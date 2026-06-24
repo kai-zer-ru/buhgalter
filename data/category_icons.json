@@ -1,0 +1,1253 @@
+{
+  "quick": {
+    "expense": [
+      "transport",
+      "groceries",
+      "food",
+      "wildberries",
+      "ozon",
+      "yandex-market",
+      "default"
+    ],
+    "income": [
+      "salary",
+      "sale",
+      "avito",
+      "freelance",
+      "rental-income",
+      "bonus",
+      "default"
+    ]
+  },
+  "icons": [
+    {
+      "id": "transport",
+      "emoji": "🚌",
+      "kind": "expense",
+      "tags": [
+        "транспорт",
+        "автобус"
+      ],
+      "name": "Транспорт"
+    },
+    {
+      "id": "food",
+      "emoji": "🛒",
+      "kind": "expense",
+      "tags": [
+        "магазин",
+        "еда",
+        "покупки"
+      ],
+      "name": "Магазины"
+    },
+    {
+      "id": "groceries",
+      "emoji": "🥫",
+      "kind": "expense",
+      "tags": [
+        "продукты",
+        "бакалея",
+        "еда"
+      ],
+      "name": "Продукты"
+    },
+    {
+      "id": "phone",
+      "emoji": "📱",
+      "kind": "expense",
+      "tags": [
+        "связь",
+        "телефон",
+        "мобильный"
+      ],
+      "name": "Связь"
+    },
+    {
+      "id": "health",
+      "emoji": "❤️",
+      "kind": "expense",
+      "tags": [
+        "здоровье",
+        "медицина"
+      ],
+      "name": "Здоровье"
+    },
+    {
+      "id": "salary",
+      "emoji": "💰",
+      "kind": "income",
+      "tags": [
+        "зарплата",
+        "доход",
+        "деньги"
+      ],
+      "name": "Зарплата"
+    },
+    {
+      "id": "home",
+      "emoji": "🏠",
+      "kind": "expense",
+      "tags": [
+        "дом",
+        "жильё",
+        "квартира"
+      ],
+      "name": "Дом"
+    },
+    {
+      "id": "default",
+      "emoji": "📁",
+      "kind": "both",
+      "tags": [
+        "разное",
+        "прочее"
+      ],
+      "name": "Разное"
+    },
+    {
+      "id": "wildberries",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "wildberries",
+        "вб",
+        "маркетплейс",
+        "шопинг"
+      ],
+      "name": "Wildberries"
+    },
+    {
+      "id": "ozon",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "ozon",
+        "озон",
+        "маркетплейс"
+      ],
+      "name": "Ozon"
+    },
+    {
+      "id": "yandex-market",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "яндекс маркет",
+        "маркетплейс",
+        "яндекс"
+      ],
+      "name": "Яндекс Маркет"
+    },
+    {
+      "id": "avito",
+      "official_logo": true,
+      "kind": "income",
+      "tags": [
+        "авито",
+        "продажа",
+        "барахолка",
+        "доход"
+      ],
+      "name": "Авито"
+    },
+    {
+      "id": "car",
+      "emoji": "🚗",
+      "kind": "expense",
+      "tags": [
+        "авто",
+        "машина",
+        "транспорт"
+      ],
+      "name": "Авто"
+    },
+    {
+      "id": "taxi",
+      "emoji": "🚕",
+      "kind": "expense",
+      "tags": [
+        "такси",
+        "транспорт"
+      ],
+      "name": "Такси"
+    },
+    {
+      "id": "train",
+      "emoji": "🚆",
+      "kind": "expense",
+      "tags": [
+        "поезд",
+        "жд",
+        "транспорт"
+      ],
+      "name": "Поезд"
+    },
+    {
+      "id": "plane",
+      "emoji": "✈️",
+      "kind": "expense",
+      "tags": [
+        "самолёт",
+        "авиа",
+        "перелёт"
+      ],
+      "name": "Самолёт"
+    },
+    {
+      "id": "metro",
+      "emoji": "🚇",
+      "kind": "expense",
+      "tags": [
+        "метро",
+        "транспорт"
+      ],
+      "name": "Метро"
+    },
+    {
+      "id": "bike",
+      "emoji": "🚲",
+      "kind": "expense",
+      "tags": [
+        "велосипед",
+        "транспорт"
+      ],
+      "name": "Велосипед"
+    },
+    {
+      "id": "fuel",
+      "emoji": "⛽",
+      "kind": "expense",
+      "tags": [
+        "бензин",
+        "топливо",
+        "азс"
+      ],
+      "name": "Бензин"
+    },
+    {
+      "id": "parking",
+      "emoji": "🅿️",
+      "kind": "expense",
+      "tags": [
+        "парковка",
+        "стоянка"
+      ],
+      "name": "Парковка"
+    },
+    {
+      "id": "ship",
+      "emoji": "🚢",
+      "kind": "expense",
+      "tags": [
+        "корабль",
+        "паром",
+        "море"
+      ],
+      "name": "Корабль"
+    },
+    {
+      "id": "scooter",
+      "emoji": "🛴",
+      "kind": "expense",
+      "tags": [
+        "самокат",
+        "транспорт"
+      ],
+      "name": "Самокат"
+    },
+    {
+      "id": "restaurant",
+      "emoji": "🍽️",
+      "kind": "expense",
+      "tags": [
+        "ресторан",
+        "кафе",
+        "еда"
+      ],
+      "name": "Ресторан"
+    },
+    {
+      "id": "coffee",
+      "emoji": "☕",
+      "kind": "expense",
+      "tags": [
+        "кофе",
+        "кафе"
+      ],
+      "name": "Кофе"
+    },
+    {
+      "id": "fastfood",
+      "emoji": "🍔",
+      "kind": "expense",
+      "tags": [
+        "фастфуд",
+        "бургер",
+        "еда"
+      ],
+      "name": "Фастфуд"
+    },
+    {
+      "id": "pizza",
+      "emoji": "🍕",
+      "kind": "expense",
+      "tags": [
+        "пицца",
+        "еда"
+      ],
+      "name": "Пицца"
+    },
+    {
+      "id": "grocery",
+      "emoji": "🥬",
+      "kind": "expense",
+      "tags": [
+        "овощи",
+        "продукты"
+      ],
+      "name": "Овощи"
+    },
+    {
+      "id": "bakery",
+      "emoji": "🥖",
+      "kind": "expense",
+      "tags": [
+        "хлеб",
+        "выпечка"
+      ],
+      "name": "Хлеб"
+    },
+    {
+      "id": "beer",
+      "emoji": "🍺",
+      "kind": "expense",
+      "tags": [
+        "алкоголь",
+        "пиво",
+        "бар"
+      ],
+      "name": "Алкоголь"
+    },
+    {
+      "id": "wine",
+      "emoji": "🍷",
+      "kind": "expense",
+      "tags": [
+        "вино",
+        "алкоголь"
+      ],
+      "name": "Вино"
+    },
+    {
+      "id": "water",
+      "emoji": "💧",
+      "kind": "expense",
+      "tags": [
+        "вода",
+        "коммуналка"
+      ],
+      "name": "Вода"
+    },
+    {
+      "id": "electricity",
+      "emoji": "⚡",
+      "kind": "expense",
+      "tags": [
+        "электричество",
+        "свет",
+        "коммуналка"
+      ],
+      "name": "Электричество"
+    },
+    {
+      "id": "gas",
+      "emoji": "🔥",
+      "kind": "expense",
+      "tags": [
+        "газ",
+        "отопление",
+        "коммуналка"
+      ],
+      "name": "Газ"
+    },
+    {
+      "id": "utilities",
+      "emoji": "🧾",
+      "kind": "expense",
+      "tags": [
+        "коммуналка",
+        "квитанции",
+        "жкх"
+      ],
+      "name": "Коммуналка"
+    },
+    {
+      "id": "internet",
+      "emoji": "🌐",
+      "kind": "expense",
+      "tags": [
+        "интернет",
+        "связь"
+      ],
+      "name": "Интернет"
+    },
+    {
+      "id": "wifi",
+      "emoji": "📶",
+      "kind": "expense",
+      "tags": [
+        "wifi",
+        "связь"
+      ],
+      "name": "Wi‑Fi"
+    },
+    {
+      "id": "tv",
+      "emoji": "📺",
+      "kind": "expense",
+      "tags": [
+        "телевизор",
+        "подписка",
+        "стриминг"
+      ],
+      "name": "Телевизор"
+    },
+    {
+      "id": "subscription",
+      "emoji": "🔁",
+      "kind": "expense",
+      "tags": [
+        "подписка",
+        "сервис"
+      ],
+      "name": "Подписка"
+    },
+    {
+      "id": "pharmacy",
+      "emoji": "💊",
+      "kind": "expense",
+      "tags": [
+        "аптека",
+        "лекарства",
+        "здоровье"
+      ],
+      "name": "Аптека"
+    },
+    {
+      "id": "hospital",
+      "emoji": "🏥",
+      "kind": "expense",
+      "tags": [
+        "больница",
+        "клиника"
+      ],
+      "name": "Больница"
+    },
+    {
+      "id": "dentist",
+      "emoji": "🦷",
+      "kind": "expense",
+      "tags": [
+        "стоматолог",
+        "зубы"
+      ],
+      "name": "Стоматолог"
+    },
+    {
+      "id": "fitness",
+      "emoji": "💪",
+      "kind": "expense",
+      "tags": [
+        "спортзал",
+        "фитнес"
+      ],
+      "name": "Спортзал"
+    },
+    {
+      "id": "yoga",
+      "emoji": "🧘",
+      "kind": "expense",
+      "tags": [
+        "йога",
+        "спорт"
+      ],
+      "name": "Йога"
+    },
+    {
+      "id": "rent",
+      "emoji": "🔑",
+      "kind": "expense",
+      "tags": [
+        "аренда",
+        "квартира",
+        "жильё"
+      ],
+      "name": "Аренда"
+    },
+    {
+      "id": "furniture",
+      "emoji": "🛋️",
+      "kind": "expense",
+      "tags": [
+        "мебель",
+        "дом"
+      ],
+      "name": "Мебель"
+    },
+    {
+      "id": "repair",
+      "emoji": "🔧",
+      "kind": "expense",
+      "tags": [
+        "ремонт",
+        "инструменты"
+      ],
+      "name": "Ремонт"
+    },
+    {
+      "id": "cleaning",
+      "emoji": "🧹",
+      "kind": "expense",
+      "tags": [
+        "уборка",
+        "клининг"
+      ],
+      "name": "Уборка"
+    },
+    {
+      "id": "garden",
+      "emoji": "🌱",
+      "kind": "expense",
+      "tags": [
+        "сад",
+        "растения",
+        "дача"
+      ],
+      "name": "Сад"
+    },
+    {
+      "id": "lamp",
+      "emoji": "💡",
+      "kind": "expense",
+      "tags": [
+        "освещение",
+        "лампа"
+      ],
+      "name": "Освещение"
+    },
+    {
+      "id": "clothes",
+      "emoji": "👕",
+      "kind": "expense",
+      "tags": [
+        "одежда",
+        "шопинг"
+      ],
+      "name": "Одежда"
+    },
+    {
+      "id": "shoes",
+      "emoji": "👟",
+      "kind": "expense",
+      "tags": [
+        "обувь"
+      ],
+      "name": "Обувь"
+    },
+    {
+      "id": "bag",
+      "emoji": "👜",
+      "kind": "expense",
+      "tags": [
+        "сумка",
+        "аксессуары"
+      ],
+      "name": "Сумка"
+    },
+    {
+      "id": "jewelry",
+      "emoji": "💍",
+      "kind": "expense",
+      "tags": [
+        "украшения",
+        "бижутерия"
+      ],
+      "name": "Украшения"
+    },
+    {
+      "id": "beauty",
+      "emoji": "💄",
+      "kind": "expense",
+      "tags": [
+        "косметика",
+        "красота"
+      ],
+      "name": "Косметика"
+    },
+    {
+      "id": "haircut",
+      "emoji": "💇",
+      "kind": "expense",
+      "tags": [
+        "парикмахер",
+        "стрижка"
+      ],
+      "name": "Парикмахер"
+    },
+    {
+      "id": "entertainment",
+      "emoji": "🎬",
+      "kind": "expense",
+      "tags": [
+        "развлечения",
+        "кино"
+      ],
+      "name": "Развлечения"
+    },
+    {
+      "id": "movie",
+      "emoji": "🍿",
+      "kind": "expense",
+      "tags": [
+        "кино",
+        "фильм"
+      ],
+      "name": "Кино"
+    },
+    {
+      "id": "game",
+      "emoji": "🎮",
+      "kind": "expense",
+      "tags": [
+        "игры",
+        "приставка"
+      ],
+      "name": "Игры"
+    },
+    {
+      "id": "music",
+      "emoji": "🎵",
+      "kind": "expense",
+      "tags": [
+        "музыка",
+        "концерт"
+      ],
+      "name": "Музыка"
+    },
+    {
+      "id": "ticket",
+      "emoji": "🎫",
+      "kind": "expense",
+      "tags": [
+        "билеты",
+        "мероприятие"
+      ],
+      "name": "Билеты"
+    },
+    {
+      "id": "sport",
+      "emoji": "⚽",
+      "kind": "expense",
+      "tags": [
+        "спорт",
+        "футбол"
+      ],
+      "name": "Спорт"
+    },
+    {
+      "id": "tennis",
+      "emoji": "🎾",
+      "kind": "expense",
+      "tags": [
+        "теннис",
+        "спорт"
+      ],
+      "name": "Теннис"
+    },
+    {
+      "id": "ski",
+      "emoji": "⛷️",
+      "kind": "expense",
+      "tags": [
+        "лыжи",
+        "зима",
+        "спорт"
+      ],
+      "name": "Лыжи"
+    },
+    {
+      "id": "swim",
+      "emoji": "🏊",
+      "kind": "expense",
+      "tags": [
+        "бассейн",
+        "плавание"
+      ],
+      "name": "Бассейн"
+    },
+    {
+      "id": "education",
+      "emoji": "📚",
+      "kind": "expense",
+      "tags": [
+        "образование",
+        "книги"
+      ],
+      "name": "Образование"
+    },
+    {
+      "id": "book",
+      "emoji": "📖",
+      "kind": "expense",
+      "tags": [
+        "книга",
+        "чтение"
+      ],
+      "name": "Книга"
+    },
+    {
+      "id": "school",
+      "emoji": "🏫",
+      "kind": "expense",
+      "tags": [
+        "школа",
+        "обучение"
+      ],
+      "name": "Школа"
+    },
+    {
+      "id": "university",
+      "emoji": "🎓",
+      "kind": "expense",
+      "tags": [
+        "университет",
+        "вуз"
+      ],
+      "name": "Университет"
+    },
+    {
+      "id": "course",
+      "emoji": "📝",
+      "kind": "expense",
+      "tags": [
+        "курсы",
+        "обучение"
+      ],
+      "name": "Курсы"
+    },
+    {
+      "id": "child",
+      "emoji": "🧒",
+      "kind": "expense",
+      "tags": [
+        "ребёнок",
+        "дети"
+      ],
+      "name": "Ребёнок"
+    },
+    {
+      "id": "baby",
+      "emoji": "👶",
+      "kind": "expense",
+      "tags": [
+        "малыш",
+        "дети"
+      ],
+      "name": "Малыш"
+    },
+    {
+      "id": "toy",
+      "emoji": "🧸",
+      "kind": "expense",
+      "tags": [
+        "игрушки",
+        "дети"
+      ],
+      "name": "Игрушки"
+    },
+    {
+      "id": "pet",
+      "emoji": "🐾",
+      "kind": "expense",
+      "tags": [
+        "питомец",
+        "животные"
+      ],
+      "name": "Питомец"
+    },
+    {
+      "id": "dog",
+      "emoji": "🐕",
+      "kind": "expense",
+      "tags": [
+        "собака"
+      ],
+      "name": "Собака"
+    },
+    {
+      "id": "cat",
+      "emoji": "🐈",
+      "kind": "expense",
+      "tags": [
+        "кошка"
+      ],
+      "name": "Кошка"
+    },
+    {
+      "id": "gift",
+      "emoji": "🎁",
+      "kind": "expense",
+      "tags": [
+        "подарок",
+        "подарки"
+      ],
+      "name": "Подарок"
+    },
+    {
+      "id": "charity",
+      "emoji": "🤝",
+      "kind": "expense",
+      "tags": [
+        "благотворительность",
+        "помощь"
+      ],
+      "name": "Благотворительность"
+    },
+    {
+      "id": "tax",
+      "emoji": "🧮",
+      "kind": "expense",
+      "tags": [
+        "налоги",
+        "налог"
+      ],
+      "name": "Налоги"
+    },
+    {
+      "id": "insurance",
+      "emoji": "🛡️",
+      "kind": "expense",
+      "tags": [
+        "страховка"
+      ],
+      "name": "Страховка"
+    },
+    {
+      "id": "bank-fee",
+      "emoji": "🏦",
+      "kind": "expense",
+      "tags": [
+        "банк",
+        "комиссия"
+      ],
+      "name": "Банк"
+    },
+    {
+      "id": "loan",
+      "emoji": "📉",
+      "kind": "expense",
+      "tags": [
+        "кредит",
+        "долг",
+        "платёж"
+      ],
+      "name": "Кредит"
+    },
+    {
+      "id": "legal",
+      "emoji": "⚖️",
+      "kind": "expense",
+      "tags": [
+        "юрист",
+        "суд",
+        "право"
+      ],
+      "name": "Юрист"
+    },
+    {
+      "id": "office",
+      "emoji": "💼",
+      "kind": "expense",
+      "tags": [
+        "офис",
+        "работа",
+        "канцелярия"
+      ],
+      "name": "Офис"
+    },
+    {
+      "id": "software",
+      "emoji": "💻",
+      "kind": "expense",
+      "tags": [
+        "софт",
+        "программы",
+        "лицензия"
+      ],
+      "name": "Софт"
+    },
+    {
+      "id": "cloud",
+      "emoji": "☁️",
+      "kind": "expense",
+      "tags": [
+        "облако",
+        "хостинг"
+      ],
+      "name": "Облако"
+    },
+    {
+      "id": "delivery",
+      "emoji": "📦",
+      "kind": "expense",
+      "tags": [
+        "доставка",
+        "посылка"
+      ],
+      "name": "Доставка"
+    },
+    {
+      "id": "travel",
+      "emoji": "🧳",
+      "kind": "expense",
+      "tags": [
+        "путешествие",
+        "отпуск"
+      ],
+      "name": "Путешествие"
+    },
+    {
+      "id": "hotel",
+      "emoji": "🏨",
+      "kind": "expense",
+      "tags": [
+        "отель",
+        "проживание"
+      ],
+      "name": "Отель"
+    },
+    {
+      "id": "beach",
+      "emoji": "🏖️",
+      "kind": "expense",
+      "tags": [
+        "пляж",
+        "отдых"
+      ],
+      "name": "Пляж"
+    },
+    {
+      "id": "mountain",
+      "emoji": "🏔️",
+      "kind": "expense",
+      "tags": [
+        "горы",
+        "поход"
+      ],
+      "name": "Горы"
+    },
+    {
+      "id": "camera",
+      "emoji": "📷",
+      "kind": "expense",
+      "tags": [
+        "фото",
+        "техника"
+      ],
+      "name": "Фото"
+    },
+    {
+      "id": "electronics",
+      "emoji": "🔌",
+      "kind": "expense",
+      "tags": [
+        "электроника",
+        "техника"
+      ],
+      "name": "Электроника"
+    },
+    {
+      "id": "phone-device",
+      "emoji": "📲",
+      "kind": "expense",
+      "tags": [
+        "смартфон",
+        "гаджет"
+      ],
+      "name": "Смартфон"
+    },
+    {
+      "id": "laptop",
+      "emoji": "💻",
+      "kind": "expense",
+      "tags": [
+        "ноутбук",
+        "компьютер"
+      ],
+      "name": "Ноутбук"
+    },
+    {
+      "id": "wedding",
+      "emoji": "💒",
+      "kind": "expense",
+      "tags": [
+        "свадьба",
+        "торжество"
+      ],
+      "name": "Свадьба"
+    },
+    {
+      "id": "party",
+      "emoji": "🎉",
+      "kind": "expense",
+      "tags": [
+        "праздник",
+        "вечеринка"
+      ],
+      "name": "Праздник"
+    },
+    {
+      "id": "flowers",
+      "emoji": "💐",
+      "kind": "expense",
+      "tags": [
+        "цветы"
+      ],
+      "name": "Цветы"
+    },
+    {
+      "id": "smoke",
+      "emoji": "🚬",
+      "kind": "expense",
+      "tags": [
+        "сигареты",
+        "табак"
+      ],
+      "name": "Сигареты"
+    },
+    {
+      "id": "income-other",
+      "emoji": "💵",
+      "kind": "income",
+      "tags": [
+        "доход",
+        "прочее"
+      ],
+      "name": "Прочие доходы"
+    },
+    {
+      "id": "wallet",
+      "emoji": "👛",
+      "kind": "income",
+      "tags": [
+        "кошелёк",
+        "доход"
+      ],
+      "name": "Кошелёк"
+    },
+    {
+      "id": "cash",
+      "emoji": "💴",
+      "kind": "income",
+      "tags": [
+        "наличные",
+        "доход"
+      ],
+      "name": "Наличные"
+    },
+    {
+      "id": "bonus",
+      "emoji": "🎯",
+      "kind": "income",
+      "tags": [
+        "премия",
+        "бонус",
+        "доход"
+      ],
+      "name": "Премия"
+    },
+    {
+      "id": "freelance",
+      "emoji": "🧑‍💻",
+      "kind": "income",
+      "tags": [
+        "фриланс",
+        "подработка"
+      ],
+      "name": "Фриланс"
+    },
+    {
+      "id": "rental-income",
+      "emoji": "🏘️",
+      "kind": "income",
+      "tags": [
+        "аренда",
+        "доход",
+        "сдача"
+      ],
+      "name": "Аренда"
+    },
+    {
+      "id": "refund",
+      "emoji": "↩️",
+      "kind": "income",
+      "tags": [
+        "возврат",
+        "кэшбэк"
+      ],
+      "name": "Возврат"
+    },
+    {
+      "id": "cashback",
+      "emoji": "🔙",
+      "kind": "income",
+      "tags": [
+        "кэшбэк",
+        "возврат"
+      ],
+      "name": "Кэшбэк"
+    },
+    {
+      "id": "dividend",
+      "emoji": "📈",
+      "kind": "income",
+      "tags": [
+        "дивиденды",
+        "инвестиции"
+      ],
+      "name": "Дивиденды"
+    },
+    {
+      "id": "investment",
+      "emoji": "💹",
+      "kind": "income",
+      "tags": [
+        "инвестиции",
+        "биржа"
+      ],
+      "name": "Инвестиции"
+    },
+    {
+      "id": "pension",
+      "emoji": "👴",
+      "kind": "income",
+      "tags": [
+        "пенсия",
+        "доход"
+      ],
+      "name": "Пенсия"
+    },
+    {
+      "id": "sale",
+      "emoji": "🏷️",
+      "kind": "income",
+      "tags": [
+        "продажа",
+        "доход"
+      ],
+      "name": "Продажа"
+    },
+    {
+      "id": "gift-income",
+      "emoji": "🎀",
+      "kind": "income",
+      "tags": [
+        "подарок",
+        "получено",
+        "доход"
+      ],
+      "name": "Подарок"
+    },
+    {
+      "id": "lottery",
+      "emoji": "🎰",
+      "kind": "income",
+      "tags": [
+        "лотерея",
+        "выигрыш"
+      ],
+      "name": "Лотерея"
+    },
+    {
+      "id": "tips",
+      "emoji": "🪙",
+      "kind": "income",
+      "tags": [
+        "чаевые",
+        "доход"
+      ],
+      "name": "Чаевые"
+    },
+    {
+      "id": "grant",
+      "emoji": "🏛️",
+      "kind": "income",
+      "tags": [
+        "грант",
+        "субсидия"
+      ],
+      "name": "Грант"
+    },
+    {
+      "id": "alimony",
+      "emoji": "👨‍👩‍👧",
+      "kind": "income",
+      "tags": [
+        "алименты",
+        "доход"
+      ],
+      "name": "Алименты"
+    },
+    {
+      "id": "interest",
+      "emoji": "🏧",
+      "kind": "income",
+      "tags": [
+        "проценты",
+        "вклад"
+      ],
+      "name": "Проценты"
+    },
+    {
+      "id": "crypto",
+      "emoji": "₿",
+      "kind": "income",
+      "tags": [
+        "крипто",
+        "биткоин"
+      ],
+      "name": "Крипто"
+    },
+    {
+      "id": "side-job",
+      "emoji": "🛠️",
+      "kind": "income",
+      "tags": [
+        "подработка",
+        "халтура"
+      ],
+      "name": "Подработка"
+    },
+    {
+      "id": "royalty",
+      "emoji": "©️",
+      "kind": "income",
+      "tags": [
+        "роялти",
+        "авторские"
+      ],
+      "name": "Роялти"
+    },
+    {
+      "id": "compensation",
+      "emoji": "🧾",
+      "kind": "both",
+      "tags": [
+        "компенсация",
+        "возмещение"
+      ],
+      "name": "Компенсация"
+    }
+  ]
+}

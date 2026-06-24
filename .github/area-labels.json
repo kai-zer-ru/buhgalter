@@ -1,0 +1,10 @@
+{
+  "UI / веб-интерфейс": { "name": "area: ui", "color": "bfd4f2", "description": "Веб-интерфейс SvelteKit" },
+  "API": { "name": "area: api", "color": "1d76db", "description": "HTTP API, сервер Go" },
+  "Импорт / экспорт данных": { "name": "area: import", "color": "fbca04", "description": "Импорт CSV и экспорт" },
+  "Долги": { "name": "area: debts", "color": "d93f0b", "description": "Долги и должники" },
+  "Кредиты": { "name": "area: credits", "color": "5319e7", "description": "Кредиты и график платежей" },
+  "Операции и счета": { "name": "area: transactions", "color": "0e8a16", "description": "Операции, переводы, счета" },
+  "Уведомления (Telegram, МАКС)": { "name": "area: notifications", "color": "006b75", "description": "Интеграции уведомлений" },
+  "Установка / Docker / деплой": { "name": "area: deploy", "color": "c5def5", "description": "Установка, Docker, CI/CD" }
+}

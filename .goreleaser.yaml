@@ -1,0 +1,86 @@
+version: 2
+project_name: buhgalter
+
+before:
+  hooks:
+    - npm ci --prefix web
+    - python3 scripts/build_category_icons_json.py
+    - make web-build copy-static copy-openapi
+    - bash scripts/render-release-env.sh "{{ .Version }}"
+
+builds:
+  - id: buhgalter
+    dir: server
+    main: ./cmd/buhgalter
+    binary: buhgalter
+    tags:
+      - embedstatic
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.installMethod=release
+      - -X main.buildCommit={{.Commit}}
+      - -X main.buildTime={{.Date}}
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: default
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  disable: false
+
+release:
+  github:
+    owner: kai-zer-ru
+    name: buhgalter
+  extra_files:
+    - glob: docker/docker-compose.yml
+      name_template: docker-compose.yaml
+    - glob: build/release/.env
+  header: |
+    {{ .Env.RELEASE_CHANGELOG }}
+
+    ---
+
+    ## Коммиты
+  footer: |
+    ## Docker
+
+    Вложения **docker-compose.yaml** и **.env** — тот же compose из репозитория; `.env` задаёт `BUHGALTER_IMAGE_TAG={{ .Version }}`.
+
+    ```bash
+    docker pull ghcr.io/kai-zer-ru/buhgalter:{{ .Version }}
+    docker compose -f docker-compose.yaml up -d
+    ```
+
+    Или без compose:
+
+    ```bash
+    docker run -d --name buhgalter \
+      -p 8765:8765 \
+      -v buhgalter-data:/app/data \
+      -v buhgalter-backups:/app/backups \
+      --restart unless-stopped \
+      ghcr.io/kai-zer-ru/buhgalter:{{ .Version }}
+    ```

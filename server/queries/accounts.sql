@@ -1,0 +1,131 @@
+-- name: GetAccountByID :one
+SELECT
+    a.id,
+    a.name,
+    a.type,
+    a.bank_id,
+    a.initial_balance,
+    a.status,
+    a.is_primary,
+    a.created_at,
+    a.updated_at,
+    b.name AS bank_name,
+    b.icon_path AS bank_icon
+FROM accounts a
+LEFT JOIN banks b ON b.id = a.bank_id
+WHERE a.id = ? AND a.user_id = ?;
+
+-- name: ListAccountsByUserActive :many
+SELECT
+    a.id,
+    a.name,
+    a.type,
+    a.bank_id,
+    a.initial_balance,
+    a.status,
+    a.is_primary,
+    a.created_at,
+    a.updated_at,
+    b.name AS bank_name,
+    b.icon_path AS bank_icon
+FROM accounts a
+LEFT JOIN banks b ON b.id = a.bank_id
+WHERE a.user_id = ? AND a.status = 'active'
+ORDER BY a.name;
+
+-- name: ListAccountsByUserAndStatus :many
+SELECT
+    a.id,
+    a.name,
+    a.type,
+    a.bank_id,
+    a.initial_balance,
+    a.status,
+    a.is_primary,
+    a.created_at,
+    a.updated_at,
+    b.name AS bank_name,
+    b.icon_path AS bank_icon
+FROM accounts a
+LEFT JOIN banks b ON b.id = a.bank_id
+WHERE a.user_id = ? AND a.status = ?
+ORDER BY a.name;
+
+-- name: InsertAccount :exec
+INSERT INTO accounts (
+    id, user_id, name, type, bank_id, initial_balance, status, is_primary, created_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?);
+
+-- name: UpdateAccount :exec
+UPDATE accounts
+SET name = ?, bank_id = ?, initial_balance = ?, updated_at = ?
+WHERE id = ? AND user_id = ?;
+
+-- name: UpdateAccountStatus :execrows
+UPDATE accounts
+SET status = ?, updated_at = ?
+WHERE id = ? AND user_id = ?;
+
+-- name: DeleteAccount :execrows
+DELETE FROM accounts
+WHERE id = ? AND user_id = ?;
+
+-- name: CountActiveAccountsByName :one
+SELECT COUNT(*) AS count
+FROM accounts
+WHERE user_id = ? AND name = ? AND status = 'active';
+
+-- name: CountActiveAccountsByNameExcluding :one
+SELECT COUNT(*) AS count
+FROM accounts
+WHERE user_id = ? AND name = ? AND status = 'active' AND id != ?;
+
+-- name: CountActiveAccountsByUser :one
+SELECT COUNT(*) AS count
+FROM accounts
+WHERE user_id = ? AND status = 'active';
+
+-- name: ClearPrimaryAccounts :exec
+UPDATE accounts
+SET is_primary = 0
+WHERE user_id = ? AND status = 'active';
+
+-- name: SetAccountPrimary :exec
+UPDATE accounts
+SET is_primary = 1
+WHERE id = ? AND user_id = ? AND status = 'active';
+
+-- name: ClearAccountPrimaryFlag :exec
+UPDATE accounts
+SET is_primary = 0
+WHERE id = ? AND user_id = ?;
+
+-- name: FirstActiveAccountID :one
+SELECT id
+FROM accounts
+WHERE user_id = ? AND status = 'active'
+ORDER BY created_at, name
+LIMIT 1;
+
+-- name: GetActiveAccountByName :one
+SELECT
+    a.id,
+    a.name,
+    a.type,
+    a.bank_id,
+    a.initial_balance,
+    a.status,
+    a.is_primary,
+    a.created_at,
+    a.updated_at,
+    b.name AS bank_name,
+    b.icon_path AS bank_icon
+FROM accounts a
+LEFT JOIN banks b ON b.id = a.bank_id
+WHERE a.user_id = ? AND a.status = 'active' AND a.name = ?
+LIMIT 1;
+
+-- name: ListActiveAccountNames :many
+SELECT name
+FROM accounts
+WHERE user_id = ? AND status = 'active';

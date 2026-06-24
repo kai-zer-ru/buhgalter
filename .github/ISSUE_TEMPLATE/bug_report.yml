@@ -1,0 +1,148 @@
+name: Сообщение об ошибке
+description: Неожиданное поведение, сбой или ошибка в интерфейсе / API
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Спасибо за отчёт. Чем подробнее описание — тем быстрее разберём проблему.
+
+        **Версию и окружение** можно посмотреть в **Админ → Диагностика** (после реализации), в ответе `GET /api/v1/admin/diagnostics`, `GET /health` или в логах при старте сервера.
+        **Логи** — каталог `BUHGALTER_LOG_DIR` (по умолчанию `./logs/`, файл `app.log`).
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Описание проблемы
+      description: Что произошло и в каком разделе приложения?
+      placeholder: При сохранении кредита с ручным графиком страница зависает...
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Шаги для воспроизведения
+      description: Как повторить проблему с нуля?
+      placeholder: |
+        1. Открыть /credits/new
+        2. Выбрать тип «вручную», добавить строку графика
+        3. Нажать «Сохранить»
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Ожидаемое поведение
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Фактическое поведение
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Область
+      description: "Помогает автоматически проставить label (area: api, area: ui и др.)"
+      options:
+        - UI / веб-интерфейс
+        - API
+        - Импорт / экспорт данных
+        - Долги
+        - Кредиты
+        - Операции и счета
+        - Уведомления (Telegram, МАКС)
+        - Установка / Docker / деплой
+        - Другое
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Версия
+      description: "Тег релиза, commit или значение из GET /health (поле version)"
+      placeholder: "1.0.0 / git tag / sha abc1234"
+    validations:
+      required: true
+
+  - type: input
+    id: upgrade_from
+    attributes:
+      label: Обновление с версии
+      description: Если проблема появилась после апгрейда — с какой версии обновлялись? Иначе укажите «новая установка»
+      placeholder: "v0.9.0 -> v1.1.0 / новая установка"
+
+  - type: dropdown
+    id: install_method
+    attributes:
+      label: Вариант установки
+      options:
+        - Вручную (make build / go build)
+        - Docker / docker compose
+        - Бинарник с GitHub Releases
+        - Режим разработки (make dev-server / dev-web)
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: ОС, архитектура и браузер
+      description: Для UI-багов укажите браузер; для сервера — ОС и arch (linux/amd64 и т.д.)
+      placeholder: Fedora 42, Firefox 128 / Ubuntu 24.04, Docker linux/arm64
+
+  - type: dropdown
+    id: proxy
+    attributes:
+      label: Обратный прокси
+      options:
+        - "Нет (прямое подключение к порту 8765)"
+        - nginx
+        - Caddy
+        - Traefik
+        - Другое
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Логи
+      description: Фрагмент `app.log` или вывод `docker compose logs` вокруг момента ошибки
+      render: shell
+      placeholder: |
+        2026-06-23 12:00:00 ERR handler error ...
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Конфигурация (без секретов)
+      description: Переменные окружения, отличающиеся от умолчаний (см. README)
+      placeholder: |
+        BUHGALTER_ADDR=:8765
+        BUHGALTER_STATIC_EMBED=true
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Скриншоты
+      description: Перетащите изображения в поле комментария ниже или вставьте ссылки
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Перед отправкой
+      options:
+        - label: Я поискал похожие issues в репозитории
+          required: true
+        - label: В тексте и логах нет паролей, API-токенов и персональных финансовых данных
+          required: true

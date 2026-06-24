@@ -1,0 +1,2801 @@
+openapi: 3.0.3
+info:
+  title: Бухгалтер API
+  description: |
+    API приложения «Бухгалтер» (этапы 0–8).
+  version: 1.0.0
+servers:
+  - url: /api/v1
+paths:
+  /health:
+    get:
+      summary: Проверка состояния сервера
+      description: |
+        Публичный healthcheck без авторизации. Минимальный ответ для Docker и балансировщиков.
+        Расширенная диагностика — `GET /admin/diagnostics` (только admin).
+      responses:
+        '200':
+          description: Сервер и БД доступны
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: ok
+                version: 1.0.0
+                db: connected
+        '503':
+          description: База данных недоступна
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: error
+                version: 1.0.0
+                db: error
+  /setup/status:
+    get:
+      summary: Статус начальной настройки
+      description: |
+        Поле `configured` — по файлу-маркеру `BUHGALTER_DATA_DIR/.configured` (по умолчанию `data/.configured`),
+        а не по полю `is_configured` в SQLite. Restore бэкапа **не** удаляет маркер.
+      responses:
+        '200':
+          description: Статус настройки
+  /setup:
+    post:
+      summary: Начальная настройка (один раз)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - admin_login
+                - admin_display_name
+                - admin_password
+                - admin_password_confirm
+              properties:
+                admin_login:
+                  type: string
+                  minLength: 3
+                  maxLength: 32
+                  description: Логин администратора
+                admin_display_name:
+                  type: string
+                  minLength: 1
+                  maxLength: 64
+                  description: Имя администратора (display_name)
+                admin_password:
+                  type: string
+                  minLength: 8
+                  description: Минимум 8 символов, хотя бы одна буква и одна цифра, не совпадает с admin_login
+                admin_password_confirm:
+                  type: string
+                  minLength: 8
+                  description: Должен совпадать с admin_password
+                registration_enabled:
+                  type: boolean
+                  default: false
+                external_url:
+                  type: string
+                  description: Опционально; URL за reverse proxy (http/https)
+      responses:
+        '201':
+          description: Настройка завершена
+        '400':
+          description: Ошибка валидации (пароли не совпадают, пустое имя и т.д.)
+        '409':
+          description: Настройка уже выполнена
+  /auth/login:
+    post:
+      summary: Вход в систему
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                login:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Успешный вход
+        '401':
+          description: Неверные учётные данные
+        '429':
+          description: Превышен лимит попыток
+  /auth/logout:
+    post:
+      summary: Выход из системы
+      security:
+        - sessionCookie: []
+      responses:
+        '204':
+          description: Выход выполнен
+  /auth/register:
+    post:
+      summary: Регистрация пользователя
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - login
+                - password
+                - password_confirm
+              properties:
+                login:
+                  type: string
+                  minLength: 3
+                  maxLength: 32
+                password:
+                  type: string
+                  minLength: 8
+                  description: Минимум 8 символов, хотя бы одна буква и одна цифра, не совпадает с login
+                password_confirm:
+                  type: string
+                  minLength: 8
+                  description: Должен совпадать с password
+                display_name:
+                  type: string
+                  description: Опционально; по умолчанию — login
+      responses:
+        '201':
+          description: Пользователь создан
+        '400':
+          description: Ошибка валидации (пароли не совпадают и т.д.)
+        '403':
+          description: Регистрация отключена
+  /auth/verify:
+    get:
+      summary: Проверка токена
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Результат проверки
+  /auth/me:
+    get:
+      summary: Текущий пользователь
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Данные пользователя
+  /user/settings:
+    get:
+      summary: Настройки пользователя
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Настройки
+    put:
+      summary: Обновить настройки
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Настройки обновлены
+  /user/password:
+    put:
+      summary: Смена пароля
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - current_password
+                - new_password
+                - new_password_confirm
+              properties:
+                current_password:
+                  type: string
+                new_password:
+                  type: string
+                  minLength: 8
+                  description: Минимум 8 символов, хотя бы одна буква и одна цифра, не совпадает с login
+                new_password_confirm:
+                  type: string
+                  minLength: 8
+                  description: Должен совпадать с new_password
+      responses:
+        '204':
+          description: Пароль изменён
+        '400':
+          description: |
+            Ошибка валидации. Код ответа `VALIDATION_ERROR`; тексты сообщений по ключам:
+            `PASSWORDS_MISMATCH`, `INVALID_CURRENT_PASSWORD`, `PASSWORD_TOO_SHORT`,
+            `PASSWORD_TOO_WEAK`, `PASSWORD_UNCHANGED` (новый пароль совпадает с текущим).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                password_unchanged:
+                  $ref: '#/components/examples/ApiErrorPasswordUnchanged'
+  /user/tokens:
+    get:
+      summary: Список API-токенов
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Список токенов
+    post:
+      summary: Создать API-токен
+      security:
+        - sessionCookie: []
+      responses:
+        '201':
+          description: Токен создан (показывается один раз)
+  /user/tokens/{id}:
+    delete:
+      summary: Отозвать API-токен
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Токен отозван
+  /user/notifications:
+    get:
+      summary: Настройки уведомлений пользователя
+      description: |
+        Возвращает конфигурацию каналов (Telegram/MAX), триггеры и шаблоны.
+        Секреты (`*_token`) в ответе не передаются.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Настройки уведомлений
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationSettings'
+    put:
+      summary: Обновить настройки уведомлений и шаблоны
+      description: |
+        Поля в теле опциональны. Для токенов используется шифрование AES-256-GCM
+        (ключ задаётся в админке, `system_settings.notification_secret_key`).
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationSettingsUpdate'
+      responses:
+        '200':
+          description: Обновлённые настройки уведомлений
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationSettings'
+        '400':
+          description: Ошибка валидации (неверный trigger_type, placeholder, длина шаблона и т.д.)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                validation:
+                  $ref: '#/components/examples/ApiErrorValidation'
+  /user/notifications/test:
+    post:
+      summary: Отправить тестовое уведомление
+      description: |
+        Отправляет тестовый шаблон (`trigger_type=test`) в выбранный канал.
+        Поддерживаются каналы `telegram` и `max`.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationTestRequest'
+      responses:
+        '200':
+          description: Тестовое сообщение отправлено
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: sent
+        '400':
+          description: |
+            Канал не настроен или некорректные параметры.
+            Код `VALIDATION_ERROR`; сообщения: `ERR_CHANNEL` (неверный канал),
+            `ERR_NOTIFICATION_CHANNEL` (канал не настроен), `ERR_INVALID_JSON`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                channel_not_configured:
+                  $ref: '#/components/examples/ApiErrorNotificationChannel'
+  /user/notifications/templates/preview:
+    post:
+      summary: Предпросмотр шаблона уведомления
+      description: |
+        Формирует текст шаблона с тестовыми данными без отправки в мессенджер.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationPreviewRequest'
+      responses:
+        '200':
+          description: Результат предпросмотра
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationPreviewResponse'
+        '400':
+          description: Ошибка валидации шаблона
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                validation:
+                  $ref: '#/components/examples/ApiErrorValidation'
+  /user/notifications/templates/reset:
+    post:
+      summary: Сбросить пользовательские шаблоны уведомлений
+      description: |
+        Если `trigger_type` не передан — сбрасывает все пользовательские шаблоны.
+        Если передан — только для указанного типа.
+      security:
+        - sessionCookie: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationResetRequest'
+      responses:
+        '200':
+          description: Настройки уведомлений после сброса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationSettings'
+        '400':
+          description: Некорректный trigger_type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                validation:
+                  $ref: '#/components/examples/ApiErrorValidation'
+  /admin/settings:
+    get:
+      summary: Системные настройки
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Настройки
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminSettings'
+    put:
+      summary: Обновить системные настройки
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminSettingsUpdate'
+      responses:
+        '200':
+          description: Настройки обновлены
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminSettings'
+        '400':
+          description: Ошибка валидации external_url
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                external_url:
+                  $ref: '#/components/examples/ApiErrorExternalURL'
+  /admin/settings/notification-secret:
+    put:
+      summary: Обновить ключ шифрования уведомлений
+      description: |
+        Set-only endpoint: принимает новый `notification_secret_key`, но никогда не возвращает сам ключ.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminNotificationSecretKeyUpdate'
+      responses:
+        '200':
+          description: Настройки обновлены
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminSettings'
+        '400':
+          description: Ошибка валидации ключа
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                secret_key:
+                  $ref: '#/components/examples/ApiErrorSecretKeyInvalid'
+  /admin/users:
+    get:
+      summary: Список пользователей
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Пользователи
+    post:
+      summary: Создать пользователя
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - login
+                - password
+                - password_confirm
+              properties:
+                login:
+                  type: string
+                  minLength: 3
+                  maxLength: 32
+                password:
+                  type: string
+                  minLength: 8
+                  description: Минимум 8 символов, хотя бы одна буква и одна цифра, не совпадает с login
+                password_confirm:
+                  type: string
+                  minLength: 8
+                  description: Должен совпадать с password
+                display_name:
+                  type: string
+                  description: Опционально; по умолчанию — login
+                is_admin:
+                  type: boolean
+                  default: false
+      responses:
+        '201':
+          description: Пользователь создан
+        '400':
+          description: Ошибка валидации (пароли не совпадают и т.д.)
+  /admin/users/{id}:
+    delete:
+      summary: Удалить пользователя
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Пользователь удалён
+  /admin/diagnostics:
+    get:
+      summary: Диагностика системы
+      description: |
+        Сводная информация для bug report и поддержки. Доступно только администратору.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Диагностические данные
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminDiagnostics'
+        '401':
+          description: Требуется авторизация
+        '403':
+          description: Недостаточно прав
+  /admin/backups:
+    get:
+      summary: Список резервных копий
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Список файлов
+  /admin/backups/settings:
+    get:
+      summary: Настройки резервного копирования
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Настройки
+    put:
+      summary: Обновить настройки резервного копирования
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Настройки обновлены
+  /admin/backups/run:
+    post:
+      summary: Запустить резервное копирование вручную
+      security:
+        - sessionCookie: []
+      responses:
+        '201':
+          description: Бэкап создан
+  /admin/backups/restore:
+    post:
+      summary: Восстановить базу из файла
+      description: |
+        Multipart: поле `file` (`.db`), поле `confirm` = `RESTORE`.
+        Перед заменой: WAL checkpoint, удаление `-wal`/`-shm`, `Manager.Reopen()`.
+        Сессии из снимка бэкапа недействительны — клиент после успеха выполняет logout.
+        Маркер `data/.configured` не затрагивается (setup не повторяется).
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, confirm]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Файл SQLite (.db)
+                confirm:
+                  type: string
+                  enum: [RESTORE]
+      responses:
+        '200':
+          description: Восстановление завершено
+        '400':
+          description: Некорректный multipart или confirm ≠ RESTORE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                restore_confirm:
+                  $ref: '#/components/examples/ApiErrorRestoreConfirm'
+        '500':
+          description: Ошибка восстановления
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                internal:
+                  $ref: '#/components/examples/ApiErrorInternal'
+  /admin/backups/download:
+    get:
+      summary: Скачать последний бэкап
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Файл базы данных
+  /admin/backups/{filename}/download:
+    get:
+      summary: Скачать архивный бэкап
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: filename
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Файл базы данных
+  /banks:
+    get:
+      summary: Справочник банков РФ
+      responses:
+        '200':
+          description: Список банков
+  /accounts:
+    get:
+      summary: Список счетов пользователя
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, archived]
+      responses:
+        '200':
+          description: Список счетов
+    post:
+      summary: Создать счёт
+      security:
+        - sessionCookie: []
+      responses:
+        '201':
+          description: Счёт создан
+  /accounts/{id}:
+    get:
+      summary: Получить счёт
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Счёт
+    put:
+      summary: Обновить счёт
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Счёт обновлён
+    delete:
+      summary: Удалить счёт
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Счёт удалён
+  /accounts/{id}/archive:
+    post:
+      summary: Архивировать счёт
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Счёт архивирован
+  /accounts/{id}/unarchive:
+    post:
+      summary: Восстановить счёт из архива
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Счёт восстановлен
+  /accounts/{id}/primary:
+    post:
+      summary: Назначить основной счёт
+      description: Снимает флаг с прежнего основного среди активных счетов. Архивный счёт назначить нельзя.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: "Счёт с `is_primary: true`"
+        '400':
+          description: Архивный счёт
+  /accounts/summary:
+    get:
+      summary: Сводка по активным счетам
+      description: Баланс и прогноз по каждому активному счёту, итоги.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Сводка
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountsSummary'
+  /accounts/{id}/balance:
+    get:
+      summary: Баланс и прогноз счёта
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Баланс счёта
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountBalanceSummary'
+        '404':
+          description: Счёт не найден
+  /dashboard:
+    get:
+      summary: Главный экран
+      description: Общий баланс, карточки счетов (с `type`, `bank_icon`), последние 10 операций.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Данные дашборда
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dashboard'
+  /transactions:
+    get:
+      summary: Список операций
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: account_id
+          in: query
+          schema:
+            type: string
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [income, expense, transfer]
+        - name: category_id
+          in: query
+          schema:
+            type: string
+        - name: kind
+          in: query
+          schema:
+            type: string
+            enum: [manual, future]
+        - name: from
+          in: query
+          description: Начало периода (UTC, `YYYY-MM-DD HH:MM:SS`)
+          schema:
+            type: string
+        - name: to
+          in: query
+          description: Конец периода (UTC)
+          schema:
+            type: string
+        - name: search
+          in: query
+          description: Подстрока в description
+          schema:
+            type: string
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [date_asc, date_desc]
+            default: date_desc
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Страница операций
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionList'
+        '400':
+          description: Некорректный формат даты периода
+    post:
+      summary: Создать доход или расход
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionCreate'
+      responses:
+        '201':
+          description: Операция создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+        '400':
+          description: Ошибка валидации
+  /categories:
+    get:
+      summary: Список категорий
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [income, expense]
+      responses:
+        '200':
+          description: Список категорий
+    post:
+      summary: Создать категорию
+      security:
+        - sessionCookie: []
+      responses:
+        '201':
+          description: Категория создана
+  /categories/order:
+    put:
+      summary: Сохранить порядок категорий
+      description: "Тело `{ \"type\": \"expense\"|\"income\", \"ids\": [\"uuid\", ...] }` — полный список id в нужном порядке."
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Обновлённый список категорий
+  /categories/{id}:
+    put:
+      summary: Обновить категорию
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Категория обновлена
+    delete:
+      summary: Удалить категорию
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Категория удалена
+  /categories/{id}/primary:
+    post:
+      summary: Назначить главную категорию
+      description: Одна главная на пользователя и тип (`expense` / `income`). Используется по умолчанию при добавлении операции.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: "Категория с `is_primary: true`"
+  /categories/{id}/subcategories:
+    get:
+      summary: Список подкатегорий
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Подкатегории
+    post:
+      summary: Создать подкатегорию
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Подкатегория создана
+  /categories/{id}/subcategories/order:
+    put:
+      summary: Сохранить порядок подкатегорий
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Обновлённый список подкатегорий
+  /subcategories/{id}:
+    put:
+      summary: Переименовать подкатегорию
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Подкатегория обновлена
+    delete:
+      summary: Удалить подкатегорию
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Подкатегория удалена
+  /debts/summary:
+    get:
+      summary: Сводка по активным долгам
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Итоги
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DebtsSummary'
+  /debts:
+    get:
+      summary: Список долгов
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: settled
+          in: query
+          schema:
+            type: string
+            enum: ['true', 'false']
+      responses:
+        '200':
+          description: Список
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Debt'
+    post:
+      summary: Создать долг
+      description: |
+        Создаёт запись долга; при `affects_balance=true` — связанную операцию в категории «Долги».
+
+        **Один должник — одно направление:** у человека не может быть одновременно активных (`is_settled=false`)
+        долгов `lent` и `borrowed`. Повтор той же стороны (ещё одна выдача / ещё одно взятие) — разрешён.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '201':
+          description: Создан
+        '409':
+          description: |
+            Конфликт направления — нельзя «взять в долг» при активном «дал в долг» у того же должника
+            и нельзя «дать в долг» при активном «взял в долг».
+  /debtors:
+    get:
+      summary: Список должников
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Список
+    post:
+      summary: Создать должника
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '201':
+          description: Создан
+  /debtors/{id}:
+    get:
+      summary: Должник — сводка, долги и связанные операции
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Должник с долгами и операциями
+        '404':
+          description: Не найден
+  /debts/{id}:
+    delete:
+      summary: Удалить долг
+      description: |
+        Удаляет запись долга и **все** связанные операции (`debt_transactions`).
+        Баланс счёта пересчитывается без этих операций.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Удалён
+        '404':
+          description: Не найден
+  /debts/{id}/settle:
+    post:
+      summary: Погасить долг (полностью или частично)
+      description: |
+        При `affects_balance` создаётся обратная операция и запись `settle` в `debt_transactions`.
+        Опциональное поле `amount` — частичное погашение (строка с рублями, как при создании долга).
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Обновлённый долг
+        '404':
+          description: Не найден
+        '409':
+          description: Долг уже закрыт
+  /credits:
+    get:
+      summary: Список кредитов
+      description: Фильтр `?status=active` или `?status=closed`
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, closed]
+      responses:
+        '200':
+          description: Массив кредитов
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Credit'
+    post:
+      summary: Создать кредит
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCreditRequest'
+      responses:
+        '201':
+          description: Созданный кредит с графиком
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Credit'
+  /credits/schedule/preview:
+    post:
+      summary: Предпросмотр графика платежей
+      description: |
+        Для `month`/`week`/`two_weeks` — автогенерация от `issue_date`.
+        Для `manual` — только переданные `seed_payments` (ровно `term` строк; сумма подгоняется последним платежом).
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreviewScheduleRequest'
+      responses:
+        '200':
+          description: График без сохранения
+  /credits/{id}:
+    get:
+      summary: Детали кредита
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Кредит с графиком
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Credit'
+        '404':
+          description: Не найден
+    put:
+      summary: Обновить кредит
+      description: Имя, платёж, счёт списания (будущие операции)
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Обновлённый кредит
+    delete:
+      summary: Удалить кредит
+      description: |
+        Query `mode=cascade` — отвязать `credit_payments.transaction_id`, удалить связанные операции, удалить кредит.
+        `mode=keep_transactions` — операции остаются, описание дополняется «(кредит удалён)», отвязать `transaction_id`.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: mode
+          in: query
+          schema:
+            type: string
+            enum: [cascade, keep_transactions]
+            default: cascade
+      responses:
+        '204':
+          description: Удалён
+  /credits/{id}/payments:
+    post:
+      summary: Оплата ближайшего платежа по графику
+      description: |
+        Обновляет ближайший неоплаченный `scheduled` (не создаёт новую строку).
+        Если у строки уже есть `transaction_id` (создан при `create_transactions`) — переиспользует операцию.
+        После оплаты удаляются дубликаты на тот же календарный день (`early`, лишние `scheduled`).
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PayCreditPaymentRequest'
+      responses:
+        '200':
+          description: Кредит после платежа
+  /credits/{id}/payments/{paymentId}:
+    delete:
+      summary: Удалить строку графика
+      description: |
+        Нельзя для `kind=retroactive`. Для оплаченной строки удаляет связанную операцию и уменьшает `paid_amount`.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: paymentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Кредит после удаления
+  /credits/{id}/close:
+    post:
+      summary: Завершить кредит
+      description: |
+        Завершает кредит (`status=closed`). При остатке > 0 тело обязательно.
+        `affects_balance=true` — операция expense на остаток; `false` — операция expense с `affects_balance=0` (в статистике, без влияния на баланс счёта).
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteCreditRequest'
+      responses:
+        '200':
+          description: Завершённый кредит
+  /credits/{id}/schedule:
+    get:
+      summary: График платежей
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Массив платежей
+  /transactions/{id}:
+    get:
+      summary: Получить операцию
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Операция
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+        '404':
+          description: Не найдена
+    put:
+      summary: Обновить доход или расход
+      description: Переводы обновляются через `PUT /transfers/{group_id}`.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionUpdate'
+      responses:
+        '200':
+          description: Операция обновлена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+        '400':
+          description: Ошибка валидации
+        '404':
+          description: Не найдена
+    delete:
+      summary: Удалить операцию
+      description: |
+        Удаляет операцию; баланс счёта меняется на противоположную сумму (расход → плюс, доход → минус).
+        Операции долга после любого погашения удалить нельзя — `409 Conflict`.
+        До погашения можно удалить только начальную (`open`) операцию долга.
+        Операция кредита — откат платежа (`scheduled`/`auto` → «Ожидает») или удаление legacy `early`; уменьшается `paid_amount`.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Удалена
+        '404':
+          description: Не найдена
+        '409':
+          description: Операция долга после погашения — удалите долг целиком
+  /transactions/{id}/activate:
+    post:
+      summary: Активировать плановую операцию
+      description: "`kind: future` → `manual` (для тестов и ручной активации)."
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Операция с `kind=manual`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+        '404':
+          description: Не найдена
+  /transfers:
+    post:
+      summary: Создать перевод
+      description: Атомарно две записи с одним `transfer_group_id`; исходящая нога создаётся первой (`created_at` +1 ms у входящей).
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferCreate'
+      responses:
+        '201':
+          description: Перевод создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transfer'
+        '400':
+          description: Ошибка валидации (тот же счёт, сумма и т.д.)
+  /transfers/{group_id}:
+    put:
+      summary: Обновить перевод
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferCreate'
+      responses:
+        '200':
+          description: Перевод обновлён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transfer'
+        '404':
+          description: Не найден
+    delete:
+      summary: Удалить перевод
+      description: Удаляет обе ноги по `group_id`.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Удалён
+        '404':
+          description: Не найден
+  /import/headers:
+    post:
+      summary: Заголовки колонок файла (для custom mapping)
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Список заголовков первой строки
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  headers:
+                    type: array
+                    items:
+                      type: string
+  /import/preview:
+    post:
+      summary: Превью импорта (dry-run)
+      description: Парсит CSV/XLSX, не пишет в БД.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                preset:
+                  type: string
+                  enum: [cubux, custom]
+                  default: cubux
+                deduplicate:
+                  type: boolean
+                  default: true
+                column_map:
+                  type: string
+                  description: JSON column mapping (custom preset)
+      responses:
+        '200':
+          description: Отчёт превью
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportReport'
+  /import:
+    post:
+      summary: Импорт операций (commit)
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          schema:
+            type: string
+          description: Повтор с тем же ключом возвращает сохранённый отчёт без дублей
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, confirm]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                preset:
+                  type: string
+                  enum: [cubux, custom]
+                deduplicate:
+                  type: boolean
+                confirm:
+                  type: boolean
+                  description: Должно быть true
+                column_map:
+                  type: string
+                account_map:
+                  type: string
+                  description: JSON — сопоставление имён счетов из файла
+                category_map:
+                  type: string
+                  description: JSON — сопоставление категорий из файла (ключ «имя|expense» или «имя|income»)
+                auto_subcategory:
+                  type: boolean
+                  description: Автоматический подбор подкатегорий (по умолчанию true)
+                subcategory_map:
+                  type: string
+                  description: JSON — сопоставление подкатегорий (ключ «категория|type|подкатегория»)
+      responses:
+        '200':
+          description: Отчёт импорта
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportReport'
+  /import/jobs:
+    post:
+      summary: Импорт операций в фоне (async job)
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          schema:
+            type: string
+          description: Повтор с тем же ключом возвращает ту же задачу/результат без дублей
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                preset:
+                  type: string
+                  enum: [cubux, custom]
+                deduplicate:
+                  type: boolean
+                column_map:
+                  type: string
+                account_map:
+                  type: string
+                category_map:
+                  type: string
+                auto_subcategory:
+                  type: boolean
+                subcategory_map:
+                  type: string
+      responses:
+        '202':
+          description: Задача импорта создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportJob'
+  /import/jobs/{id}:
+    get:
+      summary: Статус async задачи импорта
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Текущее состояние задачи
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportJob'
+        '404':
+          description: Задача не найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                not_found:
+                  $ref: '#/components/examples/ApiErrorNotFound'
+  /export:
+    get:
+      summary: Экспорт операций в Cubux CSV
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: account_id
+          in: query
+          schema:
+            type: string
+        - name: category_id
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: CSV с BOM
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: session
+    bearerAuth:
+      type: http
+      scheme: bearer
+  examples:
+    ApiErrorValidation:
+      summary: Ошибка валидации (общая)
+      value:
+        error:
+          code: VALIDATION_ERROR
+          message: Некорректные параметры запроса
+    ApiErrorPasswordUnchanged:
+      summary: Новый пароль совпадает с текущим
+      value:
+        error:
+          code: VALIDATION_ERROR
+          message: Новый пароль должен отличаться от текущего
+    ApiErrorNotificationChannel:
+      summary: Канал уведомлений не настроен
+      value:
+        error:
+          code: VALIDATION_ERROR
+          message: Канал уведомлений не настроен
+    ApiErrorExternalURL:
+      summary: Некорректный external_url
+      value:
+        error:
+          code: VALIDATION_ERROR
+          message: external_url должен начинаться с http:// или https://
+    ApiErrorSecretKeyInvalid:
+      summary: Некорректный ключ шифрования
+      value:
+        error:
+          code: VALIDATION_ERROR
+          message: Ключ должен содержать ровно 32 символа
+    ApiErrorRestoreConfirm:
+      summary: Подтверждение восстановления
+      value:
+        error:
+          code: VALIDATION_ERROR
+          message: Для восстановления введите RESTORE
+    ApiErrorNotFound:
+      summary: Ресурс не найден
+      value:
+        error:
+          code: NOT_FOUND
+          message: Не найдено
+    ApiErrorInternal:
+      summary: Внутренняя ошибка сервера
+      value:
+        error:
+          code: INTERNAL_ERROR
+          message: Внутренняя ошибка сервера
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, version, db]
+      properties:
+        status:
+          type: string
+          enum: [ok, error]
+          description: Состояние приложения
+        version:
+          type: string
+          description: Версия сборки (`-ldflags "-X main.version=…"`)
+        db:
+          type: string
+          enum: [connected, error]
+          description: Результат ping SQLite
+    ApiError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: |
+                Код ошибки: UNAUTHORIZED, FORBIDDEN, INVALID_CREDENTIALS, REGISTRATION_DISABLED,
+                RATE_LIMITED, VALIDATION_ERROR, INTERNAL_ERROR, NOT_FOUND, CONFLICT,
+                ALREADY_CONFIGURED, SERVICE_UNAVAILABLE.
+                Для смены пароля и большинства 400 — `VALIDATION_ERROR`; текст в `message`
+                локализуется по ключам (PASSWORDS_MISMATCH, ERR_CHANNEL, …).
+            message:
+              type: string
+              description: Локализованное сообщение (заголовок Accept-Language)
+      example:
+        error:
+          code: VALIDATION_ERROR
+          message: Некорректные параметры запроса
+    AdminSettings:
+      type: object
+      required: [registration_enabled, external_url, secret_key_set]
+      properties:
+        registration_enabled:
+          type: boolean
+        external_url:
+          type: string
+          nullable: true
+        secret_key_set:
+          type: boolean
+          description: true, если `notification_secret_key` задан в БД
+    AdminSettingsUpdate:
+      type: object
+      required: [registration_enabled, external_url]
+      properties:
+        registration_enabled:
+          type: boolean
+        external_url:
+          type: string
+    AdminNotificationSecretKeyUpdate:
+      type: object
+      required: [notification_secret_key]
+      properties:
+        notification_secret_key:
+          type: string
+          minLength: 32
+          maxLength: 32
+          description: |
+            Новый ключ шифрования уведомлений (set-only; в ответах никогда не возвращается).
+            Ровно 32 символа.
+    AdminDiagnostics:
+      type: object
+      required:
+        - app_version
+        - build_commit
+        - build_time
+        - db_migration_version
+        - install_method
+        - go_version
+        - os
+        - arch
+        - uptime_seconds
+        - db_size_bytes
+        - users_count
+        - data_dir
+        - log_dir
+        - addr
+        - static_embed
+        - external_url
+        - env
+      properties:
+        app_version:
+          type: string
+          description: Текущая версия приложения
+        build_commit:
+          type: string
+          description: Commit сборки (ldflags)
+        build_time:
+          type: string
+          description: Время сборки (ldflags)
+        db_migration_version:
+          type: integer
+          description: Текущая версия миграций goose
+        install_method:
+          type: string
+          description: Способ установки (manual/docker/release/dev)
+        previous_app_version:
+          type: string
+          nullable: true
+          description: Предыдущая версия приложения при обновлении
+        go_version:
+          type: string
+        os:
+          type: string
+        arch:
+          type: string
+        uptime_seconds:
+          type: integer
+        db_size_bytes:
+          type: integer
+        users_count:
+          type: integer
+        data_dir:
+          type: string
+        log_dir:
+          type: string
+        addr:
+          type: string
+        static_embed:
+          type: boolean
+        external_url:
+          type: string
+          description: Внешний URL, если настроен reverse proxy
+        env:
+          type: object
+          additionalProperties:
+            type: string
+          description: Публичные BUHGALTER_* переменные (без секретов)
+    NotificationTemplate:
+      type: object
+      required: [trigger_type, template, placeholders, is_custom]
+      properties:
+        trigger_type:
+          type: string
+          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, test]
+        template:
+          type: string
+          description: Текст шаблона
+        placeholders:
+          type: array
+          items:
+            type: string
+          description: Разрешённые placeholder-ы для trigger_type
+        is_custom:
+          type: boolean
+          description: true, если шаблон задан пользователем в БД
+    NotificationSettings:
+      type: object
+      required:
+        [
+          secret_key_configured,
+          telegram_enabled,
+          telegram_configured,
+          max_enabled,
+          max_configured,
+          trigger_debt,
+          trigger_credit,
+          trigger_planned,
+          debt_days_before,
+          my_debt_overdue_days_limit,
+          owed_debt_overdue_start_after_days,
+          owed_debt_overdue_days_limit,
+          credit_days_before,
+          notification_time_local,
+          templates
+        ]
+      properties:
+        secret_key_configured:
+          type: boolean
+          description: true, если задан ключ шифрования токенов в админке (system_settings.notification_secret_key)
+        telegram_enabled:
+          type: boolean
+        telegram_configured:
+          type: boolean
+          description: true, если сохранены токен и chat_id (токен в ответе не возвращается)
+        telegram_chat_id:
+          type: string
+          nullable: true
+        max_enabled:
+          type: boolean
+        max_configured:
+          type: boolean
+        max_provider:
+          type: string
+          nullable: true
+          enum: [a161, official]
+        max_user_id:
+          type: integer
+          nullable: true
+        max_recipient_id:
+          type: integer
+          nullable: true
+        trigger_debt:
+          type: boolean
+        trigger_credit:
+          type: boolean
+        trigger_planned:
+          type: boolean
+        debt_days_before:
+          type: integer
+          minimum: 0
+          maximum: 30
+        my_debt_overdue_days_limit:
+          type: integer
+          minimum: 0
+          maximum: 365
+        owed_debt_overdue_start_after_days:
+          type: integer
+          minimum: 0
+          maximum: 365
+        owed_debt_overdue_days_limit:
+          type: integer
+          minimum: 0
+          maximum: 365
+        credit_days_before:
+          type: integer
+          minimum: 0
+          maximum: 30
+        notification_time_local:
+          type: string
+          description: Локальное время пользователя для ежедневного запуска cron (HH:MM)
+          example: "09:30"
+        templates:
+          type: array
+          items:
+            $ref: '#/components/schemas/NotificationTemplate'
+    NotificationTemplateUpdate:
+      type: object
+      required: [trigger_type, template]
+      properties:
+        trigger_type:
+          type: string
+          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, test]
+        template:
+          type: string
+          minLength: 1
+          maxLength: 500
+    NotificationSettingsUpdate:
+      type: object
+      properties:
+        telegram_enabled:
+          type: boolean
+        telegram_bot_token:
+          type: string
+          description: Новый токен Telegram; шифруется на сервере
+        telegram_chat_id:
+          type: string
+        max_enabled:
+          type: boolean
+        max_provider:
+          type: string
+          enum: [a161, official]
+        max_token:
+          type: string
+          description: Новый токен MAX; шифруется на сервере
+        max_user_id:
+          type: integer
+          nullable: true
+        max_recipient_id:
+          type: integer
+          nullable: true
+        trigger_debt:
+          type: boolean
+        trigger_credit:
+          type: boolean
+        trigger_planned:
+          type: boolean
+        debt_days_before:
+          type: integer
+          minimum: 0
+          maximum: 30
+        my_debt_overdue_days_limit:
+          type: integer
+          minimum: 0
+          maximum: 365
+        owed_debt_overdue_start_after_days:
+          type: integer
+          minimum: 0
+          maximum: 365
+        owed_debt_overdue_days_limit:
+          type: integer
+          minimum: 0
+          maximum: 365
+        credit_days_before:
+          type: integer
+          minimum: 0
+          maximum: 30
+        notification_time_local:
+          type: string
+          description: Локальное время пользователя для ежедневного запуска cron (HH:MM)
+          pattern: '^([01]\d|2[0-3]):([0-5]\d)$'
+        templates:
+          type: array
+          items:
+            $ref: '#/components/schemas/NotificationTemplateUpdate'
+    NotificationTestRequest:
+      type: object
+      required: [channel]
+      properties:
+        channel:
+          type: string
+          enum: [telegram, max]
+    NotificationPreviewRequest:
+      type: object
+      required: [trigger_type, template]
+      properties:
+        trigger_type:
+          type: string
+          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, test]
+        template:
+          type: string
+          minLength: 1
+          maxLength: 500
+    NotificationPreviewResponse:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+    NotificationResetRequest:
+      type: object
+      properties:
+        trigger_type:
+          type: string
+          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, test]
+    Category:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          enum: [income, expense]
+        icon:
+          type: string
+          description: ID из data/category_icons.json (например transport, ozon, default)
+        sort_order:
+          type: integer
+          description: Порядок в списке (ручная сортировка в настройках)
+        is_primary:
+          type: boolean
+          description: Главная категория для типа — выбирается по умолчанию при новой операции
+        is_system:
+          type: boolean
+          description: Системная категория — нельзя изменять, удалять и добавлять подкатегории
+        subcategory_count:
+          type: integer
+        created_at:
+          type: string
+    CategoryCreate:
+      type: object
+      required: [name, type, icon]
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [income, expense]
+        icon:
+          type: string
+        sort_order:
+          type: integer
+    CategoryReorder:
+      type: object
+      required: [type, ids]
+      properties:
+        type:
+          type: string
+          enum: [income, expense]
+        ids:
+          type: array
+          items:
+            type: string
+    CategoryUpdate:
+      type: object
+      required: [name, icon]
+      properties:
+        name:
+          type: string
+        icon:
+          type: string
+        sort_order:
+          type: integer
+    Subcategory:
+      type: object
+      properties:
+        id:
+          type: string
+        category_id:
+          type: string
+        name:
+          type: string
+        icon:
+          type: string
+          description: ID иконки из того же каталога, что и у категорий
+        sort_order:
+          type: integer
+        created_at:
+          type: string
+    SubcategoryReorder:
+      type: object
+      required: [ids]
+      properties:
+        ids:
+          type: array
+          items:
+            type: string
+    SubcategoryWrite:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        icon:
+          type: string
+          description: ID иконки из каталога; если не передан — иконка родительской категории
+    Transaction:
+      type: object
+      description: |
+        Операция (доход, расход или нога перевода).
+        Поля `account_name`, `transfer_account_name`, `transfer_is_out`, `category_*`, `amount_display`
+        — обогащение в SELECT (не колонки БД).
+      properties:
+        id:
+          type: string
+        account_id:
+          type: string
+        account_name:
+          type: string
+          description: Имя счёта ноги
+        type:
+          type: string
+          enum: [income, expense, transfer]
+        kind:
+          type: string
+          enum: [manual, future]
+        amount:
+          type: integer
+          description: Копейки, всегда > 0
+        amount_display:
+          type: string
+          description: Строка для UI, например `"10000.00"` или `"10 000.00"` на клиенте
+        description:
+          type: string
+          nullable: true
+        category_id:
+          type: string
+          nullable: true
+        category_name:
+          type: string
+          nullable: true
+        category_icon:
+          type: string
+          nullable: true
+          description: ID из data/category_icons.json
+        subcategory_id:
+          type: string
+          nullable: true
+        subcategory_name:
+          type: string
+          nullable: true
+        transfer_group_id:
+          type: string
+          nullable: true
+        transfer_account_id:
+          type: string
+          nullable: true
+          description: ID второго счёта перевода
+        transfer_account_name:
+          type: string
+          nullable: true
+          description: Имя второго счёта перевода
+        transfer_is_out:
+          type: boolean
+          description: |
+            Только для `type=transfer`. `true` — исходящая нога (первая в группе по `created_at ASC`);
+            `false` — входящая. Для UI знака суммы на странице счёта.
+        transaction_date:
+          type: string
+          description: UTC, `YYYY-MM-DD HH:MM:SS`
+        created_at:
+          type: string
+        updated_at:
+          type: string
+    TransactionList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Transaction'
+        meta:
+          type: object
+          properties:
+            page:
+              type: integer
+            limit:
+              type: integer
+            total:
+              type: integer
+    TransactionCreate:
+      type: object
+      required: [account_id, type, amount, transaction_date]
+      properties:
+        account_id:
+          type: string
+        type:
+          type: string
+          enum: [income, expense]
+        amount:
+          type: string
+          description: Рубли, максимум 2 знака после запятой (`"123.45"`)
+        description:
+          type: string
+          nullable: true
+        category_id:
+          type: string
+          nullable: true
+        subcategory_id:
+          type: string
+          nullable: true
+        subcategory_name:
+          type: string
+          nullable: true
+          description: Inline-создание подкатегории
+        transaction_date:
+          type: string
+          description: UTC, `YYYY-MM-DD HH:MM:SS`
+    TransactionUpdate:
+      allOf:
+        - $ref: '#/components/schemas/TransactionCreate'
+    Transfer:
+      type: object
+      properties:
+        group_id:
+          type: string
+        from_account_id:
+          type: string
+        to_account_id:
+          type: string
+        amount:
+          type: integer
+        amount_display:
+          type: string
+        description:
+          type: string
+          nullable: true
+        transaction_date:
+          type: string
+        kind:
+          type: string
+          enum: [manual, future]
+        legs:
+          type: array
+          items:
+            $ref: '#/components/schemas/Transaction'
+    TransferCreate:
+      type: object
+      required: [from_account_id, to_account_id, amount, transaction_date]
+      properties:
+        from_account_id:
+          type: string
+        to_account_id:
+          type: string
+        amount:
+          type: string
+          description: Рубли (`"500.00"`)
+        description:
+          type: string
+          nullable: true
+        transaction_date:
+          type: string
+    AccountBalanceSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          enum: [cash, bank]
+          description: Для иконки на главной (`AccountIcon`)
+        bank_icon:
+          type: string
+          nullable: true
+          description: Slug логотипа банка при `type=bank`
+        balance:
+          type: integer
+          description: Текущий баланс, копейки
+        balance_display:
+          type: string
+        forecast_balance:
+          type: integer
+        forecast_display:
+          type: string
+        has_future_this_month:
+          type: boolean
+    AccountsSummary:
+      type: object
+      properties:
+        accounts:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccountBalanceSummary'
+        total_balance:
+          type: integer
+        total_forecast:
+          type: integer
+    Dashboard:
+      type: object
+      properties:
+        total_balance:
+          type: integer
+        total_forecast:
+          type: integer
+        accounts:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccountBalanceSummary'
+        recent_transactions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Transaction'
+    DebtsSummary:
+      type: object
+      properties:
+        i_owe:
+          type: integer
+          description: Сумма активных долгов «я взял» (копейки)
+        owed_to_me:
+          type: integer
+        overdue_i_owe:
+          type: integer
+        overdue_owed_to_me:
+          type: integer
+        active_count:
+          type: integer
+    Debtor:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        created_at:
+          type: string
+    Debt:
+      type: object
+      properties:
+        id:
+          type: string
+        debtor_id:
+          type: string
+        debtor_name:
+          type: string
+        direction:
+          type: string
+          enum: [lent, borrowed]
+        amount:
+          type: integer
+        amount_display:
+          type: string
+        affects_balance:
+          type: boolean
+        debt_date:
+          type: string
+          description: Дата и время операции (дал/взял), UTC `YYYY-MM-DD HH:MM:SS`
+        due_date:
+          type: string
+          description: Плановый возврат, UTC `YYYY-MM-DD HH:MM:SS`
+        description:
+          type: string
+          nullable: true
+        transaction_id:
+          type: string
+          nullable: true
+        is_settled:
+          type: boolean
+        settled_at:
+          type: string
+          nullable: true
+        is_overdue:
+          type: boolean
+        account_id:
+          type: string
+          nullable: true
+          description: Счёт начальной (`open`) операции; null при «без баланса»
+        account_name:
+          type: string
+          nullable: true
+          description: Имя счёта начальной операции
+        created_at:
+          type: string
+    Credit:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+          nullable: true
+        principal_amount:
+          type: integer
+          description: Копейки
+        principal_amount_display:
+          type: string
+        issue_date:
+          type: string
+        term_months:
+          type: integer
+        interest_rate:
+          type: number
+        payment_interval:
+          type: string
+          enum: [month, week, two_weeks, manual]
+        paid_amount:
+          type: integer
+        monthly_payment:
+          type: integer
+        remaining_amount:
+          type: integer
+        debit_account_id:
+          type: string
+        debit_account_name:
+          type: string
+        added_retroactively:
+          type: boolean
+        recorded_at:
+          type: string
+        status:
+          type: string
+          enum: [active, closed]
+        is_installment:
+          type: boolean
+          description: true при interest_rate = 0 (рассрочка)
+        schedule:
+          type: array
+          items:
+            $ref: '#/components/schemas/CreditPayment'
+    CreditPayment:
+      type: object
+      properties:
+        id:
+          type: string
+        amount:
+          type: integer
+        payment_date:
+          type: string
+        kind:
+          type: string
+          enum: [scheduled, early, auto, retroactive]
+        is_applied:
+          type: boolean
+        exclude_from_stats:
+          type: boolean
+        transaction_id:
+          type: string
+          nullable: true
+        transaction_kind:
+          type: string
+          nullable: true
+          description: kind связанной операции (future, manual, …)
+    PayCreditPaymentRequest:
+      type: object
+      required: [amount, payment_date]
+      properties:
+        amount:
+          oneOf:
+            - type: string
+            - type: integer
+        payment_date:
+          type: string
+          description: UTC, YYYY-MM-DD HH:MM:SS
+    CompleteCreditRequest:
+      type: object
+      properties:
+        affects_balance:
+          type: boolean
+          default: true
+          description: true — списать остаток со счёта; false — не учитывать в балансе
+        payment_date:
+          type: string
+          description: Дата завершения; обязательна при remaining_amount > 0
+    CreateCreditRequest:
+      type: object
+      required: [principal_amount, issue_date, term_months, debit_account_id]
+      properties:
+        name:
+          type: string
+        principal_amount:
+          oneOf:
+            - type: string
+            - type: integer
+        issue_date:
+          type: string
+        term_months:
+          type: integer
+        interest_rate:
+          type: number
+        payment_interval:
+          type: string
+          enum: [month, week, two_weeks, manual]
+        paid_amount:
+          oneOf:
+            - type: string
+            - type: integer
+        monthly_payment:
+          nullable: true
+          oneOf:
+            - type: string
+            - type: integer
+        debit_account_id:
+          type: string
+        added_retroactively:
+          type: boolean
+        create_transactions:
+          type: boolean
+          description: >
+            Создать операции expense для неоплаченных scheduled-платежей (по умолчанию true).
+            Прошлые/сегодня — is_applied=1; будущие — kind=future, is_applied=0.
+            В UI («Оплатить автоматически») скрыт и принудительно false при added_retroactively=true.
+        schedule_seed:
+          type: array
+          description: Полный или частичный график. Обязателен при `payment_interval=manual`.
+          items:
+            type: object
+            properties:
+              payment_date:
+                type: string
+              amount:
+                oneOf:
+                  - type: string
+                  - type: integer
+    PreviewScheduleRequest:
+      type: object
+      required: [principal, term, issue_date]
+      properties:
+        principal:
+          oneOf:
+            - type: string
+            - type: integer
+        term:
+          type: integer
+        interest_rate:
+          type: number
+        payment_interval:
+          type: string
+          enum: [month, week, two_weeks, manual]
+        issue_date:
+          type: string
+        monthly_payment:
+          nullable: true
+        seed_payments:
+          type: array
+          items:
+            type: object
+    ImportReport:
+      type: object
+      properties:
+        total_rows:
+          type: integer
+        processed_rows:
+          type: integer
+          description: Сколько строк уже обработано (для async progress)
+        valid_rows:
+          type: integer
+        skipped_duplicates:
+          type: integer
+        created_transactions:
+          type: integer
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              row:
+                type: integer
+              message:
+                type: string
+        logs:
+          type: array
+          description: Построчный лог импорта (используется в UI-спойлере полного лога)
+          items:
+            type: string
+        preview:
+          type: array
+          items:
+            type: object
+            properties:
+              row:
+                type: integer
+              action:
+                type: string
+              account:
+                type: string
+              amount:
+                type: integer
+              date:
+                type: string
+        accounts_to_create:
+          type: array
+          items:
+            type: string
+        account_mappings:
+          type: array
+          items:
+            type: object
+            properties:
+              file_name:
+                type: string
+              mode:
+                type: string
+                enum: [create, existing]
+              account_id:
+                type: string
+              account_name:
+                type: string
+              account_type:
+                type: string
+                enum: [cash, bank]
+                description: Предлагаемый тип при mode=create
+              bank_id:
+                type: string
+                description: ID банка при account_type=bank
+        categories_to_create:
+          type: array
+          items:
+            type: string
+        category_mappings:
+          type: array
+          items:
+            type: object
+            properties:
+              file_name:
+                type: string
+              type:
+                type: string
+                enum: [expense, income]
+              mode:
+                type: string
+                enum: [create, existing]
+              category_id:
+                type: string
+              category_name:
+                type: string
+        subcategory_mappings:
+          type: array
+          items:
+            type: object
+            properties:
+              file_category:
+                type: string
+              file_subcategory:
+                type: string
+              type:
+                type: string
+                enum: [expense, income]
+              mode:
+                type: string
+                enum: [create, existing]
+              subcategory_id:
+                type: string
+              subcategory_name:
+                type: string
+    ImportJob:
+      type: object
+      required: [id, filename, status, created_at]
+      properties:
+        id:
+          type: string
+        filename:
+          type: string
+        status:
+          type: string
+          enum: [queued, running, done, failed]
+        error_message:
+          type: string
+          nullable: true
+        report:
+          $ref: '#/components/schemas/ImportReport'
+        created_at:
+          type: string
+        started_at:
+          type: string
+          nullable: true
+        finished_at:
+          type: string
+          nullable: true

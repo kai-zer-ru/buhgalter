@@ -1,0 +1,19 @@
+import { describe, expect, it } from 'vitest';
+import { calendarCells } from './datetime-picker';
+
+describe('calendarCells', () => {
+	it('pads June 2026 with July 1–4 instead of 31–34', () => {
+		const cells = calendarCells(2026, 6);
+		const trailing = cells.filter((c) => !c.inMonth).map((c) => c.day);
+		expect(trailing).toEqual([1, 2, 3, 4, 5]);
+		expect(cells).toHaveLength(35);
+	});
+
+	it('includes leading days from previous month', () => {
+		// May 2026 starts on Friday → Mon–Thu from April
+		const cells = calendarCells(2026, 5);
+		const leading = cells.slice(0, 4).map((c) => c.day);
+		expect(leading).toEqual([27, 28, 29, 30]);
+		expect(cells[4]).toEqual({ day: 1, inMonth: true });
+	});
+});

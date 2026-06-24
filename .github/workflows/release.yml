@@ -1,0 +1,109 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          clean: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.4'
+          cache-dependency-path: server/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1
+      - run: make sqlc-check openapi-check
+      - run: python3 scripts/build_category_icons_json.py
+      - run: npm ci
+        working-directory: web
+      - run: npm run lint && npm run check
+        working-directory: web
+      - run: go test ./...
+        working-directory: server
+
+  goreleaser:
+    needs: [test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.4'
+          cache-dependency-path: server/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Changelog section for release header
+        run: |
+          NOTES="$(bash scripts/extract-release-notes.sh --stdout)"
+          {
+            echo 'RELEASE_CHANGELOG<<EOF'
+            printf '%s\n' "$NOTES"
+            echo 'EOF'
+          } >> "$GITHUB_ENV"
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  docker:
+    needs: [test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/kai-zer-ru/buhgalter
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=semver,pattern=v{{version}}
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+      - id: build
+        run: |
+          TAG="$(bash scripts/resolve-release-tag.sh)"
+          echo "semver=${TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "time=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: |
+            VERSION=${{ steps.build.outputs.semver }}
+            INSTALL_METHOD=docker
+            BUILD_COMMIT=${{ github.sha }}
+            BUILD_TIME=${{ steps.build.outputs.time }}
+          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.meta.outputs.tags }}

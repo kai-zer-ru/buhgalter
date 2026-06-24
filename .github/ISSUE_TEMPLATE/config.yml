@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Документация
+    url: https://github.com/kai-zer-ru/buhgalter#readme
+    about: README, установка, переменные окружения
+  - name: OpenAPI
+    url: https://github.com/kai-zer-ru/buhgalter/blob/main/docs/api/openapi.yaml
+    about: Описание HTTP API

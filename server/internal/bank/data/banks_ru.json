@@ -1,0 +1,135 @@
+[
+  {
+    "id": "sberbank",
+    "name": "Сбербанк",
+    "bic": "044525225",
+    "icon_path": "banks/sberbank.svg",
+    "sort_order": 1
+  },
+  {
+    "id": "tinkoff",
+    "name": "Т-Банк",
+    "bic": "044525974",
+    "icon_path": "banks/tinkoff.svg",
+    "sort_order": 2
+  },
+  {
+    "id": "vtb",
+    "name": "ВТБ",
+    "bic": "044525187",
+    "icon_path": "banks/vtb.svg",
+    "sort_order": 3
+  },
+  {
+    "id": "alfabank",
+    "name": "Альфа-Банк",
+    "bic": "044525593",
+    "icon_path": "banks/alfabank.svg",
+    "sort_order": 4
+  },
+  {
+    "id": "gazprombank",
+    "name": "Газпромбанк",
+    "bic": "044525823",
+    "icon_path": "banks/gazprombank.svg",
+    "sort_order": 5
+  },
+  {
+    "id": "raiffeisen",
+    "name": "Райффайзен",
+    "bic": "044525700",
+    "icon_path": "banks/raiffeisen.svg",
+    "sort_order": 6
+  },
+  {
+    "id": "rosbank",
+    "name": "Росбанк",
+    "bic": "044525256",
+    "icon_path": "banks/rosbank.svg",
+    "sort_order": 7
+  },
+  {
+    "id": "mkb",
+    "name": "МКБ",
+    "bic": "044525659",
+    "icon_path": "banks/mkb.svg",
+    "sort_order": 8
+  },
+  {
+    "id": "rshb",
+    "name": "Россельхозбанк",
+    "bic": "044525111",
+    "icon_path": "banks/rshb.svg",
+    "sort_order": 9
+  },
+  {
+    "id": "open",
+    "name": "Открытие",
+    "bic": "044525999",
+    "icon_path": "banks/open.svg",
+    "sort_order": 10
+  },
+  {
+    "id": "sovcombank",
+    "name": "Совкомбанк",
+    "bic": "044525360",
+    "icon_path": "banks/sovcombank.svg",
+    "sort_order": 11
+  },
+  {
+    "id": "psb",
+    "name": "ПСБ",
+    "bic": "044525555",
+    "icon_path": "banks/psb.svg",
+    "sort_order": 12
+  },
+  {
+    "id": "uralsib",
+    "name": "Уралсиб",
+    "bic": "044525787",
+    "icon_path": "banks/uralsib.svg",
+    "sort_order": 13
+  },
+  {
+    "id": "homecredit",
+    "name": "Хоум Кредит",
+    "bic": "044525245",
+    "icon_path": "banks/homecredit.svg",
+    "sort_order": 14
+  },
+  {
+    "id": "ozon",
+    "name": "Озон Банк",
+    "bic": "044525068",
+    "icon_path": "banks/ozon.svg",
+    "sort_order": 15
+  },
+  {
+    "id": "yandex",
+    "name": "Яндекс Банк",
+    "bic": "044525677",
+    "icon_path": "banks/yandex.svg",
+    "sort_order": 16
+  },
+  {
+    "id": "wbbank",
+    "name": "WB Банк",
+    "bic": "044525450",
+    "icon_path": "banks/wbbank.svg",
+    "sort_order": 17
+  },
+  {
+    "id": "otpbank",
+    "name": "ОТП Банк",
+    "bic": "044525311",
+    "icon_path": "banks/otpbank.svg",
+    "sort_order": 18
+  },
+  {
+    "id": "atb",
+    "name": "АТБ",
+    "bic": "041012765",
+    "icon_path": "banks/atb.svg",
+    "sort_order": 19
+  }
+]

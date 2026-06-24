@@ -1,0 +1,107 @@
+# UI и API — отображение операций
+
+Соглашения для списков операций, главной и ответов API по транзакциям. Реализация: `web/src/lib/transaction-display.ts`, `server/queries/transactions.sql`.
+
+## Поля API (обогащение в SELECT, не колонки БД)
+
+OpenAPI-схемы: [`Transaction`](api/openapi.yaml#/components/schemas/Transaction), [`AccountBalanceSummary`](api/openapi.yaml#/components/schemas/AccountBalanceSummary), [`Dashboard`](api/openapi.yaml#/components/schemas/Dashboard).
+
+В ответах `Transaction` (списки, дашборд, `GET /transactions/{id}`):
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `account_name` | string | Имя счёта ноги (`accounts.name` по `account_id`) |
+| `transfer_account_name` | string | Имя второго счёта перевода (`JOIN` по `transfer_account_id`) |
+| `transfer_is_out` | bool | Только для `type=transfer`: `true` — исходящая нога (первая в `transfer_group_id` по `created_at ASC`), `false` — входящая |
+| `category_name`, `category_icon` | | Из `categories` |
+| `amount_display` | string | `"1234.56"` для UI |
+
+`transfer_is_out` вычисляется в sqlc-запросах (`CASE` + подзапрос по `transfer_group_id`), не хранится в таблице `transactions`.
+
+В ответах **дашборда** и **сводки счетов** (`AccountBalance` / `GET /dashboard`, `/accounts/summary`, `/accounts/{id}/balance`):
+
+| Поле | Описание |
+|------|----------|
+| `type` | `cash` \| `bank` |
+| `bank_icon` | Slug логотипа банка (для `AccountIcon` на главной) |
+
+## Модуль `$lib/transaction-display.ts`
+
+| Функция | Назначение |
+|---------|------------|
+| `transferOutLeg(tx, siblings)` | Исходящая нога пары (min `created_at` в группе) |
+| `dedupeTransferLegs(txs)` | Оставить одну строку на перевод, если в списке обе ноги (главная, `/transactions`) |
+| `transferRoute(tx, siblings)` | `{ from, to }` — имена счетов **в направлении движения денег** |
+| `formatTransactionAccount(tx, siblings, mode)` | Текст колонки «Счёт» |
+| `transactionAmountSign(tx, opts?)` | Префикс суммы: `+`, `−` или пусто |
+
+## Колонка «Счёт» в таблицах
+
+Режим `mode: 'prefix'` (главная, `/transactions`, `/accounts/[id]`):
+
+| Тип | Пример |
+|-----|--------|
+| Перевод | `WB → Наличка` (всегда откуда → куда, даже на странице счёта-получателя) |
+| Расход | `с Кошелёк` |
+| Доход | `на Зарплатная карта` |
+
+Для перевода при **одной ноге** в списке (фильтр `account_id`) направление берётся из `transfer_is_out`, а не из локального `min(created_at)` среди видимых строк.
+
+## Префикс суммы
+
+| Контекст | income | expense | transfer |
+|----------|--------|---------|----------|
+| Главная, `/transactions` | `+` | `−` | *(пусто)* |
+| `/accounts/[id]` (`singleAccount: true`) | `+` | `−` | `−` исходящая / `+` входящая (`transfer_is_out`) |
+
+Символ `↔` у переводов **не используется**.
+
+## Дедупликация переводов в списках
+
+На главной и в `/transactions` в одном списке могут попасть обе ноги перевода → `dedupeTransferLegs` оставляет только исходящую ногу.
+
+На `/accounts/[id]` API отдаёт только ногу выбранного счёта — дедупликация не меняет состав, но `transferRoute` всё равно опирается на `transfer_is_out`.
+
+## Главная (`/`)
+
+- Карточки счетов: `AccountIcon` (`type`, `bank_icon` из API), имя и баланс — как на `/accounts`.
+- «Последние операции»: колонки дата, счёт, категория (с `CategoryIcon`), сумма, описание.
+- Ссылка «Все операции» → `/transactions`.
+
+## Формат денег
+
+`web/src/lib/money.ts`: отображение и ввод с разделителем тысяч **пробелом** (`10 000.00`). Компонент `MoneyInput.svelte`.
+
+## Тесты
+
+- `TestTransferRollbackOnError` — атомарность перевода при сбое второй ноги (SQLite-триггер в интеграционном тесте).
+
+## Требование для новых экранов
+
+При добавлении таблицы операций:
+
+1. Использовать `formatTransactionAccount` и `transactionAmountSign` вместо дублирования логики.
+2. Для списка одного счёта передавать `{ singleAccount: true }` в `transactionAmountSign`.
+3. Передавать полный массив `siblings` в хелперы маршрута (для случая двух ног в одном ответе).
+4. На общих списках применять `dedupeTransferLegs` перед `{#each}`.
+5. Соблюдать порядок колонок — [ui-table-columns.md](ui-table-columns.md) (дата → счёт → … → сумма).
+
+## Общий компонент списка
+
+Для снижения дублирования разметки таблиц операций на этапе релизной полировки допускается вынести общий компонент:
+
+- `$lib/components/TransactionList.svelte` — единая таблица строк операций;
+- входные данные: `transactions`, `siblings`, режим отображения (`singleAccount`, скрытие/показ колонки описания и действий);
+- логика отображения берётся только из `$lib/transaction-display.ts` (`dedupeTransferLegs`, `formatTransactionAccount`, `transactionAmountSign`), без копирования в страницах.
+
+Статус: реализовано в `$lib/components/TransactionList.svelte` (см. раздел выше).
+
+## Связанные документы
+
+| Документ | Содержание |
+|----------|------------|
+| [ui-table-columns.md](ui-table-columns.md) | Порядок колонок (дата → счёт → … → сумма) |
+| [ui-navigation.md](ui-navigation.md) | `BackLink` на `/transactions` → главная; кликабельные счета |
+| [data-model.md](data-model.md) | `transfer_group_id`, вычисляемые поля в sqlc |
+| [api/openapi.yaml](api/openapi.yaml) | Схемы `Transaction`, `Dashboard`, `AccountBalanceSummary` (v0.7.0+) |
+| [ui-navigation.md](ui-navigation.md) | Фильтры и пагинация списков — те же хелперы отображения строк |

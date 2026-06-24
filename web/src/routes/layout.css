@@ -1,0 +1,193 @@
+@import 'tailwindcss';
+
+@theme {
+	--font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+	--color-brand-50: #ecfdf5;
+	--color-brand-100: #d1fae5;
+	--color-brand-500: #10b981;
+	--color-brand-600: #059669;
+	--color-brand-700: #047857;
+}
+
+:root {
+	--bg: #f8fafc;
+	--bg-elevated: #ffffff;
+	--bg-popover: #ffffff;
+	--text: #0f172a;
+	--text-muted: #475569;
+	--border: #e2e8f0;
+	--popover-border: #cbd5e1;
+	--popover-shadow:
+		0 12px 32px color-mix(in srgb, #0f172a 14%, transparent),
+		0 0 0 1px color-mix(in srgb, var(--border) 70%, transparent);
+	--primary: #047857;
+	--primary-hover: #065f46;
+	--danger: #dc2626;
+}
+
+html.dark {
+	--bg: #0f172a;
+	--bg-elevated: #1e293b;
+	--bg-popover: #334155;
+	--text: #f1f5f9;
+	--text-muted: #cbd5e1;
+	--border: #334155;
+	--popover-border: #64748b;
+	--popover-shadow:
+		0 24px 56px color-mix(in srgb, #000 72%, transparent),
+		0 0 0 1px color-mix(in srgb, #94a3b8 28%, transparent);
+	--primary: #0d9488;
+	--primary-hover: #14b8a6;
+	--danger: #f87171;
+}
+
+@layer base {
+	html {
+		@apply antialiased;
+		background-color: var(--bg);
+		color: var(--text);
+	}
+
+	body {
+		@apply font-sans;
+		background-color: var(--bg);
+		color: var(--text);
+	}
+
+	* {
+		scrollbar-width: thin;
+		scrollbar-color: color-mix(in srgb, var(--text-muted) 45%, transparent) transparent;
+	}
+
+	*::-webkit-scrollbar {
+		width: 8px;
+		height: 8px;
+	}
+
+	*::-webkit-scrollbar-thumb {
+		background-color: color-mix(in srgb, var(--text-muted) 45%, transparent);
+		border-radius: 9999px;
+	}
+
+	*::-webkit-scrollbar-track {
+		background: transparent;
+	}
+
+	@media (hover: hover) and (pointer: fine) {
+		html {
+			scrollbar-gutter: stable;
+		}
+	}
+}
+
+@layer components {
+	.card {
+		@apply rounded-2xl border p-4 shadow-sm sm:p-6;
+		background-color: var(--bg-elevated);
+		border-color: var(--border);
+	}
+
+	.popover-panel {
+		@apply rounded-xl border;
+		background-color: var(--bg-popover);
+		border-color: var(--popover-border);
+		box-shadow: var(--popover-shadow);
+	}
+
+	.input {
+		@apply w-full rounded-xl border px-4 py-2.5 shadow-sm transition focus:ring-2 focus:outline-none;
+		background-color: var(--bg-elevated);
+		border-color: var(--border);
+		color: var(--text);
+	}
+
+	.input:focus {
+		border-color: var(--primary);
+		--tw-ring-color: color-mix(in srgb, var(--primary) 25%, transparent);
+	}
+
+	.btn-primary {
+		@apply rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-60;
+		background-color: var(--primary);
+	}
+
+	.btn-primary:hover:not(:disabled) {
+		background-color: var(--primary-hover);
+	}
+
+	.btn-danger {
+		@apply rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-60;
+		background-color: var(--danger);
+	}
+
+	.btn-danger:hover:not(:disabled) {
+		filter: brightness(1.08);
+	}
+
+	.btn-ghost {
+		@apply rounded-xl px-3 py-2 text-sm transition;
+		color: var(--text-muted);
+	}
+
+	.btn-ghost:hover {
+		background-color: color-mix(in srgb, var(--border) 50%, transparent);
+		color: var(--text);
+	}
+
+	.tab {
+		@apply rounded-lg px-4 py-2 text-sm font-medium transition;
+		color: var(--text-muted);
+	}
+
+	.tab-active {
+		background-color: color-mix(in srgb, var(--primary) 12%, transparent);
+		color: var(--primary);
+	}
+
+	.badge {
+		@apply inline-flex shrink-0 items-center rounded-lg px-2.5 py-0.5 text-xs leading-snug font-medium;
+		background-color: color-mix(in srgb, var(--border) 55%, var(--bg-elevated));
+		color: var(--text-muted);
+		border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+	}
+
+	.badge-success {
+		background-color: color-mix(in srgb, var(--primary) 14%, transparent);
+		color: var(--primary);
+		border-color: color-mix(in srgb, var(--primary) 28%, transparent);
+	}
+
+	.nav-mobile-link {
+		@apply block rounded-lg px-3 py-2 text-sm transition hover:opacity-80;
+	}
+
+	.filter-panel > summary {
+		@apply cursor-pointer list-none text-sm font-medium;
+	}
+
+	.filter-panel > summary::-webkit-details-marker {
+		display: none;
+	}
+
+	@media (pointer: coarse) {
+		.btn-primary,
+		.btn-ghost,
+		.btn-danger,
+		.tab,
+		.nav-mobile-link {
+			min-height: 2.75rem;
+		}
+
+		label.flex.items-center.gap-2 input[type='checkbox'],
+		label.flex.items-start.gap-2 input[type='checkbox'] {
+			min-height: 1.25rem;
+			min-width: 1.25rem;
+		}
+	}
+
+	@media (min-width: 768px) {
+		.filter-panel > summary {
+			display: none;
+		}
+	}
+}

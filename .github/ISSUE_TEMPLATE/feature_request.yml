@@ -1,0 +1,57 @@
+name: Предложение улучшения
+description: Новая возможность или изменение существующего поведения
+title: "[Feature] "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Опишите идею и ожидаемый пользовательский сценарий. Если это связано с существующими issues или PR — укажите ссылки.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Какую задачу это решает?
+      description: Какой сценарий использования или боль пользователя?
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Предлагаемое решение
+      description: Как вы видите реализацию или поведение?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Альтернативы
+      description: Другие варианты, которые вы рассматривали
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Область
+      options:
+        - UI / веб-интерфейс
+        - API
+        - Импорт / экспорт данных
+        - Долги
+        - Кредиты
+        - Операции и счета
+        - Уведомления (Telegram, МАКС)
+        - Установка / Docker / деплой
+        - Другое
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: willingness
+    attributes:
+      label: Участие
+      options:
+        - label: Готов помочь с тестированием
+        - label: Готов отправить pull request

@@ -1,0 +1,20 @@
+services:
+  buhgalter:
+    # Production: pull from GHCR (see docs/install/docker.md)
+    image: ghcr.io/kai-zer-ru/buhgalter:${BUHGALTER_IMAGE_TAG:-latest}
+    # Local build:
+    # build:
+    #   context: ..
+    #   dockerfile: docker/Dockerfile
+    ports:
+      - "127.0.0.1:8765:8765"
+    volumes:
+      - buhgalter-data:/app/data
+      - buhgalter-backups:/app/backups
+      # Optional: override bundled locales
+      # - ../server/locales:/app/locales:ro
+    restart: unless-stopped
+
+volumes:
+  buhgalter-data:
+  buhgalter-backups:
