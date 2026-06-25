@@ -55,24 +55,44 @@ export function weekdayMondayFirst(year: number, month: number, day: number): nu
 	return js === 0 ? 6 : js - 1;
 }
 
-export function calendarCells(
-	year: number,
-	month: number
-): Array<{ day: number; inMonth: boolean }> {
+function shiftMonth(year: number, month: number, delta: number): { year: number; month: number } {
+	let m = month + delta;
+	let y = year;
+	while (m < 1) {
+		m += 12;
+		y -= 1;
+	}
+	while (m > 12) {
+		m -= 12;
+		y += 1;
+	}
+	return { year: y, month: m };
+}
+
+export type CalendarCell = {
+	day: number;
+	month: number;
+	year: number;
+	inMonth: boolean;
+};
+
+export function calendarCells(year: number, month: number): CalendarCell[] {
 	const firstWeekday = weekdayMondayFirst(year, month, 1);
 	const totalDays = daysInMonth(year, month);
-	const prevMonthDays = daysInMonth(year, month - 1);
-	const cells: Array<{ day: number; inMonth: boolean }> = [];
+	const prev = shiftMonth(year, month, -1);
+	const next = shiftMonth(year, month, 1);
+	const prevMonthDays = daysInMonth(prev.year, prev.month);
+	const cells: CalendarCell[] = [];
 
 	for (let i = firstWeekday - 1; i >= 0; i--) {
-		cells.push({ day: prevMonthDays - i, inMonth: false });
+		cells.push({ day: prevMonthDays - i, month: prev.month, year: prev.year, inMonth: false });
 	}
 	for (let day = 1; day <= totalDays; day++) {
-		cells.push({ day, inMonth: true });
+		cells.push({ day, month, year, inMonth: true });
 	}
 	let nextDay = 1;
 	while (cells.length % 7 !== 0) {
-		cells.push({ day: nextDay++, inMonth: false });
+		cells.push({ day: nextDay++, month: next.month, year: next.year, inMonth: false });
 	}
 	return cells;
 }

@@ -3,7 +3,7 @@
 	import { _ } from 'svelte-i18n';
 	import type { Debt } from '$lib/api/client';
 	import EntityLink from '$lib/components/EntityLink.svelte';
-	import { formatAPIDateTimeForDisplay } from '$lib/dates';
+	import { formatAPIDateForDisplay } from '$lib/dates';
 	import { formatBalance } from '$lib/finance';
 
 	let {
@@ -75,10 +75,10 @@
 						{formatBalance(d.amount_display, currency)}
 					</td>
 					<td class="p-3 whitespace-nowrap">
-						{formatAPIDateTimeForDisplay(d.debt_date, tz)}
+						{formatAPIDateForDisplay(d.debt_date, tz)}
 					</td>
 					<td class="p-3 whitespace-nowrap">
-						{formatAPIDateTimeForDisplay(d.due_date, tz)}
+						{formatAPIDateForDisplay(d.due_date, tz)}
 						{#if d.is_overdue}
 							<span
 								class="ml-2 inline-block rounded px-1.5 py-0.5 text-xs whitespace-nowrap"
@@ -154,12 +154,12 @@
 				</div>
 				<div class="flex justify-between gap-2">
 					<dt style:color="var(--text-muted)">{$_('debts.col.debtDate')}</dt>
-					<dd>{formatAPIDateTimeForDisplay(d.debt_date, tz)}</dd>
+					<dd>{formatAPIDateForDisplay(d.debt_date, tz)}</dd>
 				</div>
 				<div class="flex justify-between gap-2">
 					<dt style:color="var(--text-muted)">{$_('debts.col.dueShort')}</dt>
 					<dd>
-						{formatAPIDateTimeForDisplay(d.due_date, tz)}
+						{formatAPIDateForDisplay(d.due_date, tz)}
 						{#if d.is_overdue}
 							<span class="ml-1 text-xs" style:color="var(--danger)">
 								{$_('debts.badge.overdue')}

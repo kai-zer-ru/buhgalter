@@ -28,13 +28,7 @@
 		onsaved: () => void;
 	};
 
-	let {
-		open = $bindable(),
-		editTx = null,
-		siblings = [],
-		onclose,
-		onsaved
-	}: Props = $props();
+	let { open = $bindable(), editTx = null, siblings = [], onclose, onsaved }: Props = $props();
 
 	let fromAccount = $state('');
 	let toAccount = $state('');

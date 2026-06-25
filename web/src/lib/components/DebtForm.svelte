@@ -20,7 +20,7 @@
 	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
 	import { defaultAccountId } from '$lib/accounts';
 	import { toast } from '$lib/toast';
-	import { fromDatetimeLocalValue, nowDatetimeLocal } from '$lib/dates';
+	import { fromDateLocalEnd, fromDateLocalStart, todayDateLocal } from '$lib/dates';
 	import { toAPIAmount } from '$lib/money';
 	import { user } from '$lib/stores/auth';
 
@@ -116,7 +116,7 @@
 		amount = '';
 		debtorId = fixedDebtorId ?? '';
 		newDebtorName = '';
-		const now = nowDatetimeLocal(tz);
+		const now = todayDateLocal(tz);
 		debtDateLocal = now;
 		dueDateLocal = now;
 		skipBalance = false;
@@ -149,8 +149,8 @@
 			if (!dueDateLocal) {
 				throw new Error($_('debts.field.dueDate'));
 			}
-			const debt_date = fromDatetimeLocalValue(debtDateLocal, tz);
-			const due_date = fromDatetimeLocalValue(dueDateLocal, tz);
+			const debt_date = fromDateLocalStart(debtDateLocal, tz);
+			const due_date = fromDateLocalEnd(dueDateLocal, tz);
 			await createDebt({
 				...(debtorId ? { debtor_id: debtorId } : { debtor_name: newDebtorName.trim() }),
 				direction,
@@ -213,6 +213,7 @@
 		<DateTimePicker
 			label={$_('debts.field.debtDate')}
 			bind:value={debtDateLocal}
+			timeMode="hidden"
 			usePortal
 			required
 		/>
@@ -220,6 +221,7 @@
 		<DateTimePicker
 			label={$_('debts.field.dueDate')}
 			bind:value={dueDateLocal}
+			timeMode="hidden"
 			usePortal
 			required
 		/>

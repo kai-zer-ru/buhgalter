@@ -107,10 +107,16 @@
 		return { hour: h || 0, minute: m || 0 };
 	}
 
-	function setDate(day: number) {
+	function setDate(year: number, month: number, day: number) {
+		viewYear = year;
+		viewMonth = month;
 		const { hour, minute } = effectiveTime();
-		value = buildDatetimeLocal(viewYear, viewMonth, day, hour, minute);
+		value = buildDatetimeLocal(year, month, day, hour, minute);
 		if (timeMode !== 'visible') close();
+	}
+
+	function isSelectedCell(cell: { year: number; month: number; day: number }): boolean {
+		return parsed?.day === cell.day && parsed?.month === cell.month && parsed?.year === cell.year;
 	}
 
 	function applyTime() {
@@ -271,23 +277,16 @@
 					{/each}
 				</div>
 				<div class="grid grid-cols-7 gap-1">
-					{#each cells as cell, index (index)}
+					{#each cells as cell, index (`${cell.year}-${cell.month}-${cell.day}-${index}`)}
 						<button
 							type="button"
 							class="rounded-lg px-0 py-2 text-sm transition hover:bg-[color-mix(in_srgb,var(--border)_45%,transparent)]"
 							class:datetime-day-muted={!cell.inMonth}
-							class:font-semibold={cell.inMonth &&
-								parsed?.day === cell.day &&
-								parsed?.month === viewMonth &&
-								parsed?.year === viewYear}
-							style:background-color={cell.inMonth &&
-							parsed?.day === cell.day &&
-							parsed?.month === viewMonth &&
-							parsed?.year === viewYear
+							class:font-semibold={isSelectedCell(cell)}
+							style:background-color={isSelectedCell(cell)
 								? 'color-mix(in srgb, var(--primary) 28%, transparent)'
 								: 'transparent'}
-							disabled={!cell.inMonth}
-							onclick={() => cell.inMonth && setDate(cell.day)}
+							onclick={() => setDate(cell.year, cell.month, cell.day)}
 						>
 							{cell.day}
 						</button>
