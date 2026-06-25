@@ -57,7 +57,7 @@
 <div class="space-y-6">
 	<SectionHeader title={$_('accounts.title')}>
 		{#snippet actions()}
-			<a href={resolve('/accounts/new')} class="btn-primary">
+			<a href={resolve('/accounts/new')} class="btn-primary w-full sm:w-auto">
 				{$_('accounts.new')}
 			</a>
 		{/snippet}
@@ -110,9 +110,12 @@
 					{#if filter === 'active'}
 						<button
 							type="button"
-							class="btn-ghost shrink-0 px-2"
+							class="btn-icon btn-ghost shrink-0"
 							title={acc.is_primary ? $_('accounts.primary.badge') : $_('accounts.primary.set')}
 							aria-pressed={acc.is_primary}
+							aria-label={acc.is_primary
+								? $_('accounts.primary.badge')
+								: $_('accounts.primary.set')}
 							style:color={acc.is_primary ? 'var(--primary)' : 'var(--text-muted)'}
 							onclick={() => void makePrimary(acc.id)}
 						>

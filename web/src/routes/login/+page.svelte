@@ -3,16 +3,24 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { _ } from 'svelte-i18n';
-	import { ApiError, getRegistrationEnabled, login } from '$lib/api/client';
+	import { ApiError, getRegistrationEnabled, login, requestPasswordReset } from '$lib/api/client';
 	import { user, markSessionHint } from '$lib/stores/auth';
 	import { syncThemeFromUser } from '$lib/stores/theme';
 	import { setLocale } from '$lib/i18n';
+	import ModalShell from '$lib/components/ModalShell.svelte';
+	import FormFeedback from '$lib/components/FormFeedback.svelte';
+	import { toast } from '$lib/toast';
 
 	let loginName = $state('');
 	let password = $state('');
 	let error = $state('');
 	let loading = $state(false);
 	let registrationEnabled = $state(false);
+	let resetOpen = $state(false);
+	let resetLogin = $state('');
+	let resetError = $state('');
+	let resetLoading = $state(false);
+	let resetSent = $state(false);
 
 	onMount(async () => {
 		registrationEnabled = await getRegistrationEnabled();
@@ -33,6 +41,32 @@
 			error = err instanceof ApiError ? err.message : $_('common.error');
 		} finally {
 			loading = false;
+		}
+	}
+
+	function openResetRequest() {
+		resetLogin = loginName.trim();
+		resetError = '';
+		resetSent = false;
+		resetOpen = true;
+	}
+
+	async function submitResetRequest() {
+		resetError = '';
+		const name = resetLogin.trim();
+		if (name.length < 3) {
+			resetError = $_('login.reset.loginRequired');
+			return;
+		}
+		resetLoading = true;
+		try {
+			await requestPasswordReset(name);
+			resetSent = true;
+			toast($_('login.reset.sent'));
+		} catch (err) {
+			resetError = err instanceof ApiError ? err.message : $_('common.error');
+		} finally {
+			resetLoading = false;
 		}
 	}
 </script>
@@ -68,6 +102,16 @@
 				{loading ? $_('common.loading') : $_('login.submit')}
 			</button>
 		</form>
+		<p class="mt-4 text-center text-sm">
+			<button
+				type="button"
+				class="font-medium hover:underline"
+				style:color="var(--primary)"
+				onclick={openResetRequest}
+			>
+				{$_('login.reset.request')}
+			</button>
+		</p>
 		{#if registrationEnabled}
 			<p class="mt-6 text-center text-sm" style:color="var(--text-muted)">
 				{$_('login.no_account')}
@@ -77,4 +121,38 @@
 			</p>
 		{/if}
 	</div>
+
+	<ModalShell
+		bind:open={resetOpen}
+		title={$_('login.reset.title')}
+		onclose={() => (resetOpen = false)}
+	>
+		<div class="space-y-4">
+			{#if resetSent}
+				<p class="text-sm" style:color="var(--text-muted)">{$_('login.reset.sentHint')}</p>
+			{:else}
+				<p class="text-sm" style:color="var(--text-muted)">{$_('login.reset.hint')}</p>
+				<label class="block space-y-1">
+					<span class="text-sm" style:color="var(--text-muted)">{$_('login.login')}</span>
+					<input class="input w-full" bind:value={resetLogin} autocomplete="username" required />
+				</label>
+				<FormFeedback error={resetError} />
+			{/if}
+		</div>
+		{#snippet footer()}
+			<button type="button" class="btn-ghost" onclick={() => (resetOpen = false)}>
+				{$_('common.close')}
+			</button>
+			{#if !resetSent}
+				<button
+					type="button"
+					class="btn-primary"
+					disabled={resetLoading}
+					onclick={() => void submitResetRequest()}
+				>
+					{resetLoading ? $_('common.loading') : $_('login.reset.submit')}
+				</button>
+			{/if}
+		{/snippet}
+	</ModalShell>
 </div>

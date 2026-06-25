@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -281,6 +282,11 @@ func Reorder(ctx context.Context, db *sql.DB, userID, catType string, ids []stri
 		}
 	}
 
+	ids, err = normalizeCategoryOrder(existing, ids)
+	if err != nil {
+		return err
+	}
+
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -300,10 +306,57 @@ func Reorder(ctx context.Context, db *sql.DB, userID, catType string, ids []stri
 	return tx.Commit()
 }
 
+func normalizeCategoryOrder(existing []Category, ids []string) ([]string, error) {
+	byID := make(map[string]Category, len(existing))
+	var systemIDs []string
+	for _, c := range existing {
+		byID[c.ID] = c
+		if c.IsSystem {
+			systemIDs = append(systemIDs, c.ID)
+		}
+	}
+	sort.Slice(systemIDs, func(i, j int) bool {
+		a, b := byID[systemIDs[i]], byID[systemIDs[j]]
+		if a.SortOrder != b.SortOrder {
+			return a.SortOrder < b.SortOrder
+		}
+		return a.Name < b.Name
+	})
+
+	userIDs := make([]string, 0, len(existing)-len(systemIDs))
+	seenUser := make(map[string]struct{}, len(existing))
+	for _, id := range ids {
+		c, ok := byID[id]
+		if !ok {
+			return nil, ErrInvalidReorder
+		}
+		if c.IsSystem {
+			continue
+		}
+		if _, dup := seenUser[id]; dup {
+			return nil, ErrInvalidReorder
+		}
+		seenUser[id] = struct{}{}
+		userIDs = append(userIDs, id)
+	}
+	for _, c := range existing {
+		if c.IsSystem {
+			continue
+		}
+		if _, ok := seenUser[c.ID]; !ok {
+			return nil, ErrInvalidReorder
+		}
+	}
+	return append(userIDs, systemIDs...), nil
+}
+
 func SetPrimary(ctx context.Context, db *sql.DB, userID, id string) (Category, error) {
 	cat, err := GetByID(ctx, db, userID, id)
 	if err != nil {
 		return Category{}, err
+	}
+	if cat.IsSystem {
+		return Category{}, ErrSystemCategory
 	}
 
 	tx, err := db.BeginTx(ctx, nil)

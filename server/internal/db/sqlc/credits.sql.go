@@ -938,3 +938,49 @@ func (q *Queries) UpdateFutureTransactionAccount(ctx context.Context, arg Update
 	}
 	return result.RowsAffected()
 }
+
+const updateFutureTransactionAmount = `-- name: UpdateFutureTransactionAmount :execrows
+UPDATE transactions
+SET amount = ?, updated_at = ?
+WHERE id = ? AND user_id = ? AND kind = 'future'
+`
+
+type UpdateFutureTransactionAmountParams struct {
+	Amount    int64  `json:"amount"`
+	UpdatedAt string `json:"updated_at"`
+	ID        string `json:"id"`
+	UserID    string `json:"user_id"`
+}
+
+func (q *Queries) UpdateFutureTransactionAmount(ctx context.Context, arg UpdateFutureTransactionAmountParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateFutureTransactionAmount,
+		arg.Amount,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const updateScheduledCreditPaymentAmount = `-- name: UpdateScheduledCreditPaymentAmount :execrows
+UPDATE credit_payments
+SET amount = ?
+WHERE id = ? AND credit_id = ? AND is_applied = 0 AND kind = 'scheduled'
+`
+
+type UpdateScheduledCreditPaymentAmountParams struct {
+	Amount   int64  `json:"amount"`
+	ID       string `json:"id"`
+	CreditID string `json:"credit_id"`
+}
+
+func (q *Queries) UpdateScheduledCreditPaymentAmount(ctx context.Context, arg UpdateScheduledCreditPaymentAmountParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateScheduledCreditPaymentAmount, arg.Amount, arg.ID, arg.CreditID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}

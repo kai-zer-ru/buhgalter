@@ -12,7 +12,7 @@ RUN npm run build
 FROM golang:1.26-alpine AS server
 WORKDIR /app
 RUN apk add --no-cache git
-ARG VERSION=1.0.0
+ARG VERSION=1.1.0
 ARG INSTALL_METHOD=docker
 ARG BUILD_COMMIT=unknown
 ARG BUILD_TIME
@@ -36,7 +36,7 @@ WORKDIR /app
 RUN adduser -D -u 1000 buhgalter
 COPY --from=server /buhgalter /app/buhgalter
 COPY --from=server /app/locales /app/locales
-ARG VERSION=1.0.0
+ARG VERSION=1.1.0
 ARG BUILD_COMMIT=unknown
 LABEL org.opencontainers.image.source="https://github.com/kai-zer-ru/buhgalter" \
       org.opencontainers.image.version="${VERSION}" \

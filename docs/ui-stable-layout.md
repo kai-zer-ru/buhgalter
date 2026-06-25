@@ -29,5 +29,14 @@
 | `/accounts/[id]` | «+ Операция», «Перевод» | да (фильтр операций) |
 | `/credits` | «+ Новый кредит» | да; вкладки и badge — [ui-credits.md](ui-credits.md) |
 
+## Мобильная вёрстка (v1.1)
+
+- Touch-targets минимум 44px (`layout.css`, `@media (pointer: coarse)`)
+- Широкие таблицы → карточки на `md` breakpoint (кредиты, операции)
+- Модалки — bottom sheet на узком экране (`ModalShell`, `ConfirmDialog`)
+- Вкладки — горизонтальный скролл (`PageTabs`, `.page-tabs-scroll`)
+
+Release notes: [release-notes-v1.1.md](release-notes-v1.1.md).
+
 ## Запланировано
 - Фильтры операций с вкладками — тот же паттерн (см. `/transactions`, `/stats`)

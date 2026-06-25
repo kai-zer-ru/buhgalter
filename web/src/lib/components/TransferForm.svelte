@@ -24,6 +24,7 @@
 	let fromAccount = $state('');
 	let toAccount = $state('');
 	let amount = $state('');
+	let commission = $state('');
 	let description = $state('');
 	let dateTimeValue = $state('');
 	let accounts = $state<Account[]>([]);
@@ -47,6 +48,7 @@
 		fromAccount = primary;
 		toAccount = accounts.find((a) => a.id !== primary)?.id ?? primary;
 		amount = '';
+		commission = '';
 		description = '';
 		dateTimeValue = nowDatetimeLocal(tz);
 	}
@@ -60,6 +62,7 @@
 				from_account_id: fromAccount,
 				to_account_id: toAccount,
 				amount: toAPIAmount(amount),
+				commission: commission.trim() ? toAPIAmount(commission) : undefined,
 				description: description || undefined,
 				transaction_date: fromDatetimeLocalValue(dateTimeValue, tz)
 			});
@@ -148,6 +151,12 @@
 			>
 				{$_('transfers.full_balance')}
 			</button>
+		</div>
+		<div>
+			<label class="mb-1 block text-sm font-medium" for="tr-commission"
+				>{$_('transfers.field.commission')}</label
+			>
+			<MoneyInput id="tr-commission" bind:value={commission} />
 		</div>
 		<div>
 			<label class="mb-1 block text-sm font-medium" for="tr-desc"

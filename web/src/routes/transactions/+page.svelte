@@ -15,6 +15,7 @@
 		type Transaction
 	} from '$lib/api/client';
 	import BackLink from '$lib/components/BackLink.svelte';
+	import IconButton from '$lib/components/IconButton.svelte';
 	import TransactionContextStats from '$lib/components/TransactionContextStats.svelte';
 	import TransactionFilters from '$lib/components/TransactionFilters.svelte';
 	import TransactionForm from '$lib/components/TransactionForm.svelte';
@@ -195,16 +196,15 @@
 
 	<div class="flex items-center justify-between gap-3">
 		<h1 class="text-2xl font-semibold">{$_('transactions.all')}</h1>
-		<button
-			type="button"
-			class="btn-primary"
+		<IconButton
+			icon="add"
+			label={$_('transactions.new')}
+			variant="primary"
 			onclick={() => {
 				editTx = null;
 				txOpen = true;
 			}}
-		>
-			+ {$_('transactions.new')}
-		</button>
+		/>
 	</div>
 
 	<TransactionFilters

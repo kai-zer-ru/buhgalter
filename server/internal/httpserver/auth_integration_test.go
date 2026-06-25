@@ -618,3 +618,84 @@ func TestBackupRestore(t *testing.T) {
 		t.Fatalf("login after restore without restart status %d", loginResp.StatusCode)
 	}
 }
+
+func TestPasswordResetRequestAdminFlow(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+
+	createBody, _ := json.Marshal(map[string]any{
+		"login": "bob", "password": "bobpass1", "password_confirm": "bobpass1",
+		"display_name": "Bob", "is_admin": false,
+	})
+	createResp, err := env.authedRequest(http.MethodPost, "/api/v1/admin/users", bytes.NewReader(createBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	createResp.Body.Close()
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create user status %d", createResp.StatusCode)
+	}
+
+	reqBody, _ := json.Marshal(map[string]string{"login": "bob"})
+	reqResp, err := http.Post(env.server.URL+"/api/v1/auth/request-password-reset", "application/json", bytes.NewReader(reqBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	reqResp.Body.Close()
+	if reqResp.StatusCode != http.StatusNoContent {
+		t.Fatalf("request status %d", reqResp.StatusCode)
+	}
+
+	listResp, err := env.authedRequest(http.MethodGet, "/api/v1/admin/password-reset-requests", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listResp.Body.Close()
+	var items []map[string]any
+	if err := json.NewDecoder(listResp.Body).Decode(&items); err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("pending requests %v", items)
+	}
+	requestID, _ := items[0]["id"].(string)
+	userID, _ := items[0]["user_id"].(string)
+
+	ackResp, err := env.authedRequest(http.MethodPost, "/api/v1/admin/password-reset-requests/"+requestID+"/ack", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ackResp.Body.Close()
+	if ackResp.StatusCode != http.StatusNoContent {
+		t.Fatalf("ack status %d", ackResp.StatusCode)
+	}
+
+	listResp2, err := env.authedRequest(http.MethodGet, "/api/v1/admin/password-reset-requests", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listResp2.Body.Close()
+	items = nil
+	if err := json.NewDecoder(listResp2.Body).Decode(&items); err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 0 {
+		t.Fatalf("expected no pending after ack, got %v", items)
+	}
+
+	resetBody, _ := json.Marshal(map[string]string{
+		"new_password": "newbobpass1", "new_password_confirm": "newbobpass1",
+	})
+	resetResp, err := env.authedRequest(http.MethodPut, "/api/v1/admin/users/"+userID+"/password", bytes.NewReader(resetBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resetResp.Body.Close()
+	if resetResp.StatusCode != http.StatusNoContent {
+		t.Fatalf("reset password status %d", resetResp.StatusCode)
+	}
+
+	env.cookie = ""
+	env.token = ""
+	env.login(t, "bob", "newbobpass1")
+}

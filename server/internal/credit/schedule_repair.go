@@ -32,7 +32,7 @@ func repairMissingSchedule(ctx context.Context, db *sql.DB, userID string, f cre
 	}
 	entries, err := GenerateAutoSchedule(
 		f.principal, f.termMonths, f.monthlyPayment,
-		PaymentInterval(f.paymentInterval), issueDate,
+		PaymentInterval(f.paymentInterval), issueDate, f.interestRate,
 	)
 	if err != nil {
 		return err

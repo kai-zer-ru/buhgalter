@@ -2,6 +2,7 @@ package credit
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
@@ -365,6 +366,69 @@ func TestCreateWithInterestRate(t *testing.T) {
 	}
 }
 
+func TestCreateCredit36MonthsWithInterest(t *testing.T) {
+	ctx, handle, userID, accountID := seedCreditEnv(t)
+	sqlDB := handle.DB()
+	issue := timeutil.NowUTC().AddDate(0, 1, 0)
+
+	c, err := Create(ctx, sqlDB, userID, CreateInput{
+		PrincipalAmount:    1_000_000,
+		IssueDate:          issue,
+		TermMonths:         36,
+		InterestRate:       12,
+		PaymentInterval:    IntervalMonth,
+		DebitAccountID:     accountID,
+		CreateTransactions: false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Schedule) != 36 {
+		t.Fatalf("schedule len %d, want 36", len(c.Schedule))
+	}
+}
+
+func TestRepairShortSchedules(t *testing.T) {
+	ctx, handle, userID, accountID := seedCreditEnv(t)
+	sqlDB := handle.DB()
+	issue := timeutil.NowUTC().AddDate(0, 1, 0)
+
+	c, err := Create(ctx, sqlDB, userID, CreateInput{
+		PrincipalAmount:    1_000_000,
+		IssueDate:          issue,
+		TermMonths:         36,
+		InterestRate:       12,
+		PaymentInterval:    IntervalMonth,
+		DebitAccountID:     accountID,
+		CreateTransactions: false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	payments, err := queries(sqlDB).ListCreditPayments(ctx, c.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(payments) != 36 {
+		t.Fatalf("setup: expected 36 payments, got %d", len(payments))
+	}
+	for i := 22; i < len(payments); i++ {
+		if _, err := sqlDB.ExecContext(ctx, `DELETE FROM credit_payments WHERE id = ?`, payments[i].ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := RepairShortSchedules(ctx, sqlDB); err != nil {
+		t.Fatal(err)
+	}
+	payments, err = queries(sqlDB).ListCreditPayments(ctx, c.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(payments) != 36 {
+		t.Fatalf("after repair: expected 36 payments, got %d", len(payments))
+	}
+}
+
 func TestAutoCloseOnFullPayment(t *testing.T) {
 	ctx, handle, userID, accountID := seedCreditEnv(t)
 	sqlDB := handle.DB()
@@ -432,6 +496,96 @@ func TestCreateRetroactiveCredit(t *testing.T) {
 	}
 	if retro == 0 {
 		t.Fatal("expected retroactive payments")
+	}
+}
+
+func TestCreateRetroactiveCreditWithAccountDebit(t *testing.T) {
+	ctx, handle, userID, accountID := seedCreditEnv(t)
+	sqlDB := handle.DB()
+	_, err := sqlDB.ExecContext(ctx,
+		`UPDATE accounts SET initial_balance = 1000000 WHERE id = ?`, accountID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	issue := timeutil.NowUTC().AddDate(0, -2, 0)
+	added := true
+	debitCount := 1
+
+	c, err := Create(ctx, sqlDB, userID, CreateInput{
+		PrincipalAmount:       120_000,
+		IssueDate:             issue,
+		TermMonths:            12,
+		PaymentInterval:       IntervalMonth,
+		DebitAccountID:        accountID,
+		AddedRetroactively:    &added,
+		RetroactiveDebitCount: debitCount,
+		CreateTransactions:    false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var retroTotal, debited, notDebited int
+	var debitedAmount int64
+	for _, p := range c.Schedule {
+		if p.Kind != "retroactive" {
+			continue
+		}
+		retroTotal++
+		if p.TransactionID != nil {
+			debited++
+			debitedAmount += p.Amount
+			if p.ExcludeFromStats {
+				t.Fatal("debited retro payment should count in stats")
+			}
+		} else {
+			notDebited++
+			if !p.ExcludeFromStats {
+				t.Fatal("non-debited retro should be excluded from stats")
+			}
+		}
+	}
+	if retroTotal < 1 {
+		t.Fatalf("expected at least 1 retro payment, got %d", retroTotal)
+	}
+	if debited != debitCount {
+		t.Fatalf("expected %d debited retro payments, got %d", debitCount, debited)
+	}
+	if notDebited != retroTotal-debitCount {
+		t.Fatalf("unexpected non-debited retro count %d", notDebited)
+	}
+	var txCount int
+	if err := sqlDB.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM transactions WHERE user_id = ? AND account_id = ?`,
+		userID, accountID,
+	).Scan(&txCount); err != nil {
+		t.Fatal(err)
+	}
+	if txCount != debitCount {
+		t.Fatalf("expected %d transactions, got %d", debitCount, txCount)
+	}
+	if c.PaidAmount < debitedAmount {
+		t.Fatalf("paid_amount %d should include debited %d", c.PaidAmount, debitedAmount)
+	}
+}
+
+func TestCreateRetroactiveDebitCountInvalid(t *testing.T) {
+	ctx, handle, userID, accountID := seedCreditEnv(t)
+	sqlDB := handle.DB()
+	issue := timeutil.NowUTC().AddDate(0, -2, 0)
+	added := true
+	tooMany := 99
+
+	_, err := Create(ctx, sqlDB, userID, CreateInput{
+		PrincipalAmount:       120_000,
+		IssueDate:             issue,
+		TermMonths:            12,
+		PaymentInterval:       IntervalMonth,
+		DebitAccountID:        accountID,
+		AddedRetroactively:    &added,
+		RetroactiveDebitCount: tooMany,
+	})
+	if !errors.Is(err, ErrInvalidRetroactiveDebit) {
+		t.Fatalf("expected ErrInvalidRetroactiveDebit, got %v", err)
 	}
 }
 

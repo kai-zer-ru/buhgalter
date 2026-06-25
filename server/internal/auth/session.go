@@ -118,6 +118,11 @@ func DeleteSessionByID(ctx context.Context, db *sql.DB, id string) error {
 	return err
 }
 
+func DeleteSessionsByUserID(ctx context.Context, db *sql.DB, userID string) error {
+	_, err := db.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ?`, userID)
+	return err
+}
+
 func VerifyToken(ctx context.Context, db *sql.DB, rawToken string) bool {
 	if _, err := LookupSession(ctx, db, rawToken); err == nil {
 		return true

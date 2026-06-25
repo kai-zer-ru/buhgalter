@@ -855,6 +855,22 @@
       "name": "Кредит"
     },
     {
+      "id": "percent",
+      "kind": "expense",
+      "tags": [
+        "комиссия",
+        "процент",
+        "fee"
+      ],
+      "brand": {
+        "bg": "#6366F1",
+        "fg": "#FFFFFF",
+        "label": "%",
+        "size": 16
+      },
+      "name": "Комиссия"
+    },
+    {
       "id": "legal",
       "emoji": "⚖️",
       "kind": "expense",

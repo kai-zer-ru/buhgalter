@@ -14,6 +14,7 @@
 	import FieldHint from '$lib/components/FieldHint.svelte';
 	import FormFeedback from '$lib/components/FormFeedback.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
+	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
 	import { defaultAccountId } from '$lib/accounts';
 	import { toast } from '$lib/toast';
 	import {
@@ -52,6 +53,7 @@
 	let debitAccountId = $state('');
 	let createTransactions = $state(true);
 	let retroactive = $state(false);
+	let retroactiveDebitCount = $state(0);
 	let accounts = $state<Account[]>([]);
 	let scheduleRows = $state<ScheduleRow[]>([]);
 	let scheduleLoading = $state(false);
@@ -125,14 +127,28 @@
 		editingPayment = false;
 	}
 
+	function resetForm() {
+		productType = 'credit';
+		name = '';
+		principal = '';
+		termMonths = '12';
+		interestRate = '12';
+		interval = 'month';
+		calculatedPayment = '';
+		paymentOverride = null;
+		editingPayment = false;
+		paymentDraft = '';
+		retroactive = false;
+		retroactiveDebitCount = 0;
+		scheduleRows = [];
+		lastScheduleKey = '';
+		lastBaseScheduleKey = '';
+		error = '';
+	}
+
 	$effect(() => {
 		if (open) {
-			lastScheduleKey = '';
-			lastBaseScheduleKey = '';
-			scheduleRows = [];
-			paymentOverride = null;
-			editingPayment = false;
-			paymentDraft = '';
+			resetForm();
 			createTransactions = true;
 			void loadAccounts();
 			issueDateLocal = todayDateLocal(tz);
@@ -255,6 +271,45 @@
 		return scheduleRows.length > 0 && scheduleRows.every((r) => r.date.trim() && r.amount.trim());
 	}
 
+	function retroRowIndices(): number[] {
+		const out: number[] = [];
+		for (let i = 0; i < scheduleRows.length; i++) {
+			if (rowStatus(scheduleRows[i]) === 'retroactive') out.push(i);
+		}
+		return out;
+	}
+
+	function isRetroDebited(rowIndex: number): boolean {
+		const indices = retroRowIndices();
+		const pos = indices.indexOf(rowIndex);
+		if (pos < 0) return false;
+		return pos >= indices.length - retroactiveDebitCount;
+	}
+
+	function canToggleRetroDebit(rowIndex: number): boolean {
+		const indices = retroRowIndices();
+		const pos = indices.indexOf(rowIndex);
+		if (pos < 0) return false;
+		const len = indices.length;
+		const n = retroactiveDebitCount;
+		if (n > 0 && pos === len - n) return true;
+		if (n < len && pos === len - n - 1) return true;
+		return false;
+	}
+
+	function toggleRetroDebit(rowIndex: number) {
+		const indices = retroRowIndices();
+		const pos = indices.indexOf(rowIndex);
+		if (pos < 0 || !canToggleRetroDebit(rowIndex)) return;
+		const len = indices.length;
+		const n = retroactiveDebitCount;
+		if (n > 0 && pos === len - n) {
+			retroactiveDebitCount--;
+		} else if (n < len && pos === len - n - 1) {
+			retroactiveDebitCount++;
+		}
+	}
+
 	function rowStatus(row: ScheduleRow): 'retroactive' | 'pending' | null {
 		if (!row.date.trim()) return null;
 		if (!retroactive) return 'pending';
@@ -264,6 +319,17 @@
 	const hasUnpaidPayments = $derived(
 		scheduleRows.some((row) => row.date.trim() && rowStatus(row) === 'pending')
 	);
+
+	$effect(() => {
+		if (retroactive) return;
+		retroactiveDebitCount = 0;
+	});
+
+	$effect(() => {
+		if (!retroactive) return;
+		const len = retroRowIndices().length;
+		if (retroactiveDebitCount > len) retroactiveDebitCount = len;
+	});
 
 	const showCreateTransactions = $derived(!retroactive && hasUnpaidPayments);
 
@@ -297,6 +363,7 @@
 				monthly_payment: !isManualInterval && paymentOverride ? toAPIAmount(paymentOverride) : null,
 				debit_account_id: debitAccountId,
 				added_retroactively: retroactive,
+				retroactive_debit_count: retroactive ? retroactiveDebitCount : 0,
 				create_transactions: showCreateTransactions && createTransactions,
 				schedule_seed: seed
 			});
@@ -396,11 +463,20 @@
 		</div>
 
 		<div class="space-y-1">
-			<label class="flex items-start gap-2">
-				<input type="checkbox" bind:checked={retroactive} class="mt-1" />
-				<span class="text-sm">{$_('credits.field.retroactive')}</span>
-			</label>
-			<FieldHint text={$_('credits.field.retroactiveHint')} />
+			<div class="flex items-center justify-between gap-4">
+				<div>
+					<p class="text-sm">{$_('credits.field.retroactive')}</p>
+					<FieldHint text={$_('credits.field.retroactiveHint')} />
+				</div>
+				<ToggleSwitch
+					checked={retroactive}
+					label={$_('credits.field.retroactive')}
+					onchange={() => (retroactive = !retroactive)}
+				/>
+			</div>
+			{#if retroactive && retroRowIndices().length > 0}
+				<FieldHint text={$_('credits.field.retroactiveDebitHint')} />
+			{/if}
 		</div>
 
 		<div class="space-y-2">
@@ -412,81 +488,162 @@
 					</span>
 				{/if}
 			</div>
-			<div class="overflow-x-auto rounded border text-sm" style:border-color="var(--border)">
+			<div class="rounded border text-sm" style:border-color="var(--border)">
 				{#if scheduleRows.length === 0}
 					<p class="p-4 text-sm" style:color="var(--text-muted)">
 						{scheduleLoading ? $_('credits.schedule.loading') : $_('credits.schedule.empty')}
 					</p>
 				{:else}
-					<table
-						class="w-full border-separate border-spacing-0 transition-opacity duration-150"
+					<div
+						class="hidden md:block overflow-x-auto transition-opacity duration-150"
 						class:opacity-50={scheduleLoading}
 					>
-						<thead>
-							<tr>
-								<th
-									class="sticky top-0 z-10 border-b p-2 text-left font-medium"
-									style:color="var(--text-muted)"
-									style:background-color="var(--bg-elevated)"
-									style:border-color="var(--border)"
-								>
-									#
-								</th>
-								<th
-									class="sticky top-0 z-10 border-b p-2 text-left font-medium"
-									style:color="var(--text-muted)"
-									style:background-color="var(--bg-elevated)"
-									style:border-color="var(--border)"
-								>
-									{$_('transactions.col.date')}
-								</th>
-								<th
-									class="sticky top-0 z-10 border-b p-2 text-left font-medium"
-									style:color="var(--text-muted)"
-									style:background-color="var(--bg-elevated)"
-									style:border-color="var(--border)"
-								>
-									{$_('transactions.col.amount')}
-								</th>
-								<th
-									class="sticky top-0 z-10 border-b p-2 text-left font-medium"
-									style:color="var(--text-muted)"
-									style:background-color="var(--bg-elevated)"
-									style:border-color="var(--border)"
-								>
-									{$_('transactions.col.status')}
-								</th>
-							</tr>
-						</thead>
-						<tbody>
-							{#each scheduleRows as row, i (i)}
-								{@const status = rowStatus(row)}
-								<tr class="border-b last:border-b-0" style:border-color="var(--border)">
-									<td class="p-2 align-middle" style:color="var(--text-muted)">{i + 1}</td>
-									<td class="p-2 align-middle">
-										<DateTimePicker
-											id={`credit-schedule-${i}`}
-											bind:value={row.date}
-											timeMode="hidden"
-											usePortal
-										/>
-									</td>
-									<td class="p-2 align-middle">
-										<MoneyInput bind:value={row.amount} />
-									</td>
-									<td class="p-2 align-middle whitespace-nowrap">
-										{#if status === 'retroactive'}
-											<span class="badge">{$_('credits.payment.status.retroactive')}</span>
-										{:else if status === 'pending'}
-											<span style:color="var(--text-muted)">
-												{$_('credits.payment.status.pending')}
-											</span>
-										{/if}
-									</td>
+						<table class="w-full border-separate border-spacing-0">
+							<thead>
+								<tr>
+									<th
+										class="sticky top-0 z-10 border-b p-2 text-left font-medium"
+										style:color="var(--text-muted)"
+										style:background-color="var(--bg-elevated)"
+										style:border-color="var(--border)"
+									>
+										#
+									</th>
+									<th
+										class="sticky top-0 z-10 border-b p-2 text-left font-medium"
+										style:color="var(--text-muted)"
+										style:background-color="var(--bg-elevated)"
+										style:border-color="var(--border)"
+									>
+										{$_('transactions.col.date')}
+									</th>
+									<th
+										class="sticky top-0 z-10 border-b p-2 text-left font-medium"
+										style:color="var(--text-muted)"
+										style:background-color="var(--bg-elevated)"
+										style:border-color="var(--border)"
+									>
+										{$_('transactions.col.amount')}
+									</th>
+									<th
+										class="sticky top-0 z-10 border-b p-2 text-left font-medium"
+										style:color="var(--text-muted)"
+										style:background-color="var(--bg-elevated)"
+										style:border-color="var(--border)"
+									>
+										{$_('credits.field.retroactiveDebit')}
+									</th>
+									<th
+										class="sticky top-0 z-10 border-b p-2 text-left font-medium"
+										style:color="var(--text-muted)"
+										style:background-color="var(--bg-elevated)"
+										style:border-color="var(--border)"
+									>
+										{$_('transactions.col.status')}
+									</th>
 								</tr>
-							{/each}
-						</tbody>
-					</table>
+							</thead>
+							<tbody>
+								{#each scheduleRows as row, i (i)}
+									{@const status = rowStatus(row)}
+									<tr class="border-b last:border-b-0" style:border-color="var(--border)">
+										<td class="p-2 align-middle" style:color="var(--text-muted)">{i + 1}</td>
+										<td class="p-2 align-middle">
+											<DateTimePicker
+												id={`credit-schedule-${i}`}
+												bind:value={row.date}
+												timeMode="hidden"
+												usePortal
+											/>
+										</td>
+										<td class="p-2 align-middle">
+											<MoneyInput bind:value={row.amount} />
+										</td>
+										<td class="p-2 align-middle whitespace-nowrap">
+											{#if status === 'retroactive'}
+												<ToggleSwitch
+													checked={isRetroDebited(i)}
+													disabled={!canToggleRetroDebit(i)}
+													label={$_('credits.field.retroactiveDebit')}
+													onchange={() => toggleRetroDebit(i)}
+												/>
+											{/if}
+										</td>
+										<td class="p-2 align-middle whitespace-nowrap">
+											{#if status === 'retroactive'}
+												<span class="badge">{$_('credits.payment.status.retroactive')}</span>
+											{:else if status === 'pending'}
+												<span style:color="var(--text-muted)">
+													{$_('credits.payment.status.pending')}
+												</span>
+											{/if}
+										</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+					<div
+						class="space-y-3 p-3 md:hidden transition-opacity duration-150"
+						class:opacity-50={scheduleLoading}
+					>
+						{#each scheduleRows as row, i (i)}
+							{@const status = rowStatus(row)}
+							<article class="rounded-xl border p-3" style:border-color="var(--border)">
+								<p class="mb-2 text-xs font-medium" style:color="var(--text-muted)">
+									{$_('credits.schedule.paymentNumber', { values: { n: i + 1 } })}
+								</p>
+								<dl class="grid gap-3 text-sm">
+									<div class="space-y-1">
+										<dt style:color="var(--text-muted)">{$_('transactions.col.date')}</dt>
+										<dd>
+											<DateTimePicker
+												id={`credit-schedule-mobile-${i}`}
+												bind:value={row.date}
+												timeMode="hidden"
+												usePortal
+											/>
+										</dd>
+									</div>
+									<div class="space-y-1">
+										<dt style:color="var(--text-muted)">{$_('transactions.col.amount')}</dt>
+										<dd>
+											<MoneyInput bind:value={row.amount} />
+										</dd>
+									</div>
+									{#if status === 'retroactive'}
+										<div class="flex justify-between gap-2">
+											<dt style:color="var(--text-muted)">
+												{$_('credits.field.retroactiveDebit')}
+											</dt>
+											<dd>
+												<ToggleSwitch
+													checked={isRetroDebited(i)}
+													disabled={!canToggleRetroDebit(i)}
+													label={$_('credits.field.retroactiveDebit')}
+													onchange={() => toggleRetroDebit(i)}
+												/>
+											</dd>
+										</div>
+									{/if}
+									{#if status}
+										<div class="flex justify-between gap-2">
+											<dt style:color="var(--text-muted)">{$_('transactions.col.status')}</dt>
+											<dd>
+												{#if status === 'retroactive'}
+													<span class="badge">{$_('credits.payment.status.retroactive')}</span>
+												{:else}
+													<span style:color="var(--text-muted)">
+														{$_('credits.payment.status.pending')}
+													</span>
+												{/if}
+											</dd>
+										</div>
+									{/if}
+								</dl>
+							</article>
+						{/each}
+					</div>
 				{/if}
 			</div>
 		</div>
@@ -500,11 +657,17 @@
 
 		{#if showCreateTransactions}
 			<div class="space-y-1">
-				<label class="flex items-center gap-2">
-					<input type="checkbox" bind:checked={createTransactions} />
-					<span class="text-sm">{$_('credits.field.createTransactions')}</span>
-				</label>
-				<FieldHint text={$_('credits.field.createTransactionsHint')} />
+				<div class="flex items-center justify-between gap-4">
+					<div>
+						<p class="text-sm">{$_('credits.field.createTransactions')}</p>
+						<FieldHint text={$_('credits.field.createTransactionsHint')} />
+					</div>
+					<ToggleSwitch
+						checked={createTransactions}
+						label={$_('credits.field.createTransactions')}
+						onchange={() => (createTransactions = !createTransactions)}
+					/>
+				</div>
 			</div>
 		{/if}
 

@@ -9,7 +9,7 @@ import (
 
 func TestGenerateAutoScheduleEqualParts(t *testing.T) {
 	issue, _ := timeutil.ParseUTC("2024-01-15 00:00:00")
-	entries, err := GenerateAutoSchedule(120000, 12, 10000, IntervalMonth, issue)
+	entries, err := GenerateAutoSchedule(120000, 12, 10000, IntervalMonth, issue, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,6 +35,7 @@ func TestGenerateScheduleFromSeed(t *testing.T) {
 		MonthlyPayment:  20000,
 		PaymentInterval: IntervalMonth,
 		IssueDate:       issue,
+		InterestRate:    0,
 		SeedPayments: []ScheduleSeed{
 			{PaymentDate: d1, Amount: 20000},
 			{PaymentDate: d2, Amount: 20000},
@@ -57,7 +58,7 @@ func TestGenerateScheduleFromSeed(t *testing.T) {
 
 func TestGenerateScheduleWeekInterval(t *testing.T) {
 	issue, _ := timeutil.ParseUTC("2024-01-01 00:00:00")
-	entries, err := GenerateAutoSchedule(40000, 4, 10000, IntervalWeek, issue)
+	entries, err := GenerateAutoSchedule(40000, 4, 10000, IntervalWeek, issue, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,6 +136,7 @@ func TestGenerateScheduleFullSeedAdjustsLast(t *testing.T) {
 		MonthlyPayment:  25000,
 		PaymentInterval: IntervalMonth,
 		IssueDate:       issue,
+		InterestRate:    0,
 		SeedPayments:    seeds,
 	})
 	if err != nil {
@@ -147,7 +149,7 @@ func TestGenerateScheduleFullSeedAdjustsLast(t *testing.T) {
 
 func TestGenerateScheduleLastPaymentAdjustment(t *testing.T) {
 	issue, _ := timeutil.ParseUTC("2024-01-01 00:00:00")
-	entries, err := GenerateAutoSchedule(100001, 3, 33333, IntervalMonth, issue)
+	entries, err := GenerateAutoSchedule(100001, 3, 33333, IntervalMonth, issue, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,5 +159,83 @@ func TestGenerateScheduleLastPaymentAdjustment(t *testing.T) {
 	}
 	if sum != 100001 {
 		t.Fatalf("sum %d", sum)
+	}
+}
+
+func TestGenerateScheduleAnnuityTermMonths(t *testing.T) {
+	issue, _ := timeutil.ParseUTC("2024-01-15 00:00:00")
+	principal := int64(1_000_000)
+	term := 36
+	rate := 12.0
+	monthly := MonthlyPayment(principal, rate, term)
+	entries, err := GenerateSchedule(ScheduleInput{
+		Principal:       principal,
+		TermMonths:      term,
+		MonthlyPayment:  monthly,
+		PaymentInterval: IntervalMonth,
+		IssueDate:       issue,
+		InterestRate:    rate,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != term {
+		t.Fatalf("expected %d entries, got %d", term, len(entries))
+	}
+	last := entries[len(entries)-1]
+	for i, e := range entries[:len(entries)-1] {
+		if e.Amount != monthly {
+			t.Fatalf("payment %d: amount %d want %d", i+1, e.Amount, monthly)
+		}
+	}
+	if last.Amount >= monthly {
+		t.Fatalf("last payment %d should be less than regular %d", last.Amount, monthly)
+	}
+	if last.Amount <= 0 {
+		t.Fatalf("last payment must be positive, got %d", last.Amount)
+	}
+}
+
+// Alfa-Bank-style amortization: equal payments, last one clears remaining debt (smaller).
+func TestGenerateScheduleAlfaBankExample(t *testing.T) {
+	issue, _ := timeutil.ParseUTC("2024-01-15 00:00:00")
+	principal := int64(31_000_000) // 310 000 ₽
+	term := 36
+	// Rate from first payment in bank schedule (10002.30 ₽ interest on 310 000 ₽).
+	rate := 10002.30 / 310000.0 * 12 * 100
+	monthly := MonthlyPayment(principal, rate, term)
+
+	entries, err := GenerateSchedule(ScheduleInput{
+		Principal:       principal,
+		TermMonths:      term,
+		MonthlyPayment:  monthly,
+		PaymentInterval: IntervalMonth,
+		IssueDate:       issue,
+		InterestRate:    rate,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != term {
+		t.Fatalf("expected %d entries, got %d", term, len(entries))
+	}
+	for i := 0; i < term-1; i++ {
+		if entries[i].Amount != monthly {
+			t.Fatalf("payment %d: amount %d want %d", i+1, entries[i].Amount, monthly)
+		}
+	}
+	last := entries[term-1]
+	if last.Amount >= monthly {
+		t.Fatalf("last payment %d should be less than regular %d", last.Amount, monthly)
+	}
+	if last.Amount <= 0 {
+		t.Fatalf("last payment must be positive, got %d", last.Amount)
+	}
+	var sum int64
+	for _, e := range entries {
+		sum += e.Amount
+	}
+	if sum <= principal {
+		t.Fatalf("total payments %d should exceed principal %d (includes interest)", sum, principal)
 	}
 }

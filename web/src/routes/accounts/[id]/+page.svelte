@@ -22,6 +22,7 @@
 	} from '$lib/api/client';
 	import AccountIcon from '$lib/components/AccountIcon.svelte';
 	import BackLink from '$lib/components/BackLink.svelte';
+	import IconButton from '$lib/components/IconButton.svelte';
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import TransactionFilters from '$lib/components/TransactionFilters.svelte';
@@ -285,29 +286,30 @@
 			{/if}
 
 			{#if !editing && acc.status === 'active'}
-				<div class="flex flex-wrap gap-2 border-t pt-4" style:border-color="var(--border)">
-					<button
-						type="button"
-						class="btn-primary"
+				<div class="flex flex-wrap gap-1 border-t pt-4" style:border-color="var(--border)">
+					<IconButton
+						icon="add"
+						label={$_('transactions.new')}
+						variant="primary"
 						onclick={() => {
 							editTx = null;
 							txOpen = true;
 						}}
-					>
-						+ {$_('transactions.new')}
-					</button>
-					<button type="button" class="btn-ghost" onclick={() => (transferOpen = true)}>
-						{$_('transactions.transfer')}
-					</button>
-					<button type="button" class="btn-ghost" onclick={() => (editing = true)}>
-						{$_('accounts.action.edit')}
-					</button>
+					/>
+					<IconButton
+						icon="transfer"
+						label={$_('transactions.transfer')}
+						onclick={() => (transferOpen = true)}
+					/>
+					<IconButton
+						icon="edit"
+						label={$_('accounts.action.edit')}
+						onclick={() => (editing = true)}
+					/>
 					<button type="button" class="btn-ghost" onclick={toggleArchive}>
 						{$_('accounts.action.archive')}
 					</button>
-					<button type="button" class="btn-ghost" style:color="var(--danger)" onclick={remove}>
-						{$_('common.delete')}
-					</button>
+					<IconButton icon="delete" label={$_('common.delete')} variant="danger" onclick={remove} />
 				</div>
 			{/if}
 		</div>

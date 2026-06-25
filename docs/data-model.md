@@ -173,7 +173,8 @@ erDiagram
 
 - Пара перевода: `transfer_group_id`, исходящая нога — первая по `created_at`.
 - Создание перевода — в одной транзакции БД (`BeginTx` + откат при ошибке второй ноги).
-- В API-ответах: `transfer_account_name`, `transfer_is_out` (вычисляемые поля, не колонки таблицы).
+- **Комиссия (v1.1):** опциональное поле `commission` при создании/изменении перевода; отдельная нога `expense` на счёте-источнике в системной категории «Комиссия».
+- В API-ответах: `transfer_account_name`, `transfer_is_out`, `commission`, `commission_display` (вычисляемые/агрегированные поля).
 - UI: [transactions-display.md](transactions-display.md).
 
 ## Долги и операции
@@ -187,10 +188,13 @@ erDiagram
 
 - `credits.payment_interval`: `month` | `week` | `two_weeks` | `manual`
 - `credit_payments.kind`: `scheduled`, `auto`, `retroactive`; `early` — legacy
+- При создании с `added_retroactively`: прошлые платежи → `retroactive`; опционально `retroactive_debit_count` — последние N ретро-платежей со списанием на счёт (`transaction_id`, `exclude_from_stats=0`)
+- `PATCH /credits/{id}/schedule` — правка сумм неоплаченных `scheduled` (v1.1)
+- При старте: `RepairShortSchedules` дополняет неполные графики (миграция-маркер `020`)
 - `transactions.affects_balance` — `0` при завершении кредита «без учёта в балансе»
 - Автосписание: `server/internal/scheduler` в полночь по `users.timezone`
 
-Подробнее: [ui-credits.md](ui-credits.md).
+Подробнее: [ui-credits.md](ui-credits.md), [release-notes-v1.1.md](release-notes-v1.1.md).
 
 ## Счета
 
@@ -265,5 +269,7 @@ erDiagram
 | 017 | `017_notification_settings.sql` | `notification_settings` |
 | 018 | `018_notification_log.sql` | `notification_log` |
 | 019 | `019_notification_templates.sql` | `notification_templates` |
+| 020 | `020_repair_credit_schedules.sql` | маркер; repair графиков кредитов при старте (v1.1) |
+| 023 | `023_password_reset_requests.sql` | `password_reset_requests` (v1.1) |
 
-Новые изменения схемы после релиза — только `020_*.sql`, `021_*.sql`, … в конец цепочки.
+Новые изменения схемы после релиза — только `024_*.sql`, … в конец цепочки.

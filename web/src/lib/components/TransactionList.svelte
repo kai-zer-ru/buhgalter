@@ -4,6 +4,7 @@
 	import type { Transaction } from '$lib/api/client';
 	import CategoryIcon from '$lib/components/CategoryIcon.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
+	import IconButton from '$lib/components/IconButton.svelte';
 	import TransactionAccountCell from '$lib/components/TransactionAccountCell.svelte';
 	import { formatAPIDateTimeForDisplay } from '$lib/dates';
 	import { formatMoneyDisplay } from '$lib/money';
@@ -95,21 +96,19 @@
 						{/if}
 						{#if showActions}
 							<td class="p-3 text-right whitespace-nowrap">
-								{#if showEdit && onedit && tx.type !== 'transfer'}
-									<button type="button" class="btn-ghost text-xs" onclick={() => onedit(tx)}>
-										{$_('common.edit')}
-									</button>
-								{/if}
-								{#if showDelete && ondelete}
-									<button
-										type="button"
-										class="btn-ghost text-xs"
-										style:color="var(--danger)"
-										onclick={() => ondelete(tx)}
-									>
-										{$_('common.delete')}
-									</button>
-								{/if}
+								<div class="flex items-center justify-end gap-0.5">
+									{#if showEdit && onedit && tx.type !== 'transfer'}
+										<IconButton icon="edit" label={$_('common.edit')} onclick={() => onedit(tx)} />
+									{/if}
+									{#if showDelete && ondelete}
+										<IconButton
+											icon="delete"
+											label={$_('common.delete')}
+											variant="danger"
+											onclick={() => ondelete(tx)}
+										/>
+									{/if}
+								</div>
 							</td>
 						{/if}
 					</tr>
@@ -157,21 +156,17 @@
 					</p>
 				{/if}
 				{#if showActions}
-					<div class="mt-3 flex justify-end gap-2">
+					<div class="mt-3 flex justify-end gap-0.5">
 						{#if showEdit && onedit && tx.type !== 'transfer'}
-							<button type="button" class="btn-ghost text-xs" onclick={() => onedit(tx)}>
-								{$_('common.edit')}
-							</button>
+							<IconButton icon="edit" label={$_('common.edit')} onclick={() => onedit(tx)} />
 						{/if}
 						{#if showDelete && ondelete}
-							<button
-								type="button"
-								class="btn-ghost text-xs"
-								style:color="var(--danger)"
+							<IconButton
+								icon="delete"
+								label={$_('common.delete')}
+								variant="danger"
 								onclick={() => ondelete(tx)}
-							>
-								{$_('common.delete')}
-							</button>
+							/>
 						{/if}
 					</div>
 				{/if}

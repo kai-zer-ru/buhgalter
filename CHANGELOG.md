@@ -3,6 +3,60 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 версии — [SemVer](https://semver.org/lang/ru/).
 
+Подробные release notes для пользователей: [docs/release-notes-v1.1.md](docs/release-notes-v1.1.md).
+
+## [v1.1.0] — 2026-06-25
+
+### Добавлено
+
+**Сброс пароля (через администратора)**
+
+- Страница входа: «Запросить сброс пароля» → `POST /api/v1/auth/request-password-reset` (при неизвестном логине — тот же успешный ответ, без перечисления учёток)
+- Баннер и список ожидающих запросов у администратора; подтверждение → `POST /api/v1/admin/password-reset-requests/{id}/ack`
+- Сброс пароля в админке → `PUT /api/v1/admin/users/{id}/password` с инвалидацией сессий пользователя
+- Таблица `password_reset_requests` (миграция `023`); rate limit 5 запросов/мин с IP на endpoint сброса
+
+**Кредиты**
+
+- Редактирование сумм неоплаченных платежей → `PATCH /api/v1/credits/{id}/schedule` (только `kind=scheduled`, `is_applied=false`; обновляются связанные `future`-операции)
+- При создании кредита задним числом: списание со счёта для хвоста ретро-платежей → поле `retroactive_debit_count` в `POST /api/v1/credits` (расход на `debit_account_id`, учёт в статистике)
+- Автодополнение укороченных графиков активных кредитов при старте (`RepairShortSchedules`; миграция-маркер `020`)
+
+**Переводы и категории**
+
+- Поле **комиссии** при переводе; расход в системной категории «Комиссия» (иконка `percent`)
+- Системная категория «Комиссия» для новых и существующих пользователей (backfill при старте)
+- При drag-order категорий системные остаются в конце; системную категорию нельзя назначить главной
+
+**Интерфейс**
+
+- Мобильная адаптация: touch-targets 44px, карточки графика/операций, bottom sheet модалок, скролл вкладок, меню в шапке с пунктом «Счета»
+- Сброс формы при повторном открытии «Новый кредит»
+- В админке — блок доната и ссылка на репозиторий GitHub
+
+**Документация и демо**
+
+- Демо-стенд: [buhgalter-demo.kai-zer.ru](https://buhgalter-demo.kai-zer.ru/) (логин `demo`, пароль `demo_1_demo`)
+- [docs/release-notes-v1.1.md](docs/release-notes-v1.1.md) и обновление справочников в `docs/`
+
+### Изменено
+
+- Генератор графика с процентами: ровно `term_months` платежей; аннуитет 1…N−1, последний — остаток + проценты за период
+- Сортировка категорий в API: пользовательские, затем системные (`sort_order`, `name`)
+- OpenAPI **1.1.0**: комиссия переводов, редактирование графика, `retroactive_debit_count`, password reset
+
+### Исправлено
+
+- Укороченный график кредита (например 22 платежа вместо 36) — расчёт и восстановление при старте
+- Мобильное меню: перекрывалось контентом (z-index); не закрывалось при навигации
+- Форма создания кредита сохраняла данные предыдущего кредита без перезагрузки страницы
+
+### Техническое
+
+- Миграции: `020_repair_credit_schedules`, `023_password_reset_requests`
+- SQL: `UpdateScheduledCreditPaymentAmount`, `UpdateFutureTransactionAmount`, `UpdateSystemCategoryIcon`
+- Версия по умолчанию: `1.1.0` (`VERSION`, `Makefile`, `Dockerfile`, OpenAPI)
+
 ## [v1.0.0]
 
 Первый стабильный релиз self-hosted приложения для личного учёта финансов.
@@ -75,4 +129,5 @@
 - Стек: Go 1.26+, SQLite, SvelteKit, встроенный статический фронтенд (`embedstatic`)
 - Команда `make version vX.Y.Z` — единая простановка semver во всех артефактах (`VERSION`, OpenAPI, Dockerfile, …)
 
+[v1.1.0]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.1.0
 [v1.0.0]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.0.0

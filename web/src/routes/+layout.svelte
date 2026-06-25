@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { get } from 'svelte/store';
-	import { goto } from '$app/navigation';
+	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
 	import { _ } from 'svelte-i18n';
@@ -12,13 +12,23 @@
 	import { setLocale } from '$lib/i18n';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import AppIcon from '$lib/components/AppIcon.svelte';
+	import IconButton from '$lib/components/IconButton.svelte';
 	import ToastContainer from '$lib/components/ToastContainer.svelte';
+	import AdminPasswordResetBanner from '$lib/components/AdminPasswordResetBanner.svelte';
 	import './layout.css';
 
 	let { children } = $props();
 	let ready = $state(false);
 	let bootError = $state<string | null>(null);
 	let navOpen = $state(false);
+
+	afterNavigate(() => {
+		navOpen = false;
+	});
+
+	function closeNav() {
+		navOpen = false;
+	}
 
 	const path = $derived($page.url.pathname);
 	const isSetup = $derived(path === '/setup');
@@ -120,62 +130,82 @@
 	{@render children()}
 {:else}
 	<div class="min-h-screen">
+		{#if navOpen}
+			<button
+				type="button"
+				class="nav-mobile-backdrop fixed inset-0 z-40 sm:hidden"
+				aria-label={$_('common.close')}
+				onclick={closeNav}
+			></button>
+		{/if}
 		<header
-			class="border-b px-6 py-4 backdrop-blur-sm"
+			class="sticky top-0 z-50 border-b px-4 py-3 backdrop-blur-sm sm:px-6 sm:py-4"
 			style:border-color="var(--border)"
 			style:background-color="color-mix(in srgb, var(--bg-elevated) 85%, transparent)"
 		>
-			<div class="mx-auto flex max-w-5xl items-center justify-between gap-4">
-				<a href={resolve('/')} class="flex items-center gap-2 text-lg font-semibold tracking-tight">
+			<div class="mx-auto flex max-w-5xl items-center justify-between gap-2">
+				<a
+					href={resolve('/')}
+					class="flex min-w-0 items-center gap-2 text-lg font-semibold tracking-tight"
+				>
 					<AppIcon size={32} />
-					{$_('app.title')}
+					<span class="truncate">{$_('app.title')}</span>
 				</a>
 				{#if $user}
-					<details
-						class="relative sm:hidden"
-						open={navOpen}
-						ontoggle={(e) => (navOpen = (e.currentTarget as HTMLDetailsElement).open)}
-					>
-						<summary
-							class="btn-ghost cursor-pointer list-none select-none [&::-webkit-details-marker]:hidden"
-						>
-							{$_('nav.menu')}
-						</summary>
-						<div
-							class="popover-panel nav-mobile-panel absolute right-0 z-50 mt-2 min-w-[12rem] p-2"
-						>
-							<a href={resolve('/')} class="nav-mobile-link" onclick={() => (navOpen = false)}
-								>{$_('nav.home')}</a
+					<div class="flex shrink-0 items-center gap-1">
+						<div class="relative sm:hidden">
+							<button
+								type="button"
+								class="btn-icon btn-ghost"
+								aria-expanded={navOpen}
+								aria-haspopup="true"
+								onclick={() => (navOpen = !navOpen)}
 							>
-							<a href={resolve('/debts')} class="nav-mobile-link" onclick={() => (navOpen = false)}
-								>{$_('nav.debts')}</a
-							>
-							<a
-								href={resolve('/credits')}
-								class="nav-mobile-link"
-								onclick={() => (navOpen = false)}>{$_('nav.credits')}</a
-							>
-							<a href={resolve('/stats')} class="nav-mobile-link" onclick={() => (navOpen = false)}
-								>{$_('nav.stats')}</a
-							>
-							<a
-								href={resolve('/settings')}
-								class="nav-mobile-link"
-								onclick={() => (navOpen = false)}>{$_('nav.settings')}</a
-							>
-							{#if $user.is_admin}
-								<a
-									href={resolve('/admin')}
-									class="nav-mobile-link"
-									onclick={() => (navOpen = false)}>{$_('nav.admin')}</a
+								<span class="sr-only">{$_('nav.menu')}</span>
+								<svg
+									aria-hidden="true"
+									class="h-5 w-5"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
 								>
+									<path d="M4 7h16M4 12h16M4 17h16" />
+								</svg>
+							</button>
+							{#if navOpen}
+								<div
+									class="popover-panel nav-mobile-panel absolute right-0 z-[60] mt-2 max-h-[min(70dvh,24rem)] min-w-[12rem] overflow-y-auto p-2"
+								>
+									<a href={resolve('/')} class="nav-mobile-link" onclick={closeNav}
+										>{$_('nav.home')}</a
+									>
+									<a
+										href="{resolve('/settings')}?tab=accounts"
+										class="nav-mobile-link"
+										onclick={closeNav}>{$_('nav.accounts')}</a
+									>
+									<a href={resolve('/debts')} class="nav-mobile-link" onclick={closeNav}
+										>{$_('nav.debts')}</a
+									>
+									<a href={resolve('/credits')} class="nav-mobile-link" onclick={closeNav}
+										>{$_('nav.credits')}</a
+									>
+									<a href={resolve('/stats')} class="nav-mobile-link" onclick={closeNav}
+										>{$_('nav.stats')}</a
+									>
+									<a href={resolve('/settings')} class="nav-mobile-link" onclick={closeNav}
+										>{$_('nav.settings')}</a
+									>
+									{#if $user.is_admin}
+										<a href={resolve('/admin')} class="nav-mobile-link" onclick={closeNav}
+											>{$_('nav.admin')}</a
+										>
+									{/if}
+								</div>
 							{/if}
 						</div>
-					</details>
-				{/if}
-				<nav class="flex items-center gap-2">
-					{#if $user}
-						<div class="hidden items-center gap-2 sm:flex">
+						<nav class="hidden items-center gap-2 sm:flex">
 							<a href={resolve('/')} class="btn-ghost">{$_('nav.home')}</a>
 							<a href={resolve('/debts')} class="btn-ghost">{$_('nav.debts')}</a>
 							<a href={resolve('/credits')} class="btn-ghost">{$_('nav.credits')}</a>
@@ -184,8 +214,8 @@
 							{#if $user.is_admin}
 								<a href={resolve('/admin')} class="btn-ghost">{$_('nav.admin')}</a>
 							{/if}
-						</div>
-						<span class="hidden text-sm sm:inline" style:color="var(--text-muted)">
+						</nav>
+						<span class="hidden text-sm lg:inline" style:color="var(--text-muted)">
 							{#if $user.display_name && $user.display_name !== $user.login}
 								{$user.display_name}
 								<span class="opacity-70">(@{$user.login})</span>
@@ -193,14 +223,13 @@
 								@{$user.login}
 							{/if}
 						</span>
-						<button type="button" class="btn-ghost" onclick={handleLogout}>
-							{$_('nav.logout')}
-						</button>
-					{/if}
-				</nav>
+						<IconButton icon="logout" label={$_('nav.logout')} onclick={handleLogout} />
+					</div>
+				{/if}
 			</div>
 		</header>
-		<main class="mx-auto max-w-5xl px-6 py-8">
+		<main class="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
+			<AdminPasswordResetBanner />
 			{@render children()}
 		</main>
 	</div>

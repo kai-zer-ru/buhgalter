@@ -22,8 +22,8 @@ type ScheduleSeed struct {
 }
 
 type ScheduleEntry struct {
-	PaymentDate string `json:"payment_date"`
-	Amount      int64  `json:"amount"`
+	PaymentDate   string `json:"payment_date"`
+	Amount        int64  `json:"amount"`
 	AmountDisplay string `json:"amount_display,omitempty"`
 }
 
@@ -33,6 +33,7 @@ type ScheduleInput struct {
 	MonthlyPayment  int64
 	PaymentInterval PaymentInterval
 	IssueDate       time.Time
+	InterestRate    float64
 	SeedPayments    []ScheduleSeed
 }
 
@@ -71,20 +72,33 @@ func GenerateSchedule(in ScheduleInput) ([]ScheduleEntry, error) {
 		return nil, fmt.Errorf("monthly payment must be positive")
 	}
 
-	entries := make([]ScheduleEntry, 0, in.TermMonths)
-	remaining := in.Principal
-
-	if len(in.SeedPayments) > 0 {
-		for _, seed := range in.SeedPayments {
-			if seed.Amount <= 0 {
-				return nil, fmt.Errorf("seed payment amount must be positive")
+	if in.InterestRate > 0 {
+		if len(in.SeedPayments) == in.TermMonths {
+			entries := make([]ScheduleEntry, len(in.SeedPayments))
+			for i, seed := range in.SeedPayments {
+				if seed.Amount <= 0 {
+					return nil, fmt.Errorf("seed payment amount must be positive")
+				}
+				entries[i] = ScheduleEntry{
+					PaymentDate: timeutil.FormatUTC(seed.PaymentDate),
+					Amount:      seed.Amount,
+				}
 			}
-			entries = append(entries, ScheduleEntry{
-				PaymentDate: timeutil.FormatUTC(seed.PaymentDate),
-				Amount:      seed.Amount,
-			})
-			remaining -= seed.Amount
+			return entries, nil
 		}
+		return generateInterestSchedule(in)
+	}
+
+	entries := make([]ScheduleEntry, 0, in.TermMonths)
+
+	for _, seed := range in.SeedPayments {
+		if seed.Amount <= 0 {
+			return nil, fmt.Errorf("seed payment amount must be positive")
+		}
+		entries = append(entries, ScheduleEntry{
+			PaymentDate: timeutil.FormatUTC(seed.PaymentDate),
+			Amount:      seed.Amount,
+		})
 	}
 
 	var lastDate time.Time
@@ -98,25 +112,78 @@ func GenerateSchedule(in ScheduleInput) ([]ScheduleEntry, error) {
 		lastDate = in.IssueDate
 	}
 
-	for len(entries) < in.TermMonths && remaining > 0 {
+	for len(entries) < in.TermMonths {
 		lastDate = nextPaymentDate(lastDate, in.PaymentInterval)
-		amount := in.MonthlyPayment
-		if len(entries) == in.TermMonths-1 || amount >= remaining {
-			amount = remaining
-		}
 		entries = append(entries, ScheduleEntry{
 			PaymentDate: timeutil.FormatUTC(lastDate),
+			Amount:      in.MonthlyPayment,
+		})
+	}
+
+	if err := normalizeScheduleSum(entries, in.Principal); err != nil {
+		return nil, err
+	}
+
+	return entries, nil
+}
+
+func periodRate(annualRate float64, interval PaymentInterval) float64 {
+	switch interval {
+	case IntervalWeek:
+		return annualRate / 52 / 100
+	case IntervalTwoWeeks:
+		return annualRate / 26 / 100
+	default:
+		return annualRate / 12 / 100
+	}
+}
+
+func schedulePaymentDates(in ScheduleInput) ([]time.Time, error) {
+	dates := make([]time.Time, 0, in.TermMonths)
+	lastDate := in.IssueDate
+	for i := 0; i < in.TermMonths; i++ {
+		if i < len(in.SeedPayments) {
+			lastDate = in.SeedPayments[i].PaymentDate
+			dates = append(dates, lastDate)
+			continue
+		}
+		lastDate = nextPaymentDate(lastDate, in.PaymentInterval)
+		dates = append(dates, lastDate)
+	}
+	return dates, nil
+}
+
+// generateInterestSchedule builds an amortizing schedule: equal payments except the
+// last one, which clears the remaining principal plus period interest (bank-style).
+func generateInterestSchedule(in ScheduleInput) ([]ScheduleEntry, error) {
+	dates, err := schedulePaymentDates(in)
+	if err != nil {
+		return nil, err
+	}
+	rate := periodRate(in.InterestRate, in.PaymentInterval)
+	balance := float64(in.Principal)
+	entries := make([]ScheduleEntry, 0, in.TermMonths)
+
+	for i := 0; i < in.TermMonths; i++ {
+		interest := int64(balance * rate) // truncate kopecks, bank-style
+		var amount int64
+		if i == in.TermMonths-1 {
+			balanceK := int64(balance)
+			amount = balanceK + interest
+			balance = 0
+		} else {
+			amount = in.MonthlyPayment
+			principalPart := amount - interest
+			if principalPart < 0 {
+				return nil, fmt.Errorf("monthly payment is too low for interest accrual")
+			}
+			balance -= float64(principalPart)
+		}
+		entries = append(entries, ScheduleEntry{
+			PaymentDate: timeutil.FormatUTC(dates[i]),
 			Amount:      amount,
 		})
-		remaining -= amount
 	}
-
-	if len(entries) == in.TermMonths {
-		if err := normalizeScheduleSum(entries, in.Principal); err != nil {
-			return nil, err
-		}
-	}
-
 	return entries, nil
 }
 
@@ -161,12 +228,13 @@ func generateManualSchedule(in ScheduleInput) ([]ScheduleEntry, error) {
 }
 
 // GenerateAutoSchedule builds schedule from issue_date without seed rows.
-func GenerateAutoSchedule(principal int64, term int, monthlyPayment int64, interval PaymentInterval, issueDate time.Time) ([]ScheduleEntry, error) {
+func GenerateAutoSchedule(principal int64, term int, monthlyPayment int64, interval PaymentInterval, issueDate time.Time, interestRate float64) ([]ScheduleEntry, error) {
 	return GenerateSchedule(ScheduleInput{
 		Principal:       principal,
 		TermMonths:      term,
 		MonthlyPayment:  monthlyPayment,
 		PaymentInterval: interval,
 		IssueDate:       issueDate,
+		InterestRate:    interestRate,
 	})
 }

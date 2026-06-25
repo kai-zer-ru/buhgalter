@@ -49,6 +49,19 @@
 
 Badge-метки и спойлеры графика на `/credits` — [ui-credits.md](ui-credits.md).
 
+## Мобильная навигация (v1.1)
+
+**Файл:** `web/src/routes/+layout.svelte`
+
+| Элемент | Поведение |
+|---------|-----------|
+| Breakpoint | Меню-гамбургер — `sm:hidden`; десктопная `nav` — `hidden sm:flex` |
+| Пункты | Главная, Счета, Долги, Кредиты, Статистика, Настройки, Админка (если admin) |
+| Закрытие | `afterNavigate` сбрасывает открытое меню; backdrop по тапу вне меню |
+| Z-index | Шапка `sticky top-0 z-50`; меню поверх контента страницы |
+
+Touch-targets и карточки таблиц — [ui-stable-layout.md](ui-stable-layout.md), `web/src/routes/layout.css` (`@media (pointer: coarse)`).
+
 ## Требование для новых экранов
 
 При добавлении страницы второго уровня (деталь, создание, подраздел):

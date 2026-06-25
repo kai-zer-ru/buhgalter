@@ -58,7 +58,18 @@
 	const editing = $derived(!!transaction);
 
 	const accountOptions = $derived(accounts.map((acc) => ({ value: acc.id, label: acc.name })));
-	const categoryOptions = $derived(categories.map((cat) => ({ value: cat.id, label: cat.name })));
+	const pickableCategories = $derived.by(() => {
+		const userCats = categories.filter((cat) => !cat.is_system);
+		if (!editing || !categoryId) return userCats;
+		const current = categories.find((cat) => cat.id === categoryId);
+		if (current?.is_system && !userCats.some((cat) => cat.id === categoryId)) {
+			return [...userCats, current];
+		}
+		return userCats;
+	});
+	const categoryOptions = $derived(
+		pickableCategories.map((cat) => ({ value: cat.id, label: cat.name }))
+	);
 	const subcategoryOptions = $derived([
 		{ value: '', label: '—' },
 		...subcategories.map((sub) => ({ value: sub.id, label: sub.name }))
@@ -106,8 +117,12 @@
 
 	async function loadCategories() {
 		categories = await listCategories(txType);
-		if (!categoryId && categories.length) {
-			categoryId = categories.find((c) => c.is_primary)?.id ?? categories[0].id;
+		const selectable = categories.filter((c) => !c.is_system);
+		if (!categoryId && selectable.length) {
+			categoryId = selectable.find((c) => c.is_primary)?.id ?? selectable[0].id;
+		}
+		if (categoryId && !categories.some((c) => c.id === categoryId)) {
+			categoryId = selectable.find((c) => c.is_primary)?.id ?? selectable[0]?.id ?? '';
 		}
 		if (categoryId) {
 			subcategories = await listSubcategories(categoryId);

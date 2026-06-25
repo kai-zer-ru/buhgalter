@@ -8,6 +8,7 @@
 	import TransactionForm from '$lib/components/TransactionForm.svelte';
 	import TransactionList from '$lib/components/TransactionList.svelte';
 	import TransferForm from '$lib/components/TransferForm.svelte';
+	import IconButton from '$lib/components/IconButton.svelte';
 	import { formatBalance } from '$lib/finance';
 	import { fromCents } from '$lib/money';
 	import { dedupeTransferLegs } from '$lib/transaction-display';
@@ -46,16 +47,23 @@
 <div class="space-y-6">
 	<div class="flex flex-wrap items-center justify-between gap-3">
 		<h1 class="text-2xl font-semibold">{$_('dashboard.title')}</h1>
-		<div class="flex gap-2">
+		<div class="flex shrink-0 items-center gap-1">
 			{#if dash?.accounts.length === 0}
-				<a href={resolve('/accounts/new')} class="btn-primary">{$_('accounts.new')}</a>
+				<a href={resolve('/accounts/new')} class="btn-primary hidden sm:inline-flex">
+					{$_('accounts.new')}
+				</a>
 			{/if}
-			<button type="button" class="btn-primary" onclick={() => (txOpen = true)}>
-				+ {$_('transactions.new')}
-			</button>
-			<button type="button" class="btn-ghost" onclick={() => (transferOpen = true)}>
-				{$_('transactions.transfer')}
-			</button>
+			<IconButton
+				icon="add"
+				label={$_('transactions.new')}
+				variant="primary"
+				onclick={() => (txOpen = true)}
+			/>
+			<IconButton
+				icon="transfer"
+				label={$_('transactions.transfer')}
+				onclick={() => (transferOpen = true)}
+			/>
 		</div>
 	</div>
 

@@ -1,0 +1,160 @@
+<script lang="ts">
+	import type { Snippet } from 'svelte';
+
+	export type IconName =
+		| 'edit'
+		| 'delete'
+		| 'menu'
+		| 'logout'
+		| 'add'
+		| 'transfer'
+		| 'save'
+		| 'cancel'
+		| 'create';
+
+	let {
+		icon,
+		label,
+		variant = 'ghost',
+		class: className = '',
+		children,
+		...rest
+	}: {
+		icon: IconName;
+		label: string;
+		variant?: 'ghost' | 'primary' | 'danger';
+		class?: string;
+		children?: Snippet;
+		onclick?: (e: MouseEvent) => void;
+		type?: 'button' | 'submit' | 'reset';
+		disabled?: boolean;
+		title?: string;
+		'aria-expanded'?: boolean;
+		'aria-pressed'?: boolean;
+	} = $props();
+
+	const btnClass = $derived(
+		variant === 'primary'
+			? 'btn-icon btn-primary'
+			: variant === 'danger'
+				? 'btn-icon btn-icon-danger'
+				: 'btn-icon btn-ghost'
+	);
+</script>
+
+<button
+	type="button"
+	class="{btnClass} {className}"
+	aria-label={label}
+	title={rest.title ?? label}
+	{...rest}
+>
+	{#if children}
+		{@render children()}
+	{:else if icon === 'edit'}
+		<svg
+			aria-hidden="true"
+			class="h-5 w-5"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			stroke-width="2"
+		>
+			<path d="M12 20h9" />
+			<path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+		</svg>
+	{:else if icon === 'delete'}
+		<svg
+			aria-hidden="true"
+			class="h-5 w-5"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			stroke-width="2"
+		>
+			<path d="M3 6h18" />
+			<path d="M8 6V4h8v2" />
+			<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+			<path d="M10 11v6M14 11v6" />
+		</svg>
+	{:else if icon === 'menu'}
+		<svg
+			aria-hidden="true"
+			class="h-5 w-5"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			stroke-width="2"
+		>
+			<path d="M4 7h16M4 12h16M4 17h16" />
+		</svg>
+	{:else if icon === 'logout'}
+		<svg
+			aria-hidden="true"
+			class="h-5 w-5"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			stroke-width="2"
+		>
+			<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+			<path d="M16 17l5-5-5-5M21 12H9" />
+		</svg>
+	{:else if icon === 'add'}
+		<svg
+			aria-hidden="true"
+			class="h-5 w-5"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			stroke-width="2"
+		>
+			<path d="M12 5v14M5 12h14" />
+		</svg>
+	{:else if icon === 'transfer'}
+		<svg
+			aria-hidden="true"
+			class="h-5 w-5"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			stroke-width="2"
+		>
+			<path d="m4 7 4-4 4 4M8 3v11a4 4 0 0 0 4 4h8" />
+			<path d="m20 17-4 4-4-4M16 21V10a4 4 0 0 0-4-4H4" />
+		</svg>
+	{:else if icon === 'save'}
+		<svg
+			aria-hidden="true"
+			class="h-5 w-5"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			stroke-width="2"
+		>
+			<path d="M20 6 9 17l-5-5" />
+		</svg>
+	{:else if icon === 'cancel'}
+		<svg
+			aria-hidden="true"
+			class="h-5 w-5"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			stroke-width="2"
+		>
+			<path d="M18 6 6 18M6 6l12 12" />
+		</svg>
+	{:else if icon === 'create'}
+		<svg
+			aria-hidden="true"
+			class="h-5 w-5"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			stroke-width="2"
+		>
+			<path d="M12 5v14M5 12h14" />
+		</svg>
+	{/if}
+</button>

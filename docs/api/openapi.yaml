@@ -3,7 +3,7 @@ info:
   title: Бухгалтер API
   description: |
     API приложения «Бухгалтер» (этапы 0–8).
-  version: 1.0.0
+  version: 1.1.0
 servers:
   - url: /api/v1
 paths:
@@ -1357,6 +1357,29 @@ paths:
       responses:
         '200':
           description: Массив платежей
+    patch:
+      summary: Изменить суммы неоплаченных платежей
+      description: |
+        Меняет `amount` только у строк с `kind=scheduled` и `is_applied=false`.
+        Если у строки есть связанная будущая операция (`kind=future`), обновляет и её сумму.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCreditScheduleRequest'
+      responses:
+        '200':
+          description: Кредит с обновлённым графиком
   /transactions/{id}:
     get:
       summary: Получить операцию
@@ -2354,6 +2377,11 @@ components:
           type: integer
         amount_display:
           type: string
+        commission:
+          type: integer
+          description: Комиссия за перевод, копейки
+        commission_display:
+          type: string
         description:
           type: string
           nullable: true
@@ -2377,6 +2405,10 @@ components:
         amount:
           type: string
           description: Рубли (`"500.00"`)
+        commission:
+          type: string
+          nullable: true
+          description: Комиссия за перевод, рубли (`"15.00"`). Создаёт расход в системной категории «Комиссия» на счёте-источнике.
         description:
           type: string
           nullable: true
@@ -2584,6 +2616,23 @@ components:
         payment_date:
           type: string
           description: UTC, YYYY-MM-DD HH:MM:SS
+    UpdateCreditScheduleRequest:
+      type: object
+      required: [payments]
+      properties:
+        payments:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [id, amount]
+            properties:
+              id:
+                type: string
+              amount:
+                oneOf:
+                  - type: string
+                  - type: integer
     CompleteCreditRequest:
       type: object
       properties:
@@ -2626,6 +2675,13 @@ components:
           type: string
         added_retroactively:
           type: boolean
+        retroactive_debit_count:
+          type: integer
+          minimum: 0
+          description: >
+            Число последних ретроактивных платежей (дата &lt; сегодня), для которых при создании
+            списать расход со счёта `debit_account_id`. Только при `added_retroactively=true`.
+            Не больше числа прошлых платежей в графике.
         create_transactions:
           type: boolean
           description: >

@@ -217,6 +217,57 @@ func TestTransferCRUD(t *testing.T) {
 	}
 }
 
+func TestTransferWithCommission(t *testing.T) {
+	handle, env := seedEnvFull(t)
+	database := handle.DB()
+	ctx := context.Background()
+	past := timeutil.NowUTC().Add(-time.Hour)
+
+	tr, err := CreateTransfer(ctx, database, env.userID, TransferInput{
+		FromAccountID: env.accountID, ToAccountID: env.account2,
+		Amount: 10000, Commission: 500, TransactionDate: past,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tr.Commission != 500 {
+		t.Fatalf("commission %d", tr.Commission)
+	}
+	if len(tr.Legs) != 2 {
+		t.Fatalf("expected 2 transfer legs, got %d", len(tr.Legs))
+	}
+
+	bal, err := Balance(ctx, database, env.userID, env.accountID, 100000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bal != 89500 {
+		t.Fatalf("from balance %d, want 89500", bal)
+	}
+
+	updated, err := UpdateTransfer(ctx, database, env.userID, tr.GroupID, TransferInput{
+		FromAccountID: env.accountID, ToAccountID: env.account2,
+		Amount: 10000, Commission: 0, TransactionDate: past,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Commission != 0 {
+		t.Fatalf("updated commission %d", updated.Commission)
+	}
+	bal, err = Balance(ctx, database, env.userID, env.accountID, 100000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bal != 90000 {
+		t.Fatalf("from balance after commission removal %d, want 90000", bal)
+	}
+
+	if err := DeleteTransfer(ctx, database, env.userID, tr.GroupID); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestActivateFutureTransaction(t *testing.T) {
 	handle, env := seedEnvFull(t)
 	database := handle.DB()

@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/kai-zer-ru/buhgalter/internal/categoryseed"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/money"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
 )
 
@@ -18,20 +20,23 @@ type TransferInput struct {
 	FromAccountID   string
 	ToAccountID     string
 	Amount          int64
+	Commission      int64
 	Description     *string
 	TransactionDate time.Time
 }
 
 type Transfer struct {
-	GroupID      string        `json:"group_id"`
-	FromAccountID string       `json:"from_account_id"`
-	ToAccountID   string       `json:"to_account_id"`
-	Amount        int64         `json:"amount"`
-	AmountDisplay string        `json:"amount_display"`
-	Description   *string       `json:"description"`
-	TransactionDate string      `json:"transaction_date"`
-	Kind          string        `json:"kind"`
-	Legs          []Transaction `json:"legs"`
+	GroupID           string        `json:"group_id"`
+	FromAccountID     string        `json:"from_account_id"`
+	ToAccountID       string        `json:"to_account_id"`
+	Amount            int64         `json:"amount"`
+	AmountDisplay     string        `json:"amount_display"`
+	Commission        int64         `json:"commission"`
+	CommissionDisplay string        `json:"commission_display"`
+	Description       *string       `json:"description"`
+	TransactionDate   string        `json:"transaction_date"`
+	Kind              string        `json:"kind"`
+	Legs              []Transaction `json:"legs"`
 }
 
 func CreateTransfer(ctx context.Context, db *sql.DB, userID string, in TransferInput) (Transfer, error) {
@@ -39,6 +44,9 @@ func CreateTransfer(ctx context.Context, db *sql.DB, userID string, in TransferI
 		return Transfer{}, ErrSameAccount
 	}
 	if in.Amount <= 0 {
+		return Transfer{}, ErrInvalidAmount
+	}
+	if in.Commission < 0 {
 		return Transfer{}, ErrInvalidAmount
 	}
 	if err := validateActiveAccount(ctx, db, userID, in.FromAccountID); err != nil {
@@ -57,12 +65,18 @@ func CreateTransfer(ctx context.Context, db *sql.DB, userID string, in TransferI
 	if err != nil {
 		return Transfer{}, err
 	}
+	commissionCatID, err := categoryseed.CommissionCategoryID(ctx, db, userID)
+	if err != nil {
+		return Transfer{}, err
+	}
 
 	groupID := uuid.NewString()
 	outNow := time.Now().UTC()
 	inNow := outNow.Add(time.Millisecond)
+	commissionNow := inNow.Add(time.Millisecond)
 	outCreated := outNow.Format(time.RFC3339Nano)
 	inCreated := inNow.Format(time.RFC3339Nano)
+	commissionCreated := commissionNow.Format(time.RFC3339Nano)
 	updated := outCreated
 	txDate := timeutil.FormatUTC(in.TransactionDate)
 	outID := uuid.NewString()
@@ -93,6 +107,9 @@ func CreateTransfer(ctx context.Context, db *sql.DB, userID string, in TransferI
 	}); err != nil {
 		return Transfer{}, fmt.Errorf("insert transfer in: %w", err)
 	}
+	if err := insertTransferCommission(ctx, q, userID, groupID, in.FromAccountID, commissionCatID, in.Commission, kind, txDate, commissionCreated, updated); err != nil {
+		return Transfer{}, err
+	}
 	if err := tx.Commit(); err != nil {
 		return Transfer{}, err
 	}
@@ -106,13 +123,23 @@ func UpdateTransfer(ctx context.Context, db *sql.DB, userID, groupID string, in 
 	if in.Amount <= 0 {
 		return Transfer{}, ErrInvalidAmount
 	}
-	legs, err := queries(db).ListTransactionsByTransferGroup(ctx, sqlcdb.ListTransactionsByTransferGroupParams{
+	if in.Commission < 0 {
+		return Transfer{}, ErrInvalidAmount
+	}
+
+	rows, err := queries(db).ListTransactionsByTransferGroup(ctx, sqlcdb.ListTransactionsByTransferGroupParams{
 		TransferGroupID: &groupID, UserID: userID,
 	})
 	if err != nil {
 		return Transfer{}, err
 	}
-	if len(legs) != 2 {
+	commissionCatID, err := categoryseed.CommissionCategoryID(ctx, db, userID)
+	if err != nil {
+		return Transfer{}, err
+	}
+	transferLegs := filterTransferLegs(rows)
+	commissionLeg := findCommissionLeg(rows, commissionCatID)
+	if len(transferLegs) != 2 {
 		return Transfer{}, ErrTransferNotFound
 	}
 
@@ -140,7 +167,7 @@ func UpdateTransfer(ctx context.Context, db *sql.DB, userID, groupID string, in 
 	q := queries(dbTx)
 	outCreated := time.Now().UTC().Format(time.RFC3339Nano)
 	inCreated := time.Now().UTC().Add(time.Millisecond).Format(time.RFC3339Nano)
-	for i, leg := range legs {
+	for i, leg := range transferLegs {
 		var accountID string
 		var transferAccountID string
 		var legCreated string
@@ -167,27 +194,14 @@ func UpdateTransfer(ctx context.Context, db *sql.DB, userID, groupID string, in 
 			return Transfer{}, err
 		}
 	}
+	commissionCreated := time.Now().UTC().Add(2 * time.Millisecond).Format(time.RFC3339Nano)
+	if err := syncTransferCommission(ctx, q, userID, groupID, in.FromAccountID, commissionCatID, in.Commission, kind, txDate, now, commissionCreated, commissionLeg); err != nil {
+		return Transfer{}, err
+	}
 	if err := dbTx.Commit(); err != nil {
 		return Transfer{}, err
 	}
 	return GetTransfer(ctx, db, userID, groupID)
-}
-
-func updateTransferCreatedAt(ctx context.Context, q *sqlcdb.Queries, id, userID, createdAt string) error {
-	return q.UpdateTransferCreatedAt(ctx, sqlcdb.UpdateTransferCreatedAtParams{
-		CreatedAt: createdAt,
-		ID:        id,
-		UserID:    userID,
-	})
-}
-
-func updateTransferAccountID(ctx context.Context, q *sqlcdb.Queries, id, userID, transferAccountID, updatedAt string) error {
-	return q.UpdateTransferAccountID(ctx, sqlcdb.UpdateTransferAccountIDParams{
-		TransferAccountID: &transferAccountID,
-		UpdatedAt:         updatedAt,
-		ID:                id,
-		UserID:            userID,
-	})
 }
 
 func DeleteTransfer(ctx context.Context, db *sql.DB, userID, groupID string) error {
@@ -216,9 +230,19 @@ func GetTransfer(ctx context.Context, db *sql.DB, userID, groupID string) (Trans
 		return Transfer{}, ErrTransferNotFound
 	}
 
-	legs := make([]Transaction, 0, len(rows))
+	commissionCatID, err := categoryseed.CommissionCategoryID(ctx, db, userID)
+	if err != nil {
+		return Transfer{}, err
+	}
+	transferLegs := filterTransferLegs(rows)
+	commissionLeg := findCommissionLeg(rows, commissionCatID)
+	if len(transferLegs) == 0 {
+		return Transfer{}, ErrTransferNotFound
+	}
+
+	legs := make([]Transaction, 0, len(transferLegs))
 	var fromID, toID string
-	for i, row := range rows {
+	for i, row := range transferLegs {
 		legs = append(legs, txFromGroupRow(row))
 		if i == 0 {
 			fromID = row.AccountID
@@ -228,18 +252,119 @@ func GetTransfer(ctx context.Context, db *sql.DB, userID, groupID string) (Trans
 		}
 	}
 
-	first := rows[0]
+	first := transferLegs[0]
+	var commission int64
+	if commissionLeg != nil {
+		commission = commissionLeg.Amount
+	}
 	return Transfer{
-		GroupID:         groupID,
-		FromAccountID:   fromID,
-		ToAccountID:     toID,
-		Amount:          first.Amount,
-		AmountDisplay:   legs[0].AmountDisplay,
-		Description:     first.Description,
-		TransactionDate: first.TransactionDate,
-		Kind:            first.Kind,
-		Legs:            legs,
+		GroupID:           groupID,
+		FromAccountID:     fromID,
+		ToAccountID:       toID,
+		Amount:            first.Amount,
+		AmountDisplay:     money.FormatRubles(first.Amount),
+		Commission:        commission,
+		CommissionDisplay: money.FormatRubles(commission),
+		Description:       first.Description,
+		TransactionDate:   first.TransactionDate,
+		Kind:              first.Kind,
+		Legs:              legs,
 	}, nil
+}
+
+func insertTransferCommission(
+	ctx context.Context,
+	q *sqlcdb.Queries,
+	userID, groupID, fromAccountID, commissionCatID string,
+	commission int64,
+	kind, txDate, createdAt, updatedAt string,
+) error {
+	if commission <= 0 {
+		return nil
+	}
+	id := uuid.NewString()
+	return q.InsertTransaction(ctx, sqlcdb.InsertTransactionParams{
+		ID: id, UserID: userID, AccountID: fromAccountID,
+		Type: "expense", Kind: kind, Amount: commission, Description: nil,
+		CategoryID: &commissionCatID, SubcategoryID: nil,
+		TransferGroupID: &groupID, TransferAccountID: nil,
+		TransactionDate: txDate, AffectsBalance: 1, CreatedAt: createdAt, UpdatedAt: updatedAt,
+	})
+}
+
+func syncTransferCommission(
+	ctx context.Context,
+	q *sqlcdb.Queries,
+	userID, groupID, fromAccountID, commissionCatID string,
+	commission int64,
+	kind, txDate, updatedAt, createdAt string,
+	existing *sqlcdb.ListTransactionsByTransferGroupRow,
+) error {
+	if commission <= 0 {
+		if existing == nil {
+			return nil
+		}
+		n, err := q.DeleteTransaction(ctx, sqlcdb.DeleteTransactionParams{ID: existing.ID, UserID: userID})
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return ErrNotFound
+		}
+		return nil
+	}
+	if existing != nil {
+		return q.UpdateTransaction(ctx, sqlcdb.UpdateTransactionParams{
+			AccountID: fromAccountID, Type: "expense", Kind: kind, Amount: commission, Description: nil,
+			CategoryID: &commissionCatID, SubcategoryID: nil, TransactionDate: txDate, UpdatedAt: updatedAt,
+			ID: existing.ID, UserID: userID,
+		})
+	}
+	return q.InsertTransaction(ctx, sqlcdb.InsertTransactionParams{
+		ID: uuid.NewString(), UserID: userID, AccountID: fromAccountID,
+		Type: "expense", Kind: kind, Amount: commission, Description: nil,
+		CategoryID: &commissionCatID, SubcategoryID: nil,
+		TransferGroupID: &groupID, TransferAccountID: nil,
+		TransactionDate: txDate, AffectsBalance: 1, CreatedAt: createdAt, UpdatedAt: updatedAt,
+	})
+}
+
+func filterTransferLegs(rows []sqlcdb.ListTransactionsByTransferGroupRow) []sqlcdb.ListTransactionsByTransferGroupRow {
+	out := make([]sqlcdb.ListTransactionsByTransferGroupRow, 0, 2)
+	for _, row := range rows {
+		if row.Type == "transfer" {
+			out = append(out, row)
+		}
+	}
+	return out
+}
+
+func findCommissionLeg(rows []sqlcdb.ListTransactionsByTransferGroupRow, commissionCatID string) *sqlcdb.ListTransactionsByTransferGroupRow {
+	for i := range rows {
+		row := &rows[i]
+		if row.Type != "expense" || row.CategoryID == nil || *row.CategoryID != commissionCatID {
+			continue
+		}
+		return row
+	}
+	return nil
+}
+
+func updateTransferCreatedAt(ctx context.Context, q *sqlcdb.Queries, id, userID, createdAt string) error {
+	return q.UpdateTransferCreatedAt(ctx, sqlcdb.UpdateTransferCreatedAtParams{
+		CreatedAt: createdAt,
+		ID:        id,
+		UserID:    userID,
+	})
+}
+
+func updateTransferAccountID(ctx context.Context, q *sqlcdb.Queries, id, userID, transferAccountID, updatedAt string) error {
+	return q.UpdateTransferAccountID(ctx, sqlcdb.UpdateTransferAccountIDParams{
+		TransferAccountID: &transferAccountID,
+		UpdatedAt:         updatedAt,
+		ID:                id,
+		UserID:            userID,
+	})
 }
 
 func ensureTransferCategory(ctx context.Context, db *sql.DB, userID string) (string, error) {

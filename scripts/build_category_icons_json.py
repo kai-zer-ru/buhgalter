@@ -92,6 +92,12 @@ ICONS: list[dict] = [
     {"id": "insurance", "emoji": "🛡️", "kind": "expense", "tags": ["страховка"]},
     {"id": "bank-fee", "emoji": "🏦", "kind": "expense", "tags": ["банк", "комиссия"]},
     {"id": "loan", "emoji": "📉", "kind": "expense", "tags": ["кредит", "долг", "платёж"]},
+    {
+        "id": "percent",
+        "kind": "expense",
+        "tags": ["комиссия", "процент", "fee"],
+        "brand": {"bg": "#6366F1", "fg": "#FFFFFF", "label": "%", "size": 16},
+    },
     {"id": "legal", "emoji": "⚖️", "kind": "expense", "tags": ["юрист", "суд", "право"]},
     {"id": "office", "emoji": "💼", "kind": "expense", "tags": ["офис", "работа", "канцелярия"]},
     {"id": "software", "emoji": "💻", "kind": "expense", "tags": ["софт", "программы", "лицензия"]},
@@ -145,6 +151,7 @@ NAME_OVERRIDES: dict[str, str] = {
     "fastfood": "Фастфуд",
     "wifi": "Wi‑Fi",
     "crypto": "Крипто",
+    "percent": "Комиссия",
 }
 
 

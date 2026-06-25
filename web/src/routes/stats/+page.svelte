@@ -335,7 +335,7 @@
 		</div>
 
 		<div class="grid gap-4 lg:grid-cols-2">
-			<div class="card overflow-x-auto">
+			<div class="card md:overflow-x-auto">
 				<h2 class="mb-2 text-lg font-medium">{$_('stats.section.period')}</h2>
 				{#if byPeriod.length === 0}
 					<EmptyStateCard message={$_('transactions.empty')} />
@@ -380,7 +380,7 @@
 				{/if}
 			</div>
 
-			<div class="card overflow-x-auto">
+			<div class="card md:overflow-x-auto">
 				<h2 class="mb-2 text-lg font-medium">{$_('stats.section.categories')}</h2>
 				{#if byCategory.length === 0}
 					<EmptyStateCard message={$_('transactions.empty')} />

@@ -45,6 +45,11 @@ func Open(path string) (*sql.DB, error) {
 		return nil, fmt.Errorf("backfill system categories: %w", err)
 	}
 
+	if err := runOpenHooks(context.Background(), db); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+
 	if err := syncDBPath(db, path); err != nil {
 		_ = db.Close()
 		return nil, err

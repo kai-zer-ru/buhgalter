@@ -39,6 +39,7 @@ type transferRequest struct {
 	FromAccountID   string  `json:"from_account_id"`
 	ToAccountID     string  `json:"to_account_id"`
 	Amount          string  `json:"amount"`
+	Commission      *string `json:"commission,omitempty"`
 	Description     *string `json:"description"`
 	TransactionDate string  `json:"transaction_date"`
 }
@@ -341,6 +342,13 @@ func parseTransferInput(req transferRequest) (TransferInput, error) {
 	if err != nil || amount <= 0 {
 		return TransferInput{}, errors.New("некорректная сумма")
 	}
+	var commission int64
+	if req.Commission != nil && strings.TrimSpace(*req.Commission) != "" {
+		commission, err = money.ParseRubles(*req.Commission)
+		if err != nil || commission < 0 {
+			return TransferInput{}, errors.New("некорректная комиссия")
+		}
+	}
 	txDate, err := timeutil.ParseUTC(req.TransactionDate)
 	if err != nil {
 		return TransferInput{}, errors.New("некорректная дата операции")
@@ -349,6 +357,7 @@ func parseTransferInput(req transferRequest) (TransferInput, error) {
 		FromAccountID:   req.FromAccountID,
 		ToAccountID:     req.ToAccountID,
 		Amount:          amount,
+		Commission:      commission,
 		Description:     req.Description,
 		TransactionDate: txDate,
 	}, nil

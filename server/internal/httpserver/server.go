@@ -57,11 +57,13 @@ func (s *Server) Handler() http.Handler {
 
 	setupHandler := &setup.Handler{DataDir: s.cfg.DataDir, Store: dbHandle, Audit: s.audit}
 	loginLimiter := appmw.NewIPRateLimiter(5, time.Minute)
+	passwordResetLimiter := appmw.NewIPRateLimiter(5, time.Minute)
 	authHandler := &auth.Handler{
-		Store:        dbHandle,
-		Audit:        s.audit,
-		Logger:       s.logger,
-		LoginLimiter: loginLimiter,
+		Store:                dbHandle,
+		Audit:                s.audit,
+		Logger:               s.logger,
+		LoginLimiter:         loginLimiter,
+		PasswordResetLimiter: passwordResetLimiter,
 	}
 	userHandler := &user.Handler{Store: dbHandle, Audit: s.audit}
 	adminHandler := &admin.Handler{
@@ -92,6 +94,7 @@ func (s *Server) Handler() http.Handler {
 		api.Route("/auth", func(ar chi.Router) {
 			ar.Post("/login", authHandler.Login)
 			ar.Post("/register", authHandler.Register)
+			ar.Post("/request-password-reset", authHandler.RequestPasswordReset)
 			ar.Get("/verify", authHandler.Verify)
 			ar.With(auth.RequireAuth(dbHandle)).Post("/logout", authHandler.Logout)
 			ar.With(auth.RequireAuth(dbHandle)).Get("/me", authHandler.Me)
@@ -145,6 +148,7 @@ func (s *Server) Handler() http.Handler {
 			ar.Put("/credits/{id}", creditHandler.Update)
 			ar.Post("/credits/{id}/payments", creditHandler.AddPayment)
 			ar.Delete("/credits/{id}/payments/{paymentId}", creditHandler.DeletePayment)
+			ar.Patch("/credits/{id}/schedule", creditHandler.UpdateSchedule)
 			ar.Post("/credits/{id}/close", creditHandler.Close)
 			ar.Delete("/credits/{id}", creditHandler.Delete)
 			ar.Get("/credits/{id}/schedule", creditHandler.Schedule)
@@ -199,7 +203,10 @@ func (s *Server) Handler() http.Handler {
 			ad.Put("/settings/notification-secret", adminHandler.PutNotificationSecretKey)
 			ad.Get("/users", adminHandler.ListUsers)
 			ad.Post("/users", adminHandler.CreateUser)
+			ad.Put("/users/{id}/password", adminHandler.ResetUserPassword)
 			ad.Delete("/users/{id}", adminHandler.DeleteUser)
+			ad.Get("/password-reset-requests", adminHandler.ListPasswordResetRequests)
+			ad.Post("/password-reset-requests/{id}/ack", adminHandler.AckPasswordResetRequest)
 			ad.Get("/diagnostics", adminHandler.GetDiagnostics)
 
 			ad.Get("/backups", backupHandler.List)

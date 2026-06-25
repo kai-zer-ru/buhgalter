@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/kai-zer-ru/buhgalter/internal/bank"
+	"github.com/kai-zer-ru/buhgalter/internal/categoryseed"
 )
 
 func seedBanks(t *testing.T, env *testEnv) {
@@ -306,10 +307,10 @@ func TestDefaultCategoriesOnUserCreate(t *testing.T) {
 		IsSystem bool   `json:"is_system"`
 	}
 	_ = json.NewDecoder(listResp.Body).Decode(&cats)
-	if len(cats) != 10 {
-		t.Fatalf("expected 10 default categories (7 + 3 system), got %d", len(cats))
+	if len(cats) != categoryseed.DefaultCount {
+		t.Fatalf("expected %d default categories, got %d", categoryseed.DefaultCount, len(cats))
 	}
-	var debtCount, creditCount int
+	var debtCount, creditCount, commissionCount int
 	for _, c := range cats {
 		if c.Name == "Долги" && c.IsSystem {
 			debtCount++
@@ -317,11 +318,17 @@ func TestDefaultCategoriesOnUserCreate(t *testing.T) {
 		if c.Name == "Кредиты" && c.IsSystem && c.Type == "expense" {
 			creditCount++
 		}
+		if c.Name == categoryseed.CommissionCategoryName && c.IsSystem && c.Type == "expense" {
+			commissionCount++
+		}
 	}
 	if debtCount != 2 {
 		t.Fatalf("expected 2 system Долги categories, got %d", debtCount)
 	}
 	if creditCount != 1 {
 		t.Fatalf("expected 1 system Кредиты category, got %d", creditCount)
+	}
+	if commissionCount != 1 {
+		t.Fatalf("expected 1 system %s category, got %d", categoryseed.CommissionCategoryName, commissionCount)
 	}
 }

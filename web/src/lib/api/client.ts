@@ -248,6 +248,39 @@ export function logout() {
 	return request<void>('/api/v1/auth/logout', { method: 'POST' });
 }
 
+export type PasswordResetRequest = {
+	id: string;
+	user_id: string;
+	login: string;
+	display_name: string;
+	created_at: string;
+};
+
+export function requestPasswordReset(login: string) {
+	return request<void>('/api/v1/auth/request-password-reset', {
+		method: 'POST',
+		body: JSON.stringify({ login })
+	});
+}
+
+export function listPasswordResetRequests() {
+	return request<PasswordResetRequest[]>('/api/v1/admin/password-reset-requests');
+}
+
+export function ackPasswordResetRequest(id: string) {
+	return request<void>(`/api/v1/admin/password-reset-requests/${id}/ack`, { method: 'POST' });
+}
+
+export function resetAdminUserPassword(
+	id: string,
+	payload: { new_password: string; new_password_confirm: string }
+) {
+	return request<void>(`/api/v1/admin/users/${id}/password`, {
+		method: 'PUT',
+		body: JSON.stringify(payload)
+	});
+}
+
 export function getMe() {
 	return request<User>('/api/v1/auth/me');
 }
@@ -738,6 +771,8 @@ export type Transfer = {
 	to_account_id: string;
 	amount: number;
 	amount_display: string;
+	commission: number;
+	commission_display: string;
 	description: string | null;
 	transaction_date: string;
 	kind: string;
@@ -796,6 +831,7 @@ export function createTransfer(payload: {
 	from_account_id: string;
 	to_account_id: string;
 	amount: string;
+	commission?: string;
 	description?: string;
 	transaction_date: string;
 }) {
@@ -996,6 +1032,16 @@ export function addCreditPayment(id: string, payload: { amount: string; payment_
 
 export function deleteCreditPayment(creditId: string, paymentId: string) {
 	return request<Credit>(`/api/v1/credits/${creditId}/payments/${paymentId}`, { method: 'DELETE' });
+}
+
+export function updateCreditSchedule(
+	creditId: string,
+	payload: { payments: { id: string; amount: string }[] }
+) {
+	return request<Credit>(`/api/v1/credits/${creditId}/schedule`, {
+		method: 'PATCH',
+		body: JSON.stringify(payload)
+	});
 }
 
 export function completeCredit(

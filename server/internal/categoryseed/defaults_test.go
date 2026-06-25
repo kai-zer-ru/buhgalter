@@ -36,13 +36,13 @@ func TestSeedDefaults(t *testing.T) {
 	var expense, income int
 	_ = mgr.DB().QueryRow(`SELECT COUNT(*) FROM categories WHERE user_id = ? AND type = 'expense'`, userID).Scan(&expense)
 	_ = mgr.DB().QueryRow(`SELECT COUNT(*) FROM categories WHERE user_id = ? AND type = 'income'`, userID).Scan(&income)
-	if expense != 7 || income != 3 {
-		t.Fatalf("expected 7 expense and 3 income, got %d/%d", expense, income)
+	if expense != 8 || income != 3 {
+		t.Fatalf("expected 8 expense and 3 income, got %d/%d", expense, income)
 	}
 
 	var systemCount int
 	_ = mgr.DB().QueryRow(`SELECT COUNT(*) FROM categories WHERE user_id = ? AND is_system = 1`, userID).Scan(&systemCount)
-	if systemCount != 3 {
-		t.Fatalf("expected 3 system categories, got %d", systemCount)
+	if systemCount != 4 {
+		t.Fatalf("expected 4 system categories, got %d", systemCount)
 	}
 }

@@ -12,6 +12,7 @@
 		getCredit,
 		listAccounts,
 		updateCredit,
+		updateCreditSchedule,
 		type Account,
 		type Credit,
 		type CreditPayment
@@ -56,6 +57,10 @@
 	let payError = $state('');
 	let completeError = $state('');
 	let changeAccountError = $state('');
+	let scheduleEditing = $state(false);
+	let scheduleEditRows = $state<{ id: string; amount: string }[]>([]);
+	let scheduleEditError = $state('');
+	let scheduleSaving = $state(false);
 
 	const accountOptions = $derived(accounts.map((acc) => ({ value: acc.id, label: acc.name })));
 
@@ -80,6 +85,20 @@
 		return c.name?.trim() || $_('credits.title');
 	}
 
+	function totalInterestCents(c: Credit): number {
+		if (c.is_installment) return 0;
+		if (c.schedule?.length) {
+			const sum = c.schedule.reduce((acc, p) => acc + p.amount, 0);
+			return Math.max(0, sum - c.principal_amount);
+		}
+		return Math.max(0, c.monthly_payment * c.term_months - c.principal_amount);
+	}
+
+	function formatInterestRate(rate: number): string {
+		if (!Number.isFinite(rate)) return '0';
+		return String(rate);
+	}
+
 	function nextPendingPayment(c: Credit): CreditPayment | undefined {
 		return c.schedule?.find((p) => !p.is_applied && p.kind === 'scheduled');
 	}
@@ -94,6 +113,9 @@
 	}
 
 	function paymentStatusExtra(p: NonNullable<Credit['schedule']>[number]): string {
+		if (p.kind === 'retroactive' && p.transaction_id) {
+			return $_('credits.payment.status.debitedFromAccount');
+		}
 		if (p.exclude_from_stats && p.kind !== 'retroactive') {
 			return $_('credits.payment.excludeFromStats');
 		}
@@ -214,6 +236,46 @@
 		changeAccountOpen = true;
 	}
 
+	function canEditPayment(p: CreditPayment): boolean {
+		return credit?.status === 'active' && !p.is_applied && p.kind === 'scheduled';
+	}
+
+	function openScheduleEdit() {
+		if (!credit) return;
+		scheduleEditError = '';
+		scheduleEditRows = (credit.schedule ?? [])
+			.filter(canEditPayment)
+			.map((p) => ({ id: p.id, amount: fromCents(p.amount) }));
+		scheduleEditing = true;
+	}
+
+	function cancelScheduleEdit() {
+		scheduleEditing = false;
+		scheduleEditRows = [];
+		scheduleEditError = '';
+	}
+
+	async function submitScheduleEdit() {
+		if (!credit) return;
+		scheduleEditError = '';
+		scheduleSaving = true;
+		try {
+			const payments = scheduleEditRows.map((row) => ({
+				id: row.id,
+				amount: toAPIAmount(row.amount)
+			}));
+			await updateCreditSchedule(credit.id, { payments });
+			scheduleEditing = false;
+			scheduleEditRows = [];
+			toast($_('common.saved'));
+			await load();
+		} catch (err) {
+			scheduleEditError = err instanceof ApiError ? err.message : $_('common.error');
+		} finally {
+			scheduleSaving = false;
+		}
+	}
+
 	function canDeletePayment(p: CreditPayment): boolean {
 		return credit?.status === 'active' && p.kind !== 'retroactive';
 	}
@@ -280,6 +342,13 @@
 						<span class="badge badge-success">{$_('credits.badge.closed')}</span>
 					{/if}
 				</div>
+				{#if !credit.is_installment}
+					<p class="mt-2 text-sm tabular-nums" style:color="var(--text-muted)">
+						{$_('credits.header.rate', {
+							values: { rate: formatInterestRate(credit.interest_rate) }
+						})}
+					</p>
+				{/if}
 				{#if credit.added_retroactively}
 					<dl class="mt-3 space-y-1 text-sm" style:color="var(--text-muted)">
 						<div class="flex flex-wrap gap-x-2 gap-y-0.5">
@@ -318,10 +387,14 @@
 				<span style:color="var(--text-muted)">{$_('credits.field.principal')}</span>
 				<p class="font-medium">{credit.principal_amount_display}</p>
 			</div>
-			<div>
-				<span style:color="var(--text-muted)">{$_('credits.col.remaining')}</span>
-				<p class="font-medium">{credit.remaining_amount_display}</p>
-			</div>
+			{#if !credit.is_installment}
+				<div>
+					<span style:color="var(--text-muted)">{$_('credits.field.totalInterest')}</span>
+					<p class="font-medium">
+						{formatBalance(fromCents(totalInterestCents(credit)), $user?.currency ?? 'RUB')}
+					</p>
+				</div>
+			{/if}
 			<div>
 				<span style:color="var(--text-muted)">{$_('credits.field.payment')}</span>
 				<p class="font-medium">{credit.monthly_payment_display}</p>
@@ -347,7 +420,7 @@
 					{$_('credits.schedule.title')}
 				</h2>
 
-				{#snippet paymentTable(payments: CreditPayment[])}
+				{#snippet paymentTable(payments: CreditPayment[], editable = false)}
 					<div class="hidden overflow-x-auto md:block">
 						<table class="w-full text-left text-sm">
 							<thead>
@@ -355,7 +428,7 @@
 									<th class="p-3">{$_('credits.pay.date')}</th>
 									<th class="p-3">{$_('transactions.col.amount')}</th>
 									<th class="p-3">{$_('transactions.col.status')}</th>
-									{#if creditIsActive}
+									{#if creditIsActive && !editable}
 										<th class="p-3"></th>
 									{/if}
 								</tr>
@@ -364,14 +437,23 @@
 								{#each payments as p (p.id)}
 									<tr class="border-t" style:border-color="var(--border)">
 										<td class="p-3">{formatAPIDateTimeForDisplay(p.payment_date, tz)}</td>
-										<td class="p-3">{p.amount_display}</td>
+										<td class="p-3">
+											{#if editable && canEditPayment(p)}
+												{@const editIdx = scheduleEditRows.findIndex((row) => row.id === p.id)}
+												{#if editIdx >= 0}
+													<MoneyInput bind:value={scheduleEditRows[editIdx].amount} />
+												{/if}
+											{:else}
+												{p.amount_display}
+											{/if}
+										</td>
 										<td class="p-3">
 											{paymentStatus(p)}
 											{#if paymentStatusExtra(p)}
 												<span class="badge ml-2">{paymentStatusExtra(p)}</span>
 											{/if}
 										</td>
-										{#if creditIsActive}
+										{#if creditIsActive && !editable}
 											<td class="p-3 text-right">
 												{#if canDeletePayment(p)}
 													<button
@@ -399,7 +481,16 @@
 									</div>
 									<div class="flex justify-between gap-2">
 										<dt style:color="var(--text-muted)">{$_('transactions.col.amount')}</dt>
-										<dd class="font-medium tabular-nums">{p.amount_display}</dd>
+										<dd class="font-medium tabular-nums">
+											{#if editable && canEditPayment(p)}
+												{@const editIdx = scheduleEditRows.findIndex((row) => row.id === p.id)}
+												{#if editIdx >= 0}
+													<MoneyInput bind:value={scheduleEditRows[editIdx].amount} />
+												{/if}
+											{:else}
+												{p.amount_display}
+											{/if}
+										</dd>
 									</div>
 									<div class="flex justify-between gap-2">
 										<dt style:color="var(--text-muted)">{$_('transactions.col.status')}</dt>
@@ -411,7 +502,7 @@
 										</dd>
 									</div>
 								</dl>
-								{#if creditIsActive && canDeletePayment(p)}
+								{#if creditIsActive && !editable && canDeletePayment(p)}
 									<button
 										type="button"
 										class="btn-ghost mt-3 w-full text-sm"
@@ -430,12 +521,52 @@
 						<summary
 							class="cursor-pointer list-none px-4 py-3 text-sm font-medium select-none [&::-webkit-details-marker]:hidden"
 						>
-							{$_('credits.schedule.group.pending')}
-							<span class="ml-1 font-normal tabular-nums" style:color="var(--text-muted)">
-								({scheduleGroups.pending.length})
-							</span>
+							<div class="flex flex-wrap items-center justify-between gap-2">
+								<span>
+									{$_('credits.schedule.group.pending')}
+									<span class="ml-1 font-normal tabular-nums" style:color="var(--text-muted)">
+										({scheduleGroups.pending.length})
+									</span>
+								</span>
+								{#if creditIsActive && !scheduleEditing}
+									<button
+										type="button"
+										class="btn-ghost text-sm"
+										onclick={(e) => {
+											e.preventDefault();
+											openScheduleEdit();
+										}}
+									>
+										{$_('credits.schedule.edit')}
+									</button>
+								{/if}
+							</div>
 						</summary>
-						{@render paymentTable(scheduleGroups.pending)}
+						{#if scheduleEditing}
+							<div class="px-4 pb-2">
+								<FieldHint text={$_('credits.schedule.editHint')} />
+								<FormFeedback error={scheduleEditError} />
+								<div class="mt-2 flex flex-wrap gap-2">
+									<button
+										type="button"
+										class="btn-primary"
+										disabled={scheduleSaving}
+										onclick={() => void submitScheduleEdit()}
+									>
+										{$_('common.save')}
+									</button>
+									<button
+										type="button"
+										class="btn-ghost"
+										disabled={scheduleSaving}
+										onclick={cancelScheduleEdit}
+									>
+										{$_('common.cancel')}
+									</button>
+								</div>
+							</div>
+						{/if}
+						{@render paymentTable(scheduleGroups.pending, scheduleEditing)}
 					</details>
 				{/if}
 

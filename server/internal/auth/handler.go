@@ -13,10 +13,11 @@ import (
 )
 
 type Handler struct {
-	Store        *db.Handle
-	Audit        *audit.Logger
-	Logger       *slog.Logger
-	LoginLimiter *appmw.IPRateLimiter
+	Store              *db.Handle
+	Audit              *audit.Logger
+	Logger             *slog.Logger
+	LoginLimiter       *appmw.IPRateLimiter
+	PasswordResetLimiter *appmw.IPRateLimiter
 }
 
 type loginRequest struct {
@@ -38,6 +39,39 @@ type registerRequest struct {
 
 type verifyResponse struct {
 	Valid bool `json:"valid"`
+}
+
+type requestPasswordResetRequest struct {
+	Login string `json:"login"`
+}
+
+func (h *Handler) RequestPasswordReset(w http.ResponseWriter, r *http.Request) {
+	ip := ClientIP(r)
+	if h.PasswordResetLimiter != nil && !h.PasswordResetLimiter.Allow(ip) {
+		w.Header().Set("Retry-After", "60")
+		apperror.WriteR(w, r, http.StatusTooManyRequests, apperror.RateLimited)
+		return
+	}
+
+	var req requestPasswordResetRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_INVALID_JSON")
+		return
+	}
+
+	login := strings.TrimSpace(req.Login)
+	if login == "" {
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_LOGIN_PASSWORD_REQUIRED")
+		return
+	}
+
+	if err := RequestPasswordReset(r.Context(), h.Store.DB(), login); err != nil {
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	}
+
+	_ = h.Audit.Log("auth.password.reset.request", "", login, ip, nil)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {

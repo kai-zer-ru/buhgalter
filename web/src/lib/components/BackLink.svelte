@@ -14,12 +14,7 @@
 </script>
 
 <!-- eslint-disable svelte/no-navigation-without-resolve -- path built with resolve() in derived -->
-<a
-	href={target}
-	class="mb-4 inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
-	style:color="var(--text)"
-	style:background-color="color-mix(in srgb, var(--bg-elevated) 70%, transparent)"
->
+<a href={target} class="back-link">
 	<svg
 		class="h-5 w-5 shrink-0"
 		viewBox="0 0 20 20"

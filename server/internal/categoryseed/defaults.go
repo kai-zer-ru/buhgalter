@@ -13,6 +13,7 @@ import (
 
 const DebtCategoryName = "Долги"
 const CreditCategoryName = "Кредиты"
+const CommissionCategoryName = "Комиссия"
 
 type defaultCategory struct {
 	Type      string
@@ -24,7 +25,7 @@ type defaultCategory struct {
 }
 
 // DefaultCount is the number of categories seeded for a new user (including system).
-const DefaultCount = 10
+const DefaultCount = 11
 
 var defaultCategories = []defaultCategory{
 	{Type: "expense", Name: "Транспорт", Icon: "transport", Sort: 1, IsPrimary: true},
@@ -37,9 +38,10 @@ var defaultCategories = []defaultCategory{
 }
 
 var systemCategories = []defaultCategory{
+	{Type: "expense", Name: CommissionCategoryName, Icon: "percent", Sort: 9997, IsSystem: true},
+	{Type: "expense", Name: CreditCategoryName, Icon: "loan", Sort: 9998, IsSystem: true},
 	{Type: "expense", Name: DebtCategoryName, Icon: "loan", Sort: 9999, IsSystem: true},
 	{Type: "income", Name: DebtCategoryName, Icon: "loan", Sort: 9999, IsSystem: true},
-	{Type: "expense", Name: CreditCategoryName, Icon: "loan", Sort: 9998, IsSystem: true},
 }
 
 // SeedDefaults inserts default income/expense categories for a new user.
@@ -66,6 +68,13 @@ func EnsureSystemCategories(ctx context.Context, db sqlcdb.DBTX, userID string) 
 			if row.IsSystem == 0 {
 				if err := q.SetCategorySystem(ctx, sqlcdb.SetCategorySystemParams{
 					IsSystem: 1, ID: row.ID, UserID: userID,
+				}); err != nil {
+					return err
+				}
+			}
+			if row.Icon != c.Icon {
+				if err := q.UpdateSystemCategoryIcon(ctx, sqlcdb.UpdateSystemCategoryIconParams{
+					Icon: c.Icon, ID: row.ID, UserID: userID,
 				}); err != nil {
 					return err
 				}
@@ -108,6 +117,20 @@ func DebtCategoryID(ctx context.Context, db sqlcdb.DBTX, userID, catType string)
 	}
 	row, err := sqlcdb.New(db).GetCategoryByNameAndType(ctx, sqlcdb.GetCategoryByNameAndTypeParams{
 		UserID: userID, Name: DebtCategoryName, Type: catType,
+	})
+	if err != nil {
+		return "", err
+	}
+	return row.ID, nil
+}
+
+// CommissionCategoryID returns the system expense «Комиссия» category id.
+func CommissionCategoryID(ctx context.Context, db sqlcdb.DBTX, userID string) (string, error) {
+	if err := EnsureSystemCategories(ctx, db, userID); err != nil {
+		return "", err
+	}
+	row, err := sqlcdb.New(db).GetCategoryByNameAndType(ctx, sqlcdb.GetCategoryByNameAndTypeParams{
+		UserID: userID, Name: CommissionCategoryName, Type: "expense",
 	})
 	if err != nil {
 		return "", err

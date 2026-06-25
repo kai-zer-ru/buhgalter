@@ -11,7 +11,7 @@ SELECT
     (SELECT COUNT(*) FROM subcategories s WHERE s.category_id = c.id) AS sub_count
 FROM categories c
 WHERE c.user_id = ?
-ORDER BY c.sort_order, c.name;
+ORDER BY c.is_system ASC, c.sort_order ASC, c.name ASC;
 
 -- name: ListCategoriesByUserAndType :many
 SELECT
@@ -26,7 +26,7 @@ SELECT
     (SELECT COUNT(*) FROM subcategories s WHERE s.category_id = c.id) AS sub_count
 FROM categories c
 WHERE c.user_id = ? AND c.type = ?
-ORDER BY c.sort_order, c.name;
+ORDER BY c.is_system ASC, c.sort_order ASC, c.name ASC;
 
 -- name: GetCategoryByID :one
 SELECT
@@ -48,6 +48,9 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: SetCategorySystem :exec
 UPDATE categories SET is_system = ? WHERE id = ? AND user_id = ?;
+
+-- name: UpdateSystemCategoryIcon :exec
+UPDATE categories SET icon = ? WHERE id = ? AND user_id = ? AND is_system = 1;
 
 -- name: UpdateCategory :exec
 UPDATE categories
@@ -72,7 +75,7 @@ WHERE id = ? AND user_id = ?;
 -- name: MaxCategorySortOrder :one
 SELECT COALESCE(MAX(sort_order), 0)
 FROM categories
-WHERE user_id = ? AND type = ?;
+WHERE user_id = ? AND type = ? AND is_system = 0;
 
 -- name: CountCategoriesByType :one
 SELECT COUNT(*) AS count

@@ -264,7 +264,7 @@ SELECT
     (SELECT COUNT(*) FROM subcategories s WHERE s.category_id = c.id) AS sub_count
 FROM categories c
 WHERE c.user_id = ?
-ORDER BY c.sort_order, c.name
+ORDER BY c.is_system ASC, c.sort_order ASC, c.name ASC
 `
 
 type ListCategoriesByUserRow struct {
@@ -325,7 +325,7 @@ SELECT
     (SELECT COUNT(*) FROM subcategories s WHERE s.category_id = c.id) AS sub_count
 FROM categories c
 WHERE c.user_id = ? AND c.type = ?
-ORDER BY c.sort_order, c.name
+ORDER BY c.is_system ASC, c.sort_order ASC, c.name ASC
 `
 
 type ListCategoriesByUserAndTypeParams struct {
@@ -418,7 +418,7 @@ func (q *Queries) ListSubcategoriesByCategory(ctx context.Context, categoryID st
 const maxCategorySortOrder = `-- name: MaxCategorySortOrder :one
 SELECT COALESCE(MAX(sort_order), 0)
 FROM categories
-WHERE user_id = ? AND type = ?
+WHERE user_id = ? AND type = ? AND is_system = 0
 `
 
 type MaxCategorySortOrderParams struct {
@@ -549,5 +549,20 @@ type UpdateSubcategorySortOrderParams struct {
 
 func (q *Queries) UpdateSubcategorySortOrder(ctx context.Context, arg UpdateSubcategorySortOrderParams) error {
 	_, err := q.db.ExecContext(ctx, updateSubcategorySortOrder, arg.SortOrder, arg.ID)
+	return err
+}
+
+const updateSystemCategoryIcon = `-- name: UpdateSystemCategoryIcon :exec
+UPDATE categories SET icon = ? WHERE id = ? AND user_id = ? AND is_system = 1
+`
+
+type UpdateSystemCategoryIconParams struct {
+	Icon   string `json:"icon"`
+	ID     string `json:"id"`
+	UserID string `json:"user_id"`
+}
+
+func (q *Queries) UpdateSystemCategoryIcon(ctx context.Context, arg UpdateSystemCategoryIconParams) error {
+	_, err := q.db.ExecContext(ctx, updateSystemCategoryIcon, arg.Icon, arg.ID, arg.UserID)
 	return err
 }

@@ -23,6 +23,7 @@
 	} from '$lib/api/client';
 	import CategoryIcon from '$lib/components/CategoryIcon.svelte';
 	import CategoryIconPicker from '$lib/components/CategoryIconPicker.svelte';
+	import IconButton from '$lib/components/IconButton.svelte';
 	import ReorderDragGhost from '$lib/components/ReorderDragGhost.svelte';
 	import { defaultIconForKind } from '$lib/category-icons';
 	import { confirm } from '$lib/confirm';
@@ -37,14 +38,6 @@
 
 	function subInputId(categoryId: string) {
 		return `sub-input-${categoryId}`;
-	}
-
-	function bumpSubcategoryCount(categoryId: string, delta: number) {
-		categories = categories.map((c) =>
-			c.id === categoryId
-				? { ...c, subcategory_count: Math.max(0, c.subcategory_count + delta) }
-				: c
-		);
 	}
 
 	function defaultSubIconFor(cat: Category): string {
@@ -234,7 +227,6 @@
 				...newSubIcon,
 				[categoryId]: parent ? defaultSubIconFor(parent) : defaultIconForKind(tab)
 			};
-			bumpSubcategoryCount(categoryId, 1);
 			toast($_('common.saved'));
 			await tick();
 			document.getElementById(subInputId(categoryId))?.focus();
@@ -281,19 +273,21 @@
 				...subs,
 				[categoryId]: (subs[categoryId] ?? []).filter((s) => s.id !== subId)
 			};
-			bumpSubcategoryCount(categoryId, -1);
 		} catch (err) {
 			error = err instanceof ApiError ? err.message : $_('common.error');
 		}
 	}
 
 	async function dropCategory(fromId: string, toId: string) {
-		const ids = moveId(
-			categories.map((c) => c.id),
+		const userCategories = categories.filter((c) => !c.is_system);
+		const systemCategories = categories.filter((c) => c.is_system);
+		const reordered = moveId(
+			userCategories.map((c) => c.id),
 			fromId,
 			toId
 		);
-		if (!ids) return;
+		if (!reordered) return;
+		const ids = [...reordered, ...systemCategories.map((c) => c.id)];
 		try {
 			categories = await reorderCategories(tab, ids);
 		} catch (err) {
@@ -332,21 +326,23 @@
 {/if}
 
 <div class="space-y-6">
-	<div class="flex gap-2">
-		<button
-			type="button"
-			class={tab === 'expense' ? 'tab tab-active' : 'tab'}
-			onclick={() => selectTab('expense')}
-		>
-			{$_('categories.tab.expense')}
-		</button>
-		<button
-			type="button"
-			class={tab === 'income' ? 'tab tab-active' : 'tab'}
-			onclick={() => selectTab('income')}
-		>
-			{$_('categories.tab.income')}
-		</button>
+	<div class="page-tabs-scroll">
+		<div class="page-tabs-row">
+			<button
+				type="button"
+				class="tab shrink-0 {tab === 'expense' ? 'tab-active' : ''}"
+				onclick={() => selectTab('expense')}
+			>
+				{$_('categories.tab.expense')}
+			</button>
+			<button
+				type="button"
+				class="tab shrink-0 {tab === 'income' ? 'tab-active' : ''}"
+				onclick={() => selectTab('income')}
+			>
+				{$_('categories.tab.income')}
+			</button>
+		</div>
 	</div>
 
 	{#if error}
@@ -362,9 +358,24 @@
 				bind:value={newName}
 			/>
 			<CategoryIconPicker bind:value={newIcon} bind:categoryName={newName} categoryType={tab} />
-			<button type="button" class="btn-primary sm:shrink-0" onclick={addCategory}
-				>{$_('common.create')}</button
+			<button
+				type="button"
+				class="btn-primary btn-icon sm:min-w-[auto] sm:px-4"
+				onclick={addCategory}
 			>
+				<span class="sr-only">{$_('common.create')}</span>
+				<svg
+					aria-hidden="true"
+					class="h-5 w-5 sm:hidden"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+				>
+					<path d="M12 5v14M5 12h14" />
+				</svg>
+				<span class="hidden sm:inline">{$_('common.create')}</span>
+			</button>
 		</div>
 	</div>
 
@@ -381,11 +392,11 @@
 					data-drag-kind="category"
 					style:border-color={overId === cat.id ? 'var(--primary)' : undefined}
 				>
-					<div class="flex items-center gap-2 sm:gap-3" data-drag-row>
+					<div class="flex flex-wrap items-center gap-1 sm:flex-nowrap sm:gap-2" data-drag-row>
 						{#if editingId !== cat.id}
 							{#if !cat.is_system}
 								<span
-									class="btn-ghost shrink-0 cursor-grab touch-none px-1.5 py-2 text-lg leading-none select-none active:cursor-grabbing"
+									class="btn-icon btn-ghost cursor-grab touch-none text-lg leading-none select-none active:cursor-grabbing"
 									role="button"
 									tabindex="-1"
 									aria-label={$_('categories.drag.handle')}
@@ -399,31 +410,32 @@
 									⠿
 								</span>
 							{:else}
-								<span class="w-8 shrink-0"></span>
+								<span class="btn-icon shrink-0" aria-hidden="true"></span>
 							{/if}
 							<CategoryIcon icon={cat.icon} size={36} />
 							{#if !cat.is_system}
 								<button
 									type="button"
-									class="btn-ghost shrink-0 px-2"
+									class="btn-icon btn-ghost"
 									title={cat.is_primary
 										? $_('categories.primary.badge')
 										: $_('categories.primary.set')}
 									aria-pressed={cat.is_primary}
+									aria-label={cat.is_primary
+										? $_('categories.primary.badge')
+										: $_('categories.primary.set')}
 									style:color={cat.is_primary ? 'var(--primary)' : 'var(--text-muted)'}
 									onclick={() => makePrimary(cat.id)}
 								>
 									{cat.is_primary ? '★' : '☆'}
 								</button>
-							{:else}
-								<span class="w-8 shrink-0"></span>
-							{/if}
-							{#if !cat.is_system}
 								<button
 									type="button"
-									class="btn-ghost shrink-0 px-2"
+									class="btn-icon btn-ghost"
 									aria-expanded={expanded[cat.id] ?? false}
-									aria-label={expanded[cat.id] ? 'Свернуть' : 'Подкатегории'}
+									aria-label={expanded[cat.id]
+										? $_('categories.sub.collapse')
+										: $_('categories.sub.expand')}
 									onclick={() => toggleExpand(cat)}
 								>
 									{expanded[cat.id] ? '▼' : '▶'}
@@ -431,33 +443,30 @@
 							{/if}
 							<button
 								type="button"
-								class="min-w-0 flex-1 text-left font-medium"
+								class="min-w-0 flex-1 truncate text-left font-medium"
 								onclick={() => !cat.is_system && toggleExpand(cat)}
 							>
 								{cat.name}
 								{#if cat.is_system}
-									<span class="ml-2 text-xs" style:color="var(--text-muted)"
+									<span class="ml-1 text-xs" style:color="var(--text-muted)"
 										>({$_('categories.system.badge')})</span
 									>
 								{/if}
-								{#if !cat.is_system}
-									<span class="ml-2 text-sm" style:color="var(--text-muted)">
-										({cat.subcategory_count})
-									</span>
-								{/if}
 							</button>
 							{#if !cat.is_system}
-								<button type="button" class="btn-ghost" onclick={() => startEdit(cat)}>
-									{$_('accounts.action.edit')}
-								</button>
-								<button
-									type="button"
-									class="btn-ghost"
-									style:color="var(--danger)"
-									onclick={() => removeCategory(cat.id)}
-								>
-									{$_('common.delete')}
-								</button>
+								<div class="flex shrink-0 items-center">
+									<IconButton
+										icon="edit"
+										label={$_('accounts.action.edit')}
+										onclick={() => startEdit(cat)}
+									/>
+									<IconButton
+										icon="delete"
+										label={$_('common.delete')}
+										variant="danger"
+										onclick={() => removeCategory(cat.id)}
+									/>
+								</div>
 							{/if}
 						{:else}
 							<CategoryIcon icon={cat.icon} size={36} />
@@ -472,12 +481,17 @@
 									iconSize={32}
 								/>
 								<div class="flex flex-wrap gap-2">
-									<button type="button" class="btn-primary" onclick={saveEdit}
-										>{$_('common.save')}</button
-									>
-									<button type="button" class="btn-ghost" onclick={() => (editingId = null)}>
-										{$_('common.cancel')}
-									</button>
+									<IconButton
+										icon="save"
+										label={$_('common.save')}
+										variant="primary"
+										onclick={saveEdit}
+									/>
+									<IconButton
+										icon="cancel"
+										label={$_('common.cancel')}
+										onclick={() => (editingId = null)}
+									/>
 								</div>
 							</div>
 						{/if}
@@ -521,27 +535,27 @@
 													}
 												}}
 											/>
-											<div class="flex gap-2">
-												<button
-													type="button"
-													class="btn-primary"
+											<div class="flex shrink-0 gap-1">
+												<IconButton
+													icon="save"
+													label={$_('common.save')}
+													variant="primary"
 													onclick={() => saveSubEdit(cat.id)}
-												>
-													{$_('common.save')}
-												</button>
-												<button
-													type="button"
-													class="btn-ghost"
+												/>
+												<IconButton
+													icon="cancel"
+													label={$_('common.cancel')}
 													onclick={() => (editingSubId = null)}
-												>
-													{$_('common.cancel')}
-												</button>
+												/>
 											</div>
 										</div>
 									{:else}
-										<div class="flex min-w-0 flex-1 items-center gap-2" data-drag-row>
+										<div
+											class="flex min-w-0 flex-1 items-center gap-1 overflow-hidden"
+											data-drag-row
+										>
 											<span
-												class="btn-ghost shrink-0 cursor-grab touch-none px-1 py-1 text-base leading-none select-none active:cursor-grabbing"
+												class="btn-icon btn-ghost cursor-grab touch-none text-base leading-none select-none active:cursor-grabbing"
 												role="button"
 												tabindex="-1"
 												aria-label={$_('categories.drag.handle')}
@@ -556,18 +570,20 @@
 												⠿
 											</span>
 											<CategoryIcon icon={sub.icon || 'default'} size={28} />
-											<span class="min-w-0 flex-1">{sub.name}</span>
-											<button type="button" class="btn-ghost" onclick={() => startEditSub(sub)}>
-												{$_('accounts.action.edit')}
-											</button>
-											<button
-												type="button"
-												class="btn-ghost"
-												style:color="var(--danger)"
-												onclick={() => removeSub(cat.id, sub.id)}
-											>
-												{$_('common.delete')}
-											</button>
+											<span class="min-w-0 flex-1 truncate">{sub.name}</span>
+											<div class="flex shrink-0 items-center">
+												<IconButton
+													icon="edit"
+													label={$_('accounts.action.edit')}
+													onclick={() => startEditSub(sub)}
+												/>
+												<IconButton
+													icon="delete"
+													label={$_('common.delete')}
+													variant="danger"
+													onclick={() => removeSub(cat.id, sub.id)}
+												/>
+											</div>
 										</div>
 									{/if}
 								</div>
@@ -592,9 +608,11 @@
 										}
 									}}
 								/>
-								<button type="button" class="btn-ghost sm:shrink-0" onclick={() => addSub(cat.id)}>
-									{$_('common.create')}
-								</button>
+								<IconButton
+									icon="create"
+									label={$_('common.create')}
+									onclick={() => addSub(cat.id)}
+								/>
 							</div>
 						</div>
 					{/if}

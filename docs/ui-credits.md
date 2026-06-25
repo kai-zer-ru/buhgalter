@@ -85,6 +85,33 @@
 | Будущий (операция `kind=future`) | `credits.payment.status.future` |
 | Списан | `credits.payment.status.applied` |
 | Учтён при добавлении | `credits.payment.status.retroactive` |
+| Списан со счёта (ретро с операцией) | `credits.payment.status.debitedFromAccount` — доп. badge, если `kind=retroactive` и есть `transaction_id` |
+
+---
+
+## Форма создания кредита (`CreditForm`)
+
+**Файл:** `web/src/lib/components/CreditForm.svelte`
+
+| Элемент | Поведение |
+|---------|-----------|
+| «Уже платил по графику» | `added_retroactively` — прошлые даты → `kind=retroactive` |
+| Колонка «Списан со счёта» | Только при включённом флаге; хвост последних ретро-платежей → `retroactive_debit_count` в API |
+| Правило хвоста | Отмеченные подряд снизу вверх (последние N ретро-платежей); редактируются **две** границы: верхняя отмеченная (выключить) и нижняя неотмеченная (включить) |
+| «Создать будущие операции» | Скрыт при `added_retroactively`; иначе — `create_transactions` для будущих `scheduled` |
+| Сброс формы | При каждом открытии модалки — чистые поля (v1.1) |
+
+Подробнее: [../roadmap/credit-retroactive-debit.md](../roadmap/credit-retroactive-debit.md).
+
+---
+
+## Редактирование графика (v1.1)
+
+На детальной странице активного кредита, группа **«Неоплаченные»**:
+
+- Кнопка редактирования сумм только у `scheduled` + `!is_applied`
+- `PATCH /api/v1/credits/{id}/schedule` — тело `{ payments: [{ id, amount }] }`
+- Связанные `future`-операции обновляются на сервере
 
 ### Разметка спойлера
 

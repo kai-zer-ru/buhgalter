@@ -42,13 +42,13 @@
 
 {#if state.open}
 	<div
-		class="fixed inset-0 z-[60] flex items-center justify-center p-4"
+		class="modal-backdrop fixed inset-0 z-[60] flex items-end justify-center sm:items-center sm:p-4"
 		style:background-color="color-mix(in srgb, #000 55%, transparent)"
 		role="presentation"
 		onclick={onBackdropClick}
 	>
 		<div
-			class="card w-full max-w-md shadow-xl"
+			class="modal-panel card w-full max-w-md shadow-xl sm:rounded-2xl"
 			role="alertdialog"
 			aria-modal="true"
 			aria-labelledby="confirm-dialog-title"
@@ -57,21 +57,27 @@
 			onclick={(e) => e.stopPropagation()}
 			onkeydown={(e) => e.stopPropagation()}
 		>
-			<h2 id="confirm-dialog-title" class="text-lg font-semibold">{title}</h2>
-			<p id="confirm-dialog-message" class="mt-2 text-sm" style:color="var(--text-muted)">
-				{state.options.message}
-			</p>
-			<div class="mt-6 flex flex-wrap justify-end gap-2">
-				<button type="button" class="btn-ghost" onclick={() => resolveConfirm(false)}>
-					{cancelLabel}
-				</button>
-				<button
-					type="button"
-					class={state.options.danger ? 'btn-danger' : 'btn-primary'}
-					onclick={onConfirm}
-				>
-					{confirmLabel}
-				</button>
+			<div class="p-4 sm:p-6">
+				<h2 id="confirm-dialog-title" class="text-lg font-semibold">{title}</h2>
+				<p id="confirm-dialog-message" class="mt-2 text-sm" style:color="var(--text-muted)">
+					{state.options.message}
+				</p>
+				<div class="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+					<button
+						type="button"
+						class="btn-ghost w-full sm:w-auto"
+						onclick={() => resolveConfirm(false)}
+					>
+						{cancelLabel}
+					</button>
+					<button
+						type="button"
+						class="{state.options.danger ? 'btn-danger' : 'btn-primary'} w-full sm:w-auto"
+						onclick={onConfirm}
+					>
+						{confirmLabel}
+					</button>
+				</div>
 			</div>
 		</div>
 	</div>

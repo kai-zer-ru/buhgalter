@@ -15,15 +15,18 @@
 	} = $props();
 </script>
 
-<div class="flex flex-wrap gap-2">
-	{#each tabs as tab (tab.id)}
-		<button
-			type="button"
-			class="tab {active === tab.id ? 'tab-active' : ''}"
-			aria-current={active === tab.id ? 'page' : undefined}
-			onclick={() => onchange(tab.id)}
-		>
-			{tab.label}
-		</button>
-	{/each}
+<div class="page-tabs-scroll">
+	<div class="page-tabs-row" role="tablist">
+		{#each tabs as tab (tab.id)}
+			<button
+				type="button"
+				class="tab shrink-0 {active === tab.id ? 'tab-active' : ''}"
+				role="tab"
+				aria-selected={active === tab.id}
+				onclick={() => onchange(tab.id)}
+			>
+				{tab.label}
+			</button>
+		{/each}
+	</div>
 </div>

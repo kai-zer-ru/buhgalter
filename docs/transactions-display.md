@@ -15,6 +15,8 @@ OpenAPI-схемы: [`Transaction`](api/openapi.yaml#/components/schemas/Transac
 | `transfer_is_out` | bool | Только для `type=transfer`: `true` — исходящая нога (первая в `transfer_group_id` по `created_at ASC`), `false` — входящая |
 | `category_name`, `category_icon` | | Из `categories` |
 | `amount_display` | string | `"1234.56"` для UI |
+| `commission` | integer | Только для перевода: комиссия в копейках (v1.1) |
+| `commission_display` | string | Отформатированная комиссия |
 
 `transfer_is_out` вычисляется в sqlc-запросах (`CASE` + подзапрос по `transfer_group_id`), не хранится в таблице `transactions`.
 
@@ -62,6 +64,15 @@ OpenAPI-схемы: [`Transaction`](api/openapi.yaml#/components/schemas/Transac
 
 На `/accounts/[id]` API отдаёт только ногу выбранного счёта — дедупликация не меняет состав, но `transferRoute` всё равно опирается на `transfer_is_out`.
 
+## Комиссия перевода (v1.1)
+
+В форме перевода (`TransferForm.svelte`) — опциональное поле **комиссии**. При сохранении:
+
+- Создаётся расход на счёте-источнике в системной категории «Комиссия»
+- В ответе `GET /transactions/{id}` для перевода — поля `commission`, `commission_display` (сумма ноги комиссии в группе)
+
+OpenAPI: `CreateTransferRequest.commission`, схема `Transfer`.
+
 ## Главная (`/`)
 
 - Карточки счетов: `AccountIcon` (`type`, `bank_icon` из API), имя и баланс — как на `/accounts`.
@@ -103,5 +114,5 @@ OpenAPI-схемы: [`Transaction`](api/openapi.yaml#/components/schemas/Transac
 | [ui-table-columns.md](ui-table-columns.md) | Порядок колонок (дата → счёт → … → сумма) |
 | [ui-navigation.md](ui-navigation.md) | `BackLink` на `/transactions` → главная; кликабельные счета |
 | [data-model.md](data-model.md) | `transfer_group_id`, вычисляемые поля в sqlc |
-| [api/openapi.yaml](api/openapi.yaml) | Схемы `Transaction`, `Dashboard`, `AccountBalanceSummary` (v0.7.0+) |
+| [api/openapi.yaml](api/openapi.yaml) | Схемы `Transaction`, `Dashboard`, `AccountBalanceSummary` (OpenAPI 1.1.0) |
 | [ui-navigation.md](ui-navigation.md) | Фильтры и пагинация списков — те же хелперы отображения строк |

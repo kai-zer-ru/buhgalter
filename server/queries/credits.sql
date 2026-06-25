@@ -203,6 +203,11 @@ FROM credit_payments cp
 JOIN credits c ON c.id = cp.credit_id
 WHERE cp.id = ? AND cp.credit_id = ? AND c.user_id = ?;
 
+-- name: UpdateScheduledCreditPaymentAmount :execrows
+UPDATE credit_payments
+SET amount = ?
+WHERE id = ? AND credit_id = ? AND is_applied = 0 AND kind = 'scheduled';
+
 -- name: DeleteCreditPaymentByID :execrows
 DELETE FROM credit_payments
 WHERE id = ? AND credit_id = ?;
@@ -216,6 +221,11 @@ WHERE id = ? AND credit_id = ? AND transaction_id = ? AND is_applied = 1;
 UPDATE credits
 SET status = 'active', closed_at = NULL, updated_at = ?
 WHERE id = ? AND user_id = ? AND status = 'closed';
+
+-- name: UpdateFutureTransactionAmount :execrows
+UPDATE transactions
+SET amount = ?, updated_at = ?
+WHERE id = ? AND user_id = ? AND kind = 'future';
 
 -- name: UpdateFutureTransactionAccount :execrows
 UPDATE transactions

@@ -30,8 +30,9 @@ type createCreditRequest struct {
 	PaidAmount         json.RawMessage      `json:"paid_amount"`
 	MonthlyPayment     json.RawMessage      `json:"monthly_payment"`
 	DebitAccountID     string               `json:"debit_account_id"`
-	AddedRetroactively *bool                `json:"added_retroactively"`
-	CreateTransactions *bool                `json:"create_transactions"`
+	AddedRetroactively    *bool                `json:"added_retroactively"`
+	RetroactiveDebitCount *int                 `json:"retroactive_debit_count"`
+	CreateTransactions    *bool                `json:"create_transactions"`
 	ScheduleSeed       []scheduleSeedRequest `json:"schedule_seed"`
 }
 
@@ -54,6 +55,15 @@ type payPaymentRequest struct {
 type completeCreditRequest struct {
 	AffectsBalance *bool  `json:"affects_balance"`
 	PaymentDate    string `json:"payment_date"`
+}
+
+type updateScheduleRequest struct {
+	Payments []scheduleAmountUpdateRequest `json:"payments"`
+}
+
+type scheduleAmountUpdateRequest struct {
+	ID     string          `json:"id"`
+	Amount json.RawMessage `json:"amount"`
 }
 
 type previewScheduleRequest struct {
@@ -281,6 +291,41 @@ func (h *Handler) Schedule(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, schedule)
 }
 
+func (h *Handler) UpdateSchedule(w http.ResponseWriter, r *http.Request) {
+	info, ok := auth.FromContext(r.Context())
+	if !ok {
+		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
+		return
+	}
+	id := chi.URLParam(r, "id")
+	var req updateScheduleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_INVALID_JSON")
+		return
+	}
+	updates := make([]ScheduleAmountUpdate, 0, len(req.Payments))
+	for _, p := range req.Payments {
+		if p.ID == "" {
+			apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_INVALID_JSON")
+			return
+		}
+		amount, err := money.ParseAmount(p.Amount)
+		if err != nil {
+			apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_INVALID_AMOUNT")
+			return
+		}
+		updates = append(updates, ScheduleAmountUpdate{PaymentID: p.ID, Amount: amount})
+	}
+	c, err := UpdateScheduleAmounts(r.Context(), h.Store.DB(), info.User.ID, id, updates)
+	if writeCreditError(w, r, err) {
+		return
+	}
+	_ = h.Audit.Log("credit.schedule.update", info.User.ID, info.User.Login, clientIP(r), map[string]any{
+		"credit_id": id, "count": len(updates),
+	})
+	writeJSON(w, http.StatusOK, c)
+}
+
 func (h *Handler) PreviewSchedule(w http.ResponseWriter, r *http.Request) {
 	_, ok := auth.FromContext(r.Context())
 	if !ok {
@@ -349,6 +394,9 @@ func parseCreateInput(req createCreditRequest) (CreateInput, error) {
 		TermMonths: req.TermMonths, InterestRate: req.InterestRate,
 		PaymentInterval: interval, PaidAmount: paid, DebitAccountID: req.DebitAccountID,
 		AddedRetroactively: req.AddedRetroactively, CreateTransactions: createTx,
+	}
+	if req.RetroactiveDebitCount != nil {
+		in.RetroactiveDebitCount = *req.RetroactiveDebitCount
 	}
 	if len(req.MonthlyPayment) > 0 && string(req.MonthlyPayment) != "null" {
 		mp, err := money.ParseAmount(req.MonthlyPayment)
@@ -442,6 +490,10 @@ func writeCreditError(w http.ResponseWriter, r *http.Request, err error) bool {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_NO_PENDING_PAYMENT")
 	case errors.Is(err, ErrCannotRemoveRetroactive):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_CANNOT_REMOVE_RETRO")
+	case errors.Is(err, ErrInvalidRetroactiveDebit):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_INVALID_RETRO_DEBIT")
+	case errors.Is(err, ErrCannotEditPayment):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_CANNOT_EDIT_PAYMENT")
 	case errors.Is(err, ErrCompleteParamsRequired):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_COMPLETE_DATE")
 	default:

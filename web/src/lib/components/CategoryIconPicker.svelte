@@ -2,6 +2,7 @@
 	import { _, locale } from 'svelte-i18n';
 	import { tr } from '$lib/i18n';
 	import CategoryIcon from '$lib/components/CategoryIcon.svelte';
+	import IconButton from '$lib/components/IconButton.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
 	import {
 		defaultCategoryNameForIcon,
@@ -124,9 +125,14 @@
 		class="rounded-xl px-3 py-2 text-sm font-medium transition-colors"
 		style:background-color="color-mix(in srgb, var(--border) 40%, transparent)"
 		style:color="var(--text-muted)"
+		aria-label={$_('categories.icons.more')}
 		onclick={() => (open = true)}
 	>
-		{$_('categories.icons.more')}
+		<svg aria-hidden="true" class="mx-auto h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+			<circle cx="5" cy="12" r="1.75" />
+			<circle cx="12" cy="12" r="1.75" />
+			<circle cx="19" cy="12" r="1.75" />
+		</svg>
 	</button>
 </div>
 
@@ -166,8 +172,6 @@
 			<span>{$_('categories.icons.selected')}:</span>
 			<CategoryIcon icon={value} size={28} />
 		</div>
-		<button type="button" class="btn-primary" onclick={closeModal}>
-			{$_('common.save')}
-		</button>
+		<IconButton icon="save" label={$_('common.save')} variant="primary" onclick={closeModal} />
 	{/snippet}
 </ModalShell>

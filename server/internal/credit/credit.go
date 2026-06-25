@@ -70,9 +70,10 @@ type CreateInput struct {
 	PaidAmount          int64
 	MonthlyPayment      *int64
 	DebitAccountID      string
-	AddedRetroactively  *bool
-	ScheduleSeed        []ScheduleSeed
-	CreateTransactions  bool
+	AddedRetroactively     *bool
+	RetroactiveDebitCount  int
+	ScheduleSeed           []ScheduleSeed
+	CreateTransactions     bool
 }
 
 type UpdateInput struct {
@@ -102,8 +103,9 @@ var (
 	ErrInvalidPaymentDate = errors.New("invalid payment date")
 	ErrPaymentApplied     = errors.New("payment already applied")
 	ErrNoPendingPayment   = errors.New("no pending scheduled payment")
-	ErrCannotRemoveRetroactive = errors.New("cannot remove retroactive payment")
-	ErrCompleteParamsRequired  = errors.New("complete parameters required")
+	ErrCannotRemoveRetroactive  = errors.New("cannot remove retroactive payment")
+	ErrInvalidRetroactiveDebit  = errors.New("invalid retroactive debit count")
+	ErrCompleteParamsRequired   = errors.New("complete parameters required")
 )
 
 type PreviewInput struct {
@@ -171,6 +173,7 @@ func PreviewSchedule(in PreviewInput) ([]ScheduleEntry, int64, error) {
 		MonthlyPayment:  monthly,
 		PaymentInterval: in.PaymentInterval,
 		IssueDate:       in.IssueDate,
+		InterestRate:    in.InterestRate,
 		SeedPayments:    in.SeedPayments,
 	})
 	if err != nil {
@@ -218,6 +221,7 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Cre
 		MonthlyPayment:  monthly,
 		PaymentInterval: in.PaymentInterval,
 		IssueDate:       in.IssueDate,
+		InterestRate:    in.InterestRate,
 		SeedPayments:    in.ScheduleSeed,
 	})
 	if err != nil {
@@ -272,9 +276,14 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Cre
 		return Credit{}, err
 	}
 
+	debitRetro, err := retroactiveDebitEntrySet(entries, addedRetro, todayStart, in.RetroactiveDebitCount)
+	if err != nil {
+		return Credit{}, err
+	}
+
 	var retroPaid int64
 	var scheduledPaid int64
-	for _, e := range entries {
+	for i, e := range entries {
 		payDate, err := timeutil.ParseUTC(e.PaymentDate)
 		if err != nil {
 			return Credit{}, err
@@ -290,6 +299,14 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Cre
 		}
 
 		var txID *string
+		if _, debitRetro := debitRetro[i]; debitRetro {
+			tid, err := insertCreditExpenseTransaction(ctx, dbTx, userID, in.DebitAccountID, in.Name, e.Amount, payDate, true)
+			if err != nil {
+				return Credit{}, err
+			}
+			txID = &tid
+			excludeStats = 0
+		}
 		if in.CreateTransactions && kind == "scheduled" {
 			tid, err := insertCreditExpenseTransaction(ctx, dbTx, userID, in.DebitAccountID, in.Name, e.Amount, payDate, true)
 			if err != nil {
@@ -331,6 +348,33 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Cre
 		return Credit{}, err
 	}
 	return GetByID(ctx, db, userID, id, true)
+}
+
+func retroactiveDebitEntrySet(entries []ScheduleEntry, addedRetro bool, todayStart time.Time, count int) (map[int]struct{}, error) {
+	out := make(map[int]struct{})
+	if count == 0 {
+		return out, nil
+	}
+	if !addedRetro || count < 0 {
+		return nil, ErrInvalidRetroactiveDebit
+	}
+	var retroIdx []int
+	for i, e := range entries {
+		payDate, err := timeutil.ParseUTC(e.PaymentDate)
+		if err != nil {
+			return nil, err
+		}
+		if payDate.Before(todayStart) {
+			retroIdx = append(retroIdx, i)
+		}
+	}
+	if count > len(retroIdx) {
+		return nil, ErrInvalidRetroactiveDebit
+	}
+	for _, i := range retroIdx[len(retroIdx)-count:] {
+		out[i] = struct{}{}
+	}
+	return out, nil
 }
 
 func Update(ctx context.Context, db *sql.DB, userID, id string, in UpdateInput) (Credit, error) {

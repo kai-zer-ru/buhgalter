@@ -134,6 +134,21 @@ html.dark {
 		color: var(--text);
 	}
 
+	.btn-icon {
+		@apply inline-flex shrink-0 items-center justify-center rounded-xl p-0;
+		min-height: 2.75rem;
+		min-width: 2.75rem;
+	}
+
+	.btn-icon-danger {
+		@apply rounded-xl transition;
+		color: var(--danger);
+	}
+
+	.btn-icon-danger:hover {
+		background-color: color-mix(in srgb, var(--danger) 12%, transparent);
+	}
+
 	.tab {
 		@apply rounded-lg px-4 py-2 text-sm font-medium transition;
 		color: var(--text-muted);
@@ -161,6 +176,15 @@ html.dark {
 		@apply block rounded-lg px-3 py-2 text-sm transition hover:opacity-80;
 	}
 
+	.nav-mobile-backdrop {
+		border: 0;
+		background-color: color-mix(in srgb, #0f172a 35%, transparent);
+	}
+
+	html.dark .nav-mobile-backdrop {
+		background-color: color-mix(in srgb, #000 55%, transparent);
+	}
+
 	.filter-panel > summary {
 		@apply cursor-pointer list-none text-sm font-medium;
 	}
@@ -169,12 +193,43 @@ html.dark {
 		display: none;
 	}
 
+	.page-tabs-scroll {
+		@apply -mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0;
+		scrollbar-width: none;
+	}
+
+	.page-tabs-scroll::-webkit-scrollbar {
+		display: none;
+	}
+
+	.page-tabs-row {
+		@apply flex min-w-max gap-2 sm:min-w-0 sm:flex-wrap;
+	}
+
+	.back-link {
+		@apply mb-4 inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors;
+		color: var(--text);
+		background-color: color-mix(in srgb, var(--bg-elevated) 70%, transparent);
+	}
+
+	.modal-panel {
+		@apply rounded-t-2xl sm:rounded-2xl;
+	}
+
+	@media (max-width: 639px) {
+		.modal-footer :is(.btn-primary, .btn-ghost, .btn-danger) {
+			width: 100%;
+		}
+	}
+
 	@media (pointer: coarse) {
 		.btn-primary,
 		.btn-ghost,
 		.btn-danger,
 		.tab,
-		.nav-mobile-link {
+		.nav-mobile-link,
+		.back-link,
+		.input {
 			min-height: 2.75rem;
 		}
 
