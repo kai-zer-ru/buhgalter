@@ -157,3 +157,16 @@ export function dateOnlyLocalValue(value: string): string {
 	const m = value.match(/^(\d{4}-\d{2}-\d{2})/);
 	return m ? `${m[1]}T00:00` : value;
 }
+
+/** Date-only filter start → API UTC (00:00:00 in user TZ). */
+export function fromDateLocalStart(value: string, tz: string): string {
+	return fromDatetimeLocalValue(dateOnlyLocalValue(value), tz);
+}
+
+/** Date-only filter end → API UTC (23:59:59 in user TZ). */
+export function fromDateLocalEnd(value: string, tz: string): string {
+	const m = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+	if (!m) throw new Error('invalid date-local');
+	const local = new Date(+m[1], +m[2] - 1, +m[3], 23, 59, 59);
+	return toAPIDateTime(local, tz);
+}

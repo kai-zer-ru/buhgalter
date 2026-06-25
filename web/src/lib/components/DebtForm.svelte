@@ -17,6 +17,7 @@
 	import FieldHint from '$lib/components/FieldHint.svelte';
 	import FormFeedback from '$lib/components/FormFeedback.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
+	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
 	import { defaultAccountId } from '$lib/accounts';
 	import { toast } from '$lib/toast';
 	import { fromDatetimeLocalValue, nowDatetimeLocal } from '$lib/dates';
@@ -224,11 +225,17 @@
 		/>
 
 		<div class="space-y-1">
-			<label class="flex items-start gap-2">
-				<input type="checkbox" bind:checked={skipBalance} class="mt-1" />
-				<span class="text-sm">{$_('debts.field.noBalance')}</span>
-			</label>
-			<FieldHint text={$_('debts.field.noBalanceHint')} />
+			<div class="flex items-center justify-between gap-4">
+				<div>
+					<p class="text-sm">{$_('debts.field.noBalance')}</p>
+					<FieldHint text={$_('debts.field.noBalanceHint')} />
+				</div>
+				<ToggleSwitch
+					checked={skipBalance}
+					label={$_('debts.field.noBalance')}
+					onchange={() => (skipBalance = !skipBalance)}
+				/>
+			</div>
 		</div>
 
 		{#if !skipBalance}

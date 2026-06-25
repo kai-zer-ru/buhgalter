@@ -10,7 +10,8 @@
 		| 'transfer'
 		| 'save'
 		| 'cancel'
-		| 'create';
+		| 'create'
+		| 'archive';
 
 	let {
 		icon,
@@ -155,6 +156,19 @@
 			stroke-width="2"
 		>
 			<path d="M12 5v14M5 12h14" />
+		</svg>
+	{:else if icon === 'archive'}
+		<svg
+			aria-hidden="true"
+			class="h-5 w-5"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			stroke-width="2"
+		>
+			<path d="M21 8v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8" />
+			<path d="M1 3h22v5H1z" />
+			<path d="M10 12h4" />
 		</svg>
 	{/if}
 </button>

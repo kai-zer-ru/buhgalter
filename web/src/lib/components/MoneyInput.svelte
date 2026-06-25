@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { formatMoneyInput, formatMoneyLive } from '$lib/money';
+	import { tick } from 'svelte';
+	import { formatMoneyInput, formatMoneyLive, mapMoneyInputCursor } from '$lib/money';
 
 	type Props = {
 		value?: string;
@@ -16,9 +17,23 @@
 		placeholder = '0.00',
 		class: className = 'input w-full tabular-nums'
 	}: Props = $props();
+
+	let inputEl = $state<HTMLInputElement | null>(null);
+
+	async function onInput(e: Event) {
+		const el = e.currentTarget as HTMLInputElement;
+		const raw = el.value;
+		const cursor = el.selectionStart ?? raw.length;
+		const formatted = formatMoneyLive(raw);
+		value = formatted;
+		const nextCursor = mapMoneyInputCursor(raw, cursor, formatted);
+		await tick();
+		inputEl?.setSelectionRange(nextCursor, nextCursor);
+	}
 </script>
 
 <input
+	bind:this={inputEl}
 	{id}
 	class={className}
 	type="text"
@@ -26,6 +41,6 @@
 	{required}
 	{placeholder}
 	{value}
-	oninput={(e) => (value = formatMoneyLive(e.currentTarget.value))}
+	oninput={onInput}
 	onblur={() => (value = formatMoneyInput(value))}
 />

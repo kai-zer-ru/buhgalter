@@ -242,6 +242,19 @@ func TestApplyDuePayments(t *testing.T) {
 	if n < 1 {
 		t.Fatalf("applied %d", n)
 	}
+
+	var txKind string
+	err = sqlDB.QueryRowContext(ctx, `
+		SELECT t.kind FROM transactions t
+		JOIN credit_payments cp ON cp.transaction_id = t.id
+		WHERE cp.credit_id = ? AND cp.is_applied = 1
+		ORDER BY cp.payment_date DESC LIMIT 1`, c.ID).Scan(&txKind)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if txKind != "manual" {
+		t.Fatalf("expected manual tx after apply, got %s", txKind)
+	}
 }
 
 func TestApplyDuePaymentsWithoutPrecreatedTx(t *testing.T) {

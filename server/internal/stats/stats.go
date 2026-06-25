@@ -9,6 +9,7 @@ import (
 	"time"
 
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/transaction"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
 )
 
@@ -83,19 +84,32 @@ func queries(db sqlcdb.DBTX) *sqlcdb.Queries {
 }
 
 func (s *Service) Summary(ctx context.Context, userID string, f Filters, factualOnly bool) (Summary, error) {
+	if err := transaction.ActivateDueFutureTransactions(ctx, s.db, userID); err != nil {
+		return Summary{}, err
+	}
 	f, err := normalizeFilters(f, factualOnly)
 	if err != nil {
 		return Summary{}, err
 	}
-	row, err := queries(s.db).StatsSummary(ctx, toSummaryParams(userID, f))
-	if err != nil {
-		return Summary{}, err
+	var income, expense, count int64
+	if f.AccountID != "" {
+		row, err := queries(s.db).StatsSummaryAccount(ctx, toAccountSummaryParams(userID, f))
+		if err != nil {
+			return Summary{}, err
+		}
+		income, expense, count = row.IncomeTotal, row.ExpenseTotal, row.TransactionCount
+	} else {
+		row, err := queries(s.db).StatsSummary(ctx, toSummaryParams(userID, f))
+		if err != nil {
+			return Summary{}, err
+		}
+		income, expense, count = row.IncomeTotal, row.ExpenseTotal, row.TransactionCount
 	}
 	return Summary{
-		IncomeTotal:      row.IncomeTotal,
-		ExpenseTotal:     row.ExpenseTotal,
-		BalanceDelta:     row.IncomeTotal - row.ExpenseTotal,
-		TransactionCount: row.TransactionCount,
+		IncomeTotal:      income,
+		ExpenseTotal:     expense,
+		BalanceDelta:     income - expense,
+		TransactionCount: count,
 	}, nil
 }
 
@@ -206,7 +220,7 @@ func (s *Service) ByPeriod(ctx context.Context, userID string, groupBy string, f
 }
 
 func (s *Service) ContextDefault(ctx context.Context, userID string, f Filters) (ContextSummary, error) {
-	summary, err := s.Summary(ctx, userID, f, false)
+	summary, err := s.Summary(ctx, userID, f, contextFactualOnly(f))
 	if err != nil {
 		return ContextSummary{}, err
 	}
@@ -215,7 +229,7 @@ func (s *Service) ContextDefault(ctx context.Context, userID string, f Filters) 
 
 func (s *Service) ContextAccount(ctx context.Context, userID, accountID string, f Filters) (ContextSummary, error) {
 	f.AccountID = accountID
-	summary, err := s.Summary(ctx, userID, f, false)
+	summary, err := s.Summary(ctx, userID, f, contextFactualOnly(f))
 	if err != nil {
 		return ContextSummary{}, err
 	}
@@ -349,6 +363,14 @@ func percentage(total, value int64) float64 {
 	return math.Round(v*10) / 10
 }
 
+// contextFactualOnly mirrors transaction list filters: «плановые» → only future, otherwise factual.
+func contextFactualOnly(f Filters) bool {
+	if f.IncludeFuture || f.Kind == "future" {
+		return false
+	}
+	return true
+}
+
 func normalizeFilters(f Filters, factualOnly bool) (Filters, error) {
 	if f.From != "" {
 		if _, err := timeutil.ParseUTC(f.From); err != nil {
@@ -408,6 +430,27 @@ func toSummaryParams(userID string, f Filters) sqlcdb.StatsSummaryParams {
 		TransactionDate_2: f.To,
 		Column14:          f.Search,
 		Column15:          search,
+	}
+}
+
+func toAccountSummaryParams(userID string, f Filters) sqlcdb.StatsSummaryAccountParams {
+	search := strPtr(f.Search)
+	categoryID := strPtr(f.CategoryID)
+	return sqlcdb.StatsSummaryAccountParams{
+		UserID:            userID,
+		AccountID:         f.AccountID,
+		Column3:           f.CategoryID,
+		CategoryID:        categoryID,
+		Column5:           f.Type,
+		Type:              f.Type,
+		Column7:           f.Kind,
+		Kind:              f.Kind,
+		Column9:           f.From,
+		TransactionDate:   f.From,
+		Column11:          f.To,
+		TransactionDate_2: f.To,
+		Column13:          f.Search,
+		Column14:          search,
 	}
 }
 

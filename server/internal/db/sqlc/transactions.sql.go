@@ -9,6 +9,33 @@ import (
 	"context"
 )
 
+const activateAppliedCreditFutureTransactions = `-- name: ActivateAppliedCreditFutureTransactions :execrows
+UPDATE transactions
+SET kind = 'manual', updated_at = ?
+WHERE user_id = ?
+  AND kind = 'future'
+  AND id IN (
+    SELECT cp.transaction_id
+    FROM credit_payments cp
+    WHERE cp.transaction_id IS NOT NULL
+      AND cp.is_applied = 1
+      AND cp.exclude_from_stats = 0
+  )
+`
+
+type ActivateAppliedCreditFutureTransactionsParams struct {
+	UpdatedAt string `json:"updated_at"`
+	UserID    string `json:"user_id"`
+}
+
+func (q *Queries) ActivateAppliedCreditFutureTransactions(ctx context.Context, arg ActivateAppliedCreditFutureTransactionsParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, activateAppliedCreditFutureTransactions, arg.UpdatedAt, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const activateFutureTransactionsBefore = `-- name: ActivateFutureTransactionsBefore :execrows
 UPDATE transactions
 SET kind = 'manual', updated_at = ?
@@ -206,12 +233,14 @@ SELECT
             LIMIT 1
         ) THEN 1
         ELSE 0
-    END AS transfer_is_out
+    END AS transfer_is_out,
+    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked
 FROM transactions t
 LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
 LEFT JOIN accounts a ON a.id = t.account_id
 LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
+LEFT JOIN credit_payments cp ON cp.transaction_id = t.id
 WHERE t.id = ? AND t.user_id = ?
 `
 
@@ -241,6 +270,7 @@ type GetTransactionByIDRow struct {
 	AccountName         *string `json:"account_name"`
 	TransferAccountName *string `json:"transfer_account_name"`
 	TransferIsOut       int64   `json:"transfer_is_out"`
+	CreditPaymentLinked int64   `json:"credit_payment_linked"`
 }
 
 func (q *Queries) GetTransactionByID(ctx context.Context, arg GetTransactionByIDParams) (GetTransactionByIDRow, error) {
@@ -267,6 +297,7 @@ func (q *Queries) GetTransactionByID(ctx context.Context, arg GetTransactionByID
 		&i.AccountName,
 		&i.TransferAccountName,
 		&i.TransferIsOut,
+		&i.CreditPaymentLinked,
 	)
 	return i, err
 }
@@ -453,12 +484,14 @@ SELECT
             LIMIT 1
         ) THEN 1
         ELSE 0
-    END AS transfer_is_out
+    END AS transfer_is_out,
+    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked
 FROM transactions t
 LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
 LEFT JOIN accounts a ON a.id = t.account_id
 LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
+LEFT JOIN credit_payments cp ON cp.transaction_id = t.id
 WHERE t.user_id = ?
 ORDER BY t.transaction_date DESC, t.created_at DESC
 LIMIT ?
@@ -490,6 +523,7 @@ type ListRecentTransactionsRow struct {
 	AccountName         *string `json:"account_name"`
 	TransferAccountName *string `json:"transfer_account_name"`
 	TransferIsOut       int64   `json:"transfer_is_out"`
+	CreditPaymentLinked int64   `json:"credit_payment_linked"`
 }
 
 func (q *Queries) ListRecentTransactions(ctx context.Context, arg ListRecentTransactionsParams) ([]ListRecentTransactionsRow, error) {
@@ -522,6 +556,7 @@ func (q *Queries) ListRecentTransactions(ctx context.Context, arg ListRecentTran
 			&i.AccountName,
 			&i.TransferAccountName,
 			&i.TransferIsOut,
+			&i.CreditPaymentLinked,
 		); err != nil {
 			return nil, err
 		}
@@ -678,12 +713,14 @@ SELECT
             LIMIT 1
         ) THEN 1
         ELSE 0
-    END AS transfer_is_out
+    END AS transfer_is_out,
+    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked
 FROM transactions t
 LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
 LEFT JOIN accounts a ON a.id = t.account_id
 LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
+LEFT JOIN credit_payments cp ON cp.transaction_id = t.id
 WHERE t.user_id = ?
   AND (? = '' OR t.account_id = ?)
   AND (? = '' OR t.type = ?)
@@ -737,6 +774,7 @@ type ListTransactionsFilteredDateAscRow struct {
 	AccountName         *string `json:"account_name"`
 	TransferAccountName *string `json:"transfer_account_name"`
 	TransferIsOut       int64   `json:"transfer_is_out"`
+	CreditPaymentLinked int64   `json:"credit_payment_linked"`
 }
 
 func (q *Queries) ListTransactionsFilteredDateAsc(ctx context.Context, arg ListTransactionsFilteredDateAscParams) ([]ListTransactionsFilteredDateAscRow, error) {
@@ -787,6 +825,7 @@ func (q *Queries) ListTransactionsFilteredDateAsc(ctx context.Context, arg ListT
 			&i.AccountName,
 			&i.TransferAccountName,
 			&i.TransferIsOut,
+			&i.CreditPaymentLinked,
 		); err != nil {
 			return nil, err
 		}
@@ -831,12 +870,14 @@ SELECT
             LIMIT 1
         ) THEN 1
         ELSE 0
-    END AS transfer_is_out
+    END AS transfer_is_out,
+    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked
 FROM transactions t
 LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
 LEFT JOIN accounts a ON a.id = t.account_id
 LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
+LEFT JOIN credit_payments cp ON cp.transaction_id = t.id
 WHERE t.user_id = ?
   AND (? = '' OR t.account_id = ?)
   AND (? = '' OR t.type = ?)
@@ -890,6 +931,7 @@ type ListTransactionsFilteredDateDescRow struct {
 	AccountName         *string `json:"account_name"`
 	TransferAccountName *string `json:"transfer_account_name"`
 	TransferIsOut       int64   `json:"transfer_is_out"`
+	CreditPaymentLinked int64   `json:"credit_payment_linked"`
 }
 
 func (q *Queries) ListTransactionsFilteredDateDesc(ctx context.Context, arg ListTransactionsFilteredDateDescParams) ([]ListTransactionsFilteredDateDescRow, error) {
@@ -940,6 +982,7 @@ func (q *Queries) ListTransactionsFilteredDateDesc(ctx context.Context, arg List
 			&i.AccountName,
 			&i.TransferAccountName,
 			&i.TransferIsOut,
+			&i.CreditPaymentLinked,
 		); err != nil {
 			return nil, err
 		}

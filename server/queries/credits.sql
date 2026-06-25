@@ -182,6 +182,7 @@ SELECT
     cp.credit_id,
     cp.amount AS payment_amount,
     cp.kind AS payment_kind,
+    cp.is_applied AS payment_is_applied,
     c.paid_amount,
     c.status AS credit_status
 FROM credit_payments cp

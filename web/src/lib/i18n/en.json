@@ -362,6 +362,8 @@
 	"credits.pay.preview": "Remaining after payment",
 	"credits.payment.delete": "Remove payment",
 	"credits.confirm.deletePayment": "This payment will be removed from the schedule. The linked transaction will be deleted too.",
+	"credits.confirm.deleteAppliedPayment": "This paid installment will be removed from the schedule and the linked transaction will be deleted. The credit may show an overdue payment afterward — check the schedule.",
+	"credits.schedule.appliedHint": "Paid installments cannot be edited. You can delete them, but that may cause an overdue payment on the credit.",
 	"credits.confirm.delete": "Delete credit and all related transactions?",
 	"credits.confirm.deleteKeep": "Delete credit and keep transactions with a note?",
 	"credits.delete.title": "Delete credit",

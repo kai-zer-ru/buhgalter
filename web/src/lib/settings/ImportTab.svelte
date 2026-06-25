@@ -40,6 +40,7 @@
 	import Select from '$lib/components/Select.svelte';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
 	import PageTabs from '$lib/components/PageTabs.svelte';
+	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
 
 	type Step =
 		| 'upload'
@@ -866,10 +867,14 @@
 					<input type="radio" bind:group={preset} value="custom" />
 					<span>{$_('import.settings.preset_custom')}</span>
 				</label>
-				<label class="flex items-center gap-2">
-					<input type="checkbox" bind:checked={deduplicate} />
-					<span>{$_('import.settings.deduplicate')}</span>
-				</label>
+				<div class="flex items-center justify-between gap-4">
+					<span class="text-sm">{$_('import.settings.deduplicate')}</span>
+					<ToggleSwitch
+						checked={deduplicate}
+						label={$_('import.settings.deduplicate')}
+						onchange={() => (deduplicate = !deduplicate)}
+					/>
+				</div>
 				<div class="flex gap-2">
 					<button type="button" class="btn-ghost" onclick={reset}>{$_('common.cancel')}</button>
 					<button
@@ -1148,10 +1153,17 @@
 						</div>
 					{/each}
 				</div>
-				<label class="inline-flex items-center gap-2 text-sm" style:color="var(--text-muted)">
-					<input type="checkbox" bind:checked={autoSubcategory} />
+				<div
+					class="flex items-center justify-between gap-4 text-sm"
+					style:color="var(--text-muted)"
+				>
 					<span>{$_('import.subcategories.auto_toggle')}</span>
-				</label>
+					<ToggleSwitch
+						checked={autoSubcategory}
+						label={$_('import.subcategories.auto_toggle')}
+						onchange={() => (autoSubcategory = !autoSubcategory)}
+					/>
+				</div>
 				{#if error}
 					<p class="text-sm" style:color="var(--danger)">{error}</p>
 				{/if}

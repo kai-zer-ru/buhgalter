@@ -96,6 +96,57 @@ export function formatMoneyLive(value: string): string {
 	return negative ? `-${result}` : result;
 }
 
+/** Map caret index after live formatting (keeps edit position in the middle). */
+export function mapMoneyInputCursor(value: string, cursor: number, formatted: string): number {
+	if (!formatted) return 0;
+
+	const clamped = Math.max(0, Math.min(cursor, value.length));
+	const dotPos = value.slice(0, clamped).search(/[.,]/);
+	const inFraction = dotPos !== -1;
+
+	let intDigits = 0;
+	let fracDigits = 0;
+
+	for (let i = 0; i < clamped; i++) {
+		const c = value[i];
+		if (c === '-' || c === ' ') continue;
+		if (c === '.' || c === ',') continue;
+		if (!/\d/.test(c)) continue;
+		if (inFraction && i > dotPos) fracDigits++;
+		else intDigits++;
+	}
+
+	if (!inFraction) {
+		if (intDigits === 0) return formatted.startsWith('-') ? 1 : 0;
+
+		let digits = 0;
+		for (let i = 0; i < formatted.length; i++) {
+			const c = formatted[i];
+			if (c === '.') return i;
+			if (c === '-' || c === ' ') continue;
+			if (/\d/.test(c)) {
+				digits++;
+				if (digits === intDigits) return i + 1;
+			}
+		}
+		const dot = formatted.indexOf('.');
+		return dot === -1 ? formatted.length : dot;
+	}
+
+	const dotIdx = formatted.indexOf('.');
+	if (dotIdx === -1) return formatted.length;
+	if (fracDigits === 0) return dotIdx + 1;
+
+	let digits = 0;
+	for (let i = dotIdx + 1; i < formatted.length; i++) {
+		if (/\d/.test(formatted[i])) {
+			digits++;
+			if (digits === fracDigits) return i + 1;
+		}
+	}
+	return formatted.length;
+}
+
 /** Normalize on blur: valid amount, 2 decimals, thousands separator. */
 export function formatMoneyInput(value: string): string {
 	if (!value.trim()) return '';

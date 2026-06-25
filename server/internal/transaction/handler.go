@@ -12,6 +12,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/apperror"
 	"github.com/kai-zer-ru/buhgalter/internal/audit"
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
+	"github.com/kai-zer-ru/buhgalter/internal/credit"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
 	"github.com/kai-zer-ru/buhgalter/internal/debt"
 	"github.com/kai-zer-ru/buhgalter/internal/money"
@@ -380,6 +381,8 @@ func writeTxError(w http.ResponseWriter, r *http.Request, err error) bool {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CATEGORY_NOT_FOUND")
 	case errors.Is(err, ErrCategoryTypeMatch):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CATEGORY_TYPE_MISMATCH")
+	case errors.Is(err, credit.ErrCannotEditPayment):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_CANNOT_EDIT_PAYMENT")
 	case errors.Is(err, ErrInvalidSubcategory):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_SUBCATEGORY_NOT_FOUND")
 	case errors.Is(err, ErrSameAccount):

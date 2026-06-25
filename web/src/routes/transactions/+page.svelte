@@ -24,6 +24,7 @@
 	import { confirm } from '$lib/confirm';
 	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
+	import { fromDateLocalEnd, fromDateLocalStart } from '$lib/dates';
 	import { dedupeTransferLegs } from '$lib/transaction-display';
 
 	let transactions = $state<Transaction[]>([]);
@@ -79,20 +80,20 @@
 		search = q.get('search') ?? '';
 	}
 
-	function toAPI(value: string): string {
-		return `${value.replace('T', ' ')}:00`;
-	}
-
-	function requestParams() {
-		const params: Record<string, string> = { page: String(page), limit: String(limit) };
-		if (fromLocal) params.from = toAPI(fromLocal);
-		if (toLocal) params.to = toAPI(toLocal);
+	function statsContextParams() {
+		const params: Record<string, string> = {};
+		if (fromLocal) params.from = fromDateLocalStart(fromLocal, tz);
+		if (toLocal) params.to = fromDateLocalEnd(toLocal, tz);
 		if (type) params.type = type;
 		if (categoryId) params.category_id = categoryId;
 		if (accountId) params.account_id = accountId;
 		if (kind) params.kind = kind;
 		if (search.trim()) params.search = search.trim();
 		return params;
+	}
+
+	function requestParams() {
+		return { ...statsContextParams(), page: String(page), limit: String(limit) };
 	}
 
 	function currentFiltersKey(): string {
@@ -220,7 +221,7 @@
 		onreset={resetFilters}
 	/>
 
-	<TransactionContextStats params={requestParams()} />
+	<TransactionContextStats params={statsContextParams()} />
 
 	{#if loading}
 		<p style:color="var(--text-muted)">{$_('common.loading')}</p>

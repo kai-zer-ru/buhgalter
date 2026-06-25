@@ -31,6 +31,7 @@
 	import Select from '$lib/components/Select.svelte';
 	import FormFeedback from '$lib/components/FormFeedback.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
+	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
 	import { confirm } from '$lib/confirm';
 	import { validatePasswordPolicy } from '$lib/password-policy';
 	import { formatApiError } from '$lib/api/errors';
@@ -918,10 +919,14 @@
 				<div class="space-y-6">
 					<div class="card space-y-4">
 						<h3 class="text-lg font-semibold">{$_('settings.notifications.channel.telegram')}</h3>
-						<label class="flex items-center gap-2">
-							<input type="checkbox" bind:checked={telegramEnabled} />
-							<span>{$_('settings.notifications.telegram.enable')}</span>
-						</label>
+						<div class="flex items-center justify-between gap-4">
+							<span class="text-sm">{$_('settings.notifications.telegram.enable')}</span>
+							<ToggleSwitch
+								checked={telegramEnabled}
+								label={$_('settings.notifications.telegram.enable')}
+								onchange={() => (telegramEnabled = !telegramEnabled)}
+							/>
+						</div>
 						<div class="grid gap-3 md:grid-cols-2">
 							<input
 								class="input"
@@ -995,10 +1000,14 @@
 
 					<div class="card space-y-4">
 						<h3 class="text-lg font-semibold">{$_('settings.notifications.channel.max')}</h3>
-						<label class="flex items-center gap-2">
-							<input type="checkbox" bind:checked={maxEnabled} />
-							<span>{$_('settings.notifications.max.enable')}</span>
-						</label>
+						<div class="flex items-center justify-between gap-4">
+							<span class="text-sm">{$_('settings.notifications.max.enable')}</span>
+							<ToggleSwitch
+								checked={maxEnabled}
+								label={$_('settings.notifications.max.enable')}
+								onchange={() => (maxEnabled = !maxEnabled)}
+							/>
+						</div>
 						<div class="grid gap-3 md:grid-cols-2">
 							<Select
 								label=""
@@ -1084,21 +1093,30 @@
 							{$_('settings.notifications.triggers.types_hint')}
 						</p>
 						<div class="grid gap-3 sm:grid-cols-3">
-							<label class="flex items-center gap-2"
-								><input type="checkbox" bind:checked={triggerDebt} />{$_(
-									'settings.notifications.triggers.debt'
-								)}</label
-							>
-							<label class="flex items-center gap-2"
-								><input type="checkbox" bind:checked={triggerCredit} />{$_(
-									'settings.notifications.triggers.credit'
-								)}</label
-							>
-							<label class="flex items-center gap-2"
-								><input type="checkbox" bind:checked={triggerPlanned} />{$_(
-									'settings.notifications.triggers.planned'
-								)}</label
-							>
+							<div class="flex items-center justify-between gap-2">
+								<span class="text-sm">{$_('settings.notifications.triggers.debt')}</span>
+								<ToggleSwitch
+									checked={triggerDebt}
+									label={$_('settings.notifications.triggers.debt')}
+									onchange={() => (triggerDebt = !triggerDebt)}
+								/>
+							</div>
+							<div class="flex items-center justify-between gap-2">
+								<span class="text-sm">{$_('settings.notifications.triggers.credit')}</span>
+								<ToggleSwitch
+									checked={triggerCredit}
+									label={$_('settings.notifications.triggers.credit')}
+									onchange={() => (triggerCredit = !triggerCredit)}
+								/>
+							</div>
+							<div class="flex items-center justify-between gap-2">
+								<span class="text-sm">{$_('settings.notifications.triggers.planned')}</span>
+								<ToggleSwitch
+									checked={triggerPlanned}
+									label={$_('settings.notifications.triggers.planned')}
+									onchange={() => (triggerPlanned = !triggerPlanned)}
+								/>
+							</div>
 						</div>
 						<div class="flex items-center gap-2">
 							<button

@@ -187,6 +187,9 @@ func AccountsSummaryForUser(ctx context.Context, db *sql.DB, userID string) (Acc
 }
 
 func DashboardForUser(ctx context.Context, db *sql.DB, userID string) (Dashboard, error) {
+	if err := ActivateDueFutureTransactions(ctx, db, userID); err != nil {
+		return Dashboard{}, err
+	}
 	summary, err := AccountsSummaryForUser(ctx, db, userID)
 	if err != nil {
 		return Dashboard{}, err

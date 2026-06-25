@@ -32,7 +32,7 @@ WHERE t.user_id = ?
     SELECT 1
     FROM credit_payments cp
     WHERE cp.transaction_id = t.id
-      AND (cp.exclude_from_stats = 1 OR cp.kind = 'retroactive')
+      AND cp.exclude_from_stats = 1
   )
 GROUP BY c.id, c.name, c.icon, c.type
 ORDER BY total DESC
@@ -136,7 +136,7 @@ WHERE t.user_id = ?
     SELECT 1
     FROM credit_payments cp
     WHERE cp.transaction_id = t.id
-      AND (cp.exclude_from_stats = 1 OR cp.kind = 'retroactive')
+      AND cp.exclude_from_stats = 1
   )
 GROUP BY c.id, c.name, c.icon, s.id, s.name
 ORDER BY total DESC
@@ -230,7 +230,6 @@ WHERE t.user_id = ?
   AND c.id = ?
   AND t.type IN ('income', 'expense')
   AND cp.exclude_from_stats = 0
-  AND cp.kind != 'retroactive'
   AND (? = '' OR t.kind = ?)
   AND (? = '' OR t.transaction_date >= ?)
   AND (? = '' OR t.transaction_date <= ?)
@@ -281,7 +280,6 @@ WHERE c.user_id = ?
   AND c.id = ?
   AND cp.transaction_id IS NOT NULL
   AND cp.exclude_from_stats = 0
-  AND cp.kind != 'retroactive'
   AND (? = '' OR cp.payment_date >= ?)
   AND (? = '' OR cp.payment_date <= ?)
 `
@@ -469,7 +467,7 @@ WHERE t.user_id = ?
     SELECT 1
     FROM credit_payments cp
     WHERE cp.transaction_id = t.id
-      AND (cp.exclude_from_stats = 1 OR cp.kind = 'retroactive')
+      AND cp.exclude_from_stats = 1
   )
 ORDER BY t.transaction_date ASC
 `
@@ -556,7 +554,7 @@ WHERE t.user_id = ?
     SELECT 1
     FROM credit_payments cp
     WHERE cp.transaction_id = t.id
-      AND (cp.exclude_from_stats = 1 OR cp.kind = 'retroactive')
+      AND cp.exclude_from_stats = 1
   )
 `
 
@@ -603,6 +601,97 @@ func (q *Queries) StatsSummary(ctx context.Context, arg StatsSummaryParams) (Sta
 		arg.Column15,
 	)
 	var i StatsSummaryRow
+	err := row.Scan(&i.IncomeTotal, &i.ExpenseTotal, &i.TransactionCount)
+	return i, err
+}
+
+const statsSummaryAccount = `-- name: StatsSummaryAccount :one
+SELECT
+    CAST(COALESCE(SUM(
+        CASE
+            WHEN t.type = 'income' THEN t.amount
+            WHEN t.type = 'transfer' AND t.transfer_group_id IS NOT NULL AND t.id = (
+                SELECT x.id FROM transactions x
+                WHERE x.transfer_group_id = t.transfer_group_id
+                ORDER BY x.created_at ASC, x.id ASC
+                LIMIT 1 OFFSET 1
+            ) THEN t.amount
+            ELSE 0
+        END
+    ), 0) AS INTEGER) AS income_total,
+    CAST(COALESCE(SUM(
+        CASE
+            WHEN t.type = 'expense' THEN t.amount
+            WHEN t.type = 'transfer' AND t.transfer_group_id IS NOT NULL AND t.id = (
+                SELECT x.id FROM transactions x
+                WHERE x.transfer_group_id = t.transfer_group_id
+                ORDER BY x.created_at ASC, x.id ASC
+                LIMIT 1
+            ) THEN t.amount
+            ELSE 0
+        END
+    ), 0) AS INTEGER) AS expense_total,
+    COUNT(*) AS transaction_count
+FROM transactions t
+WHERE t.user_id = ?
+  AND t.account_id = ?
+  AND t.type IN ('income', 'expense', 'transfer')
+  AND (? = '' OR t.category_id = ?)
+  AND (? = '' OR t.type = ?)
+  AND (? = '' OR t.kind = ?)
+  AND (? = '' OR t.transaction_date >= ?)
+  AND (? = '' OR t.transaction_date <= ?)
+  AND (? = '' OR t.description LIKE '%' || ? || '%')
+  AND NOT EXISTS (
+    SELECT 1
+    FROM credit_payments cp
+    WHERE cp.transaction_id = t.id
+      AND cp.exclude_from_stats = 1
+  )
+`
+
+type StatsSummaryAccountParams struct {
+	UserID            string      `json:"user_id"`
+	AccountID         string      `json:"account_id"`
+	Column3           interface{} `json:"column_3"`
+	CategoryID        *string     `json:"category_id"`
+	Column5           interface{} `json:"column_5"`
+	Type              string      `json:"type"`
+	Column7           interface{} `json:"column_7"`
+	Kind              string      `json:"kind"`
+	Column9           interface{} `json:"column_9"`
+	TransactionDate   string      `json:"transaction_date"`
+	Column11          interface{} `json:"column_11"`
+	TransactionDate_2 string      `json:"transaction_date_2"`
+	Column13          interface{} `json:"column_13"`
+	Column14          *string     `json:"column_14"`
+}
+
+type StatsSummaryAccountRow struct {
+	IncomeTotal      int64 `json:"income_total"`
+	ExpenseTotal     int64 `json:"expense_total"`
+	TransactionCount int64 `json:"transaction_count"`
+}
+
+// Account-scoped totals: incoming transfers count as income, outgoing as expense (matches balance).
+func (q *Queries) StatsSummaryAccount(ctx context.Context, arg StatsSummaryAccountParams) (StatsSummaryAccountRow, error) {
+	row := q.db.QueryRowContext(ctx, statsSummaryAccount,
+		arg.UserID,
+		arg.AccountID,
+		arg.Column3,
+		arg.CategoryID,
+		arg.Column5,
+		arg.Type,
+		arg.Column7,
+		arg.Kind,
+		arg.Column9,
+		arg.TransactionDate,
+		arg.Column11,
+		arg.TransactionDate_2,
+		arg.Column13,
+		arg.Column14,
+	)
+	var i StatsSummaryAccountRow
 	err := row.Scan(&i.IncomeTotal, &i.ExpenseTotal, &i.TransactionCount)
 	return i, err
 }

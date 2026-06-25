@@ -17,7 +17,52 @@ WHERE t.user_id = ?
     SELECT 1
     FROM credit_payments cp
     WHERE cp.transaction_id = t.id
-      AND (cp.exclude_from_stats = 1 OR cp.kind = 'retroactive')
+      AND cp.exclude_from_stats = 1
+  );
+
+-- name: StatsSummaryAccount :one
+-- Account-scoped totals: incoming transfers count as income, outgoing as expense (matches balance).
+SELECT
+    CAST(COALESCE(SUM(
+        CASE
+            WHEN t.type = 'income' THEN t.amount
+            WHEN t.type = 'transfer' AND t.transfer_group_id IS NOT NULL AND t.id = (
+                SELECT x.id FROM transactions x
+                WHERE x.transfer_group_id = t.transfer_group_id
+                ORDER BY x.created_at ASC, x.id ASC
+                LIMIT 1 OFFSET 1
+            ) THEN t.amount
+            ELSE 0
+        END
+    ), 0) AS INTEGER) AS income_total,
+    CAST(COALESCE(SUM(
+        CASE
+            WHEN t.type = 'expense' THEN t.amount
+            WHEN t.type = 'transfer' AND t.transfer_group_id IS NOT NULL AND t.id = (
+                SELECT x.id FROM transactions x
+                WHERE x.transfer_group_id = t.transfer_group_id
+                ORDER BY x.created_at ASC, x.id ASC
+                LIMIT 1
+            ) THEN t.amount
+            ELSE 0
+        END
+    ), 0) AS INTEGER) AS expense_total,
+    COUNT(*) AS transaction_count
+FROM transactions t
+WHERE t.user_id = ?
+  AND t.account_id = ?
+  AND t.type IN ('income', 'expense', 'transfer')
+  AND (? = '' OR t.category_id = ?)
+  AND (? = '' OR t.type = ?)
+  AND (? = '' OR t.kind = ?)
+  AND (? = '' OR t.transaction_date >= ?)
+  AND (? = '' OR t.transaction_date <= ?)
+  AND (? = '' OR t.description LIKE '%' || ? || '%')
+  AND NOT EXISTS (
+    SELECT 1
+    FROM credit_payments cp
+    WHERE cp.transaction_id = t.id
+      AND cp.exclude_from_stats = 1
   );
 
 -- name: StatsByCategory :many
@@ -43,7 +88,7 @@ WHERE t.user_id = ?
     SELECT 1
     FROM credit_payments cp
     WHERE cp.transaction_id = t.id
-      AND (cp.exclude_from_stats = 1 OR cp.kind = 'retroactive')
+      AND cp.exclude_from_stats = 1
   )
 GROUP BY c.id, c.name, c.icon, c.type
 ORDER BY total DESC;
@@ -73,7 +118,7 @@ WHERE t.user_id = ?
     SELECT 1
     FROM credit_payments cp
     WHERE cp.transaction_id = t.id
-      AND (cp.exclude_from_stats = 1 OR cp.kind = 'retroactive')
+      AND cp.exclude_from_stats = 1
   )
 GROUP BY c.id, c.name, c.icon, s.id, s.name
 ORDER BY total DESC;
@@ -97,7 +142,7 @@ WHERE t.user_id = ?
     SELECT 1
     FROM credit_payments cp
     WHERE cp.transaction_id = t.id
-      AND (cp.exclude_from_stats = 1 OR cp.kind = 'retroactive')
+      AND cp.exclude_from_stats = 1
   )
 ORDER BY t.transaction_date ASC;
 
@@ -132,7 +177,6 @@ WHERE t.user_id = ?
   AND c.id = ?
   AND t.type IN ('income', 'expense')
   AND cp.exclude_from_stats = 0
-  AND cp.kind != 'retroactive'
   AND (? = '' OR t.kind = ?)
   AND (? = '' OR t.transaction_date >= ?)
   AND (? = '' OR t.transaction_date <= ?);
@@ -147,7 +191,6 @@ WHERE c.user_id = ?
   AND c.id = ?
   AND cp.transaction_id IS NOT NULL
   AND cp.exclude_from_stats = 0
-  AND cp.kind != 'retroactive'
   AND (? = '' OR cp.payment_date >= ?)
   AND (? = '' OR cp.payment_date <= ?);
 

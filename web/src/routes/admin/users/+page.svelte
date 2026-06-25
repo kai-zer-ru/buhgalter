@@ -16,6 +16,7 @@
 	import { confirm } from '$lib/confirm';
 	import FormFeedback from '$lib/components/FormFeedback.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
+	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
 	import { toast } from '$lib/toast';
 	import { validatePasswordPolicy } from '$lib/password-policy';
 
@@ -213,10 +214,14 @@
 				<p class="mt-1 text-xs" style:color="var(--danger)">{$_('admin.users.passwordMismatch')}</p>
 			{/if}
 		</div>
-		<label class="flex items-center gap-2 text-sm sm:col-span-2">
-			<input type="checkbox" bind:checked={isAdmin} />
-			{$_('admin.users.roleAdmin')}
-		</label>
+		<div class="flex items-center justify-between gap-4 sm:col-span-2">
+			<span class="text-sm">{$_('admin.users.roleAdmin')}</span>
+			<ToggleSwitch
+				checked={isAdmin}
+				label={$_('admin.users.roleAdmin')}
+				onchange={() => (isAdmin = !isAdmin)}
+			/>
+		</div>
 	</div>
 	<button type="submit" class="btn-primary" disabled={loading || !formValid}>
 		{$_('common.create')}

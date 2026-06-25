@@ -35,6 +35,7 @@
 	import { toast } from '$lib/toast';
 	import { formatBalance } from '$lib/finance';
 	import { formatMoneyDisplay, toAPIAmount } from '$lib/money';
+	import { fromDateLocalEnd, fromDateLocalStart } from '$lib/dates';
 	import { dedupeTransferLegs } from '$lib/transaction-display';
 	import { user } from '$lib/stores/auth';
 
@@ -56,12 +57,15 @@
 	let txOpen = $state(false);
 	let transferOpen = $state(false);
 	let editTx = $state<Transaction | null>(null);
+	let editTransfer = $state<Transaction | null>(null);
 	let fromLocal = $state('');
 	let toLocal = $state('');
 	let typeFilter = $state('');
 	let categoryFilter = $state('');
 	let kindFilter = $state('');
 	let searchFilter = $state('');
+	let filtersAutoApplyReady = $state(false);
+	let lastFiltersKey = $state('');
 
 	const id = $derived($page.params.id ?? '');
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
@@ -71,8 +75,31 @@
 	onMount(() => {
 		if (!id) return;
 		readURLFilters();
-		void load();
+		void load().then(() => {
+			lastFiltersKey = currentFiltersKey();
+			filtersAutoApplyReady = true;
+		});
 	});
+
+	$effect(() => {
+		const nextKey = currentFiltersKey();
+		if (!filtersAutoApplyReady) return;
+		if (nextKey === lastFiltersKey) return;
+		lastFiltersKey = nextKey;
+		txPage = 1;
+		void applyURLFilters();
+	});
+
+	function currentFiltersKey(): string {
+		return JSON.stringify({
+			fromLocal,
+			toLocal,
+			type: typeFilter,
+			categoryId: categoryFilter,
+			kind: kindFilter,
+			search: searchFilter.trim()
+		});
+	}
 
 	function readURLFilters() {
 		const q = $page.url.searchParams;
@@ -121,8 +148,8 @@
 				page: String(txPage),
 				limit: String(txLimit)
 			};
-			if (fromLocal) params.from = `${fromLocal.replace('T', ' ')}:00`;
-			if (toLocal) params.to = `${toLocal.replace('T', ' ')}:00`;
+			if (fromLocal) params.from = fromDateLocalStart(fromLocal, tz);
+			if (toLocal) params.to = fromDateLocalEnd(toLocal, tz);
 			if (typeFilter) params.type = typeFilter;
 			if (categoryFilter) params.category_id = categoryFilter;
 			if (kindFilter) params.kind = kindFilter;
@@ -217,7 +244,14 @@
 	}
 
 	function openEdit(tx: Transaction) {
-		if (tx.type === 'transfer') return;
+		if (tx.credit_payment_linked) return;
+		if (tx.type === 'transfer' && tx.transfer_group_id) {
+			editTransfer = tx;
+			editTx = null;
+			transferOpen = true;
+			return;
+		}
+		editTransfer = null;
 		editTx = tx;
 		txOpen = true;
 	}
@@ -230,6 +264,7 @@
 		kindFilter = '';
 		searchFilter = '';
 		txPage = 1;
+		lastFiltersKey = currentFiltersKey();
 		await applyURLFilters();
 	}
 
@@ -299,16 +334,21 @@
 					<IconButton
 						icon="transfer"
 						label={$_('transactions.transfer')}
-						onclick={() => (transferOpen = true)}
+						onclick={() => {
+							editTransfer = null;
+							transferOpen = true;
+						}}
 					/>
 					<IconButton
 						icon="edit"
 						label={$_('accounts.action.edit')}
 						onclick={() => (editing = true)}
 					/>
-					<button type="button" class="btn-ghost" onclick={toggleArchive}>
-						{$_('accounts.action.archive')}
-					</button>
+					<IconButton
+						icon="archive"
+						label={$_('accounts.action.archive')}
+						onclick={toggleArchive}
+					/>
 					<IconButton icon="delete" label={$_('common.delete')} variant="danger" onclick={remove} />
 				</div>
 			{/if}
@@ -333,8 +373,8 @@
 			<TransactionContextStats
 				params={{
 					account_id: id,
-					from: fromLocal ? `${fromLocal.replace('T', ' ')}:00` : '',
-					to: toLocal ? `${toLocal.replace('T', ' ')}:00` : '',
+					from: fromLocal ? fromDateLocalStart(fromLocal, tz) : '',
+					to: toLocal ? fromDateLocalEnd(toLocal, tz) : '',
 					type: typeFilter,
 					category_id: categoryFilter,
 					kind: kindFilter,
@@ -380,4 +420,13 @@
 	}}
 	onsaved={load}
 />
-<TransferForm bind:open={transferOpen} onclose={() => (transferOpen = false)} onsaved={load} />
+<TransferForm
+	bind:open={transferOpen}
+	editTx={editTransfer}
+	siblings={transactions}
+	onclose={() => {
+		transferOpen = false;
+		editTransfer = null;
+	}}
+	onsaved={load}
+/>

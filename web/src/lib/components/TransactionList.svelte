@@ -8,7 +8,7 @@
 	import TransactionAccountCell from '$lib/components/TransactionAccountCell.svelte';
 	import { formatAPIDateTimeForDisplay } from '$lib/dates';
 	import { formatMoneyDisplay } from '$lib/money';
-	import { transactionAmountSign } from '$lib/transaction-display';
+	import { transactionAmountSign, canEditTransaction } from '$lib/transaction-display';
 
 	let {
 		transactions,
@@ -97,7 +97,7 @@
 						{#if showActions}
 							<td class="p-3 text-right whitespace-nowrap">
 								<div class="flex items-center justify-end gap-0.5">
-									{#if showEdit && onedit && tx.type !== 'transfer'}
+									{#if showEdit && onedit && canEditTransaction(tx)}
 										<IconButton icon="edit" label={$_('common.edit')} onclick={() => onedit(tx)} />
 									{/if}
 									{#if showDelete && ondelete}
@@ -157,7 +157,7 @@
 				{/if}
 				{#if showActions}
 					<div class="mt-3 flex justify-end gap-0.5">
-						{#if showEdit && onedit && tx.type !== 'transfer'}
+						{#if showEdit && onedit && canEditTransaction(tx)}
 							<IconButton icon="edit" label={$_('common.edit')} onclick={() => onedit(tx)} />
 						{/if}
 						{#if showDelete && ondelete}

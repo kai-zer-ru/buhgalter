@@ -631,6 +631,7 @@ export type Transaction = {
 	transfer_group_id?: string | null;
 	transfer_account_id?: string | null;
 	transfer_is_out?: boolean;
+	credit_payment_linked?: boolean;
 	transaction_date: string;
 	created_at: string;
 	updated_at: string;
@@ -837,6 +838,23 @@ export function createTransfer(payload: {
 }) {
 	return request<Transfer>('/api/v1/transfers', {
 		method: 'POST',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function updateTransfer(
+	groupId: string,
+	payload: {
+		from_account_id: string;
+		to_account_id: string;
+		amount: string;
+		commission?: string;
+		description?: string;
+		transaction_date: string;
+	}
+) {
+	return request<Transfer>(`/api/v1/transfers/${groupId}`, {
+		method: 'PUT',
 		body: JSON.stringify(payload)
 	});
 }

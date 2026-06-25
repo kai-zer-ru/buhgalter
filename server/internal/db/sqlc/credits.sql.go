@@ -354,6 +354,7 @@ SELECT
     cp.credit_id,
     cp.amount AS payment_amount,
     cp.kind AS payment_kind,
+    cp.is_applied AS payment_is_applied,
     c.paid_amount,
     c.status AS credit_status
 FROM credit_payments cp
@@ -367,12 +368,13 @@ type GetCreditPaymentLinkByTransactionIDParams struct {
 }
 
 type GetCreditPaymentLinkByTransactionIDRow struct {
-	PaymentID     string `json:"payment_id"`
-	CreditID      string `json:"credit_id"`
-	PaymentAmount int64  `json:"payment_amount"`
-	PaymentKind   string `json:"payment_kind"`
-	PaidAmount    int64  `json:"paid_amount"`
-	CreditStatus  string `json:"credit_status"`
+	PaymentID        string `json:"payment_id"`
+	CreditID         string `json:"credit_id"`
+	PaymentAmount    int64  `json:"payment_amount"`
+	PaymentKind      string `json:"payment_kind"`
+	PaymentIsApplied int64  `json:"payment_is_applied"`
+	PaidAmount       int64  `json:"paid_amount"`
+	CreditStatus     string `json:"credit_status"`
 }
 
 func (q *Queries) GetCreditPaymentLinkByTransactionID(ctx context.Context, arg GetCreditPaymentLinkByTransactionIDParams) (GetCreditPaymentLinkByTransactionIDRow, error) {
@@ -383,6 +385,7 @@ func (q *Queries) GetCreditPaymentLinkByTransactionID(ctx context.Context, arg G
 		&i.CreditID,
 		&i.PaymentAmount,
 		&i.PaymentKind,
+		&i.PaymentIsApplied,
 		&i.PaidAmount,
 		&i.CreditStatus,
 	)

@@ -306,7 +306,9 @@
 	async function doDeletePayment(p: CreditPayment) {
 		if (!credit) return;
 		const ok = await confirm({
-			message: $_('credits.confirm.deletePayment'),
+			message: $_(
+				p.is_applied ? 'credits.confirm.deleteAppliedPayment' : 'credits.confirm.deletePayment'
+			),
 			danger: true
 		});
 		if (!ok) return;
@@ -528,7 +530,7 @@
 										({scheduleGroups.pending.length})
 									</span>
 								</span>
-								{#if creditIsActive && !scheduleEditing}
+								{#if creditIsActive && !scheduleEditing && scheduleGroups.pending.some(canEditPayment)}
 									<button
 										type="button"
 										class="btn-ghost text-sm"
@@ -580,6 +582,9 @@
 								({scheduleGroups.applied.length})
 							</span>
 						</summary>
+						<div class="px-4 pb-3">
+							<FieldHint text={$_('credits.schedule.appliedHint')} />
+						</div>
 						{@render paymentTable(scheduleGroups.applied)}
 					</details>
 				{/if}

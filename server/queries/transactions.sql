@@ -31,12 +31,14 @@ SELECT
             LIMIT 1
         ) THEN 1
         ELSE 0
-    END AS transfer_is_out
+    END AS transfer_is_out,
+    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked
 FROM transactions t
 LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
 LEFT JOIN accounts a ON a.id = t.account_id
 LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
+LEFT JOIN credit_payments cp ON cp.transaction_id = t.id
 WHERE t.id = ? AND t.user_id = ?;
 
 -- name: ListTransactionsByTransferGroup :many
@@ -136,6 +138,19 @@ WHERE user_id = ?
   AND kind = 'future'
   AND transaction_date <= ?;
 
+-- name: ActivateAppliedCreditFutureTransactions :execrows
+UPDATE transactions
+SET kind = 'manual', updated_at = ?
+WHERE user_id = ?
+  AND kind = 'future'
+  AND id IN (
+    SELECT cp.transaction_id
+    FROM credit_payments cp
+    WHERE cp.transaction_id IS NOT NULL
+      AND cp.is_applied = 1
+      AND cp.exclude_from_stats = 0
+  );
+
 -- name: CountTransactionsFiltered :one
 SELECT COUNT(*) AS count
 FROM transactions t
@@ -178,12 +193,14 @@ SELECT
             LIMIT 1
         ) THEN 1
         ELSE 0
-    END AS transfer_is_out
+    END AS transfer_is_out,
+    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked
 FROM transactions t
 LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
 LEFT JOIN accounts a ON a.id = t.account_id
 LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
+LEFT JOIN credit_payments cp ON cp.transaction_id = t.id
 WHERE t.user_id = ?
   AND (? = '' OR t.account_id = ?)
   AND (? = '' OR t.type = ?)
@@ -225,12 +242,14 @@ SELECT
             LIMIT 1
         ) THEN 1
         ELSE 0
-    END AS transfer_is_out
+    END AS transfer_is_out,
+    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked
 FROM transactions t
 LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
 LEFT JOIN accounts a ON a.id = t.account_id
 LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
+LEFT JOIN credit_payments cp ON cp.transaction_id = t.id
 WHERE t.user_id = ?
   AND (? = '' OR t.account_id = ?)
   AND (? = '' OR t.type = ?)
@@ -272,12 +291,14 @@ SELECT
             LIMIT 1
         ) THEN 1
         ELSE 0
-    END AS transfer_is_out
+    END AS transfer_is_out,
+    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked
 FROM transactions t
 LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
 LEFT JOIN accounts a ON a.id = t.account_id
 LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
+LEFT JOIN credit_payments cp ON cp.transaction_id = t.id
 WHERE t.user_id = ?
 ORDER BY t.transaction_date DESC, t.created_at DESC
 LIMIT ?;

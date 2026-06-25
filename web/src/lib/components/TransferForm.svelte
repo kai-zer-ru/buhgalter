@@ -1,6 +1,12 @@
 <script lang="ts">
 	import { _ } from 'svelte-i18n';
-	import { createTransfer, listAccounts, type Account } from '$lib/api/client';
+	import {
+		createTransfer,
+		listAccounts,
+		updateTransfer,
+		type Account,
+		type Transaction
+	} from '$lib/api/client';
 	import { ApiError } from '$lib/api/client';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
 	import FormFeedback from '$lib/components/FormFeedback.svelte';
@@ -8,18 +14,27 @@
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import { defaultAccountId } from '$lib/accounts';
-	import { fromDatetimeLocalValue, nowDatetimeLocal } from '$lib/dates';
+	import { fromDatetimeLocalValue, nowDatetimeLocal, toDatetimeLocalValue } from '$lib/dates';
 	import { toAPIAmount } from '$lib/money';
+	import { transferAccountIds, transferGroupLegs, transferOutLeg } from '$lib/transaction-display';
 	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
 
 	type Props = {
 		open: boolean;
+		editTx?: Transaction | null;
+		siblings?: Transaction[];
 		onclose: () => void;
 		onsaved: () => void;
 	};
 
-	let { open = $bindable(), onclose, onsaved }: Props = $props();
+	let {
+		open = $bindable(),
+		editTx = null,
+		siblings = [],
+		onclose,
+		onsaved
+	}: Props = $props();
 
 	let fromAccount = $state('');
 	let toAccount = $state('');
@@ -30,10 +45,12 @@
 	let accounts = $state<Account[]>([]);
 	let saving = $state(false);
 	let error = $state('');
+	let groupId = $state('');
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
+	const editing = $derived(Boolean(groupId));
 	const fromAcc = $derived(accounts.find((a) => a.id === fromAccount));
-	const canFullBalance = $derived(Boolean(fromAcc && fromAcc.balance > 0));
+	const canFullBalance = $derived(Boolean(fromAcc && fromAcc.balance > 0 && !editing));
 	const accountOptions = $derived(accounts.map((acc) => ({ value: acc.id, label: acc.name })));
 
 	$effect(() => {
@@ -44,6 +61,21 @@
 	async function init() {
 		error = '';
 		accounts = await listAccounts('active');
+		if (editTx?.transfer_group_id) {
+			const legs = transferGroupLegs(editTx, siblings);
+			const metaLeg = legs.length >= 2 ? transferOutLeg(editTx, legs) : editTx;
+			const commissionLeg = legs.find((leg) => leg.type === 'expense');
+			const { fromAccountId, toAccountId } = transferAccountIds(editTx, siblings);
+			groupId = editTx.transfer_group_id;
+			fromAccount = fromAccountId;
+			toAccount = toAccountId;
+			amount = metaLeg.amount_display;
+			commission = commissionLeg?.amount_display ?? '';
+			description = metaLeg.description ?? '';
+			dateTimeValue = toDatetimeLocalValue(metaLeg.transaction_date, tz);
+			return;
+		}
+		groupId = '';
 		const primary = defaultAccountId(accounts);
 		fromAccount = primary;
 		toAccount = accounts.find((a) => a.id !== primary)?.id ?? primary;
@@ -57,15 +89,20 @@
 		e.preventDefault();
 		saving = true;
 		error = '';
+		const payload = {
+			from_account_id: fromAccount,
+			to_account_id: toAccount,
+			amount: toAPIAmount(amount),
+			commission: commission.trim() ? toAPIAmount(commission) : undefined,
+			description: description || undefined,
+			transaction_date: fromDatetimeLocalValue(dateTimeValue, tz)
+		};
 		try {
-			await createTransfer({
-				from_account_id: fromAccount,
-				to_account_id: toAccount,
-				amount: toAPIAmount(amount),
-				commission: commission.trim() ? toAPIAmount(commission) : undefined,
-				description: description || undefined,
-				transaction_date: fromDatetimeLocalValue(dateTimeValue, tz)
-			});
+			if (groupId) {
+				await updateTransfer(groupId, payload);
+			} else {
+				await createTransfer(payload);
+			}
 			open = false;
 			toast($_('common.saved'));
 			onsaved();

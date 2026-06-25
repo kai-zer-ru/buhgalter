@@ -85,7 +85,7 @@ async function remove() {
 - `settings.tokens.confirm.revoke`
 - `admin.users.confirm.delete` (плейсхолдер `{name}`)
 - `admin.backups.confirm.restore`
-- `credits.confirm.delete`, `credits.confirm.deletePayment`
+- `credits.confirm.delete`, `credits.confirm.deletePayment`, `credits.confirm.deleteAppliedPayment`
 - `credits.complete.payFromAccount` (плейсхолдеры `{amount}`, `{account}`)
 
 Новые destructive-действия — добавлять ключ `*.confirm.*` и вызывать через `confirm()`.
@@ -123,7 +123,7 @@ API: `POST /api/v1/admin/backups/restore` (multipart `file` + `confirm`). См. 
 - Отзыв API-токена
 - Удаление пользователя (админка)
 - Восстановление БД из бэкапа — см. [Восстановление БД](#восстановление-бд)
-- **Кредиты** (`/credits`): модалка **«Новый кредит»** (`CreditForm.svelte`) — единая таблица графика с автозаполнением; правка суммы платежа через **«Изменить»** / **«Сохранить»** (не на каждый символ); чекбоксы **«Уже платил по графику»** и **«Оплатить автоматически»** (второй скрыт при включённом первом); модалки **«Оплатить»** и **«Завершить»** на `/credits/[id]`; badge и спойлеры графика — [ui-credits.md](ui-credits.md); ошибка удаления кредита показывается на странице; подтверждение **«Удалить платёж»** и удаления кредита — `$lib/confirm`
+- **Кредиты** (`/credits`): … подтверждение **«Удалить платёж»** (для оплаченных — `credits.confirm.deleteAppliedPayment`) и удаления кредита — `$lib/confirm`
 
 ## Требование для новых экранов
 

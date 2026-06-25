@@ -801,12 +801,22 @@ func applyPrecreatedPayment(ctx context.Context, db *sql.DB, row sqlcdb.ListDueC
 		return false, nil
 	}
 
+	nowStr := time.Now().UTC().Format(time.RFC3339)
+	if row.TransactionID != nil {
+		if _, err := q.ActivateTransaction(ctx, sqlcdb.ActivateTransactionParams{
+			UpdatedAt: nowStr,
+			ID:        *row.TransactionID,
+			UserID:    row.UserID,
+		}); err != nil {
+			return false, err
+		}
+	}
+
 	creditRow, err := q.GetCreditByID(ctx, sqlcdb.GetCreditByIDParams{ID: row.CreditID, UserID: row.UserID})
 	if err != nil {
 		return false, err
 	}
 	newPaid := creditRow.PaidAmount + row.Amount
-	nowStr := time.Now().UTC().Format(time.RFC3339)
 	if err := q.UpdateCreditPaidAmount(ctx, sqlcdb.UpdateCreditPaidAmountParams{
 		PaidAmount: newPaid, UpdatedAt: nowStr, ID: row.CreditID, UserID: row.UserID,
 	}); err != nil {

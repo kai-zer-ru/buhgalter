@@ -17,6 +17,7 @@ OpenAPI-схемы: [`Transaction`](api/openapi.yaml#/components/schemas/Transac
 | `amount_display` | string | `"1234.56"` для UI |
 | `commission` | integer | Только для перевода: комиссия в копейках (v1.1) |
 | `commission_display` | string | Отформатированная комиссия |
+| `credit_payment_linked` | bool | `true` — операция привязана к платежу по кредиту; редактирование через `PATCH /transactions/{id}` запрещено |
 
 `transfer_is_out` вычисляется в sqlc-запросах (`CASE` + подзапрос по `transfer_group_id`), не хранится в таблице `transactions`.
 
@@ -34,6 +35,8 @@ OpenAPI-схемы: [`Transaction`](api/openapi.yaml#/components/schemas/Transac
 | `transferOutLeg(tx, siblings)` | Исходящая нога пары (min `created_at` в группе) |
 | `dedupeTransferLegs(txs)` | Оставить одну строку на перевод, если в списке обе ноги (главная, `/transactions`) |
 | `transferRoute(tx, siblings)` | `{ from, to }` — имена счетов **в направлении движения денег** |
+| `transferAccountIds(tx, siblings?)` | `{ fromAccountId, toAccountId }` для формы редактирования перевода (одна видимая нога + `transfer_is_out`) |
+| `canEditTransaction(tx)` | `false` при `credit_payment_linked` — скрыть «Изменить» в списке |
 | `formatTransactionAccount(tx, siblings, mode)` | Текст колонки «Счёт» |
 | `transactionAmountSign(tx, opts?)` | Префикс суммы: `+`, `−` или пусто |
 
@@ -73,6 +76,22 @@ OpenAPI-схемы: [`Transaction`](api/openapi.yaml#/components/schemas/Transac
 
 OpenAPI: `CreateTransferRequest.commission`, схема `Transfer`.
 
+## Редактирование перевода (v1.1)
+
+Из списка операций (`TransactionList`, страница счёта, `/transactions`) — кнопка «Изменить» открывает `TransferForm` в режиме редактирования:
+
+- API: `PUT /api/v1/transfers/{group_id}` (`updateTransfer` в клиенте)
+- Счета «откуда/куда» — `transferAccountIds()` (корректно при одной ноге на `/accounts/[id]`)
+- Операции с `credit_payment_linked` **не** редактируются из списка (`canEditTransaction`)
+
+## Фильтры дат (v1.1)
+
+`TransactionFilters` с `timeMode="hidden"`: только дата, границы суток — `fromDateLocalStart` / `toDateLocalEnd` (`$lib/dates.ts`) в часовом поясе пользователя. Используется на `/transactions`, `/stats`, странице счёта.
+
+## Категории с одинаковым именем
+
+`$lib/category-label.ts`: `categorySelectLabel` / `duplicateCategoryNames` — суффиксы «(Доход)» / «(Расход)» в фильтрах и статистике, когда имя совпадает (например системные «Долги»).
+
 ## Главная (`/`)
 
 - Карточки счетов: `AccountIcon` (`type`, `bank_icon` из API), имя и баланс — как на `/accounts`.
@@ -81,11 +100,12 @@ OpenAPI: `CreateTransferRequest.commission`, схема `Transfer`.
 
 ## Формат денег
 
-`web/src/lib/money.ts`: отображение и ввод с разделителем тысяч **пробелом** (`10 000.00`). Компонент `MoneyInput.svelte`.
+`web/src/lib/money.ts`: отображение и ввод с разделителем тысяч **пробелом** (`10 000.00`). Компонент `MoneyInput.svelte` — при вводе курсор сохраняется при форматировании (`mapMoneyInputCursor`).
 
 ## Тесты
 
 - `TestTransferRollbackOnError` — атомарность перевода при сбое второй ноги (SQLite-триггер в интеграционном тесте).
+- `money.test.ts` — стабильность курсора в `MoneyInput`.
 
 ## Требование для новых экранов
 

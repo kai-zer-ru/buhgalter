@@ -89,3 +89,43 @@ export function transactionAmountSign(tx: Transaction, opts?: { singleAccount?: 
 	}
 	return '';
 }
+
+/** Income/expense in the transaction form; not credit-linked payments. */
+export function canEditTransaction(tx: Transaction): boolean {
+	return !tx.credit_payment_linked;
+}
+
+export function transferGroupLegs(tx: Transaction, siblings: Transaction[]): Transaction[] {
+	if (!tx.transfer_group_id) return [tx];
+	return siblings.filter((item) => item.transfer_group_id === tx.transfer_group_id);
+}
+
+/** From/to account IDs for transfer edit form (works with a single visible leg). */
+export function transferAccountIds(
+	tx: Transaction,
+	siblings: Transaction[] = []
+): { fromAccountId: string; toAccountId: string } {
+	if (tx.type !== 'transfer' || !tx.transfer_group_id) {
+		return { fromAccountId: tx.account_id, toAccountId: tx.transfer_account_id ?? '' };
+	}
+
+	const legs = siblings.filter((t) => t.transfer_group_id === tx.transfer_group_id);
+	if (legs.length >= 2) {
+		const out = transferOutLeg(tx, legs);
+		return {
+			fromAccountId: out.account_id,
+			toAccountId: out.transfer_account_id ?? ''
+		};
+	}
+
+	if (tx.transfer_is_out) {
+		return {
+			fromAccountId: tx.account_id,
+			toAccountId: tx.transfer_account_id ?? ''
+		};
+	}
+	return {
+		fromAccountId: tx.transfer_account_id ?? '',
+		toAccountId: tx.account_id
+	};
+}

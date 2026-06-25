@@ -232,12 +232,6 @@ html.dark {
 		.input {
 			min-height: 2.75rem;
 		}
-
-		label.flex.items-center.gap-2 input[type='checkbox'],
-		label.flex.items-start.gap-2 input[type='checkbox'] {
-			min-height: 1.25rem;
-			min-width: 1.25rem;
-		}
 	}
 
 	@media (min-width: 768px) {

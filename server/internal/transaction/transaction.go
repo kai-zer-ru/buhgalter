@@ -34,8 +34,9 @@ type Transaction struct {
 	SubcategoryName   *string `json:"subcategory_name,omitempty"`
 	TransferGroupID   *string `json:"transfer_group_id,omitempty"`
 	TransferAccountID   *string `json:"transfer_account_id,omitempty"`
-	TransferIsOut       bool    `json:"transfer_is_out,omitempty"`
-	TransactionDate     string  `json:"transaction_date"`
+	TransferIsOut         bool `json:"transfer_is_out,omitempty"`
+	CreditPaymentLinked   bool `json:"credit_payment_linked,omitempty"`
+	TransactionDate       string  `json:"transaction_date"`
 	CreatedAt         string  `json:"created_at"`
 	UpdatedAt         string  `json:"updated_at"`
 }
@@ -88,7 +89,7 @@ func txFromGetRow(row sqlcdb.GetTransactionByIDRow) Transaction {
 		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID,
 		row.TransactionDate, row.CreatedAt, row.UpdatedAt,
 		row.CategoryName, row.CategoryIcon, row.SubcategoryName, row.AccountName, row.TransferAccountName,
-		row.TransferIsOut,
+		row.TransferIsOut, row.CreditPaymentLinked,
 	)
 }
 
@@ -98,7 +99,7 @@ func txFromListDesc(row sqlcdb.ListTransactionsFilteredDateDescRow) Transaction 
 		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID,
 		row.TransactionDate, row.CreatedAt, row.UpdatedAt,
 		row.CategoryName, row.CategoryIcon, row.SubcategoryName, row.AccountName, row.TransferAccountName,
-		row.TransferIsOut,
+		row.TransferIsOut, row.CreditPaymentLinked,
 	)
 }
 
@@ -108,7 +109,7 @@ func txFromListAsc(row sqlcdb.ListTransactionsFilteredDateAscRow) Transaction {
 		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID,
 		row.TransactionDate, row.CreatedAt, row.UpdatedAt,
 		row.CategoryName, row.CategoryIcon, row.SubcategoryName, row.AccountName, row.TransferAccountName,
-		row.TransferIsOut,
+		row.TransferIsOut, row.CreditPaymentLinked,
 	)
 }
 
@@ -118,7 +119,7 @@ func txFromRecent(row sqlcdb.ListRecentTransactionsRow) Transaction {
 		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID,
 		row.TransactionDate, row.CreatedAt, row.UpdatedAt,
 		row.CategoryName, row.CategoryIcon, row.SubcategoryName, row.AccountName, row.TransferAccountName,
-		row.TransferIsOut,
+		row.TransferIsOut, row.CreditPaymentLinked,
 	)
 }
 
@@ -128,7 +129,7 @@ func txFromGroupRow(row sqlcdb.ListTransactionsByTransferGroupRow) Transaction {
 		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID,
 		row.TransactionDate, row.CreatedAt, row.UpdatedAt,
 		row.CategoryName, row.CategoryIcon, row.SubcategoryName, row.AccountName, row.TransferAccountName,
-		row.TransferIsOut,
+		row.TransferIsOut, 0,
 	)
 }
 
@@ -137,7 +138,7 @@ func txFromFields(
 	categoryID, subcategoryID, transferGroupID, transferAccountID *string,
 	transactionDate, createdAt, updatedAt string,
 	categoryName, categoryIcon, subcategoryName, accountName, transferAccountName *string,
-	transferIsOut int64,
+	transferIsOut, creditPaymentLinked int64,
 ) Transaction {
 	t := Transaction{
 		ID:                id,
@@ -166,6 +167,9 @@ func txFromFields(
 	}
 	if txType == "transfer" {
 		t.TransferIsOut = transferIsOut == 1
+	}
+	if creditPaymentLinked == 1 {
+		t.CreditPaymentLinked = true
 	}
 	return t
 }
@@ -269,6 +273,9 @@ type UpdateInput struct {
 func Update(ctx context.Context, db *sql.DB, userID, id string, in UpdateInput) (Transaction, error) {
 	existing, err := GetByID(ctx, db, userID, id)
 	if err != nil {
+		return Transaction{}, err
+	}
+	if err := credit.GuardTransactionUpdate(ctx, db, userID, id); err != nil {
 		return Transaction{}, err
 	}
 	if existing.TransferGroupID != nil && *existing.TransferGroupID != "" {
@@ -381,7 +388,29 @@ func Activate(ctx context.Context, db *sql.DB, userID, id string) (Transaction, 
 	return GetByID(ctx, db, userID, id)
 }
 
+// ActivateDueFutureTransactions promotes past-due planned operations to manual (UTC cutoff = now).
+func ActivateDueFutureTransactions(ctx context.Context, db *sql.DB, userID string) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	cutoff := timeutil.FormatUTC(timeutil.NowUTC())
+	q := queries(db)
+	if _, err := q.ActivateAppliedCreditFutureTransactions(ctx, sqlcdb.ActivateAppliedCreditFutureTransactionsParams{
+		UpdatedAt: now,
+		UserID:    userID,
+	}); err != nil {
+		return err
+	}
+	_, err := q.ActivateFutureTransactionsBefore(ctx, sqlcdb.ActivateFutureTransactionsBeforeParams{
+		UpdatedAt:       now,
+		UserID:          userID,
+		TransactionDate: cutoff,
+	})
+	return err
+}
+
 func List(ctx context.Context, db *sql.DB, userID string, f ListFilters) (ListResult, error) {
+	if err := ActivateDueFutureTransactions(ctx, db, userID); err != nil {
+		return ListResult{}, err
+	}
 	if f.Page < 1 {
 		f.Page = 1
 	}

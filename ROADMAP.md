@@ -10,6 +10,7 @@
 - [ ] [PostgreSQL](roadmap/postgresql.md) — опциональная БД вместо SQLite
 - [ ] [Webhook](roadmap/webhooks.md) — исходящие события для внешних интеграций
 - [ ] [Синхронизация с банками](roadmap/bank-sync.md) — автоматический импорт операций
+- [ ] [Сканер чеков](roadmap/receipt-scanner.md) — расход из фото или QR чека
 - [ ] [Home Assistant](roadmap/home-assistant.md) — интеграция для умного дома
 - [ ] [Кредитная карта](roadmap/credit-card.md) — тип счёта (лимит, выписка, погашение)
 - [ ] [Кнопки в Telegram / MAX](roadmap/telegram-max-buttons.md) — inline-кнопки в исходящих уведомлениях

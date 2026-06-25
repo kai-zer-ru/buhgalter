@@ -264,3 +264,114 @@ func TestStatsContextUsesFilters(t *testing.T) {
 		t.Fatalf("expected 1 transaction in filtered context, got %d", out.TransactionCount)
 	}
 }
+
+func TestStatsSummaryIncludesCreditPaymentTransactions(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+	accID := createTestAccount(t, env, "Кредит-стат")
+
+	credit := createCredit(t, env, map[string]any{
+		"principal_amount":     "12000.00",
+		"issue_date":           time.Now().UTC().AddDate(0, -1, 0).Format("2006-01-02 00:00:00"),
+		"term_months":          6,
+		"interest_rate":        0,
+		"debit_account_id":     accID,
+		"create_transactions":  true,
+		"added_retroactively":  false,
+	})
+	schedule, ok := credit["schedule"].([]any)
+	if !ok || len(schedule) == 0 {
+		t.Fatal("expected schedule")
+	}
+	var creditExpense int64
+	var creditTxCount int64
+	for _, item := range schedule {
+		row, ok := item.(map[string]any)
+		if !ok || row["transaction_id"] == nil {
+			continue
+		}
+		applied, _ := row["is_applied"].(bool)
+		if !applied {
+			continue
+		}
+		if amt, ok := row["amount"].(float64); ok {
+			creditExpense += int64(amt)
+			creditTxCount++
+		}
+	}
+	if creditExpense == 0 {
+		t.Fatal("expected at least one applied credit payment transaction")
+	}
+
+	resp, err := env.authedRequest(http.MethodGet, "/api/v1/stats/summary", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var summary struct {
+		ExpenseTotal     int64 `json:"expense_total"`
+		TransactionCount int64 `json:"transaction_count"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&summary)
+	if summary.ExpenseTotal < creditExpense {
+		t.Fatalf("expected expense >= %d, got %d", creditExpense, summary.ExpenseTotal)
+	}
+	if summary.TransactionCount < creditTxCount {
+		t.Fatalf("expected at least %d credit payments in stats count, got %d", creditTxCount, summary.TransactionCount)
+	}
+}
+
+func TestStatsContextAccountIncludesTransfers(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+	fromID := createTestAccount(t, env, "Яндекс")
+	toID := createTestAccount(t, env, "Наличные")
+	catID := getCategoryByType(t, env, "expense")
+
+	transferBody, _ := json.Marshal(map[string]any{
+		"from_account_id": fromID, "to_account_id": toID,
+		"amount": "2000.00", "transaction_date": "2020-06-01 10:00:00",
+	})
+	transferResp, err := env.authedRequest(http.MethodPost, "/api/v1/transfers", bytes.NewReader(transferBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	transferResp.Body.Close()
+	if transferResp.StatusCode != http.StatusCreated {
+		t.Fatalf("transfer status %d", transferResp.StatusCode)
+	}
+
+	expenseBody, _ := json.Marshal(map[string]any{
+		"account_id": toID, "type": "expense", "amount": "100.00",
+		"category_id": catID, "description": "тест", "transaction_date": "2020-06-02 10:00:00",
+	})
+	expenseResp, err := env.authedRequest(http.MethodPost, "/api/v1/transactions", bytes.NewReader(expenseBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	expenseResp.Body.Close()
+	if expenseResp.StatusCode != http.StatusCreated {
+		t.Fatalf("expense status %d", expenseResp.StatusCode)
+	}
+
+	ctxResp, err := env.authedRequest(http.MethodGet, "/api/v1/stats/context?account_id="+toID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ctxResp.Body.Close()
+	var ctx struct {
+		IncomeTotal      int64 `json:"income_total"`
+		ExpenseTotal     int64 `json:"expense_total"`
+		TransactionCount int64 `json:"transaction_count"`
+	}
+	_ = json.NewDecoder(ctxResp.Body).Decode(&ctx)
+	if ctx.IncomeTotal != 200000 {
+		t.Fatalf("expected income 200000 (transfer in), got %d", ctx.IncomeTotal)
+	}
+	if ctx.ExpenseTotal != 10000 {
+		t.Fatalf("expected expense 10000, got %d", ctx.ExpenseTotal)
+	}
+	if ctx.TransactionCount != 2 {
+		t.Fatalf("expected 2 operations on account, got %d", ctx.TransactionCount)
+	}
+}
