@@ -46,7 +46,8 @@ async function remove() {
 | Формы (`TransactionForm`, `TransferForm`, `DebtForm`, `CreditForm`, …) | `onclose()` — отмена без сохранения |
 | Информационные модалки (API-токен, preview и т.п.) | закрыть, без side effects |
 | `CategoryIconPicker`, выбор иконки | закрыть без выбора |
-| **Combobox / Select** (`TimezonePicker`, будущий `Combobox`) | закрыть список; если список уже закрыт — не перехватывать Esc у родительской модалки |
+| **DateTimePicker** (календарь) | закрыть попап; в режиме с временем — Esc не закрывает, если фокус в поле времени (см. ниже) |
+| **Combobox / Select** (`TimezonePicker`, `Select`, `Combobox`) | закрыть список; если список уже закрыт — не перехватывать Esc у родительской модалки |
 | Вложенные слои | закрывается **верхний** попап (confirm поверх формы — сначала confirm) |
 
 **Не попап:** нативные `<select>` заменены на `Select` / `Combobox` — те же правила, что у combobox.
