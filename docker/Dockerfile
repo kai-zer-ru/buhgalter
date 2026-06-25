@@ -12,7 +12,7 @@ RUN npm run build
 FROM golang:1.26-alpine AS server
 WORKDIR /app
 RUN apk add --no-cache git
-ARG VERSION=1.1.0
+ARG VERSION=1.1.1
 ARG INSTALL_METHOD=docker
 ARG BUILD_COMMIT=unknown
 ARG BUILD_TIME
@@ -36,7 +36,7 @@ WORKDIR /app
 RUN adduser -D -u 1000 buhgalter
 COPY --from=server /buhgalter /app/buhgalter
 COPY --from=server /app/locales /app/locales
-ARG VERSION=1.1.0
+ARG VERSION=1.1.1
 ARG BUILD_COMMIT=unknown
 LABEL org.opencontainers.image.source="https://github.com/kai-zer-ru/buhgalter" \
       org.opencontainers.image.version="${VERSION}" \
@@ -47,7 +47,8 @@ ENV BUHGALTER_ADDR=:8765 \
     BUHGALTER_DB_PATH=/app/data/buhgalter.db \
     BUHGALTER_DATA_DIR=/app/data \
     BUHGALTER_LOG_DIR=/app/logs \
-    BUHGALTER_LOCALES_DIR=/app/locales
+    BUHGALTER_LOCALES_DIR=/app/locales \
+    BUHGALTER_ENV_FILE=/app/.env
 EXPOSE 8765
 VOLUME ["/app/data", "/app/backups", "/app/locales"]
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s CMD wget -qO- http://127.0.0.1:8765/api/v1/health || exit 1

@@ -7,11 +7,13 @@
 ## Быстрый старт
 
 ```bash
+cd docker
+cp .env.example .env
 docker pull ghcr.io/kai-zer-ru/buhgalter:latest
-docker compose -f docker/docker-compose.yml up -d
+docker compose up -d
 ```
 
-Тег образа: переменная `BUHGALTER_IMAGE_TAG` (по умолчанию `latest`), например `BUHGALTER_IMAGE_TAG=1.0.0 docker compose ...`. В GitHub Release к compose прилагается `.env` с версией релиза.
+Тег образа: `BUHGALTER_IMAGE_TAG` в `.env` (по умолчанию `latest`). В GitHub Release рядом с `docker-compose.yaml` лежат `.env` (с версией релиза) и `.env.example`.
 
 Локальная сборка без pull:
 
@@ -51,7 +53,7 @@ docker run --rm -p 8765:8765 -v buhgalter-data:/app/data ghcr.io/kai-zer-ru/buhg
 
 Откройте `http://localhost:8765/setup` и проверьте `GET /api/v1/health`.
 
-Пока **внешний URL** в админке не задан, приложение отвечает на `localhost` и адреса **локальной сети** (`192.168.x.x`, `10.x`, `172.16–31.x`). Порт в compose по умолчанию `127.0.0.1:8765:8765` — только с этого хоста; для доступа с других устройств в LAN замените на `8765:8765`. Для доступа из интернета настройте nginx, укажите `external_url` в `/admin`.
+Пока **внешний URL** в админке не задан, доступ разрешён с **localhost** (всегда) и с Host из `BUHGALTER_ALLOWED_HOSTS` в `.env`. Порт в compose по умолчанию `127.0.0.1:8765:8765` — только с этого хоста; для доступа с других устройств замените на `8765:8765` и добавьте их IP в `.env`. Для HTTPS из интернета — nginx и `external_url` в `/admin`.
 
 ### Уведомления MAX (official API)
 

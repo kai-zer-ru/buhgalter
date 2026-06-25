@@ -110,7 +110,7 @@
 	{#each displayQuick as iconId (iconId)}
 		<button
 			type="button"
-			class="rounded-xl p-2 transition-colors"
+			class="cursor-pointer rounded-xl p-2 transition-colors"
 			style:background-color={value === iconId
 				? 'color-mix(in srgb, var(--primary) 15%, transparent)'
 				: 'transparent'}
@@ -122,7 +122,7 @@
 	{/each}
 	<button
 		type="button"
-		class="rounded-xl px-3 py-2 text-sm font-medium transition-colors"
+		class="cursor-pointer rounded-xl px-3 py-2 text-sm font-medium transition-colors"
 		style:background-color="color-mix(in srgb, var(--border) 40%, transparent)"
 		style:color="var(--text-muted)"
 		aria-label={$_('categories.icons.more')}
@@ -154,7 +154,7 @@
 				{#each filtered as icon (icon.id)}
 					<button
 						type="button"
-						class="rounded-xl p-2 transition-colors"
+						class="cursor-pointer rounded-xl p-2 transition-colors"
 						style:background-color={value === icon.id
 							? 'color-mix(in srgb, var(--primary) 15%, transparent)'
 							: 'transparent'}

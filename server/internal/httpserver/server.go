@@ -52,7 +52,7 @@ func (s *Server) Handler() http.Handler {
 	r.Use(appmw.Recovery(s.logger))
 	r.Use(appmw.Logger(s.logger))
 	r.Use(appmw.CORS(s.cfg.CORSOrigins))
-	r.Use(appmw.ExternalAccess(dbHandle))
+	r.Use(appmw.ExternalAccess(dbHandle, s.cfg.AllowedHosts))
 	r.Use(chimw.Compress(5))
 
 	setupHandler := &setup.Handler{DataDir: s.cfg.DataDir, Store: dbHandle, Audit: s.audit}

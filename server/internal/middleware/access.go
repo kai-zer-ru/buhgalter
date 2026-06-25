@@ -13,9 +13,10 @@ import (
 )
 
 // ExternalAccess limits HTTP access by Host based on system_settings.external_url.
-// Empty external_url → localhost and private/LAN addresses (RFC 1918, link-local).
-// Set external_url → allowed Host matches URL hostname; localhost/LAN kept for local admin.
-func ExternalAccess(store *db.Handle) func(http.Handler) http.Handler {
+// localhost / loopback is always allowed. Otherwise: BUHGALTER_ALLOWED_HOSTS in .env;
+// with external_url set — also the URL hostname.
+func ExternalAccess(store *db.Handle, allowedHosts []string) func(http.Handler) http.Handler {
+	allowed := allowedHostSet(allowedHosts)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path == "/api/v1/health" && isLoopbackIP(directClientIP(r)) {
@@ -23,12 +24,12 @@ func ExternalAccess(store *db.Handle) func(http.Handler) http.Handler {
 				return
 			}
 
-			allowed, err := externalAccessAllowed(r.Context(), store.DB(), r)
+			ok, err := externalAccessAllowed(r.Context(), store.DB(), r, allowed)
 			if err != nil {
 				apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 				return
 			}
-			if !allowed {
+			if !ok {
 				apperror.WriteR(w, r, http.StatusForbidden, apperror.Forbidden, "ERR_EXTERNAL_ACCESS_DENIED")
 				return
 			}
@@ -37,7 +38,23 @@ func ExternalAccess(store *db.Handle) func(http.Handler) http.Handler {
 	}
 }
 
-func externalAccessAllowed(ctx context.Context, sqlDB *sql.DB, r *http.Request) (bool, error) {
+func allowedHostSet(hosts []string) map[string]struct{} {
+	allowed := make(map[string]struct{}, len(hosts))
+	for _, host := range hosts {
+		host = normalizeHost(host)
+		if host != "" {
+			allowed[host] = struct{}{}
+		}
+	}
+	return allowed
+}
+
+func isConfiguredAllowedHost(host string, allowed map[string]struct{}) bool {
+	_, ok := allowed[normalizeHost(host)]
+	return ok
+}
+
+func externalAccessAllowed(ctx context.Context, sqlDB *sql.DB, r *http.Request, allowed map[string]struct{}) (bool, error) {
 	var externalURL sql.NullString
 	if err := sqlDB.QueryRowContext(ctx, `
 		SELECT external_url FROM system_settings WHERE id = 1`,
@@ -49,17 +66,30 @@ func externalAccessAllowed(ctx context.Context, sqlDB *sql.DB, r *http.Request) 
 	host := requestHost(r, configured)
 
 	if !configured {
-		return isDirectAccessHost(host), nil
+		return isAccessAllowedHost(host, allowed), nil
 	}
 
 	wantHost, err := hostnameFromExternalURL(externalURL.String)
 	if err != nil {
 		return false, err
 	}
-	if hostMatches(host, wantHost) || isDirectAccessHost(host) {
+	if hostMatches(host, wantHost) || isAccessAllowedHost(host, allowed) {
 		return true, nil
 	}
 	return false, nil
+}
+
+func isAccessAllowedHost(host string, allowed map[string]struct{}) bool {
+	return isLocalHost(host) || isConfiguredAllowedHost(host, allowed)
+}
+
+func isLocalHost(host string) bool {
+	switch normalizeHost(host) {
+	case "localhost", "127.0.0.1", "::1":
+		return true
+	default:
+		return false
+	}
 }
 
 func requestHost(r *http.Request, trustProxy bool) string {
@@ -101,27 +131,6 @@ func hostMatches(got, want string) bool {
 	got = normalizeHost(got)
 	want = normalizeHost(want)
 	return got != "" && want != "" && got == want
-}
-
-func isLocalHost(host string) bool {
-	switch normalizeHost(host) {
-	case "localhost", "127.0.0.1", "::1":
-		return true
-	default:
-		return false
-	}
-}
-
-// isDirectAccessHost — loopback, private LAN (10/8, 172.16/12, 192.168/16), link-local.
-func isDirectAccessHost(host string) bool {
-	if isLocalHost(host) {
-		return true
-	}
-	ip := net.ParseIP(normalizeHost(host))
-	if ip == nil {
-		return false
-	}
-	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast()
 }
 
 func isLoopbackIP(ip string) bool {

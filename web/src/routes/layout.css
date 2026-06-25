@@ -107,7 +107,7 @@ html.dark {
 	}
 
 	.btn-primary {
-		@apply rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-60;
+		@apply cursor-pointer rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-60;
 		background-color: var(--primary);
 	}
 
@@ -116,7 +116,7 @@ html.dark {
 	}
 
 	.btn-danger {
-		@apply rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-60;
+		@apply cursor-pointer rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-60;
 		background-color: var(--danger);
 	}
 
@@ -125,7 +125,7 @@ html.dark {
 	}
 
 	.btn-ghost {
-		@apply rounded-xl px-3 py-2 text-sm transition;
+		@apply cursor-pointer rounded-xl px-3 py-2 text-sm transition;
 		color: var(--text-muted);
 	}
 
@@ -135,13 +135,13 @@ html.dark {
 	}
 
 	.btn-icon {
-		@apply inline-flex shrink-0 items-center justify-center rounded-xl p-0;
+		@apply inline-flex shrink-0 cursor-pointer items-center justify-center rounded-xl p-0;
 		min-height: 2.75rem;
 		min-width: 2.75rem;
 	}
 
 	.btn-icon-danger {
-		@apply rounded-xl transition;
+		@apply cursor-pointer rounded-xl transition;
 		color: var(--danger);
 	}
 
@@ -150,7 +150,7 @@ html.dark {
 	}
 
 	.tab {
-		@apply rounded-lg px-4 py-2 text-sm font-medium transition;
+		@apply cursor-pointer rounded-lg px-4 py-2 text-sm font-medium transition;
 		color: var(--text-muted);
 	}
 
@@ -173,7 +173,18 @@ html.dark {
 	}
 
 	.nav-mobile-link {
-		@apply block rounded-lg px-3 py-2 text-sm transition hover:opacity-80;
+		@apply block cursor-pointer rounded-lg px-3 py-2 text-sm transition hover:opacity-80;
+	}
+
+	.nav-link-active {
+		background-color: color-mix(in srgb, var(--primary) 12%, transparent);
+		color: var(--primary);
+		font-weight: 600;
+	}
+
+	.nav-link-active:hover {
+		color: var(--primary);
+		opacity: 1;
 	}
 
 	.nav-mobile-backdrop {
@@ -207,7 +218,7 @@ html.dark {
 	}
 
 	.back-link {
-		@apply mb-4 inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors;
+		@apply mb-4 inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors;
 		color: var(--text);
 		background-color: color-mix(in srgb, var(--bg-elevated) 70%, transparent);
 	}

@@ -33,6 +33,8 @@ make build
 
 ## Переменные окружения
 
-Основные переменные: `BUHGALTER_ADDR`, `BUHGALTER_DB_PATH`, `BUHGALTER_DATA_DIR`, `BUHGALTER_LOG_DIR`, `BUHGALTER_STATIC_EMBED`.
+Приложение при старте **только читает** `.env` (путь — `BUHGALTER_ENV_FILE`, по умолчанию `.env` в каталоге запуска). Файл создаёт и редактирует пользователь (`docker/.env.example` → `docker/.env`).
+
+Основные переменные: `BUHGALTER_ADDR`, `BUHGALTER_DB_PATH`, `BUHGALTER_DATA_DIR`, `BUHGALTER_LOG_DIR`, `BUHGALTER_STATIC_EMBED`, `BUHGALTER_ALLOWED_HOSTS`.
 
 Подробный список и примеры — в [README.md](../../README.md).

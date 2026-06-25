@@ -224,7 +224,7 @@
 		{id}
 		type="button"
 		bind:this={triggerEl}
-		class="input flex w-full items-center justify-between gap-2 text-left"
+		class="input flex w-full cursor-pointer items-center justify-between gap-2 text-left"
 		class:opacity-60={disabled}
 		{disabled}
 		aria-expanded={open}
@@ -280,7 +280,7 @@
 					{#each cells as cell, index (`${cell.year}-${cell.month}-${cell.day}-${index}`)}
 						<button
 							type="button"
-							class="rounded-lg px-0 py-2 text-sm transition hover:bg-[color-mix(in_srgb,var(--border)_45%,transparent)]"
+							class="cursor-pointer rounded-lg px-0 py-2 text-sm transition hover:bg-[color-mix(in_srgb,var(--border)_45%,transparent)]"
 							class:datetime-day-muted={!cell.inMonth}
 							class:font-semibold={isSelectedCell(cell)}
 							style:background-color={isSelectedCell(cell)
@@ -304,7 +304,7 @@
 					{#each monthShortNames as name, index (index)}
 						<button
 							type="button"
-							class="rounded-lg px-2 py-2 text-sm capitalize transition hover:bg-[color-mix(in_srgb,var(--border)_45%,transparent)]"
+							class="cursor-pointer rounded-lg px-2 py-2 text-sm capitalize transition hover:bg-[color-mix(in_srgb,var(--border)_45%,transparent)]"
 							class:font-semibold={viewMonth === index + 1}
 							style:background-color={viewMonth === index + 1
 								? 'color-mix(in srgb, var(--primary) 28%, transparent)'
@@ -327,7 +327,7 @@
 					{#each yearPageYears as year (year)}
 						<button
 							type="button"
-							class="rounded-lg px-2 py-2 text-sm transition hover:bg-[color-mix(in_srgb,var(--border)_45%,transparent)]"
+							class="cursor-pointer rounded-lg px-2 py-2 text-sm transition hover:bg-[color-mix(in_srgb,var(--border)_45%,transparent)]"
 							class:font-semibold={viewYear === year}
 							style:background-color={viewYear === year
 								? 'color-mix(in srgb, var(--primary) 28%, transparent)'

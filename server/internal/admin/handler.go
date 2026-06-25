@@ -435,8 +435,10 @@ func (h *Handler) publicEnv() map[string]string {
 		"BUHGALTER_DB_PATH":      filepath.Clean(h.Config.DBPath),
 		"BUHGALTER_DATA_DIR":     filepath.Clean(h.Config.DataDir),
 		"BUHGALTER_LOG_DIR":      filepath.Clean(h.Config.LogDir),
-		"BUHGALTER_CORS_ORIGINS": strings.Join(h.Config.CORSOrigins, ","),
-		"BUHGALTER_STATIC_EMBED": strconv.FormatBool(h.Config.StaticEmbed),
+		"BUHGALTER_CORS_ORIGINS":  strings.Join(h.Config.CORSOrigins, ","),
+		"BUHGALTER_ENV_FILE":      h.Config.EnvFilePath,
+		"BUHGALTER_ALLOWED_HOSTS": strings.Join(h.Config.AllowedHosts, ","),
+		"BUHGALTER_STATIC_EMBED":   strconv.FormatBool(h.Config.StaticEmbed),
 	}
 }
 

@@ -21,7 +21,7 @@
   "ERR_DISPLAY_NAME_REQUIRED": "Укажите имя администратора",
   "ERR_DISPLAY_NAME_LENGTH": "Имя не должно быть длиннее 64 символов",
   "ERR_EXTERNAL_URL": "external_url должен начинаться с http:// или https://",
-  "ERR_EXTERNAL_ACCESS_DENIED": "Доступ с этого адреса запрещён. Используйте localhost или локальную сеть, либо укажите внешний URL в админке.",
+  "ERR_EXTERNAL_ACCESS_DENIED": "Доступ с этого адреса запрещён. Добавьте host в BUHGALTER_ALLOWED_HOSTS в .env или укажите внешний URL в админке.",
   "ERR_RESTORE_CONFIRM": "Для восстановления введите RESTORE",
   "ERR_FILE_REQUIRED": "Файл не загружен",
   "ERR_DB_FILE_REQUIRED": "Ожидается файл .db",

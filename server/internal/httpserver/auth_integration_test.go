@@ -15,7 +15,6 @@ import (
 
 	"github.com/kai-zer-ru/buhgalter/internal/audit"
 	"github.com/kai-zer-ru/buhgalter/internal/backup"
-	"github.com/kai-zer-ru/buhgalter/internal/config"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
 	"github.com/kai-zer-ru/buhgalter/internal/httpserver"
 )
@@ -37,11 +36,7 @@ func setupConfigured(t *testing.T) *testEnv {
 	}
 	t.Cleanup(func() { _ = mgr.Close() })
 
-	cfg := config.Config{
-		Version:     "test",
-		StaticEmbed: false,
-		DataDir:     dir,
-	}
+	cfg := testConfig(dir)
 	logger, closer, err := httpserver.InitLogger(filepath.Join(dir, "logs"))
 	if err != nil {
 		t.Fatalf("logger: %v", err)
@@ -396,11 +391,7 @@ func TestRegisterPasswordMismatch(t *testing.T) {
 	}
 	defer mgr.Close()
 
-	cfg := config.Config{
-		Version:     "test",
-		StaticEmbed: false,
-		DataDir:     dir,
-	}
+	cfg := testConfig(dir)
 	logger, closer, err := httpserver.InitLogger(filepath.Join(dir, "logs"))
 	if err != nil {
 		t.Fatal(err)
@@ -445,11 +436,7 @@ func TestRegisterPasswordTooWeak(t *testing.T) {
 	}
 	defer mgr.Close()
 
-	cfg := config.Config{
-		Version:     "test",
-		StaticEmbed: false,
-		DataDir:     dir,
-	}
+	cfg := testConfig(dir)
 	logger, closer, err := httpserver.InitLogger(filepath.Join(dir, "logs"))
 	if err != nil {
 		t.Fatal(err)

@@ -58,6 +58,8 @@ release:
     - glob: docker/docker-compose.yml
       name_template: docker-compose.yaml
     - glob: build/release/.env
+    - glob: build/release/.env.example
+      name_template: .env.example
   header: |
     {{ .Env.RELEASE_CHANGELOG }}
 
@@ -67,7 +69,7 @@ release:
   footer: |
     ## Docker
 
-    Вложения **docker-compose.yaml** и **.env** — тот же compose из репозитория; `.env` задаёт `BUHGALTER_IMAGE_TAG={{ .Version }}`.
+    Вложения **docker-compose.yaml**, **.env** и **.env.example** — compose из репозитория; `.env` с `BUHGALTER_IMAGE_TAG={{ .Version }}`. При необходимости: `cp .env.example .env`.
 
     ```bash
     docker pull ghcr.io/kai-zer-ru/buhgalter:{{ .Version }}

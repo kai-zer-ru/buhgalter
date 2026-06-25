@@ -82,7 +82,7 @@ test.describe('authenticated', () => {
 		await page.getByRole('button', { name: 'Сохранить' }).click();
 		await expect(page.getByRole('cell', { name: '250.00' })).toBeVisible({ timeout: 10_000 });
 
-		await page.goto('/settings?tab=accounts');
+		await page.goto('/accounts');
 		await waitAppReady(page);
 		await expect(page.getByText(/750/)).toBeVisible({ timeout: 10_000 });
 	});

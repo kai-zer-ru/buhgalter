@@ -54,7 +54,7 @@
 </script>
 
 <div class="mx-auto max-w-lg space-y-6">
-	<BackLink href="/settings" search="tab=accounts" label={$_('accounts.title')} />
+	<BackLink href="/accounts" label={$_('accounts.title')} />
 	<h1 class="text-2xl font-semibold tracking-tight">{$_('accounts.new')}</h1>
 
 	<form class="card space-y-4" onsubmit={submit}>
@@ -136,8 +136,7 @@
 			<button type="submit" class="btn-primary" disabled={loading || (type === 'bank' && !bankId)}>
 				{loading ? $_('common.loading') : $_('common.create')}
 			</button>
-			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- query params after resolved base path -->
-			<a href={`${resolve('/settings')}?tab=accounts`} class="btn-ghost">{$_('common.cancel')}</a>
+			<a href={resolve('/accounts')} class="btn-ghost">{$_('common.cancel')}</a>
 		</div>
 		<FormFeedback {error} />
 	</form>

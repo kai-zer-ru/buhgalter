@@ -33,6 +33,59 @@
 	const path = $derived($page.url.pathname);
 	const isSetup = $derived(path === '/setup');
 
+	type NavItem = {
+		href: string;
+		labelKey: string;
+		mobileOnly?: boolean;
+		isActive: (pathname: string, search: URLSearchParams) => boolean;
+	};
+
+	const navItems: NavItem[] = [
+		{
+			href: resolve('/'),
+			labelKey: 'nav.home',
+			isActive: (p) => p === '/'
+		},
+		{
+			href: resolve('/accounts'),
+			labelKey: 'nav.accounts',
+			isActive: (p) => p.startsWith('/accounts')
+		},
+		{
+			href: resolve('/debts'),
+			labelKey: 'nav.debts',
+			isActive: (p) => p.startsWith('/debts') || p.startsWith('/debtors')
+		},
+		{
+			href: resolve('/credits'),
+			labelKey: 'nav.credits',
+			isActive: (p) => p.startsWith('/credits')
+		},
+		{
+			href: resolve('/stats'),
+			labelKey: 'nav.stats',
+			isActive: (p) => p.startsWith('/stats')
+		},
+		{
+			href: resolve('/settings'),
+			labelKey: 'nav.settings',
+			isActive: (p, search) => p.startsWith('/settings') && search.get('tab') !== 'accounts'
+		},
+		{
+			href: resolve('/admin'),
+			labelKey: 'nav.admin',
+			isActive: (p) => p.startsWith('/admin')
+		}
+	];
+
+	function navLinkClass(active: boolean, base: string) {
+		return active ? `${base} nav-link-active` : base;
+	}
+
+	function isNavItemActive(item: NavItem) {
+		return item.isActive(path, $page.url.searchParams);
+	}
+
 	async function goReady(route: '/' | '/login' | '/setup') {
 		ready = true;
 		await goto(resolve(route));
@@ -177,45 +230,34 @@
 								<div
 									class="popover-panel nav-mobile-panel absolute right-0 z-[60] mt-2 max-h-[min(70dvh,24rem)] min-w-[12rem] overflow-y-auto p-2"
 								>
-									<a href={resolve('/')} class="nav-mobile-link" onclick={closeNav}
-										>{$_('nav.home')}</a
-									>
-									<a
-										href="{resolve('/settings')}?tab=accounts"
-										class="nav-mobile-link"
-										onclick={closeNav}>{$_('nav.accounts')}</a
-									>
-									<a href={resolve('/debts')} class="nav-mobile-link" onclick={closeNav}
-										>{$_('nav.debts')}</a
-									>
-									<a href={resolve('/credits')} class="nav-mobile-link" onclick={closeNav}
-										>{$_('nav.credits')}</a
-									>
-									<a href={resolve('/stats')} class="nav-mobile-link" onclick={closeNav}
-										>{$_('nav.stats')}</a
-									>
-									<a href={resolve('/settings')} class="nav-mobile-link" onclick={closeNav}
-										>{$_('nav.settings')}</a
-									>
-									{#if $user.is_admin}
-										<a href={resolve('/admin')} class="nav-mobile-link" onclick={closeNav}
-											>{$_('nav.admin')}</a
-										>
-									{/if}
+									{#each navItems as item (item.labelKey)}
+										{#if item.labelKey !== 'nav.admin' || $user.is_admin}
+											<a
+												href={item.href}
+												class={navLinkClass(isNavItemActive(item), 'nav-mobile-link')}
+												aria-current={isNavItemActive(item) ? 'page' : undefined}
+												onclick={closeNav}>{$_(item.labelKey)}</a
+											>
+										{/if}
+									{/each}
 								</div>
 							{/if}
 						</div>
 						<nav class="hidden items-center gap-2 sm:flex">
-							<a href={resolve('/')} class="btn-ghost">{$_('nav.home')}</a>
-							<a href={resolve('/debts')} class="btn-ghost">{$_('nav.debts')}</a>
-							<a href={resolve('/credits')} class="btn-ghost">{$_('nav.credits')}</a>
-							<a href={resolve('/stats')} class="btn-ghost">{$_('nav.stats')}</a>
-							<a href={resolve('/settings')} class="btn-ghost">{$_('nav.settings')}</a>
-							{#if $user.is_admin}
-								<a href={resolve('/admin')} class="btn-ghost">{$_('nav.admin')}</a>
-							{/if}
+							{#each navItems as item (item.labelKey)}
+								{#if !item.mobileOnly}
+									{#if item.labelKey !== 'nav.admin' || $user.is_admin}
+										<a
+											href={item.href}
+											class={navLinkClass(isNavItemActive(item), 'btn-ghost')}
+											aria-current={isNavItemActive(item) ? 'page' : undefined}
+											>{$_(item.labelKey)}</a
+										>
+									{/if}
+								{/if}
+							{/each}
 						</nav>
-						<span class="hidden text-sm lg:inline" style:color="var(--text-muted)">
+						<span class="hidden text-sm lg:inline ml-[5px]" style:color="var(--text-muted)">
 							{#if $user.display_name && $user.display_name !== $user.login}
 								{$user.display_name}
 								<span class="opacity-70">(@{$user.login})</span>

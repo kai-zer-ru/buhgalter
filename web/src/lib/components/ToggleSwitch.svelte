@@ -15,7 +15,7 @@
 	aria-label={label}
 	aria-checked={checked}
 	{disabled}
-	class="relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-45"
+	class="relative h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-45"
 	style:background-color={checked ? 'var(--primary)' : 'var(--border)'}
 	onclick={() => {
 		if (!disabled) onchange?.();

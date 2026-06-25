@@ -49,7 +49,10 @@
 		<h1 class="text-2xl font-semibold">{$_('dashboard.title')}</h1>
 		<div class="flex shrink-0 items-center gap-1">
 			{#if dash?.accounts.length === 0}
-				<a href={resolve('/accounts/new')} class="btn-primary hidden sm:inline-flex">
+				<a
+					href={resolve('/accounts/new')}
+					class="btn-primary hidden sm:inline-flex min-h-11 items-center"
+				>
 					{$_('accounts.new')}
 				</a>
 			{/if}

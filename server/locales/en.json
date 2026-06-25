@@ -21,7 +21,7 @@
   "ERR_DISPLAY_NAME_REQUIRED": "Administrator display name is required",
   "ERR_DISPLAY_NAME_LENGTH": "Display name must be at most 64 characters",
   "ERR_EXTERNAL_URL": "external_url must start with http:// or https://",
-  "ERR_EXTERNAL_ACCESS_DENIED": "Access from this address is denied. Use localhost or your LAN, or set external URL in admin.",
+  "ERR_EXTERNAL_ACCESS_DENIED": "Access from this address is denied. Add the host to BUHGALTER_ALLOWED_HOSTS in .env or set external URL in admin.",
   "ERR_RESTORE_CONFIRM": "Enter RESTORE to confirm restore",
   "ERR_FILE_REQUIRED": "File is required",
   "ERR_DB_FILE_REQUIRED": "Expected a .db file",

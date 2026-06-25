@@ -12,7 +12,9 @@ type Config struct {
 	DBPath        string
 	DataDir       string
 	LogDir        string
+	EnvFilePath   string
 	CORSOrigins   []string
+	AllowedHosts  []string
 	Version       string
 	InstallMethod string
 	BuildCommit   string
@@ -22,11 +24,17 @@ type Config struct {
 }
 
 func Load(version, installMethod, buildCommit, buildTime string) Config {
+	envFile := ResolveEnvFilePath()
+	_ = LoadDotEnv(envFile)
+
+	dataDir := envOr("BUHGALTER_DATA_DIR", "./data")
+
 	cfg := Config{
 		Addr:          envOr("BUHGALTER_ADDR", ":8765"),
 		DBPath:        envOr("BUHGALTER_DB_PATH", "./data/buhgalter.db"),
-		DataDir:       envOr("BUHGALTER_DATA_DIR", "./data"),
+		DataDir:       dataDir,
 		LogDir:        envOr("BUHGALTER_LOG_DIR", "./logs"),
+		EnvFilePath:   envFile,
 		Version:       version,
 		InstallMethod: installMethod,
 		BuildCommit:   buildCommit,
@@ -43,6 +51,7 @@ func Load(version, installMethod, buildCommit, buildTime string) Config {
 			cfg.CORSOrigins = append(cfg.CORSOrigins, o)
 		}
 	}
+	cfg.AllowedHosts = ParseHostList(os.Getenv(allowedHostsEnvKey))
 	return cfg
 }
 

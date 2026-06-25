@@ -203,7 +203,7 @@
 					<li>
 						<button
 							type="button"
-							class="w-full px-4 py-2 text-left text-sm hover:opacity-90"
+							class="w-full cursor-pointer px-4 py-2 text-left text-sm hover:opacity-90"
 							class:font-medium={option.value === value}
 							style:background-color={index === highlighted || option.value === value
 								? 'color-mix(in srgb, var(--primary) 12%, transparent)'

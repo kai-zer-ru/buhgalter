@@ -22,30 +22,6 @@ func TestNormalizeHost(t *testing.T) {
 	}
 }
 
-func TestIsLocalHost(t *testing.T) {
-	if !isLocalHost("localhost") || !isLocalHost("127.0.0.1:8765") {
-		t.Fatal("expected localhost hosts to be local")
-	}
-	if isLocalHost("203.0.113.10") || isLocalHost("buhgalter.example.com") {
-		t.Fatal("expected public hosts to be non-local")
-	}
-}
-
-func TestIsDirectAccessHost(t *testing.T) {
-	allowed := []string{"127.0.0.1", "192.168.1.8:8765", "10.0.0.5", "172.16.3.1", "169.254.1.1"}
-	for _, host := range allowed {
-		if !isDirectAccessHost(host) {
-			t.Fatalf("expected direct access for %q", host)
-		}
-	}
-	denied := []string{"203.0.113.10", "buhgalter.example.com", "8.8.8.8"}
-	for _, host := range denied {
-		if isDirectAccessHost(host) {
-			t.Fatalf("expected deny for %q", host)
-		}
-	}
-}
-
 func TestRequestHostTrustProxy(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:8765/api/v1/health", nil)
 	r.Host = "203.0.113.10:8765"
@@ -56,6 +32,27 @@ func TestRequestHostTrustProxy(t *testing.T) {
 	}
 	if got := requestHost(r, true); got != "buhgalter.example.com" {
 		t.Fatalf("trusted proxy host = %q", got)
+	}
+}
+
+func TestIsLocalHost(t *testing.T) {
+	for _, host := range []string{"localhost", "localhost:8765", "127.0.0.1", "[::1]:8765"} {
+		if !isLocalHost(host) {
+			t.Fatalf("expected local host for %q", host)
+		}
+	}
+	if isLocalHost("203.0.113.10") || isLocalHost("buhgalter.example.com") {
+		t.Fatal("expected public host to be non-local")
+	}
+}
+
+func TestIsConfiguredAllowedHost(t *testing.T) {
+	allowed := allowedHostSet([]string{"203.0.113.10", "Buhgalter.Example.COM:443"})
+	if !isConfiguredAllowedHost("203.0.113.10:8765", allowed) {
+		t.Fatal("expected configured host to match")
+	}
+	if isConfiguredAllowedHost("8.8.8.8", allowed) {
+		t.Fatal("expected unknown host to be denied")
 	}
 }
 

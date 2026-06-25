@@ -38,16 +38,8 @@
 	import { toast } from '$lib/toast';
 	import CategoriesTab from '$lib/settings/CategoriesTab.svelte';
 	import ImportTab from '$lib/settings/ImportTab.svelte';
-	import AccountsTab from '$lib/settings/AccountsTab.svelte';
 
-	type Tab =
-		| 'profile'
-		| 'password'
-		| 'tokens'
-		| 'notifications'
-		| 'accounts'
-		| 'categories'
-		| 'import';
+	type Tab = 'profile' | 'password' | 'tokens' | 'notifications' | 'categories' | 'import';
 
 	function tabFromSearchParams(params: URLSearchParams): Tab {
 		const value = params.get('tab');
@@ -55,7 +47,6 @@
 			value === 'password' ||
 			value === 'tokens' ||
 			value === 'notifications' ||
-			value === 'accounts' ||
 			value === 'categories' ||
 			value === 'import'
 		) {
@@ -147,7 +138,12 @@
 	onMount(() => {
 		tab = tabFromSearchParams(new URL(window.location.href).searchParams);
 		const syncTabFromLocation = () => {
-			tab = tabFromSearchParams(new URL(window.location.href).searchParams);
+			const params = new URL(window.location.href).searchParams;
+			if (params.get('tab') === 'accounts') {
+				void goto(resolve('/accounts'), { replaceState: true });
+				return;
+			}
+			tab = tabFromSearchParams(params);
 		};
 		window.addEventListener('popstate', syncTabFromLocation);
 		void (async () => {
@@ -771,7 +767,6 @@
 			{ id: 'password', label: tr('settings.tab.password') },
 			{ id: 'tokens', label: tr('settings.tab.tokens') },
 			{ id: 'notifications', label: tr('settings.tab.notifications') },
-			{ id: 'accounts', label: tr('settings.tab.accounts') },
 			{ id: 'categories', label: tr('settings.tab.categories') },
 			{ id: 'import', label: tr('settings.tab.import') }
 		];
@@ -1366,8 +1361,6 @@
 	{/if}
 {:else if tab === 'categories'}
 	<CategoriesTab />
-{:else if tab === 'accounts'}
-	<AccountsTab />
 {:else if tab === 'import'}
 	<ImportTab />
 {:else if tab === 'tokens'}

@@ -25,7 +25,7 @@ import (
 )
 
 var (
-	version       = "1.1.0"
+	version       = "1.1.1"
 	installMethod = "dev"
 	buildCommit   = "unknown"
 	buildTime     = ""
@@ -47,6 +47,9 @@ func main() {
 		log.Fatalf("logger: %v", err)
 	}
 	defer logCloser.Close()
+	if len(cfg.AllowedHosts) > 0 {
+		logger.Info("direct access hosts", "hosts", cfg.AllowedHosts, "env_file", cfg.EnvFilePath)
+	}
 
 	manager, err := db.NewManager(cfg.DBPath)
 	if err != nil {

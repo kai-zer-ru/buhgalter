@@ -1,6 +1,8 @@
 server/buhgalter
 /buhgalter
 bin/
+/build
+/docker_dev
 server/*.db
 web/node_modules/
 web/build/

@@ -139,7 +139,7 @@
 		{id}
 		type="button"
 		bind:this={triggerEl}
-		class="input flex h-11 w-full min-w-0 items-center justify-between gap-2 text-left"
+		class="input flex h-11 w-full min-w-0 cursor-pointer items-center justify-between gap-2 text-left"
 		class:opacity-60={disabled}
 		{disabled}
 		role="combobox"
@@ -169,7 +169,7 @@
 					<li>
 						<button
 							type="button"
-							class="w-full px-4 py-2 text-left text-sm hover:opacity-90"
+							class="w-full cursor-pointer px-4 py-2 text-left text-sm hover:opacity-90"
 							class:font-medium={option.value === value}
 							style:background-color={index === highlighted || option.value === value
 								? 'color-mix(in srgb, var(--primary) 12%, transparent)'

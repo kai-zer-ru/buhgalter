@@ -220,8 +220,7 @@
 		try {
 			await deleteAccount(acc.id);
 			toast($_('common.deleted'));
-			// eslint-disable-next-line svelte/no-navigation-without-resolve -- query params after resolved base path
-			await goto(`${resolve('/settings')}?tab=accounts`);
+			await goto(resolve('/accounts'));
 		} catch (err) {
 			error = err instanceof ApiError ? err.message : $_('common.error');
 		}
@@ -275,7 +274,7 @@
 </script>
 
 <div class="space-y-6">
-	<BackLink href="/settings" search="tab=accounts" label={$_('accounts.title')} />
+	<BackLink href="/accounts" label={$_('accounts.title')} />
 
 	{#if loading}
 		<p style:color="var(--text-muted)">{$_('common.loading')}</p>
