@@ -6,11 +6,16 @@ services:
     # build:
     #   context: ..
     #   dockerfile: docker/Dockerfile
+    env_file:
+      - .env
+    environment:
+      BUHGALTER_ENV_FILE: /app/.env
     ports:
       - "127.0.0.1:8765:8765"
     volumes:
       - buhgalter-data:/app/data
       - buhgalter-backups:/app/backups
+      - ./.env:/app/.env
       # Optional: override bundled locales
       # - ../server/locales:/app/locales:ro
     restart: unless-stopped
