@@ -125,6 +125,29 @@ CREATE INDEX idx_tx_date ON transactions(transaction_date);
 CREATE INDEX idx_tx_transfer_group ON transactions(transfer_group_id);
 CREATE INDEX idx_tx_kind ON transactions(kind);
 
+CREATE TABLE recurring_operations (
+    id              TEXT PRIMARY KEY,
+    user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    type            TEXT NOT NULL CHECK (type IN ('income', 'expense')),
+    amount          INTEGER NOT NULL CHECK (amount > 0),
+    description     TEXT,
+    account_id      TEXT NOT NULL REFERENCES accounts(id),
+    category_id     TEXT NOT NULL REFERENCES categories(id),
+    subcategory_id  TEXT REFERENCES subcategories(id),
+    period          TEXT NOT NULL CHECK (period IN ('week', 'two_weeks', 'month', 'year')),
+    weekday         INTEGER CHECK (weekday BETWEEN 1 AND 7),
+    day_of_month    INTEGER CHECK (day_of_month BETWEEN 1 AND 31),
+    start_date      TEXT NOT NULL,
+    time_local      TEXT NOT NULL DEFAULT '00:00',
+    next_run_at     TEXT NOT NULL,
+    last_run_at     TEXT,
+    active          INTEGER NOT NULL DEFAULT 1,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_recurring_ops_user ON recurring_operations(user_id);
+CREATE INDEX idx_recurring_ops_due ON recurring_operations(user_id, active, next_run_at);
+
 CREATE TABLE debtors (
     id              TEXT PRIMARY KEY,
     user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -164,7 +187,13 @@ CREATE TABLE credits (
     id                  TEXT PRIMARY KEY,
     user_id             TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name                TEXT,
+    credit_kind         TEXT NOT NULL DEFAULT 'consumer'
+                        CHECK (credit_kind IN ('consumer', 'mortgage')),
     principal_amount    INTEGER NOT NULL,
+    property_price      INTEGER,
+    down_payment        INTEGER NOT NULL DEFAULT 0,
+    down_payment_affects_balance INTEGER NOT NULL DEFAULT 0,
+    down_payment_transaction_id TEXT REFERENCES transactions(id),
     issue_date          TEXT NOT NULL,
     term_months         INTEGER NOT NULL,
     interest_rate       REAL NOT NULL DEFAULT 0,
@@ -173,6 +202,9 @@ CREATE TABLE credits (
     paid_amount         INTEGER NOT NULL DEFAULT 0,
     monthly_payment     INTEGER NOT NULL,
     debit_account_id    TEXT NOT NULL REFERENCES accounts(id),
+    debit_time_local    TEXT,
+    bank_id             TEXT REFERENCES banks(id),
+    bank_id_locked      INTEGER NOT NULL DEFAULT 0,
     added_retroactively INTEGER NOT NULL DEFAULT 0,
     recorded_at         TEXT NOT NULL DEFAULT (datetime('now')),
     status              TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'closed')),
@@ -236,6 +268,7 @@ CREATE TABLE notification_settings (
     trigger_debt        INTEGER NOT NULL DEFAULT 1,
     trigger_credit      INTEGER NOT NULL DEFAULT 1,
     trigger_planned     INTEGER NOT NULL DEFAULT 1,
+    trigger_password_reset INTEGER NOT NULL DEFAULT 1,
     debt_days_before    INTEGER NOT NULL DEFAULT 1,
     my_debt_overdue_days_limit INTEGER NOT NULL DEFAULT 7,
     owed_debt_overdue_start_after_days INTEGER NOT NULL DEFAULT 0,
@@ -262,7 +295,7 @@ CREATE INDEX idx_notification_log_dedup
 CREATE TABLE notification_templates (
     user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     trigger_type    TEXT NOT NULL CHECK (trigger_type IN (
-                        'debt_overdue', 'debt_due_soon', 'credit_payment', 'planned_operation', 'test'
+                        'debt_overdue', 'debt_due_soon', 'credit_payment', 'planned_operation', 'password_reset', 'test'
                     )),
     template        TEXT NOT NULL,
     updated_at      TEXT NOT NULL DEFAULT (datetime('now')),

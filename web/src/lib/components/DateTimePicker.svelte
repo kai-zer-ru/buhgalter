@@ -276,11 +276,11 @@
 						<span>{weekday}</span>
 					{/each}
 				</div>
-				<div class="grid grid-cols-7 gap-1">
+				<div class="datetime-days-grid grid grid-cols-7 gap-1">
 					{#each cells as cell, index (`${cell.year}-${cell.month}-${cell.day}-${index}`)}
 						<button
 							type="button"
-							class="cursor-pointer rounded-lg px-0 py-2 text-sm transition hover:bg-[color-mix(in_srgb,var(--border)_45%,transparent)]"
+							class="h-9 cursor-pointer rounded-lg px-0 py-2 text-sm transition hover:bg-[color-mix(in_srgb,var(--border)_45%,transparent)]"
 							class:datetime-day-muted={!cell.inMonth}
 							class:font-semibold={isSelectedCell(cell)}
 							style:background-color={isSelectedCell(cell)
@@ -369,5 +369,9 @@
 <style>
 	.datetime-day-muted {
 		color: color-mix(in srgb, var(--text-muted) 72%, transparent);
+	}
+
+	.datetime-days-grid {
+		grid-auto-rows: minmax(0, auto);
 	}
 </style>

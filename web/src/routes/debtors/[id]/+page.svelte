@@ -89,7 +89,13 @@
 </svelte:head>
 
 <div class="space-y-4">
-	<BackLink href="/debts" label={$_('debts.title')} />
+	<BackLink
+		items={[
+			{ href: '/', label: $_('nav.home') },
+			{ href: '/debts', label: $_('debts.title') },
+			{ href: '/debts', label: detail?.name ?? $_('debtors.title') }
+		]}
+	/>
 
 	{#if loading && !detail}
 		<p style:color="var(--text-muted)">{$_('common.loading')}</p>

@@ -209,6 +209,7 @@ func TestApplyDuePayments(t *testing.T) {
 	ctx, handle, userID, accountID := seedCreditEnv(t)
 	sqlDB := handle.DB()
 	issue := timeutil.NowUTC().AddDate(0, -1, 0)
+	localTime := timeutil.NowUTC().In(time.FixedZone("MSK", 3*3600)).Format("15:04")
 
 	c, err := Create(ctx, sqlDB, userID, CreateInput{
 		PrincipalAmount:    120_000,
@@ -216,6 +217,7 @@ func TestApplyDuePayments(t *testing.T) {
 		TermMonths:         12,
 		PaymentInterval:    IntervalMonth,
 		DebitAccountID:     accountID,
+		DebitTimeLocal:     &localTime,
 		CreateTransactions: true,
 	})
 	if err != nil {
@@ -235,7 +237,7 @@ func TestApplyDuePayments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	n, err := ApplyDuePayments(ctx, sqlDB, userID, cutoff)
+	n, err := ApplyDuePayments(ctx, sqlDB, userID, cutoff, localTime)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -261,6 +263,7 @@ func TestApplyDuePaymentsWithoutPrecreatedTx(t *testing.T) {
 	ctx, handle, userID, accountID := seedCreditEnv(t)
 	sqlDB := handle.DB()
 	issue := timeutil.NowUTC().AddDate(0, -1, 0)
+	localTime := timeutil.NowUTC().In(time.FixedZone("MSK", 3*3600)).Format("15:04")
 
 	c, err := Create(ctx, sqlDB, userID, CreateInput{
 		PrincipalAmount:    60_000,
@@ -268,6 +271,7 @@ func TestApplyDuePaymentsWithoutPrecreatedTx(t *testing.T) {
 		TermMonths:         6,
 		PaymentInterval:    IntervalMonth,
 		DebitAccountID:     accountID,
+		DebitTimeLocal:     &localTime,
 		CreateTransactions: false,
 	})
 	if err != nil {
@@ -287,7 +291,7 @@ func TestApplyDuePaymentsWithoutPrecreatedTx(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	n, err := ApplyDuePayments(ctx, sqlDB, userID, cutoff)
+	n, err := ApplyDuePayments(ctx, sqlDB, userID, cutoff, localTime)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -446,6 +450,7 @@ func TestAutoCloseOnFullPayment(t *testing.T) {
 	ctx, handle, userID, accountID := seedCreditEnv(t)
 	sqlDB := handle.DB()
 	issue := timeutil.NowUTC().AddDate(0, -1, 0)
+	localTime := timeutil.NowUTC().In(time.FixedZone("MSK", 3*3600)).Format("15:04")
 
 	c, err := Create(ctx, sqlDB, userID, CreateInput{
 		PrincipalAmount:    12_000,
@@ -453,6 +458,7 @@ func TestAutoCloseOnFullPayment(t *testing.T) {
 		TermMonths:         1,
 		PaymentInterval:    IntervalMonth,
 		DebitAccountID:     accountID,
+		DebitTimeLocal:     &localTime,
 		CreateTransactions: false,
 	})
 	if err != nil {
@@ -468,7 +474,7 @@ func TestAutoCloseOnFullPayment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ApplyDuePayments(ctx, sqlDB, userID, cutoff); err != nil {
+	if _, err := ApplyDuePayments(ctx, sqlDB, userID, cutoff, localTime); err != nil {
 		t.Fatal(err)
 	}
 	got, err := GetByID(ctx, sqlDB, userID, c.ID, false)

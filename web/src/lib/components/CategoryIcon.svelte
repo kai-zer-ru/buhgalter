@@ -15,7 +15,7 @@
 <img
 	src={failed ? categoryIconUrl('default') : src}
 	alt=""
-	class="inline-block shrink-0"
+	class="inline-block shrink-0 object-cover"
 	width={size}
 	height={size}
 	onerror={() => (failed = true)}

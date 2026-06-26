@@ -137,6 +137,7 @@
 	}
 
 	async function pushURLAndReload() {
+		const basePath = resolve('/transactions');
 		const queryParts = [`page=${encodeURIComponent(String(page))}`];
 		if (fromLocal) queryParts.push(`from_local=${encodeURIComponent(fromLocal)}`);
 		if (toLocal) queryParts.push(`to_local=${encodeURIComponent(toLocal)}`);
@@ -145,7 +146,8 @@
 		if (accountId) queryParts.push(`account_id=${encodeURIComponent(accountId)}`);
 		if (kind) queryParts.push(`kind=${encodeURIComponent(kind)}`);
 		if (search.trim()) queryParts.push(`search=${encodeURIComponent(search.trim())}`);
-		await goto(resolve(`/transactions?${queryParts.join('&')}`), {
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- query string is appended to resolved base path
+		await goto(`${basePath}?${queryParts.join('&')}`, {
 			replaceState: true,
 			noScroll: true,
 			keepFocus: true
@@ -193,7 +195,12 @@
 </svelte:head>
 
 <div class="space-y-4">
-	<BackLink href="/" label={$_('dashboard.title')} />
+	<BackLink
+		items={[
+			{ href: '/', label: $_('nav.home') },
+			{ href: '/transactions', label: $_('transactions.all') }
+		]}
+	/>
 
 	<div class="flex items-center justify-between gap-3">
 		<h1 class="text-2xl font-semibold">{$_('transactions.all')}</h1>
@@ -236,6 +243,8 @@
 					{tz}
 					emptyMessage={$_('transactions.empty')}
 					showDelete
+					onmakeRecurring={(tx) =>
+						void goto(resolve(`/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`))}
 					ondelete={(tx) => void removeTx(tx)}
 				/>
 			</div>

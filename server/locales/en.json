@@ -88,6 +88,10 @@
   "ERR_CREDIT_COMPLETE_DATE": "Completion date is required",
   "ERR_CREDIT_INVALID_STATUS": "Invalid status",
   "ERR_CREDIT_INVALID_PAYMENT": "Invalid payment amount",
+  "ERR_CREDIT_INVALID_DEBIT_TIME": "Invalid debit time (expected HH:MM)",
+  "ERR_CREDIT_INVALID_KIND": "Invalid credit type",
+  "ERR_CREDIT_INVALID_MORTGAGE": "Invalid mortgage fields (property price and down payment)",
+  "CONFLICT_CREDIT_BANK_LOCKED": "Credit bank can be changed only once",
   "ERR_CATEGORY_NAME_LENGTH": "Category name must be 1 to 64 characters",
   "ERR_CATEGORY_SYSTEM_READONLY": "System category cannot be modified",
   "ERR_CATEGORY_INVALID": "Invalid category data",
@@ -104,5 +108,6 @@
   "notifications.templates.debt_due_soon": "Reminder: repay debt to {debtor} — {amount} (due {due_date}, in {days} days)",
   "notifications.templates.credit_payment": "Credit payment \"{credit}\": {amount} {when}",
   "notifications.templates.planned_operation": "Planned transaction: {type} {amount} — {description}",
+  "notifications.templates.password_reset": "Password reset requested by {display_name} (@{login}) at {requested_at}.",
   "notifications.templates.test": "Buhgalter test notification. Channel: {channel}."
 }

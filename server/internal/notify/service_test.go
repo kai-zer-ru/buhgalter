@@ -1,4 +1,4 @@
-package notify
+package notify_test
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
+	. "github.com/kai-zer-ru/buhgalter/internal/notify"
 )
 
 func seedNotifyUser(t *testing.T) (context.Context, *sql.DB, string) {

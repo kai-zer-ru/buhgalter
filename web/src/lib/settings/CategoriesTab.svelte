@@ -31,6 +31,7 @@
 	import { beginPointerDrag, moveId, type DragGhostView } from '$lib/drag-reorder';
 
 	type Tab = 'expense' | 'income';
+	const categoryIconSize = 40;
 
 	function tabFromSearchParams(params: URLSearchParams): Tab {
 		return params.get('type') === 'income' ? 'income' : 'expense';
@@ -392,7 +393,7 @@
 					data-drag-kind="category"
 					style:border-color={overId === cat.id ? 'var(--primary)' : undefined}
 				>
-					<div class="flex flex-wrap items-center gap-1 sm:flex-nowrap sm:gap-2" data-drag-row>
+					<div class="flex flex-wrap items-center gap-1 sm:flex-nowrap" data-drag-row>
 						{#if editingId !== cat.id}
 							{#if !cat.is_system}
 								<span
@@ -412,7 +413,9 @@
 							{:else}
 								<span class="btn-icon shrink-0" aria-hidden="true"></span>
 							{/if}
-							<CategoryIcon icon={cat.icon} size={36} />
+							<span class="btn-icon btn-ghost">
+								<CategoryIcon icon={cat.icon} size={categoryIconSize} />
+							</span>
 							{#if !cat.is_system}
 								<button
 									type="button"
@@ -454,7 +457,7 @@
 								{/if}
 							</button>
 							{#if !cat.is_system}
-								<div class="flex shrink-0 items-center">
+								<div class="flex shrink-0 items-center gap-1">
 									<IconButton
 										icon="edit"
 										label={$_('accounts.action.edit')}
@@ -469,7 +472,9 @@
 								</div>
 							{/if}
 						{:else}
-							<CategoryIcon icon={cat.icon} size={36} />
+							<span class="btn-icon btn-ghost">
+								<CategoryIcon icon={cat.icon} size={categoryIconSize} />
+							</span>
 							<div class="flex min-w-0 flex-1 flex-col gap-3">
 								<input class="input w-full" bind:value={editName} />
 								<CategoryIconPicker
@@ -477,8 +482,8 @@
 									bind:categoryName={editName}
 									categoryType={tab}
 									lockName={true}
-									quickSize={32}
-									iconSize={32}
+									quickSize={categoryIconSize}
+									iconSize={categoryIconSize}
 								/>
 								<div class="flex flex-wrap gap-2">
 									<IconButton
@@ -522,8 +527,8 @@
 												bind:categoryName={editSubName}
 												categoryType={tab}
 												lockName={true}
-												quickSize={28}
-												iconSize={28}
+												quickSize={categoryIconSize}
+												iconSize={categoryIconSize}
 											/>
 											<input
 												class="input min-w-[10rem] flex-1"
@@ -569,9 +574,11 @@
 											>
 												⠿
 											</span>
-											<CategoryIcon icon={sub.icon || 'default'} size={28} />
+											<span class="btn-icon btn-ghost">
+												<CategoryIcon icon={sub.icon || 'default'} size={categoryIconSize} />
+											</span>
 											<span class="min-w-0 flex-1 truncate">{sub.name}</span>
-											<div class="flex shrink-0 items-center">
+											<div class="flex shrink-0 items-center gap-1">
 												<IconButton
 													icon="edit"
 													label={$_('accounts.action.edit')}
@@ -593,8 +600,8 @@
 									bind:value={newSubIcon[cat.id]}
 									bind:categoryName={newSubName[cat.id]}
 									categoryType={tab}
-									quickSize={28}
-									iconSize={28}
+									quickSize={categoryIconSize}
+									iconSize={categoryIconSize}
 								/>
 								<input
 									id={subInputId(cat.id)}

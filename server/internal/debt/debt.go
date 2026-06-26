@@ -67,6 +67,7 @@ var (
 	ErrInvalidSettleAmount   = errors.New("invalid settle amount")
 	ErrCannotBorrowFromDebtor = errors.New("cannot borrow from debtor who owes you")
 	ErrCannotLendToCreditor   = errors.New("cannot lend to creditor you owe")
+	ErrPlannedNotAllowed      = errors.New("planned operation is not allowed for debt transactions")
 )
 
 func queries(db sqlcdb.DBTX) *sqlcdb.Queries {
@@ -563,7 +564,7 @@ func resolveTransactionKind(ctx context.Context, db sqlcdb.DBTX, userID string, 
 		return "", err
 	}
 	if future {
-		return "future", nil
+		return "", ErrPlannedNotAllowed
 	}
 	return "manual", nil
 }

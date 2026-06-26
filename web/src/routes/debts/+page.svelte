@@ -92,7 +92,12 @@
 </svelte:head>
 
 <div class="space-y-4">
-	<BackLink href="/" label={$_('dashboard.title')} />
+	<BackLink
+		items={[
+			{ href: '/', label: $_('nav.home') },
+			{ href: '/debts', label: $_('debts.title') }
+		]}
+	/>
 
 	<SectionHeader title={$_('debts.title')}>
 		{#snippet actions()}

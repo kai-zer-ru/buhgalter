@@ -25,7 +25,7 @@ import (
 )
 
 var (
-	version       = "1.1.1"
+	version       = "1.2.0"
 	installMethod = "dev"
 	buildCommit   = "unknown"
 	buildTime     = ""
@@ -88,6 +88,9 @@ func main() {
 		Audit: func(action, userID, login, ip string, details map[string]any) error {
 			return auditLogger.Log(action, userID, login, ip, details)
 		},
+		Logger: logger,
+	}, &appsched.RecurringRunner{
+		DB:     manager.DB(),
 		Logger: logger,
 	}, logger)
 	creditSched.Start()

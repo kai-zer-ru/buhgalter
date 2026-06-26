@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/kai-zer-ru/buhgalter/internal/notify"
 )
 
 type PasswordResetRequest struct {
@@ -35,15 +36,21 @@ func RequestPasswordReset(ctx context.Context, db *sql.DB, login string) error {
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
+	requestID := uuid.NewString()
 	_, err = db.ExecContext(ctx, `
 		INSERT INTO password_reset_requests (id, user_id, created_at, dismissed_at)
 		VALUES (?, ?, ?, NULL)
 		ON CONFLICT(user_id) DO UPDATE SET
 			created_at = excluded.created_at,
 			dismissed_at = NULL`,
-		uuid.NewString(), user.ID, now,
+		requestID, user.ID, now,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	displayName := user.DisplayName
+	_ = notify.NotifyAdminsOnPasswordReset(ctx, db, user.Login, displayName, now, requestID)
+	return nil
 }
 
 func ListPendingPasswordResetRequests(ctx context.Context, db *sql.DB) ([]PasswordResetRequest, error) {

@@ -5,8 +5,10 @@
 		ApiError,
 		createCredit,
 		listAccounts,
+		listBanks,
 		previewCreditSchedule,
-		type Account
+		type Account,
+		type Bank
 	} from '$lib/api/client';
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
 	import Select from '$lib/components/Select.svelte';
@@ -38,9 +40,13 @@
 
 	let { open = $bindable(), onclose, onsaved }: Props = $props();
 
-	let productType = $state<'credit' | 'installment'>('credit');
+	let productType = $state<'credit' | 'installment' | 'mortgage'>('credit');
 	let name = $state('');
 	let principal = $state('');
+	let propertyPrice = $state('');
+	let downPayment = $state('');
+	let downPaymentAffectsBalance = $state(false);
+	let downPaymentAccountId = $state('');
 	let issueDateLocal = $state('');
 	let termMonths = $state('12');
 	let interestRate = $state('12');
@@ -55,16 +61,46 @@
 	let retroactive = $state(false);
 	let retroactiveDebitCount = $state(0);
 	let accounts = $state<Account[]>([]);
+	let banks = $state<Bank[]>([]);
+	let bankId = $state('');
+	let debitTimeLocal = $state('');
 	let scheduleRows = $state<ScheduleRow[]>([]);
 	let scheduleLoading = $state(false);
 	let lastScheduleKey = $state('');
 	let saving = $state(false);
 	let error = $state('');
+	let showAllScheduleRows = $state(false);
+
+	const schedulePreviewLimit = 10;
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
 	const isManualInterval = $derived(interval === 'manual');
+	const hasDownPayment = $derived.by(() => {
+		if (!downPayment.trim()) return false;
+		try {
+			return toCents(downPayment) > 0;
+		} catch {
+			return false;
+		}
+	});
+	const effectivePrincipal = $derived.by(() => {
+		if (productType !== 'mortgage') return principal;
+		if (!propertyPrice.trim()) return '';
+		try {
+			const property = toCents(propertyPrice);
+			const down = downPayment.trim() ? toCents(downPayment) : 0;
+			if (down >= property) return '';
+			return fromCents(property - down);
+		} catch {
+			return '';
+		}
+	});
 	const termCount = $derived(Math.max(1, Number(termMonths) || 1));
 	const accountOptions = $derived(accounts.map((acc) => ({ value: acc.id, label: acc.name })));
+	const bankOptions = $derived([
+		{ value: '', label: $_('credits.field.bankNotSelected') },
+		...banks.map((bank) => ({ value: bank.id, label: bank.name }))
+	]);
 	const intervalOptions = $derived.by(() => {
 		void $locale;
 		return [
@@ -89,9 +125,9 @@
 			const sum = cents.reduce((a, b) => a + b, 0);
 			return fromCents(Math.round(sum / cents.length));
 		}
-		if (!principal.trim()) return '—';
+		if (!effectivePrincipal.trim()) return '—';
 		try {
-			return fromCents(Math.floor(toCents(principal) / termCount));
+			return fromCents(Math.floor(toCents(effectivePrincipal) / termCount));
 		} catch {
 			return '—';
 		}
@@ -104,7 +140,14 @@
 	);
 
 	function baseScheduleParamsKey(): string {
-		return [principal, termMonths, issueDateLocal, interval, productType, interestRate].join('|');
+		return [
+			effectivePrincipal,
+			termMonths,
+			issueDateLocal,
+			interval,
+			productType,
+			interestRate
+		].join('|');
 	}
 
 	function scheduleParamsKey(): string {
@@ -131,6 +174,9 @@
 		productType = 'credit';
 		name = '';
 		principal = '';
+		propertyPrice = '';
+		downPayment = '';
+		downPaymentAffectsBalance = false;
 		termMonths = '12';
 		interestRate = '12';
 		interval = 'month';
@@ -140,10 +186,15 @@
 		paymentDraft = '';
 		retroactive = false;
 		retroactiveDebitCount = 0;
+		downPaymentAccountId = '';
+		bankId = '';
+		debitTimeLocal = '';
+		banks = [];
 		scheduleRows = [];
 		lastScheduleKey = '';
 		lastBaseScheduleKey = '';
 		error = '';
+		showAllScheduleRows = false;
 	}
 
 	$effect(() => {
@@ -151,6 +202,7 @@
 			resetForm();
 			createTransactions = true;
 			void loadAccounts();
+			void loadBanks();
 			issueDateLocal = todayDateLocal(tz);
 		}
 	});
@@ -183,11 +235,12 @@
 	});
 
 	$effect(() => {
-		if (!isManualInterval || !principal.trim() || scheduleRows.length !== termCount) return;
+		if (!isManualInterval || !effectivePrincipal.trim() || scheduleRows.length !== termCount)
+			return;
 		if (!scheduleRows.every((r) => !r.amount.trim())) return;
 		let total: number;
 		try {
-			total = toCents(principal);
+			total = toCents(effectivePrincipal);
 		} catch {
 			return;
 		}
@@ -202,7 +255,7 @@
 
 	$effect(() => {
 		if (!open || isManualInterval || editingPayment) return;
-		if (!principal.trim() || !termMonths) return;
+		if (!effectivePrincipal.trim() || !termMonths) return;
 		const key = scheduleParamsKey();
 		if (key === lastScheduleKey) return;
 
@@ -216,22 +269,32 @@
 		try {
 			accounts = (await listAccounts()).filter((a) => a.status === 'active');
 			debitAccountId = defaultAccountId(accounts, debitAccountId);
+			downPaymentAccountId = defaultAccountId(accounts, downPaymentAccountId || debitAccountId);
 		} catch {
 			accounts = [];
 		}
 	}
 
+	async function loadBanks() {
+		try {
+			banks = await listBanks();
+		} catch {
+			banks = [];
+		}
+	}
+
 	async function refreshSchedule(expectedKey: string) {
-		if (!principal.trim() || !termMonths || isManualInterval) return;
+		if (!effectivePrincipal.trim() || !termMonths || isManualInterval) return;
 		const hadRows = scheduleRows.length > 0;
 		scheduleLoading = true;
 		try {
 			const res = await previewCreditSchedule({
-				principal: toAPIAmount(principal),
+				principal: toAPIAmount(effectivePrincipal),
 				term: Number(termMonths),
 				interest_rate: productType === 'installment' ? 0 : Number(interestRate) || 0,
 				payment_interval: interval,
 				issue_date: fromDatetimeLocalValue(issueDateLocal, tz),
+				credit_kind: productType === 'mortgage' ? 'mortgage' : 'consumer',
 				monthly_payment: paymentOverride ? toAPIAmount(paymentOverride) : null
 			});
 			if (scheduleParamsKey() !== expectedKey) return;
@@ -247,6 +310,7 @@
 			} else {
 				scheduleRows = nextRows;
 			}
+			showAllScheduleRows = false;
 			calculatedPayment = res.calculated_monthly_payment_display;
 			lastScheduleKey = expectedKey;
 		} catch {
@@ -316,10 +380,6 @@
 		return isFutureDatetimeLocal(row.date, tz) ? 'pending' : 'retroactive';
 	}
 
-	const hasUnpaidPayments = $derived(
-		scheduleRows.some((row) => row.date.trim() && rowStatus(row) === 'pending')
-	);
-
 	$effect(() => {
 		if (retroactive) return;
 		retroactiveDebitCount = 0;
@@ -331,16 +391,41 @@
 		if (retroactiveDebitCount > len) retroactiveDebitCount = len;
 	});
 
-	const showCreateTransactions = $derived(!retroactive && hasUnpaidPayments);
+	const showCreateTransactions = $derived(true);
+	const showDebitTimeField = $derived(showCreateTransactions && createTransactions);
+	const visibleScheduleRows = $derived(
+		(showAllScheduleRows ? scheduleRows : scheduleRows.slice(0, schedulePreviewLimit)).map(
+			(row, index) => ({ row, index })
+		)
+	);
 
 	$effect(() => {
-		if (retroactive) createTransactions = false;
+		if (!showDebitTimeField) {
+			debitTimeLocal = '';
+		}
+	});
+
+	$effect(() => {
+		if (showDebitTimeField && !debitTimeLocal.trim()) {
+			debitTimeLocal = '00:00';
+		}
+	});
+
+	$effect(() => {
+		if (!downPaymentAffectsBalance) return;
+		if (!downPaymentAccountId) {
+			downPaymentAccountId = debitAccountId;
+		}
 	});
 
 	async function submit() {
 		error = '';
 		if (!debitAccountId) {
 			error = $_('credits.error.noAccount');
+			return;
+		}
+		if (!effectivePrincipal.trim()) {
+			error = $_('credits.error.mortgageFields');
 			return;
 		}
 		if (!scheduleRowsComplete()) {
@@ -354,7 +439,16 @@
 			const seed = buildSchedulePayload();
 			await createCredit({
 				name: name.trim() || null,
-				principal_amount: toAPIAmount(principal),
+				credit_kind: productType === 'mortgage' ? 'mortgage' : 'consumer',
+				principal_amount: toAPIAmount(effectivePrincipal),
+				property_price: productType === 'mortgage' ? toAPIAmount(propertyPrice) : null,
+				down_payment: productType === 'mortgage' ? toAPIAmount(downPayment || '0') : null,
+				down_payment_affects_balance:
+					productType === 'mortgage' ? downPaymentAffectsBalance : false,
+				down_payment_account_id:
+					productType === 'mortgage' && downPaymentAffectsBalance
+						? downPaymentAccountId || debitAccountId
+						: null,
 				issue_date: fromDatetimeLocalValue(issueDateLocal, tz),
 				term_months: Number(termMonths),
 				interest_rate: productType === 'installment' ? 0 : Number(interestRate) || 0,
@@ -362,9 +456,11 @@
 				paid_amount: '0',
 				monthly_payment: !isManualInterval && paymentOverride ? toAPIAmount(paymentOverride) : null,
 				debit_account_id: debitAccountId,
+				debit_time_local: showDebitTimeField ? debitTimeLocal.trim() || null : null,
+				bank_id: bankId || null,
 				added_retroactively: retroactive,
 				retroactive_debit_count: retroactive ? retroactiveDebitCount : 0,
-				create_transactions: showCreateTransactions && createTransactions,
+				create_transactions: createTransactions,
 				schedule_seed: seed
 			});
 			open = false;
@@ -407,13 +503,53 @@
 				/>
 				{$_('credits.field.installment')}
 			</label>
+			<label class="flex items-center gap-2">
+				<input
+					type="radio"
+					name="productType"
+					value="mortgage"
+					checked={productType === 'mortgage'}
+					onchange={() => {
+						productType = 'mortgage';
+						interval = 'month';
+					}}
+				/>
+				{$_('credits.field.mortgage')}
+			</label>
 		</fieldset>
 
 		<div class="grid gap-4 sm:grid-cols-2">
-			<label class="block space-y-1">
-				<span class="text-sm" style:color="var(--text-muted)">{$_('credits.field.principal')}</span>
-				<MoneyInput bind:value={principal} />
-			</label>
+			{#if productType === 'mortgage'}
+				<label class="block space-y-1">
+					<span class="text-sm" style:color="var(--text-muted)"
+						>{$_('credits.field.propertyPrice')}</span
+					>
+					<MoneyInput bind:value={propertyPrice} />
+				</label>
+				<label class="block space-y-1">
+					<span class="text-sm" style:color="var(--text-muted)"
+						>{$_('credits.field.downPayment')}</span
+					>
+					<MoneyInput bind:value={downPayment} />
+				</label>
+				<label class="block space-y-1">
+					<span class="text-sm" style:color="var(--text-muted)"
+						>{$_('credits.field.principalComputed')}</span
+					>
+					<input class="input w-full" value={effectivePrincipal} readonly />
+				</label>
+				<label class="block space-y-1">
+					<span class="text-sm" style:color="var(--text-muted)">{$_('credits.field.rate')}</span>
+					<input type="number" step="0.1" min="0" class="input w-full" bind:value={interestRate} />
+				</label>
+			{:else}
+				<label class="block space-y-1">
+					<span class="text-sm" style:color="var(--text-muted)"
+						>{$_('credits.field.principal')}</span
+					>
+					<MoneyInput bind:value={principal} />
+				</label>
+			{/if}
 			<DateTimePicker
 				label={$_('credits.field.issueDate')}
 				bind:value={issueDateLocal}
@@ -430,20 +566,47 @@
 					<input type="number" step="0.1" min="0" class="input w-full" bind:value={interestRate} />
 				</label>
 			{/if}
-			<Select
-				label={$_('credits.field.interval')}
-				bind:value={interval}
-				options={intervalOptions}
-				usePortal
-				onchange={() => {
-					lastScheduleKey = '';
-				}}
-			/>
+			{#if productType !== 'mortgage'}
+				<Select
+					label={$_('credits.field.interval')}
+					bind:value={interval}
+					options={intervalOptions}
+					usePortal
+					onchange={() => {
+						lastScheduleKey = '';
+					}}
+				/>
+			{/if}
 		</div>
+		{#if productType === 'mortgage' && hasDownPayment}
+			<div class="space-y-1">
+				<div class="flex items-center justify-between gap-4">
+					<div>
+						<p class="text-sm">{$_('credits.field.downPaymentAffectsBalance')}</p>
+						<FieldHint text={$_('credits.field.downPaymentAffectsBalanceHint')} />
+					</div>
+					<ToggleSwitch
+						checked={downPaymentAffectsBalance}
+						label={$_('credits.field.downPaymentAffectsBalance')}
+						onchange={() => (downPaymentAffectsBalance = !downPaymentAffectsBalance)}
+					/>
+				</div>
+				{#if downPaymentAffectsBalance}
+					<div class="mt-2">
+						<Select
+							label={$_('credits.field.downPaymentAccount')}
+							bind:value={downPaymentAccountId}
+							options={accountOptions}
+							usePortal
+						/>
+					</div>
+				{/if}
+			</div>
+		{/if}
 
 		<div class="flex flex-wrap items-center gap-2 text-sm">
 			{#if !isManualInterval && editingPayment}
-				<MoneyInput bind:value={paymentDraft} class="input w-40 tabular-nums" />
+				<MoneyInput bind:value={paymentDraft} class="input w-40 tabular-nums" autoFocus />
 				<button type="button" class="btn-ghost text-sm" onclick={() => void applyPaymentEdit()}>
 					{$_('common.save')}
 				</button>
@@ -544,7 +707,9 @@
 								</tr>
 							</thead>
 							<tbody>
-								{#each scheduleRows as row, i (i)}
+								{#each visibleScheduleRows as item (item.index)}
+									{@const row = item.row}
+									{@const i = item.index}
 									{@const status = rowStatus(row)}
 									<tr class="border-b last:border-b-0" style:border-color="var(--border)">
 										<td class="p-2 align-middle" style:color="var(--text-muted)">{i + 1}</td>
@@ -587,7 +752,9 @@
 						class="space-y-3 p-3 md:hidden transition-opacity duration-150"
 						class:opacity-50={scheduleLoading}
 					>
-						{#each scheduleRows as row, i (i)}
+						{#each visibleScheduleRows as item (item.index)}
+							{@const row = item.row}
+							{@const i = item.index}
 							{@const status = rowStatus(row)}
 							<article class="rounded-xl border p-3" style:border-color="var(--border)">
 								<p class="mb-2 text-xs font-medium" style:color="var(--text-muted)">
@@ -644,17 +811,39 @@
 							</article>
 						{/each}
 					</div>
+					{#if scheduleRows.length > schedulePreviewLimit}
+						<div class="px-3 pb-3">
+							<button
+								type="button"
+								class="btn-ghost text-sm"
+								onclick={() => (showAllScheduleRows = !showAllScheduleRows)}
+							>
+								{showAllScheduleRows
+									? $_('credits.schedule.collapse')
+									: $_('credits.schedule.expand', {
+											values: { count: scheduleRows.length - schedulePreviewLimit }
+										})}
+							</button>
+						</div>
+					{/if}
 				{/if}
 			</div>
 		</div>
 
-		<Select
-			label={$_('credits.field.debitAccount')}
-			bind:value={debitAccountId}
-			options={accountOptions}
-			usePortal
-		/>
-
+		<div class="grid gap-4 sm:grid-cols-2">
+			<Select
+				label={$_('credits.field.debitAccount')}
+				bind:value={debitAccountId}
+				options={accountOptions}
+				usePortal
+			/>
+			<Select
+				label={$_('credits.field.bank')}
+				bind:value={bankId}
+				options={bankOptions}
+				usePortal
+			/>
+		</div>
 		{#if showCreateTransactions}
 			<div class="space-y-1">
 				<div class="flex items-center justify-between gap-4">
@@ -669,6 +858,14 @@
 					/>
 				</div>
 			</div>
+		{/if}
+
+		{#if showDebitTimeField}
+			<label class="block space-y-1">
+				<span class="text-sm" style:color="var(--text-muted)">{$_('credits.field.debitTime')}</span>
+				<input type="time" class="input w-full" bind:value={debitTimeLocal} />
+				<FieldHint text={$_('credits.field.debitTimeHint')} />
+			</label>
 		{/if}
 
 		<FormFeedback {error} />

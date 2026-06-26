@@ -3,6 +3,8 @@ package setup_test
 import (
 	"bytes"
 	"encoding/json"
+	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -228,5 +230,95 @@ func TestSetupStatusSyncsMarkerFromDB(t *testing.T) {
 	defer resp2.Body.Close()
 	if resp2.StatusCode != http.StatusConflict {
 		t.Fatalf("expected 409, got %d", resp2.StatusCode)
+	}
+}
+
+func TestSetupRestoreFromBackup(t *testing.T) {
+	sourceTS, sourceMgr := testServer(t)
+	defer sourceTS.Close()
+
+	setupBody, _ := json.Marshal(map[string]any{
+		"admin_login":            "admin",
+		"admin_display_name":     "Администратор",
+		"admin_password":         "secret123",
+		"admin_password_confirm": "secret123",
+	})
+	setupResp, err := http.Post(sourceTS.URL+"/api/v1/setup", "application/json", bytes.NewReader(setupBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = setupResp.Body.Close()
+	if setupResp.StatusCode != http.StatusCreated {
+		t.Fatalf("source setup status %d", setupResp.StatusCode)
+	}
+
+	targetTS, _ := testServer(t)
+	defer targetTS.Close()
+
+	sourceBackupSvc := &backup.Service{
+		Manager:   sourceMgr,
+		BackupDir: httpserver.BackupDir(filepath.Dir(sourceMgr.Path())),
+	}
+	backupName, err := sourceBackupSvc.Create()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dbFile, err := os.Open(filepath.Join(sourceBackupSvc.BackupDir, backupName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dbFile.Close()
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	_ = writer.WriteField("confirm", "RESTORE")
+	part, err := writer.CreateFormFile("file", "backup.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.Copy(part, dbFile); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, targetTS.URL+"/api/v1/setup/restore", &body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("restore status %d", resp.StatusCode)
+	}
+
+	var restoreBody struct {
+		Configured bool `json:"configured"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&restoreBody); err != nil {
+		t.Fatal(err)
+	}
+	if !restoreBody.Configured {
+		t.Fatal("expected configured=true after restoring configured backup")
+	}
+
+	statusResp, err := http.Get(targetTS.URL + "/api/v1/setup/status")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer statusResp.Body.Close()
+	var status struct {
+		Configured bool `json:"configured"`
+	}
+	if err := json.NewDecoder(statusResp.Body).Decode(&status); err != nil {
+		t.Fatal(err)
+	}
+	if !status.Configured {
+		t.Fatal("expected configured=true in setup status")
 	}
 }

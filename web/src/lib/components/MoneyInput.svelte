@@ -8,6 +8,7 @@
 		required?: boolean;
 		placeholder?: string;
 		class?: string;
+		autoFocus?: boolean;
 	};
 
 	let {
@@ -15,10 +16,12 @@
 		id,
 		required = false,
 		placeholder = '0.00',
-		class: className = 'input w-full tabular-nums'
+		class: className = 'input w-full tabular-nums',
+		autoFocus = false
 	}: Props = $props();
 
 	let inputEl = $state<HTMLInputElement | null>(null);
+	let prevAutoFocus = $state(false);
 
 	async function onInput(e: Event) {
 		const el = e.currentTarget as HTMLInputElement;
@@ -30,6 +33,18 @@
 		await tick();
 		inputEl?.setSelectionRange(nextCursor, nextCursor);
 	}
+
+	$effect(() => {
+		if (!autoFocus || prevAutoFocus) {
+			prevAutoFocus = autoFocus;
+			return;
+		}
+		prevAutoFocus = autoFocus;
+		void tick().then(() => {
+			inputEl?.focus();
+			inputEl?.select();
+		});
+	});
 </script>
 
 <input

@@ -20,6 +20,7 @@ make build
 ```
 
 После старта открыть `http://localhost:8765` и пройти `/setup`.
+Если есть резервная копия, её можно восстановить прямо на `/setup` из файла `.db` до завершения первичной настройки.
 
 ## Обновление
 
@@ -35,6 +36,9 @@ make build
 
 Приложение при старте **только читает** `.env` (путь — `BUHGALTER_ENV_FILE`, по умолчанию `.env` в каталоге запуска). Файл создаёт и редактирует пользователь (`docker/.env.example` → `docker/.env`).
 
-Основные переменные: `BUHGALTER_ADDR`, `BUHGALTER_DB_PATH`, `BUHGALTER_DATA_DIR`, `BUHGALTER_LOG_DIR`, `BUHGALTER_STATIC_EMBED`, `BUHGALTER_ALLOWED_HOSTS`.
+Основные переменные: `BUHGALTER_ADDR`, `BUHGALTER_DB_PATH`, `BUHGALTER_DATA_DIR`, `BUHGALTER_LOG_DIR`, `BUHGALTER_ALLOWED_HOSTS`, `BUHGALTER_CORS_ORIGINS`.
+Локали `ru/en` встроены в бинарник, отдельная настройка `BUHGALTER_LOCALES_DIR` для типового запуска не нужна.
+
+`BUHGALTER_STATIC_EMBED` обычно не нужен в релизном запуске (по умолчанию `true` и фронтенд отдаётся из бинарника). Используется в dev-сценариях с отдельным Vite (`make dev-server` + `make dev-web`).
 
 Подробный список и примеры — в [README.md](../../README.md).

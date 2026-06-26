@@ -231,8 +231,11 @@ func TestStatsContextScopes(t *testing.T) {
 		RemainingAmount int64  `json:"remaining_amount"`
 	}
 	_ = json.NewDecoder(creditResp.Body).Decode(&creditCtx)
-	if creditCtx.Scope != "credit" || creditCtx.PaymentCount == 0 || creditCtx.RemainingAmount <= 0 {
+	if creditCtx.Scope != "credit" || creditCtx.RemainingAmount <= 0 {
 		t.Fatalf("unexpected credit context: %+v", creditCtx)
+	}
+	if creditCtx.PaymentCount != 0 {
+		t.Fatalf("new credit should not have applied payments in context, got %+v", creditCtx)
 	}
 }
 
@@ -283,15 +286,38 @@ func TestStatsSummaryIncludesCreditPaymentTransactions(t *testing.T) {
 	if !ok || len(schedule) == 0 {
 		t.Fatal("expected schedule")
 	}
+	var firstScheduledDate string
+	for _, item := range schedule {
+		row := item.(map[string]any)
+		if row["kind"] == "scheduled" {
+			firstScheduledDate = row["payment_date"].(string)
+			break
+		}
+	}
+	if firstScheduledDate == "" {
+		t.Fatal("expected scheduled payment date")
+	}
+
+	payBody, _ := json.Marshal(map[string]any{
+		"amount":       "2000.00",
+		"payment_date": firstScheduledDate,
+	})
+	payResp, err := env.authedRequest(http.MethodPost, "/api/v1/credits/"+credit["id"].(string)+"/payments", bytes.NewReader(payBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer payResp.Body.Close()
+	if payResp.StatusCode != http.StatusOK {
+		t.Fatalf("pay status %d", payResp.StatusCode)
+	}
+
+	var paid map[string]any
+	_ = json.NewDecoder(payResp.Body).Decode(&paid)
 	var creditExpense int64
 	var creditTxCount int64
-	for _, item := range schedule {
-		row, ok := item.(map[string]any)
-		if !ok || row["transaction_id"] == nil {
-			continue
-		}
-		applied, _ := row["is_applied"].(bool)
-		if !applied {
+	for _, item := range paid["schedule"].([]any) {
+		row := item.(map[string]any)
+		if row["kind"] != "scheduled" || row["is_applied"] != true || row["transaction_id"] == nil {
 			continue
 		}
 		if amt, ok := row["amount"].(float64); ok {
@@ -299,8 +325,8 @@ func TestStatsSummaryIncludesCreditPaymentTransactions(t *testing.T) {
 			creditTxCount++
 		}
 	}
-	if creditExpense == 0 {
-		t.Fatal("expected at least one applied credit payment transaction")
+	if creditExpense == 0 || creditTxCount == 0 {
+		t.Fatal("expected applied credit payment transaction after manual pay")
 	}
 
 	resp, err := env.authedRequest(http.MethodGet, "/api/v1/stats/summary", nil)

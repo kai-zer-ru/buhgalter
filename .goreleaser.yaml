@@ -57,7 +57,6 @@ release:
   extra_files:
     - glob: docker/docker-compose.yml
       name_template: docker-compose.yaml
-    - glob: build/release/.env
     - glob: build/release/.env.example
       name_template: .env.example
   header: |

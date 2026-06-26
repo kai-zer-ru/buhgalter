@@ -330,7 +330,12 @@
 </svelte:head>
 
 <div class="space-y-4">
-	<BackLink href="/" label={$_('dashboard.title')} />
+	<BackLink
+		items={[
+			{ href: '/', label: $_('nav.home') },
+			{ href: '/stats', label: $_('stats.title') }
+		]}
+	/>
 	<h1 class="text-2xl font-semibold">{$_('stats.title')}</h1>
 
 	<details class="filter-panel card" open>

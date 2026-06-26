@@ -30,6 +30,7 @@ type Transaction struct {
 	CategoryID        *string `json:"category_id"`
 	CategoryName      *string `json:"category_name,omitempty"`
 	CategoryIcon      *string `json:"category_icon,omitempty"`
+	CategoryIsSystem  bool    `json:"category_is_system,omitempty"`
 	SubcategoryID     *string `json:"subcategory_id"`
 	SubcategoryName   *string `json:"subcategory_name,omitempty"`
 	TransferGroupID   *string `json:"transfer_group_id,omitempty"`
@@ -77,6 +78,7 @@ var (
 	ErrInvalidDate       = errors.New("invalid transaction date")
 	ErrInvalidAmount     = errors.New("invalid amount")
 	ErrSameAccount       = errors.New("same account for transfer")
+	ErrSystemCategoryPlanned = errors.New("system category cannot be planned")
 )
 
 func queries(db sqlcdb.DBTX) *sqlcdb.Queries {
@@ -88,7 +90,7 @@ func txFromGetRow(row sqlcdb.GetTransactionByIDRow) Transaction {
 		row.ID, row.AccountID, row.Type, row.Kind, row.Amount, row.Description,
 		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID,
 		row.TransactionDate, row.CreatedAt, row.UpdatedAt,
-		row.CategoryName, row.CategoryIcon, row.SubcategoryName, row.AccountName, row.TransferAccountName,
+		row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.AccountName, row.TransferAccountName,
 		row.TransferIsOut, row.CreditPaymentLinked,
 	)
 }
@@ -98,7 +100,7 @@ func txFromListDesc(row sqlcdb.ListTransactionsFilteredDateDescRow) Transaction 
 		row.ID, row.AccountID, row.Type, row.Kind, row.Amount, row.Description,
 		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID,
 		row.TransactionDate, row.CreatedAt, row.UpdatedAt,
-		row.CategoryName, row.CategoryIcon, row.SubcategoryName, row.AccountName, row.TransferAccountName,
+		row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.AccountName, row.TransferAccountName,
 		row.TransferIsOut, row.CreditPaymentLinked,
 	)
 }
@@ -108,7 +110,7 @@ func txFromListAsc(row sqlcdb.ListTransactionsFilteredDateAscRow) Transaction {
 		row.ID, row.AccountID, row.Type, row.Kind, row.Amount, row.Description,
 		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID,
 		row.TransactionDate, row.CreatedAt, row.UpdatedAt,
-		row.CategoryName, row.CategoryIcon, row.SubcategoryName, row.AccountName, row.TransferAccountName,
+		row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.AccountName, row.TransferAccountName,
 		row.TransferIsOut, row.CreditPaymentLinked,
 	)
 }
@@ -118,7 +120,7 @@ func txFromRecent(row sqlcdb.ListRecentTransactionsRow) Transaction {
 		row.ID, row.AccountID, row.Type, row.Kind, row.Amount, row.Description,
 		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID,
 		row.TransactionDate, row.CreatedAt, row.UpdatedAt,
-		row.CategoryName, row.CategoryIcon, row.SubcategoryName, row.AccountName, row.TransferAccountName,
+		row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.AccountName, row.TransferAccountName,
 		row.TransferIsOut, row.CreditPaymentLinked,
 	)
 }
@@ -128,7 +130,7 @@ func txFromGroupRow(row sqlcdb.ListTransactionsByTransferGroupRow) Transaction {
 		row.ID, row.AccountID, row.Type, row.Kind, row.Amount, row.Description,
 		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID,
 		row.TransactionDate, row.CreatedAt, row.UpdatedAt,
-		row.CategoryName, row.CategoryIcon, row.SubcategoryName, row.AccountName, row.TransferAccountName,
+		row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.AccountName, row.TransferAccountName,
 		row.TransferIsOut, 0,
 	)
 }
@@ -137,7 +139,7 @@ func txFromFields(
 	id, accountID, txType, kind string, amount int64, description *string,
 	categoryID, subcategoryID, transferGroupID, transferAccountID *string,
 	transactionDate, createdAt, updatedAt string,
-	categoryName, categoryIcon, subcategoryName, accountName, transferAccountName *string,
+	categoryName, categoryIcon *string, categoryIsSystem *int64, subcategoryName, accountName, transferAccountName *string,
 	transferIsOut, creditPaymentLinked int64,
 ) Transaction {
 	t := Transaction{
@@ -158,6 +160,9 @@ func txFromFields(
 		CategoryName:      categoryName,
 		CategoryIcon:      categoryIcon,
 		SubcategoryName:   subcategoryName,
+	}
+	if categoryIsSystem != nil {
+		t.CategoryIsSystem = *categoryIsSystem == 1
 	}
 	if accountName != nil {
 		t.AccountName = *accountName
@@ -233,6 +238,9 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Tra
 	if err != nil {
 		return Transaction{}, err
 	}
+	if err := validatePlannedForCategory(ctx, db, userID, in.CategoryID, kind); err != nil {
+		return Transaction{}, err
+	}
 
 	id := uuid.NewString()
 	now := time.Now().UTC().Format(time.RFC3339)
@@ -299,6 +307,9 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in UpdateInput) 
 	}
 	kind, err := resolveKind(ctx, db, userID, in.TransactionDate)
 	if err != nil {
+		return Transaction{}, err
+	}
+	if err := validatePlannedForCategory(ctx, db, userID, in.CategoryID, kind); err != nil {
 		return Transaction{}, err
 	}
 
@@ -617,6 +628,23 @@ func validateCategoryForType(ctx context.Context, db *sql.DB, userID string, cat
 	}
 	if cat.Type != txType {
 		return ErrCategoryTypeMatch
+	}
+	return nil
+}
+
+func validatePlannedForCategory(ctx context.Context, db *sql.DB, userID string, categoryID *string, kind string) error {
+	if kind != "future" || categoryID == nil || *categoryID == "" {
+		return nil
+	}
+	cat, err := category.GetByID(ctx, db, userID, *categoryID)
+	if errors.Is(err, category.ErrNotFound) {
+		return ErrInvalidCategory
+	}
+	if err != nil {
+		return err
+	}
+	if cat.IsSystem {
+		return ErrSystemCategoryPlanned
 	}
 	return nil
 }

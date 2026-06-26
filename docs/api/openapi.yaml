@@ -3,7 +3,7 @@ info:
   title: Бухгалтер API
   description: |
     API приложения «Бухгалтер» (этапы 0–8).
-  version: 1.1.1
+  version: 1.2.0
 servers:
   - url: /api/v1
 paths:
@@ -89,6 +89,71 @@ paths:
           description: Ошибка валидации (пароли не совпадают, пустое имя и т.д.)
         '409':
           description: Настройка уже выполнена
+  /setup/restore:
+    post:
+      summary: Восстановить БД на этапе setup
+      description: |
+        Доступно до завершения первичной настройки.
+        Multipart: поле `file` (`.db`) и `confirm=RESTORE`.
+        После восстановления возвращает `configured`:
+        - `true` — восстановленная БД уже настроена, можно переходить на `/login`;
+        - `false` — завершите первичную настройку на `/setup`.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, confirm]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Файл SQLite (.db)
+                confirm:
+                  type: string
+                  enum: [RESTORE]
+      responses:
+        '200':
+          description: Восстановление завершено
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message, configured]
+                properties:
+                  message:
+                    type: string
+                    example: restore_complete
+                  configured:
+                    type: boolean
+        '400':
+          description: Некорректный multipart, confirm или файл
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                restore_confirm:
+                  $ref: '#/components/examples/ApiErrorRestoreConfirm'
+        '409':
+          description: Инстанс уже настроен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                already_configured:
+                  $ref: '#/components/examples/ApiErrorAlreadyConfigured'
+        '500':
+          description: Ошибка восстановления
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                internal:
+                  $ref: '#/components/examples/ApiErrorInternal'
   /auth/login:
     post:
       summary: Вход в систему
@@ -887,7 +952,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/Transaction'
         '400':
-          description: Ошибка валидации
+          description: |
+            Ошибка валидации.
+            Для системных категорий (`category.is_system=true`) запрещено создавать плановые операции (`kind=future`);
+            возвращается сообщение по ключу `ERR_SYSTEM_CATEGORY_PLANNED`.
   /categories:
     get:
       summary: Список категорий
@@ -1246,6 +1314,12 @@ paths:
           required: true
           schema:
             type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCreditRequest'
       responses:
         '200':
           description: Обновлённый кредит
@@ -1380,6 +1454,82 @@ paths:
       responses:
         '200':
           description: Кредит с обновлённым графиком
+  /recurring-operations:
+    get:
+      summary: Список периодических операций
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Массив периодических операций
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RecurringOperation'
+    post:
+      summary: Создать периодическую операцию
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecurringOperationUpsertRequest'
+      responses:
+        '201':
+          description: Периодическая операция создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecurringOperation'
+  /recurring-operations/{id}:
+    put:
+      summary: Обновить периодическую операцию
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecurringOperationUpsertRequest'
+      responses:
+        '200':
+          description: Периодическая операция обновлена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecurringOperation'
+        '404':
+          description: Не найдена
+    delete:
+      summary: Удалить периодическую операцию
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Удалена
+        '404':
+          description: Не найдена
   /transactions/{id}:
     get:
       summary: Получить операцию
@@ -1427,7 +1577,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/Transaction'
         '400':
-          description: Ошибка валидации
+          description: |
+            Ошибка валидации.
+            Для системных категорий (`category.is_system=true`) запрещено сохранять плановые операции (`kind=future`);
+            возвращается сообщение по ключу `ERR_SYSTEM_CATEGORY_PLANNED`.
         '404':
           description: Не найдена
     delete:
@@ -1821,6 +1974,12 @@ components:
         error:
           code: INTERNAL_ERROR
           message: Внутренняя ошибка сервера
+    ApiErrorAlreadyConfigured:
+      summary: Начальная настройка уже выполнена
+      value:
+        error:
+          code: ALREADY_CONFIGURED
+          message: Начальная настройка уже выполнена
   schemas:
     HealthResponse:
       type: object
@@ -1852,7 +2011,7 @@ components:
                 RATE_LIMITED, VALIDATION_ERROR, INTERNAL_ERROR, NOT_FOUND, CONFLICT,
                 ALREADY_CONFIGURED, SERVICE_UNAVAILABLE.
                 Для смены пароля и большинства 400 — `VALIDATION_ERROR`; текст в `message`
-                локализуется по ключам (PASSWORDS_MISMATCH, ERR_CHANNEL, …).
+                локализуется по ключам (PASSWORDS_MISMATCH, ERR_CHANNEL, ERR_SYSTEM_CATEGORY_PLANNED, …).
             message:
               type: string
               description: Локализованное сообщение (заголовок Accept-Language)
@@ -1965,7 +2124,7 @@ components:
       properties:
         trigger_type:
           type: string
-          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, test]
+          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, password_reset, test]
         template:
           type: string
           description: Текст шаблона
@@ -1989,6 +2148,7 @@ components:
           trigger_debt,
           trigger_credit,
           trigger_planned,
+          trigger_password_reset,
           debt_days_before,
           my_debt_overdue_days_limit,
           owed_debt_overdue_start_after_days,
@@ -2029,6 +2189,8 @@ components:
           type: boolean
         trigger_planned:
           type: boolean
+        trigger_password_reset:
+          type: boolean
         debt_days_before:
           type: integer
           minimum: 0
@@ -2063,7 +2225,7 @@ components:
       properties:
         trigger_type:
           type: string
-          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, test]
+          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, password_reset, test]
         template:
           type: string
           minLength: 1
@@ -2097,6 +2259,8 @@ components:
         trigger_credit:
           type: boolean
         trigger_planned:
+          type: boolean
+        trigger_password_reset:
           type: boolean
         debt_days_before:
           type: integer
@@ -2139,7 +2303,7 @@ components:
       properties:
         trigger_type:
           type: string
-          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, test]
+          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, password_reset, test]
         template:
           type: string
           minLength: 1
@@ -2155,7 +2319,7 @@ components:
       properties:
         trigger_type:
           type: string
-          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, test]
+          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, password_reset, test]
     Category:
       type: object
       properties:
@@ -2288,6 +2452,10 @@ components:
           type: string
           nullable: true
           description: ID из data/category_icons.json
+        category_is_system:
+          type: boolean
+          nullable: true
+          description: Признак системной категории операции (`categories.is_system`)
         subcategory_id:
           type: string
           nullable: true
@@ -2544,11 +2712,33 @@ components:
         name:
           type: string
           nullable: true
+        credit_kind:
+          type: string
+          enum: [consumer, mortgage]
+          description: Тип кредита
         principal_amount:
           type: integer
           description: Копейки
         principal_amount_display:
           type: string
+        property_price:
+          type: integer
+          nullable: true
+          description: Стоимость недвижимости в копейках (только для ипотеки)
+        property_price_display:
+          type: string
+          nullable: true
+        down_payment:
+          type: integer
+          description: Первоначальный взнос в копейках
+        down_payment_display:
+          type: string
+        down_payment_affects_balance:
+          type: boolean
+          description: true, если первоначальный взнос списан с баланса счёта
+        down_payment_transaction_id:
+          type: string
+          nullable: true
         issue_date:
           type: string
         term_months:
@@ -2568,6 +2758,20 @@ components:
           type: string
         debit_account_name:
           type: string
+        debit_time_local:
+          type: string
+          nullable: true
+          description: Локальное время автосписания по кредиту в формате HH:MM; null/пусто — автосписание отключено
+          example: "09:30"
+        bank_id:
+          type: string
+          nullable: true
+        bank_name:
+          type: string
+          nullable: true
+        bank_id_locked:
+          type: boolean
+          description: Флаг совместимости; текущее поведение допускает повторное изменение банка
         added_retroactively:
           type: boolean
         recorded_at:
@@ -2649,10 +2853,33 @@ components:
       properties:
         name:
           type: string
+        credit_kind:
+          type: string
+          enum: [consumer, mortgage]
+          default: consumer
         principal_amount:
           oneOf:
             - type: string
             - type: integer
+        property_price:
+          oneOf:
+            - type: string
+            - type: integer
+          nullable: true
+          description: Стоимость недвижимости; для mortgage должна быть больше down_payment
+        down_payment:
+          oneOf:
+            - type: string
+            - type: integer
+          nullable: true
+          description: Первоначальный взнос для mortgage
+        down_payment_affects_balance:
+          type: boolean
+          description: Если true, при создании создаётся расход на сумму взноса
+        down_payment_account_id:
+          type: string
+          nullable: true
+          description: Счёт для списания первоначального взноса; используется только если down_payment_affects_balance=true. Если не указан, используется debit_account_id
         issue_date:
           type: string
         term_months:
@@ -2662,6 +2889,7 @@ components:
         payment_interval:
           type: string
           enum: [month, week, two_weeks, manual]
+          description: Для credit_kind=mortgage в MVP используется month
         paid_amount:
           oneOf:
             - type: string
@@ -2673,6 +2901,14 @@ components:
             - type: integer
         debit_account_id:
           type: string
+        debit_time_local:
+          type: string
+          nullable: true
+          pattern: '^([01]\d|2[0-3]):([0-5]\d)$'
+          description: Локальное время автосписания в формате HH:MM; null/пусто отключает автосписание для кредита
+        bank_id:
+          type: string
+          nullable: true
         added_retroactively:
           type: boolean
         retroactive_debit_count:
@@ -2700,6 +2936,143 @@ components:
                 oneOf:
                   - type: string
                   - type: integer
+    UpdateCreditRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          nullable: true
+        monthly_payment:
+          nullable: true
+          oneOf:
+            - type: string
+            - type: integer
+        debit_account_id:
+          type: string
+          nullable: true
+        debit_time_local:
+          type: string
+          nullable: true
+          pattern: '^([01]\d|2[0-3]):([0-5]\d)$'
+          description: Локальное время автосписания в формате HH:MM; пустая строка отключает автосписание
+        bank_id:
+          type: string
+          nullable: true
+          description: ID банка; допускается null для очистки поля
+    RecurringOperation:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [income, expense]
+        amount:
+          type: integer
+        amount_display:
+          type: string
+        description:
+          type: string
+          nullable: true
+        account_id:
+          type: string
+        account_name:
+          type: string
+        category_id:
+          type: string
+        category_name:
+          type: string
+        subcategory_id:
+          type: string
+          nullable: true
+        subcategory_name:
+          type: string
+          nullable: true
+        period:
+          type: string
+          enum: [week, two_weeks, month, year]
+        weekday:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 7
+          description: Обязателен для периодов week/two_weeks
+        day_of_month:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 31
+          description: |
+            Обязателен для периодов month/year.
+            В UI для `month` берётся из дня `start_date` автоматически (поле отдельно не показывается).
+        start_date:
+          type: string
+          format: date-time
+        time_local:
+          type: string
+          pattern: '^([01]\d|2[0-3]):([0-5]\d)$'
+          description: Локальное время выполнения (HH:MM), по умолчанию 00:00
+        next_run_at:
+          type: string
+          format: date-time
+        last_run_at:
+          type: string
+          nullable: true
+          format: date-time
+        active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    RecurringOperationUpsertRequest:
+      type: object
+      required: [type, amount, account_id, category_id, period, start_date]
+      properties:
+        type:
+          type: string
+          enum: [income, expense]
+        amount:
+          oneOf:
+            - type: string
+            - type: integer
+        description:
+          type: string
+          nullable: true
+        account_id:
+          type: string
+        category_id:
+          type: string
+        subcategory_id:
+          type: string
+          nullable: true
+        period:
+          type: string
+          enum: [week, two_weeks, month, year]
+        weekday:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 7
+          description: Обязателен для периодов week/two_weeks
+        day_of_month:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 31
+          description: Обязателен для периодов month/year
+        start_date:
+          type: string
+          format: date-time
+        time_local:
+          type: string
+          nullable: true
+          pattern: '^([01]\d|2[0-3]):([0-5]\d)$'
+          description: Локальное время выполнения (HH:MM), пустое значение трактуется как 00:00
+        active:
+          type: boolean
     PreviewScheduleRequest:
       type: object
       required: [principal, term, issue_date]
@@ -2708,6 +3081,10 @@ components:
           oneOf:
             - type: string
             - type: integer
+        credit_kind:
+          type: string
+          enum: [consumer, mortgage]
+          default: consumer
         term:
           type: integer
         interest_rate:
@@ -2715,6 +3092,7 @@ components:
         payment_interval:
           type: string
           enum: [month, week, two_weeks, manual]
+          description: Для credit_kind=mortgage в MVP используется month
         issue_date:
           type: string
         monthly_payment:

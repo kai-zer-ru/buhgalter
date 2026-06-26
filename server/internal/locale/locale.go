@@ -3,11 +3,14 @@ package locale
 import (
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+
+	embeddedlocales "github.com/kai-zer-ru/buhgalter/locales"
 )
 
 var (
@@ -39,7 +42,8 @@ func hasLocaleFile(dir string) bool {
 	return err == nil
 }
 
-// Load reads ru.json and en.json from dir. Not embedded in the binary.
+// Load reads ru.json and en.json from dir.
+// If files are absent, it falls back to locales embedded in the binary.
 func Load(dir string) error {
 	dir = filepath.Clean(dir)
 	localesDir = dir
@@ -54,17 +58,40 @@ func Load(dir string) error {
 			}
 			return fmt.Errorf("read %s: %w", path, err)
 		}
-		var m map[string]string
-		if err := json.Unmarshal(data, &m); err != nil {
-			return fmt.Errorf("parse %s: %w", path, err)
+		if err := decodeCatalog(lang, path, data, next); err != nil {
+			return err
 		}
-		next[lang] = m
 		loaded++
 	}
 	if loaded == 0 {
-		return fmt.Errorf("no locale files in %s", dir)
+		for _, lang := range []string{"ru", "en"} {
+			path := lang + ".json"
+			data, err := fs.ReadFile(embeddedlocales.Files, path)
+			if err != nil {
+				if os.IsNotExist(err) {
+					continue
+				}
+				return fmt.Errorf("read embedded %s: %w", path, err)
+			}
+			if err := decodeCatalog(lang, "embedded:"+path, data, next); err != nil {
+				return err
+			}
+			loaded++
+		}
+	}
+	if loaded == 0 {
+		return fmt.Errorf("no locale files in %s and no embedded locales", dir)
 	}
 	catalogs = next
+	return nil
+}
+
+func decodeCatalog(lang, source string, data []byte, dst map[string]map[string]string) error {
+	var m map[string]string
+	if err := json.Unmarshal(data, &m); err != nil {
+		return fmt.Errorf("parse %s: %w", source, err)
+	}
+	dst[lang] = m
 	return nil
 }
 

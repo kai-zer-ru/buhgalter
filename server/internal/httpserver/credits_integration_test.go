@@ -53,8 +53,8 @@ func TestCreateCreditWithSchedule(t *testing.T) {
 	}
 	for _, item := range schedule {
 		row := item.(map[string]any)
-		if row["kind"] == "scheduled" && row["transaction_id"] == nil {
-			t.Fatal("expected transaction_id on scheduled payment by default")
+		if row["kind"] == "scheduled" && row["transaction_id"] != nil {
+			t.Fatal("scheduled payment must not have precreated transaction")
 		}
 	}
 }
@@ -97,7 +97,7 @@ func TestCreateCreditRetroactiveWithAutoTransactions(t *testing.T) {
 		"added_retroactively":  true,
 		"create_transactions":  true,
 	})
-	var retroWithoutTx, pendingWithTx int
+	var retroWithoutTx, pendingWithoutTx int
 	for _, item := range credit["schedule"].([]any) {
 		row := item.(map[string]any)
 		if row["kind"] == "retroactive" {
@@ -107,17 +107,17 @@ func TestCreateCreditRetroactiveWithAutoTransactions(t *testing.T) {
 			retroWithoutTx++
 		}
 		if row["kind"] == "scheduled" && row["is_applied"] != true {
-			if row["transaction_id"] == nil {
-				t.Fatal("pending scheduled payment expected transaction_id")
+			if row["transaction_id"] != nil {
+				t.Fatal("pending scheduled payment must not have precreated transaction")
 			}
-			pendingWithTx++
+			pendingWithoutTx++
 		}
 	}
 	if retroWithoutTx == 0 {
 		t.Fatal("expected retroactive payments")
 	}
-	if pendingWithTx == 0 {
-		t.Fatal("expected pending scheduled payments with transactions")
+	if pendingWithoutTx == 0 {
+		t.Fatal("expected pending scheduled payments")
 	}
 }
 
@@ -190,21 +190,11 @@ func TestPayScheduledPaymentCreatesFutureTransaction(t *testing.T) {
 	})
 	creditID := credit["id"].(string)
 
-	var firstScheduledDate string
-	for _, item := range credit["schedule"].([]any) {
-		row := item.(map[string]any)
-		if row["kind"] == "scheduled" {
-			firstScheduledDate = row["payment_date"].(string)
-			break
-		}
-	}
-	if firstScheduledDate == "" {
-		t.Fatal("no scheduled payment in new credit")
-	}
+	payDate := time.Now().UTC().Format("2006-01-02 15:04:05")
 
 	body, _ := json.Marshal(map[string]any{
 		"amount":       "5000.00",
-		"payment_date": firstScheduledDate,
+		"payment_date": payDate,
 	})
 	resp, err := env.authedRequest(http.MethodPost, "/api/v1/credits/"+creditID+"/payments", bytes.NewReader(body))
 	if err != nil {
@@ -226,16 +216,16 @@ func TestPayScheduledPaymentCreatesFutureTransaction(t *testing.T) {
 	for _, item := range schedule {
 		row := item.(map[string]any)
 		if row["kind"] == "scheduled" && row["is_applied"] == true && row["transaction_id"] != nil {
-			if row["payment_date"] != firstScheduledDate {
-				t.Fatalf("expected payment date %q, got %v", firstScheduledDate, row["payment_date"])
+			if row["payment_date"] != payDate {
+				t.Fatalf("expected payment date %q, got %v", payDate, row["payment_date"])
 			}
 			txID := row["transaction_id"].(string)
 			txResp, _ := env.authedRequest(http.MethodGet, "/api/v1/transactions/"+txID, nil)
 			defer txResp.Body.Close()
 			var tx map[string]any
 			_ = json.NewDecoder(txResp.Body).Decode(&tx)
-			if tx["kind"] != "future" {
-				t.Fatalf("expected future tx, got %v", tx["kind"])
+			if tx["kind"] != "manual" {
+				t.Fatalf("expected manual tx, got %v", tx["kind"])
 			}
 			found = true
 		}
@@ -247,7 +237,7 @@ func TestPayScheduledPaymentCreatesFutureTransaction(t *testing.T) {
 	var sameDayCount int
 	for _, item := range schedule {
 		row := item.(map[string]any)
-		if row["payment_date"] == firstScheduledDate {
+		if row["payment_date"] == payDate {
 			sameDayCount++
 		}
 	}
@@ -283,18 +273,11 @@ func TestDeleteCreditPaymentTransaction(t *testing.T) {
 	})
 	creditID := credit["id"].(string)
 
-	var firstScheduledDate string
-	for _, item := range credit["schedule"].([]any) {
-		row := item.(map[string]any)
-		if row["kind"] == "scheduled" {
-			firstScheduledDate = row["payment_date"].(string)
-			break
-		}
-	}
+	payDate := time.Now().UTC().Format("2006-01-02 15:04:05")
 
 	payBody, _ := json.Marshal(map[string]any{
 		"amount":       "10000.00",
-		"payment_date": firstScheduledDate,
+		"payment_date": payDate,
 	})
 	payResp, err := env.authedRequest(http.MethodPost, "/api/v1/credits/"+creditID+"/payments", bytes.NewReader(payBody))
 	if err != nil {
@@ -343,7 +326,7 @@ func TestDeleteCreditPaymentTransaction(t *testing.T) {
 	var reverted bool
 	for _, item := range updated["schedule"].([]any) {
 		row := item.(map[string]any)
-		if row["payment_date"] == firstScheduledDate {
+		if row["transaction_id"] == nil && row["kind"] == "scheduled" && row["is_applied"] != true {
 			if row["is_applied"] == true || row["transaction_id"] != nil {
 				t.Fatalf("payment should be reverted, got %+v", row)
 			}
@@ -456,8 +439,8 @@ func TestDeleteCreditKeepTransactions(t *testing.T) {
 	})
 	creditID := credit["id"].(string)
 
-	futureDate := time.Now().UTC().AddDate(0, 2, 0).Format("2006-01-02 15:04:05")
-	payBody, _ := json.Marshal(map[string]any{"amount": "2000.00", "payment_date": futureDate})
+	payDate := time.Now().UTC().Format("2006-01-02 15:04:05")
+	payBody, _ := json.Marshal(map[string]any{"amount": "2000.00", "payment_date": payDate})
 	payResp, _ := env.authedRequest(http.MethodPost, "/api/v1/credits/"+creditID+"/payments", bytes.NewReader(payBody))
 	if payResp.StatusCode != http.StatusOK {
 		t.Fatalf("pay payment status %d", payResp.StatusCode)
@@ -514,8 +497,25 @@ func TestDeleteCreditCascade(t *testing.T) {
 	})
 	creditID := credit["id"].(string)
 
+	payDate := time.Now().UTC().Format("2006-01-02 15:04:05")
+
+	payBody, _ := json.Marshal(map[string]any{
+		"amount":       "1000.00",
+		"payment_date": payDate,
+	})
+	payResp, err := env.authedRequest(http.MethodPost, "/api/v1/credits/"+creditID+"/payments", bytes.NewReader(payBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if payResp.StatusCode != http.StatusOK {
+		t.Fatalf("pay payment status %d", payResp.StatusCode)
+	}
+	var paid map[string]any
+	_ = json.NewDecoder(payResp.Body).Decode(&paid)
+	payResp.Body.Close()
+
 	var txID string
-	for _, item := range credit["schedule"].([]any) {
+	for _, item := range paid["schedule"].([]any) {
 		row := item.(map[string]any)
 		if row["transaction_id"] != nil {
 			txID = row["transaction_id"].(string)
@@ -523,7 +523,7 @@ func TestDeleteCreditCascade(t *testing.T) {
 		}
 	}
 	if txID == "" {
-		t.Fatal("expected auto-created transaction")
+		t.Fatal("expected payment transaction")
 	}
 
 	delResp, err := env.authedRequest(http.MethodDelete, "/api/v1/credits/"+creditID+"?mode=cascade", nil)

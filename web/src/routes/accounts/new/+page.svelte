@@ -54,7 +54,13 @@
 </script>
 
 <div class="mx-auto max-w-lg space-y-6">
-	<BackLink href="/accounts" label={$_('accounts.title')} />
+	<BackLink
+		items={[
+			{ href: '/', label: $_('nav.home') },
+			{ href: '/accounts', label: $_('accounts.title') },
+			{ href: '/accounts/new', label: $_('accounts.new') }
+		]}
+	/>
 	<h1 class="text-2xl font-semibold tracking-tight">{$_('accounts.new')}</h1>
 
 	<form class="card space-y-4" onsubmit={submit}>

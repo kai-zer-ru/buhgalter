@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { _ } from 'svelte-i18n';
-	import { postSetup } from '$lib/api/client';
+	import { getSetupStatus, postSetup, postSetupRestore } from '$lib/api/client';
 	import { formatApiError } from '$lib/api/errors';
 	import { validatePasswordPolicy } from '$lib/password-policy';
 	import AppIcon from '$lib/components/AppIcon.svelte';
@@ -14,6 +14,10 @@
 	let error = $state('');
 	let loading = $state(false);
 	let showPassword = $state(false);
+	let restoreFile = $state<File | null>(null);
+	let restoreLoading = $state(false);
+	let restoreError = $state('');
+	let restoreSuccess = $state('');
 
 	const passwordOk = $derived(validatePasswordPolicy(adminPassword, adminLogin));
 	const passwordsMatch = $derived(
@@ -45,6 +49,36 @@
 			error = formatApiError(err, 'setup.error');
 		} finally {
 			loading = false;
+		}
+	}
+
+	function onRestoreFileChange(e: Event) {
+		const target = e.target as HTMLInputElement;
+		restoreFile = target.files?.[0] ?? null;
+		restoreError = '';
+		restoreSuccess = '';
+	}
+
+	async function submitRestore() {
+		restoreError = '';
+		restoreSuccess = '';
+		if (!restoreFile) {
+			restoreError = $_('setup.restore.file_required');
+			return;
+		}
+		restoreLoading = true;
+		try {
+			const resp = await postSetupRestore(restoreFile);
+			if (resp.configured) {
+				window.location.href = '/login';
+				return;
+			}
+			await getSetupStatus();
+			restoreSuccess = $_('setup.restore.success_continue');
+		} catch (err) {
+			restoreError = formatApiError(err, 'setup.restore.error');
+		} finally {
+			restoreLoading = false;
 		}
 	}
 </script>
@@ -97,6 +131,38 @@
 						<div>
 							<p class="text-sm font-medium text-slate-800">{$_('setup.database.sqlite')}</p>
 							<p class="text-xs text-slate-500">{$_('setup.database.hint')}</p>
+						</div>
+					</div>
+					<div class="rounded-xl border border-slate-200 bg-white px-4 py-4">
+						<p class="text-sm font-medium text-slate-800">{$_('setup.restore.title')}</p>
+						<p class="mt-1 text-xs leading-relaxed text-slate-500">
+							{$_('setup.restore.hint')}
+						</p>
+						<div class="mt-3 space-y-3">
+							<input
+								type="file"
+								accept=".db,application/x-sqlite3,application/octet-stream"
+								class="block w-full text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-slate-700 hover:file:bg-slate-200"
+								onchange={onRestoreFileChange}
+							/>
+							<button
+								type="button"
+								class="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+								disabled={restoreLoading || !restoreFile}
+								onclick={submitRestore}
+							>
+								{#if restoreLoading}
+									{$_('setup.restore.loading')}
+								{:else}
+									{$_('setup.restore.submit')}
+								{/if}
+							</button>
+							{#if restoreError}
+								<p class="text-xs text-red-600">{restoreError}</p>
+							{/if}
+							{#if restoreSuccess}
+								<p class="text-xs text-emerald-700">{restoreSuccess}</p>
+							{/if}
 						</div>
 					</div>
 				</div>

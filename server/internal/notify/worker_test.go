@@ -9,8 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kai-zer-ru/buhgalter/internal/auth"
-	"github.com/kai-zer-ru/buhgalter/internal/category"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 )
@@ -105,11 +103,11 @@ func TestWorkerPlannedOperations(t *testing.T) {
 
 	ctx := context.Background()
 	now := time.Now().UTC()
-	hash, err := auth.HashPassword("secret123")
-	if err != nil {
-		t.Fatal(err)
-	}
-	userID, err := auth.CreateUser(ctx, manager.DB(), "planuser", hash, "Plan", false)
+	userID := "u-plan"
+	_, err = manager.DB().ExecContext(ctx, `
+		INSERT INTO users (id, login, password_hash, display_name, is_admin, language, currency, timezone, theme, created_at, updated_at)
+		VALUES (?, 'planuser', 'hash', 'Plan', 0, 'ru', 'RUB', 'Europe/Moscow', 'light', ?, ?)`,
+		userID, now.Format(time.RFC3339), now.Format(time.RFC3339))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,11 +117,14 @@ func TestWorkerPlannedOperations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cats, err := category.ListByUser(ctx, manager.DB(), userID, "expense")
-	if err != nil || len(cats) == 0 {
+	catID := "cat-expense"
+	_, err = manager.DB().ExecContext(ctx, `
+		INSERT INTO categories (id, user_id, name, type, icon, sort_order, is_primary, is_system, created_at)
+		VALUES (?, ?, 'Еда', 'expense', 'default', 0, 1, 0, ?)`,
+		catID, userID, now.Format(time.RFC3339))
+	if err != nil {
 		t.Fatal(err)
 	}
-	catID := cats[0].ID
 	txDate := now.Format("2006-01-02 15:04:05")
 	_, err = manager.DB().ExecContext(ctx, `
 		INSERT INTO transactions (

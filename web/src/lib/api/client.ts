@@ -73,6 +73,11 @@ export type SetupPayload = {
 	external_url: string;
 };
 
+export type SetupRestoreResponse = {
+	message: string;
+	configured: boolean;
+};
+
 export type User = {
 	id: string;
 	login: string;
@@ -112,6 +117,7 @@ export type NotificationSettings = {
 	trigger_debt: boolean;
 	trigger_credit: boolean;
 	trigger_planned: boolean;
+	trigger_password_reset?: boolean;
 	debt_days_before: number;
 	my_debt_overdue_days_limit: number;
 	owed_debt_overdue_start_after_days: number;
@@ -133,6 +139,7 @@ export type NotificationSettingsUpdate = {
 	trigger_debt?: boolean;
 	trigger_credit?: boolean;
 	trigger_planned?: boolean;
+	trigger_password_reset?: boolean;
 	debt_days_before?: number;
 	my_debt_overdue_days_limit?: number;
 	owed_debt_overdue_start_after_days?: number;
@@ -213,6 +220,16 @@ export function postSetup(payload: SetupPayload) {
 	return request<{ message: string }>('/api/v1/setup', {
 		method: 'POST',
 		body: JSON.stringify(payload)
+	});
+}
+
+export function postSetupRestore(file: File, confirm: string = 'RESTORE') {
+	const form = new FormData();
+	form.append('file', file);
+	form.append('confirm', confirm);
+	return request<SetupRestoreResponse>('/api/v1/setup/restore', {
+		method: 'POST',
+		body: form
 	});
 }
 
@@ -626,6 +643,7 @@ export type Transaction = {
 	category_id: string | null;
 	category_name?: string | null;
 	category_icon?: string | null;
+	category_is_system?: boolean;
 	subcategory_id: string | null;
 	subcategory_name?: string | null;
 	transfer_group_id?: string | null;
@@ -633,6 +651,30 @@ export type Transaction = {
 	transfer_is_out?: boolean;
 	credit_payment_linked?: boolean;
 	transaction_date: string;
+	created_at: string;
+	updated_at: string;
+};
+
+export type RecurringOperation = {
+	id: string;
+	type: 'income' | 'expense';
+	amount: number;
+	amount_display: string;
+	description: string | null;
+	account_id: string;
+	account_name: string;
+	category_id: string;
+	category_name: string;
+	subcategory_id: string | null;
+	subcategory_name: string | null;
+	period: 'week' | 'two_weeks' | 'month' | 'year';
+	weekday: number | null;
+	day_of_month: number | null;
+	start_date: string;
+	time_local: string;
+	next_run_at: string;
+	last_run_at: string | null;
+	active: boolean;
 	created_at: string;
 	updated_at: string;
 };
@@ -828,6 +870,57 @@ export function deleteTransaction(id: string) {
 	return request<void>(`/api/v1/transactions/${id}`, { method: 'DELETE' });
 }
 
+export function listRecurringOperations() {
+	return request<RecurringOperation[]>('/api/v1/recurring-operations');
+}
+
+export function createRecurringOperation(payload: {
+	type: 'income' | 'expense';
+	amount: string;
+	description?: string;
+	account_id: string;
+	category_id: string;
+	subcategory_id?: string;
+	period: 'week' | 'two_weeks' | 'month' | 'year';
+	weekday?: number;
+	day_of_month?: number;
+	start_date: string;
+	time_local?: string;
+	active?: boolean;
+}) {
+	return request<RecurringOperation>('/api/v1/recurring-operations', {
+		method: 'POST',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function updateRecurringOperation(
+	id: string,
+	payload: {
+		type: 'income' | 'expense';
+		amount: string;
+		description?: string;
+		account_id: string;
+		category_id: string;
+		subcategory_id?: string;
+		period: 'week' | 'two_weeks' | 'month' | 'year';
+		weekday?: number;
+		day_of_month?: number;
+		start_date: string;
+		time_local?: string;
+		active?: boolean;
+	}
+) {
+	return request<RecurringOperation>(`/api/v1/recurring-operations/${id}`, {
+		method: 'PUT',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function deleteRecurringOperation(id: string) {
+	return request<void>(`/api/v1/recurring-operations/${id}`, { method: 'DELETE' });
+}
+
 export function createTransfer(payload: {
 	from_account_id: string;
 	to_account_id: string;
@@ -992,8 +1085,15 @@ export type SchedulePreviewEntry = {
 export type Credit = {
 	id: string;
 	name: string | null;
+	credit_kind?: 'consumer' | 'mortgage';
 	principal_amount: number;
 	principal_amount_display: string;
+	property_price?: number | null;
+	property_price_display?: string | null;
+	down_payment?: number;
+	down_payment_display?: string;
+	down_payment_affects_balance?: boolean;
+	down_payment_transaction_id?: string | null;
 	issue_date: string;
 	term_months: number;
 	interest_rate: number;
@@ -1006,6 +1106,10 @@ export type Credit = {
 	remaining_amount_display: string;
 	debit_account_id: string;
 	debit_account_name: string;
+	debit_time_local?: string | null;
+	bank_id?: string | null;
+	bank_name?: string | null;
+	bank_id_locked?: boolean;
 	added_retroactively: boolean;
 	recorded_at: string;
 	status: 'active' | 'closed';

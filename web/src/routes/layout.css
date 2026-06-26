@@ -107,8 +107,9 @@ html.dark {
 	}
 
 	.btn-primary {
-		@apply cursor-pointer rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-60;
+		@apply cursor-pointer rounded-xl border px-4 py-2.5 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-60;
 		background-color: var(--primary);
+		border-color: color-mix(in srgb, var(--primary) 80%, var(--border));
 	}
 
 	.btn-primary:hover:not(:disabled) {
@@ -116,8 +117,9 @@ html.dark {
 	}
 
 	.btn-danger {
-		@apply cursor-pointer rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-60;
+		@apply cursor-pointer rounded-xl border px-4 py-2.5 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-60;
 		background-color: var(--danger);
+		border-color: color-mix(in srgb, var(--danger) 75%, var(--border));
 	}
 
 	.btn-danger:hover:not(:disabled) {
@@ -125,13 +127,19 @@ html.dark {
 	}
 
 	.btn-ghost {
-		@apply cursor-pointer rounded-xl px-3 py-2 text-sm transition;
+		@apply cursor-pointer rounded-xl border px-3 py-2 text-sm transition;
 		color: var(--text-muted);
+		border-color: var(--border);
+		background-color: transparent;
 	}
 
 	.btn-ghost:hover {
 		background-color: color-mix(in srgb, var(--border) 50%, transparent);
 		color: var(--text);
+	}
+
+	.btn-nav {
+		border: 0;
 	}
 
 	.btn-icon {
@@ -141,8 +149,9 @@ html.dark {
 	}
 
 	.btn-icon-danger {
-		@apply cursor-pointer rounded-xl transition;
+		@apply cursor-pointer rounded-xl border transition;
 		color: var(--danger);
+		border-color: color-mix(in srgb, var(--danger) 55%, var(--border));
 	}
 
 	.btn-icon-danger:hover {
@@ -150,13 +159,15 @@ html.dark {
 	}
 
 	.tab {
-		@apply cursor-pointer rounded-lg px-4 py-2 text-sm font-medium transition;
+		@apply cursor-pointer border-b-2 border-transparent px-4 py-2 text-sm font-medium transition;
 		color: var(--text-muted);
+		border-radius: 0;
 	}
 
 	.tab-active {
-		background-color: color-mix(in srgb, var(--primary) 12%, transparent);
 		color: var(--primary);
+		border-bottom-color: var(--primary);
+		background-color: transparent;
 	}
 
 	.badge {
@@ -173,11 +184,10 @@ html.dark {
 	}
 
 	.nav-mobile-link {
-		@apply block cursor-pointer rounded-lg px-3 py-2 text-sm transition hover:opacity-80;
+		@apply block cursor-pointer rounded-lg border border-transparent px-3 py-2 text-sm transition hover:opacity-80;
 	}
 
 	.nav-link-active {
-		background-color: color-mix(in srgb, var(--primary) 12%, transparent);
 		color: var(--primary);
 		font-weight: 600;
 	}
@@ -217,10 +227,27 @@ html.dark {
 		@apply flex min-w-max gap-2 sm:min-w-0 sm:flex-wrap;
 	}
 
-	.back-link {
-		@apply mb-4 inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors;
+	.breadcrumbs {
+		@apply mb-4 flex flex-wrap items-center gap-1.5 text-sm;
+	}
+
+	.breadcrumb-link {
+		@apply inline-flex min-h-11 items-center rounded-lg px-2 py-1.5 transition-colors;
 		color: var(--text);
-		background-color: color-mix(in srgb, var(--bg-elevated) 70%, transparent);
+	}
+
+	.breadcrumb-link:hover {
+		color: var(--primary);
+	}
+
+	.breadcrumb-current {
+		@apply inline-flex min-h-11 items-center px-2 py-1.5;
+		color: var(--text-muted);
+	}
+
+	.breadcrumb-separator {
+		@apply px-0.5;
+		color: var(--text-muted);
 	}
 
 	.modal-panel {
@@ -239,7 +266,8 @@ html.dark {
 		.btn-danger,
 		.tab,
 		.nav-mobile-link,
-		.back-link,
+		.breadcrumb-link,
+		.breadcrumb-current,
 		.input {
 			min-height: 2.75rem;
 		}

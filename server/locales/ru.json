@@ -88,6 +88,10 @@
   "ERR_CREDIT_COMPLETE_DATE": "Укажите дату завершения",
   "ERR_CREDIT_INVALID_STATUS": "Некорректный status",
   "ERR_CREDIT_INVALID_PAYMENT": "Некорректная сумма платежа",
+  "ERR_CREDIT_INVALID_DEBIT_TIME": "Некорректное время списания (ожидается HH:MM)",
+  "ERR_CREDIT_INVALID_KIND": "Некорректный тип кредита",
+  "ERR_CREDIT_INVALID_MORTGAGE": "Некорректные данные ипотеки (стоимость и первоначальный взнос)",
+  "CONFLICT_CREDIT_BANK_LOCKED": "Банк кредита можно изменить только один раз",
   "ERR_CATEGORY_NAME_LENGTH": "Имя категории: от 1 до 64 символов",
   "ERR_CATEGORY_SYSTEM_READONLY": "Системную категорию нельзя изменить",
   "ERR_CATEGORY_INVALID": "Некорректные данные категории",
@@ -104,5 +108,6 @@
   "notifications.templates.debt_due_soon": "Напоминание: вернуть долг {debtor} — {amount}. (Срок: {due_date}, через {days} дн.)",
   "notifications.templates.credit_payment": "Платёж по кредиту «{credit}»: {amount}. Дата: {when}",
   "notifications.templates.planned_operation": "Плановая операция: {type} на {amount} — {description}",
+  "notifications.templates.password_reset": "Запрос на восстановление пароля: {display_name} (@{login}), время: {requested_at}.",
   "notifications.templates.test": "Тестовое уведомление «Бухгалтер». Канал: {channel}."
 }

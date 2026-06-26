@@ -16,8 +16,8 @@
 		categoryName = $bindable(''),
 		categoryType = 'expense',
 		lockName = false,
-		iconSize = 36,
-		quickSize = 36
+		iconSize = 40,
+		quickSize = 40
 	}: {
 		value?: string;
 		categoryName?: string;
@@ -110,7 +110,7 @@
 	{#each displayQuick as iconId (iconId)}
 		<button
 			type="button"
-			class="cursor-pointer rounded-xl p-2 transition-colors"
+			class="btn-icon btn-ghost"
 			style:background-color={value === iconId
 				? 'color-mix(in srgb, var(--primary) 15%, transparent)'
 				: 'transparent'}
@@ -122,7 +122,7 @@
 	{/each}
 	<button
 		type="button"
-		class="cursor-pointer rounded-xl px-3 py-2 text-sm font-medium transition-colors"
+		class="btn-icon btn-ghost"
 		style:background-color="color-mix(in srgb, var(--border) 40%, transparent)"
 		style:color="var(--text-muted)"
 		aria-label={$_('categories.icons.more')}
@@ -154,7 +154,7 @@
 				{#each filtered as icon (icon.id)}
 					<button
 						type="button"
-						class="cursor-pointer rounded-xl p-2 transition-colors"
+						class="btn-icon btn-ghost"
 						style:background-color={value === icon.id
 							? 'color-mix(in srgb, var(--primary) 15%, transparent)'
 							: 'transparent'}
@@ -170,7 +170,9 @@
 	{#snippet footer()}
 		<div class="mr-auto flex items-center gap-2 text-sm" style:color="var(--text-muted)">
 			<span>{$_('categories.icons.selected')}:</span>
-			<CategoryIcon icon={value} size={28} />
+			<span class="btn-icon">
+				<CategoryIcon icon={value} size={iconSize} />
+			</span>
 		</div>
 		<IconButton icon="save" label={$_('common.save')} variant="primary" onclick={closeModal} />
 	{/snippet}

@@ -38,8 +38,20 @@
 	import { toast } from '$lib/toast';
 	import CategoriesTab from '$lib/settings/CategoriesTab.svelte';
 	import ImportTab from '$lib/settings/ImportTab.svelte';
+	import AdminSystemTab from '../admin/+page.svelte';
+	import AdminUsersTab from '../admin/users/+page.svelte';
+	import AdminBackupsTab from '../admin/backups/+page.svelte';
+	import AdminDiagnosticsTab from '../admin/diagnostics/+page.svelte';
 
-	type Tab = 'profile' | 'password' | 'tokens' | 'notifications' | 'categories' | 'import';
+	type Tab =
+		| 'profile'
+		| 'password'
+		| 'tokens'
+		| 'notifications'
+		| 'categories'
+		| 'import'
+		| 'admin';
+	type AdminTab = 'system' | 'users' | 'backups' | 'diagnostics';
 
 	function tabFromSearchParams(params: URLSearchParams): Tab {
 		const value = params.get('tab');
@@ -48,14 +60,24 @@
 			value === 'tokens' ||
 			value === 'notifications' ||
 			value === 'categories' ||
-			value === 'import'
+			value === 'import' ||
+			value === 'admin'
 		) {
 			return value;
 		}
 		return 'profile';
 	}
 
+	function adminTabFromSearchParams(params: URLSearchParams): AdminTab {
+		const value = params.get('admin_tab');
+		if (value === 'users' || value === 'backups' || value === 'diagnostics') {
+			return value;
+		}
+		return 'system';
+	}
+
 	let tab = $state<Tab>(tabFromSearchParams(get(page).url.searchParams));
+	let adminTab = $state<AdminTab>(adminTabFromSearchParams(get(page).url.searchParams));
 	let profileFeedback = $state({ error: '', success: '' });
 	let passwordFeedback = $state({ error: '', success: '' });
 	let notificationsFormFeedback = $state({ error: '', success: '' });
@@ -93,6 +115,7 @@
 	let triggerDebt = $state(true);
 	let triggerCredit = $state(true);
 	let triggerPlanned = $state(true);
+	let triggerPasswordReset = $state(true);
 	let debtDaysBefore = $state(1);
 	let myDebtOverdueDaysLimit = $state(7);
 	let owedDebtOverdueStartAfterDays = $state(0);
@@ -132,11 +155,13 @@
 		'debt_due_soon',
 		'credit_payment',
 		'planned_operation',
+		'password_reset',
 		'test'
 	];
 
 	onMount(() => {
 		tab = tabFromSearchParams(new URL(window.location.href).searchParams);
+		adminTab = adminTabFromSearchParams(new URL(window.location.href).searchParams);
 		const syncTabFromLocation = () => {
 			const params = new URL(window.location.href).searchParams;
 			if (params.get('tab') === 'accounts') {
@@ -144,6 +169,7 @@
 				return;
 			}
 			tab = tabFromSearchParams(params);
+			adminTab = adminTabFromSearchParams(params);
 		};
 		window.addEventListener('popstate', syncTabFromLocation);
 		void (async () => {
@@ -179,6 +205,23 @@
 		} else {
 			url.searchParams.set('tab', next);
 		}
+		if (next !== 'admin') {
+			url.searchParams.delete('admin_tab');
+		} else {
+			url.searchParams.set('admin_tab', adminTab);
+		}
+		const search = url.searchParams.toString();
+		const settingsUrl = search ? `${resolve('/settings')}?${search}` : resolve('/settings');
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- query params after resolved base path
+		void goto(settingsUrl, { replaceState: true, keepFocus: true, noScroll: true });
+	}
+
+	function selectAdminTab(next: AdminTab) {
+		if (next === adminTab) return;
+		adminTab = next;
+		const url = new URL(get(page).url);
+		url.searchParams.set('tab', 'admin');
+		url.searchParams.set('admin_tab', next);
 		const search = url.searchParams.toString();
 		const settingsUrl = search ? `${resolve('/settings')}?${search}` : resolve('/settings');
 		// eslint-disable-next-line svelte/no-navigation-without-resolve -- query params after resolved base path
@@ -215,6 +258,7 @@
 		triggerDebt = data.trigger_debt;
 		triggerCredit = data.trigger_credit;
 		triggerPlanned = data.trigger_planned;
+		triggerPasswordReset = data.trigger_password_reset ?? true;
 		debtDaysBefore = data.debt_days_before;
 		myDebtOverdueDaysLimit = data.my_debt_overdue_days_limit ?? 7;
 		owedDebtOverdueStartAfterDays = data.owed_debt_overdue_start_after_days ?? 0;
@@ -370,6 +414,7 @@
 				trigger_debt: triggerDebt,
 				trigger_credit: triggerCredit,
 				trigger_planned: triggerPlanned,
+				trigger_password_reset: $user?.is_admin ? triggerPasswordReset : undefined,
 				debt_days_before: debtDaysBefore,
 				my_debt_overdue_days_limit: myDebtOverdueDaysLimit,
 				owed_debt_overdue_start_after_days: owedDebtOverdueStartAfterDays,
@@ -496,7 +541,8 @@
 			await putNotificationSettings({
 				trigger_debt: triggerDebt,
 				trigger_credit: triggerCredit,
-				trigger_planned: triggerPlanned
+				trigger_planned: triggerPlanned,
+				trigger_password_reset: $user?.is_admin ? triggerPasswordReset : undefined
 			});
 			await loadNotifications();
 			blockFeedback = {
@@ -762,13 +808,27 @@
 
 	const settingsTabs = $derived.by(() => {
 		void $locale;
-		return [
+		const tabs = [
 			{ id: 'profile', label: tr('settings.tab.profile') },
 			{ id: 'password', label: tr('settings.tab.password') },
 			{ id: 'tokens', label: tr('settings.tab.tokens') },
 			{ id: 'notifications', label: tr('settings.tab.notifications') },
 			{ id: 'categories', label: tr('settings.tab.categories') },
 			{ id: 'import', label: tr('settings.tab.import') }
+		];
+		if ($user?.is_admin) {
+			tabs.push({ id: 'admin', label: tr('admin.title') });
+		}
+		return tabs;
+	});
+
+	const adminTabs = $derived.by(() => {
+		void $locale;
+		return [
+			{ id: 'system', label: tr('admin.tab.system') },
+			{ id: 'users', label: tr('admin.tab.users') },
+			{ id: 'backups', label: tr('admin.tab.backups') },
+			{ id: 'diagnostics', label: tr('admin.tab.diagnostics') }
 		];
 	});
 
@@ -1087,31 +1147,49 @@
 						<p class="text-sm" style:color="var(--text-muted)">
 							{$_('settings.notifications.triggers.types_hint')}
 						</p>
-						<div class="grid gap-3 sm:grid-cols-3">
-							<div class="flex items-center justify-between gap-2">
-								<span class="text-sm">{$_('settings.notifications.triggers.debt')}</span>
+						<div class="grid w-full max-w-md gap-2">
+							<div class="grid grid-cols-[1fr_auto] items-center gap-3">
+								<span class="text-sm leading-tight"
+									>{$_('settings.notifications.triggers.debt')}</span
+								>
 								<ToggleSwitch
 									checked={triggerDebt}
 									label={$_('settings.notifications.triggers.debt')}
 									onchange={() => (triggerDebt = !triggerDebt)}
 								/>
 							</div>
-							<div class="flex items-center justify-between gap-2">
-								<span class="text-sm">{$_('settings.notifications.triggers.credit')}</span>
+							<div class="grid grid-cols-[1fr_auto] items-center gap-3">
+								<span class="text-sm leading-tight"
+									>{$_('settings.notifications.triggers.credit')}</span
+								>
 								<ToggleSwitch
 									checked={triggerCredit}
 									label={$_('settings.notifications.triggers.credit')}
 									onchange={() => (triggerCredit = !triggerCredit)}
 								/>
 							</div>
-							<div class="flex items-center justify-between gap-2">
-								<span class="text-sm">{$_('settings.notifications.triggers.planned')}</span>
+							<div class="grid grid-cols-[1fr_auto] items-center gap-3">
+								<span class="text-sm leading-tight"
+									>{$_('settings.notifications.triggers.planned')}</span
+								>
 								<ToggleSwitch
 									checked={triggerPlanned}
 									label={$_('settings.notifications.triggers.planned')}
 									onchange={() => (triggerPlanned = !triggerPlanned)}
 								/>
 							</div>
+							{#if $user?.is_admin}
+								<div class="grid grid-cols-[1fr_auto] items-center gap-3">
+									<span class="text-sm leading-tight"
+										>{$_('settings.notifications.triggers.passwordReset')}</span
+									>
+									<ToggleSwitch
+										checked={triggerPasswordReset}
+										label={$_('settings.notifications.triggers.passwordReset')}
+										onchange={() => (triggerPasswordReset = !triggerPasswordReset)}
+									/>
+								</div>
+							{/if}
 						</div>
 						<div class="flex items-center gap-2">
 							<button
@@ -1363,6 +1441,29 @@
 	<CategoriesTab />
 {:else if tab === 'import'}
 	<ImportTab />
+{:else if tab === 'admin'}
+	{#if !$user?.is_admin}
+		<div class="card max-w-lg">
+			<p style:color="var(--text-muted)">{$_('common.error')}</p>
+		</div>
+	{:else}
+		<div class="mb-6">
+			<PageTabs
+				active={adminTab}
+				tabs={adminTabs}
+				onchange={(next) => selectAdminTab(next as AdminTab)}
+			/>
+		</div>
+		{#if adminTab === 'system'}
+			<AdminSystemTab />
+		{:else if adminTab === 'users'}
+			<AdminUsersTab />
+		{:else if adminTab === 'backups'}
+			<AdminBackupsTab />
+		{:else}
+			<AdminDiagnosticsTab />
+		{/if}
+	{/if}
 {:else if tab === 'tokens'}
 	<div class="space-y-6">
 		<form class="card flex flex-wrap items-end gap-3" onsubmit={handleCreateToken}>

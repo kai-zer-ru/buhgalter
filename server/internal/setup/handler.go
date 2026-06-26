@@ -5,11 +5,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
+	"path/filepath"
 	"strings"
 
 	"github.com/kai-zer-ru/buhgalter/internal/apperror"
 	"github.com/kai-zer-ru/buhgalter/internal/audit"
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
+	"github.com/kai-zer-ru/buhgalter/internal/backup"
 	"github.com/kai-zer-ru/buhgalter/internal/bank"
 	"github.com/kai-zer-ru/buhgalter/internal/categoryseed"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
@@ -21,6 +23,7 @@ type Handler struct {
 	DataDir string
 	Store   *db.Handle
 	Audit   *audit.Logger
+	Backup  *backup.Service
 }
 
 type statusResponse struct {
@@ -41,6 +44,11 @@ type setupRequest struct {
 
 type setupResponse struct {
 	Message string `json:"message"`
+}
+
+type restoreResponse struct {
+	Message    string `json:"message"`
+	Configured bool   `json:"configured"`
 }
 
 func (h *Handler) Status(w http.ResponseWriter, r *http.Request) {
@@ -197,6 +205,61 @@ func (h *Handler) Setup(w http.ResponseWriter, r *http.Request) {
 	})
 
 	writeJSON(w, http.StatusCreated, setupResponse{Message: "setup_complete"})
+}
+
+func (h *Handler) Restore(w http.ResponseWriter, r *http.Request) {
+	if h.Backup == nil {
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	}
+	if syncConfiguredMarker(h.DataDir, h.Store.DB()) {
+		apperror.WriteR(w, r, http.StatusConflict, apperror.AlreadyConfigured)
+		return
+	}
+	if hasAdmin, err := adminUserExists(r.Context(), h.Store.DB()); err != nil {
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	} else if hasAdmin {
+		apperror.WriteR(w, r, http.StatusConflict, apperror.AlreadyConfigured)
+		return
+	}
+
+	if err := r.ParseMultipartForm(64 << 20); err != nil {
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_MULTIPART")
+		return
+	}
+	if strings.TrimSpace(r.FormValue("confirm")) != "RESTORE" {
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_RESTORE_CONFIRM")
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_FILE_REQUIRED")
+		return
+	}
+	defer file.Close()
+
+	if strings.ToLower(filepath.Ext(header.Filename)) != ".db" {
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_DB_FILE_REQUIRED")
+		return
+	}
+
+	if err := h.Backup.Restore(file); err != nil {
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	}
+
+	configured := syncConfiguredMarker(h.DataDir, h.Store.DB())
+	_ = h.Audit.Log("setup.restore", "", "", auth.ClientIP(r), map[string]any{
+		"filename":   header.Filename,
+		"configured": configured,
+	})
+
+	writeJSON(w, http.StatusOK, restoreResponse{
+		Message:    "restore_complete",
+		Configured: configured,
+	})
 }
 
 // syncConfiguredMarker returns true when setup has completed on this instance.

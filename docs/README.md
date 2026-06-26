@@ -2,7 +2,7 @@
 
 Публичные справочники по данным, UI, API и установке. Стиль оформления — [style.md](style.md).
 
-**Текущая версия API:** OpenAPI **1.1.0** — [api/openapi.yaml](api/openapi.yaml).
+**Текущая версия API:** OpenAPI **1.2.0** — [api/openapi.yaml](api/openapi.yaml).
 
 ---
 
@@ -10,6 +10,8 @@
 
 | Документ | Описание |
 |----------|----------|
+| [release-notes-v1.2.0.md](release-notes-v1.2.0.md) | v1.2.0: периодические операции, обновление кредитов и setup restore |
+| [release-notes-v1.1.1.md](release-notes-v1.1.1.md) | v1.1.1: .env, docs и улучшения UI |
 | [release-notes-v1.1.md](release-notes-v1.1.md) | v1.1.0: сброс пароля, кредиты, комиссия переводов, mobile UI |
 | [../CHANGELOG.md](../CHANGELOG.md) | Полный changelog |
 
@@ -38,7 +40,7 @@
 
 | Документ | Описание |
 |----------|----------|
-| [api/openapi.yaml](api/openapi.yaml) | OpenAPI **1.1.0** |
+| [api/openapi.yaml](api/openapi.yaml) | OpenAPI **1.2.0** |
 | [api/authentication.md](api/authentication.md) | Сессии и API-токены |
 | [import/cubux.md](import/cubux.md) | Импорт формата Cubux |
 

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { _ } from 'svelte-i18n';
-	import { ApiError, listCredits, type Credit } from '$lib/api/client';
+	import { ApiError, listBanks, listCredits, type Bank, type Credit } from '$lib/api/client';
 	import BackLink from '$lib/components/BackLink.svelte';
 	import CreditForm from '$lib/components/CreditForm.svelte';
 	import CreditList from '$lib/components/CreditList.svelte';
@@ -13,6 +13,7 @@
 
 	let tab = $state<'active' | 'closed'>('active');
 	let credits = $state<Credit[]>([]);
+	let banks = $state<Bank[]>([]);
 	let loading = $state(true);
 	let filterLoading = $state(false);
 	let error = $state('');
@@ -29,7 +30,13 @@
 		error = '';
 		try {
 			const status = tab === 'active' ? 'active' : 'closed';
-			credits = await listCredits({ status });
+			const [creditsList, banksList] = await Promise.all([listCredits({ status }), listBanks()]);
+			credits = [...creditsList].sort((a, b) => {
+				const byCreated = b.created_at.localeCompare(a.created_at);
+				if (byCreated !== 0) return byCreated;
+				return b.issue_date.localeCompare(a.issue_date);
+			});
+			banks = banksList;
 		} catch (err) {
 			error = err instanceof ApiError ? err.message : $_('common.error');
 		} finally {
@@ -47,6 +54,11 @@
 	function creditName(c: Credit): string {
 		return c.name?.trim() || $_('credits.title');
 	}
+
+	function bankIconFor(c: Credit): string | null {
+		if (!c.bank_id) return null;
+		return banks.find((item) => item.id === c.bank_id)?.icon_path ?? null;
+	}
 </script>
 
 <svelte:head>
@@ -54,7 +66,12 @@
 </svelte:head>
 
 <div class="space-y-4">
-	<BackLink href="/" label={$_('dashboard.title')} />
+	<BackLink
+		items={[
+			{ href: '/', label: $_('nav.home') },
+			{ href: '/credits', label: $_('credits.title') }
+		]}
+	/>
 
 	<SectionHeader title={$_('credits.title')}>
 		{#snippet actions()}
@@ -91,7 +108,7 @@
 					{$_('common.loading')}
 				</p>
 			{/if}
-			<CreditList {credits} {tz} {currency} nameFor={creditName} />
+			<CreditList {credits} {tz} {currency} nameFor={creditName} {bankIconFor} />
 		</div>
 	{/if}
 </div>

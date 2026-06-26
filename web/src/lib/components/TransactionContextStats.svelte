@@ -42,7 +42,7 @@
 	{:else if error}
 		<p class="text-sm" style:color="var(--danger)">{error}</p>
 	{:else if summary}
-		<div class="grid gap-3 sm:grid-cols-4">
+		<div class="grid gap-3 md:grid-cols-3">
 			<div>
 				<p class="text-xs" style:color="var(--text-muted)">{$_('stats.context.income')}</p>
 				<p class="tabular-nums font-medium">

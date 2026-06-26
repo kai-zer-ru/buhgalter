@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
@@ -10,12 +9,15 @@
 		deleteAccount,
 		deleteTransaction,
 		getAccount,
+		getAccountBalance,
 		listBanks,
 		listCategories,
 		listTransactions,
+		setPrimaryAccount,
 		unarchiveAccount,
 		updateAccount,
 		type Account,
+		type AccountBalanceSummary,
 		type Bank,
 		type Category,
 		type Transaction
@@ -40,6 +42,7 @@
 	import { user } from '$lib/stores/auth';
 
 	let acc = $state<Account | null>(null);
+	let accBalance = $state<AccountBalanceSummary | null>(null);
 	let banks = $state<Bank[]>([]);
 	let categories = $state<Category[]>([]);
 	let transactions = $state<Transaction[]>([]);
@@ -72,8 +75,12 @@
 	const visibleTx = $derived(dedupeTransferLegs(transactions));
 	const bankOptions = $derived(banks.map((bank) => ({ value: bank.id, label: bank.name })));
 
-	onMount(() => {
+	let loadedForID = $state('');
+	$effect(() => {
 		if (!id) return;
+		if (loadedForID === id) return;
+		loadedForID = id;
+		filtersAutoApplyReady = false;
 		readURLFilters();
 		void load().then(() => {
 			lastFiltersKey = currentFiltersKey();
@@ -117,13 +124,15 @@
 		loading = true;
 		error = '';
 		try {
-			const [account, bankList, expenseCats, incomeCats] = await Promise.all([
+			const [account, accountBalance, bankList, expenseCats, incomeCats] = await Promise.all([
 				getAccount(id),
+				getAccountBalance(id),
 				listBanks(),
 				listCategories('expense'),
 				listCategories('income')
 			]);
 			acc = account;
+			accBalance = accountBalance;
 			banks = bankList;
 			const uniqueCatsByID: Record<string, Category> = {};
 			for (const cat of [...expenseCats, ...incomeCats]) uniqueCatsByID[cat.id] = cat;
@@ -165,6 +174,7 @@
 	}
 
 	async function applyURLFilters() {
+		const basePath = resolve(`/accounts/${id}`);
 		const queryParts = [`page=${encodeURIComponent(String(txPage))}`];
 		if (fromLocal) queryParts.push(`from_local=${encodeURIComponent(fromLocal)}`);
 		if (toLocal) queryParts.push(`to_local=${encodeURIComponent(toLocal)}`);
@@ -172,7 +182,8 @@
 		if (categoryFilter) queryParts.push(`category_id=${encodeURIComponent(categoryFilter)}`);
 		if (kindFilter) queryParts.push(`kind=${encodeURIComponent(kindFilter)}`);
 		if (searchFilter.trim()) queryParts.push(`search=${encodeURIComponent(searchFilter.trim())}`);
-		await goto(resolve(`/accounts/${id}?${queryParts.join('&')}`), {
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- query string is appended to resolved base path
+		await goto(`${basePath}?${queryParts.join('&')}`, {
 			replaceState: true,
 			noScroll: true,
 			keepFocus: true
@@ -191,6 +202,7 @@
 				bank_id: acc.type === 'bank' ? bankId : undefined,
 				initial_balance: toAPIAmount(initialBalance)
 			});
+			accBalance = await getAccountBalance(acc.id);
 			editing = false;
 			toast($_('common.saved'));
 		} catch (err) {
@@ -204,6 +216,17 @@
 		if (!acc) return;
 		try {
 			acc = acc.status === 'active' ? await archiveAccount(acc.id) : await unarchiveAccount(acc.id);
+			accBalance = await getAccountBalance(acc.id);
+		} catch (err) {
+			error = err instanceof ApiError ? err.message : $_('common.error');
+		}
+	}
+
+	async function makePrimary() {
+		if (!acc || acc.is_primary) return;
+		try {
+			acc = await setPrimaryAccount(acc.id);
+			toast($_('common.saved'));
 		} catch (err) {
 			error = err instanceof ApiError ? err.message : $_('common.error');
 		}
@@ -274,7 +297,13 @@
 </script>
 
 <div class="space-y-6">
-	<BackLink href="/accounts" label={$_('accounts.title')} />
+	<BackLink
+		items={[
+			{ href: '/', label: $_('nav.home') },
+			{ href: '/accounts', label: $_('accounts.title') },
+			{ href: '/accounts', label: acc?.name ?? $_('common.loading') }
+		]}
+	/>
 
 	{#if loading}
 		<p style:color="var(--text-muted)">{$_('common.loading')}</p>
@@ -307,10 +336,43 @@
 							</div>
 						</form>
 					{:else}
-						<h1 class="text-2xl font-semibold">{acc.name}</h1>
+						<div class="flex items-center gap-2">
+							<h1 class="text-2xl font-semibold">{acc.name}</h1>
+							{#if acc.is_primary}
+								<span
+									class="shrink-0"
+									style:color="var(--primary)"
+									title={$_('accounts.primary.badge')}
+									aria-label={$_('accounts.primary.badge')}
+								>
+									<svg
+										aria-hidden="true"
+										class="h-5 w-5"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+									>
+										<path d="M20 6 9 17l-5-5" />
+									</svg>
+								</span>
+							{/if}
+						</div>
 						<p class="mt-2 text-3xl font-semibold tabular-nums">
-							{formatBalance(acc.balance_display, $user?.currency ?? 'RUB')}
+							{formatBalance(
+								accBalance?.balance_display ?? acc.balance_display,
+								$user?.currency ?? 'RUB'
+							)}
 						</p>
+						{#if accBalance ? accBalance.forecast_balance !== accBalance.balance : false}
+							<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
+								{$_('dashboard.withPlans')}:
+								{formatBalance(
+									accBalance?.forecast_display ?? acc.balance_display,
+									$user?.currency ?? 'RUB'
+								)}
+							</p>
+						{/if}
 					{/if}
 				</div>
 			</div>
@@ -343,6 +405,9 @@
 						label={$_('accounts.action.edit')}
 						onclick={() => (editing = true)}
 					/>
+					{#if !acc.is_primary}
+						<IconButton icon="save" label={$_('accounts.primary.set')} onclick={makePrimary} />
+					{/if}
 					<IconButton
 						icon="archive"
 						label={$_('accounts.action.archive')}
@@ -392,6 +457,8 @@
 					singleAccount
 					showEdit
 					showDelete
+					onmakeRecurring={(tx) =>
+						void goto(resolve(`/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`))}
 					onedit={openEdit}
 					ondelete={(tx) => void removeTx(tx)}
 				/>

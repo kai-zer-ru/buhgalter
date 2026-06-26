@@ -381,6 +381,8 @@ func writeTxError(w http.ResponseWriter, r *http.Request, err error) bool {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CATEGORY_NOT_FOUND")
 	case errors.Is(err, ErrCategoryTypeMatch):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CATEGORY_TYPE_MISMATCH")
+	case errors.Is(err, ErrSystemCategoryPlanned):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_SYSTEM_CATEGORY_PLANNED")
 	case errors.Is(err, credit.ErrCannotEditPayment):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_CANNOT_EDIT_PAYMENT")
 	case errors.Is(err, ErrInvalidSubcategory):

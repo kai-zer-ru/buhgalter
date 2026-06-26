@@ -195,7 +195,12 @@ SELECT
     c.id,
     c.user_id,
     c.name,
+    c.credit_kind,
     c.principal_amount,
+    c.property_price,
+    c.down_payment,
+    c.down_payment_affects_balance,
+    c.down_payment_transaction_id,
     c.issue_date,
     c.term_months,
     c.interest_rate,
@@ -204,6 +209,10 @@ SELECT
     c.monthly_payment,
     c.debit_account_id,
     a.name AS debit_account_name,
+    c.debit_time_local,
+    c.bank_id,
+    c.bank_id_locked,
+    b.name AS bank_name,
     c.added_retroactively,
     c.recorded_at,
     c.status,
@@ -212,6 +221,7 @@ SELECT
     c.updated_at
 FROM credits c
 JOIN accounts a ON a.id = c.debit_account_id
+LEFT JOIN banks b ON b.id = c.bank_id
 WHERE c.id = ? AND c.user_id = ?
 `
 
@@ -221,24 +231,33 @@ type GetCreditByIDParams struct {
 }
 
 type GetCreditByIDRow struct {
-	ID                 string  `json:"id"`
-	UserID             string  `json:"user_id"`
-	Name               *string `json:"name"`
-	PrincipalAmount    int64   `json:"principal_amount"`
-	IssueDate          string  `json:"issue_date"`
-	TermMonths         int64   `json:"term_months"`
-	InterestRate       float64 `json:"interest_rate"`
-	PaymentInterval    string  `json:"payment_interval"`
-	PaidAmount         int64   `json:"paid_amount"`
-	MonthlyPayment     int64   `json:"monthly_payment"`
-	DebitAccountID     string  `json:"debit_account_id"`
-	DebitAccountName   string  `json:"debit_account_name"`
-	AddedRetroactively int64   `json:"added_retroactively"`
-	RecordedAt         string  `json:"recorded_at"`
-	Status             string  `json:"status"`
-	ClosedAt           *string `json:"closed_at"`
-	CreatedAt          string  `json:"created_at"`
-	UpdatedAt          string  `json:"updated_at"`
+	ID                        string  `json:"id"`
+	UserID                    string  `json:"user_id"`
+	Name                      *string `json:"name"`
+	CreditKind                string  `json:"credit_kind"`
+	PrincipalAmount           int64   `json:"principal_amount"`
+	PropertyPrice             *int64  `json:"property_price"`
+	DownPayment               int64   `json:"down_payment"`
+	DownPaymentAffectsBalance int64   `json:"down_payment_affects_balance"`
+	DownPaymentTransactionID  *string `json:"down_payment_transaction_id"`
+	IssueDate                 string  `json:"issue_date"`
+	TermMonths                int64   `json:"term_months"`
+	InterestRate              float64 `json:"interest_rate"`
+	PaymentInterval           string  `json:"payment_interval"`
+	PaidAmount                int64   `json:"paid_amount"`
+	MonthlyPayment            int64   `json:"monthly_payment"`
+	DebitAccountID            string  `json:"debit_account_id"`
+	DebitAccountName          string  `json:"debit_account_name"`
+	DebitTimeLocal            *string `json:"debit_time_local"`
+	BankID                    *string `json:"bank_id"`
+	BankIDLocked              int64   `json:"bank_id_locked"`
+	BankName                  *string `json:"bank_name"`
+	AddedRetroactively        int64   `json:"added_retroactively"`
+	RecordedAt                string  `json:"recorded_at"`
+	Status                    string  `json:"status"`
+	ClosedAt                  *string `json:"closed_at"`
+	CreatedAt                 string  `json:"created_at"`
+	UpdatedAt                 string  `json:"updated_at"`
 }
 
 func (q *Queries) GetCreditByID(ctx context.Context, arg GetCreditByIDParams) (GetCreditByIDRow, error) {
@@ -248,7 +267,12 @@ func (q *Queries) GetCreditByID(ctx context.Context, arg GetCreditByIDParams) (G
 		&i.ID,
 		&i.UserID,
 		&i.Name,
+		&i.CreditKind,
 		&i.PrincipalAmount,
+		&i.PropertyPrice,
+		&i.DownPayment,
+		&i.DownPaymentAffectsBalance,
+		&i.DownPaymentTransactionID,
 		&i.IssueDate,
 		&i.TermMonths,
 		&i.InterestRate,
@@ -257,6 +281,10 @@ func (q *Queries) GetCreditByID(ctx context.Context, arg GetCreditByIDParams) (G
 		&i.MonthlyPayment,
 		&i.DebitAccountID,
 		&i.DebitAccountName,
+		&i.DebitTimeLocal,
+		&i.BankID,
+		&i.BankIDLocked,
+		&i.BankName,
 		&i.AddedRetroactively,
 		&i.RecordedAt,
 		&i.Status,
@@ -414,30 +442,40 @@ func (q *Queries) HasPaymentOnDate(ctx context.Context, arg HasPaymentOnDatePara
 
 const insertCredit = `-- name: InsertCredit :exec
 INSERT INTO credits (
-    id, user_id, name, principal_amount, issue_date, term_months, interest_rate,
+    id, user_id, name, credit_kind, principal_amount, property_price, down_payment,
+    down_payment_affects_balance, down_payment_transaction_id, issue_date, term_months, interest_rate,
     payment_interval, paid_amount, monthly_payment, debit_account_id,
+    debit_time_local, bank_id, bank_id_locked,
     added_retroactively, recorded_at, status, closed_at, created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type InsertCreditParams struct {
-	ID                 string  `json:"id"`
-	UserID             string  `json:"user_id"`
-	Name               *string `json:"name"`
-	PrincipalAmount    int64   `json:"principal_amount"`
-	IssueDate          string  `json:"issue_date"`
-	TermMonths         int64   `json:"term_months"`
-	InterestRate       float64 `json:"interest_rate"`
-	PaymentInterval    string  `json:"payment_interval"`
-	PaidAmount         int64   `json:"paid_amount"`
-	MonthlyPayment     int64   `json:"monthly_payment"`
-	DebitAccountID     string  `json:"debit_account_id"`
-	AddedRetroactively int64   `json:"added_retroactively"`
-	RecordedAt         string  `json:"recorded_at"`
-	Status             string  `json:"status"`
-	ClosedAt           *string `json:"closed_at"`
-	CreatedAt          string  `json:"created_at"`
-	UpdatedAt          string  `json:"updated_at"`
+	ID                        string  `json:"id"`
+	UserID                    string  `json:"user_id"`
+	Name                      *string `json:"name"`
+	CreditKind                string  `json:"credit_kind"`
+	PrincipalAmount           int64   `json:"principal_amount"`
+	PropertyPrice             *int64  `json:"property_price"`
+	DownPayment               int64   `json:"down_payment"`
+	DownPaymentAffectsBalance int64   `json:"down_payment_affects_balance"`
+	DownPaymentTransactionID  *string `json:"down_payment_transaction_id"`
+	IssueDate                 string  `json:"issue_date"`
+	TermMonths                int64   `json:"term_months"`
+	InterestRate              float64 `json:"interest_rate"`
+	PaymentInterval           string  `json:"payment_interval"`
+	PaidAmount                int64   `json:"paid_amount"`
+	MonthlyPayment            int64   `json:"monthly_payment"`
+	DebitAccountID            string  `json:"debit_account_id"`
+	DebitTimeLocal            *string `json:"debit_time_local"`
+	BankID                    *string `json:"bank_id"`
+	BankIDLocked              int64   `json:"bank_id_locked"`
+	AddedRetroactively        int64   `json:"added_retroactively"`
+	RecordedAt                string  `json:"recorded_at"`
+	Status                    string  `json:"status"`
+	ClosedAt                  *string `json:"closed_at"`
+	CreatedAt                 string  `json:"created_at"`
+	UpdatedAt                 string  `json:"updated_at"`
 }
 
 func (q *Queries) InsertCredit(ctx context.Context, arg InsertCreditParams) error {
@@ -445,7 +483,12 @@ func (q *Queries) InsertCredit(ctx context.Context, arg InsertCreditParams) erro
 		arg.ID,
 		arg.UserID,
 		arg.Name,
+		arg.CreditKind,
 		arg.PrincipalAmount,
+		arg.PropertyPrice,
+		arg.DownPayment,
+		arg.DownPaymentAffectsBalance,
+		arg.DownPaymentTransactionID,
 		arg.IssueDate,
 		arg.TermMonths,
 		arg.InterestRate,
@@ -453,6 +496,9 @@ func (q *Queries) InsertCredit(ctx context.Context, arg InsertCreditParams) erro
 		arg.PaidAmount,
 		arg.MonthlyPayment,
 		arg.DebitAccountID,
+		arg.DebitTimeLocal,
+		arg.BankID,
+		arg.BankIDLocked,
 		arg.AddedRetroactively,
 		arg.RecordedAt,
 		arg.Status,
@@ -595,7 +641,12 @@ SELECT
     c.id,
     c.user_id,
     c.name,
+    c.credit_kind,
     c.principal_amount,
+    c.property_price,
+    c.down_payment,
+    c.down_payment_affects_balance,
+    c.down_payment_transaction_id,
     c.issue_date,
     c.term_months,
     c.interest_rate,
@@ -604,6 +655,10 @@ SELECT
     c.monthly_payment,
     c.debit_account_id,
     a.name AS debit_account_name,
+    c.debit_time_local,
+    c.bank_id,
+    c.bank_id_locked,
+    b.name AS bank_name,
     c.added_retroactively,
     c.recorded_at,
     c.status,
@@ -612,6 +667,7 @@ SELECT
     c.updated_at
 FROM credits c
 JOIN accounts a ON a.id = c.debit_account_id
+LEFT JOIN banks b ON b.id = c.bank_id
 WHERE c.user_id = ?
   AND (? = '' OR c.status = ?)
 ORDER BY c.status ASC, c.issue_date DESC, c.created_at DESC
@@ -624,24 +680,33 @@ type ListCreditsByUserParams struct {
 }
 
 type ListCreditsByUserRow struct {
-	ID                 string  `json:"id"`
-	UserID             string  `json:"user_id"`
-	Name               *string `json:"name"`
-	PrincipalAmount    int64   `json:"principal_amount"`
-	IssueDate          string  `json:"issue_date"`
-	TermMonths         int64   `json:"term_months"`
-	InterestRate       float64 `json:"interest_rate"`
-	PaymentInterval    string  `json:"payment_interval"`
-	PaidAmount         int64   `json:"paid_amount"`
-	MonthlyPayment     int64   `json:"monthly_payment"`
-	DebitAccountID     string  `json:"debit_account_id"`
-	DebitAccountName   string  `json:"debit_account_name"`
-	AddedRetroactively int64   `json:"added_retroactively"`
-	RecordedAt         string  `json:"recorded_at"`
-	Status             string  `json:"status"`
-	ClosedAt           *string `json:"closed_at"`
-	CreatedAt          string  `json:"created_at"`
-	UpdatedAt          string  `json:"updated_at"`
+	ID                        string  `json:"id"`
+	UserID                    string  `json:"user_id"`
+	Name                      *string `json:"name"`
+	CreditKind                string  `json:"credit_kind"`
+	PrincipalAmount           int64   `json:"principal_amount"`
+	PropertyPrice             *int64  `json:"property_price"`
+	DownPayment               int64   `json:"down_payment"`
+	DownPaymentAffectsBalance int64   `json:"down_payment_affects_balance"`
+	DownPaymentTransactionID  *string `json:"down_payment_transaction_id"`
+	IssueDate                 string  `json:"issue_date"`
+	TermMonths                int64   `json:"term_months"`
+	InterestRate              float64 `json:"interest_rate"`
+	PaymentInterval           string  `json:"payment_interval"`
+	PaidAmount                int64   `json:"paid_amount"`
+	MonthlyPayment            int64   `json:"monthly_payment"`
+	DebitAccountID            string  `json:"debit_account_id"`
+	DebitAccountName          string  `json:"debit_account_name"`
+	DebitTimeLocal            *string `json:"debit_time_local"`
+	BankID                    *string `json:"bank_id"`
+	BankIDLocked              int64   `json:"bank_id_locked"`
+	BankName                  *string `json:"bank_name"`
+	AddedRetroactively        int64   `json:"added_retroactively"`
+	RecordedAt                string  `json:"recorded_at"`
+	Status                    string  `json:"status"`
+	ClosedAt                  *string `json:"closed_at"`
+	CreatedAt                 string  `json:"created_at"`
+	UpdatedAt                 string  `json:"updated_at"`
 }
 
 func (q *Queries) ListCreditsByUser(ctx context.Context, arg ListCreditsByUserParams) ([]ListCreditsByUserRow, error) {
@@ -657,7 +722,12 @@ func (q *Queries) ListCreditsByUser(ctx context.Context, arg ListCreditsByUserPa
 			&i.ID,
 			&i.UserID,
 			&i.Name,
+			&i.CreditKind,
 			&i.PrincipalAmount,
+			&i.PropertyPrice,
+			&i.DownPayment,
+			&i.DownPaymentAffectsBalance,
+			&i.DownPaymentTransactionID,
 			&i.IssueDate,
 			&i.TermMonths,
 			&i.InterestRate,
@@ -666,6 +736,10 @@ func (q *Queries) ListCreditsByUser(ctx context.Context, arg ListCreditsByUserPa
 			&i.MonthlyPayment,
 			&i.DebitAccountID,
 			&i.DebitAccountName,
+			&i.DebitTimeLocal,
+			&i.BankID,
+			&i.BankIDLocked,
+			&i.BankName,
 			&i.AddedRetroactively,
 			&i.RecordedAt,
 			&i.Status,
@@ -700,6 +774,7 @@ SELECT
     c.user_id,
     c.name AS credit_name,
     c.debit_account_id,
+    c.debit_time_local,
     c.status AS credit_status
 FROM credit_payments cp
 JOIN credits c ON c.id = cp.credit_id
@@ -723,6 +798,7 @@ type ListDueCreditPaymentsRow struct {
 	UserID           string  `json:"user_id"`
 	CreditName       *string `json:"credit_name"`
 	DebitAccountID   string  `json:"debit_account_id"`
+	DebitTimeLocal   *string `json:"debit_time_local"`
 	CreditStatus     string  `json:"credit_status"`
 }
 
@@ -748,6 +824,7 @@ func (q *Queries) ListDueCreditPayments(ctx context.Context, paymentDate string)
 			&i.UserID,
 			&i.CreditName,
 			&i.DebitAccountID,
+			&i.DebitTimeLocal,
 			&i.CreditStatus,
 		); err != nil {
 			return nil, err
@@ -854,6 +931,23 @@ func (q *Queries) RevertCreditPaymentLink(ctx context.Context, arg RevertCreditP
 	return result.RowsAffected()
 }
 
+const setCreditDownPaymentTransaction = `-- name: SetCreditDownPaymentTransaction :exec
+UPDATE credits
+SET down_payment_transaction_id = ?
+WHERE id = ? AND user_id = ?
+`
+
+type SetCreditDownPaymentTransactionParams struct {
+	DownPaymentTransactionID *string `json:"down_payment_transaction_id"`
+	ID                       string  `json:"id"`
+	UserID                   string  `json:"user_id"`
+}
+
+func (q *Queries) SetCreditDownPaymentTransaction(ctx context.Context, arg SetCreditDownPaymentTransactionParams) error {
+	_, err := q.db.ExecContext(ctx, setCreditDownPaymentTransaction, arg.DownPaymentTransactionID, arg.ID, arg.UserID)
+	return err
+}
+
 const unlinkCreditPaymentTransactions = `-- name: UnlinkCreditPaymentTransactions :exec
 UPDATE credit_payments SET transaction_id = NULL WHERE credit_id = ?
 `
@@ -865,7 +959,14 @@ func (q *Queries) UnlinkCreditPaymentTransactions(ctx context.Context, creditID 
 
 const updateCredit = `-- name: UpdateCredit :execrows
 UPDATE credits
-SET name = ?, monthly_payment = ?, debit_account_id = ?, updated_at = ?
+SET
+    name = ?,
+    monthly_payment = ?,
+    debit_account_id = ?,
+    debit_time_local = ?,
+    bank_id = ?,
+    bank_id_locked = ?,
+    updated_at = ?
 WHERE id = ? AND user_id = ? AND status = 'active'
 `
 
@@ -873,6 +974,9 @@ type UpdateCreditParams struct {
 	Name           *string `json:"name"`
 	MonthlyPayment int64   `json:"monthly_payment"`
 	DebitAccountID string  `json:"debit_account_id"`
+	DebitTimeLocal *string `json:"debit_time_local"`
+	BankID         *string `json:"bank_id"`
+	BankIDLocked   int64   `json:"bank_id_locked"`
 	UpdatedAt      string  `json:"updated_at"`
 	ID             string  `json:"id"`
 	UserID         string  `json:"user_id"`
@@ -883,6 +987,9 @@ func (q *Queries) UpdateCredit(ctx context.Context, arg UpdateCreditParams) (int
 		arg.Name,
 		arg.MonthlyPayment,
 		arg.DebitAccountID,
+		arg.DebitTimeLocal,
+		arg.BankID,
+		arg.BankIDLocked,
 		arg.UpdatedAt,
 		arg.ID,
 		arg.UserID,

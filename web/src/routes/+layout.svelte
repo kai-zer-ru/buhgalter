@@ -62,6 +62,11 @@
 			isActive: (p) => p.startsWith('/credits')
 		},
 		{
+			href: resolve('/recurring-operations'),
+			labelKey: 'nav.recurring',
+			isActive: (p) => p.startsWith('/recurring-operations')
+		},
+		{
 			href: resolve('/stats'),
 			labelKey: 'nav.stats',
 			isActive: (p) => p.startsWith('/stats')
@@ -70,11 +75,6 @@
 			href: resolve('/settings'),
 			labelKey: 'nav.settings',
 			isActive: (p, search) => p.startsWith('/settings') && search.get('tab') !== 'accounts'
-		},
-		{
-			href: resolve('/admin'),
-			labelKey: 'nav.admin',
-			isActive: (p) => p.startsWith('/admin')
 		}
 	];
 
@@ -209,7 +209,7 @@
 						<div class="relative sm:hidden">
 							<button
 								type="button"
-								class="btn-icon btn-ghost"
+								class="btn-icon btn-ghost btn-nav"
 								aria-expanded={navOpen}
 								aria-haspopup="true"
 								onclick={() => (navOpen = !navOpen)}
@@ -231,14 +231,12 @@
 									class="popover-panel nav-mobile-panel absolute right-0 z-[60] mt-2 max-h-[min(70dvh,24rem)] min-w-[12rem] overflow-y-auto p-2"
 								>
 									{#each navItems as item (item.labelKey)}
-										{#if item.labelKey !== 'nav.admin' || $user.is_admin}
-											<a
-												href={item.href}
-												class={navLinkClass(isNavItemActive(item), 'nav-mobile-link')}
-												aria-current={isNavItemActive(item) ? 'page' : undefined}
-												onclick={closeNav}>{$_(item.labelKey)}</a
-											>
-										{/if}
+										<a
+											href={item.href}
+											class={navLinkClass(isNavItemActive(item), 'nav-mobile-link')}
+											aria-current={isNavItemActive(item) ? 'page' : undefined}
+											onclick={closeNav}>{$_(item.labelKey)}</a
+										>
 									{/each}
 								</div>
 							{/if}
@@ -246,14 +244,11 @@
 						<nav class="hidden items-center gap-2 sm:flex">
 							{#each navItems as item (item.labelKey)}
 								{#if !item.mobileOnly}
-									{#if item.labelKey !== 'nav.admin' || $user.is_admin}
-										<a
-											href={item.href}
-											class={navLinkClass(isNavItemActive(item), 'btn-ghost')}
-											aria-current={isNavItemActive(item) ? 'page' : undefined}
-											>{$_(item.labelKey)}</a
-										>
-									{/if}
+									<a
+										href={item.href}
+										class={navLinkClass(isNavItemActive(item), 'btn-ghost btn-nav')}
+										aria-current={isNavItemActive(item) ? 'page' : undefined}>{$_(item.labelKey)}</a
+									>
 								{/if}
 							{/each}
 						</nav>
@@ -265,7 +260,12 @@
 								@{$user.login}
 							{/if}
 						</span>
-						<IconButton icon="logout" label={$_('nav.logout')} onclick={handleLogout} />
+						<IconButton
+							icon="logout"
+							label={$_('nav.logout')}
+							class="btn-nav"
+							onclick={handleLogout}
+						/>
 					</div>
 				{/if}
 			</div>

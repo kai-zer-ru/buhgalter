@@ -49,23 +49,31 @@ type Category struct {
 }
 
 type Credit struct {
-	ID                 string  `json:"id"`
-	UserID             string  `json:"user_id"`
-	Name               *string `json:"name"`
-	PrincipalAmount    int64   `json:"principal_amount"`
-	IssueDate          string  `json:"issue_date"`
-	TermMonths         int64   `json:"term_months"`
-	InterestRate       float64 `json:"interest_rate"`
-	PaymentInterval    string  `json:"payment_interval"`
-	PaidAmount         int64   `json:"paid_amount"`
-	MonthlyPayment     int64   `json:"monthly_payment"`
-	DebitAccountID     string  `json:"debit_account_id"`
-	AddedRetroactively int64   `json:"added_retroactively"`
-	RecordedAt         string  `json:"recorded_at"`
-	Status             string  `json:"status"`
-	ClosedAt           *string `json:"closed_at"`
-	CreatedAt          string  `json:"created_at"`
-	UpdatedAt          string  `json:"updated_at"`
+	ID                        string  `json:"id"`
+	UserID                    string  `json:"user_id"`
+	Name                      *string `json:"name"`
+	CreditKind                string  `json:"credit_kind"`
+	PrincipalAmount           int64   `json:"principal_amount"`
+	PropertyPrice             *int64  `json:"property_price"`
+	DownPayment               int64   `json:"down_payment"`
+	DownPaymentAffectsBalance int64   `json:"down_payment_affects_balance"`
+	DownPaymentTransactionID  *string `json:"down_payment_transaction_id"`
+	IssueDate                 string  `json:"issue_date"`
+	TermMonths                int64   `json:"term_months"`
+	InterestRate              float64 `json:"interest_rate"`
+	PaymentInterval           string  `json:"payment_interval"`
+	PaidAmount                int64   `json:"paid_amount"`
+	MonthlyPayment            int64   `json:"monthly_payment"`
+	DebitAccountID            string  `json:"debit_account_id"`
+	DebitTimeLocal            *string `json:"debit_time_local"`
+	BankID                    *string `json:"bank_id"`
+	BankIDLocked              int64   `json:"bank_id_locked"`
+	AddedRetroactively        int64   `json:"added_retroactively"`
+	RecordedAt                string  `json:"recorded_at"`
+	Status                    string  `json:"status"`
+	ClosedAt                  *string `json:"closed_at"`
+	CreatedAt                 string  `json:"created_at"`
+	UpdatedAt                 string  `json:"updated_at"`
 }
 
 type CreditPayment struct {
@@ -155,6 +163,7 @@ type NotificationSetting struct {
 	TriggerDebt                   int64   `json:"trigger_debt"`
 	TriggerCredit                 int64   `json:"trigger_credit"`
 	TriggerPlanned                int64   `json:"trigger_planned"`
+	TriggerPasswordReset          int64   `json:"trigger_password_reset"`
 	DebtDaysBefore                int64   `json:"debt_days_before"`
 	MyDebtOverdueDaysLimit        int64   `json:"my_debt_overdue_days_limit"`
 	OwedDebtOverdueStartAfterDays int64   `json:"owed_debt_overdue_start_after_days"`
@@ -169,6 +178,27 @@ type NotificationTemplate struct {
 	TriggerType string `json:"trigger_type"`
 	Template    string `json:"template"`
 	UpdatedAt   string `json:"updated_at"`
+}
+
+type RecurringOperation struct {
+	ID            string  `json:"id"`
+	UserID        string  `json:"user_id"`
+	Type          string  `json:"type"`
+	Amount        int64   `json:"amount"`
+	Description   *string `json:"description"`
+	AccountID     string  `json:"account_id"`
+	CategoryID    string  `json:"category_id"`
+	SubcategoryID *string `json:"subcategory_id"`
+	Period        string  `json:"period"`
+	Weekday       *int64  `json:"weekday"`
+	DayOfMonth    *int64  `json:"day_of_month"`
+	StartDate     string  `json:"start_date"`
+	TimeLocal     string  `json:"time_local"`
+	NextRunAt     string  `json:"next_run_at"`
+	LastRunAt     *string `json:"last_run_at"`
+	Active        int64   `json:"active"`
+	CreatedAt     string  `json:"created_at"`
+	UpdatedAt     string  `json:"updated_at"`
 }
 
 type Session struct {

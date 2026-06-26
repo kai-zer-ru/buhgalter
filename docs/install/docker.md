@@ -36,7 +36,6 @@ docker compose -f docker/docker-compose.yml up --build -d
 |------|------------|
 | `/app/data` | база SQLite и runtime-данные |
 | `/app/backups` | архивы бэкапов |
-| `/app/locales` | опционально: переопределение локалей (в образе уже есть `ru`/`en`) |
 
 ## Обновление контейнера
 
@@ -52,8 +51,9 @@ docker run --rm -p 8765:8765 -v buhgalter-data:/app/data ghcr.io/kai-zer-ru/buhg
 ```
 
 Откройте `http://localhost:8765/setup` и проверьте `GET /api/v1/health`.
+На `/setup` можно сразу восстановить БД из `.db` (endpoint: `POST /api/v1/setup/restore`).
 
-Пока **внешний URL** в админке не задан, доступ разрешён с **localhost** (всегда) и с Host из `BUHGALTER_ALLOWED_HOSTS` в `.env`. Порт в compose по умолчанию `127.0.0.1:8765:8765` — только с этого хоста; для доступа с других устройств замените на `8765:8765` и добавьте их IP в `.env`. Для HTTPS из интернета — nginx и `external_url` в `/admin`.
+Пока **внешний URL** в разделе **Настройки → Админка** не задан, доступ разрешён с **localhost** (всегда) и с Host из `BUHGALTER_ALLOWED_HOSTS` в `.env`. Порт в compose по умолчанию `127.0.0.1:8765:8765` — только с этого хоста; для доступа с других устройств замените на `8765:8765` и добавьте их IP в `.env`. Для HTTPS из интернета — nginx и `external_url` в админ-настройках.
 
 ### Уведомления MAX (official API)
 

@@ -3,18 +3,20 @@
 	import { _ } from 'svelte-i18n';
 	import type { Credit } from '$lib/api/client';
 	import { formatAPIDateTimeForDisplay } from '$lib/dates';
-	import { formatBalance } from '$lib/finance';
+	import { bankIconUrl, formatBalance } from '$lib/finance';
 
 	let {
 		credits,
 		tz,
 		currency,
-		nameFor
+		nameFor,
+		bankIconFor = () => null
 	}: {
 		credits: Credit[];
 		tz: string;
 		currency: string;
 		nameFor: (credit: Credit) => string;
+		bankIconFor?: (credit: Credit) => string | null;
 	} = $props();
 </script>
 
@@ -32,12 +34,27 @@
 			{#each credits as c (c.id)}
 				<tr class="border-t" style:border-color="var(--border)">
 					<td class="p-3">
-						<a href={resolve(`/credits/${c.id}`)} class="font-medium hover:underline">
-							{nameFor(c)}
-						</a>
+						<div class="flex items-center gap-2">
+							{#if bankIconFor(c)}
+								<img
+									src={bankIconUrl(bankIconFor(c)!)}
+									alt=""
+									class="h-6 w-6 rounded-md"
+									width="24"
+									height="24"
+								/>
+							{/if}
+							<a href={resolve(`/credits/${c.id}`)} class="font-medium hover:underline">
+								{nameFor(c)}
+							</a>
+						</div>
 						<div class="mt-1 flex flex-wrap items-center gap-1.5">
-							{#if c.is_installment}
+							{#if c.credit_kind === 'mortgage'}
+								<span class="badge">{$_('credits.badge.mortgage')}</span>
+							{:else if c.is_installment}
 								<span class="badge">{$_('credits.badge.installment')}</span>
+							{:else}
+								<span class="badge">{$_('credits.badge.credit')}</span>
 							{/if}
 							{#if c.added_retroactively}
 								<span class="badge">{$_('credits.badge.retroactive')}</span>
@@ -45,7 +62,7 @@
 						</div>
 					</td>
 					<td class="p-3">{formatBalance(c.remaining_amount_display, currency)}</td>
-					<td class="p-3">{c.monthly_payment_display}</td>
+					<td class="p-3">{formatBalance(c.monthly_payment_display, currency)}</td>
 					<td class="p-3">
 						{#if c.next_payment_date}
 							{formatAPIDateTimeForDisplay(c.next_payment_date, tz)}
@@ -64,12 +81,27 @@
 		<article class="rounded-xl border p-4" style:border-color="var(--border)">
 			<div class="flex items-start justify-between gap-3">
 				<div class="min-w-0">
-					<a href={resolve(`/credits/${c.id}`)} class="font-medium hover:underline">
-						{nameFor(c)}
-					</a>
+					<div class="flex items-center gap-2">
+						{#if bankIconFor(c)}
+							<img
+								src={bankIconUrl(bankIconFor(c)!)}
+								alt=""
+								class="h-6 w-6 rounded-md"
+								width="24"
+								height="24"
+							/>
+						{/if}
+						<a href={resolve(`/credits/${c.id}`)} class="font-medium hover:underline">
+							{nameFor(c)}
+						</a>
+					</div>
 					<div class="mt-1 flex flex-wrap items-center gap-1.5">
-						{#if c.is_installment}
+						{#if c.credit_kind === 'mortgage'}
+							<span class="badge">{$_('credits.badge.mortgage')}</span>
+						{:else if c.is_installment}
 							<span class="badge">{$_('credits.badge.installment')}</span>
+						{:else}
+							<span class="badge">{$_('credits.badge.credit')}</span>
 						{/if}
 						{#if c.added_retroactively}
 							<span class="badge">{$_('credits.badge.retroactive')}</span>
@@ -83,7 +115,7 @@
 			<dl class="mt-3 grid gap-2 text-sm">
 				<div class="flex justify-between gap-2">
 					<dt style:color="var(--text-muted)">{$_('credits.col.payment')}</dt>
-					<dd>{c.monthly_payment_display}</dd>
+					<dd>{formatBalance(c.monthly_payment_display, currency)}</dd>
 				</div>
 				<div class="flex justify-between gap-2">
 					<dt style:color="var(--text-muted)">{$_('credits.col.next')}</dt>

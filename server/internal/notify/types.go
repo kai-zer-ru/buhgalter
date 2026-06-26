@@ -5,6 +5,7 @@ const (
 	TriggerDebtDueSoon   = "debt_due_soon"
 	TriggerCreditPayment = "credit_payment"
 	TriggerPlannedOp     = "planned_operation"
+	TriggerPasswordReset = "password_reset"
 	TriggerTest          = "test"
 )
 
@@ -23,6 +24,7 @@ var triggerOrder = []string{
 	TriggerDebtDueSoon,
 	TriggerCreditPayment,
 	TriggerPlannedOp,
+	TriggerPasswordReset,
 	TriggerTest,
 }
 
@@ -31,5 +33,10 @@ var triggerPlaceholders = map[string][]string{
 	TriggerDebtDueSoon:   {"debtor", "amount", "due_date", "days"},
 	TriggerCreditPayment: {"credit", "amount", "payment_date", "when"},
 	TriggerPlannedOp:     {"type", "amount", "description", "date"},
+	TriggerPasswordReset: {"login", "display_name", "requested_at"},
 	TriggerTest:          {"channel"},
+}
+
+func IsAdminOnlyTrigger(triggerType string) bool {
+	return triggerType == TriggerPasswordReset
 }

@@ -25,6 +25,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/docs"
 	"github.com/kai-zer-ru/buhgalter/internal/importexport"
 	appmw "github.com/kai-zer-ru/buhgalter/internal/middleware"
+	"github.com/kai-zer-ru/buhgalter/internal/recurring"
 	"github.com/kai-zer-ru/buhgalter/internal/setup"
 	"github.com/kai-zer-ru/buhgalter/internal/static"
 	"github.com/kai-zer-ru/buhgalter/internal/stats"
@@ -55,7 +56,7 @@ func (s *Server) Handler() http.Handler {
 	r.Use(appmw.ExternalAccess(dbHandle, s.cfg.AllowedHosts))
 	r.Use(chimw.Compress(5))
 
-	setupHandler := &setup.Handler{DataDir: s.cfg.DataDir, Store: dbHandle, Audit: s.audit}
+	setupHandler := &setup.Handler{DataDir: s.cfg.DataDir, Store: dbHandle, Audit: s.audit, Backup: s.backup}
 	loginLimiter := appmw.NewIPRateLimiter(5, time.Minute)
 	passwordResetLimiter := appmw.NewIPRateLimiter(5, time.Minute)
 	authHandler := &auth.Handler{
@@ -79,6 +80,7 @@ func (s *Server) Handler() http.Handler {
 	transactionHandler := &transaction.Handler{Store: dbHandle, Audit: s.audit}
 	debtHandler := &debt.Handler{Store: dbHandle, Audit: s.audit}
 	creditHandler := &credit.Handler{Store: dbHandle, Audit: s.audit}
+	recurringHandler := &recurring.Handler{Store: dbHandle, Audit: s.audit}
 	importHandler := &importexport.Handler{Store: dbHandle, Audit: s.audit, Logger: s.logger}
 	statsHandler := &stats.Handler{Store: dbHandle}
 
@@ -90,6 +92,7 @@ func (s *Server) Handler() http.Handler {
 		api.Get("/health", s.health)
 		api.Get("/setup/status", setupHandler.Status)
 		api.Post("/setup", setupHandler.Setup)
+		api.Post("/setup/restore", setupHandler.Restore)
 
 		api.Route("/auth", func(ar chi.Router) {
 			ar.Post("/login", authHandler.Login)
@@ -121,6 +124,11 @@ func (s *Server) Handler() http.Handler {
 			ar.Put("/transactions/{id}", transactionHandler.Update)
 			ar.Delete("/transactions/{id}", transactionHandler.Delete)
 			ar.Post("/transactions/{id}/activate", transactionHandler.Activate)
+
+			ar.Get("/recurring-operations", recurringHandler.List)
+			ar.Post("/recurring-operations", recurringHandler.Create)
+			ar.Put("/recurring-operations/{id}", recurringHandler.Update)
+			ar.Delete("/recurring-operations/{id}", recurringHandler.Delete)
 
 			ar.Post("/transfers", transactionHandler.CreateTransfer)
 			ar.Put("/transfers/{group_id}", transactionHandler.UpdateTransfer)

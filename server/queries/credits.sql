@@ -3,7 +3,12 @@ SELECT
     c.id,
     c.user_id,
     c.name,
+    c.credit_kind,
     c.principal_amount,
+    c.property_price,
+    c.down_payment,
+    c.down_payment_affects_balance,
+    c.down_payment_transaction_id,
     c.issue_date,
     c.term_months,
     c.interest_rate,
@@ -12,6 +17,10 @@ SELECT
     c.monthly_payment,
     c.debit_account_id,
     a.name AS debit_account_name,
+    c.debit_time_local,
+    c.bank_id,
+    c.bank_id_locked,
+    b.name AS bank_name,
     c.added_retroactively,
     c.recorded_at,
     c.status,
@@ -20,6 +29,7 @@ SELECT
     c.updated_at
 FROM credits c
 JOIN accounts a ON a.id = c.debit_account_id
+LEFT JOIN banks b ON b.id = c.bank_id
 WHERE c.user_id = ?
   AND (? = '' OR c.status = ?)
 ORDER BY c.status ASC, c.issue_date DESC, c.created_at DESC;
@@ -29,7 +39,12 @@ SELECT
     c.id,
     c.user_id,
     c.name,
+    c.credit_kind,
     c.principal_amount,
+    c.property_price,
+    c.down_payment,
+    c.down_payment_affects_balance,
+    c.down_payment_transaction_id,
     c.issue_date,
     c.term_months,
     c.interest_rate,
@@ -38,6 +53,10 @@ SELECT
     c.monthly_payment,
     c.debit_account_id,
     a.name AS debit_account_name,
+    c.debit_time_local,
+    c.bank_id,
+    c.bank_id_locked,
+    b.name AS bank_name,
     c.added_retroactively,
     c.recorded_at,
     c.status,
@@ -46,23 +65,38 @@ SELECT
     c.updated_at
 FROM credits c
 JOIN accounts a ON a.id = c.debit_account_id
+LEFT JOIN banks b ON b.id = c.bank_id
 WHERE c.id = ? AND c.user_id = ?;
 
 -- name: InsertCredit :exec
 INSERT INTO credits (
-    id, user_id, name, principal_amount, issue_date, term_months, interest_rate,
+    id, user_id, name, credit_kind, principal_amount, property_price, down_payment,
+    down_payment_affects_balance, down_payment_transaction_id, issue_date, term_months, interest_rate,
     payment_interval, paid_amount, monthly_payment, debit_account_id,
+    debit_time_local, bank_id, bank_id_locked,
     added_retroactively, recorded_at, status, closed_at, created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: UpdateCredit :execrows
 UPDATE credits
-SET name = ?, monthly_payment = ?, debit_account_id = ?, updated_at = ?
+SET
+    name = ?,
+    monthly_payment = ?,
+    debit_account_id = ?,
+    debit_time_local = ?,
+    bank_id = ?,
+    bank_id_locked = ?,
+    updated_at = ?
 WHERE id = ? AND user_id = ? AND status = 'active';
 
 -- name: UpdateCreditPaidAmount :exec
 UPDATE credits
 SET paid_amount = ?, updated_at = ?
+WHERE id = ? AND user_id = ?;
+
+-- name: SetCreditDownPaymentTransaction :exec
+UPDATE credits
+SET down_payment_transaction_id = ?
 WHERE id = ? AND user_id = ?;
 
 -- name: CloseCredit :execrows
@@ -153,6 +187,7 @@ SELECT
     c.user_id,
     c.name AS credit_name,
     c.debit_account_id,
+    c.debit_time_local,
     c.status AS credit_status
 FROM credit_payments cp
 JOIN credits c ON c.id = cp.credit_id

@@ -21,19 +21,26 @@ type Handler struct {
 }
 
 type createCreditRequest struct {
-	Name               *string              `json:"name"`
-	PrincipalAmount    json.RawMessage      `json:"principal_amount"`
-	IssueDate          string               `json:"issue_date"`
-	TermMonths         int                  `json:"term_months"`
-	InterestRate       float64              `json:"interest_rate"`
-	PaymentInterval    string               `json:"payment_interval"`
-	PaidAmount         json.RawMessage      `json:"paid_amount"`
-	MonthlyPayment     json.RawMessage      `json:"monthly_payment"`
-	DebitAccountID     string               `json:"debit_account_id"`
-	AddedRetroactively    *bool                `json:"added_retroactively"`
-	RetroactiveDebitCount *int                 `json:"retroactive_debit_count"`
-	CreateTransactions    *bool                `json:"create_transactions"`
-	ScheduleSeed       []scheduleSeedRequest `json:"schedule_seed"`
+	Name                      *string               `json:"name"`
+	CreditKind                string                `json:"credit_kind"`
+	PrincipalAmount           json.RawMessage       `json:"principal_amount"`
+	PropertyPrice             json.RawMessage       `json:"property_price"`
+	DownPayment               json.RawMessage       `json:"down_payment"`
+	DownPaymentAffectsBalance *bool                 `json:"down_payment_affects_balance"`
+	DownPaymentAccountID      *string               `json:"down_payment_account_id"`
+	IssueDate                 string                `json:"issue_date"`
+	TermMonths                int                   `json:"term_months"`
+	InterestRate              float64               `json:"interest_rate"`
+	PaymentInterval           string                `json:"payment_interval"`
+	PaidAmount                json.RawMessage       `json:"paid_amount"`
+	MonthlyPayment            json.RawMessage       `json:"monthly_payment"`
+	DebitAccountID            string                `json:"debit_account_id"`
+	DebitTimeLocal            *string               `json:"debit_time_local"`
+	BankID                    *string               `json:"bank_id"`
+	AddedRetroactively        *bool                 `json:"added_retroactively"`
+	RetroactiveDebitCount     *int                  `json:"retroactive_debit_count"`
+	CreateTransactions        *bool                 `json:"create_transactions"`
+	ScheduleSeed              []scheduleSeedRequest `json:"schedule_seed"`
 }
 
 type scheduleSeedRequest struct {
@@ -45,6 +52,8 @@ type updateCreditRequest struct {
 	Name           *string         `json:"name"`
 	MonthlyPayment json.RawMessage `json:"monthly_payment"`
 	DebitAccountID *string         `json:"debit_account_id"`
+	DebitTimeLocal *string         `json:"debit_time_local"`
+	BankID         json.RawMessage `json:"bank_id"`
 }
 
 type payPaymentRequest struct {
@@ -68,6 +77,7 @@ type scheduleAmountUpdateRequest struct {
 
 type previewScheduleRequest struct {
 	Principal       json.RawMessage       `json:"principal"`
+	CreditKind      string                `json:"credit_kind"`
 	TermMonths      int                   `json:"term"`
 	InterestRate    float64               `json:"interest_rate"`
 	PaymentInterval string                `json:"payment_interval"`
@@ -148,7 +158,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_INVALID_JSON")
 		return
 	}
-	in := UpdateInput{Name: req.Name, DebitAccountID: req.DebitAccountID}
+	in := UpdateInput{Name: req.Name, DebitAccountID: req.DebitAccountID, DebitTimeLocal: req.DebitTimeLocal}
 	if len(req.MonthlyPayment) > 0 && string(req.MonthlyPayment) != "null" {
 		amt, err := money.ParseAmount(req.MonthlyPayment)
 		if err != nil {
@@ -156,6 +166,17 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		in.MonthlyPayment = &amt
+	}
+	if len(req.BankID) > 0 {
+		in.BankIDSet = true
+		if string(req.BankID) != "null" {
+			var bankID string
+			if err := json.Unmarshal(req.BankID, &bankID); err != nil {
+				apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_INVALID_JSON")
+				return
+			}
+			in.BankID = &bankID
+		}
 	}
 	c, err := Update(r.Context(), h.Store.DB(), info.User.ID, id, in)
 	if writeCreditError(w, r, err) {
@@ -348,8 +369,8 @@ func (h *Handler) PreviewSchedule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"schedule_preview":           entries,
-		"calculated_monthly_payment": monthly,
+		"schedule_preview":                   entries,
+		"calculated_monthly_payment":         monthly,
 		"calculated_monthly_payment_display": money.FormatRubles(monthly),
 	})
 }
@@ -390,10 +411,31 @@ func parseCreateInput(req createCreditRequest) (CreateInput, error) {
 	}
 
 	in := CreateInput{
-		Name: req.Name, PrincipalAmount: principal, IssueDate: issueDate,
+		Name: req.Name, CreditKind: req.CreditKind, PrincipalAmount: principal, IssueDate: issueDate,
 		TermMonths: req.TermMonths, InterestRate: req.InterestRate,
 		PaymentInterval: interval, PaidAmount: paid, DebitAccountID: req.DebitAccountID,
+		DebitTimeLocal: req.DebitTimeLocal, BankID: req.BankID,
 		AddedRetroactively: req.AddedRetroactively, CreateTransactions: createTx,
+	}
+	if len(req.PropertyPrice) > 0 && string(req.PropertyPrice) != "null" {
+		propertyPrice, err := money.ParseAmount(req.PropertyPrice)
+		if err != nil {
+			return CreateInput{}, errors.New("некорректная цена объекта")
+		}
+		in.PropertyPrice = &propertyPrice
+	}
+	if len(req.DownPayment) > 0 && string(req.DownPayment) != "null" {
+		downPayment, err := money.ParseAmount(req.DownPayment)
+		if err != nil {
+			return CreateInput{}, errors.New("некорректный первоначальный взнос")
+		}
+		in.DownPayment = downPayment
+	}
+	if req.DownPaymentAffectsBalance != nil {
+		in.DownPaymentAffectsBalance = *req.DownPaymentAffectsBalance
+	}
+	if req.DownPaymentAccountID != nil {
+		in.DownPaymentAccountID = req.DownPaymentAccountID
 	}
 	if req.RetroactiveDebitCount != nil {
 		in.RetroactiveDebitCount = *req.RetroactiveDebitCount
@@ -440,7 +482,7 @@ func parsePreviewInput(req previewScheduleRequest) (PreviewInput, error) {
 		return PreviewInput{}, errors.New("укажите срок")
 	}
 	in := PreviewInput{
-		Principal: principal, TermMonths: req.TermMonths, InterestRate: req.InterestRate,
+		Principal: principal, CreditKind: req.CreditKind, TermMonths: req.TermMonths, InterestRate: req.InterestRate,
 		PaymentInterval: interval, IssueDate: issueDate,
 	}
 	if len(req.MonthlyPayment) > 0 && string(req.MonthlyPayment) != "null" {
@@ -486,6 +528,18 @@ func writeCreditError(w http.ResponseWriter, r *http.Request, err error) bool {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_CLOSED")
 	case errors.Is(err, ErrInvalidInterval):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_INVALID_INTERVAL")
+	case errors.Is(err, ErrInvalidDebitTime):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_INVALID_DEBIT_TIME")
+	case errors.Is(err, ErrInvalidBank):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_ACCOUNT_BANK_NOT_FOUND")
+	case errors.Is(err, ErrPlannedNotAllowed):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_SYSTEM_CATEGORY_PLANNED")
+	case errors.Is(err, ErrInvalidCreditKind):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_INVALID_KIND")
+	case errors.Is(err, ErrInvalidMortgageFields):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_INVALID_MORTGAGE")
+	case errors.Is(err, ErrCreditBankLocked):
+		apperror.WriteR(w, r, http.StatusConflict, apperror.Conflict, "CONFLICT_CREDIT_BANK_LOCKED")
 	case errors.Is(err, ErrNoPendingPayment):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_NO_PENDING_PAYMENT")
 	case errors.Is(err, ErrCannotRemoveRetroactive):

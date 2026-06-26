@@ -1,30 +1,51 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 
-	/** Parent routes used as back-navigation targets. */
-	export type BackLinkHref = '/' | '/accounts' | '/settings' | '/admin' | '/debts' | '/credits';
+	export type BackLinkHref =
+		| '/'
+		| '/accounts'
+		| '/settings'
+		| '/admin'
+		| '/debts'
+		| '/credits'
+		| '/transactions'
+		| '/stats'
+		| '/debtors'
+		| '/accounts/new'
+		| '/recurring-operations';
+
+	export type BreadcrumbItem = {
+		href: BackLinkHref;
+		label: string;
+		search?: string;
+	};
 
 	let {
-		href,
-		label,
-		search = ''
-	}: { href: BackLinkHref; label: string; search?: string } = $props();
+		items = []
+	}: {
+		items: BreadcrumbItem[];
+	} = $props();
 
-	const target = $derived(search ? `${resolve(href)}?${search}` : resolve(href));
+	function target(item: BreadcrumbItem): string {
+		return item.search ? `${resolve(item.href)}?${item.search}` : resolve(item.href);
+	}
 </script>
 
-<!-- eslint-disable svelte/no-navigation-without-resolve -- path built with resolve() in derived -->
-<a href={target} class="back-link">
-	<svg
-		class="h-5 w-5 shrink-0"
-		viewBox="0 0 20 20"
-		fill="none"
-		stroke="currentColor"
-		stroke-width="2"
-		aria-hidden="true"
-	>
-		<path stroke-linecap="round" stroke-linejoin="round" d="M12 4l-6 6 6 6" />
-	</svg>
-	<span>{label}</span>
-</a>
-<!-- eslint-enable svelte/no-navigation-without-resolve -->
+{#if items.length > 0}
+	<nav class="breadcrumbs" aria-label="Breadcrumbs">
+		<ol class="flex flex-wrap items-center gap-1.5">
+			{#each items as item, index (`${index}:${item.href}:${item.label}:${item.search ?? ''}`)}
+				<li class="inline-flex items-center gap-1.5">
+					{#if index < items.length - 1}
+						<!-- eslint-disable svelte/no-navigation-without-resolve -- path built with resolve() helper -->
+						<a href={target(item)} class="breadcrumb-link">{item.label}</a>
+						<!-- eslint-enable svelte/no-navigation-without-resolve -->
+						<span class="breadcrumb-separator" aria-hidden="true">/</span>
+					{:else}
+						<span class="breadcrumb-current" aria-current="page">{item.label}</span>
+					{/if}
+				</li>
+			{/each}
+		</ol>
+	</nav>
+{/if}

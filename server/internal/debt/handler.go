@@ -346,6 +346,8 @@ func writeDebtError(w http.ResponseWriter, r *http.Request, err error) bool {
 		apperror.WriteR(w, r, http.StatusConflict, apperror.Conflict, "CONFLICT_DEBT_CLOSED")
 	case errors.Is(err, ErrInvalidSettleAmount):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_SETTLE_AMOUNT")
+	case errors.Is(err, ErrPlannedNotAllowed):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_SYSTEM_CATEGORY_PLANNED")
 	case errors.Is(err, ErrInvalidDebtorName):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_DEBTOR_REQUIRED")
 	case errors.Is(err, ErrCannotBorrowFromDebtor):

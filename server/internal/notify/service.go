@@ -33,6 +33,7 @@ type SettingsView struct {
 	TriggerDebt                   bool           `json:"trigger_debt"`
 	TriggerCredit                 bool           `json:"trigger_credit"`
 	TriggerPlanned                bool           `json:"trigger_planned"`
+	TriggerPasswordReset          bool           `json:"trigger_password_reset"`
 	DebtDaysBefore                int64          `json:"debt_days_before"`
 	MyDebtOverdueDaysLimit        int64          `json:"my_debt_overdue_days_limit"`
 	OwedDebtOverdueStartAfterDays int64          `json:"owed_debt_overdue_start_after_days"`
@@ -59,6 +60,7 @@ type UpdateSettingsInput struct {
 	TriggerDebt                   *bool            `json:"trigger_debt,omitempty"`
 	TriggerCredit                 *bool            `json:"trigger_credit,omitempty"`
 	TriggerPlanned                *bool            `json:"trigger_planned,omitempty"`
+	TriggerPasswordReset          *bool            `json:"trigger_password_reset,omitempty"`
 	DebtDaysBefore                *int64           `json:"debt_days_before,omitempty"`
 	MyDebtOverdueDaysLimit        *int64           `json:"my_debt_overdue_days_limit,omitempty"`
 	OwedDebtOverdueStartAfterDays *int64           `json:"owed_debt_overdue_start_after_days,omitempty"`
@@ -95,6 +97,10 @@ func getSettingsOnce(ctx context.Context, sqlDB *sql.DB, userID string) (Setting
 	if err != nil {
 		return SettingsView{}, err
 	}
+	isAdmin, err := userIsAdmin(ctx, sqlDB, userID)
+	if err != nil {
+		return SettingsView{}, err
+	}
 	custom := make(map[string]string, len(templates))
 	for _, tpl := range templates {
 		custom[tpl.TriggerType] = tpl.Template
@@ -112,6 +118,7 @@ func getSettingsOnce(ctx context.Context, sqlDB *sql.DB, userID string) (Setting
 		TriggerDebt:                   settings.TriggerDebt == 1,
 		TriggerCredit:                 settings.TriggerCredit == 1,
 		TriggerPlanned:                settings.TriggerPlanned == 1,
+		TriggerPasswordReset:          isAdmin && settings.TriggerPasswordReset == 1,
 		DebtDaysBefore:                settings.DebtDaysBefore,
 		MyDebtOverdueDaysLimit:        settings.MyDebtOverdueDaysLimit,
 		OwedDebtOverdueStartAfterDays: settings.OwedDebtOverdueStartAfterDays,
@@ -121,6 +128,9 @@ func getSettingsOnce(ctx context.Context, sqlDB *sql.DB, userID string) (Setting
 		Templates:                     make([]TemplateView, 0, len(triggerOrder)),
 	}
 	for _, trigger := range triggerOrder {
+		if !isAdmin && IsAdminOnlyTrigger(trigger) {
+			continue
+		}
 		customTemplate, ok := custom[trigger]
 		view.Templates = append(view.Templates, TemplateView{
 			TriggerType:  trigger,
@@ -144,6 +154,10 @@ func UpdateSettings(ctx context.Context, db *sql.DB, userID string, in UpdateSet
 		return SettingsView{}, err
 	}
 	settings, err := q.GetNotificationSettings(ctx, userID)
+	if err != nil {
+		return SettingsView{}, err
+	}
+	isAdmin, err := userIsAdmin(ctx, db, userID)
 	if err != nil {
 		return SettingsView{}, err
 	}
@@ -207,6 +221,12 @@ func UpdateSettings(ctx context.Context, db *sql.DB, userID string, in UpdateSet
 	if in.TriggerPlanned != nil {
 		settings.TriggerPlanned = boolToInt(*in.TriggerPlanned)
 	}
+	if in.TriggerPasswordReset != nil {
+		if !isAdmin {
+			return SettingsView{}, fmt.Errorf("trigger_password_reset is admin-only")
+		}
+		settings.TriggerPasswordReset = boolToInt(*in.TriggerPasswordReset)
+	}
 	if in.TelegramChatID != nil {
 		settings.TelegramChatID = strPtrOrNil(strings.TrimSpace(*in.TelegramChatID))
 	}
@@ -233,6 +253,9 @@ func UpdateSettings(ctx context.Context, db *sql.DB, userID string, in UpdateSet
 	for _, tpl := range in.Templates {
 		trigger := strings.TrimSpace(tpl.TriggerType)
 		if _, ok := triggerPlaceholders[trigger]; !ok {
+			return SettingsView{}, fmt.Errorf("unknown trigger_type: %s", trigger)
+		}
+		if !isAdmin && IsAdminOnlyTrigger(trigger) {
 			return SettingsView{}, fmt.Errorf("unknown trigger_type: %s", trigger)
 		}
 		template := strings.TrimSpace(tpl.Template)
@@ -264,6 +287,7 @@ func UpdateSettings(ctx context.Context, db *sql.DB, userID string, in UpdateSet
 		TriggerDebt:                   settings.TriggerDebt,
 		TriggerCredit:                 settings.TriggerCredit,
 		TriggerPlanned:                settings.TriggerPlanned,
+		TriggerPasswordReset:          settings.TriggerPasswordReset,
 		DebtDaysBefore:                settings.DebtDaysBefore,
 		MyDebtOverdueDaysLimit:        settings.MyDebtOverdueDaysLimit,
 		OwedDebtOverdueStartAfterDays: settings.OwedDebtOverdueStartAfterDays,
@@ -356,6 +380,84 @@ func SendTest(ctx context.Context, db *sql.DB, userID string, channel string, bo
 		return err
 	}
 	return appendLog(ctx, q, userID, TriggerTest, channel, nil, nil, "sent", text)
+}
+
+func NotifyAdminsOnPasswordReset(ctx context.Context, db *sql.DB, login, displayName, requestedAt, entityID string) error {
+	q := sqlcdb.New(db)
+	secret, err := ResolveSecretKey(ctx, db)
+	if err != nil {
+		return nil
+	}
+	box, err := NewSecretBox(secret)
+	if err != nil {
+		return nil
+	}
+	rows, err := db.QueryContext(ctx, `SELECT id FROM users WHERE is_admin = 1`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var adminID string
+		if err := rows.Scan(&adminID); err != nil {
+			return err
+		}
+		if err := q.EnsureNotificationSettings(ctx, adminID); err != nil {
+			continue
+		}
+		settings, err := q.GetNotificationSettings(ctx, adminID)
+		if err != nil {
+			continue
+		}
+		if settings.TriggerPasswordReset != 1 {
+			continue
+		}
+		localeCode, timezone, currencyCode, err := userFormatting(ctx, db, adminID)
+		if err != nil {
+			continue
+		}
+		templates, err := q.ListNotificationTemplates(ctx, adminID)
+		if err != nil {
+			continue
+		}
+		customMap := toTemplateMap(templates)
+		display := strings.TrimSpace(displayName)
+		if display == "" {
+			display = login
+		}
+		text, err := Format(TriggerPasswordReset, localeCode, customMap[TriggerPasswordReset], FormatData{
+			"login":        login,
+			"display_name": display,
+			"requested_at": FormatDateInTimezone(requestedAt, timezone, "02.01.2006 15:04"),
+			"amount":       FormatAmountDisplay(0, currencyCode),
+		})
+		if err != nil {
+			continue
+		}
+		now := time.Now()
+		loc, err := time.LoadLocation(defaultTZ(timezone))
+		if err != nil {
+			loc = time.UTC
+		}
+		dateKey := now.In(loc).Format("2006-01-02")
+		for _, channel := range activeChannels(settings) {
+			exists, err := DedupExists(ctx, q, adminID, TriggerPasswordReset, channel, entityID, dateKey)
+			if err != nil || exists {
+				continue
+			}
+			notifier, recipient, err := buildNotifier(settings, channel, box)
+			if err != nil {
+				_ = appendLog(ctx, q, adminID, TriggerPasswordReset, channel, &entityID, &dateKey, "error", text)
+				continue
+			}
+			if err := notifier.Send(ctx, recipient, text); err != nil {
+				_ = appendLog(ctx, q, adminID, TriggerPasswordReset, channel, &entityID, &dateKey, "error", text)
+				continue
+			}
+			_ = appendLog(ctx, q, adminID, TriggerPasswordReset, channel, &entityID, &dateKey, "sent", text)
+		}
+	}
+	return rows.Err()
 }
 
 func appendLog(ctx context.Context, q *sqlcdb.Queries, userID, triggerType, channel string, entityID, dedupDate *string, status, message string) error {
@@ -454,6 +556,14 @@ func userLanguage(ctx context.Context, db *sql.DB, userID string) (string, error
 	return normalizeLocale(language), nil
 }
 
+func userIsAdmin(ctx context.Context, db *sql.DB, userID string) (bool, error) {
+	var isAdmin int64
+	if err := db.QueryRowContext(ctx, `SELECT is_admin FROM users WHERE id = ?`, userID).Scan(&isAdmin); err != nil {
+		return false, err
+	}
+	return isAdmin == 1, nil
+}
+
 func userFormatting(ctx context.Context, db *sql.DB, userID string) (localeCode, timezone, currencyCode string, err error) {
 	if err = db.QueryRowContext(ctx, `SELECT language, timezone, currency FROM users WHERE id = ?`, userID).Scan(&localeCode, &timezone, &currencyCode); err != nil {
 		return "", "", "", err
@@ -485,6 +595,9 @@ func previewData(triggerType, localeCode, timezone, currencyCode, channel string
 		"type":         localizedOperationType(localeCode, "expense"),
 		"description":  choose(normalizeLocale(localeCode) == "ru", "Подписка", "Subscription"),
 		"date":         FormatDateInTimezone(now.Format("2006-01-02 15:04:05"), timezone, "02.01.2006 15:04"),
+		"login":        choose(normalizeLocale(localeCode) == "ru", "user1", "user1"),
+		"display_name": choose(normalizeLocale(localeCode) == "ru", "Пользователь", "User"),
+		"requested_at": FormatDateInTimezone(now.Format("2006-01-02 15:04:05"), timezone, "02.01.2006 15:04"),
 		"channel":      channelValue,
 	}
 }

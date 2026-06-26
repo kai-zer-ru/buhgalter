@@ -2,6 +2,7 @@ package transaction
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
@@ -294,6 +295,39 @@ func TestActivateFutureTransaction(t *testing.T) {
 	}
 	if activated.Kind != "manual" {
 		t.Fatalf("expected manual after activate, got %s", activated.Kind)
+	}
+}
+
+func TestCreateFutureForSystemCategoryRejected(t *testing.T) {
+	handle, env := seedEnvFull(t)
+	database := handle.DB()
+	ctx := context.Background()
+	future := timeutil.NowUTC().Add(72 * time.Hour)
+
+	cats, err := category.ListByUser(ctx, database, env.userID, "expense")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var systemExpenseID string
+	for _, c := range cats {
+		if c.IsSystem {
+			systemExpenseID = c.ID
+			break
+		}
+	}
+	if systemExpenseID == "" {
+		t.Fatal("expected system expense category")
+	}
+
+	_, err = Create(ctx, database, env.userID, CreateInput{
+		AccountID:       env.accountID,
+		Type:            "expense",
+		Amount:          1000,
+		CategoryID:      &systemExpenseID,
+		TransactionDate: future,
+	})
+	if !errors.Is(err, ErrSystemCategoryPlanned) {
+		t.Fatalf("expected ErrSystemCategoryPlanned, got %v", err)
 	}
 }
 

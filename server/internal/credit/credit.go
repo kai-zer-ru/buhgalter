@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -16,70 +17,91 @@ import (
 )
 
 type Credit struct {
-	ID                      string           `json:"id"`
-	Name                    *string          `json:"name"`
-	PrincipalAmount         int64            `json:"principal_amount"`
-	PrincipalAmountDisplay  string           `json:"principal_amount_display"`
-	IssueDate               string           `json:"issue_date"`
-	TermMonths              int              `json:"term_months"`
-	InterestRate            float64          `json:"interest_rate"`
-	PaymentInterval         string           `json:"payment_interval"`
-	PaidAmount              int64            `json:"paid_amount"`
-	PaidAmountDisplay       string           `json:"paid_amount_display"`
-	MonthlyPayment          int64            `json:"monthly_payment"`
-	MonthlyPaymentDisplay   string           `json:"monthly_payment_display"`
-	CalculatedMonthlyPayment *int64          `json:"calculated_monthly_payment,omitempty"`
-	RemainingAmount         int64            `json:"remaining_amount"`
-	RemainingAmountDisplay  string           `json:"remaining_amount_display"`
-	DebitAccountID          string           `json:"debit_account_id"`
-	DebitAccountName        string           `json:"debit_account_name"`
-	AddedRetroactively      bool             `json:"added_retroactively"`
-	RecordedAt              string           `json:"recorded_at"`
-	Status                  string           `json:"status"`
-	ClosedAt                *string          `json:"closed_at"`
-	IsInstallment           bool             `json:"is_installment"`
-	NextPaymentDate         *string          `json:"next_payment_date,omitempty"`
-	NextPaymentAmount       *int64           `json:"next_payment_amount,omitempty"`
-	Schedule                []CreditPayment  `json:"schedule,omitempty"`
-	SchedulePreview         []ScheduleEntry  `json:"schedule_preview,omitempty"`
-	CreatedAt               string           `json:"created_at"`
-	UpdatedAt               string           `json:"updated_at"`
+	ID                        string          `json:"id"`
+	Name                      *string         `json:"name"`
+	CreditKind                string          `json:"credit_kind"`
+	PrincipalAmount           int64           `json:"principal_amount"`
+	PrincipalAmountDisplay    string          `json:"principal_amount_display"`
+	PropertyPrice             *int64          `json:"property_price,omitempty"`
+	PropertyPriceDisplay      *string         `json:"property_price_display,omitempty"`
+	DownPayment               int64           `json:"down_payment"`
+	DownPaymentDisplay        string          `json:"down_payment_display"`
+	DownPaymentAffectsBalance bool            `json:"down_payment_affects_balance"`
+	DownPaymentTransactionID  *string         `json:"down_payment_transaction_id,omitempty"`
+	IssueDate                 string          `json:"issue_date"`
+	TermMonths                int             `json:"term_months"`
+	InterestRate              float64         `json:"interest_rate"`
+	PaymentInterval           string          `json:"payment_interval"`
+	PaidAmount                int64           `json:"paid_amount"`
+	PaidAmountDisplay         string          `json:"paid_amount_display"`
+	MonthlyPayment            int64           `json:"monthly_payment"`
+	MonthlyPaymentDisplay     string          `json:"monthly_payment_display"`
+	CalculatedMonthlyPayment  *int64          `json:"calculated_monthly_payment,omitempty"`
+	RemainingAmount           int64           `json:"remaining_amount"`
+	RemainingAmountDisplay    string          `json:"remaining_amount_display"`
+	DebitAccountID            string          `json:"debit_account_id"`
+	DebitAccountName          string          `json:"debit_account_name"`
+	DebitTimeLocal            *string         `json:"debit_time_local,omitempty"`
+	BankID                    *string         `json:"bank_id,omitempty"`
+	BankName                  *string         `json:"bank_name,omitempty"`
+	BankIDLocked              bool            `json:"bank_id_locked"`
+	AddedRetroactively        bool            `json:"added_retroactively"`
+	RecordedAt                string          `json:"recorded_at"`
+	Status                    string          `json:"status"`
+	ClosedAt                  *string         `json:"closed_at"`
+	IsInstallment             bool            `json:"is_installment"`
+	NextPaymentDate           *string         `json:"next_payment_date,omitempty"`
+	NextPaymentAmount         *int64          `json:"next_payment_amount,omitempty"`
+	Schedule                  []CreditPayment `json:"schedule,omitempty"`
+	SchedulePreview           []ScheduleEntry `json:"schedule_preview,omitempty"`
+	CreatedAt                 string          `json:"created_at"`
+	UpdatedAt                 string          `json:"updated_at"`
 }
 
 type CreditPayment struct {
-	ID                 string  `json:"id"`
-	CreditID           string  `json:"credit_id"`
-	TransactionID      *string `json:"transaction_id"`
-	TransactionKind    *string `json:"transaction_kind,omitempty"`
-	Amount             int64   `json:"amount"`
-	AmountDisplay      string  `json:"amount_display"`
-	PaymentDate        string  `json:"payment_date"`
-	Kind               string  `json:"kind"`
-	IsApplied          bool    `json:"is_applied"`
-	ExcludeFromStats   bool    `json:"exclude_from_stats"`
-	CreatedAt          string  `json:"created_at"`
+	ID               string  `json:"id"`
+	CreditID         string  `json:"credit_id"`
+	TransactionID    *string `json:"transaction_id"`
+	TransactionKind  *string `json:"transaction_kind,omitempty"`
+	Amount           int64   `json:"amount"`
+	AmountDisplay    string  `json:"amount_display"`
+	PaymentDate      string  `json:"payment_date"`
+	Kind             string  `json:"kind"`
+	IsApplied        bool    `json:"is_applied"`
+	ExcludeFromStats bool    `json:"exclude_from_stats"`
+	CreatedAt        string  `json:"created_at"`
 }
 
 type CreateInput struct {
-	Name                *string
-	PrincipalAmount     int64
-	IssueDate           time.Time
-	TermMonths          int
-	InterestRate        float64
-	PaymentInterval     PaymentInterval
-	PaidAmount          int64
-	MonthlyPayment      *int64
-	DebitAccountID      string
-	AddedRetroactively     *bool
-	RetroactiveDebitCount  int
-	ScheduleSeed           []ScheduleSeed
-	CreateTransactions     bool
+	Name                      *string
+	CreditKind                string
+	PrincipalAmount           int64
+	PropertyPrice             *int64
+	DownPayment               int64
+	DownPaymentAffectsBalance bool
+	DownPaymentAccountID      *string
+	IssueDate                 time.Time
+	TermMonths                int
+	InterestRate              float64
+	PaymentInterval           PaymentInterval
+	PaidAmount                int64
+	MonthlyPayment            *int64
+	DebitAccountID            string
+	DebitTimeLocal            *string
+	BankID                    *string
+	AddedRetroactively        *bool
+	RetroactiveDebitCount     int
+	ScheduleSeed              []ScheduleSeed
+	CreateTransactions        bool
 }
 
 type UpdateInput struct {
 	Name           *string
 	MonthlyPayment *int64
 	DebitAccountID *string
+	DebitTimeLocal *string
+	BankID         *string
+	BankIDSet      bool
 }
 
 type PayPaymentInput struct {
@@ -93,26 +115,40 @@ type CompleteInput struct {
 }
 
 var (
-	ErrNotFound           = errors.New("credit not found")
-	ErrInvalidAmount      = errors.New("invalid amount")
-	ErrInvalidTerm        = errors.New("invalid term")
-	ErrInvalidAccount     = errors.New("invalid account")
-	ErrAccountArchived    = errors.New("account is archived")
-	ErrAlreadyClosed      = errors.New("credit already closed")
-	ErrInvalidInterval    = errors.New("invalid payment interval")
-	ErrInvalidPaymentDate = errors.New("invalid payment date")
-	ErrPaymentApplied     = errors.New("payment already applied")
-	ErrNoPendingPayment   = errors.New("no pending scheduled payment")
-	ErrCannotRemoveRetroactive  = errors.New("cannot remove retroactive payment")
-	ErrInvalidRetroactiveDebit  = errors.New("invalid retroactive debit count")
-	ErrCompleteParamsRequired   = errors.New("complete parameters required")
+	ErrNotFound                = errors.New("credit not found")
+	ErrInvalidAmount           = errors.New("invalid amount")
+	ErrInvalidTerm             = errors.New("invalid term")
+	ErrInvalidAccount          = errors.New("invalid account")
+	ErrAccountArchived         = errors.New("account is archived")
+	ErrAlreadyClosed           = errors.New("credit already closed")
+	ErrInvalidInterval         = errors.New("invalid payment interval")
+	ErrInvalidPaymentDate      = errors.New("invalid payment date")
+	ErrPaymentApplied          = errors.New("payment already applied")
+	ErrNoPendingPayment        = errors.New("no pending scheduled payment")
+	ErrCannotRemoveRetroactive = errors.New("cannot remove retroactive payment")
+	ErrInvalidRetroactiveDebit = errors.New("invalid retroactive debit count")
+	ErrCompleteParamsRequired  = errors.New("complete parameters required")
+	ErrInvalidDebitTime        = errors.New("invalid debit time")
+	ErrCreditBankLocked        = errors.New("credit bank can be edited only once")
+	ErrInvalidBank             = errors.New("invalid bank")
+	ErrPlannedNotAllowed       = errors.New("planned operation is not allowed for credit payments")
+	ErrInvalidCreditKind       = errors.New("invalid credit kind")
+	ErrInvalidMortgageFields   = errors.New("invalid mortgage fields")
 )
+
+const (
+	CreditKindConsumer = "consumer"
+	CreditKindMortgage = "mortgage"
+)
+
+var localTimePattern = regexp.MustCompile(`^([01]\d|2[0-3]):([0-5]\d)$`)
 
 type PreviewInput struct {
 	Principal       int64
 	TermMonths      int
 	InterestRate    float64
 	PaymentInterval PaymentInterval
+	CreditKind      string
 	IssueDate       time.Time
 	MonthlyPayment  *int64
 	SeedPayments    []ScheduleSeed
@@ -172,6 +208,7 @@ func PreviewSchedule(in PreviewInput) ([]ScheduleEntry, int64, error) {
 		TermMonths:      in.TermMonths,
 		MonthlyPayment:  monthly,
 		PaymentInterval: in.PaymentInterval,
+		CreditKind:      normalizeCreditKind(in.CreditKind),
 		IssueDate:       in.IssueDate,
 		InterestRate:    in.InterestRate,
 		SeedPayments:    in.SeedPayments,
@@ -186,7 +223,15 @@ func PreviewSchedule(in PreviewInput) ([]ScheduleEntry, int64, error) {
 }
 
 func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Credit, error) {
-	if in.PrincipalAmount <= 0 {
+	creditKind := normalizeCreditKind(in.CreditKind)
+	if !isValidCreditKind(creditKind) {
+		return Credit{}, ErrInvalidCreditKind
+	}
+	principalAmount, propertyPrice, downPayment, err := normalizeCreditAmounts(creditKind, in.PrincipalAmount, in.PropertyPrice, in.DownPayment)
+	if err != nil {
+		return Credit{}, err
+	}
+	if principalAmount <= 0 {
 		return Credit{}, ErrInvalidAmount
 	}
 	if in.TermMonths <= 0 {
@@ -198,8 +243,16 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Cre
 	if err := validateActiveAccount(ctx, db, userID, in.DebitAccountID); err != nil {
 		return Credit{}, err
 	}
+	debitTimeLocal, err := normalizeDebitTimeLocal(in.DebitTimeLocal)
+	if err != nil {
+		return Credit{}, err
+	}
+	bankID := normalizeNullableID(in.BankID)
+	if err := validateBank(ctx, db, bankID); err != nil {
+		return Credit{}, err
+	}
 
-	calculated := MonthlyPayment(in.PrincipalAmount, in.InterestRate, in.TermMonths)
+	calculated := MonthlyPayment(principalAmount, in.InterestRate, in.TermMonths)
 	monthly := calculated
 	if in.MonthlyPayment != nil {
 		if *in.MonthlyPayment <= 0 {
@@ -216,12 +269,13 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Cre
 	}
 
 	entries, err := GenerateSchedule(ScheduleInput{
-		Principal:       in.PrincipalAmount,
+		Principal:       principalAmount,
 		TermMonths:      in.TermMonths,
 		MonthlyPayment:  monthly,
 		PaymentInterval: in.PaymentInterval,
 		IssueDate:       in.IssueDate,
 		InterestRate:    in.InterestRate,
+		CreditKind:      creditKind,
 		SeedPayments:    in.ScheduleSeed,
 	})
 	if err != nil {
@@ -266,10 +320,15 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Cre
 
 	if err := q.InsertCredit(ctx, sqlcdb.InsertCreditParams{
 		ID: id, UserID: userID, Name: in.Name,
-		PrincipalAmount: in.PrincipalAmount, IssueDate: issueDate,
-		TermMonths: int64(in.TermMonths), InterestRate: in.InterestRate,
+		CreditKind:      creditKind,
+		PrincipalAmount: principalAmount, PropertyPrice: propertyPrice, DownPayment: downPayment,
+		DownPaymentAffectsBalance: boolToInt64(in.DownPaymentAffectsBalance),
+		DownPaymentTransactionID:  nil,
+		IssueDate:                 issueDate,
+		TermMonths:                int64(in.TermMonths), InterestRate: in.InterestRate,
 		PaymentInterval: string(in.PaymentInterval), PaidAmount: paidAmount,
 		MonthlyPayment: monthly, DebitAccountID: in.DebitAccountID,
+		DebitTimeLocal: debitTimeLocal, BankID: bankID, BankIDLocked: 0,
 		AddedRetroactively: addedRetroInt, RecordedAt: recordedAt,
 		Status: "active", ClosedAt: nil, CreatedAt: nowStr, UpdatedAt: nowStr,
 	}); err != nil {
@@ -282,7 +341,21 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Cre
 	}
 
 	var retroPaid int64
-	var scheduledPaid int64
+	var downPaymentTxID *string
+	if creditKind == CreditKindMortgage && downPayment > 0 && in.DownPaymentAffectsBalance {
+		downPaymentAccountID := in.DebitAccountID
+		if in.DownPaymentAccountID != nil && strings.TrimSpace(*in.DownPaymentAccountID) != "" {
+			if err := validateActiveAccount(ctx, db, userID, *in.DownPaymentAccountID); err != nil {
+				return Credit{}, err
+			}
+			downPaymentAccountID = *in.DownPaymentAccountID
+		}
+		tid, err := insertCreditExpenseTransaction(ctx, dbTx, userID, downPaymentAccountID, in.Name, downPayment, in.IssueDate, true)
+		if err != nil {
+			return Credit{}, err
+		}
+		downPaymentTxID = &tid
+	}
 	for i, e := range entries {
 		payDate, err := timeutil.ParseUTC(e.PaymentDate)
 		if err != nil {
@@ -307,21 +380,8 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Cre
 			txID = &tid
 			excludeStats = 0
 		}
-		if in.CreateTransactions && kind == "scheduled" {
-			tid, err := insertCreditExpenseTransaction(ctx, dbTx, userID, in.DebitAccountID, in.Name, e.Amount, payDate, true)
-			if err != nil {
-				return Credit{}, err
-			}
-			txID = &tid
-			txKind, err := resolveTransactionKind(ctx, dbTx, userID, payDate)
-			if err != nil {
-				return Credit{}, err
-			}
-			if txKind != "future" {
-				applied = 1
-				scheduledPaid += e.Amount
-			}
-		}
+		// Auto-debit does not precreate future transactions.
+		// Transactions are created only when the scheduled moment is reached by the scheduler.
 
 		if err := q.InsertCreditPayment(ctx, sqlcdb.InsertCreditPaymentParams{
 			ID: uuid.NewString(), CreditID: id, TransactionID: txID,
@@ -332,13 +392,22 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Cre
 		}
 	}
 
-	paidAmount = in.PaidAmount + retroPaid + scheduledPaid
-	if paidAmount > in.PrincipalAmount {
-		paidAmount = in.PrincipalAmount
+	paidAmount = in.PaidAmount + retroPaid
+	if paidAmount > principalAmount {
+		paidAmount = principalAmount
 	}
 	if paidAmount != in.PaidAmount {
 		if err := q.UpdateCreditPaidAmount(ctx, sqlcdb.UpdateCreditPaidAmountParams{
 			PaidAmount: paidAmount, UpdatedAt: nowStr, ID: id, UserID: userID,
+		}); err != nil {
+			return Credit{}, err
+		}
+	}
+	if downPaymentTxID != nil {
+		if err := q.SetCreditDownPaymentTransaction(ctx, sqlcdb.SetCreditDownPaymentTransactionParams{
+			DownPaymentTransactionID: downPaymentTxID,
+			ID:                       id,
+			UserID:                   userID,
 		}); err != nil {
 			return Credit{}, err
 		}
@@ -404,6 +473,22 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in UpdateInput) 
 		}
 		debitAccount = *in.DebitAccountID
 	}
+	debitTimeLocal := existing.DebitTimeLocal
+	if in.DebitTimeLocal != nil {
+		normalized, err := normalizeDebitTimeLocal(in.DebitTimeLocal)
+		if err != nil {
+			return Credit{}, err
+		}
+		debitTimeLocal = normalized
+	}
+	bankID := normalizeNullableID(existing.BankID)
+	if in.BankIDSet {
+		nextBankID := normalizeNullableID(in.BankID)
+		if err := validateBank(ctx, db, nextBankID); err != nil {
+			return Credit{}, err
+		}
+		bankID = nextBankID
+	}
 
 	dbTx, err := db.BeginTx(ctx, nil)
 	if err != nil {
@@ -414,8 +499,15 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in UpdateInput) 
 	q := queries(dbTx)
 	nowStr := time.Now().UTC().Format(time.RFC3339)
 	n, err := q.UpdateCredit(ctx, sqlcdb.UpdateCreditParams{
-		Name: name, MonthlyPayment: monthly, DebitAccountID: debitAccount,
-		UpdatedAt: nowStr, ID: id, UserID: userID,
+		Name:           name,
+		MonthlyPayment: monthly,
+		DebitAccountID: debitAccount,
+		DebitTimeLocal: debitTimeLocal,
+		BankID:         bankID,
+		BankIDLocked:   0,
+		UpdatedAt:      nowStr,
+		ID:             id,
+		UserID:         userID,
 	})
 	if err != nil {
 		return Credit{}, err
@@ -636,9 +728,16 @@ func Delete(ctx context.Context, db *sql.DB, userID, id, mode string) error {
 	defer func() { _ = dbTx.Rollback() }()
 
 	q := queries(dbTx)
+	creditRow, err := q.GetCreditByID(ctx, sqlcdb.GetCreditByIDParams{ID: id, UserID: userID})
+	if err != nil {
+		return err
+	}
 	txIDs, err := q.ListCreditPaymentTransactionIDs(ctx, id)
 	if err != nil {
 		return err
+	}
+	if creditRow.DownPaymentTransactionID != nil {
+		txIDs = append(txIDs, creditRow.DownPaymentTransactionID)
 	}
 
 	if mode == "keep_transactions" {
@@ -699,7 +798,7 @@ func Delete(ctx context.Context, db *sql.DB, userID, id, mode string) error {
 	return dbTx.Commit()
 }
 
-func ApplyDuePayments(ctx context.Context, db *sql.DB, userID string, todayCutoff string) (int, error) {
+func ApplyDuePayments(ctx context.Context, db *sql.DB, userID string, todayCutoff string, localTime string) (int, error) {
 	rows, err := queries(db).ListDueCreditPayments(ctx, todayCutoff)
 	if err != nil {
 		return 0, err
@@ -707,6 +806,12 @@ func ApplyDuePayments(ctx context.Context, db *sql.DB, userID string, todayCutof
 	applied := 0
 	for _, row := range rows {
 		if row.UserID != userID {
+			continue
+		}
+		if row.DebitTimeLocal == nil {
+			continue
+		}
+		if strings.TrimSpace(*row.DebitTimeLocal) != localTime {
 			continue
 		}
 		ok, err := processAutoPayment(ctx, db, row)
@@ -951,7 +1056,7 @@ func paymentFromRow(r sqlcdb.ListCreditPaymentsRow) CreditPayment {
 	return CreditPayment{
 		ID: r.ID, CreditID: r.CreditID, TransactionID: r.TransactionID,
 		TransactionKind: r.TransactionKind,
-		Amount: r.Amount, AmountDisplay: money.FormatRubles(r.Amount),
+		Amount:          r.Amount, AmountDisplay: money.FormatRubles(r.Amount),
 		PaymentDate: r.PaymentDate, Kind: r.Kind,
 		IsApplied: r.IsApplied == 1, ExcludeFromStats: r.ExcludeFromStats == 1,
 		CreatedAt: r.CreatedAt,
@@ -1005,11 +1110,16 @@ func sameCalendarDayInTZ(a, b time.Time, tz string) bool {
 
 func creditFromListRow(ctx context.Context, db *sql.DB, userID string, row sqlcdb.ListCreditsByUserRow) (Credit, error) {
 	return enrichCredit(ctx, db, userID, creditFields{
-		id: row.ID, name: row.Name, principal: row.PrincipalAmount, issueDate: row.IssueDate,
+		id: row.ID, name: row.Name, creditKind: row.CreditKind, principal: row.PrincipalAmount,
+		propertyPrice: row.PropertyPrice, downPayment: row.DownPayment,
+		downPaymentAffectsBalance: row.DownPaymentAffectsBalance, downPaymentTransactionID: row.DownPaymentTransactionID,
+		issueDate:  row.IssueDate,
 		termMonths: int(row.TermMonths), interestRate: row.InterestRate,
 		paymentInterval: row.PaymentInterval, paidAmount: row.PaidAmount,
 		monthlyPayment: row.MonthlyPayment, debitAccountID: row.DebitAccountID,
-		debitAccountName: row.DebitAccountName, addedRetro: row.AddedRetroactively,
+		debitAccountName: row.DebitAccountName, debitTimeLocal: row.DebitTimeLocal,
+		bankID: row.BankID, bankName: row.BankName, bankIDLocked: row.BankIDLocked,
+		addedRetro: row.AddedRetroactively,
 		recordedAt: row.RecordedAt, status: row.Status, closedAt: row.ClosedAt,
 		createdAt: row.CreatedAt, updatedAt: row.UpdatedAt,
 	})
@@ -1017,11 +1127,16 @@ func creditFromListRow(ctx context.Context, db *sql.DB, userID string, row sqlcd
 
 func creditFromGetRow(ctx context.Context, db *sql.DB, userID string, row sqlcdb.GetCreditByIDRow) (Credit, error) {
 	return enrichCredit(ctx, db, userID, creditFields{
-		id: row.ID, name: row.Name, principal: row.PrincipalAmount, issueDate: row.IssueDate,
+		id: row.ID, name: row.Name, creditKind: row.CreditKind, principal: row.PrincipalAmount,
+		propertyPrice: row.PropertyPrice, downPayment: row.DownPayment,
+		downPaymentAffectsBalance: row.DownPaymentAffectsBalance, downPaymentTransactionID: row.DownPaymentTransactionID,
+		issueDate:  row.IssueDate,
 		termMonths: int(row.TermMonths), interestRate: row.InterestRate,
 		paymentInterval: row.PaymentInterval, paidAmount: row.PaidAmount,
 		monthlyPayment: row.MonthlyPayment, debitAccountID: row.DebitAccountID,
-		debitAccountName: row.DebitAccountName, addedRetro: row.AddedRetroactively,
+		debitAccountName: row.DebitAccountName, debitTimeLocal: row.DebitTimeLocal,
+		bankID: row.BankID, bankName: row.BankName, bankIDLocked: row.BankIDLocked,
+		addedRetro: row.AddedRetroactively,
 		recordedAt: row.RecordedAt, status: row.Status, closedAt: row.ClosedAt,
 		createdAt: row.CreatedAt, updatedAt: row.UpdatedAt,
 	})
@@ -1030,12 +1145,15 @@ func creditFromGetRow(ctx context.Context, db *sql.DB, userID string, row sqlcdb
 type creditFields struct {
 	id, issueDate, paymentInterval, debitAccountID, debitAccountName string
 	recordedAt, status, createdAt, updatedAt                         string
-	name                                                               *string
-	closedAt                                                           *string
-	principal, paidAmount, monthlyPayment                            int64
-	termMonths                                                         int
-	interestRate                                                       float64
-	addedRetro                                                         int64
+	name, debitTimeLocal, bankID, bankName                           *string
+	closedAt                                                         *string
+	creditKind                                                       string
+	principal, paidAmount, monthlyPayment, downPayment               int64
+	propertyPrice                                                    *int64
+	downPaymentTransactionID                                         *string
+	termMonths                                                       int
+	interestRate                                                     float64
+	addedRetro, bankIDLocked, downPaymentAffectsBalance              int64
 }
 
 func enrichCredit(ctx context.Context, db *sql.DB, userID string, f creditFields) (Credit, error) {
@@ -1045,17 +1163,25 @@ func enrichCredit(ctx context.Context, db *sql.DB, userID string, f creditFields
 	}
 	c := Credit{
 		ID: f.id, Name: f.name,
+		CreditKind:      normalizeCreditKind(f.creditKind),
 		PrincipalAmount: f.principal, PrincipalAmountDisplay: money.FormatRubles(f.principal),
+		PropertyPrice: f.propertyPrice, DownPayment: f.downPayment, DownPaymentDisplay: money.FormatRubles(f.downPayment),
+		DownPaymentAffectsBalance: f.downPaymentAffectsBalance == 1, DownPaymentTransactionID: f.downPaymentTransactionID,
 		IssueDate: f.issueDate, TermMonths: f.termMonths, InterestRate: f.interestRate,
 		PaymentInterval: f.paymentInterval,
-		PaidAmount: f.paidAmount, PaidAmountDisplay: money.FormatRubles(f.paidAmount),
+		PaidAmount:      f.paidAmount, PaidAmountDisplay: money.FormatRubles(f.paidAmount),
 		MonthlyPayment: f.monthlyPayment, MonthlyPaymentDisplay: money.FormatRubles(f.monthlyPayment),
 		RemainingAmount: remaining, RemainingAmountDisplay: money.FormatRubles(remaining),
 		DebitAccountID: f.debitAccountID, DebitAccountName: f.debitAccountName,
+		DebitTimeLocal: f.debitTimeLocal, BankID: f.bankID, BankName: f.bankName, BankIDLocked: f.bankIDLocked == 1,
 		AddedRetroactively: f.addedRetro == 1, RecordedAt: f.recordedAt,
 		Status: f.status, ClosedAt: f.closedAt,
 		IsInstallment: f.interestRate == 0,
-		CreatedAt: f.createdAt, UpdatedAt: f.updatedAt,
+		CreatedAt:     f.createdAt, UpdatedAt: f.updatedAt,
+	}
+	if f.propertyPrice != nil {
+		formatted := money.FormatRubles(*f.propertyPrice)
+		c.PropertyPriceDisplay = &formatted
 	}
 
 	if f.status == "active" {
@@ -1104,6 +1230,84 @@ func validateActiveAccount(ctx context.Context, db *sql.DB, userID, accountID st
 	return nil
 }
 
+func validateBank(ctx context.Context, db *sql.DB, bankID *string) error {
+	if bankID == nil {
+		return nil
+	}
+	ok, err := queries(db).BankExists(ctx, *bankID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrInvalidBank
+	}
+	return nil
+}
+
+func normalizeDebitTimeLocal(value *string) (*string, error) {
+	if value == nil {
+		return nil, nil
+	}
+	trimmed := strings.TrimSpace(*value)
+	if trimmed == "" {
+		return nil, nil
+	}
+	if !localTimePattern.MatchString(trimmed) {
+		return nil, ErrInvalidDebitTime
+	}
+	return &trimmed, nil
+}
+
+func normalizeNullableID(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	trimmed := strings.TrimSpace(*value)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
+}
+
+func boolToInt64(value bool) int64 {
+	if value {
+		return 1
+	}
+	return 0
+}
+
+func normalizeCreditKind(kind string) string {
+	trimmed := strings.TrimSpace(kind)
+	if trimmed == "" {
+		return CreditKindConsumer
+	}
+	return trimmed
+}
+
+func isValidCreditKind(kind string) bool {
+	return kind == CreditKindConsumer || kind == CreditKindMortgage
+}
+
+func normalizeCreditAmounts(kind string, principal int64, propertyPrice *int64, downPayment int64) (int64, *int64, int64, error) {
+	if downPayment < 0 {
+		return 0, nil, 0, ErrInvalidMortgageFields
+	}
+	if kind == CreditKindMortgage {
+		if propertyPrice == nil || *propertyPrice <= 0 {
+			return 0, nil, 0, ErrInvalidMortgageFields
+		}
+		if downPayment >= *propertyPrice {
+			return 0, nil, 0, ErrInvalidMortgageFields
+		}
+		financed := *propertyPrice - downPayment
+		return financed, propertyPrice, downPayment, nil
+	}
+	if principal <= 0 {
+		return principal, nil, 0, nil
+	}
+	return principal, nil, 0, nil
+}
+
 func userTimezone(ctx context.Context, db *sql.DB, userID string) (string, error) {
 	tz, err := queries(db).GetUserTimezone(ctx, userID)
 	if err != nil {
@@ -1136,7 +1340,7 @@ func resolveTransactionKind(ctx context.Context, db sqlcdb.DBTX, userID string, 
 		return "", err
 	}
 	if future {
-		return "future", nil
+		return "", ErrPlannedNotAllowed
 	}
 	return "manual", nil
 }

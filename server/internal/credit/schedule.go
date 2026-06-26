@@ -32,6 +32,7 @@ type ScheduleInput struct {
 	TermMonths      int
 	MonthlyPayment  int64
 	PaymentInterval PaymentInterval
+	CreditKind      string
 	IssueDate       time.Time
 	InterestRate    float64
 	SeedPayments    []ScheduleSeed
@@ -163,9 +164,22 @@ func generateInterestSchedule(in ScheduleInput) ([]ScheduleEntry, error) {
 	rate := periodRate(in.InterestRate, in.PaymentInterval)
 	balance := float64(in.Principal)
 	entries := make([]ScheduleEntry, 0, in.TermMonths)
+	prevDate := in.IssueDate
 
 	for i := 0; i < in.TermMonths; i++ {
 		interest := int64(balance * rate) // truncate kopecks, bank-style
+		if normalizeCreditKind(in.CreditKind) == CreditKindMortgage && in.PaymentInterval == IntervalMonth {
+			days := int(dates[i].Sub(prevDate).Hours() / 24)
+			if days < 1 {
+				days = 1
+			}
+			yearDays := 365.0
+			if dates[i].Year()%4 == 0 && (dates[i].Year()%100 != 0 || dates[i].Year()%400 == 0) {
+				yearDays = 366.0
+			}
+			dailyRate := in.InterestRate / 100 / yearDays
+			interest = int64(balance * dailyRate * float64(days))
+		}
 		var amount int64
 		if i == in.TermMonths-1 {
 			balanceK := int64(balance)
@@ -183,6 +197,7 @@ func generateInterestSchedule(in ScheduleInput) ([]ScheduleEntry, error) {
 			PaymentDate: timeutil.FormatUTC(dates[i]),
 			Amount:      amount,
 		})
+		prevDate = dates[i]
 	}
 	return entries, nil
 }
@@ -234,6 +249,7 @@ func GenerateAutoSchedule(principal int64, term int, monthlyPayment int64, inter
 		TermMonths:      term,
 		MonthlyPayment:  monthlyPayment,
 		PaymentInterval: interval,
+		CreditKind:      CreditKindConsumer,
 		IssueDate:       issueDate,
 		InterestRate:    interestRate,
 	})

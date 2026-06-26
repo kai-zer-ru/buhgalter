@@ -123,7 +123,7 @@
 							<p class="mt-1 text-xl font-semibold tabular-nums">
 								{formatBalance(acc.balance_display, $user?.currency ?? 'RUB')}
 							</p>
-							{#if acc.has_future_this_month}
+							{#if acc.forecast_balance !== acc.balance}
 								<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
 									{$_('dashboard.withPlans')}:
 									{formatBalance(acc.forecast_display, $user?.currency ?? 'RUB')}

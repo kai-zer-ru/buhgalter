@@ -22,6 +22,7 @@
 		singleAccount = false,
 		ondelete,
 		onedit,
+		onmakeRecurring,
 		descriptionExtra
 	}: {
 		transactions: Transaction[];
@@ -35,10 +36,17 @@
 		singleAccount?: boolean;
 		ondelete?: (tx: Transaction) => void;
 		onedit?: (tx: Transaction) => void;
+		onmakeRecurring?: (tx: Transaction) => void;
 		descriptionExtra?: Snippet<[Transaction]>;
 	} = $props();
 
-	const showActions = $derived(Boolean((showDelete && ondelete) || (showEdit && onedit)));
+	const showActions = $derived(
+		Boolean((showDelete && ondelete) || (showEdit && onedit) || onmakeRecurring)
+	);
+
+	function canMakeRecurring(tx: Transaction): boolean {
+		return Boolean(onmakeRecurring && tx.type !== 'transfer' && !tx.category_is_system);
+	}
 </script>
 
 {#if transactions.length === 0}
@@ -63,31 +71,31 @@
 			<tbody>
 				{#each transactions as tx (tx.id)}
 					<tr class="border-t" style:border-color="var(--border)">
-						<td class="p-3 whitespace-nowrap">
+						<td class="p-3 align-middle whitespace-nowrap">
 							{formatAPIDateTimeForDisplay(tx.transaction_date, tz)}
 							{#if tx.kind === 'future'}
 								<span title={$_('transactions.planned')}> 📅</span>
 							{/if}
 						</td>
-						<td class="p-3">
+						<td class="p-3 align-middle whitespace-nowrap">
 							<TransactionAccountCell {tx} {siblings} mode="prefix" />
 						</td>
-						<td class="p-3">
+						<td class="p-3 align-middle whitespace-nowrap">
 							{#if tx.category_icon}
-								<span class="inline-flex items-center gap-1">
-									<CategoryIcon icon={tx.category_icon} size={16} />
-									{tx.category_name ?? tx.type}
+								<span class="inline-flex items-center gap-1 align-middle">
+									<CategoryIcon icon={tx.category_icon} size={24} />
+									<span class="leading-none">{tx.category_name ?? tx.type}</span>
 								</span>
 							{:else}
 								{tx.category_name ?? tx.type}
 							{/if}
 						</td>
-						<td class="p-3 tabular-nums font-medium">
+						<td class="p-3 align-middle whitespace-nowrap tabular-nums font-medium">
 							{showAmountSign ? transactionAmountSign(tx, { singleAccount }) : ''}
 							{formatMoneyDisplay(tx.amount_display)}
 						</td>
 						{#if showDescription}
-							<td class="p-3" style:color="var(--text-muted)">
+							<td class="p-3 align-middle" style:color="var(--text-muted)">
 								{tx.description ?? ''}
 								{#if descriptionExtra}
 									{@render descriptionExtra(tx)}
@@ -95,8 +103,15 @@
 							</td>
 						{/if}
 						{#if showActions}
-							<td class="p-3 text-right whitespace-nowrap">
-								<div class="flex items-center justify-end gap-0.5">
+							<td class="p-3 align-middle text-right whitespace-nowrap">
+								<div class="flex items-center justify-end gap-1">
+									{#if canMakeRecurring(tx)}
+										<IconButton
+											icon="repeat"
+											label={$_('recurring.fromTransaction')}
+											onclick={() => onmakeRecurring?.(tx)}
+										/>
+									{/if}
 									{#if showEdit && onedit && canEditTransaction(tx)}
 										<IconButton icon="edit" label={$_('common.edit')} onclick={() => onedit(tx)} />
 									{/if}
@@ -128,20 +143,20 @@
 								<span title={$_('transactions.planned')}> 📅</span>
 							{/if}
 						</p>
-						<p class="mt-1 font-medium">
+						<p class="mt-1 text-sm font-medium">
 							<TransactionAccountCell {tx} {siblings} mode="prefix" />
 						</p>
 					</div>
-					<p class="shrink-0 text-base font-semibold tabular-nums">
+					<p class="shrink-0 text-sm font-semibold tabular-nums">
 						{showAmountSign ? transactionAmountSign(tx, { singleAccount }) : ''}
 						{formatMoneyDisplay(tx.amount_display)}
 					</p>
 				</div>
 				<p class="mt-2 text-sm">
 					{#if tx.category_icon}
-						<span class="inline-flex items-center gap-1">
-							<CategoryIcon icon={tx.category_icon} size={16} />
-							{tx.category_name ?? tx.type}
+						<span class="inline-flex items-center gap-1 align-middle">
+							<CategoryIcon icon={tx.category_icon} size={24} />
+							<span class="leading-none">{tx.category_name ?? tx.type}</span>
 						</span>
 					{:else}
 						{tx.category_name ?? tx.type}
@@ -156,7 +171,14 @@
 					</p>
 				{/if}
 				{#if showActions}
-					<div class="mt-3 flex justify-end gap-0.5">
+					<div class="mt-3 flex justify-end gap-1">
+						{#if canMakeRecurring(tx)}
+							<IconButton
+								icon="repeat"
+								label={$_('recurring.fromTransaction')}
+								onclick={() => onmakeRecurring?.(tx)}
+							/>
+						{/if}
 						{#if showEdit && onedit && canEditTransaction(tx)}
 							<IconButton icon="edit" label={$_('common.edit')} onclick={() => onedit(tx)} />
 						{/if}

@@ -7,11 +7,13 @@
 		| 'menu'
 		| 'logout'
 		| 'add'
+		| 'pay'
 		| 'transfer'
 		| 'save'
 		| 'cancel'
 		| 'create'
-		| 'archive';
+		| 'archive'
+		| 'repeat';
 
 	let {
 		icon,
@@ -112,6 +114,20 @@
 		>
 			<path d="M12 5v14M5 12h14" />
 		</svg>
+	{:else if icon === 'pay'}
+		<svg
+			aria-hidden="true"
+			class="h-5 w-5"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			stroke-width="2"
+		>
+			<path d="M3 7h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />
+			<path d="M3 10h18" />
+			<path d="M12 13v5" />
+			<path d="m9.5 15.5 2.5-2.5 2.5 2.5" />
+		</svg>
 	{:else if icon === 'transfer'}
 		<svg
 			aria-hidden="true"
@@ -169,6 +185,20 @@
 			<path d="M21 8v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8" />
 			<path d="M1 3h22v5H1z" />
 			<path d="M10 12h4" />
+		</svg>
+	{:else if icon === 'repeat'}
+		<svg
+			aria-hidden="true"
+			class="h-5 w-5"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			stroke-width="2"
+		>
+			<path d="M17 1l4 4-4 4" />
+			<path d="M3 11V9a4 4 0 0 1 4-4h14" />
+			<path d="M7 23l-4-4 4-4" />
+			<path d="M21 13v2a4 4 0 0 1-4 4H3" />
 		</svg>
 	{/if}
 </button>
