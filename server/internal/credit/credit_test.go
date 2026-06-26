@@ -634,12 +634,75 @@ func TestRemovePayment(t *testing.T) {
 	if pendingID == "" {
 		t.Fatal("no pending payment")
 	}
-	updated, err := RemovePayment(ctx, sqlDB, userID, c.ID, pendingID)
+	_, err = RemovePayment(ctx, sqlDB, userID, c.ID, pendingID)
+	if !errors.Is(err, ErrOnlyLatestPaymentDelete) {
+		t.Fatalf("expected ErrOnlyLatestPaymentDelete, got %v", err)
+	}
+}
+
+func TestRemoveAppliedScheduledPaymentRestoresUnpaidRow(t *testing.T) {
+	ctx, handle, userID, accountID := seedCreditEnv(t)
+	sqlDB := handle.DB()
+	issue := timeutil.NowUTC().AddDate(0, -1, 0)
+
+	c, err := Create(ctx, sqlDB, userID, CreateInput{
+		PrincipalAmount:    60_000,
+		IssueDate:          issue,
+		TermMonths:         6,
+		PaymentInterval:    IntervalMonth,
+		DebitAccountID:     accountID,
+		CreateTransactions: true,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(updated.Schedule) >= len(c.Schedule) {
-		t.Fatal("expected schedule shrink")
+
+	paid, err := PayNextScheduled(ctx, sqlDB, userID, c.ID, PayPaymentInput{
+		Amount:      c.MonthlyPayment,
+		PaymentDate: timeutil.NowUTC(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var appliedID string
+	beforeLen := len(paid.Schedule)
+	for _, p := range paid.Schedule {
+		if p.Kind == "scheduled" && p.IsApplied && p.TransactionID != nil {
+			appliedID = p.ID
+			break
+		}
+	}
+	if appliedID == "" {
+		t.Fatal("no applied scheduled payment")
+	}
+
+	updated, err := RemovePayment(ctx, sqlDB, userID, c.ID, appliedID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(updated.Schedule) != beforeLen {
+		t.Fatalf("expected schedule len %d, got %d", beforeLen, len(updated.Schedule))
+	}
+
+	var restored *CreditPayment
+	for i := range updated.Schedule {
+		if updated.Schedule[i].ID == appliedID {
+			restored = &updated.Schedule[i]
+			break
+		}
+	}
+	if restored == nil {
+		t.Fatal("restored schedule row not found")
+	}
+	if restored.IsApplied {
+		t.Fatal("restored row must be unpaid")
+	}
+	if restored.TransactionID != nil {
+		t.Fatal("restored row must not keep transaction link")
+	}
+	if restored.Kind != "scheduled" {
+		t.Fatalf("restored row kind should be scheduled, got %s", restored.Kind)
 	}
 }
 
@@ -763,6 +826,82 @@ func TestPayNextScheduledAndDelete(t *testing.T) {
 	}
 	if _, err := GetByID(ctx, sqlDB, userID, c.ID, false); err != ErrNotFound {
 		t.Fatalf("expected not found, got %v", err)
+	}
+}
+
+func TestPayNextScheduledWithFutureDateAllowed(t *testing.T) {
+	ctx, handle, userID, accountID := seedCreditEnv(t)
+	sqlDB := handle.DB()
+	issue := timeutil.NowUTC().AddDate(0, -1, 0)
+
+	c, err := Create(ctx, sqlDB, userID, CreateInput{
+		PrincipalAmount:    120_000,
+		IssueDate:          issue,
+		TermMonths:         12,
+		PaymentInterval:    IntervalMonth,
+		DebitAccountID:     accountID,
+		CreateTransactions: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	futurePayDate := timeutil.NowUTC().AddDate(0, 1, 0)
+	paid, err := PayNextScheduled(ctx, sqlDB, userID, c.ID, PayPaymentInput{
+		Amount:      c.MonthlyPayment,
+		PaymentDate: futurePayDate,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if paid.PaidAmount <= 0 {
+		t.Fatalf("paid amount %d", paid.PaidAmount)
+	}
+}
+
+func TestRemovePaymentRejectsNotLatestApplied(t *testing.T) {
+	ctx, handle, userID, accountID := seedCreditEnv(t)
+	sqlDB := handle.DB()
+	issue := timeutil.NowUTC().AddDate(0, -2, 0)
+
+	c, err := Create(ctx, sqlDB, userID, CreateInput{
+		PrincipalAmount:    120_000,
+		IssueDate:          issue,
+		TermMonths:         12,
+		PaymentInterval:    IntervalMonth,
+		DebitAccountID:     accountID,
+		CreateTransactions: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	paid1, err := PayNextScheduled(ctx, sqlDB, userID, c.ID, PayPaymentInput{
+		Amount:      c.MonthlyPayment,
+		PaymentDate: timeutil.NowUTC(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = PayNextScheduled(ctx, sqlDB, userID, c.ID, PayPaymentInput{
+		Amount:      c.MonthlyPayment,
+		PaymentDate: timeutil.NowUTC().AddDate(0, 0, 1),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var firstAppliedID string
+	for _, p := range paid1.Schedule {
+		if p.IsApplied && p.Kind == "scheduled" && p.TransactionID != nil {
+			firstAppliedID = p.ID
+			break
+		}
+	}
+	if firstAppliedID == "" {
+		t.Fatal("first applied payment not found")
+	}
+	_, err = RemovePayment(ctx, sqlDB, userID, c.ID, firstAppliedID)
+	if !errors.Is(err, ErrOnlyLatestPaymentDelete) {
+		t.Fatalf("expected ErrOnlyLatestPaymentDelete, got %v", err)
 	}
 }
 

@@ -150,7 +150,7 @@ func TestHandlerAddPaymentSuccess(t *testing.T) {
 
 func TestHandlerDeletePayment(t *testing.T) {
 	ctx, handle, userID, accountID := seedCreditEnv(t)
-	issue := timeutil.NowUTC().AddDate(0, 2, 0).Format("2006-01-02 00:00:00")
+	issue := timeutil.NowUTC().AddDate(0, -1, 0).Format("2006-01-02 00:00:00")
 	h := &Handler{Store: handle, Audit: audit.New(filepath.Join(t.TempDir(), "audit"))}
 	body, _ := json.Marshal(map[string]any{
 		"principal_amount": "12000.00", "issue_date": issue, "term_months": 6,
@@ -161,17 +161,30 @@ func TestHandlerDeletePayment(t *testing.T) {
 	var created Credit
 	_ = json.NewDecoder(createRec.Body).Decode(&created)
 	var paymentID string
-	for _, p := range created.Schedule {
-		if p.Kind == "scheduled" && !p.IsApplied {
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", created.ID)
+	payBody, _ := json.Marshal(map[string]any{
+		"amount":       money.FormatRubles(created.MonthlyPayment),
+		"payment_date": timeutil.NowUTC().Format("2006-01-02 15:04:05"),
+	})
+	payReq := creditAuthRequest(t, userID, http.MethodPost, "/credits/"+created.ID+"/payments", payBody)
+	payReq = payReq.WithContext(context.WithValue(payReq.Context(), chi.RouteCtxKey, rctx))
+	payRec := httptest.NewRecorder()
+	h.AddPayment(payRec, payReq)
+	if payRec.Code != http.StatusOK {
+		t.Fatalf("add payment %d: %s", payRec.Code, payRec.Body.String())
+	}
+	var paid Credit
+	_ = json.NewDecoder(payRec.Body).Decode(&paid)
+	for _, p := range paid.Schedule {
+		if p.Kind == "scheduled" && p.IsApplied && p.TransactionID != nil {
 			paymentID = p.ID
 			break
 		}
 	}
 	if paymentID == "" {
-		t.Fatal("no pending payment")
+		t.Fatal("no applied payment")
 	}
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("id", created.ID)
 	rctx.URLParams.Add("paymentId", paymentID)
 	delReq := creditAuthRequest(t, userID, http.MethodDelete, "/credits/"+created.ID+"/payments/"+paymentID, nil)
 	delReq = delReq.WithContext(context.WithValue(delReq.Context(), chi.RouteCtxKey, rctx))

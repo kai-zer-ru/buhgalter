@@ -428,7 +428,8 @@
 			!refreshing &&
 			p.is_applied &&
 			p.kind !== 'retroactive' &&
-			p.transaction_kind !== 'future'
+			p.transaction_kind !== 'future' &&
+			p.id === latestDeletableAppliedPaymentId
 		);
 	}
 
@@ -438,7 +439,8 @@
 			!paySubmitting &&
 			!refreshing &&
 			!p.is_applied &&
-			p.kind === 'scheduled'
+			p.kind === 'scheduled' &&
+			p.id === firstPendingScheduledPaymentId
 		);
 	}
 
@@ -479,6 +481,20 @@
 		empty.applied.sort(comparePaymentsOldestFirst);
 		empty.retroactive.sort(comparePaymentsOldestFirst);
 		return empty;
+	});
+	const firstPendingScheduledPaymentId = $derived.by(() => {
+		for (const p of scheduleGroups.pending) {
+			if (p.kind === 'scheduled' && !p.is_applied) return p.id;
+		}
+		return '';
+	});
+	const latestDeletableAppliedPaymentId = $derived.by(() => {
+		for (let i = scheduleGroups.applied.length - 1; i >= 0; i--) {
+			const p = scheduleGroups.applied[i];
+			if (p.transaction_kind === 'future') continue;
+			if (p.transaction_id) return p.id;
+		}
+		return '';
 	});
 
 	const creditIsActive = $derived(credit?.status === 'active');

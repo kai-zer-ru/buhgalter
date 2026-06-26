@@ -32,14 +32,14 @@ func TestCreateCreditWithSchedule(t *testing.T) {
 	accID := createTestAccount(t, env, "Ипотека-счёт")
 
 	credit := createCredit(t, env, map[string]any{
-		"name":                 "Ипотека",
-		"principal_amount":     "100000.00",
-		"issue_date":           time.Now().UTC().AddDate(0, 1, 0).Format("2006-01-02 00:00:00"),
-		"term_months":          12,
-		"interest_rate":        0,
-		"payment_interval":     "month",
-		"debit_account_id":     accID,
-		"added_retroactively":  false,
+		"name":                "Ипотека",
+		"principal_amount":    "100000.00",
+		"issue_date":          time.Now().UTC().AddDate(0, 1, 0).Format("2006-01-02 00:00:00"),
+		"term_months":         12,
+		"interest_rate":       0,
+		"payment_interval":    "month",
+		"debit_account_id":    accID,
+		"added_retroactively": false,
 	})
 	if credit["id"] == nil {
 		t.Fatal("expected credit id")
@@ -65,13 +65,13 @@ func TestCreateCreditWithoutAutoTransactions(t *testing.T) {
 	accID := createTestAccount(t, env, "Счёт")
 
 	credit := createCredit(t, env, map[string]any{
-		"principal_amount":     "10000.00",
-		"issue_date":           time.Now().UTC().AddDate(0, 1, 0).Format("2006-01-02 00:00:00"),
-		"term_months":          3,
-		"interest_rate":        0,
-		"payment_interval":     "month",
-		"debit_account_id":     accID,
-		"create_transactions":  false,
+		"principal_amount":    "10000.00",
+		"issue_date":          time.Now().UTC().AddDate(0, 1, 0).Format("2006-01-02 00:00:00"),
+		"term_months":         3,
+		"interest_rate":       0,
+		"payment_interval":    "month",
+		"debit_account_id":    accID,
+		"create_transactions": false,
 	})
 	for _, item := range credit["schedule"].([]any) {
 		row := item.(map[string]any)
@@ -88,14 +88,14 @@ func TestCreateCreditRetroactiveWithAutoTransactions(t *testing.T) {
 
 	issueDate := time.Now().UTC().AddDate(0, -3, 0).Format("2006-01-02 00:00:00")
 	credit := createCredit(t, env, map[string]any{
-		"principal_amount":     "12000.00",
-		"issue_date":           issueDate,
-		"term_months":          12,
-		"interest_rate":        0,
-		"payment_interval":     "month",
-		"debit_account_id":     accID,
-		"added_retroactively":  true,
-		"create_transactions":  true,
+		"principal_amount":    "12000.00",
+		"issue_date":          issueDate,
+		"term_months":         12,
+		"interest_rate":       0,
+		"payment_interval":    "month",
+		"debit_account_id":    accID,
+		"added_retroactively": true,
+		"create_transactions": true,
 	})
 	var retroWithoutTx, pendingWithoutTx int
 	for _, item := range credit["schedule"].([]any) {
@@ -180,13 +180,13 @@ func TestPayScheduledPaymentCreatesFutureTransaction(t *testing.T) {
 	accID := createTestAccount(t, env, "Счёт")
 
 	credit := createCredit(t, env, map[string]any{
-		"name":                 "Потреб",
-		"principal_amount":     "50000.00",
-		"issue_date":           time.Now().UTC().AddDate(0, 1, 0).Format("2006-01-02 00:00:00"),
-		"term_months":          5,
-		"interest_rate":        0,
-		"debit_account_id":     accID,
-		"added_retroactively":  false,
+		"name":                "Потреб",
+		"principal_amount":    "50000.00",
+		"issue_date":          time.Now().UTC().AddDate(0, 1, 0).Format("2006-01-02 00:00:00"),
+		"term_months":         5,
+		"interest_rate":       0,
+		"debit_account_id":    accID,
+		"added_retroactively": false,
 	})
 	creditID := credit["id"].(string)
 
@@ -377,17 +377,96 @@ func TestDeleteCreditPaymentRow(t *testing.T) {
 		t.Fatal(err)
 	}
 	delResp.Body.Close()
+	if delResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("delete payment status %d", delResp.StatusCode)
+	}
+}
+
+func TestDeleteAppliedScheduledPaymentRestoresRow(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+	accID := createTestAccount(t, env, "Счёт")
+
+	credit := createCredit(t, env, map[string]any{
+		"name":                "Потреб",
+		"principal_amount":    "50000.00",
+		"issue_date":          time.Now().UTC().AddDate(0, -1, 0).Format("2006-01-02 00:00:00"),
+		"term_months":         5,
+		"interest_rate":       0,
+		"debit_account_id":    accID,
+		"added_retroactively": false,
+	})
+	creditID := credit["id"].(string)
+	beforeLen := len(credit["schedule"].([]any))
+
+	payDate := time.Now().UTC().Format("2006-01-02 15:04:05")
+	payBody, _ := json.Marshal(map[string]any{
+		"amount":       "10000.00",
+		"payment_date": payDate,
+	})
+	payResp, err := env.authedRequest(http.MethodPost, "/api/v1/credits/"+creditID+"/payments", bytes.NewReader(payBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if payResp.StatusCode != http.StatusOK {
+		t.Fatalf("pay payment status %d", payResp.StatusCode)
+	}
+	var paid map[string]any
+	_ = json.NewDecoder(payResp.Body).Decode(&paid)
+	payResp.Body.Close()
+
+	var paymentID string
+	for _, item := range paid["schedule"].([]any) {
+		row := item.(map[string]any)
+		if row["kind"] == "scheduled" && row["is_applied"] == true && row["transaction_id"] != nil {
+			paymentID = row["id"].(string)
+			break
+		}
+	}
+	if paymentID == "" {
+		t.Fatal("no applied scheduled payment")
+	}
+
+	delResp, err := env.authedRequest(http.MethodDelete, "/api/v1/credits/"+creditID+"/payments/"+paymentID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if delResp.StatusCode != http.StatusOK {
 		t.Fatalf("delete payment status %d", delResp.StatusCode)
 	}
+	delResp.Body.Close()
 
 	getResp, _ := env.authedRequest(http.MethodGet, "/api/v1/credits/"+creditID, nil)
 	defer getResp.Body.Close()
 	var updated map[string]any
 	_ = json.NewDecoder(getResp.Body).Decode(&updated)
 	schedule := updated["schedule"].([]any)
-	if len(schedule) != 4 {
-		t.Fatalf("expected 4 schedule rows, got %d", len(schedule))
+	if len(schedule) != beforeLen {
+		t.Fatalf("expected %d schedule rows, got %d", beforeLen, len(schedule))
+	}
+	if int64(updated["paid_amount"].(float64)) != 0 {
+		t.Fatalf("paid_amount should be 0, got %v", updated["paid_amount"])
+	}
+
+	var restored map[string]any
+	for _, item := range schedule {
+		row := item.(map[string]any)
+		if row["id"] == paymentID {
+			restored = row
+			break
+		}
+	}
+	if restored == nil {
+		t.Fatal("restored payment row not found")
+	}
+	if restored["kind"] != "scheduled" {
+		t.Fatalf("expected kind scheduled, got %v", restored["kind"])
+	}
+	if restored["is_applied"] == true {
+		t.Fatal("restored payment must be unpaid")
+	}
+	if restored["transaction_id"] != nil {
+		t.Fatal("restored payment must not have transaction_id")
 	}
 }
 
@@ -429,13 +508,13 @@ func TestDeleteCreditKeepTransactions(t *testing.T) {
 	accID := createTestAccount(t, env, "Счёт")
 
 	credit := createCredit(t, env, map[string]any{
-		"name":                 "Удаляемый",
-		"principal_amount":     "20000.00",
-		"issue_date":           time.Now().UTC().AddDate(0, 1, 0).Format("2006-01-02 00:00:00"),
-		"term_months":          4,
-		"interest_rate":        0,
-		"debit_account_id":     accID,
-		"added_retroactively":  false,
+		"name":                "Удаляемый",
+		"principal_amount":    "20000.00",
+		"issue_date":          time.Now().UTC().AddDate(0, 1, 0).Format("2006-01-02 00:00:00"),
+		"term_months":         4,
+		"interest_rate":       0,
+		"debit_account_id":    accID,
+		"added_retroactively": false,
 	})
 	creditID := credit["id"].(string)
 
@@ -561,13 +640,13 @@ func TestRetroactiveCreditNoTransactions(t *testing.T) {
 	balBefore.Body.Close()
 
 	credit := createCredit(t, env, map[string]any{
-		"name":                 "Старый кредит",
-		"principal_amount":     "60000.00",
-		"issue_date":           "2022-01-01 00:00:00",
-		"term_months":            6,
-		"interest_rate":          0,
-		"debit_account_id":       accID,
-		"added_retroactively":    true,
+		"name":                "Старый кредит",
+		"principal_amount":    "60000.00",
+		"issue_date":          "2022-01-01 00:00:00",
+		"term_months":         6,
+		"interest_rate":       0,
+		"debit_account_id":    accID,
+		"added_retroactively": true,
 	})
 	if credit["added_retroactively"] != true {
 		t.Fatal("expected added_retroactively")
@@ -717,11 +796,11 @@ func TestSchedulePreview(t *testing.T) {
 	env.login(t, "admin", "secret123")
 
 	body, _ := json.Marshal(map[string]any{
-		"principal":         "120000.00",
-		"term":              12,
-		"interest_rate":     0,
-		"payment_interval":  "month",
-		"issue_date":        "2024-01-15 00:00:00",
+		"principal":        "120000.00",
+		"term":             12,
+		"interest_rate":    0,
+		"payment_interval": "month",
+		"issue_date":       "2024-01-15 00:00:00",
 	})
 	resp, err := env.authedRequest(http.MethodPost, "/api/v1/credits/schedule/preview", bytes.NewReader(body))
 	if err != nil {
@@ -749,13 +828,13 @@ func TestCreateCreditManualSchedule(t *testing.T) {
 	d3 := time.Now().UTC().AddDate(0, 3, 0).Format("2006-01-02 15:04:05")
 
 	credit := createCredit(t, env, map[string]any{
-		"name":              "Ручной график",
-		"principal_amount":  "30000.00",
-		"issue_date":        time.Now().UTC().Format("2006-01-02 00:00:00"),
-		"term_months":       3,
-		"interest_rate":     0,
-		"payment_interval":  "manual",
-		"debit_account_id":  accID,
+		"name":             "Ручной график",
+		"principal_amount": "30000.00",
+		"issue_date":       time.Now().UTC().Format("2006-01-02 00:00:00"),
+		"term_months":      3,
+		"interest_rate":    0,
+		"payment_interval": "manual",
+		"debit_account_id": accID,
 		"schedule_seed": []map[string]any{
 			{"payment_date": d1, "amount": "10000.00"},
 			{"payment_date": d2, "amount": "10000.00"},

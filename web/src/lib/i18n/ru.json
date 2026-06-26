@@ -642,6 +642,7 @@
 	"errors.ERR_CREDIT_INVALID_INTERVAL": "Некорректная периодичность",
 	"errors.ERR_CREDIT_NO_PENDING_PAYMENT": "Нет неоплаченных платежей по графику",
 	"errors.ERR_CREDIT_CANNOT_REMOVE_RETRO": "Нельзя удалить платёж, учтённый при добавлении",
+	"errors.ERR_CREDIT_ONLY_LATEST_DELETE": "Можно удалить только последний оплаченный платёж по кредиту",
 	"errors.ERR_CREDIT_INVALID_RETRO_DEBIT": "Некорректное число ретро-платежей для списания со счёта",
 	"errors.ERR_CREDIT_CANNOT_EDIT_PAYMENT": "Нельзя изменить этот платёж",
 	"errors.ERR_CREDIT_COMPLETE_DATE": "Укажите дату завершения",

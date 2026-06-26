@@ -126,6 +126,7 @@ var (
 	ErrPaymentApplied          = errors.New("payment already applied")
 	ErrNoPendingPayment        = errors.New("no pending scheduled payment")
 	ErrCannotRemoveRetroactive = errors.New("cannot remove retroactive payment")
+	ErrOnlyLatestPaymentDelete = errors.New("only latest applied payment can be deleted")
 	ErrInvalidRetroactiveDebit = errors.New("invalid retroactive debit count")
 	ErrCompleteParamsRequired  = errors.New("complete parameters required")
 	ErrInvalidDebitTime        = errors.New("invalid debit time")
@@ -1331,17 +1332,10 @@ func userTimezoneDBTX(ctx context.Context, db sqlcdb.DBTX, userID string) (strin
 }
 
 func resolveTransactionKind(ctx context.Context, db sqlcdb.DBTX, userID string, txDate time.Time) (string, error) {
-	tz, err := userTimezoneDBTX(ctx, db, userID)
-	if err != nil {
-		return "", err
-	}
-	future, err := timeutil.IsFutureInTZ(txDate, timeutil.NowUTC(), tz)
-	if err != nil {
-		return "", err
-	}
-	if future {
-		return "", ErrPlannedNotAllowed
-	}
+	_ = ctx
+	_ = db
+	_ = userID
+	_ = txDate
 	return "manual", nil
 }
 

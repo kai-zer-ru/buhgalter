@@ -544,6 +544,8 @@ func writeCreditError(w http.ResponseWriter, r *http.Request, err error) bool {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_NO_PENDING_PAYMENT")
 	case errors.Is(err, ErrCannotRemoveRetroactive):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_CANNOT_REMOVE_RETRO")
+	case errors.Is(err, ErrOnlyLatestPaymentDelete):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_ONLY_LATEST_DELETE")
 	case errors.Is(err, ErrInvalidRetroactiveDebit):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_INVALID_RETRO_DEBIT")
 	case errors.Is(err, ErrCannotEditPayment):

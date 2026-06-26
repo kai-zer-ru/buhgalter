@@ -642,6 +642,7 @@
 	"errors.ERR_CREDIT_INVALID_INTERVAL": "Invalid payment interval",
 	"errors.ERR_CREDIT_NO_PENDING_PAYMENT": "No pending scheduled payments",
 	"errors.ERR_CREDIT_CANNOT_REMOVE_RETRO": "Cannot remove payment recorded at creation",
+	"errors.ERR_CREDIT_ONLY_LATEST_DELETE": "Only the latest applied credit payment can be deleted",
 	"errors.ERR_CREDIT_INVALID_RETRO_DEBIT": "Invalid number of retroactive payments to debit from account",
 	"errors.ERR_CREDIT_CANNOT_EDIT_PAYMENT": "Cannot edit this payment",
 	"errors.ERR_CREDIT_COMPLETE_DATE": "Completion date is required",

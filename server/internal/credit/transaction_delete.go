@@ -61,6 +61,16 @@ func RemovePayment(ctx context.Context, db *sql.DB, userID, creditID, paymentID 
 	if row.Kind == "retroactive" {
 		return Credit{}, ErrCannotRemoveRetroactive
 	}
+	if row.IsApplied != 1 {
+		return Credit{}, ErrOnlyLatestPaymentDelete
+	}
+	creditWithSchedule, err := GetByID(ctx, db, userID, creditID, true)
+	if err != nil {
+		return Credit{}, err
+	}
+	if latestID := latestDeletableAppliedPaymentID(creditWithSchedule); latestID == "" || latestID != paymentID {
+		return Credit{}, ErrOnlyLatestPaymentDelete
+	}
 
 	dbTx, err := db.BeginTx(ctx, nil)
 	if err != nil {
@@ -77,11 +87,26 @@ func RemovePayment(ctx context.Context, db *sql.DB, userID, creditID, paymentID 
 			return Credit{}, err
 		}
 	}
-
-	if _, err := q.DeleteCreditPaymentByID(ctx, sqlcdb.DeleteCreditPaymentByIDParams{
-		ID: paymentID, CreditID: creditID,
-	}); err != nil {
-		return Credit{}, err
+	keepScheduleRow := row.IsApplied == 1 && row.Kind == "scheduled" && txID != nil
+	if keepScheduleRow {
+		// Deleting an applied scheduled payment should restore the schedule row as unpaid.
+		n, err := q.RevertCreditPaymentLink(ctx, sqlcdb.RevertCreditPaymentLinkParams{
+			ID:            paymentID,
+			CreditID:      creditID,
+			TransactionID: txID,
+		})
+		if err != nil {
+			return Credit{}, err
+		}
+		if n == 0 {
+			return Credit{}, ErrNotFound
+		}
+	} else {
+		if _, err := q.DeleteCreditPaymentByID(ctx, sqlcdb.DeleteCreditPaymentByIDParams{
+			ID: paymentID, CreditID: creditID,
+		}); err != nil {
+			return Credit{}, err
+		}
 	}
 
 	if txID != nil {
@@ -102,6 +127,20 @@ func RemovePayment(ctx context.Context, db *sql.DB, userID, creditID, paymentID 
 		return Credit{}, err
 	}
 	return GetByID(ctx, db, userID, creditID, true)
+}
+
+func latestDeletableAppliedPaymentID(c Credit) string {
+	for i := len(c.Schedule) - 1; i >= 0; i-- {
+		p := c.Schedule[i]
+		if p.Kind == "retroactive" || !p.IsApplied || p.TransactionID == nil {
+			continue
+		}
+		if p.TransactionKind != nil && *p.TransactionKind == "future" {
+			continue
+		}
+		return p.ID
+	}
+	return ""
 }
 
 func adjustPaidAfterPaymentRemoved(
