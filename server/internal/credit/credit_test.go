@@ -857,6 +857,16 @@ func TestPayNextScheduledWithFutureDateAllowed(t *testing.T) {
 	if paid.PaidAmount <= 0 {
 		t.Fatalf("paid amount %d", paid.PaidAmount)
 	}
+	var foundFutureTx bool
+	for _, p := range paid.Schedule {
+		if p.Kind == "scheduled" && p.IsApplied && p.TransactionKind != nil && *p.TransactionKind == "future" {
+			foundFutureTx = true
+			break
+		}
+	}
+	if !foundFutureTx {
+		t.Fatal("expected applied scheduled payment with future transaction kind")
+	}
 }
 
 func TestRemovePaymentRejectsNotLatestApplied(t *testing.T) {

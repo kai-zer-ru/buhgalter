@@ -135,9 +135,6 @@ func latestDeletableAppliedPaymentID(c Credit) string {
 		if p.Kind == "retroactive" || !p.IsApplied || p.TransactionID == nil {
 			continue
 		}
-		if p.TransactionKind != nil && *p.TransactionKind == "future" {
-			continue
-		}
 		return p.ID
 	}
 	return ""

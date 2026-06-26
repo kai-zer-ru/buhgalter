@@ -231,7 +231,10 @@
 		onclick={openPanel}
 		onkeydown={onKeydown}
 	>
-		<span style:color={value ? 'var(--text)' : 'var(--text-muted)'}>
+		<span
+			class="min-w-0 flex-1 truncate whitespace-nowrap"
+			style:color={value ? 'var(--text)' : 'var(--text-muted)'}
+		>
 			{displayLabel || '—'}
 		</span>
 		<span aria-hidden="true" style:color="var(--text-muted)">📅</span>

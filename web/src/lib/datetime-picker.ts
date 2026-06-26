@@ -94,5 +94,9 @@ export function calendarCells(year: number, month: number): CalendarCell[] {
 	while (cells.length % 7 !== 0) {
 		cells.push({ day: nextDay++, month: next.month, year: next.year, inMonth: false });
 	}
+	// Keep calendar popover height stable: always render 6 full weeks (42 cells).
+	while (cells.length < 42) {
+		cells.push({ day: nextDay++, month: next.month, year: next.year, inMonth: false });
+	}
 	return cells;
 }

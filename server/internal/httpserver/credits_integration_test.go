@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"testing"
 	"time"
+
+	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
 )
 
 func createCredit(t *testing.T, env *testEnv, body map[string]any) map[string]any {
@@ -467,6 +469,131 @@ func TestDeleteAppliedScheduledPaymentRestoresRow(t *testing.T) {
 	}
 	if restored["transaction_id"] != nil {
 		t.Fatal("restored payment must not have transaction_id")
+	}
+}
+
+func TestFutureCreditPaymentAffectsDashboardForecast(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+	accID := createTestAccount(t, env, "WB")
+
+	credit := createCredit(t, env, map[string]any{
+		"name":                "Потреб",
+		"principal_amount":    "50000.00",
+		"issue_date":          time.Now().UTC().Format("2006-01-02 00:00:00"),
+		"term_months":         5,
+		"interest_rate":       0,
+		"debit_account_id":    accID,
+		"added_retroactively": false,
+	})
+	creditID := credit["id"].(string)
+
+	payDate := time.Now().UTC().Add(2 * time.Hour).Format("2006-01-02 15:04:05")
+	payBody, _ := json.Marshal(map[string]any{
+		"amount":       "5000.00",
+		"payment_date": payDate,
+	})
+	payResp, err := env.authedRequest(http.MethodPost, "/api/v1/credits/"+creditID+"/payments", bytes.NewReader(payBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if payResp.StatusCode != http.StatusOK {
+		t.Fatalf("pay payment status %d", payResp.StatusCode)
+	}
+	var paid map[string]any
+	_ = json.NewDecoder(payResp.Body).Decode(&paid)
+	payResp.Body.Close()
+	var txID string
+	for _, item := range paid["schedule"].([]any) {
+		row := item.(map[string]any)
+		if row["kind"] == "scheduled" && row["is_applied"] == true && row["transaction_id"] != nil {
+			txID = row["transaction_id"].(string)
+			break
+		}
+	}
+	if txID == "" {
+		t.Fatal("applied scheduled payment with transaction_id not found")
+	}
+	txResp, err := env.authedRequest(http.MethodGet, "/api/v1/transactions/"+txID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer txResp.Body.Close()
+	var tx map[string]any
+	_ = json.NewDecoder(txResp.Body).Decode(&tx)
+	if tx["kind"] != "future" {
+		t.Fatalf("expected future tx kind, got %v", tx["kind"])
+	}
+	if tx["account_id"] != accID {
+		t.Fatalf("expected tx account_id %s, got %v", accID, tx["account_id"])
+	}
+	if int64(tx["amount"].(float64)) != 500000 {
+		t.Fatalf("expected tx amount 500000, got %v", tx["amount"])
+	}
+	txDateRaw, _ := tx["transaction_date"].(string)
+	if txDateRaw == "" {
+		t.Fatal("transaction_date is empty")
+	}
+	tz := "Europe/Moscow"
+	monthStart, monthEnd, err := timeutil.MonthBoundsUTC(tz, timeutil.NowUTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	txDate, err := timeutil.ParseUTC(txDateRaw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	monthStartTime, err := timeutil.ParseUTC(monthStart)
+	if err != nil {
+		t.Fatal(err)
+	}
+	monthEndTime, err := timeutil.ParseUTC(monthEnd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if txDate.Before(monthStartTime) || txDate.After(monthEndTime) {
+		t.Fatalf("tx date %s outside month [%s..%s]", txDateRaw, monthStart, monthEnd)
+	}
+	var affects int
+	if err := env.db.QueryRow("SELECT affects_balance FROM transactions WHERE id = ?", txID).Scan(&affects); err != nil {
+		t.Fatal(err)
+	}
+	if affects != 1 {
+		t.Fatalf("expected affects_balance=1, got %d", affects)
+	}
+
+	dashResp, err := env.authedRequest(http.MethodGet, "/api/v1/dashboard", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dashResp.Body.Close()
+	if dashResp.StatusCode != http.StatusOK {
+		t.Fatalf("dashboard status %d", dashResp.StatusCode)
+	}
+	var dash map[string]any
+	_ = json.NewDecoder(dashResp.Body).Decode(&dash)
+	accounts, ok := dash["accounts"].([]any)
+	if !ok {
+		t.Fatalf("dashboard accounts missing: %v", dash["accounts"])
+	}
+	var target map[string]any
+	for _, item := range accounts {
+		row := item.(map[string]any)
+		if row["id"] == accID {
+			target = row
+			break
+		}
+	}
+	if target == nil {
+		t.Fatalf("account %s not found in dashboard", accID)
+	}
+	balance := int64(target["balance"].(float64))
+	forecast := int64(target["forecast_balance"].(float64))
+	if balance == forecast {
+		t.Fatalf("expected forecast != balance for account %s, got %d", accID, balance)
+	}
+	if target["has_future_this_month"] != true {
+		t.Fatalf("expected has_future_this_month=true, got %v", target["has_future_this_month"])
 	}
 }
 

@@ -20,6 +20,7 @@
 		type Subcategory
 	} from '$lib/api/client';
 	import BackLink from '$lib/components/BackLink.svelte';
+	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
 	import IconButton from '$lib/components/IconButton.svelte';
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
 	import Select from '$lib/components/Select.svelte';
@@ -75,9 +76,13 @@
 	});
 
 	function dayFromDate(value: string): string {
-		const day = Number((value || '').split('-')[2] ?? '');
+		const day = Number((value || '').split('T')[0]?.split('-')[2] ?? '');
 		if (!Number.isFinite(day) || day < 1 || day > 31) return '1';
 		return String(day);
+	}
+
+	function dateOnly(value: string): string {
+		return (value || '').split('T')[0] ?? '';
 	}
 
 	function syncDayOfMonthFromStartDate(nextPeriod: typeof period, nextStartDate: string) {
@@ -245,7 +250,7 @@
 						: period === 'month'
 							? Number(dayFromDate(startDate))
 							: undefined,
-				start_date: fromDatetimeLocalValue(`${startDate}T00:00`, tz),
+				start_date: fromDatetimeLocalValue(`${dateOnly(startDate)}T00:00`, tz),
 				time_local: timeLocal || '00:00',
 				active
 			};
@@ -279,10 +284,9 @@
 		syncDayOfMonthFromStartDate(nextPeriod, startDate);
 	}
 
-	function onStartDateChange(nextStartDate: string) {
-		startDate = nextStartDate;
-		syncDayOfMonthFromStartDate(period, nextStartDate);
-	}
+	$effect(() => {
+		syncDayOfMonthFromStartDate(period, startDate);
+	});
 </script>
 
 <svelte:head>
@@ -453,18 +457,12 @@
 												</select>
 											</div>
 											<div>
-												<label
-													class="mb-1 block text-sm"
-													style:color="var(--text-muted)"
-													for="recurring-start-date-edit">{$_('recurring.startDate')}</label
-												>
-												<input
+												<DateTimePicker
 													id="recurring-start-date-edit"
-													class="input w-full"
-													type="date"
+													label={$_('recurring.startDate')}
 													bind:value={startDate}
-													onchange={(e) =>
-														onStartDateChange((e.currentTarget as HTMLInputElement).value)}
+													timeMode="hidden"
+													usePortal
 													required
 												/>
 											</div>
@@ -632,17 +630,12 @@
 					</select>
 				</div>
 				<div>
-					<label
-						class="mb-1 block text-sm"
-						style:color="var(--text-muted)"
-						for="recurring-start-date">{$_('recurring.startDate')}</label
-					>
-					<input
+					<DateTimePicker
 						id="recurring-start-date"
-						class="input w-full"
-						type="date"
+						label={$_('recurring.startDate')}
 						bind:value={startDate}
-						onchange={(e) => onStartDateChange((e.currentTarget as HTMLInputElement).value)}
+						timeMode="hidden"
+						usePortal
 						required
 					/>
 				</div>

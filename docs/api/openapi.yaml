@@ -857,7 +857,10 @@ paths:
   /dashboard:
     get:
       summary: Главный экран
-      description: Общий баланс, карточки счетов (с `type`, `bank_icon`), последние 10 операций.
+      description: |
+        Общий баланс, карточки счетов (с `type`, `bank_icon`), последние 10 операций.
+        `forecast_balance` и `has_future_this_month` учитывают операции `kind=future`
+        в рамках текущего месяца (по часовому поясу пользователя).
       security:
         - sessionCookie: []
         - bearerAuth: []
@@ -1353,6 +1356,8 @@ paths:
         Обновляет ближайший неоплаченный `scheduled` (не создаёт новую строку).
         Если у строки уже есть `transaction_id` (создан при `create_transactions`) — переиспользует операцию.
         После оплаты удаляются дубликаты на тот же календарный день (`early`, лишние `scheduled`).
+        Если `payment_date` в будущем, связанная операция остаётся `kind=future`
+        до наступления даты операции и учитывается в прогнозе баланса.
       security:
         - sessionCookie: []
         - bearerAuth: []
@@ -1375,7 +1380,10 @@ paths:
     delete:
       summary: Удалить строку графика
       description: |
-        Нельзя для `kind=retroactive`. Для оплаченной строки удаляет связанную операцию и уменьшает `paid_amount`.
+        Нельзя для `kind=retroactive`.
+        Для `scheduled` удаление разрешено только для последнего оплаченного платежа:
+        платёж восстанавливается как неоплаченный `scheduled`, связанная операция удаляется,
+        `paid_amount` уменьшается.
       security:
         - sessionCookie: []
         - bearerAuth: []

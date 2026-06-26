@@ -14,6 +14,7 @@ UPDATE transactions
 SET kind = 'manual', updated_at = ?
 WHERE user_id = ?
   AND kind = 'future'
+  AND transaction_date <= ?
   AND id IN (
     SELECT cp.transaction_id
     FROM credit_payments cp
@@ -24,12 +25,13 @@ WHERE user_id = ?
 `
 
 type ActivateAppliedCreditFutureTransactionsParams struct {
-	UpdatedAt string `json:"updated_at"`
-	UserID    string `json:"user_id"`
+	UpdatedAt       string `json:"updated_at"`
+	UserID          string `json:"user_id"`
+	TransactionDate string `json:"transaction_date"`
 }
 
 func (q *Queries) ActivateAppliedCreditFutureTransactions(ctx context.Context, arg ActivateAppliedCreditFutureTransactionsParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, activateAppliedCreditFutureTransactions, arg.UpdatedAt, arg.UserID)
+	result, err := q.db.ExecContext(ctx, activateAppliedCreditFutureTransactions, arg.UpdatedAt, arg.UserID, arg.TransactionDate)
 	if err != nil {
 		return 0, err
 	}
@@ -1260,6 +1262,32 @@ func (q *Queries) UpdateTransaction(ctx context.Context, arg UpdateTransactionPa
 		arg.UserID,
 	)
 	return err
+}
+
+const updateTransactionAffectsBalance = `-- name: UpdateTransactionAffectsBalance :execrows
+UPDATE transactions
+SET affects_balance = ?, updated_at = ?
+WHERE id = ? AND user_id = ?
+`
+
+type UpdateTransactionAffectsBalanceParams struct {
+	AffectsBalance int64  `json:"affects_balance"`
+	UpdatedAt      string `json:"updated_at"`
+	ID             string `json:"id"`
+	UserID         string `json:"user_id"`
+}
+
+func (q *Queries) UpdateTransactionAffectsBalance(ctx context.Context, arg UpdateTransactionAffectsBalanceParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateTransactionAffectsBalance,
+		arg.AffectsBalance,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const updateTransferAccountID = `-- name: UpdateTransferAccountID :exec

@@ -95,6 +95,11 @@ SET account_id = ?, type = ?, kind = ?, amount = ?, description = ?,
     category_id = ?, subcategory_id = ?, transaction_date = ?, updated_at = ?
 WHERE id = ? AND user_id = ?;
 
+-- name: UpdateTransactionAffectsBalance :execrows
+UPDATE transactions
+SET affects_balance = ?, updated_at = ?
+WHERE id = ? AND user_id = ?;
+
 -- name: UpdateTransferLeg :exec
 UPDATE transactions
 SET account_id = ?, amount = ?, description = ?, transaction_date = ?,
@@ -145,6 +150,7 @@ UPDATE transactions
 SET kind = 'manual', updated_at = ?
 WHERE user_id = ?
   AND kind = 'future'
+  AND transaction_date <= ?
   AND id IN (
     SELECT cp.transaction_id
     FROM credit_payments cp

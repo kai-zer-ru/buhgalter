@@ -570,10 +570,43 @@ func PayNextScheduled(ctx context.Context, db *sql.DB, userID, creditID string, 
 	q := queries(dbTx)
 	nowStr := time.Now().UTC().Format(time.RFC3339)
 	payDate := timeutil.FormatUTC(in.PaymentDate)
+	txKind, err := resolveTransactionKind(ctx, dbTx, userID, in.PaymentDate)
+	if err != nil {
+		return Credit{}, err
+	}
+	catID, err := categoryseed.CreditCategoryID(ctx, dbTx, userID)
+	if err != nil {
+		return Credit{}, err
+	}
+	desc := creditDescription(c.Name)
+	descPtr := &desc
 
 	var txID string
 	if existingTxID != nil {
 		txID = *existingTxID
+		if err := q.UpdateTransaction(ctx, sqlcdb.UpdateTransactionParams{
+			AccountID:       c.DebitAccountID,
+			Type:            "expense",
+			Kind:            txKind,
+			Amount:          in.Amount,
+			Description:     descPtr,
+			CategoryID:      &catID,
+			SubcategoryID:   nil,
+			TransactionDate: payDate,
+			UpdatedAt:       nowStr,
+			ID:              txID,
+			UserID:          userID,
+		}); err != nil {
+			return Credit{}, err
+		}
+		if _, err := q.UpdateTransactionAffectsBalance(ctx, sqlcdb.UpdateTransactionAffectsBalanceParams{
+			AffectsBalance: 1,
+			UpdatedAt:      nowStr,
+			ID:             txID,
+			UserID:         userID,
+		}); err != nil {
+			return Credit{}, err
+		}
 	} else {
 		txID, err = insertCreditExpenseTransaction(ctx, dbTx, userID, c.DebitAccountID, c.Name, in.Amount, in.PaymentDate, true)
 		if err != nil {
@@ -1332,10 +1365,17 @@ func userTimezoneDBTX(ctx context.Context, db sqlcdb.DBTX, userID string) (strin
 }
 
 func resolveTransactionKind(ctx context.Context, db sqlcdb.DBTX, userID string, txDate time.Time) (string, error) {
-	_ = ctx
-	_ = db
-	_ = userID
-	_ = txDate
+	tz, err := userTimezoneDBTX(ctx, db, userID)
+	if err != nil {
+		return "", err
+	}
+	future, err := timeutil.IsFutureInTZ(txDate, timeutil.NowUTC(), tz)
+	if err != nil {
+		return "", err
+	}
+	if future {
+		return "future", nil
+	}
 	return "manual", nil
 }
 

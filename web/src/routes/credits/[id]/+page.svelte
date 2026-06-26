@@ -428,7 +428,6 @@
 			!refreshing &&
 			p.is_applied &&
 			p.kind !== 'retroactive' &&
-			p.transaction_kind !== 'future' &&
 			p.id === latestDeletableAppliedPaymentId
 		);
 	}
@@ -491,7 +490,6 @@
 	const latestDeletableAppliedPaymentId = $derived.by(() => {
 		for (let i = scheduleGroups.applied.length - 1; i >= 0; i--) {
 			const p = scheduleGroups.applied[i];
-			if (p.transaction_kind === 'future') continue;
 			if (p.transaction_id) return p.id;
 		}
 		return '';

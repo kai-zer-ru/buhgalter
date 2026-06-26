@@ -18,28 +18,28 @@ import (
 )
 
 type Transaction struct {
-	ID                string  `json:"id"`
-	AccountID         string  `json:"account_id"`
-	AccountName           string  `json:"account_name,omitempty"`
-	TransferAccountName   string  `json:"transfer_account_name,omitempty"`
-	Type              string  `json:"type"`
-	Kind              string  `json:"kind"`
-	Amount            int64   `json:"amount"`
-	AmountDisplay     string  `json:"amount_display"`
-	Description       *string `json:"description"`
-	CategoryID        *string `json:"category_id"`
-	CategoryName      *string `json:"category_name,omitempty"`
-	CategoryIcon      *string `json:"category_icon,omitempty"`
-	CategoryIsSystem  bool    `json:"category_is_system,omitempty"`
-	SubcategoryID     *string `json:"subcategory_id"`
-	SubcategoryName   *string `json:"subcategory_name,omitempty"`
-	TransferGroupID   *string `json:"transfer_group_id,omitempty"`
+	ID                  string  `json:"id"`
+	AccountID           string  `json:"account_id"`
+	AccountName         string  `json:"account_name,omitempty"`
+	TransferAccountName string  `json:"transfer_account_name,omitempty"`
+	Type                string  `json:"type"`
+	Kind                string  `json:"kind"`
+	Amount              int64   `json:"amount"`
+	AmountDisplay       string  `json:"amount_display"`
+	Description         *string `json:"description"`
+	CategoryID          *string `json:"category_id"`
+	CategoryName        *string `json:"category_name,omitempty"`
+	CategoryIcon        *string `json:"category_icon,omitempty"`
+	CategoryIsSystem    bool    `json:"category_is_system,omitempty"`
+	SubcategoryID       *string `json:"subcategory_id"`
+	SubcategoryName     *string `json:"subcategory_name,omitempty"`
+	TransferGroupID     *string `json:"transfer_group_id,omitempty"`
 	TransferAccountID   *string `json:"transfer_account_id,omitempty"`
-	TransferIsOut         bool `json:"transfer_is_out,omitempty"`
-	CreditPaymentLinked   bool `json:"credit_payment_linked,omitempty"`
-	TransactionDate       string  `json:"transaction_date"`
-	CreatedAt         string  `json:"created_at"`
-	UpdatedAt         string  `json:"updated_at"`
+	TransferIsOut       bool    `json:"transfer_is_out,omitempty"`
+	CreditPaymentLinked bool    `json:"credit_payment_linked,omitempty"`
+	TransactionDate     string  `json:"transaction_date"`
+	CreatedAt           string  `json:"created_at"`
+	UpdatedAt           string  `json:"updated_at"`
 }
 
 type ListFilters struct {
@@ -67,17 +67,17 @@ type ListResult struct {
 }
 
 var (
-	ErrNotFound          = errors.New("transaction not found")
-	ErrTransferNotFound  = errors.New("transfer not found")
-	ErrInvalidType       = errors.New("invalid transaction type")
-	ErrInvalidAccount    = errors.New("invalid account")
-	ErrAccountArchived   = errors.New("account is archived")
-	ErrInvalidCategory   = errors.New("invalid category")
-	ErrCategoryTypeMatch = errors.New("category type mismatch")
-	ErrInvalidSubcategory = errors.New("invalid subcategory")
-	ErrInvalidDate       = errors.New("invalid transaction date")
-	ErrInvalidAmount     = errors.New("invalid amount")
-	ErrSameAccount       = errors.New("same account for transfer")
+	ErrNotFound              = errors.New("transaction not found")
+	ErrTransferNotFound      = errors.New("transfer not found")
+	ErrInvalidType           = errors.New("invalid transaction type")
+	ErrInvalidAccount        = errors.New("invalid account")
+	ErrAccountArchived       = errors.New("account is archived")
+	ErrInvalidCategory       = errors.New("invalid category")
+	ErrCategoryTypeMatch     = errors.New("category type mismatch")
+	ErrInvalidSubcategory    = errors.New("invalid subcategory")
+	ErrInvalidDate           = errors.New("invalid transaction date")
+	ErrInvalidAmount         = errors.New("invalid amount")
+	ErrSameAccount           = errors.New("same account for transfer")
 	ErrSystemCategoryPlanned = errors.New("system category cannot be planned")
 )
 
@@ -206,14 +206,14 @@ func resolveKind(ctx context.Context, db *sql.DB, userID string, txDate time.Tim
 }
 
 type CreateInput struct {
-	AccountID        string
-	Type             string
-	Amount           int64
-	Description      *string
-	CategoryID       *string
-	SubcategoryID    *string
-	SubcategoryName  *string
-	TransactionDate  time.Time
+	AccountID       string
+	Type            string
+	Amount          int64
+	Description     *string
+	CategoryID      *string
+	SubcategoryID   *string
+	SubcategoryName *string
+	TransactionDate time.Time
 }
 
 func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Transaction, error) {
@@ -405,8 +405,9 @@ func ActivateDueFutureTransactions(ctx context.Context, db *sql.DB, userID strin
 	cutoff := timeutil.FormatUTC(timeutil.NowUTC())
 	q := queries(db)
 	if _, err := q.ActivateAppliedCreditFutureTransactions(ctx, sqlcdb.ActivateAppliedCreditFutureTransactionsParams{
-		UpdatedAt: now,
-		UserID:    userID,
+		UpdatedAt:       now,
+		UserID:          userID,
+		TransactionDate: cutoff,
 	}); err != nil {
 		return err
 	}
