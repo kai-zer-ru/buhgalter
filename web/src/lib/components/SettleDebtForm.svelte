@@ -5,8 +5,10 @@
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
+	import FieldHint from '$lib/components/FieldHint.svelte';
 	import FormFeedback from '$lib/components/FormFeedback.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
+	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
 	import { toast } from '$lib/toast';
 	import { fromDatetimeLocalValue, nowDatetimeLocal } from '$lib/dates';
 	import { formatMoneyDisplay, toAPIAmount } from '$lib/money';
@@ -24,12 +26,12 @@
 	let amount = $state('');
 	let settledAtLocal = $state('');
 	let accountId = $state('');
+	let skipBalance = $state(false);
 	let accounts = $state<Account[]>([]);
 	let saving = $state(false);
 	let error = $state('');
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
-	const affectsBalance = $derived(debt?.affects_balance ?? false);
 	const accountOptions = $derived(accounts.map((acc) => ({ value: acc.id, label: acc.name })));
 
 	$effect(() => {
@@ -43,6 +45,7 @@
 		error = '';
 		amount = currentDebt.amount_display;
 		settledAtLocal = nowDatetimeLocal(tz);
+		skipBalance = false;
 		accounts = await listAccounts('active');
 		accountId =
 			currentDebt.account_id && accounts.some((a) => a.id === currentDebt.account_id)
@@ -56,6 +59,10 @@
 		error = '';
 		try {
 			const settled_at = fromDatetimeLocalValue(settledAtLocal, tz);
+			const affectsBalance = !skipBalance;
+			if (affectsBalance && !accountId) {
+				throw new Error($_('transactions.field.account'));
+			}
 			await settleDebt(debt.id, {
 				amount: toAPIAmount(amount),
 				settled_at,
@@ -105,7 +112,21 @@
 				required
 			/>
 
-			{#if affectsBalance}
+			<div class="space-y-1">
+				<div class="flex items-center justify-between gap-4">
+					<div>
+						<p class="text-sm">{$_('debts.settle.skipBalance')}</p>
+						<FieldHint text={$_('debts.settle.skipBalanceHint')} />
+					</div>
+					<ToggleSwitch
+						checked={skipBalance}
+						label={$_('debts.settle.skipBalance')}
+						onchange={() => (skipBalance = !skipBalance)}
+					/>
+				</div>
+			</div>
+
+			{#if !skipBalance}
 				<Select
 					label={$_('transactions.field.account')}
 					bind:value={accountId}

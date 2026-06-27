@@ -17,7 +17,7 @@ OpenAPI-схемы: [`Transaction`](api/openapi.yaml#/components/schemas/Transac
 | `amount_display` | string | `"1234.56"` для UI |
 | `commission` | integer | Только для перевода: комиссия в копейках (v1.1) |
 | `commission_display` | string | Отформатированная комиссия |
-| `credit_payment_linked` | bool | `true` — операция привязана к платежу по кредиту; редактирование через `PATCH /transactions/{id}` запрещено |
+| `credit_payment_linked` | bool | `true` — операция привязана к платежу по кредиту; редактирование через `PUT /transactions/{id}` запрещено |
 
 `transfer_is_out` вычисляется в sqlc-запросах (`CASE` + подзапрос по `transfer_group_id`), не хранится в таблице `transactions`.
 
@@ -76,6 +76,16 @@ OpenAPI-схемы: [`Transaction`](api/openapi.yaml#/components/schemas/Transac
 
 OpenAPI: `CreateTransferRequest.commission`, схема `Transfer`.
 
+## Редактирование дохода и расхода
+
+Из списка операций (`TransactionList` — главная, `/transactions`, `/accounts/[id]`) — пункт меню «Изменить» открывает `TransactionForm`:
+
+- API: `PUT /api/v1/transactions/{id}` (`updateTransaction` в клиенте)
+- Можно менять: счёт, категорию, подкатегорию, сумму, описание, дату
+- **Тип** (`income` / `expense`) не меняется — в форме показывается текстом; при смене типа в теле запроса — `ERR_TX_TYPE_CHANGE`
+- Дата в будущем (в TZ пользователя) → `kind=future` (плановая операция)
+- Операции с `credit_payment_linked` **не** редактируются из списка (`canEditTransaction`)
+
 ## Редактирование перевода (v1.1)
 
 Из списка операций (`TransactionList`, страница счёта, `/transactions`) — кнопка «Изменить» открывает `TransferForm` в режиме редактирования:
@@ -84,9 +94,15 @@ OpenAPI: `CreateTransferRequest.commission`, схема `Transfer`.
 - Счета «откуда/куда» — `transferAccountIds()` (корректно при одной ноге на `/accounts/[id]`)
 - Операции с `credit_payment_linked` **не** редактируются из списка (`canEditTransaction`)
 
-## Фильтры дат (v1.1)
+## Фильтры
 
-`TransactionFilters` с `timeMode="hidden"`: только дата, границы суток — `fromDateLocalStart` / `toDateLocalEnd` (`$lib/dates.ts`) в часовом поясе пользователя. Используется на `/transactions`, `/stats`, странице счёта.
+`TransactionFilters` внутри `FilterPanel`: на мобильных — спойлер «Фильтры» с chevron; на десктопе — всегда открыта. Поля с `timeMode="hidden"`: только дата, границы суток — `fromDateLocalStart` / `toDateLocalEnd` (`$lib/dates.ts`) в часовом поясе пользователя. Используется на `/transactions`, `/stats`, странице счёта.
+
+Подробнее: [ui-row-actions.md](ui-row-actions.md).
+
+## Действия в списке операций
+
+`TransactionList` — меню «⋯» в каждой строке (сделать периодической, изменить, удалить). На мобильных меню в шапке карточки рядом с суммой. Используется на **главной** («Последние операции»), `/transactions`, странице счёта.
 
 ## Категории с одинаковым именем
 
@@ -94,8 +110,8 @@ OpenAPI: `CreateTransferRequest.commission`, схема `Transfer`.
 
 ## Главная (`/`)
 
-- Карточки счетов: `AccountIcon` (`type`, `bank_icon` из API), имя и баланс — как на `/accounts`.
-- «Последние операции»: колонки дата, счёт, категория (с `CategoryIcon`), сумма, описание.
+- Карточки счетов: `AccountIcon` (`type`, `bank_icon` из API), имя, баланс и меню «⋯» — как на `/accounts` ([ui-row-actions.md](ui-row-actions.md)).
+- «Последние операции»: колонки дата, счёт, категория (с `CategoryIcon`), сумма, описание; меню «⋯» в каждой строке (как на `/transactions`).
 - Ссылка «Все операции» → `/transactions`.
 
 ## Формат денег
@@ -134,5 +150,7 @@ OpenAPI: `CreateTransferRequest.commission`, схема `Transfer`.
 | [ui-table-columns.md](ui-table-columns.md) | Порядок колонок (дата → счёт → … → сумма) |
 | [ui-navigation.md](ui-navigation.md) | `BackLink` на `/transactions` → главная; кликабельные счета |
 | [data-model.md](data-model.md) | `transfer_group_id`, вычисляемые поля в sqlc |
-| [api/openapi.yaml](api/openapi.yaml) | Схемы `Transaction`, `Dashboard`, `AccountBalanceSummary` (OpenAPI 1.1.0) |
+| [api/openapi.yaml](api/openapi.yaml) | Схемы `Transaction`, `Dashboard`, `AccountBalanceSummary`, `StatsSummary`, `/stats/*`, `ErrorResponse.error.field` |
+| [ui-row-actions.md](ui-row-actions.md) | `RowActionsMenu`, `FilterPanel` |
 | [ui-navigation.md](ui-navigation.md) | Фильтры и пагинация списков — те же хелперы отображения строк |
+| [ui-stats.md](ui-stats.md) | Страница `/stats` |

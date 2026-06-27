@@ -42,6 +42,54 @@ func seedCreditEnv(t *testing.T) (context.Context, *db.Handle, string, string) {
 	return ctx, db.NewHandle(mgr), userID, accountID
 }
 
+func TestPayNextScheduledAlternateAccount(t *testing.T) {
+	ctx, handle, userID, accountID := seedCreditEnv(t)
+	sqlDB := handle.DB()
+	altAccountID := "acc-alt"
+	_, err := sqlDB.ExecContext(ctx, `
+		INSERT INTO accounts (id, user_id, name, type, initial_balance, status, created_at, updated_at)
+		VALUES (?, ?, 'Другой счёт', 'cash', 0, 'active', datetime('now'), datetime('now'))`,
+		altAccountID, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	issue := timeutil.NowUTC().AddDate(0, 1, 0)
+	c, err := Create(ctx, sqlDB, userID, CreateInput{
+		PrincipalAmount: 60_000,
+		IssueDate:       issue,
+		TermMonths:      6,
+		PaymentInterval: IntervalMonth,
+		DebitAccountID:  accountID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	paid, err := PayNextScheduled(ctx, sqlDB, userID, c.ID, PayPaymentInput{
+		Amount: c.MonthlyPayment, PaymentDate: timeutil.NowUTC(), AccountID: altAccountID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if paid.DebitAccountID != accountID {
+		t.Fatalf("credit debit account changed: %s", paid.DebitAccountID)
+	}
+
+	var txAccountID string
+	for _, p := range paid.Schedule {
+		if p.TransactionID != nil {
+			if err := sqlDB.QueryRowContext(ctx, `SELECT account_id FROM transactions WHERE id = ?`, *p.TransactionID).Scan(&txAccountID); err != nil {
+				t.Fatal(err)
+			}
+			break
+		}
+	}
+	if txAccountID != altAccountID {
+		t.Fatalf("expected tx on %s, got %s", altAccountID, txAccountID)
+	}
+}
+
 func TestCreateListGetCredit(t *testing.T) {
 	ctx, handle, userID, accountID := seedCreditEnv(t)
 	sqlDB := handle.DB()

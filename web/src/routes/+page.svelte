@@ -1,17 +1,26 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { _ } from 'svelte-i18n';
-	import { ApiError, getDashboard, type Dashboard } from '$lib/api/client';
+	import {
+		ApiError,
+		deleteTransaction,
+		getDashboard,
+		type Dashboard,
+		type Transaction
+	} from '$lib/api/client';
 	import AccountIcon from '$lib/components/AccountIcon.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
 	import TransactionForm from '$lib/components/TransactionForm.svelte';
 	import TransactionList from '$lib/components/TransactionList.svelte';
 	import TransferForm from '$lib/components/TransferForm.svelte';
 	import IconButton from '$lib/components/IconButton.svelte';
+	import { confirm } from '$lib/confirm';
 	import { formatBalance } from '$lib/finance';
 	import { fromCents } from '$lib/money';
 	import { dedupeTransferLegs } from '$lib/transaction-display';
+	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
 
 	let dash = $state<Dashboard | null>(null);
@@ -19,6 +28,8 @@
 	let error = $state('');
 	let txOpen = $state(false);
 	let transferOpen = $state(false);
+	let editTx = $state<Transaction | null>(null);
+	let editTransfer = $state<Transaction | null>(null);
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
 	const recentTx = $derived(dash ? dedupeTransferLegs(dash.recent_transactions) : []);
@@ -36,6 +47,35 @@
 			error = err instanceof ApiError ? err.message : $_('common.error');
 		} finally {
 			loading = false;
+		}
+	}
+
+	function openEdit(tx: Transaction) {
+		if (tx.credit_payment_linked) return;
+		if (tx.type === 'transfer' && tx.transfer_group_id) {
+			editTransfer = tx;
+			editTx = null;
+			transferOpen = true;
+			return;
+		}
+		editTransfer = null;
+		editTx = tx;
+		txOpen = true;
+	}
+
+	async function removeTx(tx: Transaction) {
+		const msg =
+			tx.type === 'transfer' && tx.transfer_group_id
+				? $_('transactions.confirm.deleteTransfer')
+				: $_('transactions.confirm.delete');
+		const ok = await confirm({ message: msg, confirmLabel: $_('common.delete'), danger: true });
+		if (!ok) return;
+		try {
+			await deleteTransaction(tx.id);
+			toast($_('common.deleted'));
+			await load();
+		} catch (err) {
+			error = err instanceof ApiError ? err.message : $_('common.error');
 		}
 	}
 </script>
@@ -60,12 +100,18 @@
 				icon="add"
 				label={$_('transactions.new')}
 				variant="primary"
-				onclick={() => (txOpen = true)}
+				onclick={() => {
+					editTx = null;
+					txOpen = true;
+				}}
 			/>
 			<IconButton
 				icon="transfer"
 				label={$_('transactions.transfer')}
-				onclick={() => (transferOpen = true)}
+				onclick={() => {
+					editTransfer = null;
+					transferOpen = true;
+				}}
 			/>
 		</div>
 	</div>
@@ -148,6 +194,12 @@
 						emptyMessage={$_('transactions.empty')}
 						showDescription
 						showAmountSign
+						showEdit
+						showDelete
+						onmakeRecurring={(tx) =>
+							void goto(resolve(`/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`))}
+						onedit={openEdit}
+						ondelete={(tx) => void removeTx(tx)}
 					/>
 				</div>
 				<p class="mt-2">
@@ -160,5 +212,22 @@
 	{/if}
 </div>
 
-<TransactionForm bind:open={txOpen} onclose={() => (txOpen = false)} onsaved={load} />
-<TransferForm bind:open={transferOpen} onclose={() => (transferOpen = false)} onsaved={load} />
+<TransactionForm
+	bind:open={txOpen}
+	transaction={editTx}
+	onclose={() => {
+		txOpen = false;
+		editTx = null;
+	}}
+	onsaved={load}
+/>
+<TransferForm
+	bind:open={transferOpen}
+	editTx={editTransfer}
+	siblings={dash?.recent_transactions ?? []}
+	onclose={() => {
+		transferOpen = false;
+		editTransfer = null;
+	}}
+	onsaved={load}
+/>

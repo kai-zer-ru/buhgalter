@@ -210,6 +210,19 @@ html.dark {
 		@apply cursor-pointer list-none text-sm font-medium;
 	}
 
+	.filter-panel-summary {
+		@apply flex items-center justify-between gap-2;
+	}
+
+	.filter-panel-chevron {
+		@apply h-5 w-5 shrink-0 transition-transform duration-150;
+		color: var(--text-muted);
+	}
+
+	.filter-panel[open] > .filter-panel-summary .filter-panel-chevron {
+		transform: rotate(180deg);
+	}
+
 	.filter-panel > summary::-webkit-details-marker {
 		display: none;
 	}

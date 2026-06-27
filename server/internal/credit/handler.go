@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -59,6 +60,7 @@ type updateCreditRequest struct {
 type payPaymentRequest struct {
 	Amount      json.RawMessage `json:"amount"`
 	PaymentDate string          `json:"payment_date"`
+	AccountID   *string         `json:"account_id"`
 }
 
 type completeCreditRequest struct {
@@ -208,8 +210,12 @@ func (h *Handler) AddPayment(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteDetail(w, r, http.StatusBadRequest, apperror.ValidationError, apperror.ValidationError, err.Error())
 		return
 	}
+	accountID := ""
+	if req.AccountID != nil {
+		accountID = strings.TrimSpace(*req.AccountID)
+	}
 	c, err := PayNextScheduled(r.Context(), h.Store.DB(), info.User.ID, id, PayPaymentInput{
-		Amount: amount, PaymentDate: payDate,
+		Amount: amount, PaymentDate: payDate, AccountID: accountID,
 	})
 	if writeCreditError(w, r, err) {
 		return
@@ -456,6 +462,9 @@ func parseCreateInput(req createCreditRequest) (CreateInput, error) {
 		if err != nil {
 			return CreateInput{}, errors.New("некорректная сумма в графике")
 		}
+		if amt <= 0 {
+			return CreateInput{}, errors.New("сумма в графике должна быть положительной")
+		}
 		in.ScheduleSeed = append(in.ScheduleSeed, ScheduleSeed{PaymentDate: d, Amount: amt})
 	}
 	if interval == IntervalManual && len(in.ScheduleSeed) != req.TermMonths {
@@ -500,6 +509,9 @@ func parsePreviewInput(req previewScheduleRequest) (PreviewInput, error) {
 		amt, err := money.ParseAmount(seed.Amount)
 		if err != nil {
 			return PreviewInput{}, errors.New("некорректная сумма seed")
+		}
+		if amt <= 0 {
+			return PreviewInput{}, errors.New("сумма seed должна быть положительной")
 		}
 		in.SeedPayments = append(in.SeedPayments, ScheduleSeed{PaymentDate: d, Amount: amt})
 	}
@@ -552,6 +564,10 @@ func writeCreditError(w http.ResponseWriter, r *http.Request, err error) bool {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_CANNOT_EDIT_PAYMENT")
 	case errors.Is(err, ErrCompleteParamsRequired):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_COMPLETE_DATE")
+	case errors.Is(err, ErrMonthlyPaymentTooLowForInterest):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_INVALID_PAYMENT")
+	case errors.Is(err, ErrMonthlyPaymentTooHighForTerm):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_INVALID_PAYMENT")
 	default:
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 	}

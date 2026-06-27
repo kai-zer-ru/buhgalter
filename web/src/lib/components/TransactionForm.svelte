@@ -186,22 +186,28 @@
 	onclose={close}
 >
 	<form id="tx-form" class="space-y-4" onsubmit={save}>
-		<div class="flex gap-2">
-			<button
-				type="button"
-				class={txType === 'expense' ? 'tab tab-active' : 'tab'}
-				onclick={() => void onTypeChange('expense')}
-			>
-				{$_('transactions.type.expense')}
-			</button>
-			<button
-				type="button"
-				class={txType === 'income' ? 'tab tab-active' : 'tab'}
-				onclick={() => void onTypeChange('income')}
-			>
-				{$_('transactions.type.income')}
-			</button>
-		</div>
+		{#if editing}
+			<p class="text-sm font-medium">
+				{txType === 'expense' ? $_('transactions.type.expense') : $_('transactions.type.income')}
+			</p>
+		{:else}
+			<div class="flex gap-2">
+				<button
+					type="button"
+					class={txType === 'expense' ? 'tab tab-active' : 'tab'}
+					onclick={() => void onTypeChange('expense')}
+				>
+					{$_('transactions.type.expense')}
+				</button>
+				<button
+					type="button"
+					class={txType === 'income' ? 'tab tab-active' : 'tab'}
+					onclick={() => void onTypeChange('income')}
+				>
+					{$_('transactions.type.income')}
+				</button>
+			</div>
+		{/if}
 
 		<div>
 			<label class="mb-1 block text-sm font-medium" for="tx-amount"

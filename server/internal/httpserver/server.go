@@ -48,10 +48,11 @@ func New(cfg config.Config, manager *db.Manager, logger *slog.Logger, auditLogge
 func (s *Server) Handler() http.Handler {
 	r := chi.NewRouter()
 	dbHandle := db.NewHandle(s.manager)
+	verboseLogs := s.cfg.LogMode == "dev"
 	r.Use(appmw.RequestID)
 	r.Use(appmw.RequestIDToContext)
 	r.Use(appmw.Recovery(s.logger))
-	r.Use(appmw.Logger(s.logger))
+	r.Use(appmw.Logger(s.logger, verboseLogs))
 	r.Use(appmw.CORS(s.cfg.CORSOrigins))
 	r.Use(appmw.ExternalAccess(dbHandle, s.cfg.AllowedHosts))
 	r.Use(chimw.Compress(5))
@@ -266,7 +267,7 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-func InitLogger(logDir string) (*slog.Logger, io.Closer, error) {
+func InitLogger(logDir, mode string) (*slog.Logger, io.Closer, error) {
 	if err := os.MkdirAll(logDir, 0o755); err != nil {
 		return nil, nil, err
 	}
@@ -281,6 +282,10 @@ func InitLogger(logDir string) (*slog.Logger, io.Closer, error) {
 	}
 
 	multi := io.MultiWriter(os.Stdout, f)
-	logger := slog.New(slog.NewJSONHandler(multi, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	level := slog.LevelInfo
+	if mode == "dev" {
+		level = slog.LevelDebug
+	}
+	logger := slog.New(slog.NewJSONHandler(multi, &slog.HandlerOptions{Level: level}))
 	return logger, f, nil
 }

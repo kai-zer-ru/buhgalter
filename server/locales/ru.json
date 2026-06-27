@@ -72,6 +72,7 @@
   "ERR_SETTLE_AMOUNT": "Сумма погашения превышает остаток долга",
   "ERR_DEBTOR_REQUIRED": "Укажите должника",
   "ERR_TX_TYPE": "Тип операции: income или expense",
+  "ERR_TX_TYPE_CHANGE": "Тип операции нельзя изменить",
   "ERR_TX_AMOUNT_POSITIVE": "Сумма должна быть положительной",
   "ERR_CATEGORY_NOT_FOUND": "Категория не найдена",
   "ERR_CATEGORY_TYPE_MISMATCH": "Тип категории не совпадает с типом операции",

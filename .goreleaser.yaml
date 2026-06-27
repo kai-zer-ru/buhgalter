@@ -54,6 +54,7 @@ release:
   github:
     owner: kai-zer-ru
     name: buhgalter
+  replace_existing_artifacts: true
   extra_files:
     - glob: docker/docker-compose.yml
       name_template: docker-compose.yaml

@@ -1,5 +1,6 @@
 import { writable } from 'svelte/store';
 import type { User } from '$lib/api/client';
+import { invalidateApiCache } from '$lib/api/cache';
 import { ApiError, getMe, isTransientHttpError, logout as apiLogout } from '$lib/api/client';
 
 export const user = writable<User | null>(null);
@@ -64,6 +65,7 @@ export async function loadUser(): Promise<LoadUserResult> {
 
 			if (err instanceof ApiError && err.status === 401) {
 				clearSessionHint();
+				invalidateApiCache();
 				user.set(null);
 				return 'unauthorized';
 			}
@@ -81,5 +83,6 @@ export async function logout() {
 		// ignore
 	}
 	clearSessionHint();
+	invalidateApiCache();
 	user.set(null);
 }

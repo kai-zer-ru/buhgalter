@@ -12,6 +12,7 @@ type Config struct {
 	DBPath        string
 	DataDir       string
 	LogDir        string
+	LogMode       string
 	EnvFilePath   string
 	CORSOrigins   []string
 	AllowedHosts  []string
@@ -34,6 +35,7 @@ func Load(version, installMethod, buildCommit, buildTime string) Config {
 		DBPath:        envOr("BUHGALTER_DB_PATH", "./data/buhgalter.db"),
 		DataDir:       dataDir,
 		LogDir:        envOr("BUHGALTER_LOG_DIR", "./logs"),
+		LogMode:       envOr("BUHGALTER_LOG_MODE", "prod"),
 		EnvFilePath:   envFile,
 		Version:       version,
 		InstallMethod: installMethod,

@@ -66,12 +66,13 @@
 	let debitTimeLocal = $state('');
 	let scheduleRows = $state<ScheduleRow[]>([]);
 	let scheduleLoading = $state(false);
+	let scheduleError = $state('');
 	let lastScheduleKey = $state('');
 	let saving = $state(false);
 	let error = $state('');
-	let showAllScheduleRows = $state(false);
+	let schedulePage = $state(1);
 
-	const schedulePreviewLimit = 10;
+	const schedulePageSize = 10;
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
 	const isManualInterval = $derived(interval === 'manual');
@@ -154,8 +155,23 @@
 		return [baseScheduleParamsKey(), paymentOverride ?? ''].join('|');
 	}
 
+	function paymentsClose(a: string, b: string, toleranceCents = 100): boolean {
+		try {
+			return Math.abs(toCents(a) - toCents(b)) <= toleranceCents;
+		} catch {
+			return false;
+		}
+	}
+
 	async function applyPaymentEdit() {
-		paymentOverride = paymentDraft.trim() ? paymentDraft : null;
+		const draft = paymentDraft.trim();
+		if (!draft) {
+			paymentOverride = null;
+		} else if (calculatedPayment && paymentsClose(draft, calculatedPayment)) {
+			paymentOverride = null;
+		} else {
+			paymentOverride = draft;
+		}
 		editingPayment = false;
 		lastScheduleKey = '';
 		await refreshSchedule(scheduleParamsKey());
@@ -193,18 +209,25 @@
 		scheduleRows = [];
 		lastScheduleKey = '';
 		lastBaseScheduleKey = '';
+		scheduleError = '';
 		error = '';
-		showAllScheduleRows = false;
+		schedulePage = 1;
 	}
 
+	let formWasOpen = $state(false);
+
 	$effect(() => {
-		if (open) {
-			resetForm();
-			createTransactions = true;
-			void loadAccounts();
-			void loadBanks();
-			issueDateLocal = todayDateLocal(tz);
+		if (!open) {
+			formWasOpen = false;
+			return;
 		}
+		if (formWasOpen) return;
+		formWasOpen = true;
+		resetForm();
+		createTransactions = true;
+		void loadAccounts();
+		void loadBanks();
+		issueDateLocal = todayDateLocal(tz);
 	});
 
 	let lastBaseScheduleKey = $state('');
@@ -285,8 +308,8 @@
 
 	async function refreshSchedule(expectedKey: string) {
 		if (!effectivePrincipal.trim() || !termMonths || isManualInterval) return;
-		const hadRows = scheduleRows.length > 0;
 		scheduleLoading = true;
+		scheduleError = '';
 		try {
 			const res = await previewCreditSchedule({
 				principal: toAPIAmount(effectivePrincipal),
@@ -298,31 +321,26 @@
 				monthly_payment: paymentOverride ? toAPIAmount(paymentOverride) : null
 			});
 			if (scheduleParamsKey() !== expectedKey) return;
-			const nextRows = res.schedule_preview.map((row) => ({
+			scheduleRows = (res.schedule_preview ?? []).map((row) => ({
 				date: dateOnlyLocalValue(toDatetimeLocalValue(row.payment_date, tz)),
 				amount: row.amount_display ?? fromCents(row.amount)
 			}));
-			if (nextRows.length === scheduleRows.length && scheduleRows.length > 0) {
-				scheduleRows = scheduleRows.map((row, i) => ({
-					date: nextRows[i].date,
-					amount: nextRows[i].amount
-				}));
-			} else {
-				scheduleRows = nextRows;
-			}
-			showAllScheduleRows = false;
 			calculatedPayment = res.calculated_monthly_payment_display;
 			lastScheduleKey = expectedKey;
-		} catch {
-			if (scheduleParamsKey() === expectedKey && !hadRows) {
-				scheduleRows = [];
-			}
+			schedulePage = 1;
+		} catch (e) {
+			if (scheduleParamsKey() !== expectedKey) return;
+			scheduleError = e instanceof ApiError ? e.message : 'Не удалось рассчитать график';
+			lastScheduleKey = '';
 		} finally {
 			scheduleLoading = false;
 		}
 	}
 
 	function buildSchedulePayload() {
+		if (!isManualInterval) {
+			return [];
+		}
 		return scheduleRows
 			.filter((r) => r.date && r.amount)
 			.map((r) => ({
@@ -393,11 +411,21 @@
 
 	const showCreateTransactions = $derived(true);
 	const showDebitTimeField = $derived(showCreateTransactions && createTransactions);
-	const visibleScheduleRows = $derived(
-		(showAllScheduleRows ? scheduleRows : scheduleRows.slice(0, schedulePreviewLimit)).map(
-			(row, index) => ({ row, index })
-		)
+	const scheduleTotalPages = $derived(
+		Math.max(1, Math.ceil(scheduleRows.length / schedulePageSize))
 	);
+	const schedulePageSafe = $derived(Math.min(Math.max(1, schedulePage), scheduleTotalPages));
+	const visibleScheduleRows = $derived(
+		scheduleRows
+			.slice((schedulePageSafe - 1) * schedulePageSize, schedulePageSafe * schedulePageSize)
+			.map((row, offset) => ({ row, index: (schedulePageSafe - 1) * schedulePageSize + offset }))
+	);
+
+	$effect(() => {
+		if (schedulePage > scheduleTotalPages) {
+			schedulePage = scheduleTotalPages;
+		}
+	});
 
 	$effect(() => {
 		if (!showDebitTimeField) {
@@ -651,6 +679,9 @@
 					</span>
 				{/if}
 			</div>
+			{#if scheduleError}
+				<p class="text-sm text-red-600">{scheduleError}</p>
+			{/if}
 			<div class="rounded border text-sm" style:border-color="var(--border)">
 				{#if scheduleRows.length === 0}
 					<p class="p-4 text-sm" style:color="var(--text-muted)">
@@ -811,18 +842,47 @@
 							</article>
 						{/each}
 					</div>
-					{#if scheduleRows.length > schedulePreviewLimit}
-						<div class="px-3 pb-3">
+					{#if scheduleRows.length > schedulePageSize}
+						<div
+							class="flex flex-wrap items-center justify-between gap-2 border-t px-3 py-2 text-sm"
+							style:border-color="var(--border)"
+						>
 							<button
 								type="button"
-								class="btn-ghost text-sm"
-								onclick={() => (showAllScheduleRows = !showAllScheduleRows)}
+								class="btn-ghost"
+								disabled={schedulePageSafe <= 1}
+								onclick={() => (schedulePage = 1)}
 							>
-								{showAllScheduleRows
-									? $_('credits.schedule.collapse')
-									: $_('credits.schedule.expand', {
-											values: { count: scheduleRows.length - schedulePreviewLimit }
-										})}
+								{$_('transactions.pagination.first')}
+							</button>
+							<button
+								type="button"
+								class="btn-ghost"
+								disabled={schedulePageSafe <= 1}
+								onclick={() => (schedulePage = Math.max(1, schedulePageSafe - 1))}
+							>
+								{$_('transactions.pagination.prev')}
+							</button>
+							<span class="tabular-nums" style:color="var(--text-muted)">
+								{$_('transactions.pagination.page', {
+									values: { page: schedulePageSafe, pages: scheduleTotalPages }
+								})}
+							</span>
+							<button
+								type="button"
+								class="btn-ghost"
+								disabled={schedulePageSafe >= scheduleTotalPages}
+								onclick={() => (schedulePage = Math.min(scheduleTotalPages, schedulePageSafe + 1))}
+							>
+								{$_('transactions.pagination.next')}
+							</button>
+							<button
+								type="button"
+								class="btn-ghost"
+								disabled={schedulePageSafe >= scheduleTotalPages}
+								onclick={() => (schedulePage = scheduleTotalPages)}
+							>
+								{$_('transactions.pagination.last')}
 							</button>
 						</div>
 					{/if}

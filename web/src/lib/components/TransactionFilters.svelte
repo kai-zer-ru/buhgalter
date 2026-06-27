@@ -3,6 +3,7 @@
 	import type { Account, Category } from '$lib/api/client';
 	import { categorySelectLabel } from '$lib/category-label';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
+	import FilterPanel from '$lib/components/FilterPanel.svelte';
 	import Select from '$lib/components/Select.svelte';
 
 	type Props = {
@@ -82,9 +83,8 @@
 	]);
 </script>
 
-<details class="filter-panel card" open>
-	<summary class="md:hidden">{$_('transactions.filters.toggle')}</summary>
-	<div class="grid items-end gap-3 sm:grid-cols-2 lg:grid-cols-4 md:mt-0 mt-3">
+<FilterPanel>
+	<div class="filter-panel-body grid items-end gap-3 sm:grid-cols-2 lg:grid-cols-4 md:mt-0 mt-3">
 		<DateTimePicker
 			id="tx-filter-from"
 			label={$_('transactions.filters.from')}
@@ -155,4 +155,4 @@
 			>
 		</div>
 	</div>
-</details>
+</FilterPanel>

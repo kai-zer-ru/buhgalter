@@ -55,8 +55,10 @@ function zonedComponentsToUtc(
 
 function parseAPIDateTime(s: string): Date {
 	const m = s.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/);
-	if (!m) throw new Error('invalid datetime');
-	return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]));
+	if (m) return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]));
+	const d = new Date(s);
+	if (Number.isNaN(d.getTime())) throw new Error('invalid datetime');
+	return d;
 }
 
 /** UI datetime (interpreted in user TZ) → API UTC string. */

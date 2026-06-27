@@ -21,8 +21,8 @@
 	} from '$lib/api/client';
 	import BackLink from '$lib/components/BackLink.svelte';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
-	import IconButton from '$lib/components/IconButton.svelte';
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
+	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import { confirm } from '$lib/confirm';
 	import {
@@ -284,10 +284,205 @@
 		syncDayOfMonthFromStartDate(nextPeriod, startDate);
 	}
 
+	function periodLabel(itemPeriod: RecurringOperation['period']): string {
+		switch (itemPeriod) {
+			case 'week':
+				return $_('recurring.period.week');
+			case 'two_weeks':
+				return $_('recurring.period.twoWeeks');
+			case 'month':
+				return $_('recurring.period.month');
+			default:
+				return $_('recurring.period.year');
+		}
+	}
+
+	function rowActions(item: RecurringOperation): RowAction[] {
+		return [
+			{
+				icon: 'edit',
+				label: $_('common.edit'),
+				onclick: () => beginEdit(item)
+			},
+			{
+				icon: 'delete',
+				label: $_('common.delete'),
+				variant: 'danger',
+				onclick: () => void remove(item)
+			}
+		];
+	}
+
 	$effect(() => {
 		syncDayOfMonthFromStartDate(period, startDate);
 	});
 </script>
+
+{#snippet operationForm(formPrefix: 'create' | 'edit' | 'edit-mobile')}
+	<form class="space-y-4" onsubmit={submit}>
+		<div class="flex flex-wrap gap-2">
+			<button
+				type="button"
+				class={type === 'expense' ? 'tab tab-active' : 'tab'}
+				onclick={() => void onTypeChange('expense')}
+			>
+				{$_('transactions.type.expense')}
+			</button>
+			<button
+				type="button"
+				class={type === 'income' ? 'tab tab-active' : 'tab'}
+				onclick={() => void onTypeChange('income')}
+			>
+				{$_('transactions.type.income')}
+			</button>
+		</div>
+
+		<div class="grid gap-3 md:grid-cols-2">
+			<div>
+				<label
+					class="mb-1 block text-sm"
+					style:color="var(--text-muted)"
+					for="recurring-amount-{formPrefix}"
+				>
+					{$_('transactions.field.amount')}
+				</label>
+				<MoneyInput id="recurring-amount-{formPrefix}" bind:value={amount} />
+			</div>
+			<div>
+				<label
+					class="mb-1 block text-sm"
+					style:color="var(--text-muted)"
+					for="recurring-description-{formPrefix}"
+				>
+					{$_('transactions.field.description')}
+				</label>
+				<input
+					id="recurring-description-{formPrefix}"
+					class="input w-full"
+					bind:value={description}
+					placeholder={$_('transactions.field.description')}
+					maxlength="160"
+				/>
+			</div>
+		</div>
+
+		<div class="grid gap-3 md:grid-cols-3">
+			<Select
+				label={$_('transactions.field.account')}
+				bind:value={accountId}
+				options={accountOptions}
+				usePortal
+			/>
+			<Select
+				label={$_('transactions.field.category')}
+				bind:value={categoryId}
+				options={categoryOptions}
+				onchange={() => void loadSubcategories()}
+				usePortal
+			/>
+			<Select
+				label={$_('transactions.field.subcategory')}
+				bind:value={subcategoryId}
+				options={[{ value: '', label: '—' }, ...subcategoryOptions]}
+				disabled={subcategoryOptions.length === 0}
+				usePortal
+			/>
+		</div>
+
+		<div class="grid gap-3 md:grid-cols-3">
+			<div>
+				<label
+					class="mb-1 block text-sm"
+					style:color="var(--text-muted)"
+					for="recurring-period-{formPrefix}">{$_('recurring.period')}</label
+				>
+				<select
+					id="recurring-period-{formPrefix}"
+					class="input w-full"
+					bind:value={period}
+					onchange={(e) =>
+						onPeriodChange((e.currentTarget as HTMLSelectElement).value as typeof period)}
+				>
+					<option value="week">{$_('recurring.period.week')}</option>
+					<option value="two_weeks">{$_('recurring.period.twoWeeks')}</option>
+					<option value="month">{$_('recurring.period.month')}</option>
+					<option value="year">{$_('recurring.period.year')}</option>
+				</select>
+			</div>
+			<div>
+				<DateTimePicker
+					id="recurring-start-date-{formPrefix}"
+					label={$_('recurring.startDate')}
+					bind:value={startDate}
+					timeMode="hidden"
+					usePortal
+					required
+				/>
+			</div>
+			{#if period === 'week' || period === 'two_weeks'}
+				<div>
+					<label
+						class="mb-1 block text-sm"
+						style:color="var(--text-muted)"
+						for="recurring-weekday-{formPrefix}">{$_('recurring.weekday')}</label
+					>
+					<select id="recurring-weekday-{formPrefix}" class="input w-full" bind:value={weekday}>
+						<option value="1">{$_('datetime.weekday.mon')}</option>
+						<option value="2">{$_('datetime.weekday.tue')}</option>
+						<option value="3">{$_('datetime.weekday.wed')}</option>
+						<option value="4">{$_('datetime.weekday.thu')}</option>
+						<option value="5">{$_('datetime.weekday.fri')}</option>
+						<option value="6">{$_('datetime.weekday.sat')}</option>
+						<option value="7">{$_('datetime.weekday.sun')}</option>
+					</select>
+				</div>
+			{:else if period === 'year'}
+				<div>
+					<label
+						class="mb-1 block text-sm"
+						style:color="var(--text-muted)"
+						for="recurring-day-of-month-{formPrefix}">{$_('recurring.dayOfMonth')}</label
+					>
+					<input
+						id="recurring-day-of-month-{formPrefix}"
+						class="input w-full"
+						type="number"
+						min="1"
+						max="31"
+						bind:value={dayOfMonth}
+					/>
+				</div>
+			{/if}
+		</div>
+		<details>
+			<summary class="cursor-pointer text-sm" style:color="var(--text-muted)">
+				{$_('recurring.timeAdvanced')}
+			</summary>
+			<div class="mt-2">
+				<input class="input w-full" type="time" bind:value={timeLocal} step="60" />
+			</div>
+		</details>
+		<label class="inline-flex items-center gap-2 text-sm">
+			<input type="checkbox" bind:checked={active} />
+			{$_('recurring.active')}
+		</label>
+		<div class="flex flex-wrap gap-2">
+			<button type="submit" class="btn-primary" disabled={saving}>
+				{saving
+					? $_('common.loading')
+					: formPrefix === 'create'
+						? $_('common.create')
+						: $_('common.save')}
+			</button>
+			{#if formPrefix !== 'create'}
+				<button type="button" class="btn-ghost" onclick={resetForm}>{$_('common.cancel')}</button>
+			{/if}
+		</div>
+		{#if error}
+			<p class="text-sm" style:color="var(--danger)">{error}</p>
+		{/if}
+	</form>
+{/snippet}
 
 <svelte:head>
 	<title>{$_('recurring.title')} — {$_('app.title')}</title>
@@ -309,232 +504,91 @@
 		<p style:color="var(--text-muted)">{$_('recurring.empty')}</p>
 	{:else}
 		<div class="card md:overflow-x-auto">
-			<table class="w-full text-left text-sm">
-				<thead>
-					<tr style:color="var(--text-muted)">
-						<th class="p-3">{$_('transactions.col.description')}</th>
-						<th class="p-3">{$_('recurring.period')}</th>
-						<th class="p-3">{$_('transactions.field.account')}</th>
-						<th class="p-3">{$_('recurring.nextRun')}</th>
-						<th class="p-3"></th>
-					</tr>
-				</thead>
-				<tbody>
-					{#each items as item (item.id)}
-						<tr class="border-t" style:border-color="var(--border)">
-							<td class="p-3">
-								<div class="font-medium">{item.description || item.category_name}</div>
-								<div class="text-xs" style:color="var(--text-muted)">
+			<div class="hidden md:block">
+				<table class="w-full text-left text-sm">
+					<thead>
+						<tr style:color="var(--text-muted)">
+							<th class="p-3">{$_('transactions.col.description')}</th>
+							<th class="p-3">{$_('recurring.period')}</th>
+							<th class="p-3">{$_('transactions.field.account')}</th>
+							<th class="p-3">{$_('recurring.nextRun')}</th>
+							<th class="p-3"></th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each items as item (item.id)}
+							<tr class="border-t" style:border-color="var(--border)">
+								<td class="p-3">
+									<div class="font-medium">{item.description || item.category_name}</div>
+									<div class="text-xs" style:color="var(--text-muted)">
+										{item.category_name}
+										{#if item.subcategory_name}
+											• {item.subcategory_name}
+										{/if}
+										• {formatMoneyDisplay(item.amount_display)}
+									</div>
+								</td>
+								<td class="p-3">{periodLabel(item.period)}</td>
+								<td class="p-3">{item.account_name}</td>
+								<td class="p-3">{formatAPIDateTimeForDisplay(item.next_run_at, tz)}</td>
+								<td class="p-3 text-right">
+									<RowActionsMenu actions={rowActions(item)} />
+								</td>
+							</tr>
+							{#if editId === item.id}
+								<tr class="border-t" style:border-color="var(--border)">
+									<td colspan="5" class="p-3">
+										{@render operationForm('edit')}
+									</td>
+								</tr>
+							{/if}
+						{/each}
+					</tbody>
+				</table>
+			</div>
+
+			<div class="space-y-3 p-3 md:hidden">
+				{#each items as item (item.id)}
+					<article class="rounded-xl border p-4" style:border-color="var(--border)">
+						<div class="flex items-start justify-between gap-3">
+							<div class="min-w-0">
+								<p class="font-medium">{item.description || item.category_name}</p>
+								<p class="mt-1 text-xs" style:color="var(--text-muted)">
 									{item.category_name}
 									{#if item.subcategory_name}
 										• {item.subcategory_name}
 									{/if}
-									• {formatMoneyDisplay(item.amount_display)}
-								</div>
-							</td>
-							<td class="p-3">
-								{#if item.period === 'week'}
-									{$_('recurring.period.week')}
-								{:else if item.period === 'two_weeks'}
-									{$_('recurring.period.twoWeeks')}
-								{:else if item.period === 'month'}
-									{$_('recurring.period.month')}
-								{:else}
-									{$_('recurring.period.year')}
-								{/if}
-							</td>
-							<td class="p-3">{item.account_name}</td>
-							<td class="p-3">{formatAPIDateTimeForDisplay(item.next_run_at, tz)}</td>
-							<td class="p-3 text-right">
-								<div class="flex justify-end gap-1">
-									<IconButton
-										icon="edit"
-										label={$_('common.edit')}
-										onclick={() => beginEdit(item)}
-									/>
-									<IconButton
-										icon="delete"
-										label={$_('common.delete')}
-										variant="danger"
-										onclick={() => void remove(item)}
-									/>
-								</div>
-							</td>
-						</tr>
-						{#if editId === item.id}
-							<tr class="border-t" style:border-color="var(--border)">
-								<td colspan="5" class="p-3">
-									<form class="space-y-4" onsubmit={submit}>
-										<div class="flex flex-wrap gap-2">
-											<button
-												type="button"
-												class={type === 'expense' ? 'tab tab-active' : 'tab'}
-												onclick={() => void onTypeChange('expense')}
-											>
-												{$_('transactions.type.expense')}
-											</button>
-											<button
-												type="button"
-												class={type === 'income' ? 'tab tab-active' : 'tab'}
-												onclick={() => void onTypeChange('income')}
-											>
-												{$_('transactions.type.income')}
-											</button>
-										</div>
-
-										<div class="grid gap-3 md:grid-cols-2">
-											<div>
-												<label
-													class="mb-1 block text-sm"
-													style:color="var(--text-muted)"
-													for="recurring-amount-edit"
-												>
-													{$_('transactions.field.amount')}
-												</label>
-												<MoneyInput id="recurring-amount-edit" bind:value={amount} />
-											</div>
-											<div>
-												<label
-													class="mb-1 block text-sm"
-													style:color="var(--text-muted)"
-													for="recurring-description-edit"
-												>
-													{$_('transactions.field.description')}
-												</label>
-												<input
-													id="recurring-description-edit"
-													class="input w-full"
-													bind:value={description}
-													placeholder={$_('transactions.field.description')}
-													maxlength="160"
-												/>
-											</div>
-										</div>
-
-										<div class="grid gap-3 md:grid-cols-3">
-											<Select
-												label={$_('transactions.field.account')}
-												bind:value={accountId}
-												options={accountOptions}
-												usePortal
-											/>
-											<Select
-												label={$_('transactions.field.category')}
-												bind:value={categoryId}
-												options={categoryOptions}
-												onchange={() => void loadSubcategories()}
-												usePortal
-											/>
-											<Select
-												label={$_('transactions.field.subcategory')}
-												bind:value={subcategoryId}
-												options={[{ value: '', label: '—' }, ...subcategoryOptions]}
-												disabled={subcategoryOptions.length === 0}
-												usePortal
-											/>
-										</div>
-
-										<div class="grid gap-3 md:grid-cols-3">
-											<div>
-												<label
-													class="mb-1 block text-sm"
-													style:color="var(--text-muted)"
-													for="recurring-period-edit">{$_('recurring.period')}</label
-												>
-												<select
-													id="recurring-period-edit"
-													class="input w-full"
-													bind:value={period}
-													onchange={(e) =>
-														onPeriodChange(
-															(e.currentTarget as HTMLSelectElement).value as typeof period
-														)}
-												>
-													<option value="week">{$_('recurring.period.week')}</option>
-													<option value="two_weeks">{$_('recurring.period.twoWeeks')}</option>
-													<option value="month">{$_('recurring.period.month')}</option>
-													<option value="year">{$_('recurring.period.year')}</option>
-												</select>
-											</div>
-											<div>
-												<DateTimePicker
-													id="recurring-start-date-edit"
-													label={$_('recurring.startDate')}
-													bind:value={startDate}
-													timeMode="hidden"
-													usePortal
-													required
-												/>
-											</div>
-											{#if period === 'week' || period === 'two_weeks'}
-												<div>
-													<label
-														class="mb-1 block text-sm"
-														style:color="var(--text-muted)"
-														for="recurring-weekday-edit">{$_('recurring.weekday')}</label
-													>
-													<select
-														id="recurring-weekday-edit"
-														class="input w-full"
-														bind:value={weekday}
-													>
-														<option value="1">{$_('datetime.weekday.mon')}</option>
-														<option value="2">{$_('datetime.weekday.tue')}</option>
-														<option value="3">{$_('datetime.weekday.wed')}</option>
-														<option value="4">{$_('datetime.weekday.thu')}</option>
-														<option value="5">{$_('datetime.weekday.fri')}</option>
-														<option value="6">{$_('datetime.weekday.sat')}</option>
-														<option value="7">{$_('datetime.weekday.sun')}</option>
-													</select>
-												</div>
-											{:else if period === 'year'}
-												<div>
-													<label
-														class="mb-1 block text-sm"
-														style:color="var(--text-muted)"
-														for="recurring-day-of-month-edit">{$_('recurring.dayOfMonth')}</label
-													>
-													<input
-														id="recurring-day-of-month-edit"
-														class="input w-full"
-														type="number"
-														min="1"
-														max="31"
-														bind:value={dayOfMonth}
-													/>
-												</div>
-											{/if}
-										</div>
-										<details>
-											<summary class="cursor-pointer text-sm" style:color="var(--text-muted)">
-												{$_('recurring.timeAdvanced')}
-											</summary>
-											<div class="mt-2">
-												<input class="input w-full" type="time" bind:value={timeLocal} step="60" />
-											</div>
-										</details>
-										<label class="inline-flex items-center gap-2 text-sm">
-											<input type="checkbox" bind:checked={active} />
-											{$_('recurring.active')}
-										</label>
-										<div class="flex flex-wrap gap-2">
-											<button type="submit" class="btn-primary" disabled={saving}>
-												{saving ? $_('common.loading') : $_('common.save')}
-											</button>
-											<button type="button" class="btn-ghost" onclick={resetForm}>
-												{$_('common.cancel')}
-											</button>
-										</div>
-										{#if error}
-											<p class="text-sm" style:color="var(--danger)">{error}</p>
-										{/if}
-									</form>
-								</td>
-							</tr>
-						{/if}
-					{/each}
-				</tbody>
-			</table>
+								</p>
+							</div>
+							<p class="shrink-0 text-sm font-semibold tabular-nums">
+								{formatMoneyDisplay(item.amount_display)}
+							</p>
+						</div>
+						<dl class="mt-3 grid gap-2 text-sm">
+							<div class="flex justify-between gap-2">
+								<dt style:color="var(--text-muted)">{$_('recurring.period')}</dt>
+								<dd>{periodLabel(item.period)}</dd>
+							</div>
+							<div class="flex justify-between gap-2">
+								<dt style:color="var(--text-muted)">{$_('transactions.field.account')}</dt>
+								<dd class="text-right">{item.account_name}</dd>
+							</div>
+							<div class="flex justify-between gap-2">
+								<dt style:color="var(--text-muted)">{$_('recurring.nextRun')}</dt>
+								<dd class="text-right">{formatAPIDateTimeForDisplay(item.next_run_at, tz)}</dd>
+							</div>
+						</dl>
+						<div class="mt-3 flex justify-end">
+							<RowActionsMenu actions={rowActions(item)} />
+						</div>
+					</article>
+					{#if editId === item.id}
+						<div class="rounded-xl border p-4" style:border-color="var(--border)">
+							{@render operationForm('edit-mobile')}
+						</div>
+					{/if}
+				{/each}
+			</div>
 		</div>
 	{/if}
 
@@ -545,158 +599,8 @@
 	</div>
 
 	{#if formOpen && !editId}
-		<form class="card space-y-4" onsubmit={submit}>
-			<div class="flex flex-wrap gap-2">
-				<button
-					type="button"
-					class={type === 'expense' ? 'tab tab-active' : 'tab'}
-					onclick={() => void onTypeChange('expense')}
-				>
-					{$_('transactions.type.expense')}
-				</button>
-				<button
-					type="button"
-					class={type === 'income' ? 'tab tab-active' : 'tab'}
-					onclick={() => void onTypeChange('income')}
-				>
-					{$_('transactions.type.income')}
-				</button>
-			</div>
-
-			<div class="grid gap-3 md:grid-cols-2">
-				<div>
-					<label class="mb-1 block text-sm" style:color="var(--text-muted)" for="recurring-amount">
-						{$_('transactions.field.amount')}
-					</label>
-					<MoneyInput id="recurring-amount" bind:value={amount} />
-				</div>
-				<div>
-					<label
-						class="mb-1 block text-sm"
-						style:color="var(--text-muted)"
-						for="recurring-description"
-					>
-						{$_('transactions.field.description')}
-					</label>
-					<input
-						id="recurring-description"
-						class="input w-full"
-						bind:value={description}
-						placeholder={$_('transactions.field.description')}
-						maxlength="160"
-					/>
-				</div>
-			</div>
-
-			<div class="grid gap-3 md:grid-cols-3">
-				<Select
-					label={$_('transactions.field.account')}
-					bind:value={accountId}
-					options={accountOptions}
-					usePortal
-				/>
-				<Select
-					label={$_('transactions.field.category')}
-					bind:value={categoryId}
-					options={categoryOptions}
-					onchange={() => void loadSubcategories()}
-					usePortal
-				/>
-				<Select
-					label={$_('transactions.field.subcategory')}
-					bind:value={subcategoryId}
-					options={[{ value: '', label: '—' }, ...subcategoryOptions]}
-					disabled={subcategoryOptions.length === 0}
-					usePortal
-				/>
-			</div>
-
-			<div class="grid gap-3 md:grid-cols-3">
-				<div>
-					<label class="mb-1 block text-sm" style:color="var(--text-muted)" for="recurring-period"
-						>{$_('recurring.period')}</label
-					>
-					<select
-						id="recurring-period"
-						class="input w-full"
-						bind:value={period}
-						onchange={(e) =>
-							onPeriodChange((e.currentTarget as HTMLSelectElement).value as typeof period)}
-					>
-						<option value="week">{$_('recurring.period.week')}</option>
-						<option value="two_weeks">{$_('recurring.period.twoWeeks')}</option>
-						<option value="month">{$_('recurring.period.month')}</option>
-						<option value="year">{$_('recurring.period.year')}</option>
-					</select>
-				</div>
-				<div>
-					<DateTimePicker
-						id="recurring-start-date"
-						label={$_('recurring.startDate')}
-						bind:value={startDate}
-						timeMode="hidden"
-						usePortal
-						required
-					/>
-				</div>
-				{#if period === 'week' || period === 'two_weeks'}
-					<div>
-						<label
-							class="mb-1 block text-sm"
-							style:color="var(--text-muted)"
-							for="recurring-weekday">{$_('recurring.weekday')}</label
-						>
-						<select id="recurring-weekday" class="input w-full" bind:value={weekday}>
-							<option value="1">{$_('datetime.weekday.mon')}</option>
-							<option value="2">{$_('datetime.weekday.tue')}</option>
-							<option value="3">{$_('datetime.weekday.wed')}</option>
-							<option value="4">{$_('datetime.weekday.thu')}</option>
-							<option value="5">{$_('datetime.weekday.fri')}</option>
-							<option value="6">{$_('datetime.weekday.sat')}</option>
-							<option value="7">{$_('datetime.weekday.sun')}</option>
-						</select>
-					</div>
-				{:else if period === 'year'}
-					<div>
-						<label
-							class="mb-1 block text-sm"
-							style:color="var(--text-muted)"
-							for="recurring-day-of-month">{$_('recurring.dayOfMonth')}</label
-						>
-						<input
-							id="recurring-day-of-month"
-							class="input w-full"
-							type="number"
-							min="1"
-							max="31"
-							bind:value={dayOfMonth}
-						/>
-					</div>
-				{/if}
-			</div>
-			<details>
-				<summary class="cursor-pointer text-sm" style:color="var(--text-muted)">
-					{$_('recurring.timeAdvanced')}
-				</summary>
-				<div class="mt-2">
-					<input class="input w-full" type="time" bind:value={timeLocal} step="60" />
-				</div>
-			</details>
-			<label class="inline-flex items-center gap-2 text-sm">
-				<input type="checkbox" bind:checked={active} />
-				{$_('recurring.active')}
-			</label>
-			<div class="flex flex-wrap gap-2">
-				<button type="submit" class="btn-primary" disabled={saving}>
-					{saving ? $_('common.loading') : editId ? $_('common.save') : $_('common.create')}
-				</button>
-				{#if editId}
-					<button type="button" class="btn-ghost" onclick={resetForm}>{$_('common.cancel')}</button>
-				{/if}
-			</div>
-			{#if error}
-				<p class="text-sm" style:color="var(--danger)">{error}</p>
-			{/if}
-		</form>
+		<div class="card">
+			{@render operationForm('create')}
+		</div>
 	{/if}
 </div>

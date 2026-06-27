@@ -214,7 +214,7 @@ func (s *Service) ByPeriod(ctx context.Context, userID string, groupBy string, f
 		out = append(out, *v)
 	}
 	sort.Slice(out, func(i, j int) bool {
-		return out[i].Period < out[j].Period
+		return out[i].Period > out[j].Period
 	})
 	return out, nil
 }

@@ -30,6 +30,7 @@ const (
 type ErrorBody struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
+	Field   string `json:"field,omitempty"`
 }
 
 type Response struct {
@@ -37,15 +38,19 @@ type Response struct {
 }
 
 func Write(w http.ResponseWriter, status int, code, message string) {
+	WriteField(w, status, code, message, "")
+}
+
+func WriteField(w http.ResponseWriter, status int, code, message, field string) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(Response{
-		Error: ErrorBody{Code: code, Message: message},
+		Error: ErrorBody{Code: code, Message: message, Field: field},
 	})
 }
 
 func WriteL(w http.ResponseWriter, r *http.Request, status int, code, msgKey, fallback string) {
-	Write(w, status, code, locale.T(r, msgKey, fallback))
+	WriteField(w, status, code, locale.T(r, msgKey, fallback), inferField(msgKey))
 }
 
 // WriteR localizes message by msgKey (defaults to code).
@@ -59,5 +64,44 @@ func WriteR(w http.ResponseWriter, r *http.Request, status int, code string, msg
 
 // WriteDetail localizes msgKey; detail is shown when the key is missing.
 func WriteDetail(w http.ResponseWriter, r *http.Request, status int, code, msgKey, detail string) {
-	WriteL(w, r, status, code, msgKey, detail)
+	WriteField(w, status, code, locale.T(r, msgKey, detail), inferField(msgKey))
+}
+
+func inferField(msgKey string) string {
+	switch msgKey {
+	case "ERR_INVALID_JSON":
+		return "body"
+	case "ERR_INVALID_AMOUNT", "ERR_TX_AMOUNT_POSITIVE", "ERR_SETTLE_AMOUNT":
+		return "amount"
+	case "ERR_INVALID_DUE_DATE":
+		return "due_date"
+	case "ERR_INVALID_DEBT_DATE":
+		return "debt_date"
+	case "ERR_PERIOD_DATE":
+		return "period"
+	case "ERR_GROUP_BY":
+		return "group_by"
+	case "ERR_ACCOUNT_NOT_FOUND", "ERR_ACCOUNT_ARCHIVED", "ERR_ACCOUNT_ARCHIVED_EDIT", "ERR_ACCOUNT_PRIMARY_ARCHIVED":
+		return "account_id"
+	case "ERR_ACCOUNT_BANK_REQUIRED", "ERR_ACCOUNT_BANK_FORBIDDEN", "ERR_ACCOUNT_BANK_NOT_FOUND":
+		return "bank_id"
+	case "ERR_CREDIT_INVALID_TERM":
+		return "term_months"
+	case "ERR_CREDIT_INVALID_INTERVAL":
+		return "payment_interval"
+	case "ERR_CREDIT_INVALID_PAYMENT":
+		return "monthly_payment"
+	case "ERR_CREDIT_INVALID_DEBIT_TIME":
+		return "debit_time_local"
+	case "ERR_CREDIT_INVALID_KIND":
+		return "credit_kind"
+	case "ERR_CREDIT_INVALID_MORTGAGE":
+		return "property_price"
+	case "ERR_CREDIT_COMPLETE_DATE":
+		return "payment_date"
+	case "ERR_CREDIT_INVALID_STATUS":
+		return "status"
+	default:
+		return ""
+	}
 }

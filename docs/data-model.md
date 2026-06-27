@@ -181,13 +181,18 @@ erDiagram
 
 - **Один должник — одно направление:** у человека не может быть одновременно активных (`is_settled=0`) долгов `lent` и `borrowed` → **409 Conflict**.
 - `debts.transaction_id` — ссылка на начальную (`open`) операцию; полный список — в `debt_transactions`.
+- `POST /debts/{id}/settle`: `affects_balance` и `account_id` в теле запроса **не зависят** от флага долга при создании. При `affects_balance=true` — обратная операция на указанном счёте; при `false` — долг закрывается (или уменьшается) без операции по счёту.
 - `DELETE /debts/{id}` — каскадно снимает связи и удаляет привязанные `transactions`.
 - `DELETE /transactions/{id}` для связанной операции — запрещено (409), если есть погашения (`role=settle`).
 
 ## Кредиты и операции
 
-- `credits.payment_interval`: `month` | `week` | `two_weeks` | `manual`
+- `credits.credit_kind`: `consumer` | `mortgage` (ипотека: `property_price`, `down_payment`, сумма кредита = `property_price - down_payment`)
+- `credits.payment_interval`: `month` | `week` | `two_weeks` | `manual` (для ипотеки в MVP — только `month`)
 - `credit_payments.kind`: `scheduled`, `auto`, `retroactive`; `early` — legacy
+- График ипотеки: ежедневное начисление процентов; автоплатёж через `MonthlyPaymentMortgage`, ручной — через `monthly_payment` в create/preview (отдельный алгоритм, без отклонения «слишком высокого» платежа)
+- График потребительского кредита: аннуитет с проверкой ручного `monthly_payment` (минимум — покрытие процентов, максимум — укладывание в срок)
+- `POST /credits/schedule/preview` — предпросмотр графика без сохранения; ответ: `schedule_preview`, `calculated_monthly_payment`
 - При создании с `added_retroactively`: прошлые платежи → `retroactive`; опционально `retroactive_debit_count` — последние N ретро-платежей со списанием на счёт (`transaction_id`, `exclude_from_stats=0`)
 - `PATCH /credits/{id}/schedule` — правка сумм неоплаченных `scheduled` (v1.1)
 - При старте: `RepairShortSchedules` дополняет неполные графики (миграция-маркер `020`)

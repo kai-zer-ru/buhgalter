@@ -28,7 +28,7 @@ func testServer(t *testing.T) (*httptest.Server, *db.Manager) {
 	t.Cleanup(func() { _ = mgr.Close() })
 
 	cfg := config.Config{Version: "test", StaticEmbed: false, DataDir: dir}
-	logger, closer, err := httpserver.InitLogger(filepath.Join(dir, "logs"))
+	logger, closer, err := httpserver.InitLogger(filepath.Join(dir, "logs"), "prod")
 	if err != nil {
 		t.Fatalf("logger: %v", err)
 	}

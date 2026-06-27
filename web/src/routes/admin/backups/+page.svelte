@@ -14,6 +14,7 @@
 	} from '$lib/api/client';
 	import { formatApiError } from '$lib/api/errors';
 	import FormFeedback from '$lib/components/FormFeedback.svelte';
+	import { formatAPIDateTimeForDisplay } from '$lib/dates';
 	import { logout, user } from '$lib/stores/auth';
 	import { confirm } from '$lib/confirm';
 	import { toast } from '$lib/toast';
@@ -28,6 +29,7 @@
 	let scheduleFeedback = $state({ error: '', success: '' });
 	let restoreFeedback = $state({ error: '', success: '' });
 	let loading = $state(false);
+	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
 	const restoreReady = $derived(restoreConfirm === 'RESTORE' && restoreFile !== null);
 
 	onMount(async () => {
@@ -195,7 +197,7 @@
 					<tr class="border-t" style:border-color="var(--border)">
 						<td class="py-3 pr-4 font-mono text-xs">{f.filename}</td>
 						<td class="py-3 pr-4">{formatSize(f.size)}</td>
-						<td class="py-3 pr-4">{f.created_at}</td>
+						<td class="py-3 pr-4">{formatAPIDateTimeForDisplay(f.created_at, tz)}</td>
 						<td class="py-3 text-right">
 							<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- API download endpoint -->
 							<a class="btn-ghost inline-block" href={backupDownloadUrl(f.filename)}>
@@ -224,7 +226,7 @@
 					</div>
 					<div class="flex justify-between gap-2">
 						<dt style:color="var(--text-muted)">{$_('admin.backups.col.date')}</dt>
-						<dd>{f.created_at}</dd>
+						<dd>{formatAPIDateTimeForDisplay(f.created_at, tz)}</dd>
 					</div>
 				</dl>
 				<!-- eslint-disable svelte/no-navigation-without-resolve -- API download endpoint, not app route -->

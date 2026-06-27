@@ -40,6 +40,8 @@
 | [categories-and-icons.md](categories-and-icons.md) | Категории, подкатегории, иконки |
 | [ui-dialogs.md](ui-dialogs.md) | Диалоги, подтверждения, Esc |
 | [ui-navigation.md](ui-navigation.md) | Навигация и кликабельные сущности |
+| [ui-row-actions.md](ui-row-actions.md) | Меню «⋯» в строках и спойлер фильтров |
+| [ui-stats.md](ui-stats.md) | Страница `/stats` |
 | [ui-credits.md](ui-credits.md) | UI кредитов |
 | [ui-stable-layout.md](ui-stable-layout.md) | Стабильная шапка и EmptyState |
 | [ui-empty-states.md](ui-empty-states.md) | Пустые состояния |

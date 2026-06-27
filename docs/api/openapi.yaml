@@ -3,7 +3,20 @@ info:
   title: Бухгалтер API
   description: |
     API приложения «Бухгалтер» (этапы 0–8).
-  version: 1.2.0
+
+    Ответы с ошибками (`4xx`, `5xx`) используют объект `error` с полями `code`, `message` и опционально
+    **`field`** — имя поля тела запроса для подсветки в форме UI (например `monthly_payment`, `term_months`).
+    Схема: `ErrorResponse` → `error.field`.
+
+    **Веб-клиент (in-memory):** встроенный UI кеширует ответы `GET /banks`, `GET /categories`, `GET /debtors`
+    на 5 минут с дедупликацией параллельных запросов; кеш сбрасывается при изменении справочников и при logout.
+    `GET /accounts`, операции, дашборд и статистика **не** кешируются. Подробнее — [ui-api-cache.md](../ui-api-cache.md).
+
+    **Счета (UI):** на `/accounts` меню «⋯» вызывает inline-редактирование (`PUT /accounts/{id}`),
+    `POST /accounts/{id}/primary`, `POST /accounts/{id}/archive`, `DELETE /accounts/{id}`.
+    На `/accounts/{id}` — та же форма редактирования в шапке. Поля: название, банк, начальный баланс.
+    Подробнее — [ui-row-actions.md](../ui-row-actions.md).
+  version: 1.2.1
 servers:
   - url: /api/v1
 paths:
@@ -710,12 +723,19 @@ paths:
   /banks:
     get:
       summary: Справочник банков РФ
+      description: |
+        Статичный справочник. Встроенный веб-клиент кеширует ответ in-memory (TTL 5 мин).
       responses:
         '200':
           description: Список банков
   /accounts:
     get:
       summary: Список счетов пользователя
+      description: |
+        В ответе — актуальный баланс. Встроенный веб-клиент **не** кеширует этот endpoint.
+
+        На странице `/accounts` карточки: меню «⋯» — inline-редактирование (название, банк, начальный баланс),
+        основной, архив, удаление (см. `PUT`, `POST .../primary`, `POST .../archive`, `DELETE` для `{id}`).
       security:
         - sessionCookie: []
       parameters:
@@ -750,6 +770,9 @@ paths:
           description: Счёт
     put:
       summary: Обновить счёт
+      description: |
+        Имя, банк (для `type=bank`), начальный баланс. В UI — inline-форма на `/accounts` или форма на
+        `/accounts/{id}`; поля с подписями (`accounts.field.name`, `accounts.field.bank`, `accounts.field.balance`).
       security:
         - sessionCookie: []
       parameters:
@@ -763,6 +786,9 @@ paths:
           description: Счёт обновлён
     delete:
       summary: Удалить счёт
+      description: |
+        Безвозвратно удаляет счёт и связанные данные. В UI — пункт «Удалить» в меню «⋯» на списке
+        `/accounts` и на странице счёта (с подтверждением).
       security:
         - sessionCookie: []
       parameters:
@@ -777,6 +803,9 @@ paths:
   /accounts/{id}/archive:
     post:
       summary: Архивировать счёт
+      description: |
+        Переводит счёт в `status=archived`. Если счёт был основным — флаг снимается, основным назначается
+        следующий активный. В UI — пункт «Архивировать» в меню «⋯» на `/accounts` и на странице счёта.
       security:
         - sessionCookie: []
       parameters:
@@ -871,6 +900,222 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Dashboard'
+  /stats/summary:
+    get:
+      summary: Сводка статистики
+      description: |
+        Доход, расход, дельта и число операций за период с учётом фильтров.
+        Перед расчётом активируются наступившие операции `kind=future`.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/StatsFrom'
+        - $ref: '#/components/parameters/StatsTo'
+        - $ref: '#/components/parameters/StatsType'
+        - $ref: '#/components/parameters/StatsAccountId'
+        - $ref: '#/components/parameters/StatsCategoryId'
+        - $ref: '#/components/parameters/StatsKind'
+        - $ref: '#/components/parameters/StatsSearch'
+        - $ref: '#/components/parameters/StatsIncludeFuture'
+      responses:
+        '200':
+          description: Сводка
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatsSummary'
+        '400':
+          description: Некорректный период (`ERR_PERIOD_DATE`)
+  /stats/by-category:
+    get:
+      summary: Статистика по категориям
+      description: |
+        Агрегация по категориям: сумма, доля от общего оборота категорий, число операций.
+        Используется блоком «По категориям» на странице `/stats`.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/StatsFrom'
+        - $ref: '#/components/parameters/StatsTo'
+        - $ref: '#/components/parameters/StatsType'
+        - $ref: '#/components/parameters/StatsAccountId'
+        - $ref: '#/components/parameters/StatsCategoryId'
+        - $ref: '#/components/parameters/StatsKind'
+        - $ref: '#/components/parameters/StatsSearch'
+      responses:
+        '200':
+          description: Список категорий
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StatsCategoryItem'
+        '400':
+          description: Некорректный период
+  /stats/by-subcategory:
+    get:
+      summary: Статистика по подкатегориям
+      description: |
+        Агрегация по подкатегориям с привязкой к родительской категории.
+        В веб-интерфейсе `/stats` не отображается (с v1.2.1); endpoint сохранён для API-клиентов.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/StatsFrom'
+        - $ref: '#/components/parameters/StatsTo'
+        - $ref: '#/components/parameters/StatsType'
+        - $ref: '#/components/parameters/StatsAccountId'
+        - $ref: '#/components/parameters/StatsCategoryId'
+        - $ref: '#/components/parameters/StatsKind'
+        - $ref: '#/components/parameters/StatsSearch'
+      responses:
+        '200':
+          description: Список подкатегорий
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StatsSubcategoryItem'
+        '400':
+          description: Некорректный период
+  /stats/by-period:
+    get:
+      summary: Статистика по периодам
+      description: |
+        Агрегирует доход и расход по периодам с учётом timezone пользователя.
+        Элементы `items` отсортированы по полю `period` **от новых к старым** (убывание ISO-даты).
+        Для `week` начало недели — понедельник; для `month` — первое число месяца.
+        В веб-UI подписи периодов форматируются для чтения (см. [ui-stats.md](../ui-stats.md)); API возвращает технические ключи.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: group_by
+          in: query
+          schema:
+            type: string
+            enum: [day, week, month]
+            default: day
+          description: Группировка периодов
+        - $ref: '#/components/parameters/StatsFrom'
+        - $ref: '#/components/parameters/StatsTo'
+        - $ref: '#/components/parameters/StatsType'
+        - $ref: '#/components/parameters/StatsAccountId'
+        - $ref: '#/components/parameters/StatsCategoryId'
+        - $ref: '#/components/parameters/StatsKind'
+        - $ref: '#/components/parameters/StatsSearch'
+      responses:
+        '200':
+          description: Доход и расход по периодам
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StatsPeriodItem'
+        '400':
+          description: Некорректный период или `group_by` (`ERR_GROUP_BY`, `ERR_PERIOD_DATE`)
+  /stats/search:
+    get:
+      summary: Поиск операций в статистике
+      description: |
+        Список операций по подстроке в `description` с теми же фильтрами, что и сводка.
+        Формат ответа — как у `GET /transactions`.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Подстрока в описании
+        - $ref: '#/components/parameters/StatsFrom'
+        - $ref: '#/components/parameters/StatsTo'
+        - $ref: '#/components/parameters/StatsType'
+        - $ref: '#/components/parameters/StatsAccountId'
+        - $ref: '#/components/parameters/StatsCategoryId'
+        - $ref: '#/components/parameters/StatsKind'
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Страница операций
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionList'
+        '400':
+          description: Некорректный период
+  /stats/context:
+    get:
+      summary: Контекстная сводка
+      description: |
+        Сводка для контекста: счёт (`account_id`), должник (`debtor_id`), кредит (`credit_id`)
+        или все долги (`debts=1`). Без scope-параметров — общая сводка.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: account_id
+          in: query
+          schema:
+            type: string
+        - name: debtor_id
+          in: query
+          schema:
+            type: string
+        - name: credit_id
+          in: query
+          schema:
+            type: string
+        - name: debts
+          in: query
+          schema:
+            type: string
+            enum: ['1']
+          description: Сводка по долгам (без id)
+        - $ref: '#/components/parameters/StatsFrom'
+        - $ref: '#/components/parameters/StatsTo'
+        - $ref: '#/components/parameters/StatsType'
+        - $ref: '#/components/parameters/StatsCategoryId'
+        - $ref: '#/components/parameters/StatsKind'
+        - $ref: '#/components/parameters/StatsSearch'
+      responses:
+        '200':
+          description: Контекстная сводка
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatsContextSummary'
+        '400':
+          description: Некорректный период
   /transactions:
     get:
       summary: Список операций
@@ -962,6 +1207,9 @@ paths:
   /categories:
     get:
       summary: Список категорий
+      description: |
+        Встроенный веб-клиент кеширует ответ in-memory (TTL 5 мин); кеш сбрасывается при POST/PUT/DELETE
+        категорий и подкатегорий, reorder и set primary.
       security:
         - sessionCookie: []
       parameters:
@@ -1153,6 +1401,8 @@ paths:
   /debtors:
     get:
       summary: Список должников
+      description: |
+        Встроенный веб-клиент кеширует ответ in-memory (TTL 5 мин); кеш сбрасывается при `POST /debtors`.
       security:
         - sessionCookie: []
         - bearerAuth: []
@@ -1208,8 +1458,19 @@ paths:
     post:
       summary: Погасить долг (полностью или частично)
       description: |
-        При `affects_balance` создаётся обратная операция и запись `settle` в `debt_transactions`.
-        Опциональное поле `amount` — частичное погашение (строка с рублями, как при создании долга).
+        Закрывает долг полностью или уменьшает сумму (частичное погашение).
+
+        **`affects_balance` и `account_id` задаются в запросе** и не обязаны совпадать с флагом долга
+        при создании. При `affects_balance=true` создаётся обратная операция в категории «Долги»
+        (`income` для `lent`, `expense` для `borrowed`) и запись `settle` в `debt_transactions`;
+        `account_id` обязателен. При `affects_balance=false` долг закрывается или уменьшается без
+        операции по счёту.
+
+        Опциональное поле `amount` — частичное погашение (строка с рублями, как при создании долга);
+        если не указано — погашается остаток целиком.
+
+        В веб-клиенте: переключатель «Не учитывать в балансе» (по умолчанию выключен), затем счёт;
+        счёт по умолчанию — `account_id` долга или основной счёт пользователя.
       security:
         - sessionCookie: []
         - bearerAuth: []
@@ -1219,13 +1480,25 @@ paths:
           required: true
           schema:
             type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SettleDebtRequest'
       responses:
         '200':
           description: Обновлённый долг
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Debt'
+        '400':
+          description: Некорректная сумма, дата или отсутствует account_id при affects_balance=true
         '404':
           description: Не найден
         '409':
-          description: Долг уже закрыт
+          description: Долг уже закрыт или некорректная сумма погашения
   /credits:
     get:
       summary: Список кредитов
@@ -1270,8 +1543,26 @@ paths:
     post:
       summary: Предпросмотр графика платежей
       description: |
-        Для `month`/`week`/`two_weeks` — автогенерация от `issue_date`.
-        Для `manual` — только переданные `seed_payments` (ровно `term` строк; сумма подгоняется последним платежом).
+        Рассчитывает график без сохранения кредита. Ответ: `schedule_preview`, `calculated_monthly_payment`
+        и `calculated_monthly_payment_display`.
+
+        **Потребительский кредит** (`credit_kind=consumer`, по умолчанию):
+        - для `month` / `week` / `two_weeks` — аннуитет от `issue_date`; платежи 1…N−1 равны,
+          последний закрывает остаток + проценты за период;
+        - опциональный `monthly_payment` переопределяет расчётный платёж; если сумма совпадает с расчётной
+          в пределах 1 ₽ (копейки), трактуется как автоматическая;
+        - слишком низкий ручной платёж (не покрывает проценты) или слишком высокий (не укладывается в срок)
+          → **400** `VALIDATION_ERROR`, ключ `ERR_CREDIT_INVALID_PAYMENT`, поле `error.field=monthly_payment`;
+        - для `manual` — только переданные `seed_payments` (ровно `term` строк; сумма подгоняется последним платежом).
+
+        **Ипотека** (`credit_kind=mortgage`):
+        - периодичность в MVP — только `month`;
+        - автоматический платёж: ежедневное начисление процентов, бинарный поиск равного платежа;
+          платежи 1…N−1 равны `calculated_monthly_payment`, последний — остаток + проценты;
+        - ручной `monthly_payment` (например из договора банка): платежи 1…N−1 равны введённой сумме,
+          последний закрывает положительный остаток или повторяет введённую сумму; отклонение «слишком высокий»
+          для ипотеки **не применяется**;
+        - сумма кредита (`principal`) для ипотеки — уже `property_price - down_payment` (поля mortgage в preview не передаются).
       security:
         - sessionCookie: []
         - bearerAuth: []
@@ -1284,6 +1575,24 @@ paths:
       responses:
         '200':
           description: График без сохранения
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreviewScheduleResponse'
+        '400':
+          description: Ошибка валидации параметров графика
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                invalidPayment:
+                  summary: Некорректный ежемесячный платёж (consumer)
+                  value:
+                    error:
+                      code: VALIDATION_ERROR
+                      message: Некорректный ежемесячный платёж
+                      field: monthly_payment
   /credits/{id}:
     get:
       summary: Детали кредита
@@ -1358,6 +1667,8 @@ paths:
         После оплаты удаляются дубликаты на тот же календарный день (`early`, лишние `scheduled`).
         Если `payment_date` в будущем, связанная операция остаётся `kind=future`
         до наступления даты операции и учитывается в прогнозе баланса.
+        Опциональный `account_id` задаёт счёт только для операции этой оплаты;
+        основной счёт кредита (`debit_account_id`) не меняется.
       security:
         - sessionCookie: []
         - bearerAuth: []
@@ -1561,7 +1872,11 @@ paths:
           description: Не найдена
     put:
       summary: Обновить доход или расход
-      description: Переводы обновляются через `PUT /transfers/{group_id}`.
+      description: |
+        Переводы обновляются через `PUT /transfers/{group_id}`.
+        Операции с `credit_payment_linked=true` редактируются через кредит, не через этот endpoint.
+        Поле `type` должно совпадать с существующей операцией — иначе `ERR_TX_TYPE_CHANGE`.
+        Если `transaction_date` в будущем (в TZ пользователя), `kind` становится `future`.
       security:
         - sessionCookie: []
         - bearerAuth: []
@@ -1589,6 +1904,7 @@ paths:
             Ошибка валидации.
             Для системных категорий (`category.is_system=true`) запрещено сохранять плановые операции (`kind=future`);
             возвращается сообщение по ключу `ERR_SYSTEM_CATEGORY_PLANNED`.
+            Смена типа операции — `ERR_TX_TYPE_CHANGE`.
         '404':
           description: Не найдена
     delete:
@@ -1933,6 +2249,54 @@ components:
     bearerAuth:
       type: http
       scheme: bearer
+  parameters:
+    StatsFrom:
+      name: from
+      in: query
+      schema:
+        type: string
+      description: Начало периода (UTC, `YYYY-MM-DD HH:MM:SS`)
+    StatsTo:
+      name: to
+      in: query
+      schema:
+        type: string
+      description: Конец периода (UTC)
+    StatsType:
+      name: type
+      in: query
+      schema:
+        type: string
+        enum: [income, expense]
+    StatsAccountId:
+      name: account_id
+      in: query
+      schema:
+        type: string
+    StatsCategoryId:
+      name: category_id
+      in: query
+      schema:
+        type: string
+    StatsKind:
+      name: kind
+      in: query
+      schema:
+        type: string
+        enum: [manual, future]
+    StatsSearch:
+      name: search
+      in: query
+      schema:
+        type: string
+      description: Подстрока в description (фильтр сводки, не путать с `q` в `/stats/search`)
+    StatsIncludeFuture:
+      name: include_future
+      in: query
+      schema:
+        type: boolean
+        default: false
+      description: Учитывать операции `kind=future` в сводке (`true` / `1`)
   examples:
     ApiErrorValidation:
       summary: Ошибка валидации (общая)
@@ -2019,14 +2383,22 @@ components:
                 RATE_LIMITED, VALIDATION_ERROR, INTERNAL_ERROR, NOT_FOUND, CONFLICT,
                 ALREADY_CONFIGURED, SERVICE_UNAVAILABLE.
                 Для смены пароля и большинства 400 — `VALIDATION_ERROR`; текст в `message`
-                локализуется по ключам (PASSWORDS_MISMATCH, ERR_CHANNEL, ERR_SYSTEM_CATEGORY_PLANNED, …).
+                локализуется по ключам (PASSWORDS_MISMATCH, ERR_CHANNEL, ERR_SYSTEM_CATEGORY_PLANNED,
+                ERR_TX_TYPE_CHANGE, ERR_CREDIT_INVALID_PAYMENT, ERR_CREDIT_INVALID_TERM, ERR_CREDIT_INVALID_MORTGAGE, …).
             message:
               type: string
               description: Локализованное сообщение (заголовок Accept-Language)
+            field:
+              type: string
+              description: |
+                Опциональное имя поля запроса для привязки ошибки в форме (например `monthly_payment`,
+                `term_months`, `debit_time_local`, `credit_kind`, `property_price`, `body`).
+                Заполняется для ключей `ERR_CREDIT_*`, `ERR_INVALID_*`, `ERR_ACCOUNT_*` и аналогичных.
       example:
         error:
           code: VALIDATION_ERROR
           message: Некорректные параметры запроса
+          field: monthly_payment
     AdminSettings:
       type: object
       required: [registration_enabled, external_url, secret_key_set]
@@ -2540,6 +2912,9 @@ components:
     TransactionUpdate:
       allOf:
         - $ref: '#/components/schemas/TransactionCreate'
+      description: |
+        Тело как при создании. `type` должен совпадать с существующей операцией.
+        Дата в будущем переводит операцию в `kind=future`.
     Transfer:
       type: object
       properties:
@@ -2642,6 +3017,100 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Transaction'
+    StatsSummary:
+      type: object
+      required: [income_total, expense_total, balance_delta, transaction_count]
+      properties:
+        income_total:
+          type: integer
+          description: Сумма доходов (копейки)
+        expense_total:
+          type: integer
+          description: Сумма расходов (копейки)
+        balance_delta:
+          type: integer
+          description: income_total − expense_total
+        transaction_count:
+          type: integer
+    StatsCategoryItem:
+      type: object
+      properties:
+        category_id:
+          type: string
+        category_name:
+          type: string
+        icon:
+          type: string
+        type:
+          type: string
+          enum: [income, expense]
+        total:
+          type: integer
+        percentage:
+          type: number
+          format: float
+        count:
+          type: integer
+    StatsSubcategoryItem:
+      type: object
+      properties:
+        category_id:
+          type: string
+        category_name:
+          type: string
+        category_icon:
+          type: string
+        subcategory_id:
+          type: string
+        subcategory_name:
+          type: string
+        total:
+          type: integer
+        percentage:
+          type: number
+          format: float
+        count:
+          type: integer
+    StatsPeriodItem:
+      type: object
+      properties:
+        period:
+          type: string
+          description: |
+            Ключ периода в формате `YYYY-MM-DD` в календаре timezone пользователя:
+            `day` — дата операции; `week` — понедельник недели; `month` — первое число месяца.
+            Массив `items` отсортирован по этому полю по убыванию (новые периоды первыми).
+            В веб-UI отображается в человекочитаемом виде (месяц «Июнь 2026», неделя «1–7 июня 2026» и т.п.).
+        income:
+          type: integer
+        expense:
+          type: integer
+    StatsContextSummary:
+      allOf:
+        - $ref: '#/components/schemas/StatsSummary'
+        - type: object
+          required: [scope]
+          properties:
+            scope:
+              type: string
+              description: default, account, debtor, credit, debts
+            scope_id:
+              type: string
+            lent_total:
+              type: integer
+              nullable: true
+            borrowed_total:
+              type: integer
+              nullable: true
+            paid_total:
+              type: integer
+              nullable: true
+            payment_count:
+              type: integer
+              nullable: true
+            remaining_amount:
+              type: integer
+              nullable: true
     DebtsSummary:
       type: object
       properties:
@@ -2712,6 +3181,27 @@ components:
           description: Имя счёта начальной операции
         created_at:
           type: string
+    SettleDebtRequest:
+      type: object
+      required: [settled_at, affects_balance]
+      properties:
+        amount:
+          oneOf:
+            - type: string
+            - type: integer
+          description: Сумма погашения; если не указана — остаток долга целиком
+        settled_at:
+          type: string
+          description: Дата и время погашения, UTC `YYYY-MM-DD HH:MM:SS`
+        affects_balance:
+          type: boolean
+          default: true
+          description: |
+            true — создать обратную операцию на счёте; false — закрыть/уменьшить долг без операции.
+            Не зависит от `affects_balance` долга при создании.
+        account_id:
+          type: string
+          description: Счёт для обратной операции; обязателен при `affects_balance=true`
     Credit:
       type: object
       properties:
@@ -2828,6 +3318,9 @@ components:
         payment_date:
           type: string
           description: UTC, YYYY-MM-DD HH:MM:SS
+        account_id:
+          type: string
+          description: Счёт для данной оплаты; если не указан — основной счёт кредита (debit_account_id)
     UpdateCreditScheduleRequest:
       type: object
       required: [payments]
@@ -2907,6 +3400,10 @@ components:
           oneOf:
             - type: string
             - type: integer
+          description: |
+            Опциональный ежемесячный платёж (копейки). Для consumer — override расчётного с проверкой
+            min/max; для mortgage — сумма из договора банка без отклонения «слишком высокий».
+            Совпадение с расчётным в пределах 1 ₽ трактуется как автоматический платёж.
         debit_account_id:
           type: string
         debit_time_local:
@@ -3089,26 +3586,66 @@ components:
           oneOf:
             - type: string
             - type: integer
+          description: Сумма кредита в копейках (для ипотеки — уже `property_price - down_payment`)
         credit_kind:
           type: string
           enum: [consumer, mortgage]
           default: consumer
         term:
           type: integer
+          description: Срок в месяцах (или число платежей для week/two_weeks/manual)
         interest_rate:
           type: number
+          description: Годовая ставка, % (0 — рассрочка)
         payment_interval:
           type: string
           enum: [month, week, two_weeks, manual]
           description: Для credit_kind=mortgage в MVP используется month
         issue_date:
           type: string
+          description: Дата выдачи, UTC `YYYY-MM-DD HH:MM:SS`
         monthly_payment:
           nullable: true
+          oneOf:
+            - type: string
+            - type: integer
+          description: |
+            Опциональный override ежемесячного платежа (копейки). Для mortgage — сумма из договора банка;
+            для consumer — с проверкой на min/max. Пусто/null — автоматический расчёт.
         seed_payments:
+          type: array
+          description: Обязателен при payment_interval=manual (ровно term элементов)
+          items:
+            type: object
+            properties:
+              payment_date:
+                type: string
+              amount:
+                oneOf:
+                  - type: string
+                  - type: integer
+    PreviewScheduleResponse:
+      type: object
+      required: [schedule_preview, calculated_monthly_payment, calculated_monthly_payment_display]
+      properties:
+        schedule_preview:
           type: array
           items:
             type: object
+            required: [payment_date, amount]
+            properties:
+              payment_date:
+                type: string
+                description: UTC, YYYY-MM-DD HH:MM:SS
+              amount:
+                type: integer
+                description: Сумма платежа в копейках
+        calculated_monthly_payment:
+          type: integer
+          description: Расчётный равный платёж в копейках (до override monthly_payment)
+        calculated_monthly_payment_display:
+          type: string
+          description: Форматированная сумма для UI (например «600 576,47 ₽»)
     ImportReport:
       type: object
       properties:

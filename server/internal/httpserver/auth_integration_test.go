@@ -37,7 +37,7 @@ func setupConfigured(t *testing.T) *testEnv {
 	t.Cleanup(func() { _ = mgr.Close() })
 
 	cfg := testConfig(dir)
-	logger, closer, err := httpserver.InitLogger(filepath.Join(dir, "logs"))
+	logger, closer, err := httpserver.InitLogger(filepath.Join(dir, "logs"), "prod")
 	if err != nil {
 		t.Fatalf("logger: %v", err)
 	}
@@ -392,7 +392,7 @@ func TestRegisterPasswordMismatch(t *testing.T) {
 	defer mgr.Close()
 
 	cfg := testConfig(dir)
-	logger, closer, err := httpserver.InitLogger(filepath.Join(dir, "logs"))
+	logger, closer, err := httpserver.InitLogger(filepath.Join(dir, "logs"), "prod")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -437,7 +437,7 @@ func TestRegisterPasswordTooWeak(t *testing.T) {
 	defer mgr.Close()
 
 	cfg := testConfig(dir)
-	logger, closer, err := httpserver.InitLogger(filepath.Join(dir, "logs"))
+	logger, closer, err := httpserver.InitLogger(filepath.Join(dir, "logs"), "prod")
 	if err != nil {
 		t.Fatal(err)
 	}

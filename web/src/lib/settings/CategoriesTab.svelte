@@ -24,6 +24,7 @@
 	import CategoryIcon from '$lib/components/CategoryIcon.svelte';
 	import CategoryIconPicker from '$lib/components/CategoryIconPicker.svelte';
 	import IconButton from '$lib/components/IconButton.svelte';
+	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
 	import ReorderDragGhost from '$lib/components/ReorderDragGhost.svelte';
 	import { defaultIconForKind } from '$lib/category-icons';
 	import { confirm } from '$lib/confirm';
@@ -316,9 +317,34 @@
 		try {
 			await setPrimaryCategory(id);
 			categories = categories.map((c) => ({ ...c, is_primary: c.id === id }));
+			toast($_('common.saved'));
 		} catch (err) {
 			error = err instanceof ApiError ? err.message : $_('common.error');
 		}
+	}
+
+	function categoryActions(cat: Category): RowAction[] {
+		const actions: RowAction[] = [
+			{
+				icon: 'edit',
+				label: $_('accounts.action.edit'),
+				onclick: () => startEdit(cat)
+			}
+		];
+		if (!cat.is_primary) {
+			actions.push({
+				icon: 'save',
+				label: $_('categories.primary.set'),
+				onclick: () => void makePrimary(cat.id)
+			});
+		}
+		actions.push({
+			icon: 'delete',
+			label: $_('common.delete'),
+			variant: 'danger',
+			onclick: () => removeCategory(cat.id)
+		});
+		return actions;
 	}
 </script>
 
@@ -413,66 +439,55 @@
 							{:else}
 								<span class="btn-icon shrink-0" aria-hidden="true"></span>
 							{/if}
-							<span class="btn-icon btn-ghost">
+							<span class="inline-flex shrink-0 items-center justify-center min-h-11 min-w-11">
 								<CategoryIcon icon={cat.icon} size={categoryIconSize} />
 							</span>
 							{#if !cat.is_system}
 								<button
 									type="button"
-									class="btn-icon btn-ghost"
-									title={cat.is_primary
-										? $_('categories.primary.badge')
-										: $_('categories.primary.set')}
-									aria-pressed={cat.is_primary}
-									aria-label={cat.is_primary
-										? $_('categories.primary.badge')
-										: $_('categories.primary.set')}
-									style:color={cat.is_primary ? 'var(--primary)' : 'var(--text-muted)'}
-									onclick={() => makePrimary(cat.id)}
-								>
-									{cat.is_primary ? '★' : '☆'}
-								</button>
-								<button
-									type="button"
-									class="btn-icon btn-ghost"
+									class="min-w-0 flex-1 truncate text-left font-medium inline-flex items-center gap-1.5"
 									aria-expanded={expanded[cat.id] ?? false}
-									aria-label={expanded[cat.id]
-										? $_('categories.sub.collapse')
-										: $_('categories.sub.expand')}
 									onclick={() => toggleExpand(cat)}
 								>
-									{expanded[cat.id] ? '▼' : '▶'}
+									<span class="inline-flex min-w-0 items-center gap-1 truncate">
+										<span class="truncate">{cat.name}</span>
+										{#if cat.is_primary}
+											<span
+												class="shrink-0"
+												style:color="var(--primary)"
+												title={$_('categories.primary.badge')}
+												aria-label={$_('categories.primary.badge')}
+											>
+												<svg
+													aria-hidden="true"
+													class="h-4 w-4"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2"
+												>
+													<path d="M20 6 9 17l-5-5" />
+												</svg>
+											</span>
+										{/if}
+									</span>
+									<span class="shrink-0 text-xs leading-none" aria-hidden="true">
+										{expanded[cat.id] ? '▼' : '▶'}
+									</span>
 								</button>
-							{/if}
-							<button
-								type="button"
-								class="min-w-0 flex-1 truncate text-left font-medium"
-								onclick={() => !cat.is_system && toggleExpand(cat)}
-							>
-								{cat.name}
-								{#if cat.is_system}
+							{:else}
+								<span class="min-w-0 flex-1 truncate font-medium">
+									{cat.name}
 									<span class="ml-1 text-xs" style:color="var(--text-muted)"
 										>({$_('categories.system.badge')})</span
 									>
-								{/if}
-							</button>
+								</span>
+							{/if}
 							{#if !cat.is_system}
-								<div class="flex shrink-0 items-center gap-1">
-									<IconButton
-										icon="edit"
-										label={$_('accounts.action.edit')}
-										onclick={() => startEdit(cat)}
-									/>
-									<IconButton
-										icon="delete"
-										label={$_('common.delete')}
-										variant="danger"
-										onclick={() => removeCategory(cat.id)}
-									/>
-								</div>
+								<RowActionsMenu actions={categoryActions(cat)} />
 							{/if}
 						{:else}
-							<span class="btn-icon btn-ghost">
+							<span class="inline-flex shrink-0 items-center justify-center min-h-11 min-w-11">
 								<CategoryIcon icon={cat.icon} size={categoryIconSize} />
 							</span>
 							<div class="flex min-w-0 flex-1 flex-col gap-3">
@@ -574,23 +589,27 @@
 											>
 												⠿
 											</span>
-											<span class="btn-icon btn-ghost">
+											<span
+												class="inline-flex shrink-0 items-center justify-center min-h-11 min-w-11"
+											>
 												<CategoryIcon icon={sub.icon || 'default'} size={categoryIconSize} />
 											</span>
 											<span class="min-w-0 flex-1 truncate">{sub.name}</span>
-											<div class="flex shrink-0 items-center gap-1">
-												<IconButton
-													icon="edit"
-													label={$_('accounts.action.edit')}
-													onclick={() => startEditSub(sub)}
-												/>
-												<IconButton
-													icon="delete"
-													label={$_('common.delete')}
-													variant="danger"
-													onclick={() => removeSub(cat.id, sub.id)}
-												/>
-											</div>
+											<RowActionsMenu
+												actions={[
+													{
+														icon: 'edit',
+														label: $_('accounts.action.edit'),
+														onclick: () => startEditSub(sub)
+													},
+													{
+														icon: 'delete',
+														label: $_('common.delete'),
+														variant: 'danger',
+														onclick: () => removeSub(cat.id, sub.id)
+													}
+												]}
+											/>
 										</div>
 									{/if}
 								</div>

@@ -1,7 +1,9 @@
 package middleware
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net"
 	"net/http"
@@ -30,25 +32,61 @@ func RequestIDToContext(next http.Handler) http.Handler {
 	})
 }
 
-func Logger(logger *slog.Logger) func(http.Handler) http.Handler {
+func Logger(logger *slog.Logger, verbose bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
 			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+			respBuf := &bytes.Buffer{}
+			ww.Tee(respBuf)
 			next.ServeHTTP(ww, r)
 
 			id, _ := r.Context().Value(RequestIDKey).(string)
-			logger.Info("request",
+			auth := redactAuth(r.Header.Get("Authorization"))
+			cookie := redactCookie(r.Header.Get("Cookie"))
+			if verbose {
+				auth = r.Header.Get("Authorization")
+				cookie = r.Header.Get("Cookie")
+			}
+			attrs := []any{
 				"request_id", id,
 				"method", r.Method,
 				"path", redactPath(r.URL.Path),
 				"status", ww.Status(),
 				"duration_ms", time.Since(start).Milliseconds(),
-				"authorization", redactAuth(r.Header.Get("Authorization")),
-				"cookie", redactCookie(r.Header.Get("Cookie")),
-			)
+				"authorization", auth,
+				"cookie", cookie,
+			}
+			if msg, code, field := parseErrorResponse(respBuf.Bytes()); msg != "" {
+				attrs = append(attrs, "error_code", code, "error_message", msg)
+				if field != "" {
+					attrs = append(attrs, "error_field", field)
+				}
+			}
+			if ww.Status() >= http.StatusInternalServerError {
+				logger.Error("request", attrs...)
+				return
+			}
+			logger.Info("request", attrs...)
 		})
 	}
+}
+
+func parseErrorResponse(payload []byte) (message, code, field string) {
+	if len(payload) == 0 {
+		return "", "", ""
+	}
+	var body struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+			Field   string `json:"field"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(payload, &body); err != nil {
+		return "", "", ""
+	}
+	return body.Error.Message, body.Error.Code, body.Error.Field
 }
 
 func redactPath(path string) string {

@@ -25,7 +25,7 @@ import (
 )
 
 var (
-	version       = "1.2.0"
+	version       = "1.2.1"
 	installMethod = "dev"
 	buildCommit   = "unknown"
 	buildTime     = ""
@@ -42,7 +42,7 @@ func main() {
 		log.Fatalf("data dir: %v", err)
 	}
 
-	logger, logCloser, err := httpserver.InitLogger(cfg.LogDir)
+	logger, logCloser, err := httpserver.InitLogger(cfg.LogDir, cfg.LogMode)
 	if err != nil {
 		log.Fatalf("logger: %v", err)
 	}

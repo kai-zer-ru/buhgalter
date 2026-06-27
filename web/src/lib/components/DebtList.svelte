@@ -3,6 +3,7 @@
 	import { _ } from 'svelte-i18n';
 	import type { Debt } from '$lib/api/client';
 	import EntityLink from '$lib/components/EntityLink.svelte';
+	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
 	import { formatAPIDateForDisplay } from '$lib/dates';
 	import { formatBalance } from '$lib/finance';
 
@@ -23,6 +24,26 @@
 	} = $props();
 
 	const showActions = $derived(Boolean(onsettle || ondelete));
+
+	function rowActions(d: Debt): RowAction[] {
+		const actions: RowAction[] = [];
+		if (onsettle && !d.is_settled) {
+			actions.push({
+				icon: 'save',
+				label: $_('debts.action.settle'),
+				onclick: () => onsettle(d)
+			});
+		}
+		if (ondelete) {
+			actions.push({
+				icon: 'delete',
+				label: $_('common.delete'),
+				variant: 'danger',
+				onclick: () => ondelete(d)
+			});
+		}
+		return actions;
+	}
 </script>
 
 <div class="hidden md:block">
@@ -91,23 +112,7 @@
 					</td>
 					{#if showActions}
 						<td class="p-3 whitespace-nowrap text-right">
-							<div class="inline-flex flex-nowrap items-center justify-end gap-1">
-								{#if onsettle && !d.is_settled}
-									<button type="button" class="btn-ghost text-sm" onclick={() => onsettle(d)}>
-										{$_('debts.action.settle')}
-									</button>
-								{/if}
-								{#if ondelete}
-									<button
-										type="button"
-										class="btn-ghost text-sm"
-										style:color="var(--danger)"
-										onclick={() => ondelete(d)}
-									>
-										{$_('common.delete')}
-									</button>
-								{/if}
-							</div>
+							<RowActionsMenu actions={rowActions(d)} />
 						</td>
 					{/if}
 				</tr>
@@ -137,9 +142,14 @@
 						{/if}
 					</p>
 				</div>
-				<p class="shrink-0 text-base font-semibold tabular-nums">
-					{formatBalance(d.amount_display, currency)}
-				</p>
+				<div class="flex shrink-0 items-start gap-2">
+					<p class="text-base font-semibold tabular-nums">
+						{formatBalance(d.amount_display, currency)}
+					</p>
+					{#if showActions}
+						<RowActionsMenu actions={rowActions(d)} />
+					{/if}
+				</div>
 			</div>
 			<dl class="mt-3 grid gap-2 text-sm">
 				<div class="flex justify-between gap-2">
@@ -168,25 +178,6 @@
 					</dd>
 				</div>
 			</dl>
-			{#if showActions}
-				<div class="mt-3 flex justify-end gap-2">
-					{#if onsettle && !d.is_settled}
-						<button type="button" class="btn-ghost text-sm" onclick={() => onsettle(d)}>
-							{$_('debts.action.settle')}
-						</button>
-					{/if}
-					{#if ondelete}
-						<button
-							type="button"
-							class="btn-ghost text-sm"
-							style:color="var(--danger)"
-							onclick={() => ondelete(d)}
-						>
-							{$_('common.delete')}
-						</button>
-					{/if}
-				</div>
-			{/if}
 		</article>
 	{/each}
 </div>

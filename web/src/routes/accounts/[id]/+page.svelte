@@ -24,7 +24,7 @@
 	} from '$lib/api/client';
 	import AccountIcon from '$lib/components/AccountIcon.svelte';
 	import BackLink from '$lib/components/BackLink.svelte';
-	import IconButton from '$lib/components/IconButton.svelte';
+	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import TransactionFilters from '$lib/components/TransactionFilters.svelte';
@@ -140,6 +140,7 @@
 			name = account.name;
 			bankId = account.bank_id ?? '';
 			initialBalance = formatMoneyDisplay(account.balance_display);
+			editing = $page.url.searchParams.get('edit') === '1';
 			await loadTransactions();
 		} catch (err) {
 			error = err instanceof ApiError ? err.message : $_('common.error');
@@ -249,6 +250,54 @@
 		}
 	}
 
+	function accountActions(): RowAction[] {
+		if (!acc) return [];
+		const actions: RowAction[] = [
+			{
+				icon: 'add',
+				label: $_('transactions.new'),
+				onclick: () => {
+					editTx = null;
+					txOpen = true;
+				}
+			},
+			{
+				icon: 'transfer',
+				label: $_('transactions.transfer'),
+				onclick: () => {
+					editTransfer = null;
+					transferOpen = true;
+				}
+			},
+			{
+				icon: 'edit',
+				label: $_('accounts.action.edit'),
+				onclick: () => (editing = true)
+			}
+		];
+		if (!acc.is_primary) {
+			actions.push({
+				icon: 'save',
+				label: $_('accounts.primary.set'),
+				onclick: () => void makePrimary()
+			});
+		}
+		actions.push(
+			{
+				icon: 'archive',
+				label: $_('accounts.action.archive'),
+				onclick: () => void toggleArchive()
+			},
+			{
+				icon: 'delete',
+				label: $_('common.delete'),
+				variant: 'danger',
+				onclick: () => void remove()
+			}
+		);
+		return actions;
+	}
+
 	async function removeTx(tx: Transaction) {
 		const msg =
 			tx.type === 'transfer' && tx.transfer_group_id
@@ -310,13 +359,24 @@
 	{:else if !acc}
 		<p style:color="var(--danger)">{error || $_('common.error')}</p>
 	{:else}
-		<div class="card space-y-4">
+		<div class="card">
 			<div class="flex items-start gap-4">
 				<AccountIcon type={acc.type} bankIcon={acc.bank_icon} size={56} />
-				<div class="flex-1">
+				<div class="min-w-0 flex-1">
 					{#if editing}
 						<form class="space-y-3" onsubmit={save}>
-							<input class="input w-full" bind:value={name} required maxlength="64" />
+							<div>
+								<label class="mb-1 block text-sm" style:color="var(--text-muted)" for="acc-name">
+									{$_('accounts.field.name')}
+								</label>
+								<input
+									id="acc-name"
+									class="input w-full"
+									bind:value={name}
+									required
+									maxlength="64"
+								/>
+							</div>
 							{#if acc.type === 'bank'}
 								<Select
 									label={$_('accounts.field.bank')}
@@ -325,7 +385,12 @@
 									usePortal
 								/>
 							{/if}
-							<MoneyInput bind:value={initialBalance} />
+							<div>
+								<label class="mb-1 block text-sm" style:color="var(--text-muted)" for="acc-balance">
+									{$_('accounts.field.balance')}
+								</label>
+								<MoneyInput id="acc-balance" bind:value={initialBalance} />
+							</div>
 							<div class="flex gap-2">
 								<button type="submit" class="btn-primary" disabled={saving}>
 									{saving ? $_('common.loading') : $_('common.save')}
@@ -336,85 +401,56 @@
 							</div>
 						</form>
 					{:else}
-						<div class="flex items-center gap-2">
-							<h1 class="text-2xl font-semibold">{acc.name}</h1>
-							{#if acc.is_primary}
-								<span
-									class="shrink-0"
-									style:color="var(--primary)"
-									title={$_('accounts.primary.badge')}
-									aria-label={$_('accounts.primary.badge')}
-								>
-									<svg
-										aria-hidden="true"
-										class="h-5 w-5"
-										viewBox="0 0 24 24"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="2"
-									>
-										<path d="M20 6 9 17l-5-5" />
-									</svg>
-								</span>
+						<div class="flex items-start justify-between gap-2">
+							<div class="min-w-0">
+								<div class="flex items-center gap-2">
+									<h1 class="text-2xl font-semibold">{acc.name}</h1>
+									{#if acc.is_primary}
+										<span
+											class="shrink-0"
+											style:color="var(--primary)"
+											title={$_('accounts.primary.badge')}
+											aria-label={$_('accounts.primary.badge')}
+										>
+											<svg
+												aria-hidden="true"
+												class="h-5 w-5"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+											>
+												<path d="M20 6 9 17l-5-5" />
+											</svg>
+										</span>
+									{/if}
+								</div>
+								<p class="mt-1 text-3xl font-semibold tabular-nums">
+									{formatBalance(
+										accBalance?.balance_display ?? acc.balance_display,
+										$user?.currency ?? 'RUB'
+									)}
+								</p>
+								{#if accBalance ? accBalance.forecast_balance !== accBalance.balance : false}
+									<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
+										{$_('dashboard.withPlans')}:
+										{formatBalance(
+											accBalance?.forecast_display ?? acc.balance_display,
+											$user?.currency ?? 'RUB'
+										)}
+									</p>
+								{/if}
+							</div>
+							{#if acc.status === 'active'}
+								<RowActionsMenu actions={accountActions()} />
 							{/if}
 						</div>
-						<p class="mt-2 text-3xl font-semibold tabular-nums">
-							{formatBalance(
-								accBalance?.balance_display ?? acc.balance_display,
-								$user?.currency ?? 'RUB'
-							)}
-						</p>
-						{#if accBalance ? accBalance.forecast_balance !== accBalance.balance : false}
-							<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
-								{$_('dashboard.withPlans')}:
-								{formatBalance(
-									accBalance?.forecast_display ?? acc.balance_display,
-									$user?.currency ?? 'RUB'
-								)}
-							</p>
-						{/if}
 					{/if}
 				</div>
 			</div>
 
 			{#if error}
-				<p class="text-sm" style:color="var(--danger)">{error}</p>
-			{/if}
-
-			{#if !editing && acc.status === 'active'}
-				<div class="flex flex-wrap gap-1 border-t pt-4" style:border-color="var(--border)">
-					<IconButton
-						icon="add"
-						label={$_('transactions.new')}
-						variant="primary"
-						onclick={() => {
-							editTx = null;
-							txOpen = true;
-						}}
-					/>
-					<IconButton
-						icon="transfer"
-						label={$_('transactions.transfer')}
-						onclick={() => {
-							editTransfer = null;
-							transferOpen = true;
-						}}
-					/>
-					<IconButton
-						icon="edit"
-						label={$_('accounts.action.edit')}
-						onclick={() => (editing = true)}
-					/>
-					{#if !acc.is_primary}
-						<IconButton icon="save" label={$_('accounts.primary.set')} onclick={makePrimary} />
-					{/if}
-					<IconButton
-						icon="archive"
-						label={$_('accounts.action.archive')}
-						onclick={toggleArchive}
-					/>
-					<IconButton icon="delete" label={$_('common.delete')} variant="danger" onclick={remove} />
-				</div>
+				<p class="mt-3 text-sm" style:color="var(--danger)">{error}</p>
 			{/if}
 		</div>
 

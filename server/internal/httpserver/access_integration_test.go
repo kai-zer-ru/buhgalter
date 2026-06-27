@@ -42,7 +42,7 @@ func TestExternalAccessAllowedOnPrivateLANWithoutExternalURL(t *testing.T) {
 
 	cfg := testConfig(dir)
 	cfg.AllowedHosts = []string{"192.168.1.8"}
-	logger, closer, err := httpserver.InitLogger(filepath.Join(dir, "logs"))
+	logger, closer, err := httpserver.InitLogger(filepath.Join(dir, "logs"), "prod")
 	if err != nil {
 		t.Fatalf("logger: %v", err)
 	}
@@ -93,7 +93,7 @@ func TestExternalAccessAllowedOnLocalhostWithoutAllowedHostsInEnv(t *testing.T) 
 
 	cfg := testConfig(dir)
 	cfg.AllowedHosts = []string{"203.0.113.10"}
-	logger, closer, err := httpserver.InitLogger(filepath.Join(dir, "logs"))
+	logger, closer, err := httpserver.InitLogger(filepath.Join(dir, "logs"), "prod")
 	if err != nil {
 		t.Fatalf("logger: %v", err)
 	}
@@ -152,7 +152,7 @@ func TestExternalAccessAllowedWithConfiguredAllowedHost(t *testing.T) {
 
 	cfg := testConfig(dir)
 	cfg.AllowedHosts = []string{"203.0.113.10"}
-	logger, closer, err := httpserver.InitLogger(filepath.Join(dir, "logs"))
+	logger, closer, err := httpserver.InitLogger(filepath.Join(dir, "logs"), "prod")
 	if err != nil {
 		t.Fatalf("logger: %v", err)
 	}

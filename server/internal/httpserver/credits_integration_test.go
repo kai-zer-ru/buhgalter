@@ -61,6 +61,63 @@ func TestCreateCreditWithSchedule(t *testing.T) {
 	}
 }
 
+func TestCreateCreditRejectsTooLowMonthlyPayment(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+	accID := createTestAccount(t, env, "Счёт")
+
+	body, _ := json.Marshal(map[string]any{
+		"name":             "Потреб",
+		"principal_amount": "100000.00",
+		"issue_date":       time.Now().UTC().AddDate(0, 1, 0).Format("2006-01-02 00:00:00"),
+		"term_months":      12,
+		"interest_rate":    12.0,
+		"payment_interval": "month",
+		"monthly_payment":  "100.00",
+		"debit_account_id": accID,
+	})
+
+	resp, err := env.authedRequest(http.MethodPost, "/api/v1/credits", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		var errBody map[string]any
+		_ = json.NewDecoder(resp.Body).Decode(&errBody)
+		t.Fatalf("expected 400 for too low monthly payment, got %d: %v", resp.StatusCode, errBody)
+	}
+}
+
+func TestCreateCreditRejectsTooHighMonthlyPaymentForTerm(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+	accID := createTestAccount(t, env, "Счёт")
+
+	body, _ := json.Marshal(map[string]any{
+		"name":             "Кредит",
+		"credit_kind":      "consumer",
+		"principal_amount": "36800000.00",
+		"issue_date":       time.Now().UTC().AddDate(0, 1, 0).Format("2006-01-02 00:00:00"),
+		"term_months":      360,
+		"interest_rate":    40.0,
+		"payment_interval": "month",
+		"monthly_payment":  "3771000.00",
+		"debit_account_id": accID,
+	})
+
+	resp, err := env.authedRequest(http.MethodPost, "/api/v1/credits", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		var errBody map[string]any
+		_ = json.NewDecoder(resp.Body).Decode(&errBody)
+		t.Fatalf("expected 400 for too high monthly payment, got %d: %v", resp.StatusCode, errBody)
+	}
+}
+
 func TestCreateCreditWithoutAutoTransactions(t *testing.T) {
 	env := setupConfigured(t)
 	env.login(t, "admin", "secret123")
@@ -974,6 +1031,42 @@ func TestCreateCreditManualSchedule(t *testing.T) {
 	schedule := credit["schedule"].([]any)
 	if len(schedule) != 3 {
 		t.Fatalf("expected 3 payments, got %d", len(schedule))
+	}
+}
+
+func TestCreateCreditRejectsNegativeScheduleSeedAmount(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+	accID := createTestAccount(t, env, "Счёт")
+
+	d1 := time.Now().UTC().AddDate(0, 1, 0).Format("2006-01-02 15:04:05")
+	d2 := time.Now().UTC().AddDate(0, 2, 0).Format("2006-01-02 15:04:05")
+	d3 := time.Now().UTC().AddDate(0, 3, 0).Format("2006-01-02 15:04:05")
+
+	body, _ := json.Marshal(map[string]any{
+		"name":             "Ручной график",
+		"principal_amount": "30000.00",
+		"issue_date":       time.Now().UTC().Format("2006-01-02 00:00:00"),
+		"term_months":      3,
+		"interest_rate":    0,
+		"payment_interval": "manual",
+		"debit_account_id": accID,
+		"schedule_seed": []map[string]any{
+			{"payment_date": d1, "amount": "10000.00"},
+			{"payment_date": d2, "amount": "-10000.00"},
+			{"payment_date": d3, "amount": "10000.00"},
+		},
+	})
+
+	resp, err := env.authedRequest(http.MethodPost, "/api/v1/credits", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		var errBody map[string]any
+		_ = json.NewDecoder(resp.Body).Decode(&errBody)
+		t.Fatalf("expected 400 for negative schedule amount, got %d: %v", resp.StatusCode, errBody)
 	}
 }
 

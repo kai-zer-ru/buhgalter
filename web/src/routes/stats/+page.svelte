@@ -7,7 +7,6 @@
 		ApiError,
 		getStatsByCategory,
 		getStatsByPeriod,
-		getStatsBySubcategory,
 		getStatsSummary,
 		listAccounts,
 		listCategories,
@@ -20,7 +19,6 @@
 		type Debtor,
 		type StatsCategoryItem,
 		type StatsPeriodItem,
-		type StatsSubcategoryItem,
 		type StatsSummary,
 		type Transaction
 	} from '$lib/api/client';
@@ -28,6 +26,7 @@
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
 	import EntityLink from '$lib/components/EntityLink.svelte';
+	import FilterPanel from '$lib/components/FilterPanel.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import TransactionList from '$lib/components/TransactionList.svelte';
 	import { formatBalance } from '$lib/finance';
@@ -38,6 +37,7 @@
 	} from '$lib/category-label';
 	import { fromDateLocalEnd, fromDateLocalStart, dateOnlyLocalValue } from '$lib/dates';
 	import { formatMoneyDisplay, fromCents } from '$lib/money';
+	import { formatStatsPeriod } from '$lib/stats-period';
 	import { user } from '$lib/stores/auth';
 
 	let loading = $state(true);
@@ -45,7 +45,6 @@
 	let error = $state('');
 	let summary = $state<StatsSummary | null>(null);
 	let byCategory = $state<StatsCategoryItem[]>([]);
-	let bySubcategory = $state<StatsSubcategoryItem[]>([]);
 	let byPeriod = $state<StatsPeriodItem[]>([]);
 	let searchRows = $state<Transaction[]>([]);
 	let accounts = $state<Account[]>([]);
@@ -113,6 +112,11 @@
 	const periodMax = $derived(
 		Math.max(1, ...byPeriod.map((row) => Math.max(Math.abs(row.income), Math.abs(row.expense))))
 	);
+
+	function periodLabel(period: string): string {
+		void $locale;
+		return formatStatsPeriod(period, groupBy, $locale ?? 'ru');
+	}
 
 	onMount(async () => {
 		await loadMeta();
@@ -199,15 +203,13 @@
 		error = '';
 		try {
 			const params = statsParams();
-			const [summaryRes, categoryRes, subcategoryRes, periodRes] = await Promise.all([
+			const [summaryRes, categoryRes, periodRes] = await Promise.all([
 				getStatsSummary(params),
 				getStatsByCategory(params),
-				getStatsBySubcategory(params),
 				getStatsByPeriod({ ...params, group_by: groupBy })
 			]);
 			summary = summaryRes;
 			byCategory = categoryRes.items;
-			bySubcategory = subcategoryRes.items;
 			byPeriod = periodRes.items;
 			if (search.trim()) {
 				const searchRes = await searchStats({
@@ -248,18 +250,6 @@
 
 	function categoryDrilldownQuery(item: StatsCategoryItem): string {
 		const parts: Array<[string, string]> = [['category_id', item.category_id]];
-		if (fromLocal) parts.push(['from_local', dateOnlyLocalValue(fromLocal)]);
-		if (toLocal) parts.push(['to_local', dateOnlyLocalValue(toLocal)]);
-		if (type) parts.push(['type', type]);
-		if (accountId) parts.push(['account_id', accountId]);
-		return buildQuery(parts);
-	}
-
-	function subcategoryDrilldownQuery(item: StatsSubcategoryItem): string {
-		const parts: Array<[string, string]> = [
-			['category_id', item.category_id],
-			['search', item.subcategory_name]
-		];
 		if (fromLocal) parts.push(['from_local', dateOnlyLocalValue(fromLocal)]);
 		if (toLocal) parts.push(['to_local', dateOnlyLocalValue(toLocal)]);
 		if (type) parts.push(['type', type]);
@@ -338,9 +328,8 @@
 	/>
 	<h1 class="text-2xl font-semibold">{$_('stats.title')}</h1>
 
-	<details class="filter-panel card" open>
-		<summary class="md:hidden">{$_('transactions.filters.toggle')}</summary>
-		<div class="grid items-end gap-3 sm:grid-cols-2 md:mt-0 mt-3 lg:grid-cols-4">
+	<FilterPanel>
+		<div class="filter-panel-body grid items-end gap-3 sm:grid-cols-2 md:mt-0 mt-3 lg:grid-cols-4">
 			<DateTimePicker
 				label={$_('stats.filters.from')}
 				bind:value={fromLocal}
@@ -395,7 +384,7 @@
 				</button>
 			</div>
 		</div>
-	</details>
+	</FilterPanel>
 
 	{#if loading}
 		<p style:color="var(--text-muted)">{$_('common.loading')}</p>
@@ -439,7 +428,9 @@
 						<div class="mb-3 space-y-2 md:hidden">
 							{#each byPeriod as row (row.period)}
 								<div class="space-y-1">
-									<div class="text-xs" style:color="var(--text-muted)">{row.period}</div>
+									<div class="text-xs" style:color="var(--text-muted)">
+										{periodLabel(row.period)}
+									</div>
 									<div class="flex gap-1">
 										<div
 											class="h-2 rounded bg-emerald-500"
@@ -466,7 +457,7 @@
 							<tbody>
 								{#each byPeriod as row (row.period)}
 									<tr class="border-t" style:border-color="var(--border)">
-										<td class="p-2">{row.period}</td>
+										<td class="p-2">{periodLabel(row.period)}</td>
 										<td class="p-2 tabular-nums">{formatMoneyDisplay(fromCents(row.income))}</td>
 										<td class="p-2 tabular-nums">{formatMoneyDisplay(fromCents(row.expense))}</td>
 									</tr>
@@ -527,66 +518,6 @@
 												style:color="var(--primary)"
 											>
 												{statsCategoryLabel(row.category_name, row.type)}
-											</a>
-										</td>
-										<td class="p-2 tabular-nums">{formatMoneyDisplay(fromCents(row.total))}</td>
-										<td class="p-2">{row.percentage.toFixed(1)}</td>
-										<td class="p-2">{row.count}</td>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					{/if}
-					{#if bySubcategory.length > 0}
-						<h3 class="mb-2 mt-4 text-sm font-semibold" style:color="var(--text-muted)">
-							{$_('transactions.field.subcategory')}
-						</h3>
-						<div class="space-y-3 md:hidden">
-							{#each bySubcategory as row (`${row.category_id}:${row.subcategory_id}`)}
-								<article class="rounded-xl border p-3" style:border-color="var(--border)">
-									<a
-										href={resolve(`/transactions?${subcategoryDrilldownQuery(row)}`)}
-										class="font-medium hover:underline"
-										style:color="var(--primary)"
-									>
-										{row.subcategory_name}
-									</a>
-									<dl class="mt-2 grid gap-1 text-sm">
-										<div class="flex justify-between gap-2">
-											<dt style:color="var(--text-muted)">{$_('transactions.col.amount')}</dt>
-											<dd class="tabular-nums">{formatMoneyDisplay(fromCents(row.total))}</dd>
-										</div>
-										<div class="flex justify-between gap-2">
-											<dt style:color="var(--text-muted)">%</dt>
-											<dd>{row.percentage.toFixed(1)}</dd>
-										</div>
-										<div class="flex justify-between gap-2">
-											<dt style:color="var(--text-muted)">{$_('stats.summary.count')}</dt>
-											<dd>{row.count}</dd>
-										</div>
-									</dl>
-								</article>
-							{/each}
-						</div>
-						<table class="hidden w-full text-left text-sm md:table">
-							<thead>
-								<tr style:color="var(--text-muted)">
-									<th class="p-2">{$_('transactions.field.subcategory')}</th>
-									<th class="p-2">{$_('transactions.col.amount')}</th>
-									<th class="p-2">%</th>
-									<th class="p-2">{$_('stats.summary.count')}</th>
-								</tr>
-							</thead>
-							<tbody>
-								{#each bySubcategory as row (`${row.category_id}:${row.subcategory_id}`)}
-									<tr class="border-t" style:border-color="var(--border)">
-										<td class="p-2">
-											<a
-												href={resolve(`/transactions?${subcategoryDrilldownQuery(row)}`)}
-												class="hover:underline"
-												style:color="var(--primary)"
-											>
-												{row.subcategory_name}
 											</a>
 										</td>
 										<td class="p-2 tabular-nums">{formatMoneyDisplay(fromCents(row.total))}</td>

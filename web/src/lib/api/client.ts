@@ -1,5 +1,6 @@
 import { get } from 'svelte/store';
 import { locale } from 'svelte-i18n';
+import { cachedGet, invalidateApiCache } from '$lib/api/cache';
 
 const API_BASE = '';
 
@@ -262,6 +263,7 @@ export function register(
 }
 
 export function logout() {
+	invalidateApiCache();
 	return request<void>('/api/v1/auth/logout', { method: 'POST' });
 }
 
@@ -509,12 +511,13 @@ export type Subcategory = {
 };
 
 export function listBanks() {
-	return request<Bank[]>('/api/v1/banks');
+	return cachedGet('/api/v1/banks', () => request<Bank[]>('/api/v1/banks'));
 }
 
 export function listAccounts(status?: 'active' | 'archived') {
 	const q = status ? `?status=${status}` : '';
-	return request<Account[]>(`/api/v1/accounts${q}`);
+	const path = `/api/v1/accounts${q}`;
+	return request<Account[]>(path);
 }
 
 export function getAccount(id: string) {
@@ -530,6 +533,9 @@ export function createAccount(payload: {
 	return request<Account>('/api/v1/accounts', {
 		method: 'POST',
 		body: JSON.stringify(payload)
+	}).then((account) => {
+		invalidateApiCache('/api/v1/accounts');
+		return account;
 	});
 }
 
@@ -540,28 +546,50 @@ export function updateAccount(
 	return request<Account>(`/api/v1/accounts/${id}`, {
 		method: 'PUT',
 		body: JSON.stringify(payload)
+	}).then((account) => {
+		invalidateApiCache('/api/v1/accounts');
+		return account;
 	});
 }
 
 export function archiveAccount(id: string) {
-	return request<Account>(`/api/v1/accounts/${id}/archive`, { method: 'POST' });
+	return request<Account>(`/api/v1/accounts/${id}/archive`, { method: 'POST' }).then((account) => {
+		invalidateApiCache('/api/v1/accounts');
+		return account;
+	});
 }
 
 export function unarchiveAccount(id: string) {
-	return request<Account>(`/api/v1/accounts/${id}/unarchive`, { method: 'POST' });
+	return request<Account>(`/api/v1/accounts/${id}/unarchive`, { method: 'POST' }).then(
+		(account) => {
+			invalidateApiCache('/api/v1/accounts');
+			return account;
+		}
+	);
 }
 
 export function setPrimaryAccount(id: string) {
-	return request<Account>(`/api/v1/accounts/${id}/primary`, { method: 'POST' });
+	return request<Account>(`/api/v1/accounts/${id}/primary`, { method: 'POST' }).then((account) => {
+		invalidateApiCache('/api/v1/accounts');
+		return account;
+	});
 }
 
 export function deleteAccount(id: string) {
-	return request<void>(`/api/v1/accounts/${id}`, { method: 'DELETE' });
+	return request<void>(`/api/v1/accounts/${id}`, { method: 'DELETE' }).then((result) => {
+		invalidateApiCache('/api/v1/accounts');
+		return result;
+	});
 }
 
 export function listCategories(type?: 'income' | 'expense') {
 	const q = type ? `?type=${type}` : '';
-	return request<Category[]>(`/api/v1/categories${q}`);
+	const path = `/api/v1/categories${q}`;
+	return cachedGet(path, () => request<Category[]>(path));
+}
+
+function invalidateCategoriesCache() {
+	invalidateApiCache('/api/v1/categories');
 }
 
 export function createCategory(payload: {
@@ -573,6 +601,9 @@ export function createCategory(payload: {
 	return request<Category>('/api/v1/categories', {
 		method: 'POST',
 		body: JSON.stringify(payload)
+	}).then((category) => {
+		invalidateCategoriesCache();
+		return category;
 	});
 }
 
@@ -583,22 +614,36 @@ export function updateCategory(
 	return request<Category>(`/api/v1/categories/${id}`, {
 		method: 'PUT',
 		body: JSON.stringify(payload)
+	}).then((category) => {
+		invalidateCategoriesCache();
+		return category;
 	});
 }
 
 export function deleteCategory(id: string) {
-	return request<void>(`/api/v1/categories/${id}`, { method: 'DELETE' });
+	return request<void>(`/api/v1/categories/${id}`, { method: 'DELETE' }).then((result) => {
+		invalidateCategoriesCache();
+		return result;
+	});
 }
 
 export function reorderCategories(type: 'income' | 'expense', ids: string[]) {
 	return request<Category[]>('/api/v1/categories/order', {
 		method: 'PUT',
 		body: JSON.stringify({ type, ids })
+	}).then((categories) => {
+		invalidateCategoriesCache();
+		return categories;
 	});
 }
 
 export function setPrimaryCategory(id: string) {
-	return request<Category>(`/api/v1/categories/${id}/primary`, { method: 'POST' });
+	return request<Category>(`/api/v1/categories/${id}/primary`, { method: 'POST' }).then(
+		(category) => {
+			invalidateCategoriesCache();
+			return category;
+		}
+	);
 }
 
 export function listSubcategories(categoryId: string) {
@@ -609,6 +654,9 @@ export function reorderSubcategories(categoryId: string, ids: string[]) {
 	return request<Subcategory[]>(`/api/v1/categories/${categoryId}/subcategories/order`, {
 		method: 'PUT',
 		body: JSON.stringify({ ids })
+	}).then((subcategories) => {
+		invalidateCategoriesCache();
+		return subcategories;
 	});
 }
 
@@ -616,6 +664,9 @@ export function createSubcategory(categoryId: string, payload: { name: string; i
 	return request<Subcategory>(`/api/v1/categories/${categoryId}/subcategories`, {
 		method: 'POST',
 		body: JSON.stringify(payload)
+	}).then((subcategory) => {
+		invalidateCategoriesCache();
+		return subcategory;
 	});
 }
 
@@ -623,11 +674,17 @@ export function updateSubcategory(id: string, payload: { name: string; icon?: st
 	return request<Subcategory>(`/api/v1/subcategories/${id}`, {
 		method: 'PUT',
 		body: JSON.stringify(payload)
+	}).then((subcategory) => {
+		invalidateCategoriesCache();
+		return subcategory;
 	});
 }
 
 export function deleteSubcategory(id: string) {
-	return request<void>(`/api/v1/subcategories/${id}`, { method: 'DELETE' });
+	return request<void>(`/api/v1/subcategories/${id}`, { method: 'DELETE' }).then((result) => {
+		invalidateCategoriesCache();
+		return result;
+	});
 }
 
 export type Transaction = {
@@ -999,7 +1056,7 @@ export function getAccountBalance(id: string) {
 }
 
 export function listDebtors() {
-	return request<Debtor[]>('/api/v1/debtors');
+	return cachedGet('/api/v1/debtors', () => request<Debtor[]>('/api/v1/debtors'));
 }
 
 export function getDebtor(id: string) {
@@ -1010,6 +1067,9 @@ export function createDebtor(name: string) {
 	return request<Debtor>('/api/v1/debtors', {
 		method: 'POST',
 		body: JSON.stringify({ name })
+	}).then((debtor) => {
+		invalidateApiCache('/api/v1/debtors');
+		return debtor;
 	});
 }
 
@@ -1145,7 +1205,10 @@ export function updateCredit(id: string, payload: Record<string, unknown>) {
 	});
 }
 
-export function addCreditPayment(id: string, payload: { amount: string; payment_date: string }) {
+export function addCreditPayment(
+	id: string,
+	payload: { amount: string; payment_date: string; account_id?: string }
+) {
 	return request<Credit>(`/api/v1/credits/${id}/payments`, {
 		method: 'POST',
 		body: JSON.stringify(payload)

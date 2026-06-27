@@ -13,13 +13,10 @@ services:
     ports:
       - "127.0.0.1:8765:8765"
     volumes:
-      - buhgalter-data:/app/data
-      - buhgalter-backups:/app/backups
+      - ${BUHGALTER_HOST_DATA_DIR:-./data}:/app/data
+      - ${BUHGALTER_HOST_BACKUPS_DIR:-./backups}:/app/backups
+      - ${BUHGALTER_HOST_LOGS_DIR:-./logs}:/app/logs
       - ./.env:/app/.env
       # Optional: override bundled locales
       # - ../server/locales:/app/locales:ro
     restart: unless-stopped
-
-volumes:
-  buhgalter-data:
-  buhgalter-backups:

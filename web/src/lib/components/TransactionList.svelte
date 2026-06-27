@@ -4,7 +4,7 @@
 	import type { Transaction } from '$lib/api/client';
 	import CategoryIcon from '$lib/components/CategoryIcon.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
-	import IconButton from '$lib/components/IconButton.svelte';
+	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
 	import TransactionAccountCell from '$lib/components/TransactionAccountCell.svelte';
 	import { formatAPIDateTimeForDisplay } from '$lib/dates';
 	import { formatMoneyDisplay } from '$lib/money';
@@ -46,6 +46,33 @@
 
 	function canMakeRecurring(tx: Transaction): boolean {
 		return Boolean(onmakeRecurring && tx.type !== 'transfer' && !tx.category_is_system);
+	}
+
+	function rowActions(tx: Transaction): RowAction[] {
+		const actions: RowAction[] = [];
+		if (canMakeRecurring(tx)) {
+			actions.push({
+				icon: 'repeat',
+				label: $_('recurring.fromTransaction'),
+				onclick: () => onmakeRecurring?.(tx)
+			});
+		}
+		if (showEdit && onedit && canEditTransaction(tx)) {
+			actions.push({
+				icon: 'edit',
+				label: $_('common.edit'),
+				onclick: () => onedit(tx)
+			});
+		}
+		if (showDelete && ondelete) {
+			actions.push({
+				icon: 'delete',
+				label: $_('common.delete'),
+				variant: 'danger',
+				onclick: () => ondelete(tx)
+			});
+		}
+		return actions;
 	}
 </script>
 
@@ -104,26 +131,7 @@
 						{/if}
 						{#if showActions}
 							<td class="p-3 align-middle text-right whitespace-nowrap">
-								<div class="flex items-center justify-end gap-1">
-									{#if canMakeRecurring(tx)}
-										<IconButton
-											icon="repeat"
-											label={$_('recurring.fromTransaction')}
-											onclick={() => onmakeRecurring?.(tx)}
-										/>
-									{/if}
-									{#if showEdit && onedit && canEditTransaction(tx)}
-										<IconButton icon="edit" label={$_('common.edit')} onclick={() => onedit(tx)} />
-									{/if}
-									{#if showDelete && ondelete}
-										<IconButton
-											icon="delete"
-											label={$_('common.delete')}
-											variant="danger"
-											onclick={() => ondelete(tx)}
-										/>
-									{/if}
-								</div>
+								<RowActionsMenu actions={rowActions(tx)} />
 							</td>
 						{/if}
 					</tr>
@@ -147,10 +155,15 @@
 							<TransactionAccountCell {tx} {siblings} mode="prefix" />
 						</p>
 					</div>
-					<p class="shrink-0 text-sm font-semibold tabular-nums">
-						{showAmountSign ? transactionAmountSign(tx, { singleAccount }) : ''}
-						{formatMoneyDisplay(tx.amount_display)}
-					</p>
+					<div class="flex shrink-0 items-start gap-2">
+						<p class="text-sm font-semibold tabular-nums">
+							{showAmountSign ? transactionAmountSign(tx, { singleAccount }) : ''}
+							{formatMoneyDisplay(tx.amount_display)}
+						</p>
+						{#if showActions}
+							<RowActionsMenu actions={rowActions(tx)} />
+						{/if}
+					</div>
 				</div>
 				<p class="mt-2 text-sm">
 					{#if tx.category_icon}
@@ -169,28 +182,6 @@
 							{@render descriptionExtra(tx)}
 						{/if}
 					</p>
-				{/if}
-				{#if showActions}
-					<div class="mt-3 flex justify-end gap-1">
-						{#if canMakeRecurring(tx)}
-							<IconButton
-								icon="repeat"
-								label={$_('recurring.fromTransaction')}
-								onclick={() => onmakeRecurring?.(tx)}
-							/>
-						{/if}
-						{#if showEdit && onedit && canEditTransaction(tx)}
-							<IconButton icon="edit" label={$_('common.edit')} onclick={() => onedit(tx)} />
-						{/if}
-						{#if showDelete && ondelete}
-							<IconButton
-								icon="delete"
-								label={$_('common.delete')}
-								variant="danger"
-								onclick={() => ondelete(tx)}
-							/>
-						{/if}
-					</div>
 				{/if}
 			</article>
 		{/each}

@@ -147,11 +147,12 @@ URL в UI: `/icons/categories/{id}.svg` (`categoryIconUrl` в `web/src/lib/finan
 | Быстрый ряд | Иконка из «Ещё» встаёт **на 1 место**, последняя из дефолтного quick-ряда скрывается; повторный выбор из «Ещё» заменяет первую; клик по иконке в быстром ряду сбрасывает закрепление. Текущее значение вне quick (редактирование) тоже показывается первым |
 | Авто-имя | Подставляется только пока поле имени **пустое** или совпадает с последним авто-именем. Сначала ввели название вручную — смена иконки **не трогает** текст; очистка поля снова включает автоподстановку |
 | Редактирование | `lockName={true}` — смена иконки не перезаписывает существующее имя (категория / подкатегория) |
-| Подкатегории — раскрытие | Клик по **▶ / ▼** или по названию категории; список подгружается лениво (`GET …/subcategories`) |
+| Подкатегории — раскрытие | Клик по названию с **▶ / ▼ после текста** (одна кнопка); список подгружается лениво (`GET …/subcategories`) |
+| Иконка категории | Декоративная, не кликабельна (без `btn-icon`) |
 | Подкатегории — иконка | Тот же picker (компактный, 28px); **по умолчанию иконка родителя**; после добавления фокус остаётся в поле ввода без перезагрузки страницы |
 | Подкатегории — состояние | Обновления `subs` и `expanded` через пересоздание объекта (`{ ...obj, [id]: … }`) — требование реактивности Svelte 5 |
 | Сортировка | Перетаскивание за **⠿** (`web/src/lib/drag-reorder.ts`, `ReorderDragGhost.svelte`): ghost **следует за курсором** с **той же шириной**, что у карточки (фиксированные `width`/`height`); атрибут `data-drag-row` на всей строке; линия вставки на целевой карточке |
-| Главная категория | ★ / ☆ — `POST /categories/{id}/primary`; одна на вкладку; дефолт в форме операции (этап 3) |
+| Главная категория | Галочка у названия; «Сделать главной» — в меню «⋯» (`POST /categories/{id}/primary`); одна на вкладку; дефолт в форме операции |
 | Enter | Сохраняет подкатегорию при редактировании; добавляет новую в форме создания |
 | Удаление | `$lib/confirm` + i18n (`categories.confirm.delete`, `categories.confirm.deleteSub`) |
 
@@ -170,7 +171,8 @@ web/src/lib/components/CategoryIconPicker.svelte  # авто-имя, lockName
 web/src/lib/drag-reorder.ts                        # pointer DnD, ghost с фиксированной шириной
 web/src/lib/components/ReorderDragGhost.svelte
 web/src/routes/settings/categories/+page.svelte
-web/src/routes/accounts/+page.svelte              # вкладки active/archived, ★ основной счёт
+web/src/routes/accounts/+page.svelte              # вкладки active/archived, inline-edit, меню «⋯»
+web/src/lib/settings/CategoriesTab.svelte         # раскрытие по названию, главная в меню «⋯»
 web/src/lib/accounts.ts                           # defaultAccountId для форм
 web/src/routes/+layout.svelte                     # шапка, порядок nav, ConfirmDialog
 server/queries/categories.sql

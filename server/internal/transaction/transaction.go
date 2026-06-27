@@ -79,6 +79,7 @@ var (
 	ErrInvalidAmount         = errors.New("invalid amount")
 	ErrSameAccount           = errors.New("same account for transfer")
 	ErrSystemCategoryPlanned = errors.New("system category cannot be planned")
+	ErrTypeChange            = errors.New("transaction type cannot be changed")
 )
 
 func queries(db sqlcdb.DBTX) *sqlcdb.Queries {
@@ -289,9 +290,13 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in UpdateInput) 
 	if existing.TransferGroupID != nil && *existing.TransferGroupID != "" {
 		return Transaction{}, fmt.Errorf("use transfer endpoint to update transfers")
 	}
-	if in.Type != "income" && in.Type != "expense" {
+	if existing.Type != "income" && existing.Type != "expense" {
 		return Transaction{}, ErrInvalidType
 	}
+	if in.Type != existing.Type {
+		return Transaction{}, ErrTypeChange
+	}
+	in.Type = existing.Type
 	if in.Amount <= 0 {
 		return Transaction{}, ErrInvalidAmount
 	}

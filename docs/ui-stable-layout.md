@@ -29,14 +29,21 @@
 | `/accounts/[id]` | «+ Операция», «Перевод» | да (фильтр операций) |
 | `/credits` | «+ Новый кредит» | да; вкладки и badge — [ui-credits.md](ui-credits.md) |
 
-## Мобильная вёрстка (v1.1)
+## Фильтры (`FilterPanel`)
+
+- На **мобильных** — свёрнуты под спойлер «Фильтры» с chevron; по умолчанию закрыты.
+- На **десктопе** (`≥ md`) — панель всегда развёрнута, заголовок спойлера скрыт.
+- Компонент: `$lib/components/FilterPanel.svelte`; поля операций — `TransactionFilters`.
+
+## Мобильная вёрстка
 
 - Touch-targets минимум 44px (`layout.css`, `@media (pointer: coarse)`)
 - Широкие таблицы → карточки на `md` breakpoint (кредиты, операции)
 - Модалки — bottom sheet на узком экране (`ModalShell`, `ConfirmDialog`)
 - Вкладки — горизонтальный скролл (`PageTabs`, `.page-tabs-scroll`)
 
-Release notes: [release-notes-v1.1.md](release-notes-v1.1.md).
+Release notes: [release-notes-v1.2.1.md](release-notes-v1.2.1.md).
 
 ## Запланировано
-- Фильтры операций с вкладками — тот же паттерн (см. `/transactions`, `/stats`)
+
+- Единый `FilterPanel` для всех экранов с фильтрами — реализовано для `/transactions`, `/accounts/[id]`, `/stats` (см. [ui-row-actions.md](ui-row-actions.md))

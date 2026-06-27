@@ -239,3 +239,112 @@ func TestGenerateScheduleAlfaBankExample(t *testing.T) {
 		t.Fatalf("total payments %d should exceed principal %d (includes interest)", sum, principal)
 	}
 }
+
+func TestGenerateScheduleMortgageAutoPaymentLongTerm(t *testing.T) {
+	issue, _ := timeutil.ParseUTC("2021-01-01 00:00:00")
+	principal := int64(3_595_550_000) // 35 955 500.00
+	term := 360
+	rate := 20.0
+	monthly := MonthlyPaymentMortgage(principal, rate, term, issue)
+
+	entries, err := GenerateSchedule(ScheduleInput{
+		Principal:       principal,
+		TermMonths:      term,
+		MonthlyPayment:  monthly,
+		UserSetPayment:  false,
+		PaymentInterval: IntervalMonth,
+		CreditKind:      CreditKindMortgage,
+		IssueDate:       issue,
+		InterestRate:    rate,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v (monthly=%d)", err, monthly)
+	}
+	if len(entries) != term {
+		t.Fatalf("expected %d entries, got %d", term, len(entries))
+	}
+	last := entries[term-1]
+	if last.Amount <= 0 {
+		t.Fatalf("last payment must be positive, got %d", last.Amount)
+	}
+	for i, e := range entries {
+		if e.Amount <= 0 {
+			t.Fatalf("payment %d: non-positive amount %d", i+1, e.Amount)
+		}
+	}
+	for i := 0; i < term-1; i++ {
+		if entries[i].Amount != monthly {
+			t.Fatalf("payment %d: amount %d want %d", i+1, entries[i].Amount, monthly)
+		}
+	}
+}
+
+func TestGenerateScheduleMortgageUserSetPaymentSameAsCalculated(t *testing.T) {
+	issue, _ := timeutil.ParseUTC("2021-01-01 00:00:00")
+	principal := int64(3_595_550_000)
+	term := 360
+	rate := 20.0
+	monthly := MonthlyPaymentMortgage(principal, rate, term, issue)
+
+	_, errAuto := GenerateSchedule(ScheduleInput{
+		Principal: principal, TermMonths: term, MonthlyPayment: monthly, UserSetPayment: false,
+		PaymentInterval: IntervalMonth, CreditKind: CreditKindMortgage, IssueDate: issue, InterestRate: rate,
+	})
+	if errAuto != nil {
+		t.Fatalf("auto: %v", errAuto)
+	}
+	_, errUser := GenerateSchedule(ScheduleInput{
+		Principal: principal, TermMonths: term, MonthlyPayment: monthly, UserSetPayment: true,
+		PaymentInterval: IntervalMonth, CreditKind: CreditKindMortgage, IssueDate: issue, InterestRate: rate,
+	})
+	if errUser != nil {
+		t.Fatalf("user-set same as calculated: %v", errUser)
+	}
+
+	rounded := (monthly / 100) * 100
+	preview, resolved, err := PreviewSchedule(PreviewInput{
+		Principal: principal, TermMonths: term, InterestRate: rate,
+		PaymentInterval: IntervalMonth, IssueDate: issue, CreditKind: CreditKindMortgage,
+		MonthlyPayment: &rounded,
+	})
+	if err != nil {
+		t.Fatalf("preview rounded payment: %v", err)
+	}
+	if len(preview) != term {
+		t.Fatalf("preview len %d, want %d", len(preview), term)
+	}
+	if resolved != monthly {
+		t.Fatalf("resolved monthly %d, want calculated %d", resolved, monthly)
+	}
+}
+
+func TestGenerateScheduleMortgageUserSetBankPayment(t *testing.T) {
+	issue, _ := timeutil.ParseUTC("2021-01-01 00:00:00")
+	principal := int64(3_595_550_000)
+	term := 360
+	rate := 20.0
+	bankPayment := int64(61_074_247) // e.g. Sber contract payment
+	entries, err := GenerateSchedule(ScheduleInput{
+		Principal: principal, TermMonths: term, MonthlyPayment: bankPayment, UserSetPayment: true,
+		PaymentInterval: IntervalMonth, CreditKind: CreditKindMortgage, IssueDate: issue, InterestRate: rate,
+	})
+	if err != nil {
+		t.Fatalf("user-set bank payment: %v", err)
+	}
+	if len(entries) != term {
+		t.Fatalf("expected %d entries, got %d", term, len(entries))
+	}
+	for i, e := range entries {
+		if e.Amount <= 0 {
+			t.Fatalf("payment %d: non-positive amount %d", i+1, e.Amount)
+		}
+	}
+	for i := 0; i < term-1; i++ {
+		if entries[i].Amount != bankPayment {
+			t.Fatalf("payment %d: amount %d want %d", i+1, entries[i].Amount, bankPayment)
+		}
+	}
+	if entries[term-1].Amount != bankPayment {
+		t.Fatalf("last payment %d want bank payment %d", entries[term-1].Amount, bankPayment)
+	}
+}

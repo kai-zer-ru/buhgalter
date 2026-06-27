@@ -371,6 +371,8 @@ func writeTxError(w http.ResponseWriter, r *http.Request, err error) bool {
 	switch {
 	case errors.Is(err, ErrInvalidType):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_TX_TYPE")
+	case errors.Is(err, ErrTypeChange):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_TX_TYPE_CHANGE")
 	case errors.Is(err, ErrInvalidAmount):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_TX_AMOUNT_POSITIVE")
 	case errors.Is(err, ErrInvalidAccount):

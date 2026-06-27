@@ -2,7 +2,7 @@
 
 Публичные справочники по данным, UI, API и установке. Стиль оформления — [style.md](style.md).
 
-**Текущая версия API:** OpenAPI **1.2.0** — [api/openapi.yaml](api/openapi.yaml).
+**Актуальная спецификация API:** [api/openapi.yaml](api/openapi.yaml).
 
 ---
 
@@ -10,9 +10,10 @@
 
 | Документ | Описание |
 |----------|----------|
-| [release-notes-v1.2.0.md](release-notes-v1.2.0.md) | v1.2.0: периодические операции, обновление кредитов и setup restore |
-| [release-notes-v1.1.1.md](release-notes-v1.1.1.md) | v1.1.1: .env, docs и улучшения UI |
-| [release-notes-v1.1.md](release-notes-v1.1.md) | v1.1.0: сброс пароля, кредиты, комиссия переводов, mobile UI |
+| [release-notes-v1.2.1.md](release-notes-v1.2.1.md) | Docker, логирование, ипотека, API `error.field`, UI (счета, категории, меню «⋯», редактирование операций, фильтры, кеш, статистика, погашение долга, оплата кредита) |
+| [release-notes-v1.2.0.md](release-notes-v1.2.0.md) | Периодические операции, кредиты, ипотека MVP, setup restore |
+| [release-notes-v1.1.1.md](release-notes-v1.1.1.md) | `.env`, документация и улучшения UI |
+| [release-notes-v1.1.md](release-notes-v1.1.md) | Сброс пароля, кредиты, комиссия переводов, mobile UI |
 | [../CHANGELOG.md](../CHANGELOG.md) | Полный changelog |
 
 ---
@@ -31,6 +32,9 @@
 |----------|----------|
 | [ui-dialogs.md](ui-dialogs.md) | Диалоги, подтверждения, Esc |
 | [ui-navigation.md](ui-navigation.md) | Навигация и кликабельные сущности |
+| [ui-row-actions.md](ui-row-actions.md) | Меню «⋯» в строках и спойлер фильтров |
+| [ui-api-cache.md](ui-api-cache.md) | In-memory кеш справочников в веб-клиенте |
+| [ui-stats.md](ui-stats.md) | Страница `/stats` |
 | [ui-credits.md](ui-credits.md) | UI кредитов |
 | [ui-stable-layout.md](ui-stable-layout.md) | Стабильная шапка и вкладки |
 | [ui-empty-states.md](ui-empty-states.md) | Пустые состояния |
@@ -40,7 +44,7 @@
 
 | Документ | Описание |
 |----------|----------|
-| [api/openapi.yaml](api/openapi.yaml) | OpenAPI **1.2.0** |
+| [api/openapi.yaml](api/openapi.yaml) | Актуальная спецификация OpenAPI |
 | [api/authentication.md](api/authentication.md) | Сессии и API-токены |
 | [import/cubux.md](import/cubux.md) | Импорт формата Cubux |
 

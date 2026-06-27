@@ -107,6 +107,7 @@ type UpdateInput struct {
 type PayPaymentInput struct {
 	Amount      int64
 	PaymentDate time.Time
+	AccountID   string
 }
 
 type CompleteInput struct {
@@ -199,15 +200,58 @@ func GetByID(ctx context.Context, db *sql.DB, userID, id string, withSchedule bo
 	return c, nil
 }
 
+// monthlyPaymentMatchTolerance allows rounding to whole rubles without treating payment as custom.
+const monthlyPaymentMatchTolerance = int64(100)
+
+func calculatedMonthlyPayment(principal int64, termMonths int, interestRate float64, creditKind string, interval PaymentInterval, issueDate time.Time) int64 {
+	monthly := MonthlyPayment(principal, interestRate, termMonths)
+	if normalizeCreditKind(creditKind) == CreditKindMortgage && interval == IntervalMonth {
+		monthly = MonthlyPaymentMortgage(principal, interestRate, termMonths, issueDate)
+	}
+	return monthly
+}
+
+func resolveScheduleMonthly(principal int64, termMonths int, interestRate float64, creditKind string, interval PaymentInterval, issueDate time.Time, userMonthly *int64) (monthly int64, userSet bool) {
+	monthly = calculatedMonthlyPayment(principal, termMonths, interestRate, creditKind, interval, issueDate)
+	if userMonthly == nil {
+		return monthly, false
+	}
+	diff := *userMonthly - monthly
+	if diff < 0 {
+		diff = -diff
+	}
+	if diff <= monthlyPaymentMatchTolerance {
+		return monthly, false
+	}
+	return *userMonthly, true
+}
+
+func validateUserMonthlyAboveCalculated(calculated, monthly int64) error {
+	if calculated <= 0 || monthly <= calculated {
+		return nil
+	}
+	// Allow up to 50% above auto-calculated payment.
+	if monthly > calculated+calculated/2 {
+		return ErrMonthlyPaymentTooHighForTerm
+	}
+	return nil
+}
+
 func PreviewSchedule(in PreviewInput) ([]ScheduleEntry, int64, error) {
-	monthly := MonthlyPayment(in.Principal, in.InterestRate, in.TermMonths)
-	if in.MonthlyPayment != nil {
-		monthly = *in.MonthlyPayment
+	monthly, userSet := resolveScheduleMonthly(
+		in.Principal, in.TermMonths, in.InterestRate, in.CreditKind, in.PaymentInterval, in.IssueDate, in.MonthlyPayment,
+	)
+	if userSet && normalizeCreditKind(in.CreditKind) != CreditKindMortgage {
+		calculated := calculatedMonthlyPayment(in.Principal, in.TermMonths, in.InterestRate, in.CreditKind, in.PaymentInterval, in.IssueDate)
+		if err := validateUserMonthlyAboveCalculated(calculated, monthly); err != nil {
+			return nil, 0, err
+		}
 	}
 	entries, err := GenerateSchedule(ScheduleInput{
 		Principal:       in.Principal,
 		TermMonths:      in.TermMonths,
 		MonthlyPayment:  monthly,
+		UserSetPayment:  userSet,
 		PaymentInterval: in.PaymentInterval,
 		CreditKind:      normalizeCreditKind(in.CreditKind),
 		IssueDate:       in.IssueDate,
@@ -253,13 +297,17 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Cre
 		return Credit{}, err
 	}
 
-	calculated := MonthlyPayment(principalAmount, in.InterestRate, in.TermMonths)
-	monthly := calculated
-	if in.MonthlyPayment != nil {
-		if *in.MonthlyPayment <= 0 {
-			return Credit{}, ErrInvalidAmount
+	if in.MonthlyPayment != nil && *in.MonthlyPayment <= 0 {
+		return Credit{}, ErrInvalidAmount
+	}
+	monthly, userSet := resolveScheduleMonthly(
+		principalAmount, in.TermMonths, in.InterestRate, creditKind, in.PaymentInterval, in.IssueDate, in.MonthlyPayment,
+	)
+	if userSet && creditKind != CreditKindMortgage {
+		calculated := calculatedMonthlyPayment(principalAmount, in.TermMonths, in.InterestRate, creditKind, in.PaymentInterval, in.IssueDate)
+		if err := validateUserMonthlyAboveCalculated(calculated, monthly); err != nil {
+			return Credit{}, err
 		}
-		monthly = *in.MonthlyPayment
 	}
 	if in.PaymentInterval == IntervalManual && len(in.ScheduleSeed) > 0 {
 		var sum int64
@@ -273,6 +321,7 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Cre
 		Principal:       principalAmount,
 		TermMonths:      in.TermMonths,
 		MonthlyPayment:  monthly,
+		UserSetPayment:  userSet,
 		PaymentInterval: in.PaymentInterval,
 		IssueDate:       in.IssueDate,
 		InterestRate:    in.InterestRate,
@@ -544,7 +593,11 @@ func PayNextScheduled(ctx context.Context, db *sql.DB, userID, creditID string, 
 	if in.Amount > remaining {
 		return Credit{}, ErrInvalidAmount
 	}
-	if err := validateActiveAccount(ctx, db, userID, c.DebitAccountID); err != nil {
+	debitAccountID := c.DebitAccountID
+	if in.AccountID != "" {
+		debitAccountID = in.AccountID
+	}
+	if err := validateActiveAccount(ctx, db, userID, debitAccountID); err != nil {
 		return Credit{}, err
 	}
 
@@ -585,7 +638,7 @@ func PayNextScheduled(ctx context.Context, db *sql.DB, userID, creditID string, 
 	if existingTxID != nil {
 		txID = *existingTxID
 		if err := q.UpdateTransaction(ctx, sqlcdb.UpdateTransactionParams{
-			AccountID:       c.DebitAccountID,
+			AccountID:       debitAccountID,
 			Type:            "expense",
 			Kind:            txKind,
 			Amount:          in.Amount,
@@ -608,7 +661,7 @@ func PayNextScheduled(ctx context.Context, db *sql.DB, userID, creditID string, 
 			return Credit{}, err
 		}
 	} else {
-		txID, err = insertCreditExpenseTransaction(ctx, dbTx, userID, c.DebitAccountID, c.Name, in.Amount, in.PaymentDate, true)
+		txID, err = insertCreditExpenseTransaction(ctx, dbTx, userID, debitAccountID, c.Name, in.Amount, in.PaymentDate, true)
 		if err != nil {
 			return Credit{}, err
 		}

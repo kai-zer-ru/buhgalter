@@ -27,6 +27,7 @@
 	import Select from '$lib/components/Select.svelte';
 	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
 	import IconButton from '$lib/components/IconButton.svelte';
+	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
 	import { toast } from '$lib/toast';
 	import { confirm } from '$lib/confirm';
 	import {
@@ -52,6 +53,7 @@
 	let error = $state('');
 	let payOpen = $state(false);
 	let payAmount = $state('');
+	let payAccountId = $state('');
 	let payDateLocal = $state('');
 	let changeAccountOpen = $state(false);
 	let newAccountId = $state('');
@@ -202,7 +204,8 @@
 		try {
 			await addCreditPayment(credit.id, {
 				amount: toAPIAmount(payAmount),
-				payment_date: fromDatetimeLocalValue(payDateLocal, tz)
+				payment_date: fromDatetimeLocalValue(payDateLocal, tz),
+				account_id: payAccountId || undefined
 			});
 			payOpen = false;
 			toast($_('common.saved'));
@@ -281,14 +284,11 @@
 		return todayDateLocal(tz);
 	}
 
-	function setPayDateToday() {
-		payDateLocal = todayDateLocal(tz);
-	}
-
 	function openPay() {
 		if (!credit) return;
 		payError = '';
 		payAmount = defaultPayAmount(credit);
+		payAccountId = credit.debit_account_id;
 		payDateLocal = defaultPayDate(credit);
 		payOpen = true;
 	}
@@ -443,11 +443,79 @@
 		);
 	}
 
+	function paymentRowActions(p: CreditPayment): RowAction[] {
+		const actions: RowAction[] = [];
+		if (canPayPayment(p)) {
+			actions.push({
+				icon: 'pay',
+				label: $_('credits.action.pay'),
+				onclick: () => openPayForPayment(p)
+			});
+		} else if (canDeletePayment(p)) {
+			actions.push({
+				icon: 'delete',
+				label: $_('credits.payment.delete'),
+				variant: 'danger',
+				onclick: () => void doDeletePayment(p)
+			});
+		}
+		return actions;
+	}
+
+	function creditPageActions(): RowAction[] {
+		if (!credit) return [];
+		if (credit.status === 'active') {
+			return [
+				{
+					icon: 'edit',
+					label: $_('credits.action.changeName'),
+					onclick: () => openChangeName()
+				},
+				{
+					icon: 'transfer',
+					label: $_('credits.action.changeAccount'),
+					onclick: () => openChangeAccount()
+				},
+				{
+					icon: 'repeat',
+					label: credit.debit_time_local
+						? $_('credits.action.changeDebitTime')
+						: $_('credits.action.setDebitTime'),
+					onclick: () => openSetDebitTime()
+				},
+				{
+					icon: 'bank',
+					label: $_('credits.action.changeBank'),
+					onclick: () => openChangeBank()
+				},
+				{
+					icon: 'archive',
+					label: $_('credits.action.complete'),
+					onclick: () => openComplete()
+				},
+				{
+					icon: 'delete',
+					label: $_('common.delete'),
+					variant: 'danger',
+					onclick: () => void doDelete()
+				}
+			];
+		}
+		return [
+			{
+				icon: 'edit',
+				label: $_('credits.action.changeName'),
+				onclick: () => openChangeName()
+			}
+		];
+	}
+
 	function openPayForPayment(p: CreditPayment) {
 		if (!credit) return;
 		payError = '';
 		const amountCents = Math.min(p.amount, credit.remaining_amount);
 		payAmount = fromCents(amountCents);
+		payAccountId = credit.debit_account_id;
 		payDateLocal = dateOnlyLocalValue(toDatetimeLocalValue(p.payment_date, tz));
 		payOpen = true;
 	}
@@ -561,7 +629,7 @@
 	{:else if error}
 		<p style:color="var(--danger)">{error}</p>
 	{:else if credit}
-		<div class="flex flex-wrap items-start justify-between gap-3">
+		<div class="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-start md:justify-between">
 			<div>
 				<div class="flex items-center gap-2">
 					{#if creditBankIcon(credit)}
@@ -591,41 +659,14 @@
 					{/if}
 				</div>
 			</div>
-			{#if credit.status === 'active'}
-				<div class="flex w-full flex-wrap gap-2 md:flex-nowrap md:justify-between">
-					{#if nextPendingPayment(credit)}
-						<button type="button" class="btn-primary" onclick={openPay} disabled={paySubmitting}>
-							{paySubmitting ? $_('credits.action.paying') : $_('credits.action.pay')}
-						</button>
-					{/if}
-					<button type="button" class="btn-ghost" onclick={openChangeName}>
-						{$_('credits.action.changeName')}
+			<div class="flex w-full shrink-0 items-center justify-end gap-2 md:w-auto">
+				{#if credit.status === 'active' && nextPendingPayment(credit)}
+					<button type="button" class="btn-primary" onclick={openPay} disabled={paySubmitting}>
+						{paySubmitting ? $_('credits.action.paying') : $_('credits.action.pay')}
 					</button>
-					<button type="button" class="btn-ghost" onclick={openChangeAccount}>
-						{$_('credits.action.changeAccount')}
-					</button>
-					<button type="button" class="btn-ghost" onclick={openSetDebitTime}>
-						{credit.debit_time_local
-							? $_('credits.action.changeDebitTime')
-							: $_('credits.action.setDebitTime')}
-					</button>
-					<button type="button" class="btn-ghost" onclick={openChangeBank}>
-						{$_('credits.action.changeBank')}
-					</button>
-					<button type="button" class="btn-ghost" onclick={openComplete}>
-						{$_('credits.action.complete')}
-					</button>
-					<button type="button" class="btn-ghost min-w-24" onclick={() => void doDelete()}>
-						{$_('common.delete')}
-					</button>
-				</div>
-			{:else}
-				<div class="flex w-full flex-wrap gap-2">
-					<button type="button" class="btn-ghost" onclick={openChangeName}>
-						{$_('credits.action.changeName')}
-					</button>
-				</div>
-			{/if}
+				{/if}
+				<RowActionsMenu actions={creditPageActions()} />
+			</div>
 		</div>
 
 		<div class="card grid gap-3 p-4 text-sm md:grid-cols-3">
@@ -759,20 +800,7 @@
 										</td>
 										{#if creditIsActive && !editable}
 											<td class="p-3 text-right">
-												{#if canPayPayment(p)}
-													<IconButton
-														icon="pay"
-														label={$_('credits.action.pay')}
-														onclick={() => openPayForPayment(p)}
-													/>
-												{:else if canDeletePayment(p)}
-													<IconButton
-														icon="delete"
-														label={$_('credits.payment.delete')}
-														variant="danger"
-														onclick={() => void doDeletePayment(p)}
-													/>
-												{/if}
+												<RowActionsMenu actions={paymentRowActions(p)} />
 											</td>
 										{/if}
 									</tr>
@@ -782,6 +810,7 @@
 					</div>
 					<div class="space-y-3 p-3 md:hidden">
 						{#each payments as p (p.id)}
+							{@const paymentActions = paymentRowActions(p)}
 							<article class="rounded-xl border p-3" style:border-color="var(--border)">
 								<dl class="grid gap-2 text-sm">
 									<div class="flex justify-between gap-2">
@@ -811,22 +840,9 @@
 										</dd>
 									</div>
 								</dl>
-								{#if creditIsActive && !editable && canPayPayment(p)}
+								{#if creditIsActive && !editable && paymentActions.length > 0}
 									<div class="mt-3 flex justify-end">
-										<IconButton
-											icon="pay"
-											label={$_('credits.action.pay')}
-											onclick={() => openPayForPayment(p)}
-										/>
-									</div>
-								{:else if creditIsActive && !editable && canDeletePayment(p)}
-									<div class="mt-3 flex justify-end">
-										<IconButton
-											icon="delete"
-											label={$_('credits.payment.delete')}
-											variant="danger"
-											onclick={() => void doDeletePayment(p)}
-										/>
+										<RowActionsMenu actions={paymentActions} />
 									</div>
 								{/if}
 							</article>
@@ -1007,25 +1023,19 @@
 				<span class="text-sm" style:color="var(--text-muted)">{$_('credits.pay.amount')}</span>
 				<MoneyInput bind:value={payAmount} />
 			</label>
-			<div class="space-y-1">
-				<div class="flex gap-2">
-					<div class="min-w-0 flex-1">
-						<DateTimePicker
-							label={$_('credits.pay.date')}
-							bind:value={payDateLocal}
-							timeMode="hidden"
-							usePortal
-						/>
-					</div>
-					<button
-						type="button"
-						class="btn-ghost mt-6 shrink-0 self-start"
-						onclick={setPayDateToday}
-					>
-						{$_('credits.pay.today')}
-					</button>
-				</div>
-			</div>
+			<Select
+				id="pay-account"
+				label={$_('credits.pay.account')}
+				bind:value={payAccountId}
+				options={accountOptions}
+				usePortal
+			/>
+			<DateTimePicker
+				label={$_('credits.pay.date')}
+				bind:value={payDateLocal}
+				timeMode="hidden"
+				usePortal
+			/>
 			{#if payRemaining() !== null}
 				<p class="text-sm" style:color="var(--text-muted)">
 					{$_('credits.pay.preview')}: {formatBalance(fromCents(payRemaining()!), currency)}

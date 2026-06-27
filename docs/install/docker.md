@@ -32,10 +32,44 @@ docker compose -f docker/docker-compose.yml up --build -d
 
 ## Volumes
 
-| Путь | Назначение |
-|------|------------|
-| `/app/data` | база SQLite и runtime-данные |
-| `/app/backups` | архивы бэкапов |
+| На хосте (по умолчанию) | В контейнере | Назначение |
+|------|------|------------|
+| `./data` | `/app/data` | база SQLite и runtime-данные |
+| `./backups` | `/app/backups` | архивы бэкапов |
+| `./logs` | `/app/logs` | логи приложения |
+
+Пути на хосте настраиваются через `.env`:
+`BUHGALTER_HOST_DATA_DIR`, `BUHGALTER_HOST_BACKUPS_DIR`, `BUHGALTER_HOST_LOGS_DIR`.
+
+### Переход с named volumes на host-директории
+
+Если раньше использовались Docker named volumes (`buhgalter-data`, `buhgalter-backups`), а теперь вы включаете bind mounts (`./data`, `./backups`, `./logs`), учтите:
+
+- Docker создаст отсутствующие каталоги на хосте автоматически.
+- Старая база не удалится, но останется в старом volume.
+- Если не перенести данные, приложение увидит пустую `./data` и создаст новую пустую БД.
+
+Безопасный порядок миграции:
+
+```bash
+# 1) Остановить контейнер
+docker compose down
+
+# 2) Создать каталоги на хосте
+mkdir -p data backups logs
+
+# 3) Перенести данные из старых volumes
+docker run --rm -v buhgalter-data:/from -v "$(pwd)/data:/to" alpine sh -c 'cp -a /from/. /to/'
+docker run --rm -v buhgalter-backups:/from -v "$(pwd)/backups:/to" alpine sh -c 'cp -a /from/. /to/'
+
+# 4) (опционально) исправить владельца/права
+sudo chown -R $USER:$USER data backups logs
+
+# 5) Запустить контейнер
+docker compose up -d
+```
+
+После запуска проверьте, что в `./data` есть `buhgalter.db`, и данные в приложении на месте.
 
 ## Обновление контейнера
 

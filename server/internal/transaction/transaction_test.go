@@ -118,6 +118,32 @@ func TestCreateUpdateDeleteExpense(t *testing.T) {
 		t.Fatalf("expected 3000, got %d", updated.Amount)
 	}
 
+	_, err = Update(ctx, database, env.userID, tx.ID, UpdateInput{
+		AccountID:       env.accountID,
+		Type:            "income",
+		Amount:          3000,
+		CategoryID:      &env.incomeID,
+		TransactionDate: past,
+	})
+	if err != ErrTypeChange {
+		t.Fatalf("expected ErrTypeChange, got %v", err)
+	}
+
+	future := timeutil.NowUTC().Add(72 * time.Hour)
+	updatedFuture, err := Update(ctx, database, env.userID, tx.ID, UpdateInput{
+		AccountID:       env.accountID,
+		Type:            "expense",
+		Amount:          3000,
+		CategoryID:      &env.expenseID,
+		TransactionDate: future,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updatedFuture.Kind != "future" {
+		t.Fatalf("expected future kind, got %s", updatedFuture.Kind)
+	}
+
 	if err := Delete(ctx, database, env.userID, tx.ID); err != nil {
 		t.Fatal(err)
 	}

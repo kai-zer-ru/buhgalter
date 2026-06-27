@@ -44,12 +44,15 @@ Self-service смены пароля по e-mail **нет**. Сценарий д
 {
   "error": {
     "code": "VALIDATION_ERROR",
-    "message": "..."
+    "message": "Некорректные параметры запроса",
+    "field": "monthly_payment"
   }
 }
 ```
 
-Коды ошибок и схемы — в [openapi.yaml](openapi.yaml).
+Поле **`field`** опционально: заполняется для ошибок валидации (`ERR_CREDIT_*`, `ERR_INVALID_*`, `ERR_ACCOUNT_*` и аналогичных), чтобы UI мог подсветить конкретное поле формы.
+
+Коды ошибок и схемы — в [openapi.yaml](openapi.yaml) (в т.ч. `/stats/*`, `POST /credits/schedule/preview`).
 
 ## Смежные документы
 

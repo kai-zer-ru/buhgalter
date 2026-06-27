@@ -15,6 +15,7 @@
 	import DebtList from '$lib/components/DebtList.svelte';
 	import DebtSummaryCard from '$lib/components/DebtSummaryCard.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
+	import PageTabs from '$lib/components/PageTabs.svelte';
 	import TransactionList from '$lib/components/TransactionList.svelte';
 	import SettleDebtForm from '$lib/components/SettleDebtForm.svelte';
 	import TransactionContextStats from '$lib/components/TransactionContextStats.svelte';
@@ -137,39 +138,33 @@
 		<section>
 			<h2 class="mb-3 text-lg font-medium">{$_('debts.title')}</h2>
 
-			<div class="mb-3 flex gap-2">
-				<button
-					type="button"
-					class={tab === 'active' ? 'btn-primary' : 'btn-ghost'}
-					onclick={() => (tab = 'active')}
-				>
-					{$_('debts.tab.active')}
-				</button>
-				<button
-					type="button"
-					class={tab === 'settled' ? 'btn-primary' : 'btn-ghost'}
-					onclick={() => (tab = 'settled')}
-				>
-					{$_('debts.tab.settled')}
-				</button>
-			</div>
+			<PageTabs
+				active={tab}
+				tabs={[
+					{ id: 'active', label: $_('debts.tab.active') },
+					{ id: 'settled', label: $_('debts.tab.settled') }
+				]}
+				onchange={(next) => (tab = next as 'active' | 'settled')}
+			/>
 
-			{#if visibleDebts.length === 0}
-				<EmptyStateCard
-					message={tab === 'settled' ? $_('debts.empty.settled') : $_('debts.empty')}
-				/>
-			{:else}
-				<div class="card md:overflow-x-auto">
-					<DebtList
-						debts={visibleDebts}
-						{tz}
-						{currency}
-						showDebtor={false}
-						onsettle={openSettle}
-						ondelete={(d) => void remove(d)}
+			<div class="mt-4">
+				{#if visibleDebts.length === 0}
+					<EmptyStateCard
+						message={tab === 'settled' ? $_('debts.empty.settled') : $_('debts.empty')}
 					/>
-				</div>
-			{/if}
+				{:else}
+					<div class="card md:overflow-x-auto">
+						<DebtList
+							debts={visibleDebts}
+							{tz}
+							{currency}
+							showDebtor={false}
+							onsettle={openSettle}
+							ondelete={(d) => void remove(d)}
+						/>
+					</div>
+				{/if}
+			</div>
 		</section>
 
 		{#if detail.transactions.length > 0}

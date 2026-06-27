@@ -20,6 +20,7 @@
 	import TransactionFilters from '$lib/components/TransactionFilters.svelte';
 	import TransactionForm from '$lib/components/TransactionForm.svelte';
 	import TransactionList from '$lib/components/TransactionList.svelte';
+	import TransferForm from '$lib/components/TransferForm.svelte';
 	import TransactionPagination from '$lib/components/TransactionPagination.svelte';
 	import { confirm } from '$lib/confirm';
 	import { toast } from '$lib/toast';
@@ -35,7 +36,9 @@
 	let filterLoading = $state(false);
 	let error = $state('');
 	let txOpen = $state(false);
+	let transferOpen = $state(false);
 	let editTx = $state<Transaction | null>(null);
+	let editTransfer = $state<Transaction | null>(null);
 	let accounts = $state<Account[]>([]);
 	let categories = $state<Category[]>([]);
 
@@ -173,6 +176,19 @@
 		await pushURLAndReload();
 	}
 
+	function openEdit(tx: Transaction) {
+		if (tx.credit_payment_linked) return;
+		if (tx.type === 'transfer' && tx.transfer_group_id) {
+			editTransfer = tx;
+			editTx = null;
+			transferOpen = true;
+			return;
+		}
+		editTransfer = null;
+		editTx = tx;
+		txOpen = true;
+	}
+
 	async function removeTx(tx: Transaction) {
 		const ok = await confirm({
 			message: $_('transactions.confirm.delete'),
@@ -242,9 +258,11 @@
 					siblings={transactions}
 					{tz}
 					emptyMessage={$_('transactions.empty')}
+					showEdit
 					showDelete
 					onmakeRecurring={(tx) =>
 						void goto(resolve(`/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`))}
+					onedit={openEdit}
 					ondelete={(tx) => void removeTx(tx)}
 				/>
 			</div>
@@ -267,6 +285,16 @@
 	onclose={() => {
 		txOpen = false;
 		editTx = null;
+	}}
+	onsaved={load}
+/>
+<TransferForm
+	bind:open={transferOpen}
+	editTx={editTransfer}
+	siblings={transactions}
+	onclose={() => {
+		transferOpen = false;
+		editTransfer = null;
 	}}
 	onsaved={load}
 />

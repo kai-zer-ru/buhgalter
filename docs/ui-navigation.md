@@ -63,6 +63,8 @@ Badge-метки и спойлеры графика на `/credits` — [ui-cred
 
 Touch-targets и карточки таблиц — [ui-stable-layout.md](ui-stable-layout.md), `web/src/routes/layout.css` (`@media (pointer: coarse)`).
 
+Меню «⋯» в строках и спойлер фильтров — [ui-row-actions.md](ui-row-actions.md).
+
 ## Требование для новых экранов
 
 При добавлении страницы второго уровня (деталь, создание, подраздел):
@@ -91,6 +93,7 @@ Touch-targets и карточки таблиц — [ui-stable-layout.md](ui-stab
 | `/settings?tab=` | Профиль, Пароль, Токены, Уведомления, Категории, Импорт | Категории: расходы/доходы; Импорт: импорт/экспорт |
 | `/accounts` | Активные / Архив | — |
 | `/debts` | Активные / Закрытые | — |
+| `/debtors/[id]` (секция долгов) | Активные / Закрытые | — |
 | `/credits` | Активные / Завершённые | — |
 | `/settings?tab=admin&section=` | Админка как раздел внутри настроек (для admin) | system/users/backups/diagnostics |
 
@@ -127,6 +130,7 @@ Touch-targets и карточки таблиц — [ui-stable-layout.md](ui-stab
 
 | Раздел | Что |
 |------|-----|
+| Счета | список `/accounts`: клик по карточке → `/accounts/{id}`; меню «⋯» на карточке — [ui-row-actions.md](ui-row-actions.md) |
 | Долги | должник → `/debtors/{id}`, страница `/debtors/[id]`, порядок колонок — [ui-table-columns.md](ui-table-columns.md); даты в форме и списках — **без времени** (см. [ui-dialogs.md](ui-dialogs.md#datetimepicker-и-всплывающие-панели)) |
 | Кредиты | кредит → `/credits/{id}` |
 | Статистика | счёт, кредит, должник в поиске и drill-down |

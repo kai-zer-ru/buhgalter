@@ -72,6 +72,7 @@
   "ERR_SETTLE_AMOUNT": "Settlement amount exceeds remaining debt",
   "ERR_DEBTOR_REQUIRED": "Debtor is required",
   "ERR_TX_TYPE": "Transaction type must be income or expense",
+  "ERR_TX_TYPE_CHANGE": "Transaction type cannot be changed",
   "ERR_TX_AMOUNT_POSITIVE": "Amount must be positive",
   "ERR_CATEGORY_NOT_FOUND": "Category not found",
   "ERR_CATEGORY_TYPE_MISMATCH": "Category type does not match transaction type",
