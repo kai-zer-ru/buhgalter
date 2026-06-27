@@ -3,6 +3,7 @@
 	import type { IconName } from '$lib/components/IconButton.svelte';
 	import IconGlyph from '$lib/components/IconGlyph.svelte';
 	import { actionMenuStyle } from '$lib/dropdown-position';
+	import { randomId } from '$lib/random-id';
 	import { _ } from 'svelte-i18n';
 
 	export type RowAction = {
@@ -27,7 +28,7 @@
 	let menuStyle = $state('');
 	let highlighted = $state(0);
 
-	const menuId = `row-actions-${crypto.randomUUID()}`;
+	const menuId = `row-actions-${randomId()}`;
 	const visibleActions = $derived(actions.filter((action) => !action.disabled));
 
 	function positionMenu() {

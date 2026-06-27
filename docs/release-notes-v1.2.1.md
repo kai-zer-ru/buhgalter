@@ -4,9 +4,13 @@
 
 ---
 
+> **ОБЯЗАТЕЛЬНО СДЕЛАЙТЕ БЕКАП!** Перед обновлением сохраните копию `data/buhgalter.db` и каталога `backups/`.
+> При переходе на bind mounts `./data`, `./backups`, `./logs` — [install/docker.md](install/docker.md#docker-bind-mount-migration).
+
 ## Инфраструктура
 
-- **Docker:** по умолчанию база, бэкапы и логи лежат на хосте в `./data`, `./backups`, `./logs` (каталог `docker/`). Пути настраиваются через `BUHGALTER_HOST_DATA_DIR`, `BUHGALTER_HOST_BACKUPS_DIR`, `BUHGALTER_HOST_LOGS_DIR`. Инструкция по переносу с named volumes — [install/docker.md](install/docker.md)
+- **Docker:** по умолчанию база, бэкапы и логи лежат на хосте в `./data`, `./backups`, `./logs` (каталог `docker/`). Пути настраиваются через `BUHGALTER_HOST_DATA_DIR`, `BUHGALTER_HOST_BACKUPS_DIR`, `BUHGALTER_HOST_LOGS_DIR`. Инструкция по переносу с named volumes — [install/docker.md](install/docker.md#docker-bind-mount-migration)
+- **Docker entrypoint:** при старте контейнера каталоги volume создаются с владельцем uid 1000 — не нужен ручной `chown` на хосте
 - **`BUHGALTER_LOG_MODE`:** `prod` — безопасные логи (редактирование чувствительных заголовков); `dev` — полные request-логи и расширенная диагностика при ошибках
 
 ## API и ошибки
@@ -70,3 +74,5 @@
 - Устранён преждевременный перевод `future`-операций кредита в `manual` до наступления даты операции
 - Исправлена иконка пункта «Изменить банк» в меню кредита (галочка → иконка банка)
 - Исправлено исчезновение фильтров на десктопе после введения мобильного спойлера
+- **HTTP по LAN** (`http://192.168.x.x` и т.п.): интерфейс больше не зависает на «Загрузка…» после входа (исправлен `crypto.randomUUID` в меню «⋯»)
+- **Docker:** исправлен `permission denied` для `logs/audit` на bind mounts

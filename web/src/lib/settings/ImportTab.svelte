@@ -28,6 +28,7 @@
 		type ImportReport
 	} from '$lib/api/client';
 	import { confirm } from '$lib/confirm';
+	import { randomId } from '$lib/random-id';
 	import { toast } from '$lib/toast';
 	import {
 		IMPORT_COLUMN_FIELDS,
@@ -246,7 +247,7 @@
 	}
 
 	function newImportAttemptKey() {
-		importAttemptKey = crypto.randomUUID();
+		importAttemptKey = randomId();
 	}
 
 	async function runPreview() {

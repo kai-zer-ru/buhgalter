@@ -41,6 +41,13 @@ docker compose -f docker/docker-compose.yml up --build -d
 Пути на хосте настраиваются через `.env`:
 `BUHGALTER_HOST_DATA_DIR`, `BUHGALTER_HOST_BACKUPS_DIR`, `BUHGALTER_HOST_LOGS_DIR`.
 
+При первом `docker compose up` Docker создаёт отсутствующие каталоги на хосте (часто от `root`).
+Entrypoint образа перед запуском приложения создаёт `data`, `logs`, `backups` (и `logs/audit`) и выставляет владельца **uid 1000** (`buhgalter`) — ручной `chown` перед стартом не нужен.
+
+Обновляетесь с named volumes или меняете схему каталогов — **сначала бэкап**, затем [переход на bind mounts](#docker-bind-mount-migration).
+
+<a id="docker-bind-mount-migration"></a>
+
 ### Переход с named volumes на host-директории
 
 Если раньше использовались Docker named volumes (`buhgalter-data`, `buhgalter-backups`), а теперь вы включаете bind mounts (`./data`, `./backups`, `./logs`), учтите:
@@ -62,10 +69,7 @@ mkdir -p data backups logs
 docker run --rm -v buhgalter-data:/from -v "$(pwd)/data:/to" alpine sh -c 'cp -a /from/. /to/'
 docker run --rm -v buhgalter-backups:/from -v "$(pwd)/backups:/to" alpine sh -c 'cp -a /from/. /to/'
 
-# 4) (опционально) исправить владельца/права
-sudo chown -R $USER:$USER data backups logs
-
-# 5) Запустить контейнер
+# 4) Запустить контейнер (entrypoint поправит права на bind mounts)
 docker compose up -d
 ```
 
