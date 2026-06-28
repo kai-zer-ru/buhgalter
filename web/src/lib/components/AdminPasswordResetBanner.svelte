@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
+	import { get } from 'svelte/store';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { _ } from 'svelte-i18n';
@@ -11,11 +13,9 @@
 
 	let requests = $state<PasswordResetRequest[]>([]);
 
-	$effect(() => {
-		if ($user?.is_admin) {
+	onMount(() => {
+		if (get(user)?.is_admin) {
 			void load();
-		} else {
-			requests = [];
 		}
 	});
 
