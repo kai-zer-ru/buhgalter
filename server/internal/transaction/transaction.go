@@ -265,6 +265,9 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Tra
 	}); err != nil {
 		return Transaction{}, fmt.Errorf("insert transaction: %w", err)
 	}
+	if err := refreshAccountBalances(ctx, db, userID, in.AccountID); err != nil {
+		return Transaction{}, err
+	}
 	return GetByID(ctx, db, userID, id)
 }
 
@@ -334,6 +337,9 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in UpdateInput) 
 	}); err != nil {
 		return Transaction{}, err
 	}
+	if err := refreshAccountBalances(ctx, db, userID, uniqueAccountIDs(existing.AccountID, in.AccountID)...); err != nil {
+		return Transaction{}, err
+	}
 	return GetByID(ctx, db, userID, id)
 }
 
@@ -385,7 +391,10 @@ func Delete(ctx context.Context, db *sql.DB, userID, id string) error {
 	if n == 0 {
 		return ErrNotFound
 	}
-	return dbTx.Commit()
+	if err := dbTx.Commit(); err != nil {
+		return err
+	}
+	return refreshAccountBalances(ctx, db, userID, existing.AccountID)
 }
 
 func Activate(ctx context.Context, db *sql.DB, userID, id string) (Transaction, error) {
@@ -401,7 +410,14 @@ func Activate(ctx context.Context, db *sql.DB, userID, id string) (Transaction, 
 	if n == 0 {
 		return Transaction{}, ErrNotFound
 	}
-	return GetByID(ctx, db, userID, id)
+	tx, err := GetByID(ctx, db, userID, id)
+	if err != nil {
+		return Transaction{}, err
+	}
+	if err := refreshAccountBalances(ctx, db, userID, tx.AccountID); err != nil {
+		return Transaction{}, err
+	}
+	return tx, nil
 }
 
 // ActivateDueFutureTransactions promotes past-due planned operations to manual (UTC cutoff = now).
@@ -421,7 +437,10 @@ func ActivateDueFutureTransactions(ctx context.Context, db *sql.DB, userID strin
 		UserID:          userID,
 		TransactionDate: cutoff,
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	return refreshAccountBalances(ctx, db, userID)
 }
 
 func List(ctx context.Context, db *sql.DB, userID string, f ListFilters) (ListResult, error) {

@@ -8,10 +8,7 @@
 		getStatsByCategory,
 		getStatsByPeriod,
 		getStatsSummary,
-		listAccounts,
-		listCategories,
-		listCredits,
-		listDebtors,
+		getUIMeta,
 		searchStats,
 		type Account,
 		type Category,
@@ -168,28 +165,16 @@
 
 	async function loadMeta() {
 		try {
-			const [
-				accountList,
-				expenseCategories,
-				incomeCategories,
-				debtors,
-				activeCredits,
-				closedCredits
-			] = await Promise.all([
-				listAccounts('active'),
-				listCategories('expense'),
-				listCategories('income'),
-				listDebtors(),
-				listCredits({ status: 'active' }),
-				listCredits({ status: 'closed' })
-			]);
-			accounts = accountList;
-			const mergedCategories = [...expenseCategories, ...incomeCategories];
+			const meta = await getUIMeta();
+			accounts = meta.accounts
+				.filter((acc) => acc.status === 'active')
+				.map((acc) => ({ id: acc.id, name: acc.name }) as Account);
+			const mergedCategories = [...meta.expense_categories, ...meta.income_categories];
 			const uniqueByID: Record<string, Category> = {};
 			for (const cat of mergedCategories) uniqueByID[cat.id] = cat;
 			categories = Object.values(uniqueByID).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
-			debtorByName = toDebtorMap(debtors);
-			creditByName = toCreditMap([...activeCredits, ...closedCredits]);
+			debtorByName = toDebtorMap(meta.debtors);
+			creditByName = toCreditMap([...meta.active_credits, ...meta.closed_credits]);
 			metaLoaded = true;
 		} catch (err) {
 			error = err instanceof ApiError ? err.message : $_('common.error');

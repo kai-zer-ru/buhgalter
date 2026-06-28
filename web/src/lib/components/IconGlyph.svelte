@@ -8,6 +8,10 @@
 		icon: IconName;
 		class?: string;
 	} = $props();
+
+	const faAdd = '\uf067';
+	const faMinus = '\uf068';
+	const faTransfer = '\uf0ec';
 </script>
 
 {#if icon === 'edit'}
@@ -73,9 +77,9 @@
 		<path d="M16 17l5-5-5-5M21 12H9" />
 	</svg>
 {:else if icon === 'add' || icon === 'income'}
-	<span class="fa-solid-glyph {className}" aria-hidden="true">{'\uf067'}</span>
+	<span class="fa-solid-glyph {className}" aria-hidden="true">{faAdd}</span>
 {:else if icon === 'expense'}
-	<span class="fa-solid-glyph {className}" aria-hidden="true">{'\uf068'}</span>
+	<span class="fa-solid-glyph {className}" aria-hidden="true">{faMinus}</span>
 {:else if icon === 'pay'}
 	<svg
 		aria-hidden="true"
@@ -91,7 +95,7 @@
 		<path d="m9.5 15.5 2.5-2.5 2.5 2.5" />
 	</svg>
 {:else if icon === 'transfer'}
-	<span class="fa-solid-glyph {className}" aria-hidden="true">{'\uf0ec'}</span>
+	<span class="fa-solid-glyph {className}" aria-hidden="true">{faTransfer}</span>
 {:else if icon === 'save'}
 	<svg
 		aria-hidden="true"

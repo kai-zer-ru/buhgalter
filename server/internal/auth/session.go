@@ -107,6 +107,63 @@ func LookupSession(ctx context.Context, db *sql.DB, rawToken string) (*Session, 
 	return &s, nil
 }
 
+// LookupSessionWithUser loads session and user in one query.
+func LookupSessionWithUser(ctx context.Context, db *sql.DB, rawToken string) (*Session, *User, error) {
+	if rawToken == "" {
+		return nil, nil, errors.New("empty token")
+	}
+
+	hash := HashToken(rawToken)
+	var s Session
+	var u User
+	var isAdmin int
+	var lastActivity, expiresAt string
+	err := db.QueryRowContext(ctx, `
+		SELECT s.id, s.user_id, s.last_activity, s.expires_at,
+		       u.id, u.login, COALESCE(u.display_name, ''), u.is_admin,
+		       u.language, u.currency, u.timezone, u.theme
+		FROM sessions s
+		JOIN users u ON u.id = s.user_id
+		WHERE s.token_hash = ?`, hash,
+	).Scan(
+		&s.ID, &s.UserID, &lastActivity, &expiresAt,
+		&u.ID, &u.Login, &u.DisplayName, &isAdmin,
+		&u.Language, &u.Currency, &u.Timezone, &u.Theme,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil, errors.New("session not found")
+		}
+		return nil, nil, err
+	}
+	u.IsAdmin = isAdmin == 1
+
+	s.LastActivity, err = time.Parse(time.RFC3339, lastActivity)
+	if err != nil {
+		s.LastActivity, _ = time.Parse("2006-01-02 15:04:05", lastActivity)
+	}
+	s.ExpiresAt, err = time.Parse(time.RFC3339, expiresAt)
+	if err != nil {
+		s.ExpiresAt, _ = time.Parse("2006-01-02 15:04:05", expiresAt)
+	}
+
+	now := time.Now().UTC()
+	if now.After(s.ExpiresAt) || now.Sub(s.LastActivity) > IdleTimeout {
+		_ = DeleteSessionByID(ctx, db, s.ID)
+		return nil, nil, errors.New("session expired")
+	}
+
+	_, _ = db.ExecContext(ctx, `
+		UPDATE sessions
+		SET last_activity = datetime('now'),
+		    expires_at = ?
+		WHERE id = ?`,
+		now.Add(IdleTimeout).Format(time.RFC3339), s.ID,
+	)
+
+	return &s, &u, nil
+}
+
 func DeleteSessionByToken(ctx context.Context, db *sql.DB, rawToken string) error {
 	hash := HashToken(rawToken)
 	_, err := db.ExecContext(ctx, `DELETE FROM sessions WHERE token_hash = ?`, hash)

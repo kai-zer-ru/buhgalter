@@ -406,3 +406,109 @@ UPDATE transactions SET transfer_account_id = ?, updated_at = ? WHERE id = ? AND
 SELECT id, name, type, icon, sort_order, is_primary, is_system, created_at
 FROM categories
 WHERE user_id = ? AND name = ? AND type = ?;
+
+-- name: SumIncomeManualByUser :many
+SELECT account_id, COALESCE(SUM(amount), 0) AS total
+FROM transactions
+WHERE user_id = ? AND type = 'income' AND kind = 'manual'
+  AND affects_balance = 1 AND transaction_date <= ?
+GROUP BY account_id;
+
+-- name: SumExpenseManualByUser :many
+SELECT account_id, COALESCE(SUM(amount), 0) AS total
+FROM transactions
+WHERE user_id = ? AND type = 'expense' AND kind = 'manual'
+  AND affects_balance = 1 AND transaction_date <= ?
+GROUP BY account_id;
+
+-- name: SumTransferOutManualByUser :many
+SELECT account_id, COALESCE(SUM(amount), 0) AS total
+FROM (
+    SELECT
+        t.account_id,
+        t.amount,
+        ROW_NUMBER() OVER (
+            PARTITION BY t.transfer_group_id
+            ORDER BY t.created_at ASC, t.id ASC
+        ) AS leg
+    FROM transactions t
+    WHERE t.user_id = ? AND t.type = 'transfer' AND t.kind = 'manual'
+      AND t.affects_balance = 1 AND t.transaction_date <= ?
+      AND t.transfer_group_id IS NOT NULL
+) ranked
+WHERE leg = 1
+GROUP BY account_id;
+
+-- name: SumTransferInManualByUser :many
+SELECT account_id, COALESCE(SUM(amount), 0) AS total
+FROM (
+    SELECT
+        t.account_id,
+        t.amount,
+        ROW_NUMBER() OVER (
+            PARTITION BY t.transfer_group_id
+            ORDER BY t.created_at ASC, t.id ASC
+        ) AS leg
+    FROM transactions t
+    WHERE t.user_id = ? AND t.type = 'transfer' AND t.kind = 'manual'
+      AND t.affects_balance = 1 AND t.transaction_date <= ?
+      AND t.transfer_group_id IS NOT NULL
+) ranked
+WHERE leg = 2
+GROUP BY account_id;
+
+-- name: SumFutureIncomeByUser :many
+SELECT account_id, COALESCE(SUM(amount), 0) AS total
+FROM transactions
+WHERE user_id = ? AND type = 'income' AND kind = 'future'
+  AND affects_balance = 1 AND transaction_date >= ? AND transaction_date <= ?
+GROUP BY account_id;
+
+-- name: SumFutureExpenseByUser :many
+SELECT account_id, COALESCE(SUM(amount), 0) AS total
+FROM transactions
+WHERE user_id = ? AND type = 'expense' AND kind = 'future'
+  AND affects_balance = 1 AND transaction_date >= ? AND transaction_date <= ?
+GROUP BY account_id;
+
+-- name: SumFutureTransferOutByUser :many
+SELECT account_id, COALESCE(SUM(amount), 0) AS total
+FROM (
+    SELECT
+        t.account_id,
+        t.amount,
+        ROW_NUMBER() OVER (
+            PARTITION BY t.transfer_group_id
+            ORDER BY t.created_at ASC, t.id ASC
+        ) AS leg
+    FROM transactions t
+    WHERE t.user_id = ? AND t.type = 'transfer' AND t.kind = 'future'
+      AND t.affects_balance = 1 AND t.transaction_date >= ? AND t.transaction_date <= ?
+      AND t.transfer_group_id IS NOT NULL
+) ranked
+WHERE leg = 1
+GROUP BY account_id;
+
+-- name: SumFutureTransferInByUser :many
+SELECT account_id, COALESCE(SUM(amount), 0) AS total
+FROM (
+    SELECT
+        t.account_id,
+        t.amount,
+        ROW_NUMBER() OVER (
+            PARTITION BY t.transfer_group_id
+            ORDER BY t.created_at ASC, t.id ASC
+        ) AS leg
+    FROM transactions t
+    WHERE t.user_id = ? AND t.type = 'transfer' AND t.kind = 'future'
+      AND t.affects_balance = 1 AND t.transaction_date >= ? AND t.transaction_date <= ?
+      AND t.transfer_group_id IS NOT NULL
+) ranked
+WHERE leg = 2
+GROUP BY account_id;
+
+-- name: AccountsWithFutureInMonth :many
+SELECT DISTINCT account_id
+FROM transactions
+WHERE user_id = ? AND kind = 'future'
+  AND transaction_date >= ? AND transaction_date <= ?;

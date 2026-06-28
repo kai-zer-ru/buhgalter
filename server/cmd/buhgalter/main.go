@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	_ "github.com/kai-zer-ru/buhgalter/internal/accountbalance"
 	"github.com/kai-zer-ru/buhgalter/internal/audit"
 	"github.com/kai-zer-ru/buhgalter/internal/backup"
 	"github.com/kai-zer-ru/buhgalter/internal/bank"

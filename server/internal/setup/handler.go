@@ -15,6 +15,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/bank"
 	"github.com/kai-zer-ru/buhgalter/internal/categoryseed"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
+	"github.com/kai-zer-ru/buhgalter/internal/settingscache"
 
 	"github.com/google/uuid"
 )
@@ -194,6 +195,7 @@ func (h *Handler) Setup(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
+	settingscache.Invalidate()
 
 	ip := r.RemoteAddr
 	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {

@@ -8,9 +8,9 @@ info:
     **`field`** — имя поля тела запроса для подсветки в форме UI (например `monthly_payment`, `term_months`).
     Схема: `ErrorResponse` → `error.field`.
 
-    **Веб-клиент (in-memory):** встроенный UI кеширует ответы `GET /banks`, `GET /categories`, `GET /debtors`
-    на 5 минут с дедупликацией параллельных запросов; кеш сбрасывается при изменении справочников и при logout.
-    `GET /accounts`, операции, дашборд и статистика **не** кешируются. Подробнее — [ui-api-cache.md](../ui-api-cache.md).
+    **Серверный кеш (in-memory):** успешные ответы `GET` кешируются в процессе сервера (справочники — 5 мин,
+    остальное — 1 мин); при любой мутации кеш пользователя сбрасывается. Веб-клиент ответы не хранит.
+    Подробнее — [ui-api-cache.md](../ui-api-cache.md).
 
     **Счета (UI):** на `/accounts` меню «⋯» вызывает inline-редактирование (`PUT /accounts/{id}`),
     `POST /accounts/{id}/primary`, `POST /accounts/{id}/archive`, `DELETE /accounts/{id}`.
@@ -724,7 +724,7 @@ paths:
     get:
       summary: Справочник банков РФ
       description: |
-        Статичный справочник. Встроенный веб-клиент кеширует ответ in-memory (TTL 5 мин).
+        Статичный справочник. Сервер кеширует ответ in-memory (TTL 5 мин).
       responses:
         '200':
           description: Список банков
@@ -732,7 +732,7 @@ paths:
     get:
       summary: Список счетов пользователя
       description: |
-        В ответе — актуальный баланс. Встроенный веб-клиент **не** кеширует этот endpoint.
+        В ответе — актуальный баланс. Сервер кеширует ответ in-memory (TTL 1 мин); сбрасывается при мутациях.
 
         На странице `/accounts` карточки: меню «⋯» — inline-редактирование (название, банк, начальный баланс),
         основной, архив, удаление (см. `PUT`, `POST .../primary`, `POST .../archive`, `DELETE` для `{id}`).
@@ -1231,7 +1231,7 @@ paths:
     get:
       summary: Список категорий
       description: |
-        Встроенный веб-клиент кеширует ответ in-memory (TTL 5 мин); кеш сбрасывается при POST/PUT/DELETE
+        Сервер кеширует ответ in-memory (TTL 5 мин); кеш сбрасывается при POST/PUT/DELETE
         категорий и подкатегорий, reorder и set primary.
       security:
         - sessionCookie: []
@@ -1425,7 +1425,7 @@ paths:
     get:
       summary: Список должников
       description: |
-        Встроенный веб-клиент кеширует ответ in-memory (TTL 5 мин); кеш сбрасывается при `POST /debtors`.
+        Сервер кеширует ответ in-memory (TTL 5 мин); кеш сбрасывается при `POST /debtors`.
       security:
         - sessionCookie: []
         - bearerAuth: []

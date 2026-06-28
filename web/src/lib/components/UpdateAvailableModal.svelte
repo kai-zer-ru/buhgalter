@@ -23,7 +23,7 @@
 	}
 </script>
 
-<ModalShell open={true} title={$_('update.title')} onclose={onclose}>
+<ModalShell open={true} title={$_('update.title')} {onclose}>
 	<div class="space-y-3 text-sm">
 		<p>
 			{$_('update.message', { values: { version: update.latest_version ?? '' } })}
@@ -32,6 +32,7 @@
 			<li>
 				{$_('update.backup')}
 				{$_('update.backup_or')}
+				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- query params after resolved base path -->
 				<a href={backupsUrl} class="hover:underline" style:color="var(--primary)">
 					{$_('update.backup_link')}
 				</a>.
@@ -41,6 +42,7 @@
 	</div>
 	{#snippet footer()}
 		{#if update.release_url}
+			<!-- eslint-disable svelte/no-navigation-without-resolve -- external release URL -->
 			<a
 				href={update.release_url}
 				target="_blank"
@@ -49,6 +51,7 @@
 			>
 				{$_('update.open_release')}
 			</a>
+			<!-- eslint-enable svelte/no-navigation-without-resolve -->
 		{/if}
 		<button type="button" class="btn-ghost" onclick={handleDismiss}>
 			{$_('update.dismiss')}

@@ -18,6 +18,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	"github.com/kai-zer-ru/buhgalter/internal/config"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
+	"github.com/kai-zer-ru/buhgalter/internal/settingscache"
 	"github.com/kai-zer-ru/buhgalter/internal/notify"
 )
 
@@ -138,6 +139,7 @@ func (h *Handler) PutSettings(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
+	settingscache.Invalidate()
 
 	ip := auth.ClientIP(r)
 	_ = h.Audit.Log("admin.settings.update", info.User.ID, info.User.Login, ip, map[string]any{

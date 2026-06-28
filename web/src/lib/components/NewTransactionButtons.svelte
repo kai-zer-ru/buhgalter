@@ -13,7 +13,12 @@
 	} = $props();
 </script>
 
-<IconButton icon="income" label={$_('transactions.type.income')} variant="primary" onclick={onincome} />
+<IconButton
+	icon="income"
+	label={$_('transactions.type.income')}
+	variant="primary"
+	onclick={onincome}
+/>
 <IconButton icon="expense" label={$_('transactions.type.expense')} onclick={onexpense} />
 {#if ontransfer}
 	<IconButton icon="transfer" label={$_('transactions.transfer')} onclick={ontransfer} />

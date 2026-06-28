@@ -11,6 +11,7 @@ type Account struct {
 	Type           string  `json:"type"`
 	BankID         *string `json:"bank_id"`
 	InitialBalance int64   `json:"initial_balance"`
+	CurrentBalance int64   `json:"current_balance"`
 	Status         string  `json:"status"`
 	IsPrimary      int64   `json:"is_primary"`
 	CreatedAt      string  `json:"created_at"`

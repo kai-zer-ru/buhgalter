@@ -126,6 +126,7 @@ SELECT
     a.type,
     a.bank_id,
     a.initial_balance,
+    a.current_balance,
     a.status,
     a.is_primary,
     a.created_at,
@@ -148,6 +149,7 @@ type GetAccountByIDRow struct {
 	Type           string  `json:"type"`
 	BankID         *string `json:"bank_id"`
 	InitialBalance int64   `json:"initial_balance"`
+	CurrentBalance int64   `json:"current_balance"`
 	Status         string  `json:"status"`
 	IsPrimary      int64   `json:"is_primary"`
 	CreatedAt      string  `json:"created_at"`
@@ -165,6 +167,7 @@ func (q *Queries) GetAccountByID(ctx context.Context, arg GetAccountByIDParams) 
 		&i.Type,
 		&i.BankID,
 		&i.InitialBalance,
+		&i.CurrentBalance,
 		&i.Status,
 		&i.IsPrimary,
 		&i.CreatedAt,
@@ -182,6 +185,7 @@ SELECT
     a.type,
     a.bank_id,
     a.initial_balance,
+    a.current_balance,
     a.status,
     a.is_primary,
     a.created_at,
@@ -205,6 +209,7 @@ type GetActiveAccountByNameRow struct {
 	Type           string  `json:"type"`
 	BankID         *string `json:"bank_id"`
 	InitialBalance int64   `json:"initial_balance"`
+	CurrentBalance int64   `json:"current_balance"`
 	Status         string  `json:"status"`
 	IsPrimary      int64   `json:"is_primary"`
 	CreatedAt      string  `json:"created_at"`
@@ -222,6 +227,7 @@ func (q *Queries) GetActiveAccountByName(ctx context.Context, arg GetActiveAccou
 		&i.Type,
 		&i.BankID,
 		&i.InitialBalance,
+		&i.CurrentBalance,
 		&i.Status,
 		&i.IsPrimary,
 		&i.CreatedAt,
@@ -234,8 +240,8 @@ func (q *Queries) GetActiveAccountByName(ctx context.Context, arg GetActiveAccou
 
 const insertAccount = `-- name: InsertAccount :exec
 INSERT INTO accounts (
-    id, user_id, name, type, bank_id, initial_balance, status, is_primary, created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)
+    id, user_id, name, type, bank_id, initial_balance, current_balance, status, is_primary, created_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)
 `
 
 type InsertAccountParams struct {
@@ -245,6 +251,7 @@ type InsertAccountParams struct {
 	Type           string  `json:"type"`
 	BankID         *string `json:"bank_id"`
 	InitialBalance int64   `json:"initial_balance"`
+	CurrentBalance int64   `json:"current_balance"`
 	IsPrimary      int64   `json:"is_primary"`
 	CreatedAt      string  `json:"created_at"`
 	UpdatedAt      string  `json:"updated_at"`
@@ -258,11 +265,56 @@ func (q *Queries) InsertAccount(ctx context.Context, arg InsertAccountParams) er
 		arg.Type,
 		arg.BankID,
 		arg.InitialBalance,
+		arg.CurrentBalance,
 		arg.IsPrimary,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
 	return err
+}
+
+const listAccountRefsByUser = `-- name: ListAccountRefsByUser :many
+SELECT id, name, type, status, bank_id
+FROM accounts
+WHERE user_id = ?
+ORDER BY name
+`
+
+type ListAccountRefsByUserRow struct {
+	ID     string  `json:"id"`
+	Name   string  `json:"name"`
+	Type   string  `json:"type"`
+	Status string  `json:"status"`
+	BankID *string `json:"bank_id"`
+}
+
+func (q *Queries) ListAccountRefsByUser(ctx context.Context, userID string) ([]ListAccountRefsByUserRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAccountRefsByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAccountRefsByUserRow{}
+	for rows.Next() {
+		var i ListAccountRefsByUserRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Type,
+			&i.Status,
+			&i.BankID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listAccountsByUserActive = `-- name: ListAccountsByUserActive :many
@@ -272,6 +324,7 @@ SELECT
     a.type,
     a.bank_id,
     a.initial_balance,
+    a.current_balance,
     a.status,
     a.is_primary,
     a.created_at,
@@ -290,6 +343,7 @@ type ListAccountsByUserActiveRow struct {
 	Type           string  `json:"type"`
 	BankID         *string `json:"bank_id"`
 	InitialBalance int64   `json:"initial_balance"`
+	CurrentBalance int64   `json:"current_balance"`
 	Status         string  `json:"status"`
 	IsPrimary      int64   `json:"is_primary"`
 	CreatedAt      string  `json:"created_at"`
@@ -313,6 +367,7 @@ func (q *Queries) ListAccountsByUserActive(ctx context.Context, userID string) (
 			&i.Type,
 			&i.BankID,
 			&i.InitialBalance,
+			&i.CurrentBalance,
 			&i.Status,
 			&i.IsPrimary,
 			&i.CreatedAt,
@@ -340,6 +395,7 @@ SELECT
     a.type,
     a.bank_id,
     a.initial_balance,
+    a.current_balance,
     a.status,
     a.is_primary,
     a.created_at,
@@ -363,6 +419,7 @@ type ListAccountsByUserAndStatusRow struct {
 	Type           string  `json:"type"`
 	BankID         *string `json:"bank_id"`
 	InitialBalance int64   `json:"initial_balance"`
+	CurrentBalance int64   `json:"current_balance"`
 	Status         string  `json:"status"`
 	IsPrimary      int64   `json:"is_primary"`
 	CreatedAt      string  `json:"created_at"`
@@ -386,6 +443,7 @@ func (q *Queries) ListAccountsByUserAndStatus(ctx context.Context, arg ListAccou
 			&i.Type,
 			&i.BankID,
 			&i.InitialBalance,
+			&i.CurrentBalance,
 			&i.Status,
 			&i.IsPrimary,
 			&i.CreatedAt,
@@ -435,6 +493,40 @@ func (q *Queries) ListActiveAccountNames(ctx context.Context, userID string) ([]
 	return items, nil
 }
 
+const listAllAccountIDsByUser = `-- name: ListAllAccountIDsByUser :many
+SELECT id, initial_balance
+FROM accounts
+WHERE user_id = ?
+`
+
+type ListAllAccountIDsByUserRow struct {
+	ID             string `json:"id"`
+	InitialBalance int64  `json:"initial_balance"`
+}
+
+func (q *Queries) ListAllAccountIDsByUser(ctx context.Context, userID string) ([]ListAllAccountIDsByUserRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAllAccountIDsByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAllAccountIDsByUserRow{}
+	for rows.Next() {
+		var i ListAllAccountIDsByUserRow
+		if err := rows.Scan(&i.ID, &i.InitialBalance); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setAccountPrimary = `-- name: SetAccountPrimary :exec
 UPDATE accounts
 SET is_primary = 1
@@ -471,6 +563,29 @@ func (q *Queries) UpdateAccount(ctx context.Context, arg UpdateAccountParams) er
 		arg.Name,
 		arg.BankID,
 		arg.InitialBalance,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
+	return err
+}
+
+const updateAccountCurrentBalance = `-- name: UpdateAccountCurrentBalance :exec
+UPDATE accounts
+SET current_balance = ?, updated_at = ?
+WHERE id = ? AND user_id = ?
+`
+
+type UpdateAccountCurrentBalanceParams struct {
+	CurrentBalance int64  `json:"current_balance"`
+	UpdatedAt      string `json:"updated_at"`
+	ID             string `json:"id"`
+	UserID         string `json:"user_id"`
+}
+
+func (q *Queries) UpdateAccountCurrentBalance(ctx context.Context, arg UpdateAccountCurrentBalanceParams) error {
+	_, err := q.db.ExecContext(ctx, updateAccountCurrentBalance,
+		arg.CurrentBalance,
 		arg.UpdatedAt,
 		arg.ID,
 		arg.UserID,

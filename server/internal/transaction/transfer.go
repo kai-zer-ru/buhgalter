@@ -113,6 +113,9 @@ func CreateTransfer(ctx context.Context, db *sql.DB, userID string, in TransferI
 	if err := tx.Commit(); err != nil {
 		return Transfer{}, err
 	}
+	if err := refreshAccountBalances(ctx, db, userID, in.FromAccountID, in.ToAccountID); err != nil {
+		return Transfer{}, err
+	}
 	return GetTransfer(ctx, db, userID, groupID)
 }
 
@@ -201,11 +204,31 @@ func UpdateTransfer(ctx context.Context, db *sql.DB, userID, groupID string, in 
 	if err := dbTx.Commit(); err != nil {
 		return Transfer{}, err
 	}
+	accountIDs := uniqueAccountIDs(in.FromAccountID, in.ToAccountID)
+	for _, leg := range transferLegs {
+		accountIDs = append(accountIDs, leg.AccountID)
+	}
+	if err := refreshAccountBalances(ctx, db, userID, uniqueAccountIDs(accountIDs...)...); err != nil {
+		return Transfer{}, err
+	}
 	return GetTransfer(ctx, db, userID, groupID)
 }
 
 func DeleteTransfer(ctx context.Context, db *sql.DB, userID, groupID string) error {
 	gid := groupID
+	rows, err := queries(db).ListTransactionsByTransferGroup(ctx, sqlcdb.ListTransactionsByTransferGroupParams{
+		TransferGroupID: &gid, UserID: userID,
+	})
+	if err != nil {
+		return err
+	}
+	if len(rows) == 0 {
+		return ErrTransferNotFound
+	}
+	accountIDs := make([]string, 0, len(rows))
+	for _, row := range rows {
+		accountIDs = append(accountIDs, row.AccountID)
+	}
 	n, err := queries(db).DeleteTransactionsByGroup(ctx, sqlcdb.DeleteTransactionsByGroupParams{
 		TransferGroupID: &gid, UserID: userID,
 	})
@@ -215,7 +238,7 @@ func DeleteTransfer(ctx context.Context, db *sql.DB, userID, groupID string) err
 	if n == 0 {
 		return ErrTransferNotFound
 	}
-	return nil
+	return refreshAccountBalances(ctx, db, userID, uniqueAccountIDs(accountIDs...)...)
 }
 
 func GetTransfer(ctx context.Context, db *sql.DB, userID, groupID string) (Transfer, error) {

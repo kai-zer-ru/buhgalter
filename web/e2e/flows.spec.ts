@@ -2,7 +2,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect } from '@playwright/test';
 import { selectCombobox, selectLabeledCombobox, fillTransactionForm } from './helpers/transactions';
-import { waitAppReady } from './helpers/auth';
+import { waitAppReady, apiJSON, formatUTCDateTime } from './helpers/auth';
+import { createCashAccount, createExpense } from './helpers/setup-data';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -25,7 +26,7 @@ test('create account → add expense → see balance', async ({ page }) => {
 
 	await page.goto('/accounts');
 	await waitAppReady(page);
-	await expect(page.getByText(/750/)).toBeVisible({ timeout: 10_000 });
+	await expect(page.getByRole('link', { name: /E2E Cash.*750/ })).toBeVisible({ timeout: 10_000 });
 });
 
 test('create income on dashboard', async ({ page }) => {
@@ -117,12 +118,21 @@ test('admin create user and manual backup', async ({ page }) => {
 });
 
 test('stats page shows summary and category sections', async ({ page }) => {
+	const marker = `E2E stats marker ${Date.now()}`;
+	const account = await createCashAccount(page, `E2E Stats ${Date.now()}`);
+	await createExpense(page, account.id, '250.00', marker);
+
 	await page.goto('/stats');
 	await waitAppReady(page);
 	await expect(page.getByRole('heading', { name: 'Статистика', level: 1 })).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'По категориям' })).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'По периодам' })).toBeVisible();
-	await expect(page.getByText(/250\.00|350\.00/).first()).toBeVisible({ timeout: 15_000 });
+
+	await page.getByPlaceholder('Комментарий операции').fill(marker);
+	await expect(page.getByRole('heading', { name: 'Результаты поиска' })).toBeVisible({
+		timeout: 10_000
+	});
+	await expect(page.getByRole('row', { name: new RegExp(marker) })).toBeVisible({ timeout: 10_000 });
 });
 
 test('add expense category', async ({ page }) => {
@@ -135,19 +145,22 @@ test('add expense category', async ({ page }) => {
 });
 
 test('create credit and pay first installment', async ({ page }) => {
+	const account = await createCashAccount(page);
 	const creditName = `E2E UI Credit ${Date.now()}`;
-	await page.goto('/credits');
-	await waitAppReady(page);
-	await page.getByRole('button', { name: 'Новый кредит' }).click();
-	const creditModal = page.getByRole('dialog');
-	await creditModal.getByRole('textbox', { name: 'Название' }).fill(creditName);
-	await creditModal.getByRole('textbox', { name: 'Сумма кредита' }).fill('6000');
-	await creditModal.locator('input[type="number"]').first().fill('3');
-	await selectLabeledCombobox(page, 'Счёт списания', { label: 'E2E Cash' });
-	await expect(page.locator('table tbody tr').first()).toBeVisible({ timeout: 30_000 });
-	await creditModal.getByRole('button', { name: 'Сохранить' }).click();
-	await expect(page.getByRole('link', { name: creditName })).toBeVisible({ timeout: 15_000 });
-	await page.getByRole('link', { name: creditName }).click();
+	const now = new Date();
+	const credit = await apiJSON<{ id: string }>(page, 'POST', '/api/v1/credits', {
+		name: creditName,
+		principal_amount: '6000.00',
+		issue_date: formatUTCDateTime(new Date(now.getTime() - 24 * 60 * 60 * 1000)),
+		term_months: 3,
+		interest_rate: 0,
+		payment_interval: 'month',
+		debit_account_id: account.id,
+		added_retroactively: false,
+		create_transactions: true
+	});
+
+	await page.goto(`/credits/${credit.id}`);
 	await waitAppReady(page);
 	await page.getByRole('button', { name: 'Оплатить' }).first().click();
 	const payModal = page.getByRole('dialog');
@@ -196,7 +209,10 @@ test('create recurring operation', async ({ page }) => {
 test('notifications settings load', async ({ page }) => {
 	await page.goto('/settings?tab=notifications');
 	await waitAppReady(page);
-	await expect(page.getByRole('tab', { name: 'Уведомления' })).toHaveAttribute('aria-selected', 'true');
+	await expect(page.getByRole('tab', { name: 'Уведомления' })).toHaveAttribute(
+		'aria-selected',
+		'true'
+	);
 	await expect(
 		page
 			.getByRole('heading', { name: 'Ключ шифрования не настроен' })

@@ -7,8 +7,7 @@
 	import {
 		ApiError,
 		deleteTransaction,
-		listAccounts,
-		listCategories,
+		getUIMeta,
 		listTransactions,
 		type Account,
 		type Category,
@@ -113,14 +112,14 @@
 	}
 
 	async function loadFilterOptions() {
-		const [accs, expenseCats, incomeCats] = await Promise.all([
-			listAccounts('active'),
-			listCategories('expense'),
-			listCategories('income')
-		]);
-		accounts = accs;
+		const meta = await getUIMeta();
+		accounts = meta.accounts
+			.filter((acc) => acc.status === 'active')
+			.map((acc) => ({ id: acc.id, name: acc.name }) as Account);
 		const uniqueByID: Record<string, Category> = {};
-		for (const cat of [...expenseCats, ...incomeCats]) uniqueByID[cat.id] = cat;
+		for (const cat of [...meta.expense_categories, ...meta.income_categories]) {
+			uniqueByID[cat.id] = cat;
+		}
 		categories = Object.values(uniqueByID).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
 	}
 

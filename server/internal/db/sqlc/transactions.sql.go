@@ -9,6 +9,42 @@ import (
 	"context"
 )
 
+const accountsWithFutureInMonth = `-- name: AccountsWithFutureInMonth :many
+SELECT DISTINCT account_id
+FROM transactions
+WHERE user_id = ? AND kind = 'future'
+  AND transaction_date >= ? AND transaction_date <= ?
+`
+
+type AccountsWithFutureInMonthParams struct {
+	UserID            string `json:"user_id"`
+	TransactionDate   string `json:"transaction_date"`
+	TransactionDate_2 string `json:"transaction_date_2"`
+}
+
+func (q *Queries) AccountsWithFutureInMonth(ctx context.Context, arg AccountsWithFutureInMonthParams) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, accountsWithFutureInMonth, arg.UserID, arg.TransactionDate, arg.TransactionDate_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var account_id string
+		if err := rows.Scan(&account_id); err != nil {
+			return nil, err
+		}
+		items = append(items, account_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const activateAppliedCreditFutureTransactions = `-- name: ActivateAppliedCreditFutureTransactions :execrows
 UPDATE transactions
 SET kind = 'manual', updated_at = ?
@@ -1034,6 +1070,89 @@ func (q *Queries) SumExpenseManual(ctx context.Context, arg SumExpenseManualPara
 	return total, err
 }
 
+const sumExpenseManualByUser = `-- name: SumExpenseManualByUser :many
+SELECT account_id, COALESCE(SUM(amount), 0) AS total
+FROM transactions
+WHERE user_id = ? AND type = 'expense' AND kind = 'manual'
+  AND affects_balance = 1 AND transaction_date <= ?
+GROUP BY account_id
+`
+
+type SumExpenseManualByUserParams struct {
+	UserID          string `json:"user_id"`
+	TransactionDate string `json:"transaction_date"`
+}
+
+type SumExpenseManualByUserRow struct {
+	AccountID string      `json:"account_id"`
+	Total     interface{} `json:"total"`
+}
+
+func (q *Queries) SumExpenseManualByUser(ctx context.Context, arg SumExpenseManualByUserParams) ([]SumExpenseManualByUserRow, error) {
+	rows, err := q.db.QueryContext(ctx, sumExpenseManualByUser, arg.UserID, arg.TransactionDate)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SumExpenseManualByUserRow{}
+	for rows.Next() {
+		var i SumExpenseManualByUserRow
+		if err := rows.Scan(&i.AccountID, &i.Total); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const sumFutureExpenseByUser = `-- name: SumFutureExpenseByUser :many
+SELECT account_id, COALESCE(SUM(amount), 0) AS total
+FROM transactions
+WHERE user_id = ? AND type = 'expense' AND kind = 'future'
+  AND affects_balance = 1 AND transaction_date >= ? AND transaction_date <= ?
+GROUP BY account_id
+`
+
+type SumFutureExpenseByUserParams struct {
+	UserID            string `json:"user_id"`
+	TransactionDate   string `json:"transaction_date"`
+	TransactionDate_2 string `json:"transaction_date_2"`
+}
+
+type SumFutureExpenseByUserRow struct {
+	AccountID string      `json:"account_id"`
+	Total     interface{} `json:"total"`
+}
+
+func (q *Queries) SumFutureExpenseByUser(ctx context.Context, arg SumFutureExpenseByUserParams) ([]SumFutureExpenseByUserRow, error) {
+	rows, err := q.db.QueryContext(ctx, sumFutureExpenseByUser, arg.UserID, arg.TransactionDate, arg.TransactionDate_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SumFutureExpenseByUserRow{}
+	for rows.Next() {
+		var i SumFutureExpenseByUserRow
+		if err := rows.Scan(&i.AccountID, &i.Total); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const sumFutureExpenseInRange = `-- name: SumFutureExpenseInRange :one
 SELECT COALESCE(SUM(amount), 0) AS total
 FROM transactions
@@ -1060,6 +1179,48 @@ func (q *Queries) SumFutureExpenseInRange(ctx context.Context, arg SumFutureExpe
 	return total, err
 }
 
+const sumFutureIncomeByUser = `-- name: SumFutureIncomeByUser :many
+SELECT account_id, COALESCE(SUM(amount), 0) AS total
+FROM transactions
+WHERE user_id = ? AND type = 'income' AND kind = 'future'
+  AND affects_balance = 1 AND transaction_date >= ? AND transaction_date <= ?
+GROUP BY account_id
+`
+
+type SumFutureIncomeByUserParams struct {
+	UserID            string `json:"user_id"`
+	TransactionDate   string `json:"transaction_date"`
+	TransactionDate_2 string `json:"transaction_date_2"`
+}
+
+type SumFutureIncomeByUserRow struct {
+	AccountID string      `json:"account_id"`
+	Total     interface{} `json:"total"`
+}
+
+func (q *Queries) SumFutureIncomeByUser(ctx context.Context, arg SumFutureIncomeByUserParams) ([]SumFutureIncomeByUserRow, error) {
+	rows, err := q.db.QueryContext(ctx, sumFutureIncomeByUser, arg.UserID, arg.TransactionDate, arg.TransactionDate_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SumFutureIncomeByUserRow{}
+	for rows.Next() {
+		var i SumFutureIncomeByUserRow
+		if err := rows.Scan(&i.AccountID, &i.Total); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const sumFutureIncomeInRange = `-- name: SumFutureIncomeInRange :one
 SELECT COALESCE(SUM(amount), 0) AS total
 FROM transactions
@@ -1084,6 +1245,59 @@ func (q *Queries) SumFutureIncomeInRange(ctx context.Context, arg SumFutureIncom
 	var total interface{}
 	err := row.Scan(&total)
 	return total, err
+}
+
+const sumFutureTransferInByUser = `-- name: SumFutureTransferInByUser :many
+SELECT account_id, COALESCE(SUM(amount), 0) AS total
+FROM (
+    SELECT
+        t.account_id,
+        t.amount,
+        ROW_NUMBER() OVER (
+            PARTITION BY t.transfer_group_id
+            ORDER BY t.created_at ASC, t.id ASC
+        ) AS leg
+    FROM transactions t
+    WHERE t.user_id = ? AND t.type = 'transfer' AND t.kind = 'future'
+      AND t.affects_balance = 1 AND t.transaction_date >= ? AND t.transaction_date <= ?
+      AND t.transfer_group_id IS NOT NULL
+) ranked
+WHERE leg = 2
+GROUP BY account_id
+`
+
+type SumFutureTransferInByUserParams struct {
+	UserID            string `json:"user_id"`
+	TransactionDate   string `json:"transaction_date"`
+	TransactionDate_2 string `json:"transaction_date_2"`
+}
+
+type SumFutureTransferInByUserRow struct {
+	AccountID string      `json:"account_id"`
+	Total     interface{} `json:"total"`
+}
+
+func (q *Queries) SumFutureTransferInByUser(ctx context.Context, arg SumFutureTransferInByUserParams) ([]SumFutureTransferInByUserRow, error) {
+	rows, err := q.db.QueryContext(ctx, sumFutureTransferInByUser, arg.UserID, arg.TransactionDate, arg.TransactionDate_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SumFutureTransferInByUserRow{}
+	for rows.Next() {
+		var i SumFutureTransferInByUserRow
+		if err := rows.Scan(&i.AccountID, &i.Total); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const sumFutureTransferInInRange = `-- name: SumFutureTransferInInRange :one
@@ -1117,6 +1331,59 @@ func (q *Queries) SumFutureTransferInInRange(ctx context.Context, arg SumFutureT
 	var total interface{}
 	err := row.Scan(&total)
 	return total, err
+}
+
+const sumFutureTransferOutByUser = `-- name: SumFutureTransferOutByUser :many
+SELECT account_id, COALESCE(SUM(amount), 0) AS total
+FROM (
+    SELECT
+        t.account_id,
+        t.amount,
+        ROW_NUMBER() OVER (
+            PARTITION BY t.transfer_group_id
+            ORDER BY t.created_at ASC, t.id ASC
+        ) AS leg
+    FROM transactions t
+    WHERE t.user_id = ? AND t.type = 'transfer' AND t.kind = 'future'
+      AND t.affects_balance = 1 AND t.transaction_date >= ? AND t.transaction_date <= ?
+      AND t.transfer_group_id IS NOT NULL
+) ranked
+WHERE leg = 1
+GROUP BY account_id
+`
+
+type SumFutureTransferOutByUserParams struct {
+	UserID            string `json:"user_id"`
+	TransactionDate   string `json:"transaction_date"`
+	TransactionDate_2 string `json:"transaction_date_2"`
+}
+
+type SumFutureTransferOutByUserRow struct {
+	AccountID string      `json:"account_id"`
+	Total     interface{} `json:"total"`
+}
+
+func (q *Queries) SumFutureTransferOutByUser(ctx context.Context, arg SumFutureTransferOutByUserParams) ([]SumFutureTransferOutByUserRow, error) {
+	rows, err := q.db.QueryContext(ctx, sumFutureTransferOutByUser, arg.UserID, arg.TransactionDate, arg.TransactionDate_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SumFutureTransferOutByUserRow{}
+	for rows.Next() {
+		var i SumFutureTransferOutByUserRow
+		if err := rows.Scan(&i.AccountID, &i.Total); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const sumFutureTransferOutInRange = `-- name: SumFutureTransferOutInRange :one
@@ -1172,6 +1439,47 @@ func (q *Queries) SumIncomeManual(ctx context.Context, arg SumIncomeManualParams
 	return total, err
 }
 
+const sumIncomeManualByUser = `-- name: SumIncomeManualByUser :many
+SELECT account_id, COALESCE(SUM(amount), 0) AS total
+FROM transactions
+WHERE user_id = ? AND type = 'income' AND kind = 'manual'
+  AND affects_balance = 1 AND transaction_date <= ?
+GROUP BY account_id
+`
+
+type SumIncomeManualByUserParams struct {
+	UserID          string `json:"user_id"`
+	TransactionDate string `json:"transaction_date"`
+}
+
+type SumIncomeManualByUserRow struct {
+	AccountID string      `json:"account_id"`
+	Total     interface{} `json:"total"`
+}
+
+func (q *Queries) SumIncomeManualByUser(ctx context.Context, arg SumIncomeManualByUserParams) ([]SumIncomeManualByUserRow, error) {
+	rows, err := q.db.QueryContext(ctx, sumIncomeManualByUser, arg.UserID, arg.TransactionDate)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SumIncomeManualByUserRow{}
+	for rows.Next() {
+		var i SumIncomeManualByUserRow
+		if err := rows.Scan(&i.AccountID, &i.Total); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const sumTransferInManual = `-- name: SumTransferInManual :one
 SELECT COALESCE(SUM(t.amount), 0) AS total
 FROM transactions t
@@ -1199,6 +1507,58 @@ func (q *Queries) SumTransferInManual(ctx context.Context, arg SumTransferInManu
 	return total, err
 }
 
+const sumTransferInManualByUser = `-- name: SumTransferInManualByUser :many
+SELECT account_id, COALESCE(SUM(amount), 0) AS total
+FROM (
+    SELECT
+        t.account_id,
+        t.amount,
+        ROW_NUMBER() OVER (
+            PARTITION BY t.transfer_group_id
+            ORDER BY t.created_at ASC, t.id ASC
+        ) AS leg
+    FROM transactions t
+    WHERE t.user_id = ? AND t.type = 'transfer' AND t.kind = 'manual'
+      AND t.affects_balance = 1 AND t.transaction_date <= ?
+      AND t.transfer_group_id IS NOT NULL
+) ranked
+WHERE leg = 2
+GROUP BY account_id
+`
+
+type SumTransferInManualByUserParams struct {
+	UserID          string `json:"user_id"`
+	TransactionDate string `json:"transaction_date"`
+}
+
+type SumTransferInManualByUserRow struct {
+	AccountID string      `json:"account_id"`
+	Total     interface{} `json:"total"`
+}
+
+func (q *Queries) SumTransferInManualByUser(ctx context.Context, arg SumTransferInManualByUserParams) ([]SumTransferInManualByUserRow, error) {
+	rows, err := q.db.QueryContext(ctx, sumTransferInManualByUser, arg.UserID, arg.TransactionDate)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SumTransferInManualByUserRow{}
+	for rows.Next() {
+		var i SumTransferInManualByUserRow
+		if err := rows.Scan(&i.AccountID, &i.Total); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const sumTransferOutManual = `-- name: SumTransferOutManual :one
 SELECT COALESCE(SUM(t.amount), 0) AS total
 FROM transactions t
@@ -1224,6 +1584,58 @@ func (q *Queries) SumTransferOutManual(ctx context.Context, arg SumTransferOutMa
 	var total interface{}
 	err := row.Scan(&total)
 	return total, err
+}
+
+const sumTransferOutManualByUser = `-- name: SumTransferOutManualByUser :many
+SELECT account_id, COALESCE(SUM(amount), 0) AS total
+FROM (
+    SELECT
+        t.account_id,
+        t.amount,
+        ROW_NUMBER() OVER (
+            PARTITION BY t.transfer_group_id
+            ORDER BY t.created_at ASC, t.id ASC
+        ) AS leg
+    FROM transactions t
+    WHERE t.user_id = ? AND t.type = 'transfer' AND t.kind = 'manual'
+      AND t.affects_balance = 1 AND t.transaction_date <= ?
+      AND t.transfer_group_id IS NOT NULL
+) ranked
+WHERE leg = 1
+GROUP BY account_id
+`
+
+type SumTransferOutManualByUserParams struct {
+	UserID          string `json:"user_id"`
+	TransactionDate string `json:"transaction_date"`
+}
+
+type SumTransferOutManualByUserRow struct {
+	AccountID string      `json:"account_id"`
+	Total     interface{} `json:"total"`
+}
+
+func (q *Queries) SumTransferOutManualByUser(ctx context.Context, arg SumTransferOutManualByUserParams) ([]SumTransferOutManualByUserRow, error) {
+	rows, err := q.db.QueryContext(ctx, sumTransferOutManualByUser, arg.UserID, arg.TransactionDate)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SumTransferOutManualByUserRow{}
+	for rows.Next() {
+		var i SumTransferOutManualByUserRow
+		if err := rows.Scan(&i.AccountID, &i.Total); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const updateTransaction = `-- name: UpdateTransaction :exec

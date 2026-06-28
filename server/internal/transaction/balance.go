@@ -3,9 +3,11 @@ package transaction
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/accountbalance"
 	"github.com/kai-zer-ru/buhgalter/internal/debt"
 	"github.com/kai-zer-ru/buhgalter/internal/money"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
@@ -37,37 +39,17 @@ type Dashboard struct {
 	DebtsSummary       debt.Summary     `json:"debts_summary"`
 }
 
-// Balance computes current balance for an account (manual transactions only, date <= now UTC).
+// Balance returns stored current balance for an account.
 func Balance(ctx context.Context, db *sql.DB, userID, accountID string, initialBalance int64) (int64, error) {
-	now := timeutil.FormatUTC(timeutil.NowUTC())
-	q := queries(db)
-
-	income, err := sumInt64(q.SumIncomeManual(ctx, sqlcdb.SumIncomeManualParams{
-		UserID: userID, AccountID: accountID, TransactionDate: now,
-	}))
+	row, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: accountID, UserID: userID})
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return initialBalance, nil
+		}
 		return 0, err
 	}
-	expense, err := sumInt64(q.SumExpenseManual(ctx, sqlcdb.SumExpenseManualParams{
-		UserID: userID, AccountID: accountID, TransactionDate: now,
-	}))
-	if err != nil {
-		return 0, err
-	}
-	transferOut, err := sumInt64(q.SumTransferOutManual(ctx, sqlcdb.SumTransferOutManualParams{
-		UserID: userID, AccountID: accountID, TransactionDate: now,
-	}))
-	if err != nil {
-		return 0, err
-	}
-	transferIn, err := sumInt64(q.SumTransferInManual(ctx, sqlcdb.SumTransferInManualParams{
-		UserID: userID, AccountID: accountID, TransactionDate: now,
-	}))
-	if err != nil {
-		return 0, err
-	}
-
-	return initialBalance + income - expense + transferIn - transferOut, nil
+	_ = initialBalance
+	return row.CurrentBalance, nil
 }
 
 // ForecastBalance adds future transactions in the current month (user timezone) to balance.
@@ -146,10 +128,15 @@ func EnrichAccountBalance(ctx context.Context, db *sql.DB, userID, accountID, ac
 	if err != nil {
 		return AccountBalance{}, err
 	}
-	forecast, hasFuture, err := ForecastBalance(ctx, db, userID, accountID, bal)
+	tz, err := userTimezone(ctx, db, userID)
 	if err != nil {
 		return AccountBalance{}, err
 	}
+	forecasts, err := accountbalance.ForecastsByUser(ctx, db, userID, tz, map[string]int64{accountID: bal})
+	if err != nil {
+		return AccountBalance{}, err
+	}
+	fc := forecasts[accountID]
 	return AccountBalance{
 		ID:                 accountID,
 		Name:               accountName,
@@ -157,9 +144,9 @@ func EnrichAccountBalance(ctx context.Context, db *sql.DB, userID, accountID, ac
 		BankIcon:           bankIcon,
 		Balance:            bal,
 		BalanceDisplay:     money.FormatRubles(bal),
-		ForecastBalance:    forecast,
-		ForecastDisplay:    money.FormatRubles(forecast),
-		HasFutureThisMonth: hasFuture,
+		ForecastBalance:    fc.Balance,
+		ForecastDisplay:    money.FormatRubles(fc.Balance),
+		HasFutureThisMonth: fc.HasFutureThisMonth,
 	}, nil
 }
 
@@ -168,16 +155,38 @@ func AccountsSummaryForUser(ctx context.Context, db *sql.DB, userID string) (Acc
 	if err != nil {
 		return AccountsSummary{}, err
 	}
+	balances := make(map[string]int64, len(rows))
 	out := make([]AccountBalance, 0, len(rows))
-	var totalBal, totalForecast int64
 	for _, row := range rows {
-		ab, err := EnrichAccountBalance(ctx, db, userID, row.ID, row.Name, row.Type, row.BankIcon, row.InitialBalance)
-		if err != nil {
-			return AccountsSummary{}, err
+		balances[row.ID] = row.CurrentBalance
+		out = append(out, AccountBalance{
+			ID:              row.ID,
+			Name:            row.Name,
+			Type:            row.Type,
+			BankIcon:        row.BankIcon,
+			Balance:         row.CurrentBalance,
+			BalanceDisplay:  money.FormatRubles(row.CurrentBalance),
+			ForecastBalance: row.CurrentBalance,
+			ForecastDisplay: money.FormatRubles(row.CurrentBalance),
+		})
+	}
+	tz, err := userTimezone(ctx, db, userID)
+	if err != nil {
+		return AccountsSummary{}, err
+	}
+	forecasts, err := accountbalance.ForecastsByUser(ctx, db, userID, tz, balances)
+	if err != nil {
+		return AccountsSummary{}, err
+	}
+	var totalBal, totalForecast int64
+	for i := range out {
+		if fc, ok := forecasts[out[i].ID]; ok {
+			out[i].ForecastBalance = fc.Balance
+			out[i].ForecastDisplay = money.FormatRubles(fc.Balance)
+			out[i].HasFutureThisMonth = fc.HasFutureThisMonth
 		}
-		out = append(out, ab)
-		totalBal += ab.Balance
-		totalForecast += ab.ForecastBalance
+		totalBal += out[i].Balance
+		totalForecast += out[i].ForecastBalance
 	}
 	return AccountsSummary{
 		Accounts:      out,

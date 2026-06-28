@@ -43,14 +43,9 @@ func RequireAuth(store *db.Handle) func(http.Handler) http.Handler {
 			}
 
 			sqlDB := store.DB()
-			session, err := LookupSession(r.Context(), sqlDB, token)
+			session, sessionUser, err := LookupSessionWithUser(r.Context(), sqlDB, token)
 			if err == nil {
-				user, err := LoadUser(r.Context(), sqlDB, session.UserID)
-				if err != nil {
-					writeUserLoadError(w, r, err)
-					return
-				}
-				info := AuthInfo{User: *user, SessionID: session.ID, Token: token}
+				info := AuthInfo{User: *sessionUser, SessionID: session.ID, Token: token}
 				ctx := context.WithValue(r.Context(), AuthContextKey, info)
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return

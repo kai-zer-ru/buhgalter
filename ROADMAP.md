@@ -64,6 +64,11 @@
 - [x] Проверка версии раз в сутки — попап для админов о бэкапе и release notes ([release notes](docs/release-notes-v1.2.2.md))
 - [x] `/stats` → «По категориям»: отдельные секции доходов и расходов ([ui-stats](docs/ui-stats.md))
 - [x] Кнопки-иконки Доход / Расход / Перевод вместо общего «Операция» ([transactions-display](docs/transactions-display.md), [ui-row-actions](docs/ui-row-actions.md))
+- [x] Разобраться с долгой загрузкой страниц — денормализация баланса, batch SQL, индексы, кеш middleware, `GET /api/v1/ui/meta` ([release notes](docs/release-notes-v1.2.2.md))
+- [x] полностью покрыть код тестами e2e
+- [ ] [Активация future-операций в фоне](roadmap/activate-future-transactions.md) — убрать `ActivateDueFutureTransactions` из hot-path каждого запроса
+- [ ] отключить постоянные запросы api/v1/admin/password-reset-requests
+- [ ] Убрать поле "Разница", дублирует баланс
 
 ## v1.3.0
 

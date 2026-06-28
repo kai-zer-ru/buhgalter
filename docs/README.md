@@ -34,7 +34,7 @@
 | [ui-dialogs.md](ui-dialogs.md) | Диалоги, подтверждения, Esc |
 | [ui-navigation.md](ui-navigation.md) | Навигация и кликабельные сущности |
 | [ui-row-actions.md](ui-row-actions.md) | Меню «⋯» в строках и спойлер фильтров |
-| [ui-api-cache.md](ui-api-cache.md) | In-memory кеш справочников в веб-клиенте |
+| [ui-api-cache.md](ui-api-cache.md) | In-memory кеш GET-ответов на сервере |
 | [ui-stats.md](ui-stats.md) | Страница `/stats` |
 | [ui-credits.md](ui-credits.md) | UI кредитов |
 | [ui-stable-layout.md](ui-stable-layout.md) | Стабильная шапка и вкладки |

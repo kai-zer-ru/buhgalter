@@ -13,6 +13,7 @@ import (
 	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/kai-zer-ru/buhgalter/internal/account"
 	"github.com/kai-zer-ru/buhgalter/internal/admin"
+	"github.com/kai-zer-ru/buhgalter/internal/apicache"
 	"github.com/kai-zer-ru/buhgalter/internal/audit"
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	"github.com/kai-zer-ru/buhgalter/internal/backup"
@@ -31,6 +32,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/stats"
 	"github.com/kai-zer-ru/buhgalter/internal/transaction"
 	"github.com/kai-zer-ru/buhgalter/internal/user"
+	"github.com/kai-zer-ru/buhgalter/internal/ui"
 	"github.com/kai-zer-ru/buhgalter/internal/versioncheck"
 )
 
@@ -85,7 +87,10 @@ func (s *Server) Handler() http.Handler {
 	recurringHandler := &recurring.Handler{Store: dbHandle, Audit: s.audit}
 	importHandler := &importexport.Handler{Store: dbHandle, Audit: s.audit, Logger: s.logger}
 	statsHandler := &stats.Handler{Store: dbHandle}
+	uiHandler := &ui.Handler{Store: dbHandle}
 	versionHandler := &versioncheck.Handler{Checker: versioncheck.NewChecker(s.cfg.Version)}
+	apiCache := apicache.New()
+	apiCacheMW := apicache.Middleware(apiCache)
 
 	r.Get("/docs", docs.RedocHandler())
 	r.Get("/docs/", docs.RedocHandler())
@@ -93,23 +98,24 @@ func (s *Server) Handler() http.Handler {
 
 	r.Route("/api/v1", func(api chi.Router) {
 		api.Get("/health", s.health)
-		api.Get("/setup/status", setupHandler.Status)
-		api.Post("/setup", setupHandler.Setup)
-		api.Post("/setup/restore", setupHandler.Restore)
+		api.With(apiCacheMW).Get("/setup/status", setupHandler.Status)
+		api.With(apiCacheMW).Post("/setup", setupHandler.Setup)
+		api.With(apiCacheMW).Post("/setup/restore", setupHandler.Restore)
 
 		api.Route("/auth", func(ar chi.Router) {
 			ar.Post("/login", authHandler.Login)
 			ar.Post("/register", authHandler.Register)
 			ar.Post("/request-password-reset", authHandler.RequestPasswordReset)
 			ar.Get("/verify", authHandler.Verify)
-			ar.With(auth.RequireAuth(dbHandle)).Post("/logout", authHandler.Logout)
-			ar.With(auth.RequireAuth(dbHandle)).Get("/me", authHandler.Me)
+			ar.With(auth.RequireAuth(dbHandle), apiCacheMW).Post("/logout", authHandler.Logout)
+			ar.With(auth.RequireAuth(dbHandle), apiCacheMW).Get("/me", authHandler.Me)
 		})
 
-		api.Get("/banks", bankHandler.List)
+		api.With(apiCacheMW).Get("/banks", bankHandler.List)
 
 		api.Group(func(ar chi.Router) {
 			ar.Use(auth.RequireAuth(dbHandle))
+			ar.Use(apiCacheMW)
 			ar.Get("/accounts", accountHandler.List)
 			ar.Post("/accounts", accountHandler.Create)
 			ar.Get("/accounts/summary", transactionHandler.AccountsSummary)
@@ -190,10 +196,13 @@ func (s *Server) Handler() http.Handler {
 			ar.Get("/stats/by-period", statsHandler.ByPeriod)
 			ar.Get("/stats/search", statsHandler.Search)
 			ar.Get("/stats/context", statsHandler.Context)
+
+			ar.Get("/ui/meta", uiHandler.Meta)
 		})
 
 		api.Route("/user", func(ur chi.Router) {
 			ur.Use(auth.RequireAuth(dbHandle))
+			ur.Use(apiCacheMW)
 			ur.Get("/settings", userHandler.GetSettings)
 			ur.Put("/settings", userHandler.PutSettings)
 			ur.Get("/notifications", userHandler.GetNotifications)
@@ -210,6 +219,7 @@ func (s *Server) Handler() http.Handler {
 		api.Route("/admin", func(ad chi.Router) {
 			ad.Use(auth.RequireAuth(dbHandle))
 			ad.Use(auth.RequireAdmin)
+			ad.Use(apiCacheMW)
 			ad.Get("/settings", adminHandler.GetSettings)
 			ad.Put("/settings", adminHandler.PutSettings)
 			ad.Put("/settings/notification-secret", adminHandler.PutNotificationSecretKey)

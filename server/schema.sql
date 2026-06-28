@@ -71,6 +71,7 @@ CREATE TABLE accounts (
     type            TEXT NOT NULL CHECK (type IN ('cash', 'bank')),
     bank_id         TEXT REFERENCES banks(id),
     initial_balance INTEGER NOT NULL DEFAULT 0,
+    current_balance INTEGER NOT NULL DEFAULT 0,
     status          TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'archived')),
     is_primary      INTEGER NOT NULL DEFAULT 0,
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
@@ -124,6 +125,7 @@ CREATE INDEX idx_tx_account ON transactions(account_id);
 CREATE INDEX idx_tx_date ON transactions(transaction_date);
 CREATE INDEX idx_tx_transfer_group ON transactions(transfer_group_id);
 CREATE INDEX idx_tx_kind ON transactions(kind);
+CREATE INDEX idx_tx_user_account_balance ON transactions(user_id, account_id, kind, type, transaction_date);
 
 CREATE TABLE recurring_operations (
     id              TEXT PRIMARY KEY,

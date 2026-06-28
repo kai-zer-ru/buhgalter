@@ -10,6 +10,7 @@ import (
 
 	"github.com/kai-zer-ru/buhgalter/internal/apperror"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
+	"github.com/kai-zer-ru/buhgalter/internal/settingscache"
 )
 
 // ExternalAccess limits HTTP access by Host based on system_settings.external_url.
@@ -55,10 +56,8 @@ func isConfiguredAllowedHost(host string, allowed map[string]struct{}) bool {
 }
 
 func externalAccessAllowed(ctx context.Context, sqlDB *sql.DB, r *http.Request, allowed map[string]struct{}) (bool, error) {
-	var externalURL sql.NullString
-	if err := sqlDB.QueryRowContext(ctx, `
-		SELECT external_url FROM system_settings WHERE id = 1`,
-	).Scan(&externalURL); err != nil {
+	externalURL, err := settingscache.ExternalURL(ctx, sqlDB)
+	if err != nil {
 		return false, err
 	}
 

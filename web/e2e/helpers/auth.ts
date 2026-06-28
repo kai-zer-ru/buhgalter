@@ -15,6 +15,8 @@ export const ADMIN = {
 export async function waitAppReady(page: Page) {
 	await expect(page.getByText('Загрузка…')).toHaveCount(0, { timeout: 20_000 });
 	await expect(page.locator('header')).toBeVisible({ timeout: 20_000 });
+	const { dismissBlockingModals } = await import('./ui');
+	await dismissBlockingModals(page);
 }
 
 export async function completeSetupIfNeeded(page: Page) {

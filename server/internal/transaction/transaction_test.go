@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kai-zer-ru/buhgalter/internal/accountbalance"
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	"github.com/kai-zer-ru/buhgalter/internal/category"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
@@ -71,6 +72,9 @@ func seedEnvFull(t *testing.T) (*db.Handle, seedEnv) {
 	}
 	if expenseID == "" || incomeID == "" {
 		t.Fatal("expected seeded categories")
+	}
+	if err := accountbalance.Refresh(ctx, sqlDB, userID); err != nil {
+		t.Fatal(err)
 	}
 
 	return db.NewHandle(mgr), seedEnv{userID: userID, accountID: accountID, account2: account2, expenseID: expenseID, incomeID: incomeID}

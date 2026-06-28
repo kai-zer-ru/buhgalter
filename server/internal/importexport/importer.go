@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kai-zer-ru/buhgalter/internal/account"
+	"github.com/kai-zer-ru/buhgalter/internal/accountbalance"
 	"github.com/kai-zer-ru/buhgalter/internal/bank"
 	"github.com/kai-zer-ru/buhgalter/internal/category"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
@@ -587,6 +588,9 @@ func importWithProgress(
 
 	if opts.IdempotencyKey != "" {
 		_ = saveIdempotency(ctx, db, userID, opts.IdempotencyKey, report)
+	}
+	if report.ValidRows > 0 {
+		_ = accountbalance.Refresh(ctx, db, userID)
 	}
 	emitProgress(true)
 	warnNonRUB(mapped)

@@ -9,8 +9,7 @@
 		createRecurringOperation,
 		deleteRecurringOperation,
 		getTransaction,
-		listAccounts,
-		listCategories,
+		getUIMeta,
 		listRecurringOperations,
 		listSubcategories,
 		updateRecurringOperation,
@@ -98,16 +97,15 @@
 		loading = true;
 		error = '';
 		try {
-			const [ops, accs, expenseCats, incomeCats] = await Promise.all([
-				listRecurringOperations(),
-				listAccounts('active'),
-				listCategories('expense'),
-				listCategories('income')
-			]);
+			const [ops, meta] = await Promise.all([listRecurringOperations(), getUIMeta()]);
 			items = ops;
-			accounts = accs;
+			accounts = meta.accounts
+				.filter((acc) => acc.status === 'active')
+				.map((acc) => ({ id: acc.id, name: acc.name }) as Account);
 			const uniqueByID: Record<string, Category> = {};
-			for (const cat of [...expenseCats, ...incomeCats]) uniqueByID[cat.id] = cat;
+			for (const cat of [...meta.expense_categories, ...meta.income_categories]) {
+				uniqueByID[cat.id] = cat;
+			}
 			categories = Object.values(uniqueByID);
 			if (!accountId && accounts.length > 0) accountId = accounts[0].id;
 			if (!categoryId) categoryId = firstCategoryByType(type)?.id ?? '';

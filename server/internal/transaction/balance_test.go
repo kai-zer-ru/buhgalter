@@ -3,10 +3,13 @@ package transaction
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/kai-zer-ru/buhgalter/internal/accountbalance"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
 )
@@ -31,19 +34,22 @@ func seedUserAccount(t *testing.T, database *sql.DB) (userID, accountID string) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = database.ExecContext(ctx, `INSERT INTO accounts (id, user_id, name, type, initial_balance, status, created_at, updated_at) VALUES (?, ?, 'Test', 'cash', 100000, 'active', datetime('now'), datetime('now'))`, accountID, userID)
+	_, err = database.ExecContext(ctx, `INSERT INTO accounts (id, user_id, name, type, initial_balance, current_balance, status, created_at, updated_at) VALUES (?, ?, 'Test', 'cash', 100000, 100000, 'active', datetime('now'), datetime('now'))`, accountID, userID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return userID, accountID
 }
 
+var testTxSeq atomic.Uint64
+
 func insertTx(t *testing.T, database *sql.DB, userID, accountID, txType, kind, date string, amount int64) {
 	t.Helper()
+	id := fmt.Sprintf("tx-%d", testTxSeq.Add(1))
 	_, err := database.ExecContext(context.Background(), `
 		INSERT INTO transactions (id, user_id, account_id, type, kind, amount, transaction_date, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
-		"tx-"+txType+"-"+kind, userID, accountID, txType, kind, amount, date)
+		id, userID, accountID, txType, kind, amount, date)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,15 +62,19 @@ func TestBalanceManualOnly(t *testing.T) {
 	past := timeutil.FormatUTC(timeutil.NowUTC().Add(-24 * time.Hour))
 
 	insertTx(t, database, userID, accountID, "income", "manual", past, 5000)
+	insertTx(t, database, userID, accountID, "income", "manual", past, 5000)
 	insertTx(t, database, userID, accountID, "expense", "manual", past, 2000)
+	if err := accountbalance.Refresh(context.Background(), database, userID, accountID); err != nil {
+		t.Fatal(err)
+	}
 
 	bal, err := Balance(context.Background(), database, userID, accountID, 100000)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 100000 + 5000 - 2000 = 103000
-	if bal != 103000 {
-		t.Fatalf("expected 103000, got %d", bal)
+	// 100000 + 5000 + 5000 - 2000 = 108000
+	if bal != 108000 {
+		t.Fatalf("expected 108000, got %d", bal)
 	}
 
 	insertTx(t, database, userID, accountID, "income", "future", now, 99999)
@@ -72,7 +82,7 @@ func TestBalanceManualOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bal2 != 103000 {
+	if bal2 != 108000 {
 		t.Fatalf("future should not affect balance, got %d", bal2)
 	}
 }
@@ -86,6 +96,9 @@ func TestForecastWithFutureInMonth(t *testing.T) {
 	insertTx(t, database, userID, accountID, "expense", "manual", past, 1000)
 	insertTx(t, database, userID, accountID, "expense", "future", future, 3000)
 
+	if err := accountbalance.Refresh(context.Background(), database, userID, accountID); err != nil {
+		t.Fatal(err)
+	}
 	bal, err := Balance(context.Background(), database, userID, accountID, 100000)
 	if err != nil {
 		t.Fatal(err)

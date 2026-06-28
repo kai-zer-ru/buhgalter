@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/kai-zer-ru/buhgalter/internal/accountbalance"
 	"github.com/kai-zer-ru/buhgalter/internal/categoryseed"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/money"
@@ -466,6 +467,16 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Cre
 	if err := dbTx.Commit(); err != nil {
 		return Credit{}, err
 	}
+	syncAccountBalances(ctx, db, userID, in.DebitAccountID)
+	if creditKind == CreditKindMortgage && downPayment > 0 && in.DownPaymentAffectsBalance {
+		downPaymentAccountID := in.DebitAccountID
+		if in.DownPaymentAccountID != nil && strings.TrimSpace(*in.DownPaymentAccountID) != "" {
+			downPaymentAccountID = *in.DownPaymentAccountID
+		}
+		if downPaymentAccountID != in.DebitAccountID {
+			syncAccountBalances(ctx, db, userID, downPaymentAccountID)
+		}
+	}
 	return GetByID(ctx, db, userID, id, true)
 }
 
@@ -699,6 +710,7 @@ func PayNextScheduled(ctx context.Context, db *sql.DB, userID, creditID string, 
 	if err := dbTx.Commit(); err != nil {
 		return Credit{}, err
 	}
+	syncAccountBalances(ctx, db, userID, debitAccountID)
 	return GetByID(ctx, db, userID, creditID, true)
 }
 
@@ -787,6 +799,9 @@ func Complete(ctx context.Context, db *sql.DB, userID, id string, in CompleteInp
 
 	if err := dbTx.Commit(); err != nil {
 		return Credit{}, err
+	}
+	if remaining > 0 && in.AffectsBalance {
+		syncAccountBalances(ctx, db, userID, c.DebitAccountID)
 	}
 	return GetByID(ctx, db, userID, id, true)
 }
@@ -882,7 +897,13 @@ func Delete(ctx context.Context, db *sql.DB, userID, id, mode string) error {
 	if n == 0 {
 		return ErrNotFound
 	}
-	return dbTx.Commit()
+	if err := dbTx.Commit(); err != nil {
+		return err
+	}
+	if mode == "cascade" {
+		syncAccountBalances(ctx, db, userID, creditRow.DebitAccountID)
+	}
+	return nil
 }
 
 func ApplyDuePayments(ctx context.Context, db *sql.DB, userID string, todayCutoff string, localTime string) (int, error) {
@@ -972,6 +993,7 @@ func processAutoPayment(ctx context.Context, db *sql.DB, row sqlcdb.ListDueCredi
 	if err := dbTx.Commit(); err != nil {
 		return false, err
 	}
+	syncAccountBalances(ctx, db, row.UserID, row.DebitAccountID)
 	return true, nil
 }
 
@@ -1020,6 +1042,7 @@ func applyPrecreatedPayment(ctx context.Context, db *sql.DB, row sqlcdb.ListDueC
 	if err := dbTx.Commit(); err != nil {
 		return false, err
 	}
+	syncAccountBalances(ctx, db, row.UserID, row.DebitAccountID)
 	return true, nil
 }
 
@@ -1430,6 +1453,19 @@ func resolveTransactionKind(ctx context.Context, db sqlcdb.DBTX, userID string, 
 		return "future", nil
 	}
 	return "manual", nil
+}
+
+func syncAccountBalances(ctx context.Context, db *sql.DB, userID string, accountIDs ...string) {
+	ids := make([]string, 0, len(accountIDs))
+	for _, id := range accountIDs {
+		if strings.TrimSpace(id) != "" {
+			ids = append(ids, id)
+		}
+	}
+	if len(ids) == 0 {
+		return
+	}
+	_ = accountbalance.Refresh(ctx, db, userID, ids...)
 }
 
 // TodayCutoffUTC returns end-of-today in user TZ as UTC datetime string for due payment queries.

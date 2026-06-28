@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/kai-zer-ru/buhgalter/internal/accountbalance"
 	"github.com/kai-zer-ru/buhgalter/internal/bank"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/money"
@@ -37,7 +38,7 @@ func queries(db *sql.DB) *sqlcdb.Queries {
 func accountFromRow(
 	id, name, accType, status, createdAt, updatedAt string,
 	bankID *string,
-	initialBalance, isPrimary int64,
+	initialBalance, currentBalance, isPrimary int64,
 	bankName, bankIcon *string,
 ) Account {
 	a := Account{
@@ -53,29 +54,29 @@ func accountFromRow(
 		CreatedAt:      createdAt,
 		UpdatedAt:      updatedAt,
 	}
-	a.Balance = a.InitialBalance
-	a.BalanceDisplay = money.FormatRubles(a.Balance)
+	a.Balance = currentBalance
+	a.BalanceDisplay = money.FormatRubles(currentBalance)
 	return a
 }
 
 func accountFromGetRow(row sqlcdb.GetAccountByIDRow) Account {
 	return accountFromRow(
 		row.ID, row.Name, row.Type, row.Status, row.CreatedAt, row.UpdatedAt,
-		row.BankID, row.InitialBalance, row.IsPrimary, row.BankName, row.BankIcon,
+		row.BankID, row.InitialBalance, row.CurrentBalance, row.IsPrimary, row.BankName, row.BankIcon,
 	)
 }
 
 func accountFromListActive(row sqlcdb.ListAccountsByUserActiveRow) Account {
 	return accountFromRow(
 		row.ID, row.Name, row.Type, row.Status, row.CreatedAt, row.UpdatedAt,
-		row.BankID, row.InitialBalance, row.IsPrimary, row.BankName, row.BankIcon,
+		row.BankID, row.InitialBalance, row.CurrentBalance, row.IsPrimary, row.BankName, row.BankIcon,
 	)
 }
 
 func accountFromListStatus(row sqlcdb.ListAccountsByUserAndStatusRow) Account {
 	return accountFromRow(
 		row.ID, row.Name, row.Type, row.Status, row.CreatedAt, row.UpdatedAt,
-		row.BankID, row.InitialBalance, row.IsPrimary, row.BankName, row.BankIcon,
+		row.BankID, row.InitialBalance, row.CurrentBalance, row.IsPrimary, row.BankName, row.BankIcon,
 	)
 }
 
@@ -153,6 +154,7 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Acc
 		Type:           in.Type,
 		BankID:         in.BankID,
 		InitialBalance: in.InitialBalance,
+		CurrentBalance: in.InitialBalance,
 		IsPrimary:      isPrimary,
 		CreatedAt:      now,
 		UpdatedAt:      now,
@@ -202,6 +204,9 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in UpdateInput) 
 		ID:             id,
 		UserID:         userID,
 	}); err != nil {
+		return Account{}, err
+	}
+	if err := accountbalance.Refresh(ctx, db, userID, id); err != nil {
 		return Account{}, err
 	}
 	return GetByID(ctx, db, userID, id)

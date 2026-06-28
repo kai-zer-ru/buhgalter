@@ -6,11 +6,13 @@ type CacheEntry = {
 const cache = new Map<string, CacheEntry>();
 const inflight = new Map<string, Promise<unknown>>();
 
-const DEFAULT_TTL_MS = 5 * 60 * 1000;
+/** Справочники, меняющиеся только с релизом (банки и т.п.). */
+export const STATIC_REF_TTL_MS = 24 * 60 * 60 * 1000;
 
 export function invalidateApiCache(prefix?: string) {
 	if (!prefix) {
 		cache.clear();
+		inflight.clear();
 		return;
 	}
 	for (const key of cache.keys()) {
@@ -18,10 +20,14 @@ export function invalidateApiCache(prefix?: string) {
 	}
 }
 
+export function seedStaticRef<T>(key: string, value: T, ttlMs = STATIC_REF_TTL_MS) {
+	cache.set(key, { value, expiresAt: Date.now() + ttlMs });
+}
+
 export async function cachedGet<T>(
 	key: string,
 	fetcher: () => Promise<T>,
-	ttlMs = DEFAULT_TTL_MS
+	ttlMs = STATIC_REF_TTL_MS
 ): Promise<T> {
 	const now = Date.now();
 	const hit = cache.get(key);

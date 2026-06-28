@@ -12,7 +12,6 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
 	"github.com/kai-zer-ru/buhgalter/internal/money"
-	"github.com/kai-zer-ru/buhgalter/internal/transaction"
 )
 
 type Handler struct {
@@ -45,15 +44,6 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
-	for i := range accounts {
-		bal, err := transaction.Balance(r.Context(), h.Store.DB(), info.User.ID, accounts[i].ID, accounts[i].InitialBalance)
-		if err != nil {
-			apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
-			return
-		}
-		accounts[i].Balance = bal
-		accounts[i].BalanceDisplay = money.FormatRubles(bal)
-	}
 	if accounts == nil {
 		accounts = []Account{}
 	}
@@ -76,15 +66,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
-	accounts := []Account{acc}
-	bal, err := transaction.Balance(r.Context(), h.Store.DB(), info.User.ID, acc.ID, acc.InitialBalance)
-	if err != nil {
-		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
-		return
-	}
-	accounts[0].Balance = bal
-	accounts[0].BalanceDisplay = money.FormatRubles(bal)
-	writeJSON(w, http.StatusOK, accounts[0])
+	writeJSON(w, http.StatusOK, acc)
 }
 
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
@@ -181,13 +163,6 @@ func (h *Handler) SetPrimary(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
-	bal, err := transaction.Balance(r.Context(), h.Store.DB(), info.User.ID, acc.ID, acc.InitialBalance)
-	if err != nil {
-		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
-		return
-	}
-	acc.Balance = bal
-	acc.BalanceDisplay = money.FormatRubles(bal)
 	_ = h.Audit.Log("account.set_primary", info.User.ID, info.User.Login, clientIP(r), map[string]any{"account_id": id})
 	writeJSON(w, http.StatusOK, acc)
 }

@@ -5,6 +5,7 @@ SELECT
     a.type,
     a.bank_id,
     a.initial_balance,
+    a.current_balance,
     a.status,
     a.is_primary,
     a.created_at,
@@ -22,6 +23,7 @@ SELECT
     a.type,
     a.bank_id,
     a.initial_balance,
+    a.current_balance,
     a.status,
     a.is_primary,
     a.created_at,
@@ -40,6 +42,7 @@ SELECT
     a.type,
     a.bank_id,
     a.initial_balance,
+    a.current_balance,
     a.status,
     a.is_primary,
     a.created_at,
@@ -53,8 +56,8 @@ ORDER BY a.name;
 
 -- name: InsertAccount :exec
 INSERT INTO accounts (
-    id, user_id, name, type, bank_id, initial_balance, status, is_primary, created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?);
+    id, user_id, name, type, bank_id, initial_balance, current_balance, status, is_primary, created_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?);
 
 -- name: UpdateAccount :exec
 UPDATE accounts
@@ -114,6 +117,7 @@ SELECT
     a.type,
     a.bank_id,
     a.initial_balance,
+    a.current_balance,
     a.status,
     a.is_primary,
     a.created_at,
@@ -129,3 +133,19 @@ LIMIT 1;
 SELECT name
 FROM accounts
 WHERE user_id = ? AND status = 'active';
+
+-- name: ListAccountRefsByUser :many
+SELECT id, name, type, status, bank_id
+FROM accounts
+WHERE user_id = ?
+ORDER BY name;
+
+-- name: UpdateAccountCurrentBalance :exec
+UPDATE accounts
+SET current_balance = ?, updated_at = ?
+WHERE id = ? AND user_id = ?;
+
+-- name: ListAllAccountIDsByUser :many
+SELECT id, initial_balance
+FROM accounts
+WHERE user_id = ?;
