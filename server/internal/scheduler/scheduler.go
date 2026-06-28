@@ -7,16 +7,16 @@ import (
 	"sync"
 	"time"
 
-	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/credit"
-	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
+	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/recurring"
+	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
 )
 
 // CreditRunner applies due credit payments for users at local configured credit debit time.
 type CreditRunner struct {
-	DB    *sql.DB
-	Audit func(action, userID, login, ip string, details map[string]any) error
+	DB     *sql.DB
+	Audit  func(action, userID, login, ip string, details map[string]any) error
 	Logger *slog.Logger
 }
 

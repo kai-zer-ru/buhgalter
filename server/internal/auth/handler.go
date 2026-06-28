@@ -13,10 +13,10 @@ import (
 )
 
 type Handler struct {
-	Store              *db.Handle
-	Audit              *audit.Logger
-	Logger             *slog.Logger
-	LoginLimiter       *appmw.IPRateLimiter
+	Store                *db.Handle
+	Audit                *audit.Logger
+	Logger               *slog.Logger
+	LoginLimiter         *appmw.IPRateLimiter
 	PasswordResetLimiter *appmw.IPRateLimiter
 }
 

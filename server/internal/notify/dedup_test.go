@@ -59,11 +59,11 @@ func TestDedupExistsCompositeKey(t *testing.T) {
 	}
 
 	cases := []struct {
-		name       string
-		trigger    string
-		channel    string
-		entityID   string
-		dedupDate  string
+		name      string
+		trigger   string
+		channel   string
+		entityID  string
+		dedupDate string
 	}{
 		{name: "different trigger", trigger: TriggerDebtDueSoon, channel: ChannelTelegram, entityID: entityID, dedupDate: dedupDate},
 		{name: "different channel", trigger: TriggerDebtOverdue, channel: ChannelMax, entityID: entityID, dedupDate: dedupDate},
@@ -83,4 +83,3 @@ func TestDedupExistsCompositeKey(t *testing.T) {
 		})
 	}
 }
-

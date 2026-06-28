@@ -18,8 +18,8 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	"github.com/kai-zer-ru/buhgalter/internal/config"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
-	"github.com/kai-zer-ru/buhgalter/internal/settingscache"
 	"github.com/kai-zer-ru/buhgalter/internal/notify"
+	"github.com/kai-zer-ru/buhgalter/internal/settingscache"
 )
 
 type Handler struct {
@@ -433,14 +433,14 @@ func (h *Handler) dbSizeBytes() int64 {
 
 func (h *Handler) publicEnv() map[string]string {
 	return map[string]string{
-		"BUHGALTER_ADDR":         h.Config.Addr,
-		"BUHGALTER_DB_PATH":      filepath.Clean(h.Config.DBPath),
-		"BUHGALTER_DATA_DIR":     filepath.Clean(h.Config.DataDir),
-		"BUHGALTER_LOG_DIR":      filepath.Clean(h.Config.LogDir),
+		"BUHGALTER_ADDR":          h.Config.Addr,
+		"BUHGALTER_DB_PATH":       filepath.Clean(h.Config.DBPath),
+		"BUHGALTER_DATA_DIR":      filepath.Clean(h.Config.DataDir),
+		"BUHGALTER_LOG_DIR":       filepath.Clean(h.Config.LogDir),
 		"BUHGALTER_CORS_ORIGINS":  strings.Join(h.Config.CORSOrigins, ","),
 		"BUHGALTER_ENV_FILE":      h.Config.EnvFilePath,
 		"BUHGALTER_ALLOWED_HOSTS": strings.Join(h.Config.AllowedHosts, ","),
-		"BUHGALTER_STATIC_EMBED":   strconv.FormatBool(h.Config.StaticEmbed),
+		"BUHGALTER_STATIC_EMBED":  strconv.FormatBool(h.Config.StaticEmbed),
 	}
 }
 

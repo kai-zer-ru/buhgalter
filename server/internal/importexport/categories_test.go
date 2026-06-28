@@ -4,16 +4,16 @@ import "testing"
 
 func TestBuildCategoryMappings(t *testing.T) {
 	existing := map[string]string{
-		"транспорт|expense": "id-transport",
+		"транспорт|expense":    "id-transport",
 		"прочие доходы|income": "id-income",
 	}
 	names := map[string]string{
-		"транспорт|expense": "Транспорт",
+		"транспорт|expense":    "Транспорт",
 		"прочие доходы|income": "Прочие доходы",
 	}
 	file := map[string]FileCategory{
-		"Транспорт|expense": {Name: "Транспорт", Type: "expense"},
-		"Связь|expense":     {Name: "Связь", Type: "expense"},
+		"Транспорт|expense":    {Name: "Транспорт", Type: "expense"},
+		"Связь|expense":        {Name: "Связь", Type: "expense"},
 		"Прочие доходы|income": {Name: "Прочие доходы", Type: "income"},
 	}
 	mappings := buildCategoryMappings(file, existing, names)

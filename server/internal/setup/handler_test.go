@@ -98,12 +98,12 @@ func TestSetupSuccessAndConflict(t *testing.T) {
 	defer ts.Close()
 
 	body, _ := json.Marshal(map[string]any{
-		"admin_login":              "admin",
-		"admin_display_name":       "Администратор",
-		"admin_password":           "secret123",
-		"admin_password_confirm":   "secret123",
-		"registration_enabled":     false,
-		"external_url":             "https://buhgalter.mys-ite.ru",
+		"admin_login":            "admin",
+		"admin_display_name":     "Администратор",
+		"admin_password":         "secret123",
+		"admin_password_confirm": "secret123",
+		"registration_enabled":   false,
+		"external_url":           "https://buhgalter.mys-ite.ru",
 	})
 	resp, err := http.Post(ts.URL+"/api/v1/setup", "application/json", bytes.NewReader(body))
 	if err != nil {
@@ -146,11 +146,11 @@ func TestSetupPasswordMismatch(t *testing.T) {
 	defer ts.Close()
 
 	body, _ := json.Marshal(map[string]any{
-		"admin_login":              "admin",
-		"admin_password":           "secret123",
-		"admin_password_confirm":   "different",
-		"admin_display_name":       "Admin",
-		"registration_enabled":     false,
+		"admin_login":            "admin",
+		"admin_password":         "secret123",
+		"admin_password_confirm": "different",
+		"admin_display_name":     "Admin",
+		"registration_enabled":   false,
 	})
 	resp, err := http.Post(ts.URL+"/api/v1/setup", "application/json", bytes.NewReader(body))
 	if err != nil {
@@ -167,11 +167,11 @@ func TestSetupMissingDisplayName(t *testing.T) {
 	defer ts.Close()
 
 	body, _ := json.Marshal(map[string]any{
-		"admin_login":              "admin",
-		"admin_display_name":       "",
-		"admin_password":           "secret123",
-		"admin_password_confirm":   "secret123",
-		"registration_enabled":     false,
+		"admin_login":            "admin",
+		"admin_display_name":     "",
+		"admin_password":         "secret123",
+		"admin_password_confirm": "secret123",
+		"registration_enabled":   false,
 	})
 	resp, err := http.Post(ts.URL+"/api/v1/setup", "application/json", bytes.NewReader(body))
 	if err != nil {

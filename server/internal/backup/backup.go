@@ -13,7 +13,7 @@ import (
 )
 
 type Service struct {
-	Manager  *db.Manager
+	Manager   *db.Manager
 	BackupDir string
 }
 

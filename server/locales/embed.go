@@ -6,4 +6,3 @@ import "embed"
 //
 //go:embed ru.json en.json
 var Files embed.FS
-

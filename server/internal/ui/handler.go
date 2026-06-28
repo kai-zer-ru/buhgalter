@@ -27,13 +27,13 @@ type AccountRef struct {
 }
 
 type MetaResponse struct {
-	Accounts         []AccountRef        `json:"accounts"`
-	Banks            []bank.Bank         `json:"banks"`
+	Accounts          []AccountRef        `json:"accounts"`
+	Banks             []bank.Bank         `json:"banks"`
 	ExpenseCategories []category.Category `json:"expense_categories"`
 	IncomeCategories  []category.Category `json:"income_categories"`
-	Debtors          []debt.Debtor       `json:"debtors"`
-	ActiveCredits    []credit.Credit     `json:"active_credits"`
-	ClosedCredits    []credit.Credit     `json:"closed_credits"`
+	Debtors           []debt.Debtor       `json:"debtors"`
+	ActiveCredits     []credit.Credit     `json:"active_credits"`
+	ClosedCredits     []credit.Credit     `json:"closed_credits"`
 }
 
 func (h *Handler) Meta(w http.ResponseWriter, r *http.Request) {

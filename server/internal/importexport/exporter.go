@@ -21,7 +21,7 @@ func ExportCSV(ctx context.Context, db *sql.DB, userID, displayName string, f Ex
 	page := 1
 	for {
 		res, err := transaction.List(ctx, db, userID, transaction.ListFilters{
-			AccountID: f.AccountID,
+			AccountID:  f.AccountID,
 			CategoryID: f.CategoryID,
 			From:       from,
 			To:         to,

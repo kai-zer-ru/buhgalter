@@ -101,4 +101,3 @@ func findExistingSubcategoryByCategoryID(categoryID, subName string, byCategory 
 	sub, ok := m[strings.ToLower(strings.TrimSpace(subName))]
 	return sub, ok
 }
-

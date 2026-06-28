@@ -132,7 +132,9 @@ test('stats page shows summary and category sections', async ({ page }) => {
 	await expect(page.getByRole('heading', { name: 'Результаты поиска' })).toBeVisible({
 		timeout: 10_000
 	});
-	await expect(page.getByRole('row', { name: new RegExp(marker) })).toBeVisible({ timeout: 10_000 });
+	await expect(page.getByRole('row', { name: new RegExp(marker) })).toBeVisible({
+		timeout: 10_000
+	});
 });
 
 test('add expense category', async ({ page }) => {

@@ -117,7 +117,9 @@ func TestAccountPrimary(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer resp.Body.Close()
-		var acc struct{ ID string `json:"id"` }
+		var acc struct {
+			ID string `json:"id"`
+		}
 		_ = json.NewDecoder(resp.Body).Decode(&acc)
 		return acc.ID
 	}
@@ -215,7 +217,9 @@ func TestArchiveAccountHiddenFromActiveList(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer listResp.Body.Close()
-	var active []struct{ ID string `json:"id"` }
+	var active []struct {
+		ID string `json:"id"`
+	}
 	_ = json.NewDecoder(listResp.Body).Decode(&active)
 	for _, a := range active {
 		if a.ID == acc.ID {
@@ -228,7 +232,9 @@ func TestArchiveAccountHiddenFromActiveList(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer archListResp.Body.Close()
-	var archived []struct{ ID string `json:"id"` }
+	var archived []struct {
+		ID string `json:"id"`
+	}
 	_ = json.NewDecoder(archListResp.Body).Decode(&archived)
 	found := false
 	for _, a := range archived {
@@ -252,7 +258,9 @@ func TestCategoriesIsolatedPerUser(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var cat struct{ ID string `json:"id"` }
+	var cat struct {
+		ID string `json:"id"`
+	}
 	_ = json.NewDecoder(catResp.Body).Decode(&cat)
 	catResp.Body.Close()
 
@@ -272,7 +280,9 @@ func TestCategoriesIsolatedPerUser(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer listResp.Body.Close()
-	var cats []struct{ Name string `json:"name"` }
+	var cats []struct {
+		Name string `json:"name"`
+	}
 	_ = json.NewDecoder(listResp.Body).Decode(&cats)
 	for _, c := range cats {
 		if c.Name == "Моя категория" {

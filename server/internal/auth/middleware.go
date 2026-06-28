@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/kai-zer-ru/buhgalter/internal/apperror"
-	appmw "github.com/kai-zer-ru/buhgalter/internal/middleware"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
+	appmw "github.com/kai-zer-ru/buhgalter/internal/middleware"
 )
 
 type ctxKey string

@@ -7,7 +7,7 @@ LDFLAGS := -X main.version=$(VERSION) -X main.installMethod=$(INSTALL_METHOD) -X
 OPENAPI_SRC := docs/api/openapi.yaml
 OPENAPI_DST := server/internal/docs/openapi.yaml
 
-.PHONY: dev dev-server dev-web build web-build category-icons-json copy-static copy-openapi openapi-check server-build fix-build-perms test test-unit test-e2e test-coverage lint lint-go docker-build act-push act-release migrate ci sqlc sqlc-check download-bank-logos download-marketplace-logos clear version
+.PHONY: dev dev-server dev-web build web-build category-icons-json copy-static copy-openapi openapi-check server-build fix-build-perms test test-unit test-e2e test-coverage lint lint-go prepare prepare-go prepare-web prepare-gen docker-build act-push act-release migrate ci sqlc sqlc-check download-bank-logos download-marketplace-logos clear version
 
 DOCKER_COMPOSE := docker compose -f docker/docker-compose.yml
 
@@ -82,6 +82,18 @@ act-release:
 
 lint: lint-go
 	cd web && npm run lint
+
+# Автофикс форматирования, линтера и сгенерированных артефактов перед коммитом / make ci.
+prepare: prepare-go prepare-web prepare-gen
+
+prepare-go:
+	cd server && golangci-lint fmt ./...
+	cd server && golangci-lint run --fix ./...
+
+prepare-web:
+	cd web && npm run lint:fix
+
+prepare-gen: sqlc copy-openapi category-icons-json
 
 DOCKER_IMAGE_TAG ?= buhgalter:local
 

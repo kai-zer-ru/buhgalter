@@ -10,12 +10,12 @@ import (
 )
 
 type Entry struct {
-	Timestamp string         `json:"@timestamp"`
-	Action    string         `json:"action"`
-	ActorID   string         `json:"actor_id,omitempty"`
-	ActorLogin string        `json:"actor_login,omitempty"`
-	IP        string         `json:"ip,omitempty"`
-	Details   map[string]any `json:"details,omitempty"`
+	Timestamp  string         `json:"@timestamp"`
+	Action     string         `json:"action"`
+	ActorID    string         `json:"actor_id,omitempty"`
+	ActorLogin string         `json:"actor_login,omitempty"`
+	IP         string         `json:"ip,omitempty"`
+	Details    map[string]any `json:"details,omitempty"`
 }
 
 type Logger struct {

@@ -14,9 +14,9 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	"github.com/kai-zer-ru/buhgalter/internal/credit"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
+	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/debt"
 	"github.com/kai-zer-ru/buhgalter/internal/money"
-	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
 )
 
@@ -26,14 +26,14 @@ type Handler struct {
 }
 
 type createRequest struct {
-	AccountID        string  `json:"account_id"`
-	Type             string  `json:"type"`
-	Amount           string  `json:"amount"`
-	Description      *string `json:"description"`
-	CategoryID       *string `json:"category_id"`
-	SubcategoryID    *string `json:"subcategory_id"`
-	SubcategoryName  *string `json:"subcategory_name"`
-	TransactionDate  string  `json:"transaction_date"`
+	AccountID       string  `json:"account_id"`
+	Type            string  `json:"type"`
+	Amount          string  `json:"amount"`
+	Description     *string `json:"description"`
+	CategoryID      *string `json:"category_id"`
+	SubcategoryID   *string `json:"subcategory_id"`
+	SubcategoryName *string `json:"subcategory_name"`
+	TransactionDate string  `json:"transaction_date"`
 }
 
 type transferRequest struct {

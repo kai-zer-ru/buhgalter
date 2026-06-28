@@ -18,35 +18,35 @@ type ColumnMap map[string]string
 
 // Known mapping targets for custom imports.
 const (
-	ColType            = "type"
-	ColDate            = "date"
-	ColDebitAmount     = "debit_amount"
-	ColDebitAccount    = "debit_account"
-	ColCreditAmount    = "credit_amount"
-	ColCreditAccount   = "credit_account"
-	ColCategory        = "category"
-	ColSubcategory     = "subcategory"
-	ColDescription     = "description"
-	ColProject         = "project"
-	ColUser            = "user"
-	ColDebitCurrency   = "debit_currency"
-	ColCreditCurrency  = "credit_currency"
+	ColType           = "type"
+	ColDate           = "date"
+	ColDebitAmount    = "debit_amount"
+	ColDebitAccount   = "debit_account"
+	ColCreditAmount   = "credit_amount"
+	ColCreditAccount  = "credit_account"
+	ColCategory       = "category"
+	ColSubcategory    = "subcategory"
+	ColDescription    = "description"
+	ColProject        = "project"
+	ColUser           = "user"
+	ColDebitCurrency  = "debit_currency"
+	ColCreditCurrency = "credit_currency"
 )
 
 // MappedRow is a normalized row ready for resolution.
 type MappedRow struct {
-	RowNum      int
-	CubuxType   string // Расходы | Доходы | Перевод (or mapped equivalents)
-	Date        time.Time
-	DebitAmount int64
-	CreditAmount int64
-	DebitAccount string
-	CreditAccount string
-	Category     string
-	Subcategory  string
-	Description  string
-	Project      string
-	User         string
+	RowNum         int
+	CubuxType      string // Расходы | Доходы | Перевод (or mapped equivalents)
+	Date           time.Time
+	DebitAmount    int64
+	CreditAmount   int64
+	DebitAccount   string
+	CreditAccount  string
+	Category       string
+	Subcategory    string
+	Description    string
+	Project        string
+	User           string
 	DebitCurrency  string
 	CreditCurrency string
 }
@@ -62,15 +62,15 @@ const (
 
 // PreviewItem is one row in the import preview response.
 type PreviewItem struct {
-	Row        int     `json:"row"`
-	Action     TxAction `json:"action"`
-	Account    string  `json:"account,omitempty"`
-	ToAccount  string  `json:"to_account,omitempty"`
-	Amount     int64   `json:"amount"`
-	Category   string  `json:"category,omitempty"`
-	Subcategory string `json:"subcategory,omitempty"`
-	Date       string  `json:"date"`
-	Description string `json:"description,omitempty"`
+	Row         int      `json:"row"`
+	Action      TxAction `json:"action"`
+	Account     string   `json:"account,omitempty"`
+	ToAccount   string   `json:"to_account,omitempty"`
+	Amount      int64    `json:"amount"`
+	Category    string   `json:"category,omitempty"`
+	Subcategory string   `json:"subcategory,omitempty"`
+	Date        string   `json:"date"`
+	Description string   `json:"description,omitempty"`
 }
 
 // RowError is a per-row validation error.
@@ -130,32 +130,32 @@ type SubcategoryMappingSuggestion struct {
 
 // ImportOptions configures preview/commit.
 type ImportOptions struct {
-	Preset         string
-	Deduplicate    bool
-	ColumnMap      ColumnMap
-	AccountMap     map[string]AccountMapEntry
-	CategoryMap    map[string]CategoryMapEntry
-	SubcategoryMap map[string]SubcategoryMapEntry
+	Preset          string
+	Deduplicate     bool
+	ColumnMap       ColumnMap
+	AccountMap      map[string]AccountMapEntry
+	CategoryMap     map[string]CategoryMapEntry
+	SubcategoryMap  map[string]SubcategoryMapEntry
 	AutoSubcategory bool
-	Confirm        bool
-	IdempotencyKey string
+	Confirm         bool
+	IdempotencyKey  string
 }
 
 // Report is the API response for preview and commit.
 type Report struct {
-	TotalRows           int           `json:"total_rows"`
-	ProcessedRows       int           `json:"processed_rows,omitempty"`
-	ValidRows           int           `json:"valid_rows"`
-	SkippedDuplicates   int           `json:"skipped_duplicates"`
-	CreatedTransactions int           `json:"created_transactions,omitempty"`
-	Errors              []RowError    `json:"errors"`
-	Logs                []string      `json:"logs,omitempty"`
-	Preview             []PreviewItem `json:"preview"`
-	AccountsToCreate    []string      `json:"accounts_to_create"`
-	AccountMappings     []AccountMappingSuggestion `json:"account_mappings"`
-	CategoryMappings    []CategoryMappingSuggestion `json:"category_mappings"`
+	TotalRows           int                            `json:"total_rows"`
+	ProcessedRows       int                            `json:"processed_rows,omitempty"`
+	ValidRows           int                            `json:"valid_rows"`
+	SkippedDuplicates   int                            `json:"skipped_duplicates"`
+	CreatedTransactions int                            `json:"created_transactions,omitempty"`
+	Errors              []RowError                     `json:"errors"`
+	Logs                []string                       `json:"logs,omitempty"`
+	Preview             []PreviewItem                  `json:"preview"`
+	AccountsToCreate    []string                       `json:"accounts_to_create"`
+	AccountMappings     []AccountMappingSuggestion     `json:"account_mappings"`
+	CategoryMappings    []CategoryMappingSuggestion    `json:"category_mappings"`
 	SubcategoryMappings []SubcategoryMappingSuggestion `json:"subcategory_mappings"`
-	CategoriesToCreate  []string      `json:"categories_to_create"`
+	CategoriesToCreate  []string                       `json:"categories_to_create"`
 }
 
 // ExportFilters configures CSV export.

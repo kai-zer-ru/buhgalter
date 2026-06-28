@@ -36,11 +36,11 @@ func TestDebtWithoutBalanceNoTransaction(t *testing.T) {
 	accID := createTestAccount(t, env, "Кошелёк")
 
 	debt := createDebt(t, env, map[string]any{
-		"debtor_name":      "Денис",
-		"direction":        "lent",
-		"amount":           "500.00",
-		"due_date":         "2025-12-31 00:00:00",
-		"affects_balance":  false,
+		"debtor_name":     "Денис",
+		"direction":       "lent",
+		"amount":          "500.00",
+		"due_date":        "2025-12-31 00:00:00",
+		"affects_balance": false,
 	})
 	if debt["transaction_id"] != nil {
 		t.Fatal("expected no transaction_id")
@@ -63,12 +63,12 @@ func TestDebtWithBalanceCreatesTransaction(t *testing.T) {
 	accID := createTestAccount(t, env, "Основной")
 
 	debt := createDebt(t, env, map[string]any{
-		"debtor_name":      "Мария",
-		"direction":        "lent",
-		"amount":           "200.00",
-		"due_date":         "2025-12-31 00:00:00",
-		"affects_balance":  true,
-		"account_id":       accID,
+		"debtor_name":     "Мария",
+		"direction":       "lent",
+		"amount":          "200.00",
+		"due_date":        "2025-12-31 00:00:00",
+		"affects_balance": true,
+		"account_id":      accID,
 	})
 	if debt["transaction_id"] == nil {
 		t.Fatal("expected transaction_id")
@@ -267,7 +267,7 @@ func TestPartialSettleReducesDebt(t *testing.T) {
 
 	body, _ := json.Marshal(map[string]any{
 		"amount":          "40.00",
-		"settled_at":        "2020-01-15 12:00:00",
+		"settled_at":      "2020-01-15 12:00:00",
 		"affects_balance": true,
 		"account_id":      accID,
 	})
@@ -280,8 +280,8 @@ func TestPartialSettleReducesDebt(t *testing.T) {
 		t.Fatalf("partial settle status %d", resp.StatusCode)
 	}
 	var updated struct {
-		Amount      int64 `json:"amount"`
-		IsSettled   bool  `json:"is_settled"`
+		Amount    int64 `json:"amount"`
+		IsSettled bool  `json:"is_settled"`
 	}
 	_ = json.NewDecoder(resp.Body).Decode(&updated)
 	if updated.IsSettled || updated.Amount != 6000 {
@@ -357,9 +357,9 @@ func TestDeleteSettledDebtRemovesAllTransactions(t *testing.T) {
 	openTxID := debt["transaction_id"].(string)
 
 	body, _ := json.Marshal(map[string]any{
-		"settled_at":       "2020-01-15 12:00:00",
-		"affects_balance":  true,
-		"account_id":       accID,
+		"settled_at":      "2020-01-15 12:00:00",
+		"affects_balance": true,
+		"account_id":      accID,
 	})
 	settleResp, err := env.authedRequest(http.MethodPost, "/api/v1/debts/"+debtID+"/settle", bytes.NewReader(body))
 	if err != nil {
@@ -505,19 +505,19 @@ func TestSettleCreatesReverseTransaction(t *testing.T) {
 	accID := createTestAccount(t, env, "Счёт")
 
 	debt := createDebt(t, env, map[string]any{
-		"debtor_name":      "Иван",
-		"direction":        "lent",
-		"amount":           "100.00",
-		"due_date":         "2025-12-31 00:00:00",
-		"affects_balance":  true,
-		"account_id":       accID,
+		"debtor_name":     "Иван",
+		"direction":       "lent",
+		"amount":          "100.00",
+		"due_date":        "2025-12-31 00:00:00",
+		"affects_balance": true,
+		"account_id":      accID,
 	})
 	debtID := debt["id"].(string)
 
 	body, _ := json.Marshal(map[string]any{
-		"settled_at":       "2020-01-15 12:00:00",
-		"affects_balance":  true,
-		"account_id":       accID,
+		"settled_at":      "2020-01-15 12:00:00",
+		"affects_balance": true,
+		"account_id":      accID,
 	})
 	resp, err := env.authedRequest(http.MethodPost, "/api/v1/debts/"+debtID+"/settle", bytes.NewReader(body))
 	if err != nil {
@@ -664,9 +664,9 @@ func TestGetDebtorDetail(t *testing.T) {
 		t.Fatalf("get debtor status %d", resp.StatusCode)
 	}
 	var detail struct {
-		Name         string `json:"name"`
-		OwedToMe     int64  `json:"owed_to_me"`
-		Debts        []struct {
+		Name     string `json:"name"`
+		OwedToMe int64  `json:"owed_to_me"`
+		Debts    []struct {
 			AccountID   *string `json:"account_id"`
 			AccountName *string `json:"account_name"`
 		} `json:"debts"`

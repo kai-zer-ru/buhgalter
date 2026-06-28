@@ -6,8 +6,8 @@ import (
 	"errors"
 	"fmt"
 
-	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/accountbalance"
+	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/debt"
 	"github.com/kai-zer-ru/buhgalter/internal/money"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
@@ -26,9 +26,9 @@ type AccountBalance struct {
 }
 
 type AccountsSummary struct {
-	Accounts       []AccountBalance `json:"accounts"`
-	TotalBalance   int64            `json:"total_balance"`
-	TotalForecast  int64            `json:"total_forecast"`
+	Accounts      []AccountBalance `json:"accounts"`
+	TotalBalance  int64            `json:"total_balance"`
+	TotalForecast int64            `json:"total_forecast"`
 }
 
 type Dashboard struct {

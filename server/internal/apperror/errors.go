@@ -9,13 +9,13 @@ import (
 )
 
 const (
-	Unauthorized         = "UNAUTHORIZED"
-	Forbidden            = "FORBIDDEN"
-	InvalidCredentials   = "INVALID_CREDENTIALS"
-	RegistrationDisabled = "REGISTRATION_DISABLED"
-	RateLimited          = "RATE_LIMITED"
-	ValidationError      = "VALIDATION_ERROR"
-	PasswordsMismatch    = "PASSWORDS_MISMATCH"
+	Unauthorized           = "UNAUTHORIZED"
+	Forbidden              = "FORBIDDEN"
+	InvalidCredentials     = "INVALID_CREDENTIALS"
+	RegistrationDisabled   = "REGISTRATION_DISABLED"
+	RateLimited            = "RATE_LIMITED"
+	ValidationError        = "VALIDATION_ERROR"
+	PasswordsMismatch      = "PASSWORDS_MISMATCH"
 	InvalidCurrentPassword = "INVALID_CURRENT_PASSWORD"
 	PasswordTooShort       = "PASSWORD_TOO_SHORT"
 	PasswordTooWeak        = "PASSWORD_TOO_WEAK"

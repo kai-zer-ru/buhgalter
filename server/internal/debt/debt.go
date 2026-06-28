@@ -17,35 +17,35 @@ import (
 )
 
 type Debt struct {
-	ID              string  `json:"id"`
-	DebtorID        string  `json:"debtor_id"`
-	DebtorName      string  `json:"debtor_name"`
-	Direction       string  `json:"direction"`
-	Amount          int64   `json:"amount"`
-	AmountDisplay   string  `json:"amount_display"`
-	AffectsBalance  bool    `json:"affects_balance"`
-	DebtDate        string  `json:"debt_date"`
-	DueDate         string  `json:"due_date"`
-	Description     *string `json:"description"`
-	TransactionID   *string `json:"transaction_id"`
-	IsSettled       bool    `json:"is_settled"`
-	SettledAt       *string `json:"settled_at"`
-	IsOverdue       bool    `json:"is_overdue"`
-	CreatedAt       string  `json:"created_at"`
-	AccountID       *string `json:"account_id,omitempty"`
-	AccountName     *string `json:"account_name,omitempty"`
+	ID             string  `json:"id"`
+	DebtorID       string  `json:"debtor_id"`
+	DebtorName     string  `json:"debtor_name"`
+	Direction      string  `json:"direction"`
+	Amount         int64   `json:"amount"`
+	AmountDisplay  string  `json:"amount_display"`
+	AffectsBalance bool    `json:"affects_balance"`
+	DebtDate       string  `json:"debt_date"`
+	DueDate        string  `json:"due_date"`
+	Description    *string `json:"description"`
+	TransactionID  *string `json:"transaction_id"`
+	IsSettled      bool    `json:"is_settled"`
+	SettledAt      *string `json:"settled_at"`
+	IsOverdue      bool    `json:"is_overdue"`
+	CreatedAt      string  `json:"created_at"`
+	AccountID      *string `json:"account_id,omitempty"`
+	AccountName    *string `json:"account_name,omitempty"`
 }
 
 type CreateInput struct {
-	DebtorID        *string
-	DebtorName      *string
-	Direction       string
-	Amount          int64
-	DebtDate        time.Time
-	DueDate         time.Time
-	AffectsBalance  bool
-	Description     *string
-	AccountID       string
+	DebtorID       *string
+	DebtorName     *string
+	Direction      string
+	Amount         int64
+	DebtDate       time.Time
+	DueDate        time.Time
+	AffectsBalance bool
+	Description    *string
+	AccountID      string
 }
 
 type SettleInput struct {
@@ -56,16 +56,16 @@ type SettleInput struct {
 }
 
 var (
-	ErrNotFound          = errors.New("debt not found")
-	ErrInvalidDirection  = errors.New("invalid direction")
-	ErrInvalidAmount     = errors.New("invalid amount")
-	ErrInvalidDueDate    = errors.New("invalid due date")
-	ErrInvalidDebtDate   = errors.New("invalid debt date")
-	ErrAccountRequired   = errors.New("account required when affects balance")
-	ErrInvalidAccount    = errors.New("invalid account")
-	ErrAccountArchived   = errors.New("account is archived")
-	ErrAlreadySettled    = errors.New("debt already settled")
-	ErrInvalidSettleAmount   = errors.New("invalid settle amount")
+	ErrNotFound               = errors.New("debt not found")
+	ErrInvalidDirection       = errors.New("invalid direction")
+	ErrInvalidAmount          = errors.New("invalid amount")
+	ErrInvalidDueDate         = errors.New("invalid due date")
+	ErrInvalidDebtDate        = errors.New("invalid debt date")
+	ErrAccountRequired        = errors.New("account required when affects balance")
+	ErrInvalidAccount         = errors.New("invalid account")
+	ErrAccountArchived        = errors.New("account is archived")
+	ErrAlreadySettled         = errors.New("debt already settled")
+	ErrInvalidSettleAmount    = errors.New("invalid settle amount")
 	ErrCannotBorrowFromDebtor = errors.New("cannot borrow from debtor who owes you")
 	ErrCannotLendToCreditor   = errors.New("cannot lend to creditor you owe")
 	ErrPlannedNotAllowed      = errors.New("planned operation is not allowed for debt transactions")
@@ -113,10 +113,10 @@ func debtsFromRows(rows interface{}, tz string, now time.Time) ([]Debt, error) {
 
 type debtRowFields struct {
 	id, debtorID, debtorName, direction, debtDate, dueDate, createdAt string
-	amount                                                  int64
-	affectsBalance, isSettled                               int64
-	description, transactionID, settledAt                     *string
-	accountID, accountName                                    *string
+	amount                                                            int64
+	affectsBalance, isSettled                                         int64
+	description, transactionID, settledAt                             *string
+	accountID, accountName                                            *string
 }
 
 func mapDebtRows[T any](list []T, tz string, now time.Time, at func(int) debtRowFields) ([]Debt, error) {

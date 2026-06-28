@@ -9,8 +9,8 @@ import (
 	"time"
 
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
-	"github.com/kai-zer-ru/buhgalter/internal/transaction"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
+	"github.com/kai-zer-ru/buhgalter/internal/transaction"
 )
 
 var ErrInvalidDate = errors.New("invalid stats date")
@@ -291,12 +291,12 @@ func (s *Service) ContextCredit(ctx context.Context, userID, creditID string, f 
 		return ContextSummary{}, err
 	}
 	paidRow, err := queries(s.db).StatsContextCreditPaid(ctx, sqlcdb.StatsContextCreditPaidParams{
-		UserID:         userID,
-		ID:             creditID,
-		Column3:        f.From,
-		PaymentDate:    f.From,
-		Column5:        f.To,
-		PaymentDate_2:  f.To,
+		UserID:        userID,
+		ID:            creditID,
+		Column3:       f.From,
+		PaymentDate:   f.From,
+		Column5:       f.To,
+		PaymentDate_2: f.To,
 	})
 	if err != nil {
 		return ContextSummary{}, err

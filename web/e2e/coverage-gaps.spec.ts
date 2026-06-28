@@ -152,7 +152,9 @@ test('edit expense from dashboard recent list', async ({ page }) => {
 	await page.goto('/');
 	await waitAppReady(page);
 
-	const row = page.getByRole('row', { name: new RegExp(`${description}.*55\\.40|55\\.40.*${description}`) });
+	const row = page.getByRole('row', {
+		name: new RegExp(`${description}.*55\\.40|55\\.40.*${description}`)
+	});
 	await rowMenuAction(page, row, 'Изменить');
 
 	const dialog = page.getByRole('dialog');

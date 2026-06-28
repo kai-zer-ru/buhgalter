@@ -77,4 +77,3 @@ func TestBuildMaxA161MessageEndpointChatRecipient(t *testing.T) {
 		t.Fatalf("unexpected endpoint: %q", endpoint)
 	}
 }
-

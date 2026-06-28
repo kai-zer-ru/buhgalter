@@ -31,8 +31,8 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/static"
 	"github.com/kai-zer-ru/buhgalter/internal/stats"
 	"github.com/kai-zer-ru/buhgalter/internal/transaction"
-	"github.com/kai-zer-ru/buhgalter/internal/user"
 	"github.com/kai-zer-ru/buhgalter/internal/ui"
+	"github.com/kai-zer-ru/buhgalter/internal/user"
 	"github.com/kai-zer-ru/buhgalter/internal/versioncheck"
 )
 

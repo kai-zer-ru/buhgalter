@@ -12,10 +12,10 @@ import (
 
 type repairCreditRow struct {
 	id, userID, issueDate, paymentInterval string
-	principal, monthlyPayment               int64
-	termMonths                              int
-	interestRate                            float64
-	addedRetroactively                      bool
+	principal, monthlyPayment              int64
+	termMonths                             int
+	interestRate                           float64
+	addedRetroactively                     bool
 }
 
 // RepairShortSchedules appends missing scheduled payments for credits created with the

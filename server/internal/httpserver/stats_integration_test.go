@@ -274,13 +274,13 @@ func TestStatsSummaryIncludesCreditPaymentTransactions(t *testing.T) {
 	accID := createTestAccount(t, env, "Кредит-стат")
 
 	credit := createCredit(t, env, map[string]any{
-		"principal_amount":     "12000.00",
-		"issue_date":           time.Now().UTC().AddDate(0, -1, 0).Format("2006-01-02 00:00:00"),
-		"term_months":          6,
-		"interest_rate":        0,
-		"debit_account_id":     accID,
-		"create_transactions":  true,
-		"added_retroactively":  false,
+		"principal_amount":    "12000.00",
+		"issue_date":          time.Now().UTC().AddDate(0, -1, 0).Format("2006-01-02 00:00:00"),
+		"term_months":         6,
+		"interest_rate":       0,
+		"debit_account_id":    accID,
+		"create_transactions": true,
+		"added_retroactively": false,
 	})
 	schedule, ok := credit["schedule"].([]any)
 	if !ok || len(schedule) == 0 {

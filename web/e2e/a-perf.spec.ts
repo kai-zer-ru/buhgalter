@@ -1,6 +1,11 @@
 import { expect, test } from '@playwright/test';
 import { apiJSON, formatUTCDateTime } from './helpers/auth';
-import { expectPageLoadsWithin, MAX_PAGE_LOAD_MS, measurePageLoad, warmRoute } from './helpers/perf';
+import {
+	expectPageLoadsWithin,
+	MAX_PAGE_LOAD_MS,
+	measurePageLoad,
+	warmRoute
+} from './helpers/perf';
 
 const AUTHENTICATED_ROUTES = [
 	'/',

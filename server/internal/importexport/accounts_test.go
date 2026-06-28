@@ -12,9 +12,9 @@ func TestBuildAccountMappings(t *testing.T) {
 		"яндекс":   "Яндекс",
 	}
 	file := map[string]struct{}{
-		"Наличные":  {},
-		"Яндекс":    {},
-		"Кредитка":  {},
+		"Наличные": {},
+		"Яндекс":   {},
+		"Кредитка": {},
 	}
 	mappings := buildAccountMappings(file, existing, names, nil)
 	if len(mappings) != 3 {

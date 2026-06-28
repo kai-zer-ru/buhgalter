@@ -9,11 +9,11 @@ import (
 )
 
 type Summary struct {
-	IOwe             int64 `json:"i_owe"`
-	OwedToMe         int64 `json:"owed_to_me"`
-	OverdueIOwe      int64 `json:"overdue_i_owe"`
-	OverdueOwedToMe  int64 `json:"overdue_owed_to_me"`
-	ActiveCount      int64 `json:"active_count"`
+	IOwe            int64 `json:"i_owe"`
+	OwedToMe        int64 `json:"owed_to_me"`
+	OverdueIOwe     int64 `json:"overdue_i_owe"`
+	OverdueOwedToMe int64 `json:"overdue_owed_to_me"`
+	ActiveCount     int64 `json:"active_count"`
 }
 
 type summaryRow struct {
