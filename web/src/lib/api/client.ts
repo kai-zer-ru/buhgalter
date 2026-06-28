@@ -79,6 +79,13 @@ export type SetupRestoreResponse = {
 	configured: boolean;
 };
 
+export type VersionCheckResult = {
+	current_version: string;
+	latest_version?: string;
+	update_available: boolean;
+	release_url?: string;
+};
+
 export type User = {
 	id: string;
 	login: string;
@@ -215,6 +222,10 @@ export type BackupSettings = {
 
 export function getSetupStatus() {
 	return request<SetupStatus>('/api/v1/setup/status');
+}
+
+export function getVersionCheck() {
+	return request<VersionCheckResult>('/api/v1/version/check');
 }
 
 export function postSetup(payload: SetupPayload) {

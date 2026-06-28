@@ -15,7 +15,7 @@
 	import TransactionForm from '$lib/components/TransactionForm.svelte';
 	import TransactionList from '$lib/components/TransactionList.svelte';
 	import TransferForm from '$lib/components/TransferForm.svelte';
-	import IconButton from '$lib/components/IconButton.svelte';
+	import NewTransactionButtons from '$lib/components/NewTransactionButtons.svelte';
 	import { confirm } from '$lib/confirm';
 	import { formatBalance } from '$lib/finance';
 	import { fromCents } from '$lib/money';
@@ -30,6 +30,7 @@
 	let transferOpen = $state(false);
 	let editTx = $state<Transaction | null>(null);
 	let editTransfer = $state<Transaction | null>(null);
+	let newTxType = $state<'expense' | 'income'>('expense');
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
 	const recentTx = $derived(dash ? dedupeTransferLegs(dash.recent_transactions) : []);
@@ -48,6 +49,12 @@
 		} finally {
 			loading = false;
 		}
+	}
+
+	function openNewTransaction(type: 'expense' | 'income') {
+		editTx = null;
+		newTxType = type;
+		txOpen = true;
 	}
 
 	function openEdit(tx: Transaction) {
@@ -96,19 +103,10 @@
 					{$_('accounts.new')}
 				</a>
 			{/if}
-			<IconButton
-				icon="add"
-				label={$_('transactions.new')}
-				variant="primary"
-				onclick={() => {
-					editTx = null;
-					txOpen = true;
-				}}
-			/>
-			<IconButton
-				icon="transfer"
-				label={$_('transactions.transfer')}
-				onclick={() => {
+			<NewTransactionButtons
+				onincome={() => openNewTransaction('income')}
+				onexpense={() => openNewTransaction('expense')}
+				ontransfer={() => {
 					editTransfer = null;
 					transferOpen = true;
 				}}
@@ -214,6 +212,7 @@
 
 <TransactionForm
 	bind:open={txOpen}
+	defaultType={newTxType}
 	transaction={editTx}
 	onclose={() => {
 		txOpen = false;

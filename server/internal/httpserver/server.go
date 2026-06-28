@@ -31,6 +31,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/stats"
 	"github.com/kai-zer-ru/buhgalter/internal/transaction"
 	"github.com/kai-zer-ru/buhgalter/internal/user"
+	"github.com/kai-zer-ru/buhgalter/internal/versioncheck"
 )
 
 type Server struct {
@@ -84,6 +85,7 @@ func (s *Server) Handler() http.Handler {
 	recurringHandler := &recurring.Handler{Store: dbHandle, Audit: s.audit}
 	importHandler := &importexport.Handler{Store: dbHandle, Audit: s.audit, Logger: s.logger}
 	statsHandler := &stats.Handler{Store: dbHandle}
+	versionHandler := &versioncheck.Handler{Checker: versioncheck.NewChecker(s.cfg.Version)}
 
 	r.Get("/docs", docs.RedocHandler())
 	r.Get("/docs/", docs.RedocHandler())
@@ -136,6 +138,7 @@ func (s *Server) Handler() http.Handler {
 			ar.Delete("/transfers/{group_id}", transactionHandler.DeleteTransfer)
 
 			ar.Get("/dashboard", transactionHandler.Dashboard)
+			ar.Get("/version/check", versionHandler.Check)
 
 			ar.Get("/debtors", debtHandler.ListDebtors)
 			ar.Post("/debtors", debtHandler.CreateDebtor)

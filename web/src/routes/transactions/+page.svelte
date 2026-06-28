@@ -15,7 +15,7 @@
 		type Transaction
 	} from '$lib/api/client';
 	import BackLink from '$lib/components/BackLink.svelte';
-	import IconButton from '$lib/components/IconButton.svelte';
+	import NewTransactionButtons from '$lib/components/NewTransactionButtons.svelte';
 	import TransactionContextStats from '$lib/components/TransactionContextStats.svelte';
 	import TransactionFilters from '$lib/components/TransactionFilters.svelte';
 	import TransactionForm from '$lib/components/TransactionForm.svelte';
@@ -39,6 +39,7 @@
 	let transferOpen = $state(false);
 	let editTx = $state<Transaction | null>(null);
 	let editTransfer = $state<Transaction | null>(null);
+	let newTxType = $state<'expense' | 'income'>('expense');
 	let accounts = $state<Account[]>([]);
 	let categories = $state<Category[]>([]);
 
@@ -176,6 +177,12 @@
 		await pushURLAndReload();
 	}
 
+	function openNewTransaction(type: 'expense' | 'income') {
+		editTx = null;
+		newTxType = type;
+		txOpen = true;
+	}
+
 	function openEdit(tx: Transaction) {
 		if (tx.credit_payment_linked) return;
 		if (tx.type === 'transfer' && tx.transfer_group_id) {
@@ -218,17 +225,18 @@
 		]}
 	/>
 
-	<div class="flex items-center justify-between gap-3">
+	<div class="flex flex-wrap items-center justify-between gap-3">
 		<h1 class="text-2xl font-semibold">{$_('transactions.all')}</h1>
-		<IconButton
-			icon="add"
-			label={$_('transactions.new')}
-			variant="primary"
-			onclick={() => {
-				editTx = null;
-				txOpen = true;
-			}}
-		/>
+		<div class="flex shrink-0 items-center gap-1">
+			<NewTransactionButtons
+				onincome={() => openNewTransaction('income')}
+				onexpense={() => openNewTransaction('expense')}
+				ontransfer={() => {
+					editTransfer = null;
+					transferOpen = true;
+				}}
+			/>
+		</div>
 	</div>
 
 	<TransactionFilters
@@ -281,6 +289,7 @@
 
 <TransactionForm
 	bind:open={txOpen}
+	defaultType={newTxType}
 	transaction={editTx}
 	onclose={() => {
 		txOpen = false;

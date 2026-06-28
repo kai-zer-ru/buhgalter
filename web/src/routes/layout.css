@@ -42,6 +42,14 @@ html.dark {
 }
 
 @layer base {
+	@font-face {
+		font-family: 'Font Awesome 6 Free';
+		font-style: normal;
+		font-weight: 900;
+		font-display: block;
+		src: url('@fortawesome/fontawesome-free/webfonts/fa-solid-900.woff2') format('woff2');
+	}
+
 	html {
 		@apply antialiased;
 		background-color: var(--bg);
@@ -146,6 +154,30 @@ html.dark {
 		@apply inline-flex shrink-0 cursor-pointer items-center justify-center rounded-xl p-0;
 		min-height: 2.75rem;
 		min-width: 2.75rem;
+	}
+
+	.fa-solid-glyph {
+		font-family: 'Font Awesome 6 Free';
+		font-weight: 900;
+		font-style: normal;
+		line-height: 1;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		-webkit-font-smoothing: antialiased;
+		-moz-osx-font-smoothing: grayscale;
+	}
+
+	.fa-solid-glyph.h-4 {
+		font-size: 1rem;
+		width: 1rem;
+		height: 1rem;
+	}
+
+	.fa-solid-glyph.h-5 {
+		font-size: 1.25rem;
+		width: 1.25rem;
+		height: 1.25rem;
 	}
 
 	.btn-icon-danger {

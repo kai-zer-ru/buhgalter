@@ -1,14 +1,13 @@
 import { expect, type Page } from '@playwright/test';
 
-/** Custom Select/Combobox (`role="combobox"` + `#id-list` listbox). */
-export async function selectCombobox(
+async function pickComboboxOption(
 	page: Page,
-	id: string,
+	trigger: ReturnType<Page['locator']>,
 	option: { label?: string; index?: number }
 ) {
-	const trigger = page.locator(`#${id}`);
 	await trigger.click();
-	const list = page.locator(`#${id}-list`);
+	const id = await trigger.getAttribute('id');
+	const list = id ? page.locator(`#${id}-list`) : page.getByRole('listbox').first();
 	await expect(list).toBeVisible();
 
 	if (option.label !== undefined) {
@@ -20,4 +19,23 @@ export async function selectCombobox(
 		return;
 	}
 	throw new Error('selectCombobox: pass label or index');
+}
+
+/** Custom Select/Combobox (`role="combobox"` + `#id-list` listbox). */
+export async function selectCombobox(
+	page: Page,
+	id: string,
+	option: { label?: string; index?: number }
+) {
+	await pickComboboxOption(page, page.locator(`#${id}`), option);
+}
+
+/** Combobox located by its visible label text (for forms with duplicate default ids). */
+export async function selectLabeledCombobox(
+	page: Page,
+	labelText: string,
+	option: { label?: string; index?: number }
+) {
+	const field = page.locator('label', { hasText: labelText }).first().locator('..');
+	await pickComboboxOption(page, field.getByRole('combobox'), option);
 }

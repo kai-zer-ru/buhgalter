@@ -29,6 +29,7 @@
 	import Select from '$lib/components/Select.svelte';
 	import TransactionFilters from '$lib/components/TransactionFilters.svelte';
 	import TransactionForm from '$lib/components/TransactionForm.svelte';
+	import NewTransactionButtons from '$lib/components/NewTransactionButtons.svelte';
 	import TransactionContextStats from '$lib/components/TransactionContextStats.svelte';
 	import TransactionList from '$lib/components/TransactionList.svelte';
 	import TransactionPagination from '$lib/components/TransactionPagination.svelte';
@@ -61,6 +62,7 @@
 	let transferOpen = $state(false);
 	let editTx = $state<Transaction | null>(null);
 	let editTransfer = $state<Transaction | null>(null);
+	let newTxType = $state<'expense' | 'income'>('expense');
 	let fromLocal = $state('');
 	let toLocal = $state('');
 	let typeFilter = $state('');
@@ -250,31 +252,42 @@
 		}
 	}
 
-	function accountActions(): RowAction[] {
+	function openNewTransaction(type: 'expense' | 'income') {
+		editTx = null;
+		newTxType = type;
+		txOpen = true;
+	}
+
+	function accountActions(includeTransactions = false): RowAction[] {
 		if (!acc) return [];
-		const actions: RowAction[] = [
-			{
-				icon: 'add',
-				label: $_('transactions.new'),
-				onclick: () => {
-					editTx = null;
-					txOpen = true;
+		const actions: RowAction[] = [];
+		if (includeTransactions) {
+			actions.push(
+				{
+					icon: 'income',
+					label: $_('transactions.type.income'),
+					onclick: () => openNewTransaction('income')
+				},
+				{
+					icon: 'expense',
+					label: $_('transactions.type.expense'),
+					onclick: () => openNewTransaction('expense')
+				},
+				{
+					icon: 'transfer',
+					label: $_('transactions.transfer'),
+					onclick: () => {
+						editTransfer = null;
+						transferOpen = true;
+					}
 				}
-			},
-			{
-				icon: 'transfer',
-				label: $_('transactions.transfer'),
-				onclick: () => {
-					editTransfer = null;
-					transferOpen = true;
-				}
-			},
-			{
-				icon: 'edit',
-				label: $_('accounts.action.edit'),
-				onclick: () => (editing = true)
-			}
-		];
+			);
+		}
+		actions.push({
+			icon: 'edit',
+			label: $_('accounts.action.edit'),
+			onclick: () => (editing = true)
+		});
 		if (!acc.is_primary) {
 			actions.push({
 				icon: 'save',
@@ -442,7 +455,24 @@
 								{/if}
 							</div>
 							{#if acc.status === 'active'}
-								<RowActionsMenu actions={accountActions()} />
+								<div class="flex shrink-0 items-center gap-1">
+									<div class="hidden items-center gap-1 md:flex">
+										<NewTransactionButtons
+											onincome={() => openNewTransaction('income')}
+											onexpense={() => openNewTransaction('expense')}
+											ontransfer={() => {
+												editTransfer = null;
+												transferOpen = true;
+											}}
+										/>
+									</div>
+									<div class="md:hidden">
+										<RowActionsMenu actions={accountActions(true)} />
+									</div>
+									<div class="hidden md:block">
+										<RowActionsMenu actions={accountActions(false)} />
+									</div>
+								</div>
 							{/if}
 						</div>
 					{/if}
@@ -515,6 +545,7 @@
 <TransactionForm
 	bind:open={txOpen}
 	accountId={id}
+	defaultType={newTxType}
 	transaction={editTx}
 	onclose={() => {
 		txOpen = false;

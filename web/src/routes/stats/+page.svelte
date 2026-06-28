@@ -97,6 +97,18 @@
 	const duplicateCategoryNameSet = $derived(
 		duplicateCategoryNames(byCategory.map((row) => ({ name: row.category_name, type: row.type })))
 	);
+	const byCategoryIncome = $derived(
+		byCategory
+			.filter((row) => row.type === 'income')
+			.sort((a, b) => b.total - a.total || a.category_name.localeCompare(b.category_name, 'ru'))
+	);
+	const byCategoryExpense = $derived(
+		byCategory
+			.filter((row) => row.type === 'expense')
+			.sort((a, b) => b.total - a.total || a.category_name.localeCompare(b.category_name, 'ru'))
+	);
+	const showCategoryIncome = $derived(type !== 'expense');
+	const showCategoryExpense = $derived(type !== 'income');
 
 	function statsCategoryLabel(name: string, type: 'income' | 'expense'): string {
 		return categoryDisplayLabel(name, type, duplicateCategoryNameSet);
@@ -472,61 +484,36 @@
 					{#if byCategory.length === 0}
 						<EmptyStateCard message={$_('transactions.empty')} />
 					{:else}
-						<div class="space-y-3 md:hidden">
-							{#each byCategory as row (row.category_id)}
-								<article class="rounded-xl border p-3" style:border-color="var(--border)">
-									<a
-										href={resolve(`/transactions?${categoryDrilldownQuery(row)}`)}
-										class="font-medium hover:underline"
-										style:color="var(--primary)"
-									>
-										{statsCategoryLabel(row.category_name, row.type)}
-									</a>
-									<dl class="mt-2 grid gap-1 text-sm">
-										<div class="flex justify-between gap-2">
-											<dt style:color="var(--text-muted)">{$_('transactions.col.amount')}</dt>
-											<dd class="tabular-nums">{formatMoneyDisplay(fromCents(row.total))}</dd>
-										</div>
-										<div class="flex justify-between gap-2">
-											<dt style:color="var(--text-muted)">%</dt>
-											<dd>{row.percentage.toFixed(1)}</dd>
-										</div>
-										<div class="flex justify-between gap-2">
-											<dt style:color="var(--text-muted)">{$_('stats.summary.count')}</dt>
-											<dd>{row.count}</dd>
-										</div>
-									</dl>
-								</article>
-							{/each}
+						<div class="space-y-6">
+							{#if showCategoryIncome}
+								<section>
+									{#if type === ''}
+										<h3 class="mb-2 text-sm font-medium" style:color="var(--text-muted)">
+											{$_('stats.summary.income')}
+										</h3>
+									{/if}
+									{#if byCategoryIncome.length === 0}
+										<EmptyStateCard message={$_('transactions.empty')} />
+									{:else}
+										{@render categorySection(byCategoryIncome)}
+									{/if}
+								</section>
+							{/if}
+							{#if showCategoryExpense}
+								<section>
+									{#if type === ''}
+										<h3 class="mb-2 text-sm font-medium" style:color="var(--text-muted)">
+											{$_('stats.summary.expense')}
+										</h3>
+									{/if}
+									{#if byCategoryExpense.length === 0}
+										<EmptyStateCard message={$_('transactions.empty')} />
+									{:else}
+										{@render categorySection(byCategoryExpense)}
+									{/if}
+								</section>
+							{/if}
 						</div>
-						<table class="hidden w-full text-left text-sm md:table">
-							<thead>
-								<tr style:color="var(--text-muted)">
-									<th class="p-2">{$_('transactions.col.category')}</th>
-									<th class="p-2">{$_('transactions.col.amount')}</th>
-									<th class="p-2">%</th>
-									<th class="p-2">{$_('stats.summary.count')}</th>
-								</tr>
-							</thead>
-							<tbody>
-								{#each byCategory as row (row.category_id)}
-									<tr class="border-t" style:border-color="var(--border)">
-										<td class="p-2">
-											<a
-												href={resolve(`/transactions?${categoryDrilldownQuery(row)}`)}
-												class="hover:underline"
-												style:color="var(--primary)"
-											>
-												{statsCategoryLabel(row.category_name, row.type)}
-											</a>
-										</td>
-										<td class="p-2 tabular-nums">{formatMoneyDisplay(fromCents(row.total))}</td>
-										<td class="p-2">{row.percentage.toFixed(1)}</td>
-										<td class="p-2">{row.count}</td>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
 					{/if}
 				</div>
 			</div>
@@ -547,6 +534,64 @@
 		</div>
 	{/if}
 </div>
+
+{#snippet categorySection(rows: StatsCategoryItem[])}
+	<div class="space-y-3 md:hidden">
+		{#each rows as row (row.category_id)}
+			<article class="rounded-xl border p-3" style:border-color="var(--border)">
+				<a
+					href={resolve(`/transactions?${categoryDrilldownQuery(row)}`)}
+					class="font-medium hover:underline"
+					style:color="var(--primary)"
+				>
+					{statsCategoryLabel(row.category_name, row.type)}
+				</a>
+				<dl class="mt-2 grid gap-1 text-sm">
+					<div class="flex justify-between gap-2">
+						<dt style:color="var(--text-muted)">{$_('transactions.col.amount')}</dt>
+						<dd class="tabular-nums">{formatMoneyDisplay(fromCents(row.total))}</dd>
+					</div>
+					<div class="flex justify-between gap-2">
+						<dt style:color="var(--text-muted)">%</dt>
+						<dd>{row.percentage.toFixed(1)}</dd>
+					</div>
+					<div class="flex justify-between gap-2">
+						<dt style:color="var(--text-muted)">{$_('stats.summary.count')}</dt>
+						<dd>{row.count}</dd>
+					</div>
+				</dl>
+			</article>
+		{/each}
+	</div>
+	<table class="hidden w-full text-left text-sm md:table">
+		<thead>
+			<tr style:color="var(--text-muted)">
+				<th class="p-2">{$_('transactions.col.category')}</th>
+				<th class="p-2">{$_('transactions.col.amount')}</th>
+				<th class="p-2">%</th>
+				<th class="p-2">{$_('stats.summary.count')}</th>
+			</tr>
+		</thead>
+		<tbody>
+			{#each rows as row (row.category_id)}
+				<tr class="border-t" style:border-color="var(--border)">
+					<td class="p-2">
+						<a
+							href={resolve(`/transactions?${categoryDrilldownQuery(row)}`)}
+							class="hover:underline"
+							style:color="var(--primary)"
+						>
+							{statsCategoryLabel(row.category_name, row.type)}
+						</a>
+					</td>
+					<td class="p-2 tabular-nums">{formatMoneyDisplay(fromCents(row.total))}</td>
+					<td class="p-2">{row.percentage.toFixed(1)}</td>
+					<td class="p-2">{row.count}</td>
+				</tr>
+			{/each}
+		</tbody>
+	</table>
+{/snippet}
 
 {#snippet searchDescriptionLinks(tx: Transaction)}
 	{@const debtorId = debtorIDFromDescription(tx)}

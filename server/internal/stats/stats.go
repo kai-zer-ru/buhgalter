@@ -122,9 +122,9 @@ func (s *Service) ByCategory(ctx context.Context, userID string, f Filters) ([]C
 	if err != nil {
 		return nil, err
 	}
-	var total int64
+	totalsByType := map[string]int64{}
 	for _, row := range rows {
-		total += row.Total
+		totalsByType[row.CategoryType] += row.Total
 	}
 	out := make([]CategoryItem, 0, len(rows))
 	for _, row := range rows {
@@ -134,7 +134,7 @@ func (s *Service) ByCategory(ctx context.Context, userID string, f Filters) ([]C
 			Icon:         row.CategoryIcon,
 			Type:         row.CategoryType,
 			Total:        row.Total,
-			Percentage:   percentage(total, row.Total),
+			Percentage:   percentage(totalsByType[row.CategoryType], row.Total),
 			Count:        row.TxCount,
 		})
 	}

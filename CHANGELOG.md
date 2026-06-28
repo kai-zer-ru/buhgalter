@@ -3,12 +3,32 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 версии — [SemVer](https://semver.org/lang/ru/).
 
-Подробные release notes для пользователей: [docs/release-notes-v1.2.1.md](docs/release-notes-v1.2.1.md).
+Подробные release notes для пользователей: [docs/release-notes-v1.2.2.md](docs/release-notes-v1.2.2.md).
+
+## [v1.2.2] — 2026-06-28
+
+> **ОБЯЗАТЕЛЬНО СДЕЛАЙТЕ БЕКАП!** Перед обновлением сохраните копию базы (`data/buhgalter.db`) и каталога `backups/`.
+
+### Добавлено
+
+**Обновления**
+
+- `GET /api/v1/version/check` — сравнение текущей версии с последним релизом на GitHub (кеш на сервере 24 ч)
+- Веб-клиент: раз в сутки проверка обновления; модальное предупреждение о бэкапе и release notes — **только для администраторов**; ссылка «скачайте бекап» → **Настройки → Админка → Бекапы**
+
+**UI/UX**
+
+- Главная (`/`), **Все операции** (`/transactions`), **страница счёта** (`/accounts/[id]`): три кнопки-иконки **Доход / Расход / Перевод** (`NewTransactionButtons`, Font Awesome Solid: `f067`, `f068`, `f0ec`); подписи только в `title` / `aria-label`
+- Форма новой операции (`TransactionForm`): переключатель типа убран — тип задаётся кнопкой; заголовок модалки «Доход» или «Расход»; при редактировании тип по-прежнему только текстом
+- На странице счёта кнопки операций вынесены из меню «⋯» в шапку карточки (как на главной); в меню — редактирование, основной, архив, удаление
+- `/stats` → «По категориям»: отдельные секции **доходы** и **расходы**; процент считается внутри каждого типа
 
 ## [v1.2.1] — 2026-06-27
 
 > **ОБЯЗАТЕЛЬНО СДЕЛАЙТЕ БЕКАП!** Перед обновлением сохраните копию базы (`data/buhgalter.db`) и каталога `backups/`.
 > При деплое через Docker и переходе на каталоги `./data`, `./backups`, `./logs` на хосте — [инструкция по миграции](docs/install/docker.md#docker-bind-mount-migration).
+
+Подробные release notes для пользователей: [docs/release-notes-v1.2.1.md](docs/release-notes-v1.2.1.md).
 
 ### Добавлено
 
@@ -359,5 +379,6 @@
 [v1.1.1]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.1.1
 [v1.1.0]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.1.0
 [v1.0.0]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.0.0
+[v1.2.2]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.2.2
 [v1.2.1]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.2.1
 [v1.2.0]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.2.0

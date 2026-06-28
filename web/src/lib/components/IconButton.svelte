@@ -9,6 +9,8 @@
 		| 'more-vertical'
 		| 'logout'
 		| 'add'
+		| 'income'
+		| 'expense'
 		| 'pay'
 		| 'transfer'
 		| 'save'

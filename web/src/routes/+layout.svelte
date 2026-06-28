@@ -11,16 +11,19 @@
 	import { initTheme, syncThemeFromUser } from '$lib/stores/theme';
 	import { setLocale } from '$lib/i18n';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import UpdateAvailableModal from '$lib/components/UpdateAvailableModal.svelte';
 	import AppIcon from '$lib/components/AppIcon.svelte';
 	import IconButton from '$lib/components/IconButton.svelte';
 	import ToastContainer from '$lib/components/ToastContainer.svelte';
 	import AdminPasswordResetBanner from '$lib/components/AdminPasswordResetBanner.svelte';
+	import { checkForVersionUpdate, type PendingVersionUpdate } from '$lib/version-check';
 	import './layout.css';
 
 	let { children } = $props();
 	let ready = $state(false);
 	let bootError = $state<string | null>(null);
 	let navOpen = $state(false);
+	let pendingUpdate = $state<PendingVersionUpdate | null>(null);
 
 	afterNavigate(() => {
 		navOpen = false;
@@ -128,6 +131,11 @@
 				if (currentUser) {
 					setLocale(currentUser.language);
 					syncThemeFromUser(currentUser.theme);
+					if (currentUser.is_admin) {
+						void checkForVersionUpdate().then((update) => {
+							if (update) pendingUpdate = update;
+						});
+					}
 					if (currentPath === '/login' || currentPath === '/register') {
 						await goReady('/');
 						return;
@@ -278,4 +286,7 @@
 {/if}
 
 <ConfirmDialog />
+{#if pendingUpdate && $user?.is_admin}
+	<UpdateAvailableModal update={pendingUpdate} onclose={() => (pendingUpdate = null)} />
+{/if}
 <ToastContainer />

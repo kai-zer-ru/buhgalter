@@ -76,6 +76,29 @@ OpenAPI-схемы: [`Transaction`](api/openapi.yaml#/components/schemas/Transac
 
 OpenAPI: `CreateTransferRequest.commission`, схема `Transfer`.
 
+## Главная (`/`)
+
+- Карточки счетов: `AccountIcon` (`type`, `bank_icon` из API), имя, баланс и меню «⋯» — как на `/accounts` ([ui-row-actions.md](ui-row-actions.md)).
+- В шапке — три кнопки **Доход / Расход / Перевод** (`NewTransactionButtons`); тип новой операции задаётся кнопкой, без переключателя в форме.
+- «Последние операции»: колонки дата, счёт, категория (с `CategoryIcon`), сумма, описание; меню «⋯» в каждой строке (как на `/transactions`).
+- Ссылка «Все операции» → `/transactions`.
+
+## Создание операций
+
+Компонент `$lib/components/NewTransactionButtons.svelte` — три `IconButton` в шапке:
+
+| Экран | Кнопки |
+|-------|--------|
+| `/` (главная) | Доход, Расход, Перевод |
+| `/transactions` | Доход, Расход, Перевод |
+| `/accounts/[id]` | **≥ md:** Доход, Расход, Перевод (рядом с меню «⋯» счёта). **&lt; md:** операции в меню «⋯» |
+
+Иконки — Font Awesome Solid (`f067` доход, `f068` расход, `f0ec` перевод); видимый текст только в `title` / `aria-label`.
+
+`TransactionForm` при **создании**: без вкладок типа; заголовок модалки — «Доход» или «Расход» (`defaultType` из родителя). При **редактировании** — заголовок «Изменить операцию», тип текстом, смена типа запрещена API.
+
+`TransferForm` — отдельная модалка по кнопке перевода на тех же экранах.
+
 ## Редактирование дохода и расхода
 
 Из списка операций (`TransactionList` — главная, `/transactions`, `/accounts/[id]`) — пункт меню «Изменить» открывает `TransactionForm`:
@@ -107,12 +130,6 @@ OpenAPI: `CreateTransferRequest.commission`, схема `Transfer`.
 ## Категории с одинаковым именем
 
 `$lib/category-label.ts`: `categorySelectLabel` / `duplicateCategoryNames` — суффиксы «(Доход)» / «(Расход)» в фильтрах и статистике, когда имя совпадает (например системные «Долги»).
-
-## Главная (`/`)
-
-- Карточки счетов: `AccountIcon` (`type`, `bank_icon` из API), имя, баланс и меню «⋯» — как на `/accounts` ([ui-row-actions.md](ui-row-actions.md)).
-- «Последние операции»: колонки дата, счёт, категория (с `CategoryIcon`), сумма, описание; меню «⋯» в каждой строке (как на `/transactions`).
-- Ссылка «Все операции» → `/transactions`.
 
 ## Формат денег
 

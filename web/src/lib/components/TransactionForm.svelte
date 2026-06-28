@@ -27,6 +27,7 @@
 	type Props = {
 		open: boolean;
 		accountId?: string;
+		defaultType?: 'expense' | 'income';
 		transaction?: Transaction | null;
 		onclose: () => void;
 		onsaved: () => void;
@@ -35,6 +36,7 @@
 	let {
 		open = $bindable(),
 		accountId = '',
+		defaultType = 'expense',
 		transaction = null,
 		onclose,
 		onsaved
@@ -103,7 +105,7 @@
 			description = transaction.description ?? '';
 			dateTimeValue = toDatetimeLocalValue(transaction.transaction_date, tz);
 		} else {
-			txType = 'expense';
+			txType = defaultType;
 			amount = '';
 			selectedAccount = defaultAccountId(accounts, accountId);
 			categoryId = '';
@@ -129,13 +131,6 @@
 		} else {
 			subcategories = [];
 		}
-	}
-
-	async function onTypeChange(type: 'expense' | 'income') {
-		txType = type;
-		categoryId = '';
-		subcategoryId = '';
-		await loadCategories();
 	}
 
 	async function onCategoryChange() {
@@ -182,7 +177,11 @@
 
 <ModalShell
 	bind:open
-	title={editing ? $_('transactions.edit') : $_('transactions.new')}
+	title={editing
+		? $_('transactions.edit')
+		: txType === 'expense'
+			? $_('transactions.type.expense')
+			: $_('transactions.type.income')}
 	onclose={close}
 >
 	<form id="tx-form" class="space-y-4" onsubmit={save}>
@@ -190,23 +189,6 @@
 			<p class="text-sm font-medium">
 				{txType === 'expense' ? $_('transactions.type.expense') : $_('transactions.type.income')}
 			</p>
-		{:else}
-			<div class="flex gap-2">
-				<button
-					type="button"
-					class={txType === 'expense' ? 'tab tab-active' : 'tab'}
-					onclick={() => void onTypeChange('expense')}
-				>
-					{$_('transactions.type.expense')}
-				</button>
-				<button
-					type="button"
-					class={txType === 'income' ? 'tab tab-active' : 'tab'}
-					onclick={() => void onTypeChange('income')}
-				>
-					{$_('transactions.type.income')}
-				</button>
-			</div>
 		{/if}
 
 		<div>

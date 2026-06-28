@@ -16,7 +16,7 @@ info:
     `POST /accounts/{id}/primary`, `POST /accounts/{id}/archive`, `DELETE /accounts/{id}`.
     На `/accounts/{id}` — та же форма редактирования в шапке. Поля: название, банк, начальный баланс.
     Подробнее — [ui-row-actions.md](../ui-row-actions.md).
-  version: 1.2.1
+  version: 1.2.2
 servers:
   - url: /api/v1
 paths:
@@ -900,6 +900,29 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Dashboard'
+  /version/check:
+    get:
+      summary: Проверка доступного обновления
+      description: |
+        Сравнивает текущую версию приложения с последним релизом на GitHub.
+        Ответ кешируется на сервере 24 часа. Веб-клиент запрашивает endpoint не чаще одного раза в сутки.
+        Модальное предупреждение (бэкап, release notes, ссылка на **Настройки → Админка → Бекапы**) показывается
+        **только администраторам** при `update_available: true`.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Результат проверки
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionCheckResponse'
+              example:
+                current_version: 1.2.1
+                latest_version: 1.2.2
+                update_available: true
+                release_url: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.2.2
   /stats/summary:
     get:
       summary: Сводка статистики
@@ -931,8 +954,8 @@ paths:
     get:
       summary: Статистика по категориям
       description: |
-        Агрегация по категориям: сумма, доля от общего оборота категорий, число операций.
-        Используется блоком «По категориям» на странице `/stats`.
+        Агрегация по категориям: сумма, доля от оборота категорий **того же типа** (доход или расход), число операций.
+        Используется блоком «По категориям» на странице `/stats` (раздельно для доходов и расходов).
       security:
         - sessionCookie: []
         - bearerAuth: []
@@ -2368,6 +2391,23 @@ components:
           type: string
           enum: [connected, error]
           description: Результат ping SQLite
+    VersionCheckResponse:
+      type: object
+      required: [current_version, update_available]
+      properties:
+        current_version:
+          type: string
+          description: Версия текущей установки
+        latest_version:
+          type: string
+          description: Последняя версия на GitHub (если удалось получить)
+        update_available:
+          type: boolean
+          description: true, если latest_version новее current_version
+        release_url:
+          type: string
+          format: uri
+          description: Ссылка на страницу релиза на GitHub
     ApiError:
       type: object
       required: [error]
@@ -3049,6 +3089,7 @@ components:
         percentage:
           type: number
           format: float
+          description: Доля категории в обороте категорий того же типа (income или expense), %
         count:
           type: integer
     StatsSubcategoryItem:
