@@ -406,13 +406,8 @@
 					</p>
 				</div>
 				<div class="card">
-					<p class="text-xs" style:color="var(--text-muted)">{$_('stats.summary.delta')}</p>
-					<p class="tabular-nums text-xl font-semibold">
-						{formatBalance(fromCents(summary?.balance_delta ?? 0), currency)}
-					</p>
-					<p class="text-xs" style:color="var(--text-muted)">
-						{$_('stats.summary.count')}: {summary?.transaction_count ?? 0}
-					</p>
+					<p class="text-xs" style:color="var(--text-muted)">{$_('stats.summary.count')}</p>
+					<p class="tabular-nums text-xl font-semibold">{summary?.transaction_count ?? 0}</p>
 				</div>
 			</div>
 

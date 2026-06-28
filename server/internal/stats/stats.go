@@ -29,7 +29,6 @@ type Filters struct {
 type Summary struct {
 	IncomeTotal      int64 `json:"income_total"`
 	ExpenseTotal     int64 `json:"expense_total"`
-	BalanceDelta     int64 `json:"balance_delta"`
 	TransactionCount int64 `json:"transaction_count"`
 }
 
@@ -108,7 +107,6 @@ func (s *Service) Summary(ctx context.Context, userID string, f Filters, factual
 	return Summary{
 		IncomeTotal:      income,
 		ExpenseTotal:     expense,
-		BalanceDelta:     income - expense,
 		TransactionCount: count,
 	}, nil
 }
@@ -261,7 +259,6 @@ func (s *Service) ContextDebtor(ctx context.Context, userID, debtorID string, f 
 		Summary: Summary{
 			IncomeTotal:      row.IncomeTotal,
 			ExpenseTotal:     row.ExpenseTotal,
-			BalanceDelta:     row.IncomeTotal - row.ExpenseTotal,
 			TransactionCount: row.TransactionCount,
 		},
 		Scope:         "debtor",
@@ -315,7 +312,6 @@ func (s *Service) ContextCredit(ctx context.Context, userID, creditID string, f 
 		Summary: Summary{
 			IncomeTotal:      row.IncomeTotal,
 			ExpenseTotal:     row.ExpenseTotal,
-			BalanceDelta:     row.IncomeTotal - row.ExpenseTotal,
 			TransactionCount: row.TransactionCount,
 		},
 		Scope:           "credit",
@@ -348,7 +344,6 @@ func (s *Service) ContextDebts(ctx context.Context, userID string, f Filters) (C
 		Summary: Summary{
 			IncomeTotal:      row.IncomeTotal,
 			ExpenseTotal:     row.ExpenseTotal,
-			BalanceDelta:     row.IncomeTotal - row.ExpenseTotal,
 			TransactionCount: row.TransactionCount,
 		},
 		Scope: "debts",

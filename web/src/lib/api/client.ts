@@ -725,7 +725,6 @@ export type TransactionList = {
 export type StatsSummary = {
 	income_total: number;
 	expense_total: number;
-	balance_delta: number;
 	transaction_count: number;
 };
 

@@ -56,12 +56,6 @@
 				</p>
 			</div>
 			<div>
-				<p class="text-xs" style:color="var(--text-muted)">{$_('stats.context.delta')}</p>
-				<p class="tabular-nums font-medium">
-					{formatBalance(fromCents(summary.balance_delta), currency)}
-				</p>
-			</div>
-			<div>
 				<p class="text-xs" style:color="var(--text-muted)">{$_('stats.context.count')}</p>
 				<p class="tabular-nums font-medium">{summary.transaction_count}</p>
 			</div>

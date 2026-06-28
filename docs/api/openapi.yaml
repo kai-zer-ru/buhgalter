@@ -3059,7 +3059,7 @@ components:
             $ref: '#/components/schemas/Transaction'
     StatsSummary:
       type: object
-      required: [income_total, expense_total, balance_delta, transaction_count]
+      required: [income_total, expense_total, transaction_count]
       properties:
         income_total:
           type: integer
@@ -3067,9 +3067,6 @@ components:
         expense_total:
           type: integer
           description: Сумма расходов (копейки)
-        balance_delta:
-          type: integer
-          description: income_total − expense_total
         transaction_count:
           type: integer
     StatsCategoryItem:
