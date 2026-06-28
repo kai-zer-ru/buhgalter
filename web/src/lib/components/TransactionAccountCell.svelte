@@ -1,7 +1,7 @@
 <script lang="ts">
 	import EntityLink from '$lib/components/EntityLink.svelte';
 	import type { Transaction } from '$lib/api/client';
-	import { transferRoute, type AccountLabelMode } from '$lib/transaction-display';
+	import { transferAccountIds, transferRoute, type AccountLabelMode } from '$lib/transaction-display';
 
 	let {
 		tx,
@@ -27,23 +27,10 @@
 		}
 
 		const names = transferRoute(tx, siblings);
-		const legs = siblings.filter(
-			(item) => item.transfer_group_id && item.transfer_group_id === tx.transfer_group_id
-		);
-		const out =
-			legs.length >= 2
-				? legs.reduce((best, cur) => (cur.created_at < best.created_at ? cur : best))
-				: tx.transfer_is_out
-					? tx
-					: (siblings.find(
-							(item) => item.transfer_group_id === tx.transfer_group_id && item.transfer_is_out
-						) ?? tx);
-
-		const fromId = out.account_id;
-		const toId = out.transfer_account_id ?? tx.transfer_account_id ?? '';
+		const { fromAccountId, toAccountId } = transferAccountIds(tx, siblings);
 		const accounts: AccountRef[] = [];
-		if (names.from && fromId) accounts.push({ id: fromId, name: names.from });
-		if (names.to && toId) accounts.push({ id: toId, name: names.to });
+		if (names.from && fromAccountId) accounts.push({ id: fromAccountId, name: names.from });
+		if (names.to && toAccountId) accounts.push({ id: toAccountId, name: names.to });
 		return { prefix: '', accounts };
 	});
 </script>

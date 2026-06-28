@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { waitAppReady } from './helpers/auth';
-import { createCashAccount } from './helpers/setup-data';
+import { createCashAccount, createTransfer } from './helpers/setup-data';
 import { confirmDialog, rowMenuAction } from './helpers/ui';
 
 test('accounts list: edit name inline', async ({ page }) => {
@@ -86,4 +86,27 @@ test('dashboard: click account card opens account page', async ({ page }) => {
 
 	await expect(page).toHaveURL(new RegExp(`/accounts/${account.id}`));
 	await expect(page.getByRole('heading', { name: account.name })).toBeVisible();
+});
+
+test('account detail: transfer counterparty links open correct account', async ({ page }) => {
+	const from = await createCashAccount(page, `E2E Xfer From ${Date.now()}`);
+	const to = await createCashAccount(page, `E2E Xfer To ${Date.now()}`);
+	const amount = '75.00';
+	await createTransfer(page, from.id, to.id, amount);
+
+	await page.goto(`/accounts/${to.id}`);
+	await waitAppReady(page);
+	const incomingRow = page.getByRole('row').filter({ hasText: amount });
+	await incomingRow.getByRole('link', { name: from.name, exact: true }).click();
+	await waitAppReady(page);
+	await expect(page).toHaveURL(new RegExp(`/accounts/${from.id}(?:\\?|$)`));
+	await expect(page.getByRole('heading', { name: from.name })).toBeVisible();
+
+	await page.goto(`/accounts/${from.id}`);
+	await waitAppReady(page);
+	const outgoingRow = page.getByRole('row').filter({ hasText: amount });
+	await outgoingRow.getByRole('link', { name: to.name, exact: true }).click();
+	await waitAppReady(page);
+	await expect(page).toHaveURL(new RegExp(`/accounts/${to.id}(?:\\?|$)`));
+	await expect(page.getByRole('heading', { name: to.name })).toBeVisible();
 });
