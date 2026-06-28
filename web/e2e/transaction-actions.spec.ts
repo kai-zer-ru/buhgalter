@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { waitAppReady } from './helpers/auth';
 import { createCashAccount, createExpense, createTransfer } from './helpers/setup-data';
 import { confirmDialog, rowMenuAction } from './helpers/ui';
-import { selectCombobox } from './helpers/transactions';
+import { fillEditTxAmount, selectCombobox } from './helpers/transactions';
 
 test('edit expense on /transactions', async ({ page }) => {
 	const tag = Date.now();
@@ -17,7 +17,7 @@ test('edit expense on /transactions', async ({ page }) => {
 	await rowMenuAction(page, row, 'Изменить');
 
 	const dialog = page.getByRole('dialog');
-	await dialog.locator('#tx-amount').fill('222');
+	await fillEditTxAmount(dialog, '222', /222(\.00)?/);
 	await dialog.getByRole('button', { name: 'Сохранить' }).click();
 	await expect(dialog).toHaveCount(0, { timeout: 15_000 });
 	await expect(page.getByRole('row', { name: /222\.00/ })).toBeVisible({ timeout: 10_000 });

@@ -10,7 +10,6 @@ import (
 
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
-	"github.com/kai-zer-ru/buhgalter/internal/transaction"
 )
 
 var ErrInvalidDate = errors.New("invalid stats date")
@@ -83,9 +82,6 @@ func queries(db sqlcdb.DBTX) *sqlcdb.Queries {
 }
 
 func (s *Service) Summary(ctx context.Context, userID string, f Filters, factualOnly bool) (Summary, error) {
-	if err := transaction.ActivateDueFutureTransactions(ctx, s.db, userID); err != nil {
-		return Summary{}, err
-	}
 	f, err := normalizeFilters(f, factualOnly)
 	if err != nil {
 		return Summary{}, err

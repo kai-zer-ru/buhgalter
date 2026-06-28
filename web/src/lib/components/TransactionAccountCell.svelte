@@ -1,7 +1,11 @@
 <script lang="ts">
 	import EntityLink from '$lib/components/EntityLink.svelte';
 	import type { Transaction } from '$lib/api/client';
-	import { transferAccountIds, transferRoute, type AccountLabelMode } from '$lib/transaction-display';
+	import {
+		transferAccountIds,
+		transferRoute,
+		type AccountLabelMode
+	} from '$lib/transaction-display';
 
 	let {
 		tx,

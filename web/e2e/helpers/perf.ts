@@ -4,11 +4,7 @@ import { waitAppReady } from './auth';
 /** Target max time from navigation start until the page is interactive. Exceeding logs a warning only. */
 export const MAX_PAGE_LOAD_MS = 1000;
 
-export function warnIfPageLoadSlow(
-	elapsed: number,
-	label: string,
-	maxMs = MAX_PAGE_LOAD_MS
-): void {
+export function warnIfPageLoadSlow(elapsed: number, label: string, maxMs = MAX_PAGE_LOAD_MS): void {
 	if (elapsed > maxMs) {
 		console.warn(`[perf] ${label} took ${elapsed}ms (limit ${maxMs}ms)`);
 	}

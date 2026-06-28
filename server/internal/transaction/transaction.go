@@ -421,32 +421,54 @@ func Activate(ctx context.Context, db *sql.DB, userID, id string) (Transaction, 
 }
 
 // ActivateDueFutureTransactions promotes past-due planned operations to manual (UTC cutoff = now).
-func ActivateDueFutureTransactions(ctx context.Context, db *sql.DB, userID string) error {
+func ActivateDueFutureTransactions(ctx context.Context, db *sql.DB, userID string) (int64, error) {
 	now := time.Now().UTC().Format(time.RFC3339)
 	cutoff := timeutil.FormatUTC(timeutil.NowUTC())
 	q := queries(db)
-	if _, err := q.ActivateAppliedCreditFutureTransactions(ctx, sqlcdb.ActivateAppliedCreditFutureTransactionsParams{
-		UpdatedAt:       now,
-		UserID:          userID,
-		TransactionDate: cutoff,
-	}); err != nil {
-		return err
-	}
-	_, err := q.ActivateFutureTransactionsBefore(ctx, sqlcdb.ActivateFutureTransactionsBeforeParams{
+	n1, err := q.ActivateAppliedCreditFutureTransactions(ctx, sqlcdb.ActivateAppliedCreditFutureTransactionsParams{
 		UpdatedAt:       now,
 		UserID:          userID,
 		TransactionDate: cutoff,
 	})
 	if err != nil {
-		return err
+		return 0, err
 	}
-	return refreshAccountBalances(ctx, db, userID)
+	n2, err := q.ActivateFutureTransactionsBefore(ctx, sqlcdb.ActivateFutureTransactionsBeforeParams{
+		UpdatedAt:       now,
+		UserID:          userID,
+		TransactionDate: cutoff,
+	})
+	if err != nil {
+		return 0, err
+	}
+	activated := n1 + n2
+	if activated == 0 {
+		return 0, nil
+	}
+	return activated, refreshAccountBalances(ctx, db, userID)
+}
+
+// ActivateAllDueFutureTransactions promotes due future operations for all affected users.
+func ActivateAllDueFutureTransactions(ctx context.Context, db *sql.DB) (users int, transactions int64, err error) {
+	cutoff := timeutil.FormatUTC(timeutil.NowUTC())
+	userIDs, err := queries(db).ListUsersWithDueFutureTransactions(ctx, cutoff)
+	if err != nil {
+		return 0, 0, err
+	}
+	for _, userID := range userIDs {
+		n, err := ActivateDueFutureTransactions(ctx, db, userID)
+		if err != nil {
+			return users, transactions, err
+		}
+		if n > 0 {
+			users++
+			transactions += n
+		}
+	}
+	return users, transactions, nil
 }
 
 func List(ctx context.Context, db *sql.DB, userID string, f ListFilters) (ListResult, error) {
-	if err := ActivateDueFutureTransactions(ctx, db, userID); err != nil {
-		return ListResult{}, err
-	}
 	if f.Page < 1 {
 		f.Page = 1
 	}

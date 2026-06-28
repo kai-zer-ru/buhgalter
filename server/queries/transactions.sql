@@ -159,6 +159,12 @@ WHERE user_id = ?
       AND cp.exclude_from_stats = 0
   );
 
+-- name: ListUsersWithDueFutureTransactions :many
+SELECT DISTINCT user_id
+FROM transactions
+WHERE kind = 'future'
+  AND transaction_date <= ?;
+
 -- name: CountTransactionsFiltered :one
 SELECT COUNT(*) AS count
 FROM transactions t

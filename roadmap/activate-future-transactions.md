@@ -1,26 +1,21 @@
 # Активация future-операций в фоне
 
 **Версия:** v1.2.2  
-**Статус:** черновик (полное описание — в отдельной задаче)
+**Статус:** реализовано — фоновый `FutureRunner` в `scheduler` (раз в минуту + при старте)
 
 ## Зачем
 
-Сейчас при каждом HTTP-запросе middleware вызывает `ActivateDueFutureTransactions` — переводит наступившие `future`-операции в `manual` и пересчитывает балансы. Это добавляет задержку на **каждый** запрос, даже когда просроченных операций нет.
+Раньше при list/dashboard/stats вызывался `ActivateDueFutureTransactions` — перевод наступивших `future`-операций в `manual` и пересчёт балансов на каждый read-запрос.
 
-## Направление
+## Решение
 
-- Вынести активацию из hot-path middleware в фоновый процесс (cron / ticker внутри сервера / отдельная job).
-- Middleware оставить только для лёгких проверок (auth, access).
-- Гарантировать, что пользователь видит актуальные данные при открытии страниц (eventual consistency с приемлемым лагом или точечная активация по user_id при чтении счетов).
+- `FutureRunner` в `internal/scheduler` — активация раз в минуту (и сразу при старте сервера), по образцу credits/recurring.
+- `ActivateAllDueFutureTransactions` — только пользователи с просроченными `future`.
+- Убраны вызовы из `List`, `DashboardForUser`, `stats.Summary`.
+- Допустимый лаг актуальности данных — до ~1 минуты.
 
 ## Связанные места в коде
 
-- `server/internal/middleware/` — вызов активации на каждый запрос
-- `server/internal/transaction/` — `ActivateDueFutureTransactions`
+- `server/internal/scheduler/` — `FutureRunner`, `runFutureActivation`
+- `server/internal/transaction/` — `ActivateDueFutureTransactions`, `ActivateAllDueFutureTransactions`
 - `server/internal/accountbalance/` — пересчёт балансов после активации
-
-## Открытые вопросы
-
-- Интервал фоновой задачи vs активация «по требованию» при GET `/accounts`
-- Поведение при нескольких инстансах (SQLite — один процесс; для PostgreSQL — блокировки)
-- Метрики и observability (сколько операций активировано за цикл)

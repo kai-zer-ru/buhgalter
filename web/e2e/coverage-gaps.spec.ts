@@ -6,7 +6,12 @@ import { login, apiJSON, waitAppReady } from './helpers/auth';
 import { advanceImportToPreview, commitImportFromPreview } from './helpers/import';
 import { createCashAccount, createIncome } from './helpers/setup-data';
 import { confirmDialog, rowMenuAction } from './helpers/ui';
-import { fillTransactionForm, selectCombobox, selectLabeledCombobox } from './helpers/transactions';
+import {
+	fillEditTxAmount,
+	fillTransactionForm,
+	selectCombobox,
+	selectLabeledCombobox
+} from './helpers/transactions';
 
 test('login with valid credentials', async ({ page }) => {
 	await page.context().clearCookies();
@@ -115,7 +120,7 @@ test('edit income on /transactions', async ({ page }) => {
 	await rowMenuAction(page, row, 'Изменить');
 
 	const dialog = page.getByRole('dialog');
-	await dialog.locator('#tx-amount').fill('199.75');
+	await fillEditTxAmount(dialog, '199.75');
 	await dialog.getByRole('button', { name: 'Сохранить' }).click();
 	await expect(dialog).toHaveCount(0, { timeout: 15_000 });
 	await expect(page.getByRole('row', { name: /199\.75/ })).toBeVisible({ timeout: 10_000 });
@@ -158,7 +163,7 @@ test('edit expense from dashboard recent list', async ({ page }) => {
 	await rowMenuAction(page, row, 'Изменить');
 
 	const dialog = page.getByRole('dialog');
-	await dialog.locator('#tx-amount').fill('66.80');
+	await fillEditTxAmount(dialog, '66.80');
 	await dialog.getByRole('button', { name: 'Сохранить' }).click();
 	await expect(dialog).toHaveCount(0, { timeout: 15_000 });
 	await expect(page.getByText('66.80').first()).toBeVisible({ timeout: 10_000 });

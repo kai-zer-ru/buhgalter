@@ -54,7 +54,6 @@
 
 	async function init() {
 		error = '';
-		accounts = await listAccounts('active');
 		if (editTx?.transfer_group_id) {
 			const legs = transferGroupLegs(editTx, siblings);
 			const metaLeg = legs.length >= 2 ? transferOutLeg(editTx, legs) : editTx;
@@ -67,16 +66,21 @@
 			commission = commissionLeg?.amount_display ?? '';
 			description = metaLeg.description ?? '';
 			dateTimeValue = toDatetimeLocalValue(metaLeg.transaction_date, tz);
-			return;
+		} else {
+			groupId = '';
+			fromAccount = '';
+			toAccount = '';
+			amount = '';
+			commission = '';
+			description = '';
+			dateTimeValue = nowDatetimeLocal(tz);
 		}
-		groupId = '';
-		const primary = defaultAccountId(accounts);
-		fromAccount = primary;
-		toAccount = accounts.find((a) => a.id !== primary)?.id ?? primary;
-		amount = '';
-		commission = '';
-		description = '';
-		dateTimeValue = nowDatetimeLocal(tz);
+		accounts = await listAccounts('active');
+		if (!editTx?.transfer_group_id) {
+			const primary = defaultAccountId(accounts);
+			fromAccount = primary;
+			toAccount = accounts.find((a) => a.id !== primary)?.id ?? primary;
+		}
 	}
 
 	async function save(e: Event) {

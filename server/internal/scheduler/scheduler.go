@@ -11,6 +11,7 @@ import (
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/recurring"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
+	"github.com/kai-zer-ru/buhgalter/internal/transaction"
 )
 
 // CreditRunner applies due credit payments for users at local configured credit debit time.
@@ -23,6 +24,7 @@ type CreditRunner struct {
 type Scheduler struct {
 	Credit           *CreditRunner
 	Recurring        *RecurringRunner
+	Future           *FutureRunner
 	Logger           *slog.Logger
 	stop             chan struct{}
 	mu               sync.Mutex
@@ -35,10 +37,16 @@ type RecurringRunner struct {
 	Logger *slog.Logger
 }
 
-func New(creditRunner *CreditRunner, recurringRunner *RecurringRunner, logger *slog.Logger) *Scheduler {
+type FutureRunner struct {
+	DB     *sql.DB
+	Logger *slog.Logger
+}
+
+func New(creditRunner *CreditRunner, recurringRunner *RecurringRunner, futureRunner *FutureRunner, logger *slog.Logger) *Scheduler {
 	return &Scheduler{
 		Credit:           creditRunner,
 		Recurring:        recurringRunner,
+		Future:           futureRunner,
 		Logger:           logger,
 		stop:             make(chan struct{}),
 		creditLastRun:    make(map[string]string),
@@ -57,6 +65,9 @@ func (s *Scheduler) Stop() {
 func (s *Scheduler) loop() {
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
+	if s.Future != nil {
+		s.runFutureActivation()
+	}
 	for {
 		select {
 		case <-s.stop:
@@ -67,6 +78,9 @@ func (s *Scheduler) loop() {
 			}
 			if s.Recurring != nil {
 				s.runRecurring(now)
+			}
+			if s.Future != nil {
+				s.runFutureActivation()
 			}
 		}
 	}
@@ -149,6 +163,18 @@ func (s *Scheduler) runRecurring(now time.Time) {
 		if applied > 0 {
 			s.Logger.Info("recurring operations applied", "user_id", u.ID, "count", applied)
 		}
+	}
+}
+
+func (s *Scheduler) runFutureActivation() {
+	ctx := context.Background()
+	users, count, err := transaction.ActivateAllDueFutureTransactions(ctx, s.Future.DB)
+	if err != nil {
+		s.Logger.Error("future activation failed", "err", err)
+		return
+	}
+	if users > 0 {
+		s.Logger.Info("future transactions activated", "users", users, "count", count)
 	}
 }
 

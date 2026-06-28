@@ -1,5 +1,16 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 import { selectCombobox, selectLabeledCombobox } from './combobox';
+
+export async function fillEditTxAmount(
+	dialog: Locator,
+	amount: string,
+	expected = new RegExp(amount.replace('.', '\\.'))
+) {
+	const amountInput = dialog.locator('#tx-amount');
+	await amountInput.click();
+	await amountInput.fill(amount);
+	await expect(amountInput).toHaveValue(expected);
+}
 
 export async function fillTransactionForm(
 	page: Page,

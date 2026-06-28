@@ -95,24 +95,28 @@
 
 	async function init() {
 		error = '';
-		accounts = await listAccounts('active');
 		if (transaction) {
 			txType = transaction.type === 'income' ? 'income' : 'expense';
 			amount = formatMoneyDisplay(transaction.amount_display);
 			selectedAccount = transaction.account_id;
 			categoryId = transaction.category_id ?? '';
 			subcategoryId = transaction.subcategory_id ?? '';
+			newSubcategory = '';
 			description = transaction.description ?? '';
 			dateTimeValue = toDatetimeLocalValue(transaction.transaction_date, tz);
 		} else {
 			txType = defaultType;
 			amount = '';
-			selectedAccount = defaultAccountId(accounts, accountId);
+			selectedAccount = '';
 			categoryId = '';
 			subcategoryId = '';
 			newSubcategory = '';
 			description = '';
 			dateTimeValue = nowDatetimeLocal(tz);
+		}
+		accounts = await listAccounts('active');
+		if (!transaction) {
+			selectedAccount = defaultAccountId(accounts, accountId);
 		}
 		await loadCategories();
 	}

@@ -1050,6 +1050,36 @@ func (q *Queries) ListTransactionsFilteredDateDesc(ctx context.Context, arg List
 	return items, nil
 }
 
+const listUsersWithDueFutureTransactions = `-- name: ListUsersWithDueFutureTransactions :many
+SELECT DISTINCT user_id
+FROM transactions
+WHERE kind = 'future'
+  AND transaction_date <= ?
+`
+
+func (q *Queries) ListUsersWithDueFutureTransactions(ctx context.Context, transactionDate string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listUsersWithDueFutureTransactions, transactionDate)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var user_id string
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const sumExpenseManual = `-- name: SumExpenseManual :one
 SELECT COALESCE(SUM(amount), 0) AS total
 FROM transactions

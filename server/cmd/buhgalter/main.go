@@ -93,6 +93,9 @@ func main() {
 	}, &appsched.RecurringRunner{
 		DB:     manager.DB(),
 		Logger: logger,
+	}, &appsched.FutureRunner{
+		DB:     manager.DB(),
+		Logger: logger,
 	}, logger)
 	creditSched.Start()
 	defer creditSched.Stop()
