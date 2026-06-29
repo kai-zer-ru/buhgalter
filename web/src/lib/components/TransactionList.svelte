@@ -8,7 +8,11 @@
 	import TransactionAccountCell from '$lib/components/TransactionAccountCell.svelte';
 	import { formatAPIDateTimeForDisplay } from '$lib/dates';
 	import { formatMoneyDisplay } from '$lib/money';
-	import { transactionAmountSign, canEditTransaction } from '$lib/transaction-display';
+	import {
+		transactionAmountSign,
+		canEditTransaction,
+		canRepeatTransaction
+	} from '$lib/transaction-display';
 
 	let {
 		transactions,
@@ -22,6 +26,7 @@
 		singleAccount = false,
 		ondelete,
 		onedit,
+		onrepeat,
 		onmakeRecurring,
 		descriptionExtra
 	}: {
@@ -36,12 +41,13 @@
 		singleAccount?: boolean;
 		ondelete?: (tx: Transaction) => void;
 		onedit?: (tx: Transaction) => void;
+		onrepeat?: (tx: Transaction) => void;
 		onmakeRecurring?: (tx: Transaction) => void;
 		descriptionExtra?: Snippet<[Transaction]>;
 	} = $props();
 
 	const showActions = $derived(
-		Boolean((showDelete && ondelete) || (showEdit && onedit) || onmakeRecurring)
+		Boolean((showDelete && ondelete) || (showEdit && onedit) || onrepeat || onmakeRecurring)
 	);
 
 	function canMakeRecurring(tx: Transaction): boolean {
@@ -50,6 +56,13 @@
 
 	function rowActions(tx: Transaction): RowAction[] {
 		const actions: RowAction[] = [];
+		if (onrepeat && canRepeatTransaction(tx)) {
+			actions.push({
+				icon: 'create',
+				label: $_('transactions.repeat'),
+				onclick: () => onrepeat(tx)
+			});
+		}
 		if (canMakeRecurring(tx)) {
 			actions.push({
 				icon: 'repeat',

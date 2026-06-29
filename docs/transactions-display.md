@@ -37,6 +37,7 @@ OpenAPI-схемы: [`Transaction`](api/openapi.yaml#/components/schemas/Transac
 | `transferRoute(tx, siblings)` | `{ from, to }` — имена счетов **в направлении движения денег** |
 | `transferAccountIds(tx, siblings?)` | `{ fromAccountId, toAccountId }` для формы редактирования перевода (одна видимая нога + `transfer_is_out`) |
 | `canEditTransaction(tx)` | `false` при `credit_payment_linked` — скрыть «Изменить» в списке |
+| `canRepeatTransaction(tx)` | `false` при `credit_payment_linked` или системной категории (доход/расход); переводы — без ограничения по категории |
 | `formatTransactionAccount(tx, siblings, mode)` | Текст колонки «Счёт» |
 | `transactionAmountSign(tx, opts?)` | Префикс суммы: `+`, `−` или пусто |
 
@@ -125,7 +126,9 @@ OpenAPI: `CreateTransferRequest.commission`, схема `Transfer`.
 
 ## Действия в списке операций
 
-`TransactionList` — меню «⋯» в каждой строке (сделать периодической, изменить, удалить). На мобильных меню в шапке карточки рядом с суммой. Используется на **главной** («Последние операции»), `/transactions`, странице счёта.
+`TransactionList` — меню «⋯» в каждой строке (повторить, сделать периодической, изменить, удалить). На мобильных меню в шапке карточки рядом с суммой. Используется на **главной** («Последние операции»), `/transactions`, странице счёта.
+
+**Повторить** — открывает форму **создания** новой операции с полями из выбранной строки (счёт, категория, сумма, описание; для перевода — счета, сумма, комиссия); дата — текущая. Работает для **дохода**, **расхода** и **перевода**. Доход/расход — `TransactionForm` (`repeatFrom`); перевод — `TransferForm` (`repeatFrom`). Недоступно для операций с `credit_payment_linked` и для дохода/расхода в **системных категориях** (как «Сделать периодической»).
 
 ## Категории с одинаковым именем
 
@@ -139,6 +142,7 @@ OpenAPI: `CreateTransferRequest.commission`, схема `Transfer`.
 
 - `TestTransferRollbackOnError` — атомарность перевода при сбое второй ноги (SQLite-триггер в интеграционном тесте).
 - `money.test.ts` — стабильность курсора в `MoneyInput`.
+- `transaction-display.test.ts` — `canRepeatTransaction` (ограничения как у редактирования).
 
 ## Требование для новых экранов
 

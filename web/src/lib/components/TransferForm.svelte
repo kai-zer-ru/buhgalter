@@ -23,12 +23,20 @@
 	type Props = {
 		open: boolean;
 		editTx?: Transaction | null;
+		repeatFrom?: Transaction | null;
 		siblings?: Transaction[];
 		onclose: () => void;
 		onsaved: () => void;
 	};
 
-	let { open = $bindable(), editTx = null, siblings = [], onclose, onsaved }: Props = $props();
+	let {
+		open = $bindable(),
+		editTx = null,
+		repeatFrom = null,
+		siblings = [],
+		onclose,
+		onsaved
+	}: Props = $props();
 
 	let fromAccount = $state('');
 	let toAccount = $state('');
@@ -49,23 +57,39 @@
 
 	$effect(() => {
 		if (!open) return;
-		void init();
+		void init(editTx, repeatFrom, siblings);
 	});
 
-	async function init() {
+	async function init(
+		editSource: Transaction | null | undefined,
+		repeatSource: Transaction | null | undefined,
+		related: Transaction[]
+	) {
 		error = '';
-		if (editTx?.transfer_group_id) {
-			const legs = transferGroupLegs(editTx, siblings);
-			const metaLeg = legs.length >= 2 ? transferOutLeg(editTx, legs) : editTx;
+		if (editSource?.transfer_group_id) {
+			const legs = transferGroupLegs(editSource, related);
+			const metaLeg = legs.length >= 2 ? transferOutLeg(editSource, legs) : editSource;
 			const commissionLeg = legs.find((leg) => leg.type === 'expense');
-			const { fromAccountId, toAccountId } = transferAccountIds(editTx, siblings);
-			groupId = editTx.transfer_group_id;
+			const { fromAccountId, toAccountId } = transferAccountIds(editSource, related);
+			groupId = editSource.transfer_group_id;
 			fromAccount = fromAccountId;
 			toAccount = toAccountId;
 			amount = metaLeg.amount_display;
 			commission = commissionLeg?.amount_display ?? '';
 			description = metaLeg.description ?? '';
 			dateTimeValue = toDatetimeLocalValue(metaLeg.transaction_date, tz);
+		} else if (repeatSource?.transfer_group_id) {
+			const legs = transferGroupLegs(repeatSource, related);
+			const metaLeg = legs.length >= 2 ? transferOutLeg(repeatSource, legs) : repeatSource;
+			const commissionLeg = legs.find((leg) => leg.type === 'expense');
+			const { fromAccountId, toAccountId } = transferAccountIds(repeatSource, related);
+			groupId = '';
+			fromAccount = fromAccountId;
+			toAccount = toAccountId;
+			amount = metaLeg.amount_display;
+			commission = commissionLeg?.amount_display ?? '';
+			description = metaLeg.description ?? '';
+			dateTimeValue = nowDatetimeLocal(tz);
 		} else {
 			groupId = '';
 			fromAccount = '';
@@ -76,7 +100,7 @@
 			dateTimeValue = nowDatetimeLocal(tz);
 		}
 		accounts = await listAccounts('active');
-		if (!editTx?.transfer_group_id) {
+		if (!editSource?.transfer_group_id && !repeatSource?.transfer_group_id) {
 			const primary = defaultAccountId(accounts);
 			fromAccount = primary;
 			toAccount = accounts.find((a) => a.id !== primary)?.id ?? primary;

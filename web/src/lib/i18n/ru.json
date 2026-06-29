@@ -205,6 +205,7 @@
 	"dashboard.accountsEmpty": "Создайте первый счёт, чтобы учитывать баланс и операции",
 	"transactions.new": "Операция",
 	"transactions.edit": "Редактировать операцию",
+	"transactions.repeat": "Повторить",
 	"transactions.transfer": "Перевод",
 	"transactions.all": "Все операции",
 	"transactions.empty": "Операций пока нет",

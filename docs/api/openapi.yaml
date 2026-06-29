@@ -16,7 +16,7 @@ info:
     `POST /accounts/{id}/primary`, `POST /accounts/{id}/archive`, `DELETE /accounts/{id}`.
     На `/accounts/{id}` — та же форма редактирования в шапке. Поля: название, банк, начальный баланс.
     Подробнее — [ui-row-actions.md](../ui-row-actions.md).
-  version: 1.2.2
+  version: 1.2.3
 servers:
   - url: /api/v1
 paths:

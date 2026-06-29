@@ -29,6 +29,7 @@
 		accountId?: string;
 		defaultType?: 'expense' | 'income';
 		transaction?: Transaction | null;
+		repeatFrom?: Transaction | null;
 		onclose: () => void;
 		onsaved: () => void;
 	};
@@ -38,6 +39,7 @@
 		accountId = '',
 		defaultType = 'expense',
 		transaction = null,
+		repeatFrom = null,
 		onclose,
 		onsaved
 	}: Props = $props();
@@ -62,7 +64,7 @@
 	const accountOptions = $derived(accounts.map((acc) => ({ value: acc.id, label: acc.name })));
 	const pickableCategories = $derived.by(() => {
 		const userCats = categories.filter((cat) => !cat.is_system);
-		if (!editing || !categoryId) return userCats;
+		if ((!editing && !repeatFrom) || !categoryId) return userCats;
 		const current = categories.find((cat) => cat.id === categoryId);
 		if (current?.is_system && !userCats.some((cat) => cat.id === categoryId)) {
 			return [...userCats, current];
@@ -90,22 +92,35 @@
 
 	$effect(() => {
 		if (!open) return;
-		void init();
+		void init(transaction, repeatFrom, defaultType);
 	});
 
-	async function init() {
+	async function init(
+		editSource: Transaction | null,
+		repeatSource: Transaction | null,
+		createType: 'expense' | 'income'
+	) {
 		error = '';
-		if (transaction) {
-			txType = transaction.type === 'income' ? 'income' : 'expense';
-			amount = formatMoneyDisplay(transaction.amount_display);
-			selectedAccount = transaction.account_id;
-			categoryId = transaction.category_id ?? '';
-			subcategoryId = transaction.subcategory_id ?? '';
+		if (editSource) {
+			txType = editSource.type === 'income' ? 'income' : 'expense';
+			amount = formatMoneyDisplay(editSource.amount_display);
+			selectedAccount = editSource.account_id;
+			categoryId = editSource.category_id ?? '';
+			subcategoryId = editSource.subcategory_id ?? '';
 			newSubcategory = '';
-			description = transaction.description ?? '';
-			dateTimeValue = toDatetimeLocalValue(transaction.transaction_date, tz);
+			description = editSource.description ?? '';
+			dateTimeValue = toDatetimeLocalValue(editSource.transaction_date, tz);
+		} else if (repeatSource) {
+			txType = repeatSource.type === 'income' ? 'income' : 'expense';
+			amount = formatMoneyDisplay(repeatSource.amount_display);
+			selectedAccount = repeatSource.account_id;
+			categoryId = repeatSource.category_id ?? '';
+			subcategoryId = repeatSource.subcategory_id ?? '';
+			newSubcategory = '';
+			description = repeatSource.description ?? '';
+			dateTimeValue = nowDatetimeLocal(tz);
 		} else {
-			txType = defaultType;
+			txType = createType;
 			amount = '';
 			selectedAccount = '';
 			categoryId = '';
@@ -115,7 +130,7 @@
 			dateTimeValue = nowDatetimeLocal(tz);
 		}
 		accounts = await listAccounts('active');
-		if (!transaction) {
+		if (!editSource && !repeatSource) {
 			selectedAccount = defaultAccountId(accounts, accountId);
 		}
 		await loadCategories();

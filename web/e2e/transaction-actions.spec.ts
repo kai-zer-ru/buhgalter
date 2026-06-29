@@ -1,6 +1,11 @@
 import { test, expect } from '@playwright/test';
 import { waitAppReady } from './helpers/auth';
-import { createCashAccount, createExpense, createTransfer } from './helpers/setup-data';
+import {
+	createCashAccount,
+	createExpense,
+	createIncome,
+	createTransfer
+} from './helpers/setup-data';
 import { confirmDialog, rowMenuAction } from './helpers/ui';
 import { fillEditTxAmount, selectCombobox } from './helpers/transactions';
 
@@ -85,6 +90,78 @@ test('delete transfer on /transactions', async ({ page }) => {
 	await confirmDialog(page);
 
 	await expect(transferRow).toHaveCount(0, { timeout: 10_000 });
+});
+
+test('repeat expense opens prefilled create form', async ({ page }) => {
+	const tag = Date.now();
+	const account = await createCashAccount(page, `E2E Repeat Exp ${tag}`);
+	const description = `E2E repeat source ${tag}`;
+	await createExpense(page, account.id, '55.25', description);
+
+	await page.goto('/transactions');
+	await waitAppReady(page);
+	await selectCombobox(page, 'tx-filter-account', { label: account.name });
+
+	const row = page.getByRole('row', { name: new RegExp(`${account.name}.*55\\.25`) });
+	await rowMenuAction(page, row, 'Повторить');
+
+	const dialog = page.getByRole('dialog');
+	await expect(dialog.getByRole('heading', { name: 'Расход' })).toBeVisible();
+	await expect(dialog.locator('#tx-amount')).toHaveValue(/55\.25/);
+	await expect(dialog.locator('#tx-desc')).toHaveValue(description);
+	await dialog.getByRole('button', { name: 'Сохранить' }).click();
+	await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+
+	await expect(page.getByRole('row', { name: /55\.25/ })).toHaveCount(2, { timeout: 10_000 });
+});
+
+test('repeat income opens prefilled create form', async ({ page }) => {
+	const tag = Date.now();
+	const account = await createCashAccount(page, `E2E Repeat Inc ${tag}`);
+	const description = `E2E repeat income ${tag}`;
+	await createIncome(page, account.id, '77.75', description);
+
+	await page.goto('/transactions');
+	await waitAppReady(page);
+	await selectCombobox(page, 'tx-filter-account', { label: account.name });
+
+	const row = page.getByRole('row', { name: new RegExp(`${account.name}.*77\\.75`) });
+	await rowMenuAction(page, row, 'Повторить');
+
+	const dialog = page.getByRole('dialog');
+	await expect(dialog.getByRole('heading', { name: 'Доход' })).toBeVisible();
+	await expect(dialog.locator('#tx-amount')).toHaveValue(/77\.75/);
+	await expect(dialog.locator('#tx-desc')).toHaveValue(description);
+	await dialog.getByRole('button', { name: 'Сохранить' }).click();
+	await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+
+	await expect(page.getByRole('row', { name: /77\.75/ })).toHaveCount(2, { timeout: 10_000 });
+});
+
+test('repeat transfer opens prefilled create form', async ({ page }) => {
+	const tag = Date.now();
+	const from = await createCashAccount(page, `E2E Repeat From ${tag}`);
+	const to = await createCashAccount(page, `E2E Repeat To ${tag}`);
+	await createTransfer(page, from.id, to.id, '42.00');
+
+	await page.goto('/transactions');
+	await waitAppReady(page);
+	await selectCombobox(page, 'tx-filter-account', { label: from.name });
+
+	const transferRow = page.getByRole('row', {
+		name: new RegExp(`${from.name}.*${to.name}.*42\\.00`)
+	});
+	await rowMenuAction(page, transferRow, 'Повторить');
+
+	const dialog = page.getByRole('dialog');
+	await expect(dialog.getByRole('heading', { name: 'Перевод' })).toBeVisible();
+	await expect(dialog.locator('#tr-amount')).toHaveValue(/42\.00/);
+	await dialog.getByRole('button', { name: 'Сохранить' }).click();
+	await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+
+	await expect(
+		page.getByRole('row', { name: new RegExp(`${from.name}.*${to.name}.*42\\.00`) })
+	).toHaveCount(2, { timeout: 15_000 });
 });
 
 test('make transaction recurring opens prefilled form', async ({ page }) => {

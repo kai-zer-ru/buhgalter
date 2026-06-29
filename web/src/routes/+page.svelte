@@ -30,6 +30,8 @@
 	let transferOpen = $state(false);
 	let editTx = $state<Transaction | null>(null);
 	let editTransfer = $state<Transaction | null>(null);
+	let repeatTx = $state<Transaction | null>(null);
+	let repeatTransfer = $state<Transaction | null>(null);
 	let newTxType = $state<'expense' | 'income'>('expense');
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
@@ -53,6 +55,7 @@
 
 	function openNewTransaction(type: 'expense' | 'income') {
 		editTx = null;
+		repeatTx = null;
 		newTxType = type;
 		txOpen = true;
 	}
@@ -62,11 +65,33 @@
 		if (tx.type === 'transfer' && tx.transfer_group_id) {
 			editTransfer = tx;
 			editTx = null;
+			repeatTransfer = null;
+			repeatTx = null;
 			transferOpen = true;
 			return;
 		}
 		editTransfer = null;
+		repeatTransfer = null;
+		repeatTx = null;
 		editTx = tx;
+		txOpen = true;
+	}
+
+	function openRepeat(tx: Transaction) {
+		if (tx.credit_payment_linked) return;
+		if (tx.type === 'transfer' && tx.transfer_group_id) {
+			editTransfer = null;
+			editTx = null;
+			repeatTx = null;
+			repeatTransfer = tx;
+			transferOpen = true;
+			return;
+		}
+		editTransfer = null;
+		editTx = null;
+		repeatTransfer = null;
+		repeatTx = tx;
+		newTxType = tx.type === 'income' ? 'income' : 'expense';
 		txOpen = true;
 	}
 
@@ -108,6 +133,7 @@
 				onexpense={() => openNewTransaction('expense')}
 				ontransfer={() => {
 					editTransfer = null;
+					repeatTransfer = null;
 					transferOpen = true;
 				}}
 			/>
@@ -196,6 +222,7 @@
 						showDelete
 						onmakeRecurring={(tx) =>
 							void goto(resolve(`/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`))}
+						onrepeat={openRepeat}
 						onedit={openEdit}
 						ondelete={(tx) => void removeTx(tx)}
 					/>
@@ -214,19 +241,23 @@
 	bind:open={txOpen}
 	defaultType={newTxType}
 	transaction={editTx}
+	repeatFrom={repeatTx}
 	onclose={() => {
 		txOpen = false;
 		editTx = null;
+		repeatTx = null;
 	}}
 	onsaved={load}
 />
 <TransferForm
 	bind:open={transferOpen}
 	editTx={editTransfer}
+	repeatFrom={repeatTransfer}
 	siblings={dash?.recent_transactions ?? []}
 	onclose={() => {
 		transferOpen = false;
 		editTransfer = null;
+		repeatTransfer = null;
 	}}
 	onsaved={load}
 />

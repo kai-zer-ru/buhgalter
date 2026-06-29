@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { test, expect } from '@playwright/test';
 import { selectCombobox, selectLabeledCombobox, fillTransactionForm } from './helpers/transactions';
@@ -6,13 +7,18 @@ import { waitAppReady, apiJSON, formatUTCDateTime } from './helpers/auth';
 import { createCashAccount, createExpense } from './helpers/setup-data';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const appVersion = JSON.parse(readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'))
+	.version as string;
 
 test.describe.configure({ mode: 'serial' });
 
+let cashAccountName = '';
+
 test('create account → add expense → see balance', async ({ page }) => {
+	cashAccountName = `E2E Cash ${Date.now()}`;
 	await page.goto('/accounts/new');
 	await waitAppReady(page);
-	await page.getByLabel('Название').fill('E2E Cash');
+	await page.getByLabel('Название').fill(cashAccountName);
 	await page.getByRole('button', { name: 'Наличные' }).click();
 	await page.getByLabel('Начальный баланс').fill('1000');
 	await page.getByRole('button', { name: 'Создать' }).click();
@@ -21,19 +27,21 @@ test('create account → add expense → see balance', async ({ page }) => {
 	await page.goto('/transactions');
 	await waitAppReady(page);
 	await page.getByRole('button', { name: 'Расход', exact: true }).click();
-	await fillTransactionForm(page, { amount: '250', account: 'E2E Cash' });
+	await fillTransactionForm(page, { amount: '250', account: cashAccountName });
 	await expect(page.getByText('250.00').first()).toBeVisible({ timeout: 10_000 });
 
 	await page.goto('/accounts');
 	await waitAppReady(page);
-	await expect(page.getByRole('link', { name: /E2E Cash.*750/ })).toBeVisible({ timeout: 10_000 });
+	await expect(page.getByRole('link', { name: new RegExp(`${cashAccountName}.*750`) })).toBeVisible(
+		{ timeout: 10_000 }
+	);
 });
 
 test('create income on dashboard', async ({ page }) => {
 	await page.goto('/');
 	await waitAppReady(page);
 	await page.getByRole('button', { name: 'Доход', exact: true }).click();
-	await fillTransactionForm(page, { amount: '100', account: 'E2E Cash' });
+	await fillTransactionForm(page, { amount: '100', account: cashAccountName });
 	await expect(page.getByText('100.00').first()).toBeVisible({ timeout: 10_000 });
 });
 
@@ -54,7 +62,7 @@ test('create transfer', async ({ page }) => {
 	await page.goto('/');
 	await waitAppReady(page);
 	await page.getByRole('button', { name: 'Перевод', exact: true }).click();
-	await selectCombobox(page, 'from-acc', { label: 'E2E Cash' });
+	await selectCombobox(page, 'from-acc', { label: cashAccountName });
 	await selectCombobox(page, 'to-acc', { label: 'E2E Bank' });
 	await page.locator('#tr-amount').fill('100');
 	await page.getByRole('button', { name: 'Сохранить' }).click();
@@ -200,7 +208,7 @@ test('create recurring operation', async ({ page }) => {
 	await page.getByRole('button', { name: 'Добавить' }).click();
 	await page.locator('#recurring-amount-create').fill('99');
 	await page.locator('#recurring-description-create').fill(description);
-	await selectLabeledCombobox(page, 'Счёт', { label: 'E2E Cash' });
+	await selectLabeledCombobox(page, 'Счёт', { label: cashAccountName });
 	await selectLabeledCombobox(page, 'Категория', { index: 0 });
 	await page.getByRole('button', { name: 'Создать' }).click();
 	await expect(page.getByRole('row', { name: new RegExp(description) })).toBeVisible({
@@ -227,7 +235,10 @@ test('admin diagnostics loads', async ({ page }) => {
 	await waitAppReady(page);
 	await expect(page.getByRole('heading', { name: 'Диагностика', level: 2 })).toBeVisible();
 	await expect(page.getByRole('cell', { name: 'app_version', exact: true })).toBeVisible();
-	await expect(page.getByText('1.2.2').first()).toBeVisible();
+	const versionRow = page
+		.getByRole('row')
+		.filter({ has: page.getByRole('cell', { name: 'app_version', exact: true }) });
+	await expect(versionRow.getByRole('cell').nth(1)).toHaveText(appVersion);
 });
 
 test('password reset request on login page', async ({ page }) => {
