@@ -9,6 +9,36 @@ import (
 	"context"
 )
 
+const failInterruptedImportJobs = `-- name: FailInterruptedImportJobs :execrows
+UPDATE import_jobs
+SET status = ?, error_message = ?, finished_at = ?, updated_at = ?
+WHERE status IN (?, ?) AND finished_at IS NULL
+`
+
+type FailInterruptedImportJobsParams struct {
+	Status       string  `json:"status"`
+	ErrorMessage *string `json:"error_message"`
+	FinishedAt   *string `json:"finished_at"`
+	UpdatedAt    string  `json:"updated_at"`
+	Status_2     string  `json:"status_2"`
+	Status_3     string  `json:"status_3"`
+}
+
+func (q *Queries) FailInterruptedImportJobs(ctx context.Context, arg FailInterruptedImportJobsParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, failInterruptedImportJobs,
+		arg.Status,
+		arg.ErrorMessage,
+		arg.FinishedAt,
+		arg.UpdatedAt,
+		arg.Status_2,
+		arg.Status_3,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const getImportIdempotency = `-- name: GetImportIdempotency :one
 SELECT response_json
 FROM import_idempotency
@@ -25,6 +55,43 @@ func (q *Queries) GetImportIdempotency(ctx context.Context, arg GetImportIdempot
 	var response_json string
 	err := row.Scan(&response_json)
 	return response_json, err
+}
+
+const getImportJob = `-- name: GetImportJob :one
+SELECT id, filename, status, error_message, report_json, created_at, started_at, finished_at
+FROM import_jobs WHERE id = ? AND user_id = ?
+`
+
+type GetImportJobParams struct {
+	ID     string `json:"id"`
+	UserID string `json:"user_id"`
+}
+
+type GetImportJobRow struct {
+	ID           string  `json:"id"`
+	Filename     string  `json:"filename"`
+	Status       string  `json:"status"`
+	ErrorMessage *string `json:"error_message"`
+	ReportJson   *string `json:"report_json"`
+	CreatedAt    string  `json:"created_at"`
+	StartedAt    *string `json:"started_at"`
+	FinishedAt   *string `json:"finished_at"`
+}
+
+func (q *Queries) GetImportJob(ctx context.Context, arg GetImportJobParams) (GetImportJobRow, error) {
+	row := q.db.QueryRowContext(ctx, getImportJob, arg.ID, arg.UserID)
+	var i GetImportJobRow
+	err := row.Scan(
+		&i.ID,
+		&i.Filename,
+		&i.Status,
+		&i.ErrorMessage,
+		&i.ReportJson,
+		&i.CreatedAt,
+		&i.StartedAt,
+		&i.FinishedAt,
+	)
+	return i, err
 }
 
 const insertImportIdempotency = `-- name: InsertImportIdempotency :exec
@@ -47,6 +114,32 @@ func (q *Queries) InsertImportIdempotency(ctx context.Context, arg InsertImportI
 		arg.IdempotencyKey,
 		arg.ResponseJson,
 		arg.CreatedAt,
+	)
+	return err
+}
+
+const insertImportJob = `-- name: InsertImportJob :exec
+INSERT INTO import_jobs (id, user_id, filename, status, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?)
+`
+
+type InsertImportJobParams struct {
+	ID        string `json:"id"`
+	UserID    string `json:"user_id"`
+	Filename  string `json:"filename"`
+	Status    string `json:"status"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
+}
+
+func (q *Queries) InsertImportJob(ctx context.Context, arg InsertImportJobParams) error {
+	_, err := q.db.ExecContext(ctx, insertImportJob,
+		arg.ID,
+		arg.UserID,
+		arg.Filename,
+		arg.Status,
+		arg.CreatedAt,
+		arg.UpdatedAt,
 	)
 	return err
 }
@@ -106,4 +199,106 @@ func (q *Queries) ListTransactionDedupRows(ctx context.Context, userID string) (
 		return nil, err
 	}
 	return items, nil
+}
+
+const setImportJobDone = `-- name: SetImportJobDone :exec
+UPDATE import_jobs
+SET status = ?, report_json = ?, error_message = NULL, finished_at = ?, updated_at = ?
+WHERE id = ? AND user_id = ?
+`
+
+type SetImportJobDoneParams struct {
+	Status     string  `json:"status"`
+	ReportJson *string `json:"report_json"`
+	FinishedAt *string `json:"finished_at"`
+	UpdatedAt  string  `json:"updated_at"`
+	ID         string  `json:"id"`
+	UserID     string  `json:"user_id"`
+}
+
+func (q *Queries) SetImportJobDone(ctx context.Context, arg SetImportJobDoneParams) error {
+	_, err := q.db.ExecContext(ctx, setImportJobDone,
+		arg.Status,
+		arg.ReportJson,
+		arg.FinishedAt,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
+	return err
+}
+
+const setImportJobFailed = `-- name: SetImportJobFailed :exec
+UPDATE import_jobs
+SET status = ?, error_message = ?, finished_at = ?, updated_at = ?
+WHERE id = ? AND user_id = ?
+`
+
+type SetImportJobFailedParams struct {
+	Status       string  `json:"status"`
+	ErrorMessage *string `json:"error_message"`
+	FinishedAt   *string `json:"finished_at"`
+	UpdatedAt    string  `json:"updated_at"`
+	ID           string  `json:"id"`
+	UserID       string  `json:"user_id"`
+}
+
+func (q *Queries) SetImportJobFailed(ctx context.Context, arg SetImportJobFailedParams) error {
+	_, err := q.db.ExecContext(ctx, setImportJobFailed,
+		arg.Status,
+		arg.ErrorMessage,
+		arg.FinishedAt,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
+	return err
+}
+
+const setImportJobProgress = `-- name: SetImportJobProgress :exec
+UPDATE import_jobs
+SET report_json = ?, updated_at = ?
+WHERE id = ? AND user_id = ?
+`
+
+type SetImportJobProgressParams struct {
+	ReportJson *string `json:"report_json"`
+	UpdatedAt  string  `json:"updated_at"`
+	ID         string  `json:"id"`
+	UserID     string  `json:"user_id"`
+}
+
+func (q *Queries) SetImportJobProgress(ctx context.Context, arg SetImportJobProgressParams) error {
+	_, err := q.db.ExecContext(ctx, setImportJobProgress,
+		arg.ReportJson,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
+	return err
+}
+
+const setImportJobRunning = `-- name: SetImportJobRunning :exec
+UPDATE import_jobs
+SET status = ?, started_at = ?, updated_at = ?
+WHERE id = ? AND user_id = ?
+`
+
+type SetImportJobRunningParams struct {
+	Status    string  `json:"status"`
+	StartedAt *string `json:"started_at"`
+	UpdatedAt string  `json:"updated_at"`
+	ID        string  `json:"id"`
+	UserID    string  `json:"user_id"`
+}
+
+func (q *Queries) SetImportJobRunning(ctx context.Context, arg SetImportJobRunningParams) error {
+	_, err := q.db.ExecContext(ctx, setImportJobRunning,
+		arg.Status,
+		arg.StartedAt,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
+	return err
 }

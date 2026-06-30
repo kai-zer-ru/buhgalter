@@ -21,21 +21,16 @@ func NotifyAdminsOnUserRegistration(ctx context.Context, db *sql.DB, userID, log
 	if err != nil {
 		return nil
 	}
-	rows, err := db.QueryContext(ctx, `SELECT id FROM users WHERE is_admin = 1`)
+	adminIDs, err := q.ListAdminUserIDs(ctx)
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var adminID string
-		if err := rows.Scan(&adminID); err != nil {
-			return err
-		}
+	for _, adminID := range adminIDs {
 		if err := notifyAdminUserRegistration(ctx, db, q, box, adminID, userID, login, displayName, registeredAt); err != nil {
 			return err
 		}
 	}
-	return rows.Err()
+	return nil
 }
 
 func notifyAdminUserRegistration(ctx context.Context, db *sql.DB, q *sqlcdb.Queries, box *SecretBox, adminID, userID, login, displayName, registeredAt string) error {

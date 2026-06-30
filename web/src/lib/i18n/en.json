@@ -162,7 +162,6 @@
 	"accounts.confirm.delete": "The account and all related data will be permanently deleted.",
 	"accounts.primary.badge": "Primary account",
 	"accounts.primary.set": "Set as primary",
-	"accounts.transactions.placeholder": "Account transactions will appear in the next stage",
 	"categories.title": "Categories",
 	"categories.tab.expense": "Expenses",
 	"categories.tab.income": "Income",

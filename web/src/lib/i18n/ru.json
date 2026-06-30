@@ -162,7 +162,6 @@
 	"accounts.confirm.delete": "Счёт и все связанные данные будут удалены безвозвратно.",
 	"accounts.primary.badge": "Основной счёт",
 	"accounts.primary.set": "Сделать основным",
-	"accounts.transactions.placeholder": "Операции по счёту появятся на следующем этапе",
 	"categories.title": "Категории",
 	"categories.tab.expense": "Расходы",
 	"categories.tab.income": "Доходы",

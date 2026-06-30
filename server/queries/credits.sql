@@ -268,5 +268,23 @@ UPDATE transactions
 SET account_id = ?, updated_at = ?
 WHERE id = ? AND user_id = ? AND kind = 'future';
 
--- name: ListUsersWithTimezone :many
-SELECT id, timezone FROM users;
+-- name: ListActiveCreditsForScheduleRepair :many
+SELECT id, user_id, principal_amount, issue_date, term_months, interest_rate,
+       payment_interval, monthly_payment, added_retroactively
+FROM credits
+WHERE status = 'active' AND payment_interval != 'manual';
+
+-- name: BackdateFirstUnappliedScheduledPayment :execrows
+UPDATE credit_payments SET payment_date = datetime('now', '-1 day')
+WHERE id = (
+    SELECT cp2.id FROM credit_payments cp2
+    WHERE cp2.credit_id = ? AND cp2.is_applied = 0 AND cp2.kind = 'scheduled' LIMIT 1
+);
+
+-- name: CreditPaymentsUnappliedByUser :many
+SELECT cp.id, c.name AS credit_name, cp.amount, cp.payment_date
+FROM credit_payments cp
+JOIN credits c ON c.id = cp.credit_id
+WHERE cp.is_applied = 0 AND cp.kind = 'scheduled'
+  AND c.status = 'active' AND c.user_id = ?;
+

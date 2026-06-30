@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/kai-zer-ru/buhgalter/internal/apperror"
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
+	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 )
 
 type updateUserStatusRequest struct {
@@ -39,27 +40,23 @@ func (h *Handler) UpdateUserStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var login string
-	var fromStatus string
-	err := h.Store.DB().QueryRowContext(r.Context(), `
-		SELECT login, status FROM users WHERE id = ?`, targetID,
-	).Scan(&login, &fromStatus)
+	q := sqlcdb.New(h.Store.DB())
+	current, err := q.GetUserLoginAndStatus(r.Context(), targetID)
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
 		return
 	}
 
-	from := auth.UserStatus(fromStatus)
+	from := auth.UserStatus(current.Status)
 	if !auth.CanTransition(from, to) {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.UserStatusTransition)
 		return
 	}
 
-	_, err = h.Store.DB().ExecContext(r.Context(), `
-		UPDATE users SET status = ?, updated_at = datetime('now') WHERE id = ?`,
-		string(to), targetID,
-	)
-	if err != nil {
+	if err := q.UpdateUserStatus(r.Context(), sqlcdb.UpdateUserStatusParams{
+		Status: string(to),
+		ID:     targetID,
+	}); err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
@@ -71,20 +68,18 @@ func (h *Handler) UpdateUserStatus(w http.ResponseWriter, r *http.Request) {
 	ip := auth.ClientIP(r)
 	_ = h.Audit.Log("admin.user.status", info.User.ID, info.User.Login, ip, map[string]any{
 		"target_id":    targetID,
-		"target_login": login,
-		"from":         fromStatus,
+		"target_login": current.Login,
+		"from":         current.Status,
 		"to":           string(to),
 	})
 
-	var u userItem
-	var isAdmin int
-	var createdAt string
-	_ = h.Store.DB().QueryRowContext(r.Context(), `
-		SELECT id, login, COALESCE(display_name, ''), is_admin, status, created_at
-		FROM users WHERE id = ?`, targetID,
-	).Scan(&u.ID, &u.Login, &u.DisplayName, &isAdmin, &u.Status, &createdAt)
-	u.IsAdmin = isAdmin == 1
-	u.CreatedAt = createdAt
-
-	writeJSON(w, http.StatusOK, u)
+	row, _ := q.GetUserAdminItem(r.Context(), targetID)
+	writeJSON(w, http.StatusOK, userItem{
+		ID:          row.ID,
+		Login:       row.Login,
+		DisplayName: row.DisplayName,
+		IsAdmin:     row.IsAdmin == 1,
+		Status:      row.Status,
+		CreatedAt:   row.CreatedAt,
+	})
 }

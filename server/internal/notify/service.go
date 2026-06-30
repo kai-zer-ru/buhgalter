@@ -432,16 +432,11 @@ func NotifyAdminsOnPasswordReset(ctx context.Context, db *sql.DB, login, display
 	if err != nil {
 		return nil
 	}
-	rows, err := db.QueryContext(ctx, `SELECT id FROM users WHERE is_admin = 1`)
+	adminIDs, err := q.ListAdminUserIDs(ctx)
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var adminID string
-		if err := rows.Scan(&adminID); err != nil {
-			return err
-		}
+	for _, adminID := range adminIDs {
 		if err := q.EnsureNotificationSettings(ctx, adminID); err != nil {
 			continue
 		}
@@ -497,7 +492,7 @@ func NotifyAdminsOnPasswordReset(ctx context.Context, db *sql.DB, login, display
 			_ = appendLog(ctx, q, adminID, TriggerPasswordReset, channel, &entityID, &dateKey, "sent", text)
 		}
 	}
-	return rows.Err()
+	return nil
 }
 
 func appendLog(ctx context.Context, q *sqlcdb.Queries, userID, triggerType, channel string, entityID, dedupDate *string, status, message string) error {
@@ -589,24 +584,24 @@ func decryptSecret(raw *string, box *SecretBox) (string, error) {
 }
 
 func userLanguage(ctx context.Context, db *sql.DB, userID string) (string, error) {
-	var language string
-	if err := db.QueryRowContext(ctx, `SELECT language FROM users WHERE id = ?`, userID).Scan(&language); err != nil {
+	language, err := sqlcdb.New(db).GetUserLanguage(ctx, userID)
+	if err != nil {
 		return "", err
 	}
 	return normalizeLocale(language), nil
 }
 
 func userIsAdmin(ctx context.Context, db *sql.DB, userID string) (bool, error) {
-	var isAdmin int64
-	if err := db.QueryRowContext(ctx, `SELECT is_admin FROM users WHERE id = ?`, userID).Scan(&isAdmin); err != nil {
+	isAdmin, err := sqlcdb.New(db).GetUserIsAdmin(ctx, userID)
+	if err != nil {
 		return false, err
 	}
 	return isAdmin == 1, nil
 }
 
 func registrationEnabled(ctx context.Context, db *sql.DB) (bool, error) {
-	var enabled int64
-	if err := db.QueryRowContext(ctx, `SELECT registration_enabled FROM system_settings WHERE id = 1`).Scan(&enabled); err != nil {
+	enabled, err := sqlcdb.New(db).GetRegistrationEnabled(ctx)
+	if err != nil {
 		return false, err
 	}
 	return enabled == 1, nil
@@ -634,9 +629,13 @@ func rejectRegistrationDependentTrigger(ctx context.Context, db *sql.DB, userID,
 }
 
 func userFormatting(ctx context.Context, db *sql.DB, userID string) (localeCode, timezone, currencyCode string, err error) {
-	if err = db.QueryRowContext(ctx, `SELECT language, timezone, currency FROM users WHERE id = ?`, userID).Scan(&localeCode, &timezone, &currencyCode); err != nil {
+	row, err := sqlcdb.New(db).GetUserFormatting(ctx, userID)
+	if err != nil {
 		return "", "", "", err
 	}
+	localeCode = row.Language
+	timezone = row.Timezone
+	currencyCode = row.Currency
 	if strings.TrimSpace(timezone) == "" {
 		timezone = "Europe/Moscow"
 	}

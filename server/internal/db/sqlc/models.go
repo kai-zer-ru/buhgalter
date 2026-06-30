@@ -182,6 +182,13 @@ type NotificationTemplate struct {
 	UpdatedAt   string `json:"updated_at"`
 }
 
+type PasswordResetRequest struct {
+	ID          string  `json:"id"`
+	UserID      string  `json:"user_id"`
+	CreatedAt   string  `json:"created_at"`
+	DismissedAt *string `json:"dismissed_at"`
+}
+
 type RecurringOperation struct {
 	ID            string  `json:"id"`
 	UserID        string  `json:"user_id"`

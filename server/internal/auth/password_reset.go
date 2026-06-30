@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/notify"
 )
 
@@ -37,15 +38,11 @@ func RequestPasswordReset(ctx context.Context, db *sql.DB, login string) error {
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	requestID := uuid.NewString()
-	_, err = db.ExecContext(ctx, `
-		INSERT INTO password_reset_requests (id, user_id, created_at, dismissed_at)
-		VALUES (?, ?, ?, NULL)
-		ON CONFLICT(user_id) DO UPDATE SET
-			created_at = excluded.created_at,
-			dismissed_at = NULL`,
-		requestID, user.ID, now,
-	)
-	if err != nil {
+	if err := queries(db).UpsertPasswordResetRequest(ctx, sqlcdb.UpsertPasswordResetRequestParams{
+		ID:        requestID,
+		UserID:    user.ID,
+		CreatedAt: now,
+	}); err != nil {
 		return err
 	}
 	displayName := user.DisplayName
@@ -54,40 +51,30 @@ func RequestPasswordReset(ctx context.Context, db *sql.DB, login string) error {
 }
 
 func ListPendingPasswordResetRequests(ctx context.Context, db *sql.DB) ([]PasswordResetRequest, error) {
-	rows, err := db.QueryContext(ctx, `
-		SELECT r.id, r.user_id, u.login, COALESCE(u.display_name, ''), r.created_at
-		FROM password_reset_requests r
-		JOIN users u ON u.id = r.user_id
-		WHERE r.dismissed_at IS NULL
-		ORDER BY r.created_at ASC`)
+	rows, err := queries(db).ListPendingPasswordResetRequests(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	out := make([]PasswordResetRequest, 0)
-	for rows.Next() {
-		var item PasswordResetRequest
-		if err := rows.Scan(&item.ID, &item.UserID, &item.Login, &item.DisplayName, &item.CreatedAt); err != nil {
-			return nil, err
-		}
-		out = append(out, item)
+	out := make([]PasswordResetRequest, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, PasswordResetRequest{
+			ID:          row.ID,
+			UserID:      row.UserID,
+			Login:       row.Login,
+			DisplayName: row.DisplayName,
+			CreatedAt:   row.CreatedAt,
+		})
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 func DismissPasswordResetRequest(ctx context.Context, db *sql.DB, requestID string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
-	res, err := db.ExecContext(ctx, `
-		UPDATE password_reset_requests
-		SET dismissed_at = ?
-		WHERE id = ? AND dismissed_at IS NULL`,
-		now, requestID,
-	)
-	if err != nil {
-		return err
-	}
-	n, err := res.RowsAffected()
+	n, err := queries(db).DismissPasswordResetRequest(ctx, sqlcdb.DismissPasswordResetRequestParams{
+		DismissedAt: &now,
+		ID:          requestID,
+	})
 	if err != nil {
 		return err
 	}
@@ -99,25 +86,19 @@ func DismissPasswordResetRequest(ctx context.Context, db *sql.DB, requestID stri
 
 func DismissPasswordResetRequestsForUser(ctx context.Context, db *sql.DB, userID string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
-	_, err := db.ExecContext(ctx, `
-		UPDATE password_reset_requests
-		SET dismissed_at = ?
-		WHERE user_id = ? AND dismissed_at IS NULL`,
-		now, userID,
-	)
-	return err
+	return queries(db).DismissPasswordResetRequestsForUser(ctx, sqlcdb.DismissPasswordResetRequestsForUserParams{
+		DismissedAt: &now,
+		UserID:      userID,
+	})
 }
 
 func SetUserPassword(ctx context.Context, db *sql.DB, userID, passwordHash string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
-	res, err := db.ExecContext(ctx, `
-		UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?`,
-		passwordHash, now, userID,
-	)
-	if err != nil {
-		return err
-	}
-	n, err := res.RowsAffected()
+	n, err := queries(db).UpdateUserPassword(ctx, sqlcdb.UpdateUserPasswordParams{
+		PasswordHash: passwordHash,
+		UpdatedAt:    now,
+		ID:           userID,
+	})
 	if err != nil {
 		return err
 	}

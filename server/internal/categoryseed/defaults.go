@@ -93,21 +93,16 @@ func EnsureSystemCategories(ctx context.Context, db sqlcdb.DBTX, userID string) 
 
 // BackfillSystemCategories ensures system categories for all existing users.
 func BackfillSystemCategories(ctx context.Context, db *sql.DB) error {
-	rows, err := db.QueryContext(ctx, `SELECT id FROM users`)
+	userIDs, err := sqlcdb.New(db).ListUserIDs(ctx)
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var userID string
-		if err := rows.Scan(&userID); err != nil {
-			return err
-		}
+	for _, userID := range userIDs {
 		if err := EnsureSystemCategories(ctx, db, userID); err != nil {
 			return err
 		}
 	}
-	return rows.Err()
+	return nil
 }
 
 // DebtCategoryID returns the system «Долги» category id for the given type.

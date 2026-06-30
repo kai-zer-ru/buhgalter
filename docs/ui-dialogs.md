@@ -151,7 +151,7 @@ API: `POST /api/v1/admin/backups/restore` (multipart `file` + `confirm`). См. 
 - Destructive: `btn-danger` в `layout.css` (`var(--danger)`)
 - Прокрутка: одна зона на модалку, кастомные скроллбары — см. [ui-stable-layout.md](ui-stable-layout.md)
 
-## Где уже применено (этапы 1–5)
+## Где уже применено
 
 - Удаление счёта
 - Удаление категории / подкатегории
@@ -185,7 +185,7 @@ API: `POST /api/v1/admin/backups/restore` (multipart `file` + `confirm`). См. 
 ## Коды ошибок API (формы)
 
 Ответы `4xx` с телом `{ "error": { "code", "message" } }` — показывать `message` пользователю.  
-Полный список кодов этапа 1 — схема `ApiError` в [api/openapi.yaml](api/openapi.yaml).
+Полный список кодов — схема `ApiError` в [api/openapi.yaml](api/openapi.yaml).
 
 Примеры для настроек → пароль:
 

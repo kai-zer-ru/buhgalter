@@ -63,6 +63,22 @@ func (q *Queries) ApplyScheduledPayment(ctx context.Context, arg ApplyScheduledP
 	return result.RowsAffected()
 }
 
+const backdateFirstUnappliedScheduledPayment = `-- name: BackdateFirstUnappliedScheduledPayment :execrows
+UPDATE credit_payments SET payment_date = datetime('now', '-1 day')
+WHERE id = (
+    SELECT cp2.id FROM credit_payments cp2
+    WHERE cp2.credit_id = ? AND cp2.is_applied = 0 AND cp2.kind = 'scheduled' LIMIT 1
+)
+`
+
+func (q *Queries) BackdateFirstUnappliedScheduledPayment(ctx context.Context, creditID string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, backdateFirstUnappliedScheduledPayment, creditID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const closeCredit = `-- name: CloseCredit :execrows
 UPDATE credits
 SET status = 'closed', closed_at = ?, updated_at = ?
@@ -110,6 +126,49 @@ func (q *Queries) CountCreditPayments(ctx context.Context, creditID string) (int
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const creditPaymentsUnappliedByUser = `-- name: CreditPaymentsUnappliedByUser :many
+SELECT cp.id, c.name AS credit_name, cp.amount, cp.payment_date
+FROM credit_payments cp
+JOIN credits c ON c.id = cp.credit_id
+WHERE cp.is_applied = 0 AND cp.kind = 'scheduled'
+  AND c.status = 'active' AND c.user_id = ?
+`
+
+type CreditPaymentsUnappliedByUserRow struct {
+	ID          string  `json:"id"`
+	CreditName  *string `json:"credit_name"`
+	Amount      int64   `json:"amount"`
+	PaymentDate string  `json:"payment_date"`
+}
+
+func (q *Queries) CreditPaymentsUnappliedByUser(ctx context.Context, userID string) ([]CreditPaymentsUnappliedByUserRow, error) {
+	rows, err := q.db.QueryContext(ctx, creditPaymentsUnappliedByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CreditPaymentsUnappliedByUserRow{}
+	for rows.Next() {
+		var i CreditPaymentsUnappliedByUserRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.CreditName,
+			&i.Amount,
+			&i.PaymentDate,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const deleteCredit = `-- name: DeleteCredit :execrows
@@ -543,6 +602,58 @@ func (q *Queries) InsertCreditPayment(ctx context.Context, arg InsertCreditPayme
 	return err
 }
 
+const listActiveCreditsForScheduleRepair = `-- name: ListActiveCreditsForScheduleRepair :many
+SELECT id, user_id, principal_amount, issue_date, term_months, interest_rate,
+       payment_interval, monthly_payment, added_retroactively
+FROM credits
+WHERE status = 'active' AND payment_interval != 'manual'
+`
+
+type ListActiveCreditsForScheduleRepairRow struct {
+	ID                 string  `json:"id"`
+	UserID             string  `json:"user_id"`
+	PrincipalAmount    int64   `json:"principal_amount"`
+	IssueDate          string  `json:"issue_date"`
+	TermMonths         int64   `json:"term_months"`
+	InterestRate       float64 `json:"interest_rate"`
+	PaymentInterval    string  `json:"payment_interval"`
+	MonthlyPayment     int64   `json:"monthly_payment"`
+	AddedRetroactively int64   `json:"added_retroactively"`
+}
+
+func (q *Queries) ListActiveCreditsForScheduleRepair(ctx context.Context) ([]ListActiveCreditsForScheduleRepairRow, error) {
+	rows, err := q.db.QueryContext(ctx, listActiveCreditsForScheduleRepair)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListActiveCreditsForScheduleRepairRow{}
+	for rows.Next() {
+		var i ListActiveCreditsForScheduleRepairRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.PrincipalAmount,
+			&i.IssueDate,
+			&i.TermMonths,
+			&i.InterestRate,
+			&i.PaymentInterval,
+			&i.MonthlyPayment,
+			&i.AddedRetroactively,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCreditPaymentTransactionIDs = `-- name: ListCreditPaymentTransactionIDs :many
 SELECT transaction_id FROM credit_payments
 WHERE credit_id = ? AND transaction_id IS NOT NULL
@@ -827,38 +938,6 @@ func (q *Queries) ListDueCreditPayments(ctx context.Context, paymentDate string)
 			&i.DebitTimeLocal,
 			&i.CreditStatus,
 		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listUsersWithTimezone = `-- name: ListUsersWithTimezone :many
-SELECT id, timezone FROM users
-`
-
-type ListUsersWithTimezoneRow struct {
-	ID       string `json:"id"`
-	Timezone string `json:"timezone"`
-}
-
-func (q *Queries) ListUsersWithTimezone(ctx context.Context) ([]ListUsersWithTimezoneRow, error) {
-	rows, err := q.db.QueryContext(ctx, listUsersWithTimezone)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListUsersWithTimezoneRow{}
-	for rows.Next() {
-		var i ListUsersWithTimezoneRow
-		if err := rows.Scan(&i.ID, &i.Timezone); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: Бухгалтер API
   description: |
-    API приложения «Бухгалтер» (этапы 0–8).
+    API приложения «Бухгалтер» для учёта личных финансов.
 
     Ответы с ошибками (`4xx`, `5xx`) используют объект `error` с полями `code`, `message` и опционально
     **`field`** — имя поля тела запроса для подсветки в форме UI (например `monthly_payment`, `term_months`).
@@ -104,7 +104,7 @@ paths:
           description: Настройка уже выполнена
   /setup/restore:
     post:
-      summary: Восстановить БД на этапе setup
+      summary: Восстановить БД до завершения настройки
       description: |
         Доступно до завершения первичной настройки.
         Multipart: поле `file` (`.db`) и `confirm=RESTORE`.
@@ -358,6 +358,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+              examples:
+                validation:
+                  $ref: '#/components/examples/ApiErrorValidation'
   /user/tokens/{id}:
     delete:
       summary: Отозвать API-токен
@@ -1059,7 +1062,7 @@ paths:
       summary: Статистика по подкатегориям
       description: |
         Агрегация по подкатегориям с привязкой к родительской категории.
-        В веб-интерфейсе `/stats` не отображается (с v1.2.1); endpoint сохранён для API-клиентов.
+        В веб-интерфейсе `/stats` не отображается; endpoint доступен для API-клиентов.
       security:
         - sessionCookie: []
         - bearerAuth: []
@@ -1651,7 +1654,7 @@ paths:
         - для `manual` — только переданные `seed_payments` (ровно `term` строк; сумма подгоняется последним платежом).
 
         **Ипотека** (`credit_kind=mortgage`):
-        - периодичность в MVP — только `month`;
+        - для ипотеки поддерживается только периодичность `month`;
         - автоматический платёж: ежедневное начисление процентов, бинарный поиск равного платежа;
           платежи 1…N−1 равны `calculated_monthly_payment`, последний — остаток + проценты;
         - ручной `monthly_payment` (например из договора банка): платежи 1…N−1 равны введённой сумме,
@@ -3548,7 +3551,7 @@ components:
         payment_interval:
           type: string
           enum: [month, week, two_weeks, manual]
-          description: Для credit_kind=mortgage в MVP используется month
+          description: Для credit_kind=mortgage допустимо только значение month
         paid_amount:
           oneOf:
             - type: string
@@ -3758,7 +3761,7 @@ components:
         payment_interval:
           type: string
           enum: [month, week, two_weeks, manual]
-          description: Для credit_kind=mortgage в MVP используется month
+          description: Для credit_kind=mortgage допустимо только значение month
         issue_date:
           type: string
           description: Дата выдачи, UTC `YYYY-MM-DD HH:MM:SS`
@@ -3950,7 +3953,7 @@ components:
           type: string
           format: date-time
           nullable: true
-          description: `null` — бессрочный токен
+          description: "`null` — бессрочный токен"
         last_used_at:
           type: string
           format: date-time
@@ -3970,7 +3973,7 @@ components:
         expires_at:
           type: string
           format: date-time
-          description: Явная дата истечения (RFC3339); игнорируется при `never_expires: true`
+          description: "Явная дата истечения (RFC3339); игнорируется при `never_expires: true`"
     APITokenCreated:
       allOf:
         - $ref: '#/components/schemas/APIToken'
@@ -3982,4 +3985,4 @@ components:
               description: Полное значение токена (только в ответе на создание)
             never_expires:
               type: boolean
-              description: `true`, если токен бессрочный
+              description: "`true`, если токен бессрочный"

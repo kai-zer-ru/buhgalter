@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 )
 
 const (
@@ -51,12 +52,14 @@ func CreateSession(ctx context.Context, db *sql.DB, userID, ip, userAgent string
 	id := uuid.NewString()
 	expiresAt := time.Now().UTC().Add(IdleTimeout)
 
-	_, err = db.ExecContext(ctx, `
-		INSERT INTO sessions (id, user_id, token_hash, last_activity, expires_at, ip_address, user_agent)
-		VALUES (?, ?, ?, datetime('now'), ?, ?, ?)`,
-		id, userID, tokenHash, expiresAt.UTC().Format(time.RFC3339), nullStr(ip), nullStr(userAgent),
-	)
-	if err != nil {
+	if err := queries(db).InsertSession(ctx, sqlcdb.InsertSessionParams{
+		ID:        id,
+		UserID:    userID,
+		TokenHash: tokenHash,
+		ExpiresAt: expiresAt.UTC().Format(time.RFC3339),
+		IpAddress: optionalString(ip),
+		UserAgent: optionalString(userAgent),
+	}); err != nil {
 		return "", fmt.Errorf("insert session: %w", err)
 	}
 	return rawToken, nil
@@ -68,12 +71,7 @@ func LookupSession(ctx context.Context, db *sql.DB, rawToken string) (*Session, 
 	}
 
 	hash := HashToken(rawToken)
-	var s Session
-	var lastActivity, expiresAt string
-	err := db.QueryRowContext(ctx, `
-		SELECT id, user_id, last_activity, expires_at
-		FROM sessions WHERE token_hash = ?`, hash,
-	).Scan(&s.ID, &s.UserID, &lastActivity, &expiresAt)
+	row, err := queries(db).GetSessionByTokenHash(ctx, hash)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, errors.New("session not found")
@@ -81,13 +79,9 @@ func LookupSession(ctx context.Context, db *sql.DB, rawToken string) (*Session, 
 		return nil, err
 	}
 
-	s.LastActivity, err = time.Parse(time.RFC3339, lastActivity)
+	s, err := sessionFromRow(row.ID, row.UserID, row.LastActivity, row.ExpiresAt)
 	if err != nil {
-		s.LastActivity, _ = time.Parse("2006-01-02 15:04:05", lastActivity)
-	}
-	s.ExpiresAt, err = time.Parse(time.RFC3339, expiresAt)
-	if err != nil {
-		s.ExpiresAt, _ = time.Parse("2006-01-02 15:04:05", expiresAt)
+		return nil, err
 	}
 
 	now := time.Now().UTC()
@@ -96,15 +90,12 @@ func LookupSession(ctx context.Context, db *sql.DB, rawToken string) (*Session, 
 		return nil, errors.New("session expired")
 	}
 
-	_, _ = db.ExecContext(ctx, `
-		UPDATE sessions
-		SET last_activity = datetime('now'),
-		    expires_at = ?
-		WHERE id = ?`,
-		now.Add(IdleTimeout).Format(time.RFC3339), s.ID,
-	)
+	_ = queries(db).TouchSession(ctx, sqlcdb.TouchSessionParams{
+		ExpiresAt: now.Add(IdleTimeout).Format(time.RFC3339),
+		ID:        s.ID,
+	})
 
-	return &s, nil
+	return s, nil
 }
 
 // LookupSessionWithUser loads session and user in one query.
@@ -114,38 +105,19 @@ func LookupSessionWithUser(ctx context.Context, db *sql.DB, rawToken string) (*S
 	}
 
 	hash := HashToken(rawToken)
-	var s Session
-	var u User
-	var isAdmin int
-	var lastActivity, expiresAt string
-	err := db.QueryRowContext(ctx, `
-		SELECT s.id, s.user_id, s.last_activity, s.expires_at,
-		       u.id, u.login, COALESCE(u.display_name, ''), u.is_admin, u.status,
-		       u.language, u.currency, u.timezone, u.theme
-		FROM sessions s
-		JOIN users u ON u.id = s.user_id
-		WHERE s.token_hash = ?`, hash,
-	).Scan(
-		&s.ID, &s.UserID, &lastActivity, &expiresAt,
-		&u.ID, &u.Login, &u.DisplayName, &isAdmin, &u.Status,
-		&u.Language, &u.Currency, &u.Timezone, &u.Theme,
-	)
+	row, err := queries(db).GetSessionWithUser(ctx, hash)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil, errors.New("session not found")
 		}
 		return nil, nil, err
 	}
-	u.IsAdmin = isAdmin == 1
 
-	s.LastActivity, err = time.Parse(time.RFC3339, lastActivity)
+	s, err := sessionFromRow(row.ID, row.UserID, row.LastActivity, row.ExpiresAt)
 	if err != nil {
-		s.LastActivity, _ = time.Parse("2006-01-02 15:04:05", lastActivity)
+		return nil, nil, err
 	}
-	s.ExpiresAt, err = time.Parse(time.RFC3339, expiresAt)
-	if err != nil {
-		s.ExpiresAt, _ = time.Parse("2006-01-02 15:04:05", expiresAt)
-	}
+	u := userFromSessionRow(row)
 
 	now := time.Now().UTC()
 	if now.After(s.ExpiresAt) || now.Sub(s.LastActivity) > IdleTimeout {
@@ -153,31 +125,25 @@ func LookupSessionWithUser(ctx context.Context, db *sql.DB, rawToken string) (*S
 		return nil, nil, errors.New("session expired")
 	}
 
-	_, _ = db.ExecContext(ctx, `
-		UPDATE sessions
-		SET last_activity = datetime('now'),
-		    expires_at = ?
-		WHERE id = ?`,
-		now.Add(IdleTimeout).Format(time.RFC3339), s.ID,
-	)
+	_ = queries(db).TouchSession(ctx, sqlcdb.TouchSessionParams{
+		ExpiresAt: now.Add(IdleTimeout).Format(time.RFC3339),
+		ID:        s.ID,
+	})
 
-	return &s, &u, nil
+	return s, u, nil
 }
 
 func DeleteSessionByToken(ctx context.Context, db *sql.DB, rawToken string) error {
 	hash := HashToken(rawToken)
-	_, err := db.ExecContext(ctx, `DELETE FROM sessions WHERE token_hash = ?`, hash)
-	return err
+	return queries(db).DeleteSessionByTokenHash(ctx, hash)
 }
 
 func DeleteSessionByID(ctx context.Context, db *sql.DB, id string) error {
-	_, err := db.ExecContext(ctx, `DELETE FROM sessions WHERE id = ?`, id)
-	return err
+	return queries(db).DeleteSessionByID(ctx, id)
 }
 
 func DeleteSessionsByUserID(ctx context.Context, db *sql.DB, userID string) error {
-	_, err := db.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ?`, userID)
-	return err
+	return queries(db).DeleteSessionsByUserID(ctx, userID)
 }
 
 func VerifyToken(ctx context.Context, db *sql.DB, rawToken string) bool {
@@ -192,55 +158,64 @@ func LookupAPIToken(ctx context.Context, db *sql.DB, rawToken string) (userID st
 		return "", errors.New("empty token")
 	}
 	hash := HashToken(rawToken)
-	var tokenID string
-	var expiresAt sql.NullString
-	err = db.QueryRowContext(ctx, `
-		SELECT id, user_id, expires_at FROM api_tokens WHERE token_hash = ?`, hash,
-	).Scan(&tokenID, &userID, &expiresAt)
+	row, err := queries(db).GetAPITokenByHash(ctx, hash)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", errors.New("api token not found")
 		}
 		return "", err
 	}
-	if expiresAt.Valid && expiresAt.String != "" {
-		t, parseErr := time.Parse(time.RFC3339, expiresAt.String)
-		if parseErr != nil {
-			t, _ = time.Parse("2006-01-02 15:04:05", expiresAt.String)
-		}
-		if time.Now().UTC().After(t) {
-			return "", errors.New("api token expired")
-		}
+	if apiTokenExpired(row.ExpiresAt) {
+		return "", errors.New("api token expired")
 	}
-	_, _ = db.ExecContext(ctx, `UPDATE api_tokens SET last_used_at = datetime('now') WHERE id = ?`, tokenID)
-	return userID, nil
+	_ = queries(db).TouchAPITokenByID(ctx, row.ID)
+	return row.UserID, nil
 }
 
 func verifyAPIToken(ctx context.Context, db *sql.DB, rawToken string) bool {
 	hash := HashToken(rawToken)
-	var expiresAt sql.NullString
-	err := db.QueryRowContext(ctx, `
-		SELECT expires_at FROM api_tokens WHERE token_hash = ?`, hash,
-	).Scan(&expiresAt)
+	expiresAt, err := queries(db).GetAPITokenExpiresAt(ctx, hash)
 	if err != nil {
 		return false
 	}
-	if expiresAt.Valid && expiresAt.String != "" {
-		t, err := time.Parse(time.RFC3339, expiresAt.String)
-		if err != nil {
-			t, _ = time.Parse("2006-01-02 15:04:05", expiresAt.String)
-		}
-		if time.Now().UTC().After(t) {
-			return false
-		}
+	if apiTokenExpired(expiresAt) {
+		return false
 	}
-	_, _ = db.ExecContext(ctx, `UPDATE api_tokens SET last_used_at = datetime('now') WHERE token_hash = ?`, hash)
+	_ = queries(db).TouchAPITokenByHash(ctx, hash)
 	return true
 }
 
-func nullStr(s string) any {
-	if s == "" {
-		return nil
+func sessionFromRow(id, userID, lastActivity, expiresAt string) (*Session, error) {
+	var s Session
+	s.ID = id
+	s.UserID = userID
+	var err error
+	s.LastActivity, err = parseTime(lastActivity)
+	if err != nil {
+		return nil, err
 	}
-	return s
+	s.ExpiresAt, err = parseTime(expiresAt)
+	if err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
+func parseTime(value string) (time.Time, error) {
+	t, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		t, err = time.Parse("2006-01-02 15:04:05", value)
+	}
+	return t, err
+}
+
+func apiTokenExpired(expiresAt *string) bool {
+	if expiresAt == nil || *expiresAt == "" {
+		return false
+	}
+	t, err := parseTime(*expiresAt)
+	if err != nil {
+		return false
+	}
+	return time.Now().UTC().After(t)
 }

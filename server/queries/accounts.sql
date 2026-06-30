@@ -149,3 +149,6 @@ WHERE id = ? AND user_id = ?;
 SELECT id, initial_balance
 FROM accounts
 WHERE user_id = ?;
+
+-- name: ListDistinctAccountUserIDs :many
+SELECT DISTINCT user_id FROM accounts;

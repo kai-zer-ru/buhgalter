@@ -17,6 +17,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/bank"
 	"github.com/kai-zer-ru/buhgalter/internal/config"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
+	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/httpserver"
 	"github.com/kai-zer-ru/buhgalter/internal/importexport"
 	"github.com/kai-zer-ru/buhgalter/internal/locale"
@@ -138,28 +139,22 @@ func syncAppVersion(db *sql.DB, version string) error {
 		return nil
 	}
 
-	var current sql.NullString
-	if err := db.QueryRow(`SELECT app_version FROM system_settings WHERE id = 1`).Scan(&current); err != nil {
+	q := sqlcdb.New(db)
+	current, err := q.GetAppVersion(context.Background())
+	if err != nil {
 		return err
 	}
-	currentVersion := strings.TrimSpace(current.String)
+	currentVersion := strings.TrimSpace(current)
 	if currentVersion == version {
 		return nil
 	}
+	ctx := context.Background()
 	if currentVersion == "" {
-		_, err := db.Exec(`
-			UPDATE system_settings
-			SET app_version = ?, previous_app_version = NULL, updated_at = datetime('now')
-			WHERE id = 1`,
-			version,
-		)
-		return err
+		return q.SetAppVersionFirst(ctx, version)
 	}
-	_, err := db.Exec(`
-		UPDATE system_settings
-		SET previous_app_version = ?, app_version = ?, updated_at = datetime('now')
-		WHERE id = 1`,
-		currentVersion, version,
-	)
-	return err
+	prev := currentVersion
+	return q.SetAppVersionUpgrade(ctx, sqlcdb.SetAppVersionUpgradeParams{
+		PreviousAppVersion: &prev,
+		AppVersion:         version,
+	})
 }

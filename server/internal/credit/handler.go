@@ -13,6 +13,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/audit"
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
+	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/money"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
 )
@@ -406,17 +407,11 @@ func (h *Handler) E2EApplyDue(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_INVALID_DEBIT_TIME")
 		return
 	}
-	res, err := sqlDB.ExecContext(ctx, `
-		UPDATE credit_payments SET payment_date = datetime('now', '-1 day')
-		WHERE id = (
-			SELECT id FROM credit_payments
-			WHERE credit_id = ? AND is_applied = 0 AND kind = 'scheduled' LIMIT 1
-		)`, creditID)
+	n, err := sqlcdb.New(sqlDB).BackdateFirstUnappliedScheduledPayment(ctx, creditID)
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
-	n, _ := res.RowsAffected()
 	if n == 0 {
 		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
 		return

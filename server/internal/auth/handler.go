@@ -10,6 +10,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/apperror"
 	"github.com/kai-zer-ru/buhgalter/internal/audit"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
+	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	appmw "github.com/kai-zer-ru/buhgalter/internal/middleware"
 	"github.com/kai-zer-ru/buhgalter/internal/notify"
 )
@@ -143,9 +144,8 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
-	var enabled int
-	if err := h.Store.DB().QueryRowContext(r.Context(), `
-		SELECT registration_enabled FROM system_settings WHERE id = 1`).Scan(&enabled); err != nil {
+	enabled, err := sqlcdb.New(h.Store.DB()).GetRegistrationEnabled(r.Context())
+	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}

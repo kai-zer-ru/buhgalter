@@ -43,8 +43,8 @@ ER-диаграмма: [data-model.md](data-model.md).
 
 | Название | Тип | Иконка | Назначение |
 |----------|-----|--------|------------|
-| Долги | income, expense | `loan` | Операции по долгам (этап 4) |
-| Кредиты | expense | `loan` | Платежи по кредитам (этап 5) |
+| Долги | income, expense | `loan` | Операции по долгам |
+| Кредиты | expense | `loan` | Платежи по кредитам |
 | Комиссия | expense | `percent` | Комиссия за перевод между счетами (v1.1) |
 
 Seed при создании пользователя + backfill при старте БД (`categoryseed.EnsureSystemCategories`). `PUT` / `DELETE` → `403 Forbidden`; `POST /categories/{id}/subcategories` → `403 Forbidden`; `POST /categories/{id}/primary` → `403 Forbidden`. В UI настроек — только просмотр, без раскрытия подкатегорий.
