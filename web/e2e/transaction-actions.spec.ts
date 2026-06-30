@@ -198,6 +198,37 @@ test('delete expense from dashboard recent list', async ({ page }) => {
 	await expect(page.getByRole('row', { name: /77\.00/ })).toHaveCount(0, { timeout: 10_000 });
 });
 
+test('transfer form excludes selected account from opposite select', async ({ page }) => {
+	const tag = Date.now();
+	const from = await createCashAccount(page, `E2E Tr Excl From ${tag}`);
+	const to = await createCashAccount(page, `E2E Tr Excl To ${tag}`);
+
+	await page.goto('/');
+	await waitAppReady(page);
+	await page.getByRole('button', { name: 'Перевод', exact: true }).click();
+
+	const dialog = page.getByRole('dialog');
+	await selectCombobox(page, 'from-acc', { label: from.name });
+
+	const toList = page.locator('#to-acc-list');
+	await page.locator('#to-acc').click();
+	await expect(toList).toBeVisible();
+	await expect(toList.getByRole('button', { name: from.name, exact: true })).toHaveCount(0);
+	await expect(toList.getByRole('button', { name: to.name, exact: true })).toBeVisible();
+	await toList.getByRole('button', { name: to.name, exact: true }).click();
+
+	const fromList = page.locator('#from-acc-list');
+	await page.locator('#from-acc').click();
+	await expect(fromList).toBeVisible();
+	await expect(fromList.getByRole('button', { name: to.name, exact: true })).toHaveCount(0);
+	await expect(fromList.getByRole('button', { name: from.name, exact: true })).toBeVisible();
+	await fromList.getByRole('button', { name: from.name, exact: true }).click();
+
+	await dialog.locator('#tr-amount').fill('12.50');
+	await dialog.getByRole('button', { name: 'Сохранить' }).click();
+	await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+});
+
 test('create transfer with commission', async ({ page }) => {
 	const from = await createCashAccount(page, 'E2E Comm From');
 	const to = await createCashAccount(page, 'E2E Comm To');

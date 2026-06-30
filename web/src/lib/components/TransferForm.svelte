@@ -16,6 +16,7 @@
 	import { defaultAccountId } from '$lib/accounts';
 	import { fromDatetimeLocalValue, nowDatetimeLocal, toDatetimeLocalValue } from '$lib/dates';
 	import { toAPIAmount } from '$lib/money';
+	import { pickOtherAccountId, transferAccountOptions } from '$lib/transfer-accounts';
 	import { transferAccountIds, transferGroupLegs, transferOutLeg } from '$lib/transaction-display';
 	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
@@ -53,11 +54,17 @@
 	const editing = $derived(Boolean(groupId));
 	const fromAcc = $derived(accounts.find((a) => a.id === fromAccount));
 	const canFullBalance = $derived(Boolean(fromAcc && fromAcc.balance > 0 && !editing));
-	const accountOptions = $derived(accounts.map((acc) => ({ value: acc.id, label: acc.name })));
+	const fromAccountOptions = $derived(transferAccountOptions(accounts, toAccount));
+	const toAccountOptions = $derived(transferAccountOptions(accounts, fromAccount));
 
 	$effect(() => {
 		if (!open) return;
 		void init(editTx, repeatFrom, siblings);
+	});
+
+	$effect(() => {
+		if (!open || !fromAccount || !toAccount || fromAccount !== toAccount) return;
+		toAccount = pickOtherAccountId(accounts, fromAccount);
 	});
 
 	async function init(
@@ -103,7 +110,7 @@
 		if (!editSource?.transfer_group_id && !repeatSource?.transfer_group_id) {
 			const primary = defaultAccountId(accounts);
 			fromAccount = primary;
-			toAccount = accounts.find((a) => a.id !== primary)?.id ?? primary;
+			toAccount = pickOtherAccountId(accounts, primary);
 		}
 	}
 
@@ -183,7 +190,7 @@
 					id="from-acc"
 					label={$_('transactions.field.from')}
 					bind:value={fromAccount}
-					options={accountOptions}
+					options={fromAccountOptions}
 					usePortal
 				/>
 			</div>
@@ -192,7 +199,7 @@
 					id="to-acc"
 					label={$_('transactions.field.to')}
 					bind:value={toAccount}
-					options={accountOptions}
+					options={toAccountOptions}
 					usePortal
 				/>
 			</div>
