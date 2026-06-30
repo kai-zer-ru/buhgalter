@@ -127,6 +127,15 @@
 		return parsed?.day === cell.day && parsed?.month === cell.month && parsed?.year === cell.year;
 	}
 
+	function isTodayCell(cell: { year: number; month: number; day: number }): boolean {
+		const now = new Date();
+		return (
+			cell.year === now.getFullYear() &&
+			cell.month === now.getMonth() + 1 &&
+			cell.day === now.getDate()
+		);
+	}
+
 	function applyTime() {
 		const p = parseDatetimeLocal(value);
 		if (!p) return;
@@ -196,6 +205,12 @@
 	function close() {
 		open = false;
 		panelView = 'days';
+	}
+
+	function selectToday() {
+		const now = new Date();
+		panelView = 'days';
+		setDate(now.getFullYear(), now.getMonth() + 1, now.getDate());
 	}
 
 	function onDocumentPointerDown(event: PointerEvent) {
@@ -296,12 +311,10 @@
 					{#each cells as cell, index (`${cell.year}-${cell.month}-${cell.day}-${index}`)}
 						<button
 							type="button"
-							class="h-9 cursor-pointer rounded-lg px-0 py-2 text-sm transition hover:bg-[color-mix(in_srgb,var(--border)_45%,transparent)]"
+							class="datetime-day-btn h-9 cursor-pointer rounded-lg px-0 py-2 text-sm transition"
 							class:datetime-day-muted={!cell.inMonth}
-							class:font-semibold={isSelectedCell(cell)}
-							style:background-color={isSelectedCell(cell)
-								? 'color-mix(in srgb, var(--primary) 28%, transparent)'
-								: 'transparent'}
+							class:datetime-day-selected={isSelectedCell(cell)}
+							class:datetime-day-today={isTodayCell(cell)}
 							onclick={() => setDate(cell.year, cell.month, cell.day)}
 						>
 							{cell.day}
@@ -370,7 +383,12 @@
 				</div>
 			{/if}
 			<div class="mt-3 flex justify-end gap-2">
-				<button type="button" class="btn-ghost text-sm" onclick={close}>
+				{#if panelView === 'days'}
+					<button type="button" class="btn-ghost datetime-footer-btn text-sm" onclick={selectToday}>
+						{$_('datetime.today')}
+					</button>
+				{/if}
+				<button type="button" class="btn-ghost datetime-footer-btn text-sm" onclick={close}>
 					{$_('datetime.done')}
 				</button>
 			</div>
@@ -387,7 +405,32 @@
 		color: color-mix(in srgb, var(--text-muted) 72%, transparent);
 	}
 
+	.datetime-day-btn {
+		background-color: transparent;
+	}
+
+	.datetime-day-btn:hover:not(.datetime-day-selected) {
+		background-color: color-mix(in srgb, var(--text) 14%, var(--bg-popover));
+	}
+
+	.datetime-day-selected {
+		background-color: color-mix(in srgb, var(--primary) 28%, transparent);
+		font-weight: 600;
+	}
+
+	.datetime-day-selected:hover {
+		background-color: color-mix(in srgb, var(--primary) 40%, transparent);
+	}
+
+	.datetime-day-today {
+		box-shadow: inset 0 0 0 1px var(--primary);
+	}
+
 	.datetime-days-grid {
 		grid-auto-rows: minmax(0, auto);
+	}
+
+	.datetime-footer-btn {
+		border-color: var(--popover-border);
 	}
 </style>

@@ -683,6 +683,7 @@
 	"common.notFound": "Nothing found",
 	"datetime.time": "Time",
 	"datetime.done": "Done",
+	"datetime.today": "Today",
 	"datetime.weekday.mon": "Mon",
 	"datetime.weekday.tue": "Tue",
 	"datetime.weekday.wed": "Wed",

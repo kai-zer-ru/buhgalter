@@ -683,6 +683,7 @@
 	"common.notFound": "Ничего не найдено",
 	"datetime.time": "Время",
 	"datetime.done": "Готово",
+	"datetime.today": "Сегодня",
 	"datetime.weekday.mon": "Пн",
 	"datetime.weekday.tue": "Вт",
 	"datetime.weekday.wed": "Ср",
