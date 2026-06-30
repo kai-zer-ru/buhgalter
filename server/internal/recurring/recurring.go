@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/kai-zer-ru/buhgalter/internal/accountbalance"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/money"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
@@ -253,6 +254,7 @@ func ApplyDue(ctx context.Context, db *sql.DB, userID string, now time.Time, tz 
 	}
 	q := queries(db)
 	applied := 0
+	affectedAccounts := make(map[string]struct{}, len(due))
 	for _, op := range due {
 		if err := validateDueOperation(ctx, db, userID, op); err != nil {
 			continue
@@ -278,6 +280,7 @@ func ApplyDue(ctx context.Context, db *sql.DB, userID string, now time.Time, tz 
 		}); err != nil {
 			continue
 		}
+		affectedAccounts[op.AccountID] = struct{}{}
 		nextInput := Input{
 			Type:          op.Type,
 			Amount:        op.Amount,
@@ -304,6 +307,15 @@ func ApplyDue(ctx context.Context, db *sql.DB, userID string, now time.Time, tz 
 			UserID:    userID,
 		})
 		applied++
+	}
+	if len(affectedAccounts) > 0 {
+		accountIDs := make([]string, 0, len(affectedAccounts))
+		for id := range affectedAccounts {
+			accountIDs = append(accountIDs, id)
+		}
+		if err := accountbalance.Refresh(ctx, db, userID, accountIDs...); err != nil {
+			return applied, err
+		}
 	}
 	return applied, nil
 }

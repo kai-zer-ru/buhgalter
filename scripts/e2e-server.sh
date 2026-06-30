@@ -7,6 +7,7 @@ export BUHGALTER_DATA_DIR="$DATA_DIR"
 export BUHGALTER_DB_PATH="${DATA_DIR}/buhgalter.db"
 export BUHGALTER_ADDR="${BUHGALTER_ADDR:-:9876}"
 export BUHGALTER_STATIC_EMBED=true
+export BUHGALTER_E2E=1
 export BUHGALTER_LOG_DIR="${DATA_DIR}/logs"
 export BUHGALTER_LOCALES_DIR="${ROOT}/server/locales"
 

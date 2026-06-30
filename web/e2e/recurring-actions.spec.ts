@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { waitAppReady } from './helpers/auth';
+import { waitAppReady, apiJSON } from './helpers/auth';
 import { createCashAccount } from './helpers/setup-data';
 import { selectLabeledCombobox } from './helpers/transactions';
 import { confirmDialog, rowMenuAction } from './helpers/ui';
@@ -94,4 +94,46 @@ test('create weekly recurring with weekday selector', async ({ page }) => {
 	await expect(page.getByRole('row', { name: new RegExp(description) })).toBeVisible({
 		timeout: 10_000
 	});
+});
+
+test('recurring expense updates account balance when applied', async ({ page }) => {
+	const account = await createCashAccount(page);
+	const categories = await apiJSON<{ id: string }[]>(
+		page,
+		'GET',
+		'/api/v1/categories?type=expense'
+	);
+	const description = `E2E Rec Balance ${Date.now()}`;
+
+	const created = await apiJSON<{ id: string }>(page, 'POST', '/api/v1/recurring-operations', {
+		type: 'expense',
+		amount: '50.00',
+		description,
+		account_id: account.id,
+		category_id: categories[0].id,
+		period: 'month',
+		day_of_month: 1,
+		start_date: '2020-01-01 00:00:00',
+		time_local: '08:00'
+	});
+
+	await apiJSON<{ applied: number }>(
+		page,
+		'POST',
+		`/api/v1/test/recurring-operations/${created.id}/run-now`
+	);
+
+	const bal = await apiJSON<{ balance: number }>(
+		page,
+		'GET',
+		`/api/v1/accounts/${account.id}/balance`
+	);
+	expect(bal.balance).toBe(95_000);
+
+	const txs = await apiJSON<{ data: { description?: string }[] }>(
+		page,
+		'GET',
+		`/api/v1/transactions?search=${encodeURIComponent(description)}`
+	);
+	expect(txs.data.some((tx) => tx.description === description)).toBeTruthy();
 });

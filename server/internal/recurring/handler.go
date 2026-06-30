@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/kai-zer-ru/buhgalter/internal/apperror"
@@ -114,6 +116,46 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = h.Audit.Log("recurring.delete", info.User.ID, info.User.Login, clientIP(r), map[string]any{"id": id})
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// E2ERunNow forces a recurring operation to run immediately (BUHGALTER_E2E=1 only).
+func (h *Handler) E2ERunNow(w http.ResponseWriter, r *http.Request) {
+	if os.Getenv("BUHGALTER_E2E") != "1" {
+		http.NotFound(w, r)
+		return
+	}
+	info, ok := auth.FromContext(r.Context())
+	if !ok {
+		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
+		return
+	}
+	id := chi.URLParam(r, "id")
+	ctx := r.Context()
+	sqlDB := h.Store.DB()
+	past := timeutil.FormatUTC(timeutil.NowUTC().Add(-time.Hour))
+	res, err := sqlDB.ExecContext(ctx, `
+		UPDATE recurring_operations SET next_run_at = ?
+		WHERE id = ? AND user_id = ?`, past, id, info.User.ID)
+	if err != nil {
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
+		return
+	}
+	tz, err := userTimezone(ctx, sqlDB, info.User.ID)
+	if err != nil {
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	}
+	applied, err := ApplyDue(ctx, sqlDB, info.User.ID, timeutil.NowUTC(), tz)
+	if err != nil {
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"applied": applied})
 }
 
 func parseInput(req createRequest) (Input, error) {
