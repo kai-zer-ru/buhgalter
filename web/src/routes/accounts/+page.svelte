@@ -20,7 +20,7 @@
 	import Select from '$lib/components/Select.svelte';
 	import { confirm } from '$lib/confirm';
 	import { formatBalance } from '$lib/finance';
-	import { formatMoneyDisplay, toAPIAmount } from '$lib/money';
+	import { formatMoneyForInput, toAPIAmount } from '$lib/money';
 	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
 
@@ -60,7 +60,7 @@
 		editingId = acc.id;
 		editName = acc.name;
 		editBankId = acc.bank_id ?? '';
-		editInitialBalance = formatMoneyDisplay(acc.balance_display);
+		editInitialBalance = formatMoneyForInput(acc.balance_display);
 	}
 
 	function cancelEdit() {

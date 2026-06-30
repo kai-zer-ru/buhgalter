@@ -147,13 +147,33 @@ export function mapMoneyInputCursor(value: string, cursor: number, formatted: st
 	return formatted.length;
 }
 
-/** Normalize on blur: valid amount, 2 decimals, thousands separator. */
+/** Value for MoneyInput: empty when zero/unset, otherwise formatted display. */
+export function formatMoneyForInput(value: string): string {
+	const trimmed = value.trim();
+	if (!trimmed) return '';
+	try {
+		if (toCents(trimmed) === 0) return '';
+	} catch {
+		// fall through to display formatting
+	}
+	return formatMoneyDisplay(trimmed);
+}
+
+/** Normalize on blur: valid amount, 2 decimals, thousands separator; zero → empty. */
 export function formatMoneyInput(value: string): string {
 	if (!value.trim()) return '';
 	try {
-		return fromCents(toCents(value));
+		const cents = toCents(value);
+		if (cents === 0) return '';
+		return fromCents(cents);
 	} catch {
-		return formatMoneyDisplay(value);
+		const displayed = formatMoneyDisplay(value);
+		try {
+			if (toCents(displayed) === 0) return '';
+		} catch {
+			// keep formatted fallback
+		}
+		return displayed;
 	}
 }
 

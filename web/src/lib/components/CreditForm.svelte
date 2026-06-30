@@ -26,7 +26,7 @@
 		todayDateLocal,
 		toDatetimeLocalValue
 	} from '$lib/dates';
-	import { fromCents, toAPIAmount, toCents } from '$lib/money';
+	import { fromCents, toAPIAmount, toCents, formatMoneyForInput } from '$lib/money';
 	import { user } from '$lib/stores/auth';
 
 	type Props = {
@@ -178,7 +178,7 @@
 	}
 
 	function startPaymentEdit() {
-		paymentDraft = paymentOverride ?? calculatedPayment;
+		paymentDraft = formatMoneyForInput(paymentOverride ?? calculatedPayment);
 		editingPayment = true;
 	}
 
@@ -323,7 +323,7 @@
 			if (scheduleParamsKey() !== expectedKey) return;
 			scheduleRows = (res.schedule_preview ?? []).map((row) => ({
 				date: dateOnlyLocalValue(toDatetimeLocalValue(row.payment_date, tz)),
-				amount: row.amount_display ?? fromCents(row.amount)
+				amount: formatMoneyForInput(row.amount_display ?? fromCents(row.amount))
 			}));
 			calculatedPayment = res.calculated_monthly_payment_display;
 			lastScheduleKey = expectedKey;

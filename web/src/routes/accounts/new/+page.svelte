@@ -15,7 +15,7 @@
 	let type = $state<'cash' | 'bank'>('cash');
 	let bankId = $state('');
 	let bankSearch = $state('');
-	let initialBalance = $state('0');
+	let initialBalance = $state('');
 	let banks = $state<Bank[]>([]);
 	let loading = $state(false);
 	let error = $state('');
@@ -135,7 +135,7 @@
 			<label class="mb-1 block text-sm" style:color="var(--text-muted)" for="balance">
 				{$_('accounts.field.balance')}
 			</label>
-			<MoneyInput id="balance" bind:value={initialBalance} placeholder="0.00" />
+			<MoneyInput id="balance" bind:value={initialBalance} />
 		</div>
 
 		<div class="flex gap-2 pt-2">

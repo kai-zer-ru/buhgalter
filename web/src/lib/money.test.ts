@@ -1,5 +1,35 @@
 import { describe, expect, it } from 'vitest';
-import { formatMoneyLive, mapMoneyInputCursor } from './money';
+import {
+	formatMoneyForInput,
+	formatMoneyInput,
+	formatMoneyLive,
+	mapMoneyInputCursor
+} from './money';
+
+describe('formatMoneyForInput', () => {
+	it('returns empty for unset and zero values', () => {
+		expect(formatMoneyForInput('')).toBe('');
+		expect(formatMoneyForInput('0')).toBe('');
+		expect(formatMoneyForInput('0.00')).toBe('');
+		expect(formatMoneyForInput('0,00')).toBe('');
+	});
+
+	it('formats non-zero amounts for input', () => {
+		expect(formatMoneyForInput('1000.00')).toBe('1 000.00');
+		expect(formatMoneyForInput('50')).toBe('50');
+	});
+});
+
+describe('formatMoneyInput', () => {
+	it('clears zero on blur', () => {
+		expect(formatMoneyInput('0')).toBe('');
+		expect(formatMoneyInput('0.00')).toBe('');
+	});
+
+	it('normalizes non-zero amounts', () => {
+		expect(formatMoneyInput('1000')).toBe('1 000.00');
+	});
+});
 
 describe('mapMoneyInputCursor', () => {
 	it('does not jump to end when editing grouped integer part', () => {

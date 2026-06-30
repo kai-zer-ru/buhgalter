@@ -40,7 +40,7 @@
 		toDatetimeLocalValue
 	} from '$lib/dates';
 	import { bankIconUrl, formatBalance } from '$lib/finance';
-	import { toAPIAmount, fromCents } from '$lib/money';
+	import { toAPIAmount, fromCents, formatMoneyForInput } from '$lib/money';
 	import { user } from '$lib/stores/auth';
 
 	const id = $derived($page.params.id ?? '');
@@ -395,7 +395,7 @@
 		scheduleEditError = '';
 		scheduleEditRows = (credit.schedule ?? [])
 			.filter(canEditPayment)
-			.map((p) => ({ id: p.id, amount: fromCents(p.amount) }));
+			.map((p) => ({ id: p.id, amount: formatMoneyForInput(fromCents(p.amount)) }));
 		scheduleEditing = true;
 	}
 

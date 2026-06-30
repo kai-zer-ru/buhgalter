@@ -11,7 +11,7 @@
 	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
 	import { toast } from '$lib/toast';
 	import { fromDatetimeLocalValue, nowDatetimeLocal } from '$lib/dates';
-	import { formatMoneyDisplay, toAPIAmount } from '$lib/money';
+	import { formatMoneyForInput, formatMoneyDisplay, toAPIAmount } from '$lib/money';
 	import { user } from '$lib/stores/auth';
 
 	type Props = {
@@ -43,7 +43,7 @@
 		if (!debt) return;
 		const currentDebt = debt;
 		error = '';
-		amount = currentDebt.amount_display;
+		amount = formatMoneyForInput(currentDebt.amount_display);
 		settledAtLocal = nowDatetimeLocal(tz);
 		skipBalance = false;
 		accounts = await listAccounts('active');

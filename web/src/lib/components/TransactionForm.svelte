@@ -20,7 +20,7 @@
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import { defaultAccountId } from '$lib/accounts';
-	import { formatMoneyDisplay, toAPIAmount } from '$lib/money';
+	import { formatMoneyForInput, toAPIAmount } from '$lib/money';
 	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
 
@@ -103,7 +103,7 @@
 		error = '';
 		if (editSource) {
 			txType = editSource.type === 'income' ? 'income' : 'expense';
-			amount = formatMoneyDisplay(editSource.amount_display);
+			amount = formatMoneyForInput(editSource.amount_display);
 			selectedAccount = editSource.account_id;
 			categoryId = editSource.category_id ?? '';
 			subcategoryId = editSource.subcategory_id ?? '';
@@ -112,7 +112,7 @@
 			dateTimeValue = toDatetimeLocalValue(editSource.transaction_date, tz);
 		} else if (repeatSource) {
 			txType = repeatSource.type === 'income' ? 'income' : 'expense';
-			amount = formatMoneyDisplay(repeatSource.amount_display);
+			amount = formatMoneyForInput(repeatSource.amount_display);
 			selectedAccount = repeatSource.account_id;
 			categoryId = repeatSource.category_id ?? '';
 			subcategoryId = repeatSource.subcategory_id ?? '';

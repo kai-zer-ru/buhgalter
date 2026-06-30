@@ -44,4 +44,39 @@ test.describe('account page — operation entry points', () => {
 		await fillTransactionForm(page, { amount: '50', account: account.name });
 		await expect(page.getByText('50.00').first()).toBeVisible({ timeout: 10_000 });
 	});
+
+	test('account page expense form preselects current account', async ({ page }) => {
+		await page.setViewportSize({ width: 1280, height: 720 });
+		const { account, header } = await openAccountPage(page);
+
+		await header.getByRole('button', { name: 'Расход', exact: true }).click();
+		const dialog = page.getByRole('dialog');
+		await expect(dialog).toBeVisible();
+		await expect(page.locator('#tx-account')).toContainText(account.name);
+	});
+
+	test('account page transfer form preselects current account as from', async ({ page }) => {
+		await page.setViewportSize({ width: 1280, height: 720 });
+		const tag = Date.now();
+		const primary = await apiJSON<{ id: string; name: string }>(page, 'POST', '/api/v1/accounts', {
+			name: `E2E Primary ${tag}`,
+			type: 'cash',
+			initial_balance: '100.00'
+		});
+		const viewed = await apiJSON<{ id: string; name: string }>(page, 'POST', '/api/v1/accounts', {
+			name: `E2E Cash View ${tag}`,
+			type: 'cash',
+			initial_balance: '200.00'
+		});
+		await apiJSON(page, 'POST', `/api/v1/accounts/${primary.id}/primary`, {});
+
+		await page.goto(`/accounts/${viewed.id}`);
+		await waitAppReady(page);
+
+		await page.getByRole('button', { name: 'Перевод', exact: true }).click();
+		const dialog = page.getByRole('dialog');
+		await expect(dialog).toBeVisible();
+		await expect(page.locator('#from-acc')).toContainText(viewed.name);
+		await expect(page.locator('#from-acc')).not.toContainText(primary.name);
+	});
 });

@@ -15,7 +15,7 @@
 	import Select from '$lib/components/Select.svelte';
 	import { defaultAccountId } from '$lib/accounts';
 	import { fromDatetimeLocalValue, nowDatetimeLocal, toDatetimeLocalValue } from '$lib/dates';
-	import { toAPIAmount } from '$lib/money';
+	import { formatMoneyForInput, toAPIAmount } from '$lib/money';
 	import { pickOtherAccountId, transferAccountOptions } from '$lib/transfer-accounts';
 	import { transferAccountIds, transferGroupLegs, transferOutLeg } from '$lib/transaction-display';
 	import { toast } from '$lib/toast';
@@ -23,6 +23,7 @@
 
 	type Props = {
 		open: boolean;
+		accountId?: string;
 		editTx?: Transaction | null;
 		repeatFrom?: Transaction | null;
 		siblings?: Transaction[];
@@ -32,6 +33,7 @@
 
 	let {
 		open = $bindable(),
+		accountId = '',
 		editTx = null,
 		repeatFrom = null,
 		siblings = [],
@@ -59,7 +61,7 @@
 
 	$effect(() => {
 		if (!open) return;
-		void init(editTx, repeatFrom, siblings);
+		void init(editTx, repeatFrom, siblings, accountId);
 	});
 
 	$effect(() => {
@@ -70,7 +72,8 @@
 	async function init(
 		editSource: Transaction | null | undefined,
 		repeatSource: Transaction | null | undefined,
-		related: Transaction[]
+		related: Transaction[],
+		contextAccountId: string
 	) {
 		error = '';
 		if (editSource?.transfer_group_id) {
@@ -81,8 +84,8 @@
 			groupId = editSource.transfer_group_id;
 			fromAccount = fromAccountId;
 			toAccount = toAccountId;
-			amount = metaLeg.amount_display;
-			commission = commissionLeg?.amount_display ?? '';
+			amount = formatMoneyForInput(metaLeg.amount_display);
+			commission = formatMoneyForInput(commissionLeg?.amount_display ?? '');
 			description = metaLeg.description ?? '';
 			dateTimeValue = toDatetimeLocalValue(metaLeg.transaction_date, tz);
 		} else if (repeatSource?.transfer_group_id) {
@@ -93,8 +96,8 @@
 			groupId = '';
 			fromAccount = fromAccountId;
 			toAccount = toAccountId;
-			amount = metaLeg.amount_display;
-			commission = commissionLeg?.amount_display ?? '';
+			amount = formatMoneyForInput(metaLeg.amount_display);
+			commission = formatMoneyForInput(commissionLeg?.amount_display ?? '');
 			description = metaLeg.description ?? '';
 			dateTimeValue = nowDatetimeLocal(tz);
 		} else {
@@ -108,9 +111,9 @@
 		}
 		accounts = await listAccounts('active');
 		if (!editSource?.transfer_group_id && !repeatSource?.transfer_group_id) {
-			const primary = defaultAccountId(accounts);
-			fromAccount = primary;
-			toAccount = pickOtherAccountId(accounts, primary);
+			const from = defaultAccountId(accounts, contextAccountId);
+			fromAccount = from;
+			toAccount = pickOtherAccountId(accounts, from);
 		}
 	}
 

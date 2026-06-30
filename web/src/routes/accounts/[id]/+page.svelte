@@ -37,7 +37,7 @@
 	import { confirm } from '$lib/confirm';
 	import { toast } from '$lib/toast';
 	import { formatBalance } from '$lib/finance';
-	import { formatMoneyDisplay, toAPIAmount } from '$lib/money';
+	import { formatMoneyForInput, toAPIAmount } from '$lib/money';
 	import { fromDateLocalEnd, fromDateLocalStart } from '$lib/dates';
 	import { dedupeTransferLegs } from '$lib/transaction-display';
 	import { user } from '$lib/stores/auth';
@@ -143,7 +143,7 @@
 			categories = Object.values(uniqueCatsByID).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
 			name = account.name;
 			bankId = account.bank_id ?? '';
-			initialBalance = formatMoneyDisplay(account.balance_display);
+			initialBalance = formatMoneyForInput(account.balance_display);
 			editing = $page.url.searchParams.get('edit') === '1';
 			await loadTransactions();
 		} catch (err) {
@@ -585,6 +585,7 @@
 />
 <TransferForm
 	bind:open={transferOpen}
+	accountId={id}
 	editTx={editTransfer}
 	repeatFrom={repeatTransfer}
 	siblings={transactions}

@@ -30,7 +30,7 @@
 		toDatetimeLocalValue,
 		formatAPIDateTimeForDisplay
 	} from '$lib/dates';
-	import { formatMoneyDisplay } from '$lib/money';
+	import { formatMoneyDisplay, formatMoneyForInput, toAPIAmount } from '$lib/money';
 	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
 
@@ -45,7 +45,7 @@
 	let formOpen = $state(false);
 
 	let type = $state<'income' | 'expense'>('expense');
-	let amount = $state('0');
+	let amount = $state('');
 	let description = $state('');
 	let accountId = $state('');
 	let categoryId = $state('');
@@ -125,7 +125,7 @@
 			const tx = await getTransaction(txID);
 			if (tx.type === 'transfer') return;
 			type = tx.type;
-			amount = formatMoneyDisplay(tx.amount_display);
+			amount = formatMoneyForInput(tx.amount_display);
 			description = tx.description ?? '';
 			accountId = tx.account_id;
 			categoryId = tx.category_id ?? '';
@@ -173,7 +173,7 @@
 	function resetForm() {
 		editId = null;
 		type = 'expense';
-		amount = '0';
+		amount = '';
 		description = '';
 		accountId = accounts[0]?.id ?? '';
 		const firstCategory = firstCategoryByType('expense');
@@ -196,7 +196,7 @@
 		formOpen = false;
 		editId = item.id;
 		type = item.type;
-		amount = formatMoneyDisplay(item.amount_display);
+		amount = formatMoneyForInput(item.amount_display);
 		description = item.description ?? '';
 		accountId = item.account_id;
 		categoryId = item.category_id;
@@ -235,7 +235,7 @@
 		try {
 			const payload = {
 				type,
-				amount,
+				amount: toAPIAmount(amount),
 				description: description.trim() || undefined,
 				account_id: accountId,
 				category_id: categoryId,
