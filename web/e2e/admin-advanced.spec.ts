@@ -64,3 +64,25 @@ test('admin system tab loads for admin user', async ({ page }) => {
 		'true'
 	);
 });
+
+test('admin: support links visible in settings tab', async ({ page }) => {
+	await page.goto('/settings?tab=admin&admin_tab=system');
+	await waitAppReady(page);
+
+	const support = page.getByRole('link', { name: 'Поддержать проект' });
+	const repository = page.getByRole('link', { name: 'Репозиторий' });
+	await expect(support).toBeVisible();
+	await expect(repository).toBeVisible();
+	await expect(support).toHaveAttribute('href', /tbank\.ru/);
+	await expect(repository).toHaveAttribute('href', 'https://github.com/kai-zer-ru/buhgalter');
+	await expect(support).toHaveAttribute('target', '_blank');
+	await expect(repository).toHaveAttribute('target', '_blank');
+});
+
+test('admin: support links visible on /admin routes', async ({ page }) => {
+	await page.goto('/admin');
+	await waitAppReady(page);
+
+	await expect(page.getByRole('link', { name: 'Поддержать проект' })).toBeVisible();
+	await expect(page.getByRole('link', { name: 'Репозиторий' })).toBeVisible();
+});

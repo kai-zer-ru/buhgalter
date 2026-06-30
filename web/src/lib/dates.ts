@@ -95,7 +95,7 @@ export function fromAPIDateTime(s: string, tz: string): Date {
 export function formatAPIDateTimeForDisplay(s: string, tz: string): string {
 	try {
 		const d = fromAPIDateTime(s, tz);
-		return `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+		return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
 	} catch {
 		return s;
 	}
@@ -114,7 +114,7 @@ export function formatCreditPaymentDateForDisplay(
 		}
 		const debitTime = (debitTimeLocal ?? '').trim();
 		if (/^\d{2}:\d{2}$/.test(debitTime)) {
-			return `${formatAPIDateForDisplay(paymentDate, tz)} ${debitTime}`;
+			return `${formatAPIDateForDisplay(paymentDate, tz)} ${debitTime}:00`;
 		}
 		return formatAPIDateTimeForDisplay(paymentDate, tz);
 	} catch {
@@ -125,7 +125,7 @@ export function formatCreditPaymentDateForDisplay(
 export function formatAPIDateForDisplay(s: string, tz: string): string {
 	try {
 		const d = fromAPIDateTime(s, tz);
-		return `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()}`;
+		return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 	} catch {
 		return s;
 	}

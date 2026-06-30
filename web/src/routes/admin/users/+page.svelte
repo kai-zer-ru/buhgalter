@@ -169,128 +169,133 @@
 	}
 </script>
 
-<form class="card mb-6 space-y-4" onsubmit={submit}>
-	<h2 class="text-lg font-medium">{$_('admin.users.create.title')}</h2>
-	<div class="grid gap-4 sm:grid-cols-2">
-		<div>
-			<label class="mb-1.5 block text-sm font-medium" for="login">{$_('login.login')}</label>
-			<input id="login" class="input" bind:value={login} minlength="3" required />
+<div class="space-y-4">
+	<form class="card space-y-4" onsubmit={submit}>
+		<h2 class="text-lg font-medium">{$_('admin.users.create.title')}</h2>
+		<div class="grid gap-4 sm:grid-cols-2">
+			<div>
+				<label class="mb-1.5 block text-sm font-medium" for="login">{$_('login.login')}</label>
+				<input id="login" class="input" bind:value={login} minlength="3" required />
+			</div>
+			<div>
+				<label class="mb-1.5 block text-sm font-medium" for="display"
+					>{$_('register.display_name')}</label
+				>
+				<input id="display" class="input" bind:value={displayName} />
+			</div>
+			<div>
+				<label class="mb-1.5 block text-sm font-medium" for="password">{$_('login.password')}</label
+				>
+				<input
+					id="password"
+					class="input"
+					type="password"
+					bind:value={password}
+					minlength="8"
+					autocomplete="new-password"
+					required
+				/>
+				<p class="mt-1 text-xs" style:color="var(--text-muted)">
+					{$_('auth.password.requirements')}
+				</p>
+			</div>
+			<div>
+				<label class="mb-1.5 block text-sm font-medium" for="password-confirm"
+					>{$_('admin.users.passwordConfirm')}</label
+				>
+				<input
+					id="password-confirm"
+					class="input"
+					type="password"
+					bind:value={passwordConfirm}
+					minlength="8"
+					autocomplete="new-password"
+					required
+				/>
+				{#if passwordConfirm.length > 0 && !passwordsMatch}
+					<p class="mt-1 text-xs" style:color="var(--danger)">
+						{$_('admin.users.passwordMismatch')}
+					</p>
+				{/if}
+			</div>
+			<div class="flex items-center justify-between gap-4 sm:col-span-2">
+				<span class="text-sm">{$_('admin.users.roleAdmin')}</span>
+				<ToggleSwitch
+					checked={isAdmin}
+					label={$_('admin.users.roleAdmin')}
+					onchange={() => (isAdmin = !isAdmin)}
+				/>
+			</div>
 		</div>
-		<div>
-			<label class="mb-1.5 block text-sm font-medium" for="display"
-				>{$_('register.display_name')}</label
-			>
-			<input id="display" class="input" bind:value={displayName} />
-		</div>
-		<div>
-			<label class="mb-1.5 block text-sm font-medium" for="password">{$_('login.password')}</label>
-			<input
-				id="password"
-				class="input"
-				type="password"
-				bind:value={password}
-				minlength="8"
-				autocomplete="new-password"
-				required
-			/>
-			<p class="mt-1 text-xs" style:color="var(--text-muted)">
-				{$_('auth.password.requirements')}
-			</p>
-		</div>
-		<div>
-			<label class="mb-1.5 block text-sm font-medium" for="password-confirm"
-				>{$_('admin.users.passwordConfirm')}</label
-			>
-			<input
-				id="password-confirm"
-				class="input"
-				type="password"
-				bind:value={passwordConfirm}
-				minlength="8"
-				autocomplete="new-password"
-				required
-			/>
-			{#if passwordConfirm.length > 0 && !passwordsMatch}
-				<p class="mt-1 text-xs" style:color="var(--danger)">{$_('admin.users.passwordMismatch')}</p>
-			{/if}
-		</div>
-		<div class="flex items-center justify-between gap-4 sm:col-span-2">
-			<span class="text-sm">{$_('admin.users.roleAdmin')}</span>
-			<ToggleSwitch
-				checked={isAdmin}
-				label={$_('admin.users.roleAdmin')}
-				onchange={() => (isAdmin = !isAdmin)}
-			/>
-		</div>
-	</div>
-	<button type="submit" class="btn-primary" disabled={loading || !formValid}>
-		{$_('common.create')}
-	</button>
-	<FormFeedback error={formError} />
-</form>
+		<button type="submit" class="btn-primary" disabled={loading || !formValid}>
+			{$_('common.create')}
+		</button>
+		<FormFeedback error={formError} />
+	</form>
 
-<FormFeedback error={listError} />
+	<FormFeedback error={listError} />
 
-<div class="card md:overflow-x-auto">
-	<div class="hidden md:block">
-		<table class="w-full text-left text-sm">
-			<thead>
-				<tr style:color="var(--text-muted)">
-					<th class="pb-3 pr-4">{$_('login.login')}</th>
-					<th class="pb-3 pr-4">{$_('register.display_name')}</th>
-					<th class="pb-3 pr-4">{$_('admin.users.role')}</th>
-					<th class="pb-3"></th>
-				</tr>
-			</thead>
-			<tbody>
-				{#each users as u (u.id)}
-					<tr class="border-t" style:border-color="var(--border)">
-						<td class="py-3 pr-4">{u.login}</td>
-						<td class="py-3 pr-4">{u.display_name}</td>
-						<td class="py-3 pr-4">{u.is_admin ? 'admin' : 'user'}</td>
-						<td class="py-3 text-right">
-							<div class="flex justify-end gap-2">
-								<button type="button" class="btn-ghost" onclick={() => openResetPassword(u)}>
-									{$_('admin.users.resetPassword')}
-								</button>
-								{#if u.id !== $user?.id}
-									<button type="button" class="btn-ghost" onclick={() => remove(u.id, u.login)}>
-										{$_('common.delete')}
-									</button>
-								{/if}
-							</div>
-						</td>
+	<div class="card md:overflow-x-auto">
+		<div class="hidden md:block">
+			<table class="w-full text-left text-sm">
+				<thead>
+					<tr style:color="var(--text-muted)">
+						<th class="pb-3 pr-4">{$_('login.login')}</th>
+						<th class="pb-3 pr-4">{$_('register.display_name')}</th>
+						<th class="pb-3 pr-4">{$_('admin.users.role')}</th>
+						<th class="pb-3"></th>
 					</tr>
-				{/each}
-			</tbody>
-		</table>
-	</div>
-	<div class="space-y-3 md:hidden">
-		{#each users as u (u.id)}
-			<article class="rounded-xl border p-4" style:border-color="var(--border)">
-				<p class="font-medium">{u.login}</p>
-				<dl class="mt-2 grid gap-2 text-sm">
-					<div class="flex justify-between gap-2">
-						<dt style:color="var(--text-muted)">{$_('register.display_name')}</dt>
-						<dd>{u.display_name}</dd>
-					</div>
-					<div class="flex justify-between gap-2">
-						<dt style:color="var(--text-muted)">{$_('admin.users.role')}</dt>
-						<dd>{u.is_admin ? 'admin' : 'user'}</dd>
-					</div>
-				</dl>
-				<div class="mt-3 flex flex-col gap-2">
-					<button type="button" class="btn-ghost w-full" onclick={() => openResetPassword(u)}>
-						{$_('admin.users.resetPassword')}
-					</button>
-					{#if u.id !== $user?.id}
-						<button type="button" class="btn-ghost w-full" onclick={() => remove(u.id, u.login)}>
-							{$_('common.delete')}
+				</thead>
+				<tbody>
+					{#each users as u (u.id)}
+						<tr class="border-t" style:border-color="var(--border)">
+							<td class="py-3 pr-4">{u.login}</td>
+							<td class="py-3 pr-4">{u.display_name}</td>
+							<td class="py-3 pr-4">{u.is_admin ? 'admin' : 'user'}</td>
+							<td class="py-3 text-right">
+								<div class="flex justify-end gap-2">
+									<button type="button" class="btn-ghost" onclick={() => openResetPassword(u)}>
+										{$_('admin.users.resetPassword')}
+									</button>
+									{#if u.id !== $user?.id}
+										<button type="button" class="btn-ghost" onclick={() => remove(u.id, u.login)}>
+											{$_('common.delete')}
+										</button>
+									{/if}
+								</div>
+							</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>
+		<div class="space-y-3 md:hidden">
+			{#each users as u (u.id)}
+				<article class="rounded-xl border p-4" style:border-color="var(--border)">
+					<p class="font-medium">{u.login}</p>
+					<dl class="mt-2 grid gap-2 text-sm">
+						<div class="flex justify-between gap-2">
+							<dt style:color="var(--text-muted)">{$_('register.display_name')}</dt>
+							<dd>{u.display_name}</dd>
+						</div>
+						<div class="flex justify-between gap-2">
+							<dt style:color="var(--text-muted)">{$_('admin.users.role')}</dt>
+							<dd>{u.is_admin ? 'admin' : 'user'}</dd>
+						</div>
+					</dl>
+					<div class="mt-3 flex flex-col gap-2">
+						<button type="button" class="btn-ghost w-full" onclick={() => openResetPassword(u)}>
+							{$_('admin.users.resetPassword')}
 						</button>
-					{/if}
-				</div>
-			</article>
-		{/each}
+						{#if u.id !== $user?.id}
+							<button type="button" class="btn-ghost w-full" onclick={() => remove(u.id, u.login)}>
+								{$_('common.delete')}
+							</button>
+						{/if}
+					</div>
+				</article>
+			{/each}
+		</div>
 	</div>
 </div>
 

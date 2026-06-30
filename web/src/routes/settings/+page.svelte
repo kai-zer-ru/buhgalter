@@ -42,6 +42,7 @@
 	import AdminUsersTab from '../admin/users/+page.svelte';
 	import AdminBackupsTab from '../admin/backups/+page.svelte';
 	import AdminDiagnosticsTab from '../admin/diagnostics/+page.svelte';
+	import AdminSupportLinks from '$lib/components/AdminSupportLinks.svelte';
 
 	type Tab =
 		| 'profile'
@@ -1454,15 +1455,18 @@
 				onchange={(next) => selectAdminTab(next as AdminTab)}
 			/>
 		</div>
-		{#if adminTab === 'system'}
-			<AdminSystemTab />
-		{:else if adminTab === 'users'}
-			<AdminUsersTab />
-		{:else if adminTab === 'backups'}
-			<AdminBackupsTab />
-		{:else}
-			<AdminDiagnosticsTab />
-		{/if}
+		<div class="space-y-4">
+			{#if adminTab === 'system'}
+				<AdminSystemTab />
+			{:else if adminTab === 'users'}
+				<AdminUsersTab />
+			{:else if adminTab === 'backups'}
+				<AdminBackupsTab />
+			{:else}
+				<AdminDiagnosticsTab />
+			{/if}
+			<AdminSupportLinks />
+		</div>
 	{/if}
 {:else if tab === 'tokens'}
 	<div class="space-y-6">

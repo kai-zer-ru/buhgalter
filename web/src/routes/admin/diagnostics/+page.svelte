@@ -3,11 +3,15 @@
 	import { _ } from 'svelte-i18n';
 	import { ApiError, getAdminDiagnostics, type AdminDiagnostics } from '$lib/api/client';
 	import FormFeedback from '$lib/components/FormFeedback.svelte';
+	import { formatAPIDateTimeForDisplay } from '$lib/dates';
+	import { user } from '$lib/stores/auth';
 
 	let diagnostics = $state<AdminDiagnostics | null>(null);
 	let loading = $state(true);
 	let error = $state('');
 	let copyStatus = $state('');
+
+	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
 
 	const orderedFields: Array<[keyof AdminDiagnostics, string]> = [
 		['app_version', 'app_version'],
@@ -39,9 +43,12 @@
 		}
 	});
 
-	function display(value: unknown) {
+	function display(field: keyof AdminDiagnostics, value: unknown) {
 		if (value === null || value === undefined || value === '') return '—';
 		if (typeof value === 'boolean') return value ? 'true' : 'false';
+		if (field === 'build_time' && typeof value === 'string') {
+			return formatAPIDateTimeForDisplay(value, tz);
+		}
 		return String(value);
 	}
 
@@ -84,16 +91,17 @@
 	<p class="text-sm" style:color="var(--danger)">{error}</p>
 {:else if diagnostics}
 	<div class="space-y-4">
-		<div class="card flex flex-wrap items-center justify-between gap-3">
-			<h2 class="text-lg font-semibold">{$_('admin.diagnostics.title')}</h2>
-			<button type="button" class="btn-primary" onclick={copyForReport}>
-				{$_('admin.diagnostics.copy')}
-			</button>
+		<div class="card space-y-3">
+			<div class="flex flex-wrap items-center justify-between gap-3">
+				<h2 class="text-lg font-semibold">{$_('admin.diagnostics.title')}</h2>
+				<button type="button" class="btn-primary" onclick={copyForReport}>
+					{$_('admin.diagnostics.copy')}
+				</button>
+			</div>
+			{#if copyStatus}
+				<FormFeedback success={copyStatus} />
+			{/if}
 		</div>
-
-		{#if copyStatus}
-			<FormFeedback success={copyStatus} />
-		{/if}
 
 		<div class="card md:overflow-x-auto">
 			<div class="hidden md:block">
@@ -102,7 +110,7 @@
 						{#each orderedFields as [field, label] (field)}
 							<tr class="border-t first:border-t-0" style:border-color="var(--border)">
 								<td class="w-64 py-3 pr-4 font-medium">{label}</td>
-								<td class="break-all py-3">{display(diagnostics[field])}</td>
+								<td class="break-all py-3">{display(field, diagnostics[field])}</td>
 							</tr>
 						{/each}
 						<tr class="border-t" style:border-color="var(--border)">
@@ -124,7 +132,7 @@
 				{#each orderedFields as [field, label] (field)}
 					<article class="rounded-xl border p-3" style:border-color="var(--border)">
 						<p class="text-xs font-medium" style:color="var(--text-muted)">{label}</p>
-						<p class="mt-1 break-all text-sm">{display(diagnostics[field])}</p>
+						<p class="mt-1 break-all text-sm">{display(field, diagnostics[field])}</p>
 					</article>
 				{/each}
 				<article class="rounded-xl border p-3" style:border-color="var(--border)">

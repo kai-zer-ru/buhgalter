@@ -34,10 +34,11 @@
 **UI/UX**
 
 - **Кредиты:** в графике платежей и списке кредитов дата следующего платежа показывается с временем автосписания (`formatCreditPaymentDateForDisplay`, `debit_time_local`), а не полуночью
+- **Админка:** кнопки «Поддержать проект» и «Репозиторий» снова видны во вкладке «Администрирование» в настройках (с v1.2.0 админка встроена в `/settings?tab=admin` без `admin/+layout.svelte`, где жили ссылки)
 
 ### Техническое
 
-- e2e: повтор операции, селекты перевода, автосписание кредита с `debit_time_local`, баланс после периодической операции; `money-input.spec.ts` — placeholder суммы
+- e2e: повтор операции, селекты перевода, автосписание кредита с `debit_time_local`, баланс после периодической операции; `money-input.spec.ts` — placeholder суммы; `admin-advanced.spec.ts` — кнопки «Поддержать проект» и «Репозиторий» в админке
 - [docs/release-notes-v1.2.3.md](docs/release-notes-v1.2.3.md), [transactions-display.md](docs/transactions-display.md), [ui-row-actions.md](docs/ui-row-actions.md)
 - Версия `1.2.3`
 

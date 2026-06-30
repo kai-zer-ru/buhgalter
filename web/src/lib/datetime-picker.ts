@@ -33,15 +33,15 @@ export function buildDatetimeLocal(
 export function formatDateButtonLabel(value: string): string {
 	const parsed = parseDatetimeLocal(value);
 	if (!parsed) return '';
-	return `${pad2(parsed.day)}.${pad2(parsed.month)}.${parsed.year}`;
+	return `${parsed.year}-${pad2(parsed.month)}-${pad2(parsed.day)}`;
 }
 
 export function formatDatetimeButtonLabel(value: string): string {
 	const parsed = parseDatetimeLocal(value);
 	if (!parsed) return '';
-	const date = `${pad2(parsed.day)}.${pad2(parsed.month)}.${parsed.year}`;
+	const date = `${parsed.year}-${pad2(parsed.month)}-${pad2(parsed.day)}`;
 	if (value.includes('T')) {
-		return `${date} ${pad2(parsed.hour)}:${pad2(parsed.minute)}`;
+		return `${date} ${pad2(parsed.hour)}:${pad2(parsed.minute)}:00`;
 	}
 	return date;
 }

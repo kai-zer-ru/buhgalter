@@ -1,4 +1,4 @@
-VERSION ?= 1.2.3
+VERSION ?= 1.2.4
 INSTALL_METHOD ?= manual
 BUILD_COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILD_TIME ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -7,7 +7,7 @@ LDFLAGS := -X main.version=$(VERSION) -X main.installMethod=$(INSTALL_METHOD) -X
 OPENAPI_SRC := docs/api/openapi.yaml
 OPENAPI_DST := server/internal/docs/openapi.yaml
 
-.PHONY: dev dev-server dev-web build web-build category-icons-json copy-static copy-openapi openapi-check server-build fix-build-perms test test-unit test-e2e test-coverage lint lint-go prepare prepare-go prepare-web prepare-gen docker-build act-push act-release migrate ci sqlc sqlc-check download-bank-logos download-marketplace-logos clear version
+.PHONY: dev dev-server dev-web build web-build category-icons-json copy-static copy-openapi openapi-check server-build fix-build-perms test test-unit test-e2e test-coverage lint lint-go prepare prepare-go prepare-web prepare-gen docker-build act-push act-release tag-release migrate ci sqlc sqlc-check download-bank-logos download-marketplace-logos clear version
 
 DOCKER_COMPOSE := docker compose -f docker/docker-compose.yml
 
@@ -79,6 +79,11 @@ act-release:
 	@git rev-parse HEAD >/dev/null 2>&1 || (echo "act-release: нужен хотя бы один git commit" && exit 1)
 	@test -n "$$GITHUB_TOKEN" || (echo "act-release: задайте GITHUB_TOKEN (Personal Access Token с repo)" && exit 1)
 	act push $(ACT_PLATFORM) -W .github/workflows/release.yml -e .github/act/tag-push.json -s GITHUB_TOKEN=$$GITHUB_TOKEN
+
+# Сборка текущей версии из VERSION и публикация аннотированного тега vX.Y.Z на origin.
+tag-release:
+	@chmod +x scripts/tag_release.sh
+	@scripts/tag_release.sh
 
 lint: lint-go
 	cd web && npm run lint
