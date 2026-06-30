@@ -120,14 +120,14 @@ func LookupSessionWithUser(ctx context.Context, db *sql.DB, rawToken string) (*S
 	var lastActivity, expiresAt string
 	err := db.QueryRowContext(ctx, `
 		SELECT s.id, s.user_id, s.last_activity, s.expires_at,
-		       u.id, u.login, COALESCE(u.display_name, ''), u.is_admin,
+		       u.id, u.login, COALESCE(u.display_name, ''), u.is_admin, u.status,
 		       u.language, u.currency, u.timezone, u.theme
 		FROM sessions s
 		JOIN users u ON u.id = s.user_id
 		WHERE s.token_hash = ?`, hash,
 	).Scan(
 		&s.ID, &s.UserID, &lastActivity, &expiresAt,
-		&u.ID, &u.Login, &u.DisplayName, &isAdmin,
+		&u.ID, &u.Login, &u.DisplayName, &isAdmin, &u.Status,
 		&u.Language, &u.Currency, &u.Timezone, &u.Theme,
 	)
 	if err != nil {

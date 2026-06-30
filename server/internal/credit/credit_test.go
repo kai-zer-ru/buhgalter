@@ -27,7 +27,7 @@ func seedCreditEnv(t *testing.T) (context.Context, *db.Handle, string, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	userID, err := auth.CreateUser(ctx, sqlDB, "credituser", hash, "Credit", false)
+	userID, err := auth.CreateUser(ctx, sqlDB, "credituser", hash, "Credit", false, auth.UserStatusActive)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -27,6 +27,7 @@ CREATE TABLE users (
     currency        TEXT NOT NULL DEFAULT 'RUB',
     timezone        TEXT NOT NULL DEFAULT 'Europe/Moscow',
     theme           TEXT NOT NULL DEFAULT 'light',
+    status          TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'pending', 'banned')),
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -270,6 +271,7 @@ CREATE TABLE notification_settings (
     trigger_debt        INTEGER NOT NULL DEFAULT 1,
     trigger_credit      INTEGER NOT NULL DEFAULT 1,
     trigger_planned     INTEGER NOT NULL DEFAULT 1,
+    trigger_user_registration INTEGER NOT NULL DEFAULT 1,
     trigger_password_reset INTEGER NOT NULL DEFAULT 1,
     debt_days_before    INTEGER NOT NULL DEFAULT 1,
     my_debt_overdue_days_limit INTEGER NOT NULL DEFAULT 7,
@@ -297,7 +299,8 @@ CREATE INDEX idx_notification_log_dedup
 CREATE TABLE notification_templates (
     user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     trigger_type    TEXT NOT NULL CHECK (trigger_type IN (
-                        'debt_overdue', 'debt_due_soon', 'credit_payment', 'planned_operation', 'password_reset', 'test'
+                        'debt_overdue', 'debt_due_soon', 'credit_payment', 'planned_operation',
+                        'user_registration', 'password_reset', 'test'
                     )),
     template        TEXT NOT NULL,
     updated_at      TEXT NOT NULL DEFAULT (datetime('now')),

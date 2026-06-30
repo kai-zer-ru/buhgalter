@@ -25,6 +25,7 @@ erDiagram
         TEXT language
         TEXT timezone
         INTEGER is_admin
+        TEXT status
     }
 
     sessions {

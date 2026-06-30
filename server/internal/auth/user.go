@@ -11,6 +11,7 @@ type User struct {
 	Login       string `json:"login"`
 	DisplayName string `json:"display_name"`
 	IsAdmin     bool   `json:"is_admin"`
+	Status      string `json:"status"`
 	Language    string `json:"language"`
 	Currency    string `json:"currency"`
 	Timezone    string `json:"timezone"`
@@ -21,9 +22,9 @@ func LoadUser(ctx context.Context, db *sql.DB, userID string) (*User, error) {
 	var u User
 	var isAdmin int
 	err := db.QueryRowContext(ctx, `
-		SELECT id, login, COALESCE(display_name, ''), is_admin, language, currency, timezone, theme
+		SELECT id, login, COALESCE(display_name, ''), is_admin, status, language, currency, timezone, theme
 		FROM users WHERE id = ?`, userID,
-	).Scan(&u.ID, &u.Login, &u.DisplayName, &isAdmin, &u.Language, &u.Currency, &u.Timezone, &u.Theme)
+	).Scan(&u.ID, &u.Login, &u.DisplayName, &isAdmin, &u.Status, &u.Language, &u.Currency, &u.Timezone, &u.Theme)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, errors.New("user not found")
@@ -39,9 +40,9 @@ func LoadUserByLogin(ctx context.Context, db *sql.DB, login string) (*User, stri
 	var isAdmin int
 	var passwordHash string
 	err := db.QueryRowContext(ctx, `
-		SELECT id, login, COALESCE(display_name, ''), is_admin, language, currency, timezone, theme, password_hash
+		SELECT id, login, COALESCE(display_name, ''), is_admin, status, language, currency, timezone, theme, password_hash
 		FROM users WHERE login = ?`, login,
-	).Scan(&u.ID, &u.Login, &u.DisplayName, &isAdmin, &u.Language, &u.Currency, &u.Timezone, &u.Theme, &passwordHash)
+	).Scan(&u.ID, &u.Login, &u.DisplayName, &isAdmin, &u.Status, &u.Language, &u.Currency, &u.Timezone, &u.Theme, &passwordHash)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, "", errors.New("user not found")

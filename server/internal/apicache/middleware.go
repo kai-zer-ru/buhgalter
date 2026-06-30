@@ -108,6 +108,10 @@ func isMutating(method string) bool {
 
 func invalidateForRequest(cache *Cache, r *http.Request) {
 	path := r.URL.Path
+	if path == "/api/v1/auth/register" {
+		cache.DeleteContaining("/api/v1/admin/users")
+		return
+	}
 	if strings.HasPrefix(path, "/api/v1/setup") {
 		cache.DeletePrefix("g:setup:")
 		cache.Clear()

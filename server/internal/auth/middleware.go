@@ -45,6 +45,9 @@ func RequireAuth(store *db.Handle) func(http.Handler) http.Handler {
 			sqlDB := store.DB()
 			session, sessionUser, err := LookupSessionWithUser(r.Context(), sqlDB, token)
 			if err == nil {
+				if RejectIfNotActive(w, r, sessionUser.Status) {
+					return
+				}
 				info := AuthInfo{User: *sessionUser, SessionID: session.ID, Token: token}
 				ctx := context.WithValue(r.Context(), AuthContextKey, info)
 				next.ServeHTTP(w, r.WithContext(ctx))
@@ -59,6 +62,9 @@ func RequireAuth(store *db.Handle) func(http.Handler) http.Handler {
 			user, err := LoadUser(r.Context(), sqlDB, userID)
 			if err != nil {
 				writeUserLoadError(w, r, err)
+				return
+			}
+			if RejectIfNotActive(w, r, user.Status) {
 				return
 			}
 			info := AuthInfo{User: *user, Token: token, APIToken: true}
@@ -116,6 +122,9 @@ func RequireAPIToken(store *db.Handle) func(http.Handler) http.Handler {
 			user, err := LoadUser(r.Context(), sqlDB, userID)
 			if err != nil {
 				apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized, "ERR_USER_NOT_FOUND")
+				return
+			}
+			if RejectIfNotActive(w, r, user.Status) {
 				return
 			}
 

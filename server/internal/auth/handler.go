@@ -5,11 +5,13 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/kai-zer-ru/buhgalter/internal/apperror"
 	"github.com/kai-zer-ru/buhgalter/internal/audit"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
 	appmw "github.com/kai-zer-ru/buhgalter/internal/middleware"
+	"github.com/kai-zer-ru/buhgalter/internal/notify"
 )
 
 type Handler struct {
@@ -35,6 +37,10 @@ type registerRequest struct {
 	Password        string `json:"password"`
 	PasswordConfirm string `json:"password_confirm"`
 	DisplayName     string `json:"display_name"`
+}
+
+type registerResponse struct {
+	User User `json:"user"`
 }
 
 type verifyResponse struct {
@@ -105,6 +111,11 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	if err != nil || !ok {
 		h.logFailedLogin(ip, login)
 		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.InvalidCredentials)
+		return
+	}
+
+	if RejectIfNotActive(w, r, user.Status) {
+		h.logFailedLogin(ip, login)
 		return
 	}
 
@@ -179,7 +190,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, err := CreateUser(r.Context(), h.Store.DB(), login, hash, displayName, false)
+	userID, err := CreateUser(r.Context(), h.Store.DB(), login, hash, displayName, false, UserStatusPending)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
 			apperror.WriteR(w, r, http.StatusConflict, apperror.ValidationError, "CONFLICT_LOGIN_TAKEN")
@@ -195,15 +206,9 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ip := ClientIP(r)
-	token, err := CreateSession(r.Context(), h.Store.DB(), user.ID, ip, r.UserAgent())
-	if err != nil {
-		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
-		return
-	}
+	_ = notify.NotifyAdminsOnUserRegistration(r.Context(), h.Store.DB(), user.ID, user.Login, user.DisplayName, time.Now().UTC().Format(time.RFC3339))
 
-	SetSessionCookie(w, r, token)
-	writeJSON(w, http.StatusCreated, loginResponse{Token: token, User: *user})
+	writeJSON(w, http.StatusCreated, registerResponse{User: *user})
 }
 
 func (h *Handler) Verify(w http.ResponseWriter, r *http.Request) {

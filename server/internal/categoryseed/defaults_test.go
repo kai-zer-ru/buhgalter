@@ -19,7 +19,7 @@ func TestSeedDefaults(t *testing.T) {
 	defer mgr.Close()
 
 	ctx := context.Background()
-	userID, err := auth.CreateUser(ctx, mgr.DB(), "u1", "hash", "User", false)
+	userID, err := auth.CreateUser(ctx, mgr.DB(), "u1", "hash", "User", false, auth.UserStatusActive)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -186,6 +186,8 @@ paths:
           description: Успешный вход
         '401':
           description: Неверные учётные данные
+        '403':
+          description: Учётная запись на модерации или заблокирована (USER_PENDING_MODERATION, USER_BANNED)
         '429':
           description: Превышен лимит попыток
   /auth/logout:
@@ -227,7 +229,15 @@ paths:
                   description: Опционально; по умолчанию — login
       responses:
         '201':
-          description: Пользователь создан
+          description: Пользователь создан (статус pending, сессия не выдаётся)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                properties:
+                  user:
+                    $ref: '#/components/schemas/User'
         '400':
           description: Ошибка валидации (пароли не совпадают и т.д.)
         '403':
@@ -629,6 +639,42 @@ paths:
       responses:
         '204':
           description: Пользователь удалён
+  /admin/users/{id}/status:
+    put:
+      summary: Изменить статус пользователя
+      description: |
+        Допустимые переходы: pending→active|banned, active→banned, banned→active.
+        Нельзя менять свой статус. При бане сессии пользователя инвалидируются.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [active, banned]
+      responses:
+        '200':
+          description: Обновлённый пользователь
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUser'
+        '400':
+          description: Недопустимый статус или переход
+        '404':
+          description: Пользователь не найден
   /admin/diagnostics:
     get:
       summary: Диагностика системы
@@ -2446,6 +2492,7 @@ components:
               type: string
               description: |
                 Код ошибки: UNAUTHORIZED, FORBIDDEN, INVALID_CREDENTIALS, REGISTRATION_DISABLED,
+                USER_PENDING_MODERATION, USER_BANNED, USER_STATUS_INVALID, USER_STATUS_TRANSITION,
                 RATE_LIMITED, VALIDATION_ERROR, INTERNAL_ERROR, NOT_FOUND, CONFLICT,
                 ALREADY_CONFIGURED, SERVICE_UNAVAILABLE.
                 Для смены пароля и большинства 400 — `VALIDATION_ERROR`; текст в `message`
@@ -2465,6 +2512,46 @@ components:
           code: VALIDATION_ERROR
           message: Некорректные параметры запроса
           field: monthly_payment
+    User:
+      type: object
+      required: [id, login, display_name, is_admin, status, language, currency, timezone, theme]
+      properties:
+        id:
+          type: string
+        login:
+          type: string
+        display_name:
+          type: string
+        is_admin:
+          type: boolean
+        status:
+          type: string
+          enum: [active, pending, banned]
+        language:
+          type: string
+        currency:
+          type: string
+        timezone:
+          type: string
+        theme:
+          type: string
+    AdminUser:
+      type: object
+      required: [id, login, display_name, is_admin, status, created_at]
+      properties:
+        id:
+          type: string
+        login:
+          type: string
+        display_name:
+          type: string
+        is_admin:
+          type: boolean
+        status:
+          type: string
+          enum: [active, pending, banned]
+        created_at:
+          type: string
     AdminSettings:
       type: object
       required: [registration_enabled, external_url, secret_key_set]
@@ -2570,7 +2657,7 @@ components:
       properties:
         trigger_type:
           type: string
-          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, password_reset, test]
+          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, user_registration, password_reset, test]
         template:
           type: string
           description: Текст шаблона
@@ -2594,6 +2681,7 @@ components:
           trigger_debt,
           trigger_credit,
           trigger_planned,
+          trigger_user_registration,
           trigger_password_reset,
           debt_days_before,
           my_debt_overdue_days_limit,
@@ -2635,6 +2723,9 @@ components:
           type: boolean
         trigger_planned:
           type: boolean
+        trigger_user_registration:
+          type: boolean
+          description: Только для администратора — уведомление о новой регистрации
         trigger_password_reset:
           type: boolean
         debt_days_before:
@@ -2671,7 +2762,7 @@ components:
       properties:
         trigger_type:
           type: string
-          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, password_reset, test]
+          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, user_registration, password_reset, test]
         template:
           type: string
           minLength: 1
@@ -2706,6 +2797,9 @@ components:
           type: boolean
         trigger_planned:
           type: boolean
+        trigger_user_registration:
+          type: boolean
+          description: Только для администратора — уведомление о новой регистрации
         trigger_password_reset:
           type: boolean
         debt_days_before:
@@ -2749,7 +2843,7 @@ components:
       properties:
         trigger_type:
           type: string
-          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, password_reset, test]
+          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, user_registration, password_reset, test]
         template:
           type: string
           minLength: 1
@@ -2765,7 +2859,7 @@ components:
       properties:
         trigger_type:
           type: string
-          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, password_reset, test]
+          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, user_registration, password_reset, test]
     Category:
       type: object
       properties:

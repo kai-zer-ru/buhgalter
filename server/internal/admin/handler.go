@@ -49,6 +49,7 @@ type userItem struct {
 	Login       string `json:"login"`
 	DisplayName string `json:"display_name"`
 	IsAdmin     bool   `json:"is_admin"`
+	Status      string `json:"status"`
 	CreatedAt   string `json:"created_at"`
 }
 
@@ -211,7 +212,7 @@ func (h *Handler) PutNotificationSecretKey(w http.ResponseWriter, r *http.Reques
 
 func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.Store.DB().QueryContext(r.Context(), `
-		SELECT id, login, COALESCE(display_name, ''), is_admin, created_at
+		SELECT id, login, COALESCE(display_name, ''), is_admin, status, created_at
 		FROM users ORDER BY created_at ASC`,
 	)
 	if err != nil {
@@ -224,7 +225,7 @@ func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var u userItem
 		var isAdmin int
-		if err := rows.Scan(&u.ID, &u.Login, &u.DisplayName, &isAdmin, &u.CreatedAt); err != nil {
+		if err := rows.Scan(&u.ID, &u.Login, &u.DisplayName, &isAdmin, &u.Status, &u.CreatedAt); err != nil {
 			apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 			return
 		}
@@ -280,7 +281,7 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, err := auth.CreateUser(r.Context(), h.Store.DB(), login, hash, displayName, req.IsAdmin)
+	userID, err := auth.CreateUser(r.Context(), h.Store.DB(), login, hash, displayName, req.IsAdmin, auth.UserStatusActive)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
 			apperror.WriteR(w, r, http.StatusConflict, apperror.ValidationError, "CONFLICT_LOGIN_TAKEN")
@@ -290,8 +291,8 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var createdAt string
-	_ = h.Store.DB().QueryRowContext(r.Context(), `SELECT created_at FROM users WHERE id = ?`, userID).Scan(&createdAt)
+	var createdAt, status string
+	_ = h.Store.DB().QueryRowContext(r.Context(), `SELECT created_at, status FROM users WHERE id = ?`, userID).Scan(&createdAt, &status)
 
 	ip := auth.ClientIP(r)
 	_ = h.Audit.Log("admin.user.create", info.User.ID, info.User.Login, ip, map[string]any{
@@ -303,6 +304,7 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		Login:       login,
 		DisplayName: displayName,
 		IsAdmin:     req.IsAdmin,
+		Status:      status,
 		CreatedAt:   createdAt,
 	})
 }

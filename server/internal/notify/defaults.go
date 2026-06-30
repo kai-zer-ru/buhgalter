@@ -16,20 +16,22 @@ type localeCatalog struct {
 
 var fallbackTemplates = map[string]map[string]string{
 	"ru": {
-		TriggerDebtOverdue:   "Просрочен долг: {debtor} — {amount}. (Срок: {due_date})",
-		TriggerDebtDueSoon:   "Напоминание: вернуть долг {debtor} — {amount}. (Срок: {due_date}, через {days} дн.)",
-		TriggerCreditPayment: "Платёж по кредиту «{credit}»: {amount}. Дата: {when}",
-		TriggerPlannedOp:     "Плановая операция: {type} на {amount} — {description}",
-		TriggerPasswordReset: "Запрос на восстановление пароля: {display_name} (@{login}), время: {requested_at}.",
-		TriggerTest:          "Тестовое уведомление «Бухгалтер». Канал: {channel}.",
+		TriggerDebtOverdue:      "Просрочен долг: {debtor} — {amount}. (Срок: {due_date})",
+		TriggerDebtDueSoon:      "Напоминание: вернуть долг {debtor} — {amount}. (Срок: {due_date}, через {days} дн.)",
+		TriggerCreditPayment:    "Платёж по кредиту «{credit}»: {amount}. Дата: {when}",
+		TriggerPlannedOp:        "Плановая операция: {type} на {amount} — {description}",
+		TriggerUserRegistration: "Новая регистрация: {display_name} (@{login}), {registered_at}. Модерация: {moderation_url}",
+		TriggerPasswordReset:    "Запрос на восстановление пароля: {display_name} (@{login}), время: {requested_at}.",
+		TriggerTest:             "Тестовое уведомление «Бухгалтер». Канал: {channel}.",
 	},
 	"en": {
-		TriggerDebtOverdue:   "Debt overdue: {debtor} — {amount} (due {due_date})",
-		TriggerDebtDueSoon:   "Reminder: repay debt to {debtor} — {amount} (due {due_date}, in {days} days)",
-		TriggerCreditPayment: "Credit payment \"{credit}\": {amount} {when}",
-		TriggerPlannedOp:     "Planned transaction: {type} {amount} — {description}",
-		TriggerPasswordReset: "Password reset requested by {display_name} (@{login}) at {requested_at}.",
-		TriggerTest:          "Buhgalter test notification. Channel: {channel}.",
+		TriggerDebtOverdue:      "Debt overdue: {debtor} — {amount} (due {due_date})",
+		TriggerDebtDueSoon:      "Reminder: repay debt to {debtor} — {amount} (due {due_date}, in {days} days)",
+		TriggerCreditPayment:    "Credit payment \"{credit}\": {amount} {when}",
+		TriggerPlannedOp:        "Planned transaction: {type} {amount} — {description}",
+		TriggerUserRegistration: "New registration: {display_name} (@{login}), {registered_at}. Moderation: {moderation_url}",
+		TriggerPasswordReset:    "Password reset requested by {display_name} (@{login}) at {requested_at}.",
+		TriggerTest:             "Buhgalter test notification. Channel: {channel}.",
 	},
 }
 

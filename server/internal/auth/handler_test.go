@@ -34,7 +34,7 @@ func seedAdmin(t *testing.T, mgr *db.Handle) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	userID, err := CreateUser(ctx, mgr.DB(), "admin", hash, "Admin", true)
+	userID, err := CreateUser(ctx, mgr.DB(), "admin", hash, "Admin", true, UserStatusActive)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,6 +125,20 @@ func TestHandlerRegister(t *testing.T) {
 	h.Register(rec, req)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("register status %d: %s", rec.Code, rec.Body.String())
+	}
+	var regResp struct {
+		User User `json:"user"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&regResp); err != nil {
+		t.Fatal(err)
+	}
+	if regResp.User.Status != string(UserStatusPending) {
+		t.Fatalf("expected pending status, got %q", regResp.User.Status)
+	}
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == SessionCookieName && c.Value != "" {
+			t.Fatal("expected no session cookie after register")
+		}
 	}
 }
 
@@ -327,7 +341,7 @@ func TestLoginRateLimited(t *testing.T) {
 func TestRequireAdminForbidden(t *testing.T) {
 	mgr := testDB(t)
 	hash, _ := HashPassword("secret123")
-	userID, _ := CreateUser(context.Background(), mgr.DB(), "user", hash, "U", false)
+	userID, _ := CreateUser(context.Background(), mgr.DB(), "user", hash, "U", false, UserStatusActive)
 	token, _ := CreateSession(context.Background(), mgr.DB(), userID, "", "")
 
 	rec := httptest.NewRecorder()
@@ -377,11 +391,11 @@ func TestCreateUserDuplicateLogin(t *testing.T) {
 	mgr := testDB(t)
 	ctx := context.Background()
 	hash, _ := HashPassword("secret123")
-	_, err := CreateUser(ctx, mgr.DB(), "dup", hash, "D", false)
+	_, err := CreateUser(ctx, mgr.DB(), "dup", hash, "D", false, UserStatusActive)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = CreateUser(ctx, mgr.DB(), "dup", hash, "D2", false)
+	_, err = CreateUser(ctx, mgr.DB(), "dup", hash, "D2", false, UserStatusActive)
 	if err == nil {
 		t.Fatal("expected duplicate error")
 	}

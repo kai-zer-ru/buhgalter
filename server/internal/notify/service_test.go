@@ -27,7 +27,7 @@ func seedNotifyUser(t *testing.T) (context.Context, *sql.DB, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	userID, err := auth.CreateUser(ctx, sqlDB, "notifyuser", hash, "Notify", false)
+	userID, err := auth.CreateUser(ctx, sqlDB, "notifyuser", hash, "Notify", false, auth.UserStatusActive)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -230,6 +230,51 @@ func TestSendTestMaxChannel(t *testing.T) {
 	}
 	if err := SendTest(ctx, sqlDB, userID, ChannelMax, box); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestGetSettingsHidesUserRegistrationWhenDisabled(t *testing.T) {
+	ctx, sqlDB, userID := seedNotifyUser(t)
+	hash, err := auth.HashPassword("secret123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	adminID, err := auth.CreateUser(ctx, sqlDB, "adminnotify", hash, "Admin", true, auth.UserStatusActive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = userID
+
+	settings, err := GetSettings(ctx, sqlDB, adminID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tpl := range settings.Templates {
+		if tpl.TriggerType == TriggerUserRegistration {
+			t.Fatal("expected user_registration template to be hidden when registration is disabled")
+		}
+	}
+	if settings.TriggerUserRegistration {
+		t.Fatal("expected trigger_user_registration to be false when registration is disabled")
+	}
+
+	_, err = sqlDB.ExecContext(ctx, `UPDATE system_settings SET registration_enabled = 1 WHERE id = 1`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings, err = GetSettings(ctx, sqlDB, adminID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, tpl := range settings.Templates {
+		if tpl.TriggerType == TriggerUserRegistration {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected user_registration template when registration is enabled")
 	}
 }
 

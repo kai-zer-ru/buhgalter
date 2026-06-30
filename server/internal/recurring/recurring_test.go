@@ -28,7 +28,7 @@ func seedRecurringEnv(t *testing.T) (context.Context, *db.Handle, string, string
 	if err != nil {
 		t.Fatal(err)
 	}
-	userID, err := auth.CreateUser(ctx, sqlDB, "recuser", hash, "Recurring", false)
+	userID, err := auth.CreateUser(ctx, sqlDB, "recuser", hash, "Recurring", false, auth.UserStatusActive)
 	if err != nil {
 		t.Fatal(err)
 	}

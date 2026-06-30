@@ -62,8 +62,14 @@ func (s *Server) Handler() http.Handler {
 	r.Use(chimw.Compress(5))
 
 	setupHandler := &setup.Handler{DataDir: s.cfg.DataDir, Store: dbHandle, Audit: s.audit, Backup: s.backup}
-	loginLimiter := appmw.NewIPRateLimiter(5, time.Minute)
-	passwordResetLimiter := appmw.NewIPRateLimiter(5, time.Minute)
+	loginLimit := 5
+	passwordResetLimit := 5
+	if os.Getenv("BUHGALTER_E2E") == "1" {
+		loginLimit = 1000
+		passwordResetLimit = 1000
+	}
+	loginLimiter := appmw.NewIPRateLimiter(loginLimit, time.Minute)
+	passwordResetLimiter := appmw.NewIPRateLimiter(passwordResetLimit, time.Minute)
 	authHandler := &auth.Handler{
 		Store:                dbHandle,
 		Audit:                s.audit,
@@ -105,7 +111,7 @@ func (s *Server) Handler() http.Handler {
 
 		api.Route("/auth", func(ar chi.Router) {
 			ar.Post("/login", authHandler.Login)
-			ar.Post("/register", authHandler.Register)
+			ar.With(apiCacheMW).Post("/register", authHandler.Register)
 			ar.Post("/request-password-reset", authHandler.RequestPasswordReset)
 			ar.Get("/verify", authHandler.Verify)
 			ar.With(auth.RequireAuth(dbHandle), apiCacheMW).Post("/logout", authHandler.Logout)
@@ -230,6 +236,7 @@ func (s *Server) Handler() http.Handler {
 			ad.Put("/settings/notification-secret", adminHandler.PutNotificationSecretKey)
 			ad.Get("/users", adminHandler.ListUsers)
 			ad.Post("/users", adminHandler.CreateUser)
+			ad.Put("/users/{id}/status", adminHandler.UpdateUserStatus)
 			ad.Put("/users/{id}/password", adminHandler.ResetUserPassword)
 			ad.Delete("/users/{id}", adminHandler.DeleteUser)
 			ad.Get("/password-reset-requests", adminHandler.ListPasswordResetRequests)

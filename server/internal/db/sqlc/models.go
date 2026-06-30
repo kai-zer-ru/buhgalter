@@ -164,6 +164,7 @@ type NotificationSetting struct {
 	TriggerDebt                   int64   `json:"trigger_debt"`
 	TriggerCredit                 int64   `json:"trigger_credit"`
 	TriggerPlanned                int64   `json:"trigger_planned"`
+	TriggerUserRegistration       int64   `json:"trigger_user_registration"`
 	TriggerPasswordReset          int64   `json:"trigger_password_reset"`
 	DebtDaysBefore                int64   `json:"debt_days_before"`
 	MyDebtOverdueDaysLimit        int64   `json:"my_debt_overdue_days_limit"`
@@ -266,6 +267,7 @@ type User struct {
 	Currency     string  `json:"currency"`
 	Timezone     string  `json:"timezone"`
 	Theme        string  `json:"theme"`
+	Status       string  `json:"status"`
 	CreatedAt    string  `json:"created_at"`
 	UpdatedAt    string  `json:"updated_at"`
 }

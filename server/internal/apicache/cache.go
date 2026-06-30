@@ -54,6 +54,19 @@ func (c *Cache) DeletePrefix(prefix string) {
 	}
 }
 
+func (c *Cache) DeleteContaining(substr string) {
+	if substr == "" {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for key := range c.items {
+		if strings.Contains(key, substr) {
+			delete(c.items, key)
+		}
+	}
+}
+
 func (c *Cache) Clear() {
 	c.mu.Lock()
 	c.items = make(map[string]Response)

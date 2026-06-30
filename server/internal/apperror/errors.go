@@ -25,6 +25,10 @@ const (
 	Conflict               = "CONFLICT"
 	AlreadyConfigured      = "ALREADY_CONFIGURED"
 	ServiceUnavailable     = "SERVICE_UNAVAILABLE"
+	UserPendingModeration  = "USER_PENDING_MODERATION"
+	UserBanned             = "USER_BANNED"
+	UserStatusInvalid      = "USER_STATUS_INVALID"
+	UserStatusTransition   = "USER_STATUS_TRANSITION"
 )
 
 type ErrorBody struct {
@@ -101,6 +105,11 @@ func inferField(msgKey string) string {
 		return "payment_date"
 	case "ERR_CREDIT_INVALID_STATUS":
 		return "status"
+	case "CONFLICT_LOGIN_TAKEN", "ERR_LOGIN_LENGTH", "ERR_LOGIN_PASSWORD_REQUIRED":
+		return "login"
+	case "PASSWORD_TOO_SHORT", "PASSWORD_TOO_WEAK", "PASSWORDS_MISMATCH",
+		"INVALID_CURRENT_PASSWORD", "PASSWORD_UNCHANGED":
+		return "password"
 	default:
 		return ""
 	}

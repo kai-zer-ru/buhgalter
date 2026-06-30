@@ -141,8 +141,8 @@ func (h *Handler) Setup(w http.ResponseWriter, r *http.Request) {
 	defer func() { _ = tx.Rollback() }()
 
 	_, err = tx.Exec(`
-		INSERT INTO users (id, login, password_hash, display_name, is_admin)
-		VALUES (?, ?, ?, ?, 1)`,
+		INSERT INTO users (id, login, password_hash, display_name, is_admin, status)
+		VALUES (?, ?, ?, ?, 1, 'active')`,
 		userID, login, hash, displayName,
 	)
 	if err != nil {

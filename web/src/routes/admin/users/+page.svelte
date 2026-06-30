@@ -5,19 +5,23 @@
 	import { page } from '$app/stores';
 	import { _ } from 'svelte-i18n';
 	import {
-		ApiError,
 		createAdminUser,
 		deleteAdminUser,
 		listAdminUsers,
 		resetAdminUserPassword,
-		type AdminUser
+		updateAdminUserStatus,
+		type AdminUser,
+		type UserStatus
 	} from '$lib/api/client';
+	import { formatAuthUserApiError } from '$lib/auth/api-errors';
 	import { user } from '$lib/stores/auth';
 	import { confirm } from '$lib/confirm';
 	import FormFeedback from '$lib/components/FormFeedback.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
+	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
 	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
 	import { toast } from '$lib/toast';
+	import { refreshPendingUsersBanner } from '$lib/stores/admin-pending-users';
 	import { validatePasswordPolicy } from '$lib/password-policy';
 
 	let users = $state<AdminUser[]>([]);
@@ -39,6 +43,12 @@
 	/** Prevents the ?reset= query effect from reopening the modal after cancel. */
 	let dismissedResetQuery = $state<string | null>(null);
 
+	let moderateOpen = $state(false);
+	let moderateUser = $state<AdminUser | null>(null);
+	let moderateError = $state('');
+	let moderateLoading = $state(false);
+	let dismissedModerateQuery = $state<string | null>(null);
+
 	const passwordsMatch = $derived(passwordConfirm.length === 0 || password === passwordConfirm);
 	const formValid = $derived(
 		login.trim().length >= 3 &&
@@ -54,6 +64,23 @@
 			resetPassword === resetPasswordConfirm
 	);
 
+	function statusLabel(status: UserStatus): string {
+		switch (status) {
+			case 'active':
+				return $_('admin.users.status.active');
+			case 'pending':
+				return $_('admin.users.status.pending');
+			case 'banned':
+				return $_('admin.users.status.banned');
+			default:
+				return status;
+		}
+	}
+
+	function roleLabel(isAdminRole: boolean): string {
+		return isAdminRole ? $_('admin.users.roleAdmin') : $_('admin.users.roleUser');
+	}
+
 	onMount(async () => {
 		if (!$user?.is_admin) {
 			await goto(resolve('/'));
@@ -61,6 +88,7 @@
 		}
 		users = await listAdminUsers();
 		openResetFromQuery();
+		openModerateFromQuery();
 	});
 
 	$effect(() => {
@@ -71,6 +99,17 @@
 		}
 		if (users.length > 0) {
 			openResetFromQuery();
+		}
+	});
+
+	$effect(() => {
+		const userId = $page.url.searchParams.get('moderate');
+		if (!userId) {
+			dismissedModerateQuery = null;
+			return;
+		}
+		if (users.length > 0) {
+			openModerateFromQuery();
 		}
 	});
 
@@ -111,11 +150,71 @@
 		await goto(adminUsersUrl, { replaceState: true, keepFocus: true, noScroll: true });
 	}
 
+	function openModerateFromQuery() {
+		const userId = $page.url.searchParams.get('moderate');
+		if (!userId || userId === dismissedModerateQuery) return;
+		const target = users.find((u) => u.id === userId);
+		if (target && target.status === 'pending') {
+			openModeration(target);
+		}
+	}
+
+	function openModeration(u: AdminUser) {
+		moderateUser = u;
+		moderateError = '';
+		moderateOpen = true;
+	}
+
+	function closeModeration() {
+		const userId = $page.url.searchParams.get('moderate');
+		if (userId) {
+			dismissedModerateQuery = userId;
+		}
+		moderateOpen = false;
+		moderateUser = null;
+		void clearModerateQueryParam();
+	}
+
+	async function clearModerateQueryParam() {
+		if (!$page.url.searchParams.has('moderate')) return;
+		const url = new URL($page.url);
+		url.searchParams.delete('moderate');
+		const search = url.searchParams.toString();
+		const adminUsersUrl = search ? `${resolve('/admin/users')}?${search}` : resolve('/admin/users');
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- query params after resolved base path
+		await goto(adminUsersUrl, { replaceState: true, keepFocus: true, noScroll: true });
+	}
+
+	async function submitModeration(status: 'active' | 'banned') {
+		if (!moderateUser) return;
+		if (status === 'banned') {
+			const ok = await confirm({
+				message: $_('admin.users.confirm.ban', { values: { name: moderateUser.login } }),
+				confirmLabel: $_('admin.users.action.ban'),
+				danger: true
+			});
+			if (!ok) return;
+		}
+		moderateError = '';
+		moderateLoading = true;
+		try {
+			await updateAdminUserStatus(moderateUser.id, status);
+			users = await listAdminUsers();
+			refreshPendingUsersBanner();
+			toast($_('common.saved'));
+			closeModeration();
+		} catch (err) {
+			moderateError = formatAuthUserApiError(err);
+		} finally {
+			moderateLoading = false;
+		}
+	}
+
 	async function submit(e: Event) {
 		e.preventDefault();
 		formError = '';
 		if (!formValid) {
-			formError = 'Пароли не совпадают или слишком короткие';
+			formError = $_('admin.users.passwordMismatch');
 			return;
 		}
 		loading = true;
@@ -135,7 +234,7 @@
 			users = await listAdminUsers();
 			toast($_('common.saved'));
 		} catch (err) {
-			formError = err instanceof ApiError ? err.message : $_('common.error');
+			formError = formatAuthUserApiError(err);
 		} finally {
 			loading = false;
 		}
@@ -157,9 +256,29 @@
 			toast($_('common.saved'));
 			closeResetPassword();
 		} catch (err) {
-			resetError = err instanceof ApiError ? err.message : $_('common.error');
+			resetError = formatAuthUserApiError(err);
 		} finally {
 			resetLoading = false;
+		}
+	}
+
+	async function changeStatus(u: AdminUser, status: 'active' | 'banned') {
+		if (status === 'banned') {
+			const ok = await confirm({
+				message: $_('admin.users.confirm.ban', { values: { name: u.login } }),
+				confirmLabel: $_('admin.users.action.ban'),
+				danger: true
+			});
+			if (!ok) return;
+		}
+		listError = '';
+		try {
+			await updateAdminUserStatus(u.id, status);
+			users = await listAdminUsers();
+			refreshPendingUsersBanner();
+			toast($_('common.saved'));
+		} catch (err) {
+			listError = formatAuthUserApiError(err);
 		}
 	}
 
@@ -176,8 +295,63 @@
 			users = await listAdminUsers();
 			toast($_('common.deleted'));
 		} catch (err) {
-			listError = err instanceof ApiError ? err.message : $_('common.error');
+			listError = formatAuthUserApiError(err);
 		}
+	}
+
+	function rowActions(u: AdminUser): RowAction[] {
+		const isSelf = u.id === $user?.id;
+		const actions: RowAction[] = [];
+
+		if (!isSelf) {
+			if (u.status === 'pending') {
+				actions.push({
+					icon: 'create',
+					label: $_('admin.users.action.activate'),
+					onclick: () => void changeStatus(u, 'active')
+				});
+			}
+			if (u.status === 'active') {
+				actions.push({
+					icon: 'archive',
+					label: $_('admin.users.action.ban'),
+					variant: 'danger',
+					onclick: () => void changeStatus(u, 'banned')
+				});
+			}
+			if (u.status === 'banned') {
+				actions.push({
+					icon: 'save',
+					label: $_('admin.users.action.unblock'),
+					onclick: () => void changeStatus(u, 'active')
+				});
+			}
+			if (u.status === 'pending') {
+				actions.push({
+					icon: 'archive',
+					label: $_('admin.users.action.ban'),
+					variant: 'danger',
+					onclick: () => void changeStatus(u, 'banned')
+				});
+			}
+		}
+
+		actions.push({
+			icon: 'edit',
+			label: $_('admin.users.resetPassword'),
+			onclick: () => openResetPassword(u)
+		});
+
+		if (!isSelf) {
+			actions.push({
+				icon: 'delete',
+				label: $_('common.delete'),
+				variant: 'danger',
+				onclick: () => void remove(u.id, u.login)
+			});
+		}
+
+		return actions;
 	}
 </script>
 
@@ -249,32 +423,32 @@
 
 	<div class="card md:overflow-x-auto">
 		<div class="hidden md:block">
-			<table class="w-full text-left text-sm">
+			<table class="w-full table-fixed text-left text-sm">
+				<colgroup>
+					<col />
+					<col />
+					<col class="w-[11rem]" />
+					<col class="w-[9.5rem]" />
+					<col class="w-12" />
+				</colgroup>
 				<thead>
 					<tr style:color="var(--text-muted)">
-						<th class="pb-3 pr-4">{$_('login.login')}</th>
-						<th class="pb-3 pr-4">{$_('register.display_name')}</th>
-						<th class="pb-3 pr-4">{$_('admin.users.role')}</th>
-						<th class="pb-3"></th>
+						<th class="p-3">{$_('login.login')}</th>
+						<th class="p-3">{$_('register.display_name')}</th>
+						<th class="p-3 whitespace-nowrap">{$_('admin.users.role')}</th>
+						<th class="p-3 whitespace-nowrap">{$_('admin.users.status')}</th>
+						<th class="p-3 w-0"></th>
 					</tr>
 				</thead>
 				<tbody>
 					{#each users as u (u.id)}
 						<tr class="border-t" style:border-color="var(--border)">
-							<td class="py-3 pr-4">{u.login}</td>
-							<td class="py-3 pr-4">{u.display_name}</td>
-							<td class="py-3 pr-4">{u.is_admin ? 'admin' : 'user'}</td>
-							<td class="py-3 text-right">
-								<div class="flex justify-end gap-2">
-									<button type="button" class="btn-ghost" onclick={() => openResetPassword(u)}>
-										{$_('admin.users.resetPassword')}
-									</button>
-									{#if u.id !== $user?.id}
-										<button type="button" class="btn-ghost" onclick={() => remove(u.id, u.login)}>
-											{$_('common.delete')}
-										</button>
-									{/if}
-								</div>
+							<td class="p-3 align-middle">{u.login}</td>
+							<td class="p-3 align-middle">{u.display_name}</td>
+							<td class="p-3 align-middle whitespace-nowrap">{roleLabel(u.is_admin)}</td>
+							<td class="p-3 align-middle whitespace-nowrap">{statusLabel(u.status)}</td>
+							<td class="p-3 w-0 align-middle text-right whitespace-nowrap">
+								<RowActionsMenu actions={rowActions(u)} />
 							</td>
 						</tr>
 					{/each}
@@ -284,7 +458,10 @@
 		<div class="space-y-3 md:hidden">
 			{#each users as u (u.id)}
 				<article class="rounded-xl border p-4" style:border-color="var(--border)">
-					<p class="font-medium">{u.login}</p>
+					<div class="flex items-start justify-between gap-2">
+						<p class="font-medium">{u.login}</p>
+						<RowActionsMenu actions={rowActions(u)} />
+					</div>
 					<dl class="mt-2 grid gap-2 text-sm">
 						<div class="flex justify-between gap-2">
 							<dt style:color="var(--text-muted)">{$_('register.display_name')}</dt>
@@ -292,19 +469,13 @@
 						</div>
 						<div class="flex justify-between gap-2">
 							<dt style:color="var(--text-muted)">{$_('admin.users.role')}</dt>
-							<dd>{u.is_admin ? 'admin' : 'user'}</dd>
+							<dd>{roleLabel(u.is_admin)}</dd>
+						</div>
+						<div class="flex justify-between gap-2">
+							<dt style:color="var(--text-muted)">{$_('admin.users.status')}</dt>
+							<dd>{statusLabel(u.status)}</dd>
 						</div>
 					</dl>
-					<div class="mt-3 flex flex-col gap-2">
-						<button type="button" class="btn-ghost w-full" onclick={() => openResetPassword(u)}>
-							{$_('admin.users.resetPassword')}
-						</button>
-						{#if u.id !== $user?.id}
-							<button type="button" class="btn-ghost w-full" onclick={() => remove(u.id, u.login)}>
-								{$_('common.delete')}
-							</button>
-						{/if}
-					</div>
 				</article>
 			{/each}
 		</div>
@@ -364,6 +535,48 @@
 				onclick={() => void submitResetPassword()}
 			>
 				{resetLoading ? $_('common.loading') : $_('common.save')}
+			</button>
+		{/snippet}
+	</ModalShell>
+{/if}
+
+{#if moderateOpen && moderateUser}
+	<ModalShell
+		bind:open={moderateOpen}
+		title={$_('admin.userModeration.title')}
+		onclose={closeModeration}
+	>
+		<div class="space-y-4">
+			<p class="text-sm" style:color="var(--text-muted)">
+				{$_('admin.userModeration.forUser', {
+					values: {
+						login: moderateUser.login,
+						name: moderateUser.display_name || moderateUser.login
+					}
+				})}
+			</p>
+			<FormFeedback error={moderateError} />
+		</div>
+		{#snippet footer()}
+			<button type="button" class="btn-ghost" onclick={closeModeration}>
+				{$_('common.cancel')}
+			</button>
+			<button
+				type="button"
+				class="btn-ghost"
+				style:color="var(--danger)"
+				disabled={moderateLoading}
+				onclick={() => void submitModeration('banned')}
+			>
+				{moderateLoading ? $_('common.loading') : $_('admin.users.action.ban')}
+			</button>
+			<button
+				type="button"
+				class="btn-primary"
+				disabled={moderateLoading}
+				onclick={() => void submitModeration('active')}
+			>
+				{moderateLoading ? $_('common.loading') : $_('admin.users.action.activate')}
 			</button>
 		{/snippet}
 	</ModalShell>
