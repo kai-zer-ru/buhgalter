@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { goto, replaceState } from '$app/navigation';
+	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
 	import { _ } from 'svelte-i18n';
@@ -36,6 +36,8 @@
 	let resetPasswordConfirm = $state('');
 	let resetError = $state('');
 	let resetLoading = $state(false);
+	/** Prevents the ?reset= query effect from reopening the modal after cancel. */
+	let dismissedResetQuery = $state<string | null>(null);
 
 	const passwordsMatch = $derived(passwordConfirm.length === 0 || password === passwordConfirm);
 	const formValid = $derived(
@@ -62,14 +64,19 @@
 	});
 
 	$effect(() => {
-		if (users.length > 0 && $page.url.searchParams.get('reset')) {
+		const userId = $page.url.searchParams.get('reset');
+		if (!userId) {
+			dismissedResetQuery = null;
+			return;
+		}
+		if (users.length > 0) {
 			openResetFromQuery();
 		}
 	});
 
 	function openResetFromQuery() {
 		const userId = $page.url.searchParams.get('reset');
-		if (!userId) return;
+		if (!userId || userId === dismissedResetQuery) return;
 		const target = users.find((u) => u.id === userId);
 		if (target) {
 			openResetPassword(target);
@@ -85,18 +92,23 @@
 	}
 
 	function closeResetPassword() {
+		const userId = $page.url.searchParams.get('reset');
+		if (userId) {
+			dismissedResetQuery = userId;
+		}
 		resetOpen = false;
 		resetUser = null;
-		if ($page.url.searchParams.has('reset')) {
-			const url = new URL($page.url);
-			url.searchParams.delete('reset');
-			const search = url.searchParams.toString();
-			const adminUsersUrl = search
-				? `${resolve('/admin/users')}?${search}`
-				: resolve('/admin/users');
-			// eslint-disable-next-line svelte/no-navigation-without-resolve -- query params after resolved base path
-			replaceState(adminUsersUrl, {});
-		}
+		void clearResetQueryParam();
+	}
+
+	async function clearResetQueryParam() {
+		if (!$page.url.searchParams.has('reset')) return;
+		const url = new URL($page.url);
+		url.searchParams.delete('reset');
+		const search = url.searchParams.toString();
+		const adminUsersUrl = search ? `${resolve('/admin/users')}?${search}` : resolve('/admin/users');
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- query params after resolved base path
+		await goto(adminUsersUrl, { replaceState: true, keepFocus: true, noScroll: true });
 	}
 
 	async function submit(e: Event) {

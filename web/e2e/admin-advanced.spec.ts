@@ -1,8 +1,38 @@
 import { test, expect } from '@playwright/test';
-import { waitAppReady } from './helpers/auth';
+import { apiJSON, waitAppReady } from './helpers/auth';
 import { confirmDialog } from './helpers/ui';
 
 test.describe.configure({ mode: 'serial' });
+
+test('admin: reset password modal closes on cancel from notification link', async ({ page }) => {
+	await page.goto('/admin/users');
+	await waitAppReady(page);
+
+	await page.getByLabel('Логин').fill('e2eresetcancel');
+	await page.getByLabel('Пароль', { exact: true }).fill('userpass1');
+	await page.getByLabel('Подтверждение пароля').fill('userpass1');
+	await page.getByRole('button', { name: 'Создать' }).click();
+	await expect(page.getByRole('cell', { name: 'e2eresetcancel' }).first()).toBeVisible({
+		timeout: 10_000
+	});
+
+	const users = await apiJSON<{ id: string; login: string }[]>(page, 'GET', '/api/v1/admin/users');
+	const target = users.find((u) => u.login === 'e2eresetcancel');
+	expect(target).toBeTruthy();
+
+	await page.goto(`/admin/users?reset=${target!.id}`);
+	await waitAppReady(page);
+
+	const modal = page.getByRole('dialog');
+	await expect(modal).toBeVisible();
+	await modal.getByRole('button', { name: 'Отмена' }).click();
+	await expect(modal).toHaveCount(0, { timeout: 10_000 });
+	await expect(page).not.toHaveURL(/reset=/);
+
+	const row = page.getByRole('row', { name: /e2eresetcancel/ });
+	await row.getByRole('button', { name: 'Удалить' }).click();
+	await confirmDialog(page);
+});
 
 test('admin: reset user password', async ({ page }) => {
 	await page.goto('/admin/users');
