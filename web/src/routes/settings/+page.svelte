@@ -43,6 +43,7 @@
 	import AdminBackupsTab from '../admin/backups/+page.svelte';
 	import AdminDiagnosticsTab from '../admin/diagnostics/+page.svelte';
 	import AdminSupportLinks from '$lib/components/AdminSupportLinks.svelte';
+	import BackLink, { type BreadcrumbItem } from '$lib/components/BackLink.svelte';
 
 	type Tab =
 		| 'profile'
@@ -836,11 +837,59 @@
 	function formatOptional(value: string | null) {
 		return value && value.trim() !== '' ? value : '—';
 	}
+
+	const breadcrumbItems = $derived.by((): BreadcrumbItem[] => {
+		void $locale;
+		const home: BreadcrumbItem = { href: '/', label: tr('nav.home') };
+		const settings: BreadcrumbItem = { href: '/settings', label: tr('settings.title') };
+
+		if (tab === 'profile') {
+			return [home, settings];
+		}
+
+		if (tab === 'admin') {
+			const admin: BreadcrumbItem = {
+				href: '/settings',
+				label: tr('admin.title'),
+				search: 'tab=admin'
+			};
+			if (adminTab === 'system') {
+				return [home, settings, admin];
+			}
+			const adminTabLabels: Record<Exclude<AdminTab, 'system'>, string> = {
+				users: tr('admin.tab.users'),
+				backups: tr('admin.tab.backups'),
+				diagnostics: tr('admin.tab.diagnostics')
+			};
+			return [
+				home,
+				settings,
+				admin,
+				{
+					href: '/settings',
+					label: adminTabLabels[adminTab],
+					search: `tab=admin&admin_tab=${adminTab}`
+				}
+			];
+		}
+
+		const tabLabels: Record<Exclude<Tab, 'profile' | 'admin'>, string> = {
+			password: tr('settings.tab.password'),
+			tokens: tr('settings.tab.tokens'),
+			notifications: tr('settings.tab.notifications'),
+			categories: tr('settings.tab.categories'),
+			import: tr('settings.tab.import')
+		};
+
+		return [home, settings, { href: '/settings', label: tabLabels[tab], search: `tab=${tab}` }];
+	});
 </script>
 
 <svelte:head>
 	<title>{$_('settings.title')} — {$_('app.title')}</title>
 </svelte:head>
+
+<BackLink items={breadcrumbItems} />
 
 <h1 class="mb-6 text-2xl font-semibold">{$_('settings.title')}</h1>
 

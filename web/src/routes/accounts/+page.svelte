@@ -13,6 +13,7 @@
 		type Account,
 		type Bank
 	} from '$lib/api/client';
+	import BackLink from '$lib/components/BackLink.svelte';
 	import AccountIcon from '$lib/components/AccountIcon.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
@@ -185,6 +186,13 @@
 </svelte:head>
 
 <div class="space-y-6">
+	<BackLink
+		items={[
+			{ href: '/', label: $_('nav.home') },
+			{ href: '/accounts', label: $_('accounts.title') }
+		]}
+	/>
+
 	<div class="flex flex-wrap items-center justify-between gap-3">
 		<h1 class="text-2xl font-semibold">{$_('accounts.title')}</h1>
 		<a href={resolve('/accounts/new')} class="btn-primary">

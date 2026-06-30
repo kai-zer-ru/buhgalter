@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { resolve } from '$app/paths';
-	import { _ } from 'svelte-i18n';
+	import { _, locale } from 'svelte-i18n';
+	import BackLink, { type BreadcrumbItem } from '$lib/components/BackLink.svelte';
 	import AdminSupportLinks from '$lib/components/AdminSupportLinks.svelte';
 
 	let { children } = $props();
@@ -27,11 +28,30 @@
 		if (exact) return $page.url.pathname === path;
 		return $page.url.pathname.startsWith(path);
 	}
+
+	const breadcrumbItems = $derived.by((): BreadcrumbItem[] => {
+		void $locale;
+		const items: BreadcrumbItem[] = [
+			{ href: '/', label: $_('nav.home') },
+			{ href: '/settings', label: $_('settings.title'), search: 'tab=admin' },
+			{ href: '/admin', label: $_('admin.title') }
+		];
+		const active = tabs.find((t) => isActive(t.path, t.exact));
+		if (active && active.path !== '/admin') {
+			items.push({
+				href: active.path as BreadcrumbItem['href'],
+				label: $_(active.label)
+			});
+		}
+		return items;
+	});
 </script>
 
 <svelte:head>
 	<title>{$_('admin.title')} — {$_('app.title')}</title>
 </svelte:head>
+
+<BackLink items={breadcrumbItems} />
 
 <h1 class="mb-6 text-2xl font-semibold">{$_('admin.title')}</h1>
 

@@ -3,7 +3,38 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 версии — [SemVer](https://semver.org/lang/ru/).
 
-Подробные release notes для пользователей: [docs/release-notes-v1.2.3.md](docs/release-notes-v1.2.3.md).
+Подробные release notes для пользователей: [docs/release-notes-v1.2.4.md](docs/release-notes-v1.2.4.md).
+
+## [v1.2.4] — 0000-00-00
+
+> **ОБЯЗАТЕЛЬНО СДЕЛАЙТЕ БЕКАП!** Перед обновлением сохраните копию базы (`data/buhgalter.db`) и каталога `backups/`.
+
+### Изменено
+
+**UI/UX**
+
+- **Форматы даты и времени:** единые правила отображения по всему UI — дата `31.12.2026`, дата-время `31.12.2026 12:00:00`; в списках операций, долгах, кредитах, периодических операциях и плейсхолдерах уведомлений `{date}` / `{requested_at}` — **без секунд** (`31.12.2026 12:00`). Константы: web `$lib/dates.ts` (`DISPLAY_*_FORMAT`), Go `timeutil/display.go` (`Display*Layout`); гайд [docs/date-time-display.md](docs/date-time-display.md)
+- **DateTimePicker:** кнопка пикера и стандарты `operationDatetimePickerCreate` / `Edit`, `dateOnlyPicker` — подписи в формате `дд.мм.гггг` / `дд.мм.гггг чч:мм`
+- **Админка — диагностика и бекапы:** `build_time` и `created_at` через `formatAPIDateTimeForDisplay` (с секундами), а не сырой RFC3339
+- **Админка:** компонент `AdminSupportLinks` — ссылки «Поддержать проект» и «Репозиторий» на `/admin/*` и в **Настройки → Администрирование → Система**
+- **Хлебные крошки:** на всех разделах и вложенных экранах — цепочка от «Главная» через раздел (счета, настройки, админка и т.д.); в настройках и админке учитываются вкладки
+
+**Backend**
+
+- **Уведомления:** форматирование плейсхолдеров даты/времени через `timeutil.FormatDisplay*` в часовом поясе пользователя; `{date}` и `{requested_at}` — без секунд
+
+### Исправлено
+
+**UI/UX**
+
+- **Админка — сброс пароля:** модальное окно при переходе по `?reset=` из уведомления закрывается по «Отмена»; параметр `reset` снимается с URL, повторное открытие блокируется (`dismissedResetQuery` в `/admin/users`)
+
+### Техническое
+
+- Unit: `server/internal/timeutil/display_test.go`, `web/src/lib/dates.test.ts`, `web/src/lib/datetime-picker.test.ts`, `server/internal/notify/formatter_test.go` (форматы в тестовых данных)
+- e2e: `date-time-display.spec.ts` — формат даты в списке операций и `build_time` в диагностике; `admin-advanced.spec.ts` — закрытие сброса пароля по «Отмена», ссылки поддержки
+- [docs/release-notes-v1.2.4.md](docs/release-notes-v1.2.4.md), [date-time-display.md](docs/date-time-display.md), [transactions-display.md](docs/transactions-display.md)
+- Версия `1.2.4`
 
 ## [v1.2.3] — 2026-06-30
 

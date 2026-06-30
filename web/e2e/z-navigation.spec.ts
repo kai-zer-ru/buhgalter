@@ -33,6 +33,25 @@ test('transactions breadcrumb returns to home', async ({ page }) => {
 	await expect(page).toHaveURL('/');
 });
 
+test('accounts breadcrumb shows section trail', async ({ page }) => {
+	await page.goto('/accounts');
+	await waitAppReady(page);
+
+	const crumbs = page.locator('.breadcrumbs');
+	await expect(crumbs.getByRole('link', { name: 'Главная' })).toBeVisible();
+	await expect(crumbs.getByText('Счета', { exact: true })).toBeVisible();
+});
+
+test('settings breadcrumb reflects active tab', async ({ page }) => {
+	await page.goto('/settings?tab=password');
+	await waitAppReady(page);
+
+	const crumbs = page.locator('.breadcrumbs');
+	await expect(crumbs.getByRole('link', { name: 'Главная' })).toBeVisible();
+	await expect(crumbs.getByRole('link', { name: 'Настройки' })).toBeVisible();
+	await expect(crumbs.getByText('Пароль', { exact: true })).toBeVisible();
+});
+
 test('nav links highlight active section', async ({ page }) => {
 	await page.setViewportSize({ width: 1280, height: 720 });
 	await page.goto('/accounts');

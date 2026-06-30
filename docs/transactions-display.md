@@ -77,6 +77,10 @@ OpenAPI-схемы: [`Transaction`](api/openapi.yaml#/components/schemas/Transac
 
 OpenAPI: `CreateTransferRequest.commission`, схема `Transfer`.
 
+## Колонка «Дата» в таблицах операций
+
+**(v1.2.4)** Дата операции — `formatAPIOperationDateTimeForDisplay` (`$lib/dates.ts`): **`дд.мм.гггг чч:мм`** без секунд, в часовом поясе пользователя. То же правило — долги, кредиты (график, `next_run_at`), уведомления (`{date}`, `{requested_at}`). С секундами — админка (диагностика, бекапы). См. [date-time-display.md](date-time-display.md).
+
 ## Главная (`/`)
 
 - Карточки счетов: `AccountIcon` (`type`, `bank_icon` из API), имя, баланс и меню «⋯» — как на `/accounts` ([ui-row-actions.md](ui-row-actions.md)).

@@ -10,6 +10,7 @@
 
 | Документ | Описание |
 |----------|----------|
+| [release-notes-v1.2.4.md](release-notes-v1.2.4.md) | Единые форматы даты/времени, диагностика (build_time), сброс пароля из уведомления, ссылки в админке, хлебные крошки |
 | [release-notes-v1.2.3.md](release-notes-v1.2.3.md) | Повторить операцию, поля суммы (placeholder), перевод (селекты и счёт по умолчанию), периодические 08:00, автосписание кредита |
 | [release-notes-v1.2.2.md](release-notes-v1.2.2.md) | Проверка обновлений (админ), кнопки доход/расход/перевод, форма операции, статистика по категориям |
 | [release-notes-v1.2.1.md](release-notes-v1.2.1.md) | Docker, логирование, ипотека, API `error.field`, UI (счета, категории, меню «⋯», редактирование операций, фильтры, кеш, статистика, погашение долга, оплата кредита) |
@@ -34,7 +35,7 @@
 |----------|----------|
 | [date-time-display.md](date-time-display.md) | Форматы даты/времени и DateTimePicker |
 | [ui-dialogs.md](ui-dialogs.md) | Диалоги, подтверждения, Esc |
-| [ui-navigation.md](ui-navigation.md) | Навигация и кликабельные сущности |
+| [ui-navigation.md](ui-navigation.md) | Хлебные крошки и кликабельные сущности |
 | [ui-row-actions.md](ui-row-actions.md) | Меню «⋯» в строках и спойлер фильтров |
 | [ui-api-cache.md](ui-api-cache.md) | In-memory кеш GET-ответов на сервере |
 | [ui-stats.md](ui-stats.md) | Страница `/stats` |
