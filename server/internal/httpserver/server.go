@@ -54,6 +54,7 @@ func (s *Server) Handler() http.Handler {
 	verboseLogs := s.cfg.LogMode == "dev"
 	r.Use(appmw.RequestID)
 	r.Use(appmw.RequestIDToContext)
+	r.Use(appmw.RejectNoiseProbes)
 	r.Use(appmw.Recovery(s.logger))
 	r.Use(appmw.Logger(s.logger, verboseLogs))
 	r.Use(appmw.CORS(s.cfg.CORSOrigins))
