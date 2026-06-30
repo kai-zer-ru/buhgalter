@@ -14,6 +14,10 @@
 	import { ApiError } from '$lib/api/client';
 	import { fromDatetimeLocalValue, nowDatetimeLocal, toDatetimeLocalValue } from '$lib/dates';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
+	import {
+		operationDatetimePickerCreate,
+		operationDatetimePickerEdit
+	} from '$lib/datetime-picker-standards';
 	import FieldHint from '$lib/components/FieldHint.svelte';
 	import FormFeedback from '$lib/components/FormFeedback.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
@@ -260,8 +264,7 @@
 			id="tx-date"
 			label={$_('transactions.field.dateOnly')}
 			bind:value={dateTimeValue}
-			timeMode="optional"
-			defaultTime={editing ? 'preserve' : 'now'}
+			{...editing ? operationDatetimePickerEdit : operationDatetimePickerCreate}
 			usePortal
 			required
 		/>

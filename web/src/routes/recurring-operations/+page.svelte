@@ -20,6 +20,7 @@
 	} from '$lib/api/client';
 	import BackLink from '$lib/components/BackLink.svelte';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
+	import { dateOnlyPicker } from '$lib/datetime-picker-standards';
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
 	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
 	import Select from '$lib/components/Select.svelte';
@@ -28,7 +29,7 @@
 		todayDateLocal,
 		fromDatetimeLocalValue,
 		toDatetimeLocalValue,
-		formatAPIDateTimeForDisplay
+		formatAPIOperationDateTimeForDisplay
 	} from '$lib/dates';
 	import { formatMoneyDisplay, formatMoneyForInput, toAPIAmount } from '$lib/money';
 	import { toast } from '$lib/toast';
@@ -412,7 +413,7 @@
 					id="recurring-start-date-{formPrefix}"
 					label={$_('recurring.startDate')}
 					bind:value={startDate}
-					timeMode="hidden"
+					{...dateOnlyPicker}
 					usePortal
 					required
 				/>
@@ -528,7 +529,7 @@
 								</td>
 								<td class="p-3">{periodLabel(item.period)}</td>
 								<td class="p-3">{item.account_name}</td>
-								<td class="p-3">{formatAPIDateTimeForDisplay(item.next_run_at, tz)}</td>
+								<td class="p-3">{formatAPIOperationDateTimeForDisplay(item.next_run_at, tz)}</td>
 								<td class="p-3 text-right">
 									<RowActionsMenu actions={rowActions(item)} />
 								</td>
@@ -573,7 +574,9 @@
 							</div>
 							<div class="flex justify-between gap-2">
 								<dt style:color="var(--text-muted)">{$_('recurring.nextRun')}</dt>
-								<dd class="text-right">{formatAPIDateTimeForDisplay(item.next_run_at, tz)}</dd>
+								<dd class="text-right">
+									{formatAPIOperationDateTimeForDisplay(item.next_run_at, tz)}
+								</dd>
 							</div>
 						</dl>
 						<div class="mt-3 flex justify-end">

@@ -19,6 +19,7 @@ func TestFormatDefaultsForAllTriggers(t *testing.T) {
 		"type":         "Расход",
 		"description":  "Подписка",
 		"date":         "01.07.2026 09:00",
+		"requested_at": "01.07.2026 09:00",
 		"channel":      "telegram",
 	}
 	for _, trigger := range triggerOrder {

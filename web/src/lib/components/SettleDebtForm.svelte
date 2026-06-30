@@ -5,6 +5,7 @@
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
+	import { operationDatetimePickerCreate } from '$lib/datetime-picker-standards';
 	import FieldHint from '$lib/components/FieldHint.svelte';
 	import FormFeedback from '$lib/components/FormFeedback.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
@@ -108,6 +109,7 @@
 			<DateTimePicker
 				label={$_('debts.settle.date')}
 				bind:value={settledAtLocal}
+				{...operationDatetimePickerCreate}
 				usePortal
 				required
 			/>

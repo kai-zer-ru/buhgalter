@@ -21,6 +21,7 @@
 	import BackLink from '$lib/components/BackLink.svelte';
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
+	import { dateOnlyPicker } from '$lib/datetime-picker-standards';
 	import FieldHint from '$lib/components/FieldHint.svelte';
 	import FormFeedback from '$lib/components/FormFeedback.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
@@ -32,7 +33,7 @@
 	import { confirm } from '$lib/confirm';
 	import {
 		formatAPIDateForDisplay,
-		formatAPIDateTimeForDisplay,
+		formatAPIOperationDateTimeForDisplay,
 		formatCreditPaymentDateForDisplay,
 		dateOnlyLocalValue,
 		fromDatetimeLocalValue,
@@ -726,7 +727,7 @@
 			{#if credit.added_retroactively}
 				<div>
 					<span style:color="var(--text-muted)">{$_('credits.field.recordedAt')}</span>
-					<p class="font-medium">{formatAPIDateTimeForDisplay(credit.recorded_at, tz)}</p>
+					<p class="font-medium">{formatAPIOperationDateTimeForDisplay(credit.recorded_at, tz)}</p>
 				</div>
 			{/if}
 			<div>
@@ -1038,7 +1039,7 @@
 			<DateTimePicker
 				label={$_('credits.pay.date')}
 				bind:value={payDateLocal}
-				timeMode="hidden"
+				{...dateOnlyPicker}
 				usePortal
 			/>
 			{#if payRemaining() !== null}
@@ -1102,7 +1103,7 @@
 			<DateTimePicker
 				label={$_('credits.complete.date')}
 				bind:value={completeDateLocal}
-				timeMode="hidden"
+				{...dateOnlyPicker}
 				usePortal
 			/>
 			<FormFeedback error={completeError} />

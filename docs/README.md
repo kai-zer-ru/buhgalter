@@ -32,6 +32,7 @@
 
 | Документ | Описание |
 |----------|----------|
+| [date-time-display.md](date-time-display.md) | Форматы даты/времени и DateTimePicker |
 | [ui-dialogs.md](ui-dialogs.md) | Диалоги, подтверждения, Esc |
 | [ui-navigation.md](ui-navigation.md) | Навигация и кликабельные сущности |
 | [ui-row-actions.md](ui-row-actions.md) | Меню «⋯» в строках и спойлер фильтров |

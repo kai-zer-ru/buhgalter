@@ -6,7 +6,7 @@
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
 	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
 	import TransactionAccountCell from '$lib/components/TransactionAccountCell.svelte';
-	import { formatAPIDateTimeForDisplay } from '$lib/dates';
+	import { formatAPIOperationDateTimeForDisplay } from '$lib/dates';
 	import { formatMoneyDisplay } from '$lib/money';
 	import {
 		transactionAmountSign,
@@ -112,7 +112,7 @@
 				{#each transactions as tx (tx.id)}
 					<tr class="border-t" style:border-color="var(--border)">
 						<td class="p-3 align-middle whitespace-nowrap">
-							{formatAPIDateTimeForDisplay(tx.transaction_date, tz)}
+							{formatAPIOperationDateTimeForDisplay(tx.transaction_date, tz)}
 							{#if tx.kind === 'future'}
 								<span title={$_('transactions.planned')}> 📅</span>
 							{/if}
@@ -159,7 +159,7 @@
 				<div class="flex items-start justify-between gap-3">
 					<div class="min-w-0">
 						<p class="text-sm" style:color="var(--text-muted)">
-							{formatAPIDateTimeForDisplay(tx.transaction_date, tz)}
+							{formatAPIOperationDateTimeForDisplay(tx.transaction_date, tz)}
 							{#if tx.kind === 'future'}
 								<span title={$_('transactions.planned')}> 📅</span>
 							{/if}

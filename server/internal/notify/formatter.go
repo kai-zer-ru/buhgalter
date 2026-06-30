@@ -122,10 +122,23 @@ func addThousandsSeparator(value string) string {
 }
 
 func FormatDateInTimezone(value, timezone, layout string) string {
+	switch layout {
+	case timeutil.DisplayDateLayout:
+		return timeutil.FormatDisplayDateInTimezone(value, timezone)
+	case timeutil.DisplayDateTimeLayout:
+		return timeutil.FormatDisplayDateTimeInTimezone(value, timezone)
+	case timeutil.DisplayDateTimeShortLayout:
+		return timeutil.FormatDisplayDateTimeShortInTimezone(value, timezone)
+	default:
+		return formatDateInTimezoneWithLayout(value, timezone, layout)
+	}
+}
+
+func formatDateInTimezoneWithLayout(value, timezone, layout string) string {
 	if timezone == "" {
 		timezone = "Europe/Moscow"
 	}
-	tm, err := timeutil.ParseUTC(value)
+	tm, err := timeutil.ParseFlexibleUTC(value)
 	if err != nil {
 		return value
 	}
@@ -137,9 +150,9 @@ func FormatDateInTimezone(value, timezone, layout string) string {
 }
 
 func RelativeWhen(localeCode string, value string, now time.Time, timezone string) string {
-	tm, err := timeutil.ParseUTC(value)
+	tm, err := timeutil.ParseFlexibleUTC(value)
 	if err != nil {
-		return FormatDateInTimezone(value, timezone, "02.01.2006")
+		return FormatDateInTimezone(value, timezone, timeutil.DisplayDateLayout)
 	}
 	loc, err := time.LoadLocation(timezone)
 	if err != nil {
@@ -165,7 +178,7 @@ func RelativeWhen(localeCode string, value string, now time.Time, timezone strin
 		if ru && days > 1 && days <= 7 {
 			return "через " + strconv.Itoa(days) + " дн."
 		}
-		return target.Format("02.01.2006")
+		return target.Format(timeutil.DisplayDateLayout)
 	}
 }
 

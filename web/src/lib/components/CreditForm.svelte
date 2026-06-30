@@ -13,6 +13,7 @@
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
+	import { dateOnlyPicker } from '$lib/datetime-picker-standards';
 	import FieldHint from '$lib/components/FieldHint.svelte';
 	import FormFeedback from '$lib/components/FormFeedback.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
@@ -581,7 +582,7 @@
 			<DateTimePicker
 				label={$_('credits.field.issueDate')}
 				bind:value={issueDateLocal}
-				timeMode="hidden"
+				{...dateOnlyPicker}
 				usePortal
 			/>
 			<label class="block space-y-1">
@@ -748,7 +749,7 @@
 											<DateTimePicker
 												id={`credit-schedule-${i}`}
 												bind:value={row.date}
-												timeMode="hidden"
+												{...dateOnlyPicker}
 												usePortal
 											/>
 										</td>
@@ -798,7 +799,7 @@
 											<DateTimePicker
 												id={`credit-schedule-mobile-${i}`}
 												bind:value={row.date}
-												timeMode="hidden"
+												{...dateOnlyPicker}
 												usePortal
 											/>
 										</dd>

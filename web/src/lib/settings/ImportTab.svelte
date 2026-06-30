@@ -40,6 +40,7 @@
 	import { tick } from 'svelte';
 	import Select from '$lib/components/Select.svelte';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
+	import { dateOnlyPicker } from '$lib/datetime-picker-standards';
 	import PageTabs from '$lib/components/PageTabs.svelte';
 	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
 
@@ -798,9 +799,9 @@
 				<DateTimePicker
 					label={$_('import.export.from')}
 					bind:value={exportFrom}
-					timeMode="hidden"
+					{...dateOnlyPicker}
 				/>
-				<DateTimePicker label={$_('import.export.to')} bind:value={exportTo} timeMode="hidden" />
+				<DateTimePicker label={$_('import.export.to')} bind:value={exportTo} {...dateOnlyPicker} />
 			</div>
 			<Select
 				label={$_('import.export.account')}

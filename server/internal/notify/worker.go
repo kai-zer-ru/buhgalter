@@ -10,6 +10,7 @@ import (
 	"time"
 
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
 )
 
 type Worker struct {
@@ -151,7 +152,7 @@ func (w *Worker) processPlanned(
 			"type":        localizedOperationType(localeCode, tx.Type),
 			"amount":      FormatAmountDisplay(tx.Amount, currencyCode),
 			"description": normalizeDescription(tx.Description),
-			"date":        FormatDateInTimezone(tx.TransactionDate, timezone, "02.01.2006 15:04"),
+			"date":        timeutil.FormatDisplayDateTimeShortInTimezone(tx.TransactionDate, timezone),
 		})
 		if err != nil {
 			continue
@@ -199,7 +200,7 @@ func (w *Worker) processDebts(
 		text, err := Format(trigger, localeCode, customMap[trigger], FormatData{
 			"debtor":   debtor,
 			"amount":   FormatAmountDisplay(amount, currencyCode),
-			"due_date": FormatDateInTimezone(dueDate, timezone, "02.01.2006"),
+			"due_date": timeutil.FormatDisplayDateInTimezone(dueDate, timezone),
 			"days":     int64ToString(int64(max(diff, 0))),
 		})
 		if err != nil {
@@ -302,7 +303,7 @@ func (w *Worker) processCreditPayments(
 		text, err := Format(TriggerCreditPayment, localeCode, customMap[TriggerCreditPayment], FormatData{
 			"credit":       creditName,
 			"amount":       FormatAmountDisplay(amount, currencyCode),
-			"payment_date": FormatDateInTimezone(payDate, timezone, "02.01.2006"),
+			"payment_date": timeutil.FormatDisplayDateInTimezone(payDate, timezone),
 			"when":         RelativeWhen(localeCode, payDate, nowUTC, timezone),
 		})
 		if err != nil {

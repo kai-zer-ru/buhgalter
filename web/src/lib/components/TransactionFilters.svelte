@@ -3,6 +3,7 @@
 	import type { Account, Category } from '$lib/api/client';
 	import { categorySelectLabel } from '$lib/category-label';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
+	import { dateOnlyPicker } from '$lib/datetime-picker-standards';
 	import FilterPanel from '$lib/components/FilterPanel.svelte';
 	import Select from '$lib/components/Select.svelte';
 
@@ -89,14 +90,14 @@
 			id="tx-filter-from"
 			label={$_('transactions.filters.from')}
 			bind:value={fromLocal}
-			timeMode="hidden"
+			{...dateOnlyPicker}
 			usePortal
 		/>
 		<DateTimePicker
 			id="tx-filter-to"
 			label={$_('transactions.filters.to')}
 			bind:value={toLocal}
-			timeMode="hidden"
+			{...dateOnlyPicker}
 			usePortal
 		/>
 

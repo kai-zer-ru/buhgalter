@@ -1,7 +1,47 @@
+/** API wire format. Display rules: docs/date-time-display.md */
 export const API_DATETIME_FORMAT = 'yyyy-MM-dd HH:mm:ss';
+
+/** User-facing date only, e.g. `31.12.2026` */
+export const DISPLAY_DATE_FORMAT = 'dd.MM.yyyy';
+/** User-facing date-time with seconds, e.g. `31.12.2026 12:00:00` */
+export const DISPLAY_DATETIME_FORMAT = 'dd.MM.yyyy HH:mm:ss';
+/** User-facing date-time without seconds (operation lists), e.g. `31.12.2026 12:00` */
+export const DISPLAY_DATETIME_SHORT_FORMAT = 'dd.MM.yyyy HH:mm';
 
 function pad2(n: number): string {
 	return n.toString().padStart(2, '0');
+}
+
+/** Local wall-clock date → `DISPLAY_DATE_FORMAT` */
+export function formatDisplayDate(d: Date): string {
+	return `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()}`;
+}
+
+/** Local wall-clock date-time → `DISPLAY_DATETIME_FORMAT` */
+export function formatDisplayDateTime(d: Date): string {
+	return `${formatDisplayDate(d)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+}
+
+/** Local wall-clock date-time → `DISPLAY_DATETIME_SHORT_FORMAT` */
+export function formatDisplayDateTimeShort(d: Date): string {
+	return `${formatDisplayDate(d)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+/** Date parts → `DISPLAY_DATE_FORMAT` */
+export function formatDatePartsForDisplay(year: number, month: number, day: number): string {
+	return `${pad2(day)}.${pad2(month)}.${year}`;
+}
+
+/** @deprecated use formatDisplayDate */
+export function formatLocalDateForDisplay(d: Date): string {
+	return formatDisplayDate(d);
+}
+
+/** ISO date `yyyy-MM-dd` → `dd.MM.yyyy` */
+export function formatISODateForDisplay(isoDate: string): string {
+	const m = isoDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+	if (!m) return isoDate;
+	return formatDatePartsForDisplay(+m[1], +m[2], +m[3]);
 }
 
 function formatUTC(d: Date): string {
@@ -92,10 +132,19 @@ export function fromAPIDateTime(s: string, tz: string): Date {
 	return new Date(+map.year, +map.month - 1, +map.day, +map.hour, +map.minute, +(map.second ?? 0));
 }
 
+/** API UTC string → `DISPLAY_DATETIME_FORMAT` in user timezone. */
 export function formatAPIDateTimeForDisplay(s: string, tz: string): string {
 	try {
-		const d = fromAPIDateTime(s, tz);
-		return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+		return formatDisplayDateTime(fromAPIDateTime(s, tz));
+	} catch {
+		return s;
+	}
+}
+
+/** API UTC string → `DISPLAY_DATETIME_SHORT_FORMAT` (operation lists, notification date-time). */
+export function formatAPIOperationDateTimeForDisplay(s: string, tz: string): string {
+	try {
+		return formatDisplayDateTimeShort(fromAPIDateTime(s, tz));
 	} catch {
 		return s;
 	}
@@ -110,22 +159,30 @@ export function formatCreditPaymentDateForDisplay(
 	try {
 		const local = fromAPIDateTime(paymentDate, tz);
 		if (local.getHours() !== 0 || local.getMinutes() !== 0) {
-			return formatAPIDateTimeForDisplay(paymentDate, tz);
+			return formatAPIOperationDateTimeForDisplay(paymentDate, tz);
 		}
 		const debitTime = (debitTimeLocal ?? '').trim();
 		if (/^\d{2}:\d{2}$/.test(debitTime)) {
-			return `${formatAPIDateForDisplay(paymentDate, tz)} ${debitTime}:00`;
+			return formatDisplayDateTimeShort(
+				new Date(
+					local.getFullYear(),
+					local.getMonth(),
+					local.getDate(),
+					+debitTime.slice(0, 2),
+					+debitTime.slice(3, 5)
+				)
+			);
 		}
-		return formatAPIDateTimeForDisplay(paymentDate, tz);
+		return formatAPIOperationDateTimeForDisplay(paymentDate, tz);
 	} catch {
 		return paymentDate;
 	}
 }
 
+/** API UTC string → `DISPLAY_DATE_FORMAT` in user timezone. */
 export function formatAPIDateForDisplay(s: string, tz: string): string {
 	try {
-		const d = fromAPIDateTime(s, tz);
-		return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+		return formatDisplayDate(fromAPIDateTime(s, tz));
 	} catch {
 		return s;
 	}

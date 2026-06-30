@@ -9,6 +9,10 @@
 	} from '$lib/api/client';
 	import { ApiError } from '$lib/api/client';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
+	import {
+		operationDatetimePickerCreate,
+		operationDatetimePickerEdit
+	} from '$lib/datetime-picker-standards';
 	import FormFeedback from '$lib/components/FormFeedback.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
@@ -237,8 +241,7 @@
 			id="tr-date"
 			label={$_('transactions.field.dateOnly')}
 			bind:value={dateTimeValue}
-			timeMode="optional"
-			defaultTime="now"
+			{...editing ? operationDatetimePickerEdit : operationDatetimePickerCreate}
 			usePortal
 			required
 		/>

@@ -4,7 +4,7 @@
 	import type { Debt } from '$lib/api/client';
 	import EntityLink from '$lib/components/EntityLink.svelte';
 	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
-	import { formatAPIDateForDisplay } from '$lib/dates';
+	import { formatAPIDateForDisplay, formatAPIOperationDateTimeForDisplay } from '$lib/dates';
 	import { formatBalance } from '$lib/finance';
 
 	let {
@@ -96,7 +96,7 @@
 						{formatBalance(d.amount_display, currency)}
 					</td>
 					<td class="p-3 whitespace-nowrap">
-						{formatAPIDateForDisplay(d.debt_date, tz)}
+						{formatAPIOperationDateTimeForDisplay(d.debt_date, tz)}
 					</td>
 					<td class="p-3 whitespace-nowrap">
 						{formatAPIDateForDisplay(d.due_date, tz)}
@@ -164,7 +164,7 @@
 				</div>
 				<div class="flex justify-between gap-2">
 					<dt style:color="var(--text-muted)">{$_('debts.col.debtDate')}</dt>
-					<dd>{formatAPIDateForDisplay(d.debt_date, tz)}</dd>
+					<dd>{formatAPIOperationDateTimeForDisplay(d.debt_date, tz)}</dd>
 				</div>
 				<div class="flex justify-between gap-2">
 					<dt style:color="var(--text-muted)">{$_('debts.col.dueShort')}</dt>

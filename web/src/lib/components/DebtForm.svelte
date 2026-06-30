@@ -14,13 +14,19 @@
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
+	import { dateOnlyPicker, operationDatetimePickerCreate } from '$lib/datetime-picker-standards';
 	import FieldHint from '$lib/components/FieldHint.svelte';
 	import FormFeedback from '$lib/components/FormFeedback.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
 	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
 	import { defaultAccountId } from '$lib/accounts';
 	import { toast } from '$lib/toast';
-	import { fromDateLocalEnd, fromDateLocalStart, todayDateLocal } from '$lib/dates';
+	import {
+		fromDateLocalEnd,
+		fromDatetimeLocalValue,
+		nowDatetimeLocal,
+		todayDateLocal
+	} from '$lib/dates';
 	import { toAPIAmount } from '$lib/money';
 	import { user } from '$lib/stores/auth';
 
@@ -116,9 +122,8 @@
 		amount = '';
 		debtorId = fixedDebtorId ?? '';
 		newDebtorName = '';
-		const now = todayDateLocal(tz);
-		debtDateLocal = now;
-		dueDateLocal = now;
+		debtDateLocal = nowDatetimeLocal(tz);
+		dueDateLocal = todayDateLocal(tz);
 		skipBalance = false;
 		description = '';
 		const [accountsData, activeList] = await Promise.all([
@@ -149,7 +154,7 @@
 			if (!dueDateLocal) {
 				throw new Error($_('debts.field.dueDate'));
 			}
-			const debt_date = fromDateLocalStart(debtDateLocal, tz);
+			const debt_date = fromDatetimeLocalValue(debtDateLocal, tz);
 			const due_date = fromDateLocalEnd(dueDateLocal, tz);
 			await createDebt({
 				...(debtorId ? { debtor_id: debtorId } : { debtor_name: newDebtorName.trim() }),
@@ -213,7 +218,7 @@
 		<DateTimePicker
 			label={$_('debts.field.debtDate')}
 			bind:value={debtDateLocal}
-			timeMode="hidden"
+			{...operationDatetimePickerCreate}
 			usePortal
 			required
 		/>
@@ -221,7 +226,7 @@
 		<DateTimePicker
 			label={$_('debts.field.dueDate')}
 			bind:value={dueDateLocal}
-			timeMode="hidden"
+			{...dateOnlyPicker}
 			usePortal
 			required
 		/>

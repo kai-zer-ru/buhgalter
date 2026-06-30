@@ -1,4 +1,8 @@
 <script lang="ts">
+	/**
+	 * Date/time picker. Project standards: docs/date-time-display.md,
+	 * props helpers in $lib/datetime-picker-standards.ts
+	 */
 	import { portal } from '$lib/actions/portal';
 	import { dropdownListStyle } from '$lib/dropdown-position';
 	import FieldHint from '$lib/components/FieldHint.svelte';
@@ -20,8 +24,8 @@
 		hint = '',
 		disabled = false,
 		usePortal = false,
-		timeMode = 'visible' as TimeMode,
-		defaultTime = 'preserve' as 'now' | 'preserve' | string,
+		timeMode = 'optional' as TimeMode,
+		defaultTime = 'now' as 'now' | 'preserve' | string,
 		required = false
 	}: {
 		value?: string;
@@ -56,9 +60,12 @@
 
 	const parsed = $derived(parseDatetimeLocal(value));
 
-	const displayLabel = $derived(
-		timeMode === 'visible' ? formatDatetimeButtonLabel(value) : formatDateButtonLabel(value)
-	);
+	const displayLabel = $derived.by(() => {
+		if (!value) return '';
+		// optional: date on button, time only under <details>
+		const showTime = timeMode === 'visible';
+		return showTime ? formatDatetimeButtonLabel(value) : formatDateButtonLabel(value);
+	});
 
 	const monthLabel = $derived(
 		new Date(viewYear, viewMonth - 1, 1).toLocaleDateString(undefined, {
@@ -87,21 +94,22 @@
 		}
 	}
 
-	function effectiveTime(): { hour: number; minute: number } {
-		if (timeMode === 'hidden') {
-			return { hour: 0, minute: 0 };
+	function resolveDefaultTime(): { hour: number; minute: number } {
+		if (defaultTime === 'now') {
+			const now = new Date();
+			return { hour: now.getHours(), minute: now.getMinutes() };
 		}
-		if (timeMode === 'optional' && !timeExpanded) {
-			if (defaultTime === 'now') {
-				const now = new Date();
-				return { hour: now.getHours(), minute: now.getMinutes() };
-			}
-			if (defaultTime !== 'preserve') {
-				const [h, m] = defaultTime.split(':').map(Number);
-				return { hour: h || 0, minute: m || 0 };
-			}
-			const p = parseDatetimeLocal(value);
-			return { hour: p?.hour ?? 0, minute: p?.minute ?? 0 };
+		if (defaultTime !== 'preserve') {
+			const [h, m] = defaultTime.split(':').map(Number);
+			return { hour: h || 0, minute: m || 0 };
+		}
+		const p = parseDatetimeLocal(value);
+		return { hour: p?.hour ?? 0, minute: p?.minute ?? 0 };
+	}
+
+	function effectiveTime(): { hour: number; minute: number } {
+		if (timeMode === 'hidden' || (timeMode === 'optional' && !timeExpanded)) {
+			return resolveDefaultTime();
 		}
 		const [h, m] = (timeValue || '00:00').split(':').map(Number);
 		return { hour: h || 0, minute: m || 0 };
@@ -195,6 +203,11 @@
 		if (triggerEl?.contains(target) || panelEl?.contains(target)) return;
 		close();
 	}
+
+	$effect(() => {
+		if (!value) return;
+		syncViewFromValue();
+	});
 
 	$effect(() => {
 		if (!open) return;

@@ -3,7 +3,7 @@ import { formatStatsPeriod } from './stats-period';
 
 describe('formatStatsPeriod', () => {
 	it('keeps day grouping as ISO date', () => {
-		expect(formatStatsPeriod('2026-06-15', 'day', 'ru')).toBe('2026-06-15');
+		expect(formatStatsPeriod('2026-12-31', 'day', 'ru')).toBe('31.12.2026');
 	});
 
 	it('formats month grouping in Russian', () => {

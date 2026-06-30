@@ -1,3 +1,5 @@
+import { formatDatePartsForDisplay, formatDisplayDateTimeShort } from '$lib/dates';
+
 export function pad2(n: number): string {
 	return n.toString().padStart(2, '0');
 }
@@ -33,17 +35,18 @@ export function buildDatetimeLocal(
 export function formatDateButtonLabel(value: string): string {
 	const parsed = parseDatetimeLocal(value);
 	if (!parsed) return '';
-	return `${parsed.year}-${pad2(parsed.month)}-${pad2(parsed.day)}`;
+	return formatDatePartsForDisplay(parsed.year, parsed.month, parsed.day);
 }
 
 export function formatDatetimeButtonLabel(value: string): string {
 	const parsed = parseDatetimeLocal(value);
 	if (!parsed) return '';
-	const date = `${parsed.year}-${pad2(parsed.month)}-${pad2(parsed.day)}`;
-	if (value.includes('T')) {
-		return `${date} ${pad2(parsed.hour)}:${pad2(parsed.minute)}:00`;
+	if (!value.includes('T')) {
+		return formatDatePartsForDisplay(parsed.year, parsed.month, parsed.day);
 	}
-	return date;
+	return formatDisplayDateTimeShort(
+		new Date(parsed.year, parsed.month - 1, parsed.day, parsed.hour, parsed.minute)
+	);
 }
 
 export function daysInMonth(year: number, month: number): number {

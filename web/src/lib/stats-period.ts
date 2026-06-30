@@ -1,3 +1,5 @@
+import { formatISODateForDisplay } from './dates';
+
 function parseISODateLocal(period: string): Date | null {
 	const m = period.match(/^(\d{4})-(\d{2})-(\d{2})$/);
 	if (!m) return null;
@@ -40,7 +42,7 @@ export function formatStatsPeriod(
 	groupBy: 'day' | 'week' | 'month',
 	locale: string
 ): string {
-	if (groupBy === 'day') return period;
+	if (groupBy === 'day') return formatISODateForDisplay(period);
 
 	const start = parseISODateLocal(period);
 	if (!start) return period;

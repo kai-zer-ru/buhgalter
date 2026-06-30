@@ -21,6 +21,7 @@
 	} from '$lib/api/client';
 	import BackLink from '$lib/components/BackLink.svelte';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
+	import { dateOnlyPicker } from '$lib/datetime-picker-standards';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
 	import EntityLink from '$lib/components/EntityLink.svelte';
 	import FilterPanel from '$lib/components/FilterPanel.svelte';
@@ -330,13 +331,13 @@
 			<DateTimePicker
 				label={$_('stats.filters.from')}
 				bind:value={fromLocal}
-				timeMode="hidden"
+				{...dateOnlyPicker}
 				usePortal
 			/>
 			<DateTimePicker
 				label={$_('stats.filters.to')}
 				bind:value={toLocal}
-				timeMode="hidden"
+				{...dateOnlyPicker}
 				usePortal
 			/>
 			<Select

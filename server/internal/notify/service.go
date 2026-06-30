@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
 )
 
 type TemplateView struct {
@@ -428,7 +429,7 @@ func NotifyAdminsOnPasswordReset(ctx context.Context, db *sql.DB, login, display
 		text, err := Format(TriggerPasswordReset, localeCode, customMap[TriggerPasswordReset], FormatData{
 			"login":        login,
 			"display_name": display,
-			"requested_at": FormatDateInTimezone(requestedAt, timezone, "02.01.2006 15:04"),
+			"requested_at": timeutil.FormatDisplayDateTimeShortInTimezone(requestedAt, timezone),
 			"amount":       FormatAmountDisplay(0, currencyCode),
 		})
 		if err != nil {
@@ -587,17 +588,17 @@ func previewData(triggerType, localeCode, timezone, currencyCode, channel string
 	return map[string]string{
 		"debtor":       choose(normalizeLocale(localeCode) == "ru", "Денис", "Denis"),
 		"amount":       FormatAmountDisplay(1000000, currencyCode),
-		"due_date":     FormatDateInTimezone(now.Add(-24*time.Hour).Format("2006-01-02 15:04:05"), timezone, "02.01.2006"),
+		"due_date":     timeutil.FormatDisplayDateInTimezone(now.Add(-24*time.Hour).Format(timeutil.Layout), timezone),
 		"days":         "2",
 		"credit":       choose(normalizeLocale(localeCode) == "ru", "Ипотека", "Mortgage"),
-		"payment_date": FormatDateInTimezone(futureDate, timezone, "02.01.2006"),
+		"payment_date": timeutil.FormatDisplayDateInTimezone(futureDate, timezone),
 		"when":         RelativeWhen(localeCode, futureDate, now, timezone),
 		"type":         localizedOperationType(localeCode, "expense"),
 		"description":  choose(normalizeLocale(localeCode) == "ru", "Подписка", "Subscription"),
-		"date":         FormatDateInTimezone(now.Format("2006-01-02 15:04:05"), timezone, "02.01.2006 15:04"),
+		"date":         timeutil.FormatDisplayDateTimeShortInTimezone(now.Format(timeutil.Layout), timezone),
 		"login":        choose(normalizeLocale(localeCode) == "ru", "user1", "user1"),
 		"display_name": choose(normalizeLocale(localeCode) == "ru", "Пользователь", "User"),
-		"requested_at": FormatDateInTimezone(now.Format("2006-01-02 15:04:05"), timezone, "02.01.2006 15:04"),
+		"requested_at": timeutil.FormatDisplayDateTimeShortInTimezone(now.Format(timeutil.Layout), timezone),
 		"channel":      channelValue,
 	}
 }

@@ -120,7 +120,7 @@ OpenAPI: `CreateTransferRequest.commission`, схема `Transfer`.
 
 ## Фильтры
 
-`TransactionFilters` внутри `FilterPanel`: на мобильных — спойлер «Фильтры» с chevron; на десктопе — всегда открыта. Поля с `timeMode="hidden"`: только дата, границы суток — `fromDateLocalStart` / `toDateLocalEnd` (`$lib/dates.ts`) в часовом поясе пользователя. Используется на `/transactions`, `/stats`, странице счёта.
+`TransactionFilters` внутри `FilterPanel`: на мобильных — спойлер «Фильтры» с chevron; на десктопе — всегда открыта. Поля с `dateOnlyPicker`: только дата, границы суток — `fromDateLocalStart` / `toDateLocalEnd` (`$lib/dates.ts`) в часовом поясе пользователя. См. [date-time-display.md](date-time-display.md). Используется на `/transactions`, `/stats`, странице счёта.
 
 Подробнее: [ui-row-actions.md](ui-row-actions.md).
 
@@ -173,6 +173,7 @@ OpenAPI: `CreateTransferRequest.commission`, схема `Transfer`.
 
 | Документ | Содержание |
 |----------|------------|
+| [date-time-display.md](date-time-display.md) | Форматы даты/времени, DateTimePicker |
 | [ui-table-columns.md](ui-table-columns.md) | Порядок колонок (дата → счёт → … → сумма) |
 | [ui-navigation.md](ui-navigation.md) | `BackLink` на `/transactions` → главная; кликабельные счета |
 | [data-model.md](data-model.md) | `transfer_group_id`, вычисляемые поля в sqlc |

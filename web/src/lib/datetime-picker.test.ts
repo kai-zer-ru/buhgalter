@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { calendarCells } from './datetime-picker';
+import { calendarCells, formatDatetimeButtonLabel } from './datetime-picker';
+
+describe('formatDatetimeButtonLabel', () => {
+	it('omits seconds from datetime values', () => {
+		expect(formatDatetimeButtonLabel('2026-12-31T08:30')).toBe('31.12.2026 08:30');
+	});
+});
 
 describe('calendarCells', () => {
 	it('pads June 2026 with July 1–4 instead of 31–34', () => {
