@@ -2,7 +2,7 @@
 	import { resolve } from '$app/paths';
 	import { _ } from 'svelte-i18n';
 	import type { Credit } from '$lib/api/client';
-	import { formatAPIDateTimeForDisplay } from '$lib/dates';
+	import { formatCreditPaymentDateForDisplay } from '$lib/dates';
 	import { bankIconUrl, formatBalance } from '$lib/finance';
 
 	let {
@@ -65,7 +65,7 @@
 					<td class="p-3">{formatBalance(c.monthly_payment_display, currency)}</td>
 					<td class="p-3">
 						{#if c.next_payment_date}
-							{formatAPIDateTimeForDisplay(c.next_payment_date, tz)}
+							{formatCreditPaymentDateForDisplay(c.next_payment_date, tz, c.debit_time_local)}
 						{:else}
 							—
 						{/if}
@@ -121,7 +121,7 @@
 					<dt style:color="var(--text-muted)">{$_('credits.col.next')}</dt>
 					<dd>
 						{#if c.next_payment_date}
-							{formatAPIDateTimeForDisplay(c.next_payment_date, tz)}
+							{formatCreditPaymentDateForDisplay(c.next_payment_date, tz, c.debit_time_local)}
 						{:else}
 							—
 						{/if}

@@ -197,7 +197,7 @@ erDiagram
 - `PATCH /credits/{id}/schedule` — правка сумм неоплаченных `scheduled` (v1.1)
 - При старте: `RepairShortSchedules` дополняет неполные графики (миграция-маркер `020`)
 - `transactions.affects_balance` — `0` при завершении кредита «без учёта в балансе»
-- Автосписание: `server/internal/scheduler` в полночь по `users.timezone`
+- Автосписание: `server/internal/scheduler` по `debit_time_local` в `users.timezone`; `transactions.transaction_date` — дата платежа + это время (UTC в БД)
 
 Подробнее: [ui-credits.md](ui-credits.md), [release-notes-v1.1.md](release-notes-v1.1.md).
 

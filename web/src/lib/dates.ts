@@ -101,6 +101,27 @@ export function formatAPIDateTimeForDisplay(s: string, tz: string): string {
 	}
 }
 
+/** Payment schedule date with optional auto-debit local time (payment_date is often stored at 00:00). */
+export function formatCreditPaymentDateForDisplay(
+	paymentDate: string,
+	tz: string,
+	debitTimeLocal?: string | null
+): string {
+	try {
+		const local = fromAPIDateTime(paymentDate, tz);
+		if (local.getHours() !== 0 || local.getMinutes() !== 0) {
+			return formatAPIDateTimeForDisplay(paymentDate, tz);
+		}
+		const debitTime = (debitTimeLocal ?? '').trim();
+		if (/^\d{2}:\d{2}$/.test(debitTime)) {
+			return `${formatAPIDateForDisplay(paymentDate, tz)} ${debitTime}`;
+		}
+		return formatAPIDateTimeForDisplay(paymentDate, tz);
+	} catch {
+		return paymentDate;
+	}
+}
+
 export function formatAPIDateForDisplay(s: string, tz: string): string {
 	try {
 		const d = fromAPIDateTime(s, tz);

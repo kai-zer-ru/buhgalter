@@ -33,6 +33,7 @@
 	import {
 		formatAPIDateForDisplay,
 		formatAPIDateTimeForDisplay,
+		formatCreditPaymentDateForDisplay,
 		dateOnlyLocalValue,
 		fromDatetimeLocalValue,
 		todayDateLocal,
@@ -373,6 +374,10 @@
 		} catch (err) {
 			changeBankError = err instanceof ApiError ? err.message : $_('common.error');
 		}
+	}
+
+	function paymentDateDisplay(p: CreditPayment): string {
+		return formatCreditPaymentDateForDisplay(p.payment_date, tz, credit?.debit_time_local);
 	}
 
 	function canEditPayment(p: CreditPayment): boolean {
@@ -781,7 +786,7 @@
 							<tbody>
 								{#each payments as p (p.id)}
 									<tr class="border-t" style:border-color="var(--border)">
-										<td class="p-3">{formatAPIDateTimeForDisplay(p.payment_date, tz)}</td>
+										<td class="p-3">{paymentDateDisplay(p)}</td>
 										<td class="p-3">
 											{#if editable && canEditPayment(p)}
 												{@const editIdx = scheduleEditRows.findIndex((row) => row.id === p.id)}
@@ -815,7 +820,7 @@
 								<dl class="grid gap-2 text-sm">
 									<div class="flex justify-between gap-2">
 										<dt style:color="var(--text-muted)">{$_('credits.pay.date')}</dt>
-										<dd>{formatAPIDateTimeForDisplay(p.payment_date, tz)}</dd>
+										<dd>{paymentDateDisplay(p)}</dd>
 									</div>
 									<div class="flex justify-between gap-2">
 										<dt style:color="var(--text-muted)">{$_('transactions.col.amount')}</dt>

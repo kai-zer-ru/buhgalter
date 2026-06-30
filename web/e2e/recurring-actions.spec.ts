@@ -25,17 +25,20 @@ test('create recurring uses 08:00 local time by default', async ({ page }) => {
 	const account = await createCashAccount(page);
 	const description = `E2E Rec Time ${Date.now()}`;
 
+	await page.goto('/recurring-operations');
+	await waitAppReady(page);
+
 	let postedTime = '';
 	await page.route('**/api/v1/recurring-operations', async (route) => {
-		if (route.request().method() === 'POST') {
-			const body = route.request().postDataJSON() as { time_local?: string };
-			postedTime = body.time_local ?? '';
+		if (route.request().method() !== 'POST') {
+			await route.continue();
+			return;
 		}
+		const body = route.request().postDataJSON() as { time_local?: string };
+		postedTime = body.time_local ?? '';
 		await route.continue();
 	});
 
-	await page.goto('/recurring-operations');
-	await waitAppReady(page);
 	await page.getByRole('button', { name: 'Добавить' }).click();
 	await page.locator('#recurring-amount-create').fill('42');
 	await page.locator('#recurring-description-create').fill(description);

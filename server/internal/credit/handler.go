@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -379,6 +380,63 @@ func (h *Handler) PreviewSchedule(w http.ResponseWriter, r *http.Request) {
 		"calculated_monthly_payment":         monthly,
 		"calculated_monthly_payment_display": money.FormatRubles(monthly),
 	})
+}
+
+// E2EApplyDue applies the next due credit auto-payment immediately (BUHGALTER_E2E=1 only).
+func (h *Handler) E2EApplyDue(w http.ResponseWriter, r *http.Request) {
+	if os.Getenv("BUHGALTER_E2E") != "1" {
+		http.NotFound(w, r)
+		return
+	}
+	info, ok := auth.FromContext(r.Context())
+	if !ok {
+		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
+		return
+	}
+	creditID := chi.URLParam(r, "id")
+	ctx := r.Context()
+	sqlDB := h.Store.DB()
+	creditRow, err := GetByID(ctx, sqlDB, info.User.ID, creditID, false)
+	if err != nil {
+		if writeCreditError(w, r, err) {
+			return
+		}
+	}
+	if creditRow.DebitTimeLocal == nil || strings.TrimSpace(*creditRow.DebitTimeLocal) == "" {
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_INVALID_DEBIT_TIME")
+		return
+	}
+	res, err := sqlDB.ExecContext(ctx, `
+		UPDATE credit_payments SET payment_date = datetime('now', '-1 day')
+		WHERE id = (
+			SELECT id FROM credit_payments
+			WHERE credit_id = ? AND is_applied = 0 AND kind = 'scheduled' LIMIT 1
+		)`, creditID)
+	if err != nil {
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
+		return
+	}
+	tz, err := userTimezone(ctx, sqlDB, info.User.ID)
+	if err != nil {
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	}
+	cutoff, err := TodayCutoffUTC(tz, timeutil.NowUTC())
+	if err != nil {
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	}
+	applied, err := ApplyDuePayments(ctx, sqlDB, info.User.ID, cutoff, strings.TrimSpace(*creditRow.DebitTimeLocal))
+	if err != nil {
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"applied": applied})
 }
 
 func parseCreateInput(req createCreditRequest) (CreateInput, error) {

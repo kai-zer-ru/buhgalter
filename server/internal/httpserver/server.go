@@ -140,6 +140,7 @@ func (s *Server) Handler() http.Handler {
 			ar.Delete("/recurring-operations/{id}", recurringHandler.Delete)
 			if os.Getenv("BUHGALTER_E2E") == "1" {
 				ar.Post("/test/recurring-operations/{id}/run-now", recurringHandler.E2ERunNow)
+				ar.Post("/test/credits/{id}/apply-due", creditHandler.E2EApplyDue)
 			}
 
 			ar.Post("/transfers", transactionHandler.CreateTransfer)

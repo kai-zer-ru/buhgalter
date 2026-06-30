@@ -307,6 +307,85 @@ func TestApplyDuePayments(t *testing.T) {
 	}
 }
 
+func TestPaymentTransactionDate(t *testing.T) {
+	payDate, err := timeutil.ParseUTC("2026-06-15 00:00:00")
+	if err != nil {
+		t.Fatal(err)
+	}
+	debitTime := "10:00"
+	got, err := paymentTransactionDate(payDate, &debitTime, "Europe/Moscow")
+	if err != nil {
+		t.Fatal(err)
+	}
+	loc, _ := time.LoadLocation("Europe/Moscow")
+	local := got.In(loc)
+	if local.Format("15:04") != "10:00" {
+		t.Fatalf("expected 10:00 local, got %s", local.Format("15:04"))
+	}
+	if local.Format("2006-01-02") != "2026-06-15" {
+		t.Fatalf("expected 2026-06-15, got %s", local.Format("2006-01-02"))
+	}
+}
+
+func TestApplyDuePaymentsUsesDebitTimeForTransaction(t *testing.T) {
+	ctx, handle, userID, accountID := seedCreditEnv(t)
+	sqlDB := handle.DB()
+	issue := timeutil.NowUTC().AddDate(0, -1, 0)
+	debitTime := "10:00"
+
+	c, err := Create(ctx, sqlDB, userID, CreateInput{
+		PrincipalAmount:    60_000,
+		IssueDate:          issue,
+		TermMonths:         6,
+		PaymentInterval:    IntervalMonth,
+		DebitAccountID:     accountID,
+		DebitTimeLocal:     &debitTime,
+		CreateTransactions: false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = sqlDB.ExecContext(ctx, `
+		UPDATE credit_payments SET payment_date = datetime('now', '-1 day')
+		WHERE id = (
+			SELECT id FROM credit_payments
+			WHERE credit_id = ? AND is_applied = 0 AND kind = 'scheduled' LIMIT 1
+		)`, c.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cutoff, err := TodayCutoffUTC("Europe/Moscow", timeutil.NowUTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := ApplyDuePayments(ctx, sqlDB, userID, cutoff, debitTime)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n < 1 {
+		t.Fatalf("applied %d", n)
+	}
+
+	var txDate string
+	err = sqlDB.QueryRowContext(ctx, `
+		SELECT t.transaction_date FROM transactions t
+		JOIN credit_payments cp ON cp.transaction_id = t.id
+		WHERE cp.credit_id = ? AND cp.kind = 'auto' LIMIT 1`, c.ID).Scan(&txDate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := timeutil.ParseUTC(txDate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loc, _ := time.LoadLocation("Europe/Moscow")
+	local := parsed.In(loc)
+	if local.Format("15:04") != debitTime {
+		t.Fatalf("expected transaction at %s local, got %s (%s)", debitTime, local.Format("15:04"), txDate)
+	}
+}
+
 func TestApplyDuePaymentsWithoutPrecreatedTx(t *testing.T) {
 	ctx, handle, userID, accountID := seedCreditEnv(t)
 	sqlDB := handle.DB()

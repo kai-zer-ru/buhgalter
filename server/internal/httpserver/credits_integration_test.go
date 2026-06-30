@@ -2,11 +2,13 @@ package httpserver_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"testing"
 	"time"
 
+	"github.com/kai-zer-ru/buhgalter/internal/credit"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
 )
 
@@ -1089,5 +1091,63 @@ func TestCreditSystemCategoryExists(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("system category Кредиты not found")
+	}
+}
+
+func TestCreditApplyDueUsesDebitTimeForTransaction(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+	ctx := context.Background()
+	accID := createTestAccount(t, env, "Автосписание кредита")
+
+	issueDate := timeutil.FormatUTC(timeutil.NowUTC().AddDate(0, -1, 0))
+	creditRow := createCredit(t, env, map[string]any{
+		"principal_amount": "60000.00",
+		"issue_date":       issueDate,
+		"term_months":      6,
+		"interest_rate":    0,
+		"payment_interval": "month",
+		"debit_account_id": accID,
+		"debit_time_local": "10:00",
+	})
+	creditID := creditRow["id"].(string)
+
+	_, err := env.db.ExecContext(ctx, `
+		UPDATE credit_payments SET payment_date = datetime('now', '-1 day')
+		WHERE id = (
+			SELECT id FROM credit_payments
+			WHERE credit_id = ? AND is_applied = 0 AND kind = 'scheduled' LIMIT 1
+		)`, creditID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cutoff, err := credit.TodayCutoffUTC("Europe/Moscow", timeutil.NowUTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	applied, err := credit.ApplyDuePayments(ctx, env.db, mustAdminUserID(t, env), cutoff, "10:00")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if applied != 1 {
+		t.Fatalf("expected 1 applied payment, got %d", applied)
+	}
+
+	var txDate string
+	err = env.db.QueryRowContext(ctx, `
+		SELECT t.transaction_date FROM transactions t
+		JOIN credit_payments cp ON cp.transaction_id = t.id
+		WHERE cp.credit_id = ? AND cp.kind = 'auto' LIMIT 1`, creditID).Scan(&txDate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := timeutil.ParseUTC(txDate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loc, _ := time.LoadLocation("Europe/Moscow")
+	if parsed.In(loc).Format("15:04") != "10:00" {
+		t.Fatalf("expected transaction at 10:00 Europe/Moscow, got %s", txDate)
 	}
 }

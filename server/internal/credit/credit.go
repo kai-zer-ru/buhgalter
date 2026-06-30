@@ -959,8 +959,16 @@ func processAutoPayment(ctx context.Context, db *sql.DB, row sqlcdb.ListDueCredi
 	if err != nil {
 		return false, err
 	}
+	tz, err := userTimezone(ctx, db, row.UserID)
+	if err != nil {
+		return false, err
+	}
+	txDate, err := paymentTransactionDate(payDate, row.DebitTimeLocal, tz)
+	if err != nil {
+		return false, err
+	}
 	creditName := row.CreditName
-	txID, err := insertCreditExpenseTransaction(ctx, dbTx, row.UserID, row.DebitAccountID, creditName, row.Amount, payDate, true)
+	txID, err := insertCreditExpenseTransaction(ctx, dbTx, row.UserID, row.DebitAccountID, creditName, row.Amount, txDate, true)
 	if err != nil {
 		return false, err
 	}
@@ -1366,6 +1374,31 @@ func normalizeDebitTimeLocal(value *string) (*string, error) {
 		return nil, ErrInvalidDebitTime
 	}
 	return &trimmed, nil
+}
+
+// paymentTransactionDate combines a scheduled payment calendar date with debit_time_local in the user's timezone.
+func paymentTransactionDate(payDate time.Time, debitTimeLocal *string, tz string) (time.Time, error) {
+	if debitTimeLocal == nil || strings.TrimSpace(*debitTimeLocal) == "" {
+		return payDate, nil
+	}
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid timezone: %w", err)
+	}
+	hour, minute, err := parseDebitTimeLocal(*debitTimeLocal)
+	if err != nil {
+		return time.Time{}, err
+	}
+	local := payDate.In(loc)
+	return time.Date(local.Year(), local.Month(), local.Day(), hour, minute, 0, 0, loc).UTC(), nil
+}
+
+func parseDebitTimeLocal(v string) (hour, minute int, err error) {
+	t, err := time.Parse("15:04", strings.TrimSpace(v))
+	if err != nil {
+		return 0, 0, ErrInvalidDebitTime
+	}
+	return t.Hour(), t.Minute(), nil
 }
 
 func normalizeNullableID(value *string) *string {
