@@ -313,19 +313,31 @@ func TestAPITokenLifecycle(t *testing.T) {
 	env := setupConfigured(t)
 	env.login(t, "admin", "secret123")
 
-	createBody, _ := json.Marshal(map[string]any{"name": "HA", "expires_at": nil})
+	createBody, _ := json.Marshal(map[string]any{"name": "HA"})
 	resp, err := env.authedRequest(http.MethodPost, "/api/v1/user/tokens", bytes.NewReader(createBody))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
 	var created struct {
-		ID    string `json:"id"`
-		Token string `json:"token"`
+		ID        string  `json:"id"`
+		Token     string  `json:"token"`
+		ExpiresAt *string `json:"expires_at"`
 	}
 	_ = json.NewDecoder(resp.Body).Decode(&created)
 	if created.Token == "" {
 		t.Fatal("expected token in response")
+	}
+	if created.ExpiresAt == nil || *created.ExpiresAt == "" {
+		t.Fatal("expected default expiry (~1 month)")
+	}
+	exp, err := time.Parse(time.RFC3339, *created.ExpiresAt)
+	if err != nil {
+		t.Fatalf("parse expires_at: %v", err)
+	}
+	delta := exp.Sub(time.Now().UTC())
+	if delta < 29*24*time.Hour || delta > 31*24*time.Hour {
+		t.Fatalf("expected ~30 days expiry, got %v", delta)
 	}
 
 	resp2, err := http.Get(env.server.URL + "/api/v1/auth/verify?token=" + created.Token)
@@ -355,6 +367,91 @@ func TestAPITokenLifecycle(t *testing.T) {
 	_ = json.NewDecoder(resp4.Body).Decode(&v)
 	if v.Valid {
 		t.Fatal("revoked token should be invalid")
+	}
+}
+
+func TestAPITokenNeverExpires(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+
+	createBody, _ := json.Marshal(map[string]any{"name": "Perpetual", "never_expires": true})
+	resp, err := env.authedRequest(http.MethodPost, "/api/v1/user/tokens", bytes.NewReader(createBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var created struct {
+		Token        string  `json:"token"`
+		NeverExpires bool    `json:"never_expires"`
+		ExpiresAt    *string `json:"expires_at"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&created)
+	if !created.NeverExpires || created.ExpiresAt != nil {
+		t.Fatalf("expected perpetual token, got never_expires=%v expires_at=%v", created.NeverExpires, created.ExpiresAt)
+	}
+
+	resp2, err := http.Get(env.server.URL + "/api/v1/auth/verify?token=" + created.Token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp2.Body.Close()
+	var v struct {
+		Valid bool `json:"valid"`
+	}
+	_ = json.NewDecoder(resp2.Body).Decode(&v)
+	if !v.Valid {
+		t.Fatal("perpetual api token should be valid")
+	}
+}
+
+func TestAPITokenRevokeOtherUserForbidden(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+
+	createBody, _ := json.Marshal(map[string]any{"name": "Admin token"})
+	resp, err := env.authedRequest(http.MethodPost, "/api/v1/user/tokens", bytes.NewReader(createBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var created struct {
+		ID string `json:"id"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&created)
+
+	userBody, _ := json.Marshal(map[string]any{
+		"login": "user1", "password": "password1", "password_confirm": "password1", "display_name": "User", "is_admin": false,
+	})
+	userResp, err := env.authedRequest(http.MethodPost, "/api/v1/admin/users", bytes.NewReader(userBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	userResp.Body.Close()
+
+	env.login(t, "user1", "password1")
+	delResp, err := env.authedRequest(http.MethodDelete, "/api/v1/user/tokens/"+created.ID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	delResp.Body.Close()
+	if delResp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404 when revoking another user's token, got %d", delResp.StatusCode)
+	}
+}
+
+func TestAPITokenExpiredRejected(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+
+	past := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
+	createBody, _ := json.Marshal(map[string]any{"name": "Expired", "expires_at": past})
+	resp, err := env.authedRequest(http.MethodPost, "/api/v1/user/tokens", bytes.NewReader(createBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 for past expiry, got %d", resp.StatusCode)
 	}
 }
 

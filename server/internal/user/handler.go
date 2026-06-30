@@ -49,17 +49,19 @@ type tokenListItem struct {
 }
 
 type createTokenRequest struct {
-	Name      string  `json:"name"`
-	ExpiresAt *string `json:"expires_at"`
+	Name         string  `json:"name"`
+	NeverExpires bool    `json:"never_expires"`
+	ExpiresAt    *string `json:"expires_at"`
 }
 
 type createTokenResponse struct {
-	ID          string  `json:"id"`
-	Name        string  `json:"name"`
-	Token       string  `json:"token"`
-	TokenPrefix string  `json:"token_prefix"`
-	ExpiresAt   *string `json:"expires_at"`
-	CreatedAt   string  `json:"created_at"`
+	ID           string  `json:"id"`
+	Name         string  `json:"name"`
+	Token        string  `json:"token"`
+	TokenPrefix  string  `json:"token_prefix"`
+	NeverExpires bool    `json:"never_expires,omitempty"`
+	ExpiresAt    *string `json:"expires_at"`
+	CreatedAt    string  `json:"created_at"`
 }
 
 type notificationTestRequest struct {
@@ -407,15 +409,10 @@ func (h *Handler) CreateToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var expiresVal any
-	var expiresPtr *string
-	if req.ExpiresAt != nil && *req.ExpiresAt != "" {
-		if _, err := time.Parse(time.RFC3339, *req.ExpiresAt); err != nil {
-			apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_TOKEN_EXPIRES")
-			return
-		}
-		expiresVal = *req.ExpiresAt
-		expiresPtr = req.ExpiresAt
+	expiresVal, expiresPtr, perpetual, err := resolveTokenExpiry(req.NeverExpires, req.ExpiresAt, time.Now())
+	if err != nil {
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_TOKEN_EXPIRES")
+		return
 	}
 
 	raw, hash, prefix, err := generateAPIToken()
@@ -445,12 +442,13 @@ func (h *Handler) CreateToken(w http.ResponseWriter, r *http.Request) {
 	})
 
 	writeJSON(w, http.StatusCreated, createTokenResponse{
-		ID:          id,
-		Name:        name,
-		Token:       raw,
-		TokenPrefix: prefix,
-		ExpiresAt:   expiresPtr,
-		CreatedAt:   createdAt,
+		ID:           id,
+		Name:         name,
+		Token:        raw,
+		TokenPrefix:  prefix,
+		NeverExpires: perpetual,
+		ExpiresAt:    expiresPtr,
+		CreatedAt:    createdAt,
 	})
 }
 

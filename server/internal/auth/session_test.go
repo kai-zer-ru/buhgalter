@@ -91,6 +91,38 @@ func TestVerifyTokenSessionAndAPI(t *testing.T) {
 	}
 }
 
+func TestAPITokenExpiredRejected(t *testing.T) {
+	dir := t.TempDir()
+	mgr, err := db.NewManager(filepath.Join(dir, "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mgr.Close()
+	sqlDB := mgr.DB()
+	ctx := context.Background()
+
+	userID, err := CreateUser(ctx, sqlDB, "expuser", "hash", "Exp", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	raw := "bhg_expiredtoken123456"
+	hash := HashToken(raw)
+	expired := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
+	_, err = sqlDB.Exec(`
+		INSERT INTO api_tokens (id, user_id, name, token_hash, token_prefix, expires_at)
+		VALUES ('tok-exp', ?, 'expired', ?, 'bhg_expi', ?)`, userID, hash, expired)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if VerifyToken(ctx, sqlDB, raw) {
+		t.Fatal("expired api token should be invalid")
+	}
+	if _, err := LookupAPIToken(ctx, sqlDB, raw); err == nil {
+		t.Fatal("LookupAPIToken should reject expired token")
+	}
+}
+
 func TestSessionRefreshExtendsExpiry(t *testing.T) {
 	dir := t.TempDir()
 	mgr, err := db.NewManager(filepath.Join(dir, "test.db"))

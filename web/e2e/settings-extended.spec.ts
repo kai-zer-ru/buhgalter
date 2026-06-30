@@ -44,6 +44,20 @@ test('tokens: revoke created API token', async ({ page }) => {
 	await expect(page.getByText(tokenName)).toHaveCount(0, { timeout: 10_000 });
 });
 
+test('tokens: perpetual token shows risk warning', async ({ page }) => {
+	const tokenName = `E2E Perpetual ${Date.now()}`;
+
+	await page.goto('/settings?tab=tokens');
+	await waitAppReady(page);
+	await page.locator('#token-name').fill(tokenName);
+	await page.getByRole('switch', { name: 'Бессрочный' }).click();
+	await expect(page.getByText('Этот токен будет бессрочный — это РИСКОВАННО')).toBeVisible();
+	await page.getByRole('button', { name: 'Создать' }).click();
+	await page.getByRole('button', { name: 'Закрыть' }).click();
+	await expect(page.getByText(tokenName).first()).toBeVisible();
+	await expect(page.getByText('Бессрочно').first()).toBeVisible();
+});
+
 test('categories: delete expense category', async ({ page }) => {
 	const name = `E2E Cat Del ${Date.now()}`;
 

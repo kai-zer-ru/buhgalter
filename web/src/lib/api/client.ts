@@ -206,7 +206,10 @@ export type APIToken = {
 	created_at: string;
 };
 
-export type APITokenCreated = APIToken & { token: string };
+export type APITokenCreated = APIToken & {
+	token: string;
+	never_expires?: boolean;
+};
 
 export type BackupFile = {
 	filename: string;
@@ -377,10 +380,19 @@ export function listTokens() {
 	return request<APIToken[]>('/api/v1/user/tokens');
 }
 
-export function createToken(name: string, expiresAt: string | null) {
+export function createToken(
+	name: string,
+	opts?: { neverExpires?: boolean; expiresAt?: string | null }
+) {
+	const body: { name: string; never_expires?: boolean; expires_at?: string | null } = { name };
+	if (opts?.neverExpires) {
+		body.never_expires = true;
+	} else if (opts?.expiresAt) {
+		body.expires_at = opts.expiresAt;
+	}
 	return request<APITokenCreated>('/api/v1/user/tokens', {
 		method: 'POST',
-		body: JSON.stringify({ name, expires_at: expiresAt })
+		body: JSON.stringify(body)
 	});
 }
 

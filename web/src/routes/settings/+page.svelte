@@ -27,6 +27,7 @@
 	import { applyTheme } from '$lib/theme';
 	import { setLocale } from '$lib/i18n';
 	import TimezonePicker from '$lib/components/TimezonePicker.svelte';
+	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
 	import PageTabs from '$lib/components/PageTabs.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import FormFeedback from '$lib/components/FormFeedback.svelte';
@@ -35,6 +36,13 @@
 	import { confirm } from '$lib/confirm';
 	import { validatePasswordPolicy } from '$lib/password-policy';
 	import { formatApiError } from '$lib/api/errors';
+	import {
+		apiDateTimeToRFC3339,
+		defaultTokenExpiryLocal,
+		formatAPIOperationDateTimeForDisplay,
+		fromDateLocalEnd
+	} from '$lib/dates';
+	import { dateOnlyPicker } from '$lib/datetime-picker-standards';
 	import { toast } from '$lib/toast';
 	import CategoriesTab from '$lib/settings/CategoriesTab.svelte';
 	import ImportTab from '$lib/settings/ImportTab.svelte';
@@ -97,6 +105,8 @@
 
 	let tokens = $state<APIToken[]>([]);
 	let newTokenName = $state('');
+	let newTokenExpiresAt = $state('');
+	let newTokenNeverExpires = $state(false);
 	let tokenFormError = $state('');
 	let createdToken = $state<APITokenCreated | null>(null);
 
@@ -186,6 +196,13 @@
 			}
 		})();
 		return () => window.removeEventListener('popstate', syncTabFromLocation);
+	});
+
+	$effect(() => {
+		if (tab !== 'tokens') return;
+		if (!newTokenExpiresAt) {
+			newTokenExpiresAt = defaultTokenExpiryLocal(timezone);
+		}
 	});
 
 	$effect(() => {
@@ -777,8 +794,15 @@
 		tokenFormError = '';
 		loading = true;
 		try {
-			createdToken = await createToken(newTokenName.trim(), null);
+			const opts = newTokenNeverExpires
+				? { neverExpires: true }
+				: {
+						expiresAt: apiDateTimeToRFC3339(fromDateLocalEnd(newTokenExpiresAt, timezone))
+					};
+			createdToken = await createToken(newTokenName.trim(), opts);
 			newTokenName = '';
+			newTokenNeverExpires = false;
+			newTokenExpiresAt = defaultTokenExpiryLocal(timezone);
 			toast($_('common.saved'));
 			await loadTokens();
 		} catch (err) {
@@ -836,6 +860,13 @@
 
 	function formatOptional(value: string | null) {
 		return value && value.trim() !== '' ? value : '—';
+	}
+
+	function formatTokenExpiry(value: string | null) {
+		if (!value || value.trim() === '') {
+			return $_('settings.tokens.col.never');
+		}
+		return formatAPIOperationDateTimeForDisplay(value, timezone);
 	}
 
 	const breadcrumbItems = $derived.by((): BreadcrumbItem[] => {
@@ -1519,23 +1550,48 @@
 	{/if}
 {:else if tab === 'tokens'}
 	<div class="space-y-6">
-		<form class="card flex flex-wrap items-end gap-3" onsubmit={handleCreateToken}>
-			<div class="min-w-[200px] flex-1">
-				<label class="mb-1.5 block text-sm font-medium" for="token-name"
-					>{$_('settings.tokens.name')}</label
-				>
-				<input
-					id="token-name"
-					class="input"
-					bind:value={newTokenName}
-					placeholder="Home Assistant"
-					required
+		<form class="card space-y-4" onsubmit={handleCreateToken}>
+			<div class="grid gap-4 sm:grid-cols-2">
+				<div>
+					<label class="mb-1.5 block text-sm font-medium" for="token-name"
+						>{$_('settings.tokens.name')}</label
+					>
+					<input
+						id="token-name"
+						class="input w-full"
+						bind:value={newTokenName}
+						placeholder="Home Assistant"
+						required
+					/>
+				</div>
+				<DateTimePicker
+					id="token-expires"
+					label={$_('settings.tokens.expires')}
+					bind:value={newTokenExpiresAt}
+					disabled={newTokenNeverExpires}
+					required={!newTokenNeverExpires}
+					{...dateOnlyPicker}
 				/>
 			</div>
-			<button type="submit" class="btn-primary" disabled={loading}>{$_('common.create')}</button>
-			<div class="w-full basis-full">
-				<FormFeedback error={tokenFormError} />
+			<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+				<label class="flex cursor-pointer items-center gap-3">
+					<ToggleSwitch
+						checked={newTokenNeverExpires}
+						label={$_('settings.tokens.never_expires')}
+						onchange={() => (newTokenNeverExpires = !newTokenNeverExpires)}
+					/>
+					<span class="text-sm">{$_('settings.tokens.never_expires')}</span>
+				</label>
+				<button type="submit" class="btn-primary w-full sm:w-auto" disabled={loading}>
+					{$_('common.create')}
+				</button>
 			</div>
+			{#if newTokenNeverExpires}
+				<p class="text-sm font-medium" style:color="var(--danger)">
+					{$_('settings.tokens.perpetual_warning')}
+				</p>
+			{/if}
+			<FormFeedback error={tokenFormError} />
 		</form>
 
 		{#if createdToken}
@@ -1576,7 +1632,7 @@
 							<tr class="border-t" style:border-color="var(--border)">
 								<td class="py-3 pr-4">{t.name}</td>
 								<td class="py-3 pr-4 font-mono">{t.token_prefix}</td>
-								<td class="py-3 pr-4">{formatOptional(t.expires_at)}</td>
+								<td class="py-3 pr-4">{formatTokenExpiry(t.expires_at)}</td>
 								<td class="py-3 pr-4">{formatOptional(t.last_used_at)}</td>
 								<td class="py-3 text-right">
 									<button type="button" class="btn-ghost" onclick={() => revokeToken(t.id)}>
@@ -1605,7 +1661,7 @@
 							</div>
 							<div class="flex justify-between gap-2">
 								<dt style:color="var(--text-muted)">{$_('settings.tokens.col.expires')}</dt>
-								<dd>{formatOptional(t.expires_at)}</dd>
+								<dd>{formatTokenExpiry(t.expires_at)}</dd>
 							</div>
 							<div class="flex justify-between gap-2">
 								<dt style:color="var(--text-muted)">{$_('settings.tokens.col.last_used')}</dt>

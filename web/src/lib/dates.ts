@@ -243,10 +243,26 @@ export function fromDateLocalStart(value: string, tz: string): string {
 	return fromDatetimeLocalValue(dateOnlyLocalValue(value), tz);
 }
 
+/** API UTC `yyyy-MM-dd HH:mm:ss` → RFC3339 for endpoints that expect ISO timestamps. */
+export function apiDateTimeToRFC3339(api: string): string {
+	const m = api.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/);
+	if (!m) throw new Error('invalid api datetime');
+	return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6])).toISOString();
+}
+
 /** Date-only filter end → API UTC (23:59:59 in user TZ). */
 export function fromDateLocalEnd(value: string, tz: string): string {
 	const m = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
 	if (!m) throw new Error('invalid date-local');
 	const local = new Date(+m[1], +m[2] - 1, +m[3], 23, 59, 59);
 	return toAPIDateTime(local, tz);
+}
+
+/** Default API token expiry: 30 days from now in user TZ (date-only). */
+export function defaultTokenExpiryLocal(tz: string): string {
+	const now = nowDatetimeLocal(tz);
+	const m = now.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+	if (!m) return now;
+	const d = new Date(+m[1], +m[2] - 1, +m[3] + 30, 0, 0);
+	return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T00:00`;
 }

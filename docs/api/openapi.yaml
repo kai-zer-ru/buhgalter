@@ -316,16 +316,42 @@ paths:
       responses:
         '200':
           description: Список токенов
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/APIToken'
     post:
       summary: Создать API-токен
+      description: |
+        По умолчанию срок действия — 30 дней. Бессрочный токен (`never_expires: true`) допустим,
+        но не рекомендуется. Явная дата в `expires_at` (RFC3339) переопределяет срок по умолчанию.
       security:
         - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/APITokenCreateRequest'
       responses:
         '201':
-          description: Токен создан (показывается один раз)
+          description: Токен создан (значение `token` показывается один раз)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APITokenCreated'
+        '400':
+          description: Ошибка валидации (`ERR_TOKEN_NAME_REQUIRED`, `ERR_TOKEN_EXPIRES`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /user/tokens/{id}:
     delete:
       summary: Отозвать API-токен
+      description: Можно отозвать только собственный токен; чужой — `404 NOT_FOUND`.
       security:
         - sessionCookie: []
       parameters:
@@ -3816,3 +3842,50 @@ components:
         finished_at:
           type: string
           nullable: true
+    APIToken:
+      type: object
+      required: [id, name, token_prefix, created_at]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        token_prefix:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: `null` — бессрочный токен
+        last_used_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+    APITokenCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        never_expires:
+          type: boolean
+          default: false
+          description: Бессрочный токен (не рекомендуется)
+        expires_at:
+          type: string
+          format: date-time
+          description: Явная дата истечения (RFC3339); игнорируется при `never_expires: true`
+    APITokenCreated:
+      allOf:
+        - $ref: '#/components/schemas/APIToken'
+        - type: object
+          required: [token]
+          properties:
+            token:
+              type: string
+              description: Полное значение токена (только в ответе на создание)
+            never_expires:
+              type: boolean
+              description: `true`, если токен бессрочный
