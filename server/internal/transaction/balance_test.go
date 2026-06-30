@@ -87,11 +87,33 @@ func TestBalanceManualOnly(t *testing.T) {
 	}
 }
 
+// futureInCurrentMonthUTC returns a datetime after now but still within the current UTC month.
+func futureInCurrentMonthUTC(t *testing.T) time.Time {
+	t.Helper()
+	now := timeutil.NowUTC()
+	_, monthEnd, err := timeutil.MonthBoundsUTC("UTC", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	monthEndTime, err := timeutil.ParseUTC(monthEnd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	future := now.Add(48 * time.Hour)
+	if !future.Before(monthEndTime) {
+		future = monthEndTime.Add(-time.Hour)
+	}
+	if !future.After(now) {
+		t.Skip("no room for future transaction in current month")
+	}
+	return future
+}
+
 func TestForecastWithFutureInMonth(t *testing.T) {
 	database := testDB(t)
 	userID, accountID := seedUserAccount(t, database)
 	past := timeutil.FormatUTC(timeutil.NowUTC().Add(-24 * time.Hour))
-	future := timeutil.FormatUTC(timeutil.NowUTC().Add(48 * time.Hour))
+	future := timeutil.FormatUTC(futureInCurrentMonthUTC(t))
 
 	insertTx(t, database, userID, accountID, "expense", "manual", past, 1000)
 	insertTx(t, database, userID, accountID, "expense", "future", future, 3000)

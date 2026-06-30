@@ -54,7 +54,7 @@
 	let weekday = $state('1');
 	let dayOfMonth = $state('1');
 	let startDate = $state('');
-	let timeLocal = $state('00:00');
+	let timeLocal = $state('08:00');
 	let active = $state(true);
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
@@ -183,7 +183,7 @@
 		weekday = '1';
 		dayOfMonth = '1';
 		startDate = todayDateLocal(tz).slice(0, 10);
-		timeLocal = '00:00';
+		timeLocal = '08:00';
 		active = true;
 		void loadSubcategories();
 	}
@@ -249,7 +249,7 @@
 							? Number(dayFromDate(startDate))
 							: undefined,
 				start_date: fromDatetimeLocalValue(`${dateOnly(startDate)}T00:00`, tz),
-				time_local: timeLocal || '00:00',
+				time_local: timeLocal || '08:00',
 				active
 			};
 			if (editId) {

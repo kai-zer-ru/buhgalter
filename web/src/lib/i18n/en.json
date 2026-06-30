@@ -261,7 +261,7 @@
 	"recurring.startDate": "Start date",
 	"recurring.weekday": "Weekday",
 	"recurring.dayOfMonth": "Day of month",
-	"recurring.timeAdvanced": "Execution time (default 00:00)",
+	"recurring.timeAdvanced": "Execution time (default 08:00)",
 	"recurring.active": "Operation is active",
 	"recurring.nextRun": "Next run",
 	"recurring.fromTransaction": "Make recurring",

@@ -127,7 +127,7 @@ func parseInput(req createRequest) (Input, error) {
 	}
 	timeLocal := strings.TrimSpace(req.TimeLocal)
 	if timeLocal == "" {
-		timeLocal = "00:00"
+		timeLocal = "08:00"
 	}
 	active := true
 	if req.Active != nil {

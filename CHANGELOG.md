@@ -3,17 +3,35 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 версии — [SemVer](https://semver.org/lang/ru/).
 
-Подробные release notes для пользователей: [docs/release-notes-v1.2.2.md](docs/release-notes-v1.2.2.md).
+Подробные release notes для пользователей: [docs/release-notes-v1.2.3.md](docs/release-notes-v1.2.3.md).
 
 ## [v1.2.3] — unreleased
 
+> **ОБЯЗАТЕЛЬНО СДЕЛАЙТЕ БЕКАП!** Перед обновлением сохраните копию базы (`data/buhgalter.db`) и каталога `backups/`.
+
+Подробные release notes для пользователей: [docs/release-notes-v1.2.3.md](docs/release-notes-v1.2.3.md).
+
 ### Добавлено
+
+**UI/UX**
 
 - Список операций (главная, `/transactions`, страница счёта): пункт меню «⋯» **Повторить** — форма новой операции с полями из выбранной строки и текущей датой (**доход**, **расход**, **перевод**); недоступно для системных категорий и платежей по кредиту
 
+### Изменено
+
+**UI/UX**
+
+- **Периодические операции** (`/recurring-operations`): время выполнения по умолчанию — **08:00** в часовом поясе пользователя (раньше 00:00; UI и API при пустом `time_local`)
+
 ### Исправлено
 
+**UI/UX**
+
 - **Форма перевода:** выбранный в одном поле счёт не показывается в противоположном селекте («Откуда» / «Куда»); при совпадении значений автоматически подбирается другой счёт
+
+### Техническое
+
+- Версия `1.2.3`
 
 ## [v1.2.2] — 2026-06-28
 
@@ -431,6 +449,7 @@
 [v1.1.1]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.1.1
 [v1.1.0]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.1.0
 [v1.0.0]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.0.0
+[v1.2.3]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.2.3
 [v1.2.2]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.2.2
 [v1.2.1]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.2.1
 [v1.2.0]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.2.0

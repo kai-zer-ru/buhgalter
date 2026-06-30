@@ -3554,7 +3554,7 @@ components:
         time_local:
           type: string
           pattern: '^([01]\d|2[0-3]):([0-5]\d)$'
-          description: Локальное время выполнения (HH:MM), по умолчанию 00:00
+          description: Локальное время выполнения (HH:MM), по умолчанию 08:00
         next_run_at:
           type: string
           format: date-time
@@ -3613,7 +3613,7 @@ components:
           type: string
           nullable: true
           pattern: '^([01]\d|2[0-3]):([0-5]\d)$'
-          description: Локальное время выполнения (HH:MM), пустое значение трактуется как 00:00
+          description: Локальное время выполнения (HH:MM), пустое значение трактуется как 08:00
         active:
           type: boolean
     PreviewScheduleRequest:

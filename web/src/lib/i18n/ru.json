@@ -261,7 +261,7 @@
 	"recurring.startDate": "Дата старта",
 	"recurring.weekday": "День недели",
 	"recurring.dayOfMonth": "День месяца",
-	"recurring.timeAdvanced": "Время выполнения (по умолчанию 00:00)",
+	"recurring.timeAdvanced": "Время выполнения (по умолчанию 08:00)",
 	"recurring.active": "Операция активна",
 	"recurring.nextRun": "Следующий запуск",
 	"recurring.fromTransaction": "Сделать периодической",
