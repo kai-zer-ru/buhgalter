@@ -31,6 +31,14 @@
 
 ## Фильтры (`FilterPanel`)
 
+Единый компонент на всех экранах с панелью фильтров (подробнее — [ui-row-actions.md](ui-row-actions.md)):
+
+| Маршрут | Содержимое панели |
+|---------|-------------------|
+| `/transactions` | `TransactionFilters` |
+| `/accounts/[id]` | `TransactionFilters` |
+| `/stats` | собственная сетка полей |
+
 - На **мобильных** — свёрнуты под спойлер «Фильтры» с chevron; по умолчанию закрыты.
 - На **десктопе** (`≥ md`) — панель всегда развёрнута, заголовок спойлера скрыт.
 - Компонент: `$lib/components/FilterPanel.svelte`; поля операций — `TransactionFilters`.
@@ -41,9 +49,3 @@
 - Широкие таблицы → карточки на `md` breakpoint (кредиты, операции)
 - Модалки — bottom sheet на узком экране (`ModalShell`, `ConfirmDialog`)
 - Вкладки — горизонтальный скролл (`PageTabs`, `.page-tabs-scroll`)
-
-Release notes: [release-notes-v1.2.1.md](release-notes-v1.2.1.md).
-
-## Запланировано
-
-- Единый `FilterPanel` для всех экранов с фильтрами — реализовано для `/transactions`, `/accounts/[id]`, `/stats` (см. [ui-row-actions.md](ui-row-actions.md))

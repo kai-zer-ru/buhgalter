@@ -32,9 +32,7 @@ Self-service смены пароля по e-mail **нет**. Сценарий д
 2. Администратор: `GET /api/v1/admin/password-reset-requests` — список ожидающих; `POST .../ack` — скрыть запрос из очереди.
 3. Администратор: `PUT /api/v1/admin/users/{id}/password` — новый пароль; сессии пользователя инвалидируются.
 
-Таблица БД: `password_reset_requests` (миграция `023`).
-
-Подробнее: [../release-notes-v1.1.md](../release-notes-v1.1.md).
+Таблица БД: `password_reset_requests` (миграция `023_password_reset_requests.sql`).
 
 ## Ошибки
 

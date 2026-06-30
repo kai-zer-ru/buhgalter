@@ -10,11 +10,11 @@
 | `categories` | `icon` | `TEXT` | ID иконки из каталога, по умолчанию `default` |
 | `categories` | `type` | `income` \| `expense` | Тип категории |
 | `categories` | `sort_order` | `INTEGER` | Порядок в списке (ручная сортировка в UI) |
-| `categories` | `is_primary` | `INTEGER` | `1` — главная категория для типа (миграция `006_category_primary.sql`) |
-| `categories` | `is_system` | `INTEGER` | `1` — системная категория, нельзя менять/удалять и создавать подкатегории (миграция `009_category_is_system.sql`, этап 4) |
-| `subcategories` | `icon` | `TEXT` | ID иконки; при создании без `icon` в API — **иконка родительской категории**, иначе `default` (миграция `004_subcategory_icons.sql`) |
+| `categories` | `is_primary` | `INTEGER` | `1` — главная категория для типа (`007_categories.sql`) |
+| `categories` | `is_system` | `INTEGER` | `1` — системная категория, нельзя менять/удалять (`007_categories.sql`) |
+| `subcategories` | `icon` | `TEXT` | ID иконки; без `icon` в API — иконка родителя (`008_subcategories.sql`) |
 | `subcategories` | `category_id` | `TEXT` | Родительская категория |
-| `subcategories` | `sort_order` | `INTEGER` | Порядок в списке (миграция `007_subcategory_sort_order.sql`) |
+| `subcategories` | `sort_order` | `INTEGER` | Порядок в списке (`008_subcategories.sql`) |
 
 Подкатегория наследует **тип** от родителя (отдельного поля `type` нет). В UI picker фильтрует иконки по вкладке «Расходы» / «Доходы».
 
@@ -162,19 +162,11 @@ URL в UI: `/icons/categories/{id}.svg` (`categoryIconUrl` в `web/src/lib/finan
 
 ## Файлы (шпаргалка)
 
-```
-data/category_icons.json          # каталог ID, kind, name, tags
-data/category_icons/*.svg         # официальные логотипы маркетплейсов
-web/static/icons/categories/      # все SVG для фронта
-web/src/lib/category-icons.ts     # фильтрация по kind, quickIconsDisplay, defaultCategoryNameForIcon
-web/src/lib/components/CategoryIconPicker.svelte  # авто-имя, lockName
-web/src/lib/drag-reorder.ts                        # pointer DnD, ghost с фиксированной шириной
-web/src/lib/components/ReorderDragGhost.svelte
-web/src/routes/settings/categories/+page.svelte
-web/src/routes/accounts/+page.svelte              # вкладки active/archived, inline-edit, меню «⋯»
-web/src/lib/settings/CategoriesTab.svelte         # раскрытие по названию, главная в меню «⋯»
-web/src/lib/accounts.ts                           # defaultAccountId для форм
-web/src/routes/+layout.svelte                     # шапка, порядок nav, ConfirmDialog
-server/queries/categories.sql
-server/internal/category/category.go              # CreateSubcategory — icon от родителя
-```
+| Путь | Назначение |
+|------|------------|
+| `data/category_icons.json` | каталог ID, kind, name, tags |
+| `web/static/icons/categories/` | SVG для фронта |
+| `web/src/lib/category-icons.ts` | фильтрация по kind, quick-ряды |
+| `web/src/lib/components/CategoryIconPicker.svelte` | picker с авто-именем |
+| `web/src/routes/settings/categories/+page.svelte` | страница настроек |
+| `server/queries/categories.sql` | sqlc-запросы |

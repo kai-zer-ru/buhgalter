@@ -1,6 +1,6 @@
 # Стиль документации
 
-Единые правила оформления Markdown в публичной документации репозитория (`docs/`, `roadmap/`). На этапе релиза все файлы из [списка для ревизии](#охват-ревизии) приводятся к этому стилю.
+Единые правила оформления Markdown в публичной документации репозитория (`docs/`).
 
 ## Язык и тон
 
@@ -33,20 +33,21 @@
 | Файл | Роль |
 |------|------|
 | [README.md](README.md) | Индекс публичной документации |
-| [ROADMAP.md](../ROADMAP.md) | Только список идей |
-| [roadmap/](../roadmap/) | Детали идей после v1 |
+| [../README.md](../README.md) | Установка, быстрый старт, переменные окружения |
 | [style.md](style.md) | Единый стиль Markdown |
-| [data-model.md](data-model.md) | ER-диаграмма, SQL, миграции |
+| [data-model.md](data-model.md) | Схема БД, миграции |
 | [categories-and-icons.md](categories-and-icons.md) | Категории, подкатегории, иконки |
+| [transactions-display.md](transactions-display.md) | Отображение операций |
+| [date-time-display.md](date-time-display.md) | Форматы даты/времени |
 | [ui-dialogs.md](ui-dialogs.md) | Диалоги, подтверждения, Esc |
 | [ui-navigation.md](ui-navigation.md) | Навигация и кликабельные сущности |
 | [ui-row-actions.md](ui-row-actions.md) | Меню «⋯» в строках и спойлер фильтров |
+| [ui-api-cache.md](ui-api-cache.md) | Кеш GET на сервере и банки в браузере |
 | [ui-stats.md](ui-stats.md) | Страница `/stats` |
 | [ui-credits.md](ui-credits.md) | UI кредитов |
-| [ui-stable-layout.md](ui-stable-layout.md) | Стабильная шапка и EmptyState |
+| [ui-stable-layout.md](ui-stable-layout.md) | Стабильная шапка и вкладки |
 | [ui-empty-states.md](ui-empty-states.md) | Пустые состояния |
 | [ui-table-columns.md](ui-table-columns.md) | Порядок колонок таблиц |
-| [transactions-display.md](transactions-display.md) | Отображение операций |
 | [import/cubux.md](import/cubux.md) | Импорт формата Cubux |
 | [api/openapi.yaml](api/openapi.yaml) | OpenAPI v1 |
 | [api/authentication.md](api/authentication.md) | Авторизация, сессии, API-токены |
@@ -100,7 +101,7 @@
 
 - Все `*.md` — тот же стиль, что `docs/`; в шапке: «Не входит в v1»
 
-**Вне охвата:** `web/README.md` (шаблон Svelte), `.github/*`, комментарии в коде.
+**Вне охвата:** release-notes, `CHANGELOG.md`, `roadmap/`, шаблонные README фреймворков, `.github/*`.
 
 ## Проверка
 

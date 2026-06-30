@@ -1,44 +1,56 @@
 # Установка вручную
 
-Пошаговая установка без Docker: сборка бинарника и запуск на хосте.
+Сборка бинарника и запуск на хосте без Docker.
 
 ---
 
 ## Требования
 
-- Linux/macOS
-- Go и Node.js (если собираете web-часть локально)
-- Права на запись в каталог проекта (`data/`, `logs/`)
+- Linux, macOS или Windows
+- **Go 1.26+** и **Node.js 22+** — только если собираете из исходников
+- Права на запись в каталог запуска (`data/`, `logs/`)
 
 ## Установка
 
 ```bash
-git clone https://github.com/kai-zer-ru/buhgalter
+git clone https://github.com/kai-zer-ru/buhgalter.git
 cd buhgalter
 make build
 ./buhgalter
 ```
 
-После старта открыть `http://localhost:8765` и пройти `/setup`.
-Если есть резервная копия, её можно восстановить прямо на `/setup` из файла `.db` до завершения первичной настройки.
+Откройте [http://localhost:8765/setup](http://localhost:8765/setup) и создайте учётную запись администратора.
+
+При наличии резервной копии её можно восстановить на `/setup` из файла `.db` **до** завершения первичной настройки.
+
+## Каталоги данных
+
+| Путь            | Назначение                          |
+| --------------- | ----------------------------------- |
+| `data/`         | SQLite (`buhgalter.db`), `.configured` |
+| `data/backups/` | файлы бэкапов                       |
+| `logs/`         | логи                                |
 
 ## Обновление
 
 ```bash
 git pull
 make build
-./buhgalter
+# остановите старый процесс, запустите ./buhgalter снова
 ```
 
-Для dev-базы после пересборки миграций (одноразовый break перед v1) — пересоздать SQLite или выполнить `make clear`.
+Перед обновлением сделайте бэкап в **Настройки → Админка → Бэкапы** или скопируйте `data/buhgalter.db`.
 
 ## Переменные окружения
 
-Приложение при старте **только читает** `.env` (путь — `BUHGALTER_ENV_FILE`, по умолчанию `.env` в каталоге запуска). Файл создаёт и редактирует пользователь (`docker/.env.example` → `docker/.env`).
+Создайте `.env` в каталоге запуска (шаблон для Docker: [docker/.env.example](../../docker/.env.example) — пути внутри контейнера замените на локальные).
 
-Основные переменные: `BUHGALTER_ADDR`, `BUHGALTER_DB_PATH`, `BUHGALTER_DATA_DIR`, `BUHGALTER_LOG_DIR`, `BUHGALTER_ALLOWED_HOSTS`, `BUHGALTER_CORS_ORIGINS`.
-Локали `ru/en` встроены в бинарник, отдельная настройка `BUHGALTER_LOCALES_DIR` для типового запуска не нужна.
+Основные переменные: `BUHGALTER_ADDR`, `BUHGALTER_DATA_DIR`, `BUHGALTER_LOG_DIR`, `BUHGALTER_ALLOWED_HOSTS`.
 
-`BUHGALTER_STATIC_EMBED` обычно не нужен в релизном запуске (по умолчанию `true` и фронтенд отдаётся из бинарника). Используется в dev-сценариях с отдельным Vite (`make dev-server` + `make dev-web`).
+Полный список и примеры — в [README.md](../../README.md#переменные-окружения).
 
-Подробный список и примеры — в [README.md](../../README.md).
+`BUHGALTER_STATIC_EMBED=false` нужен только при разработке с отдельным Vite (`make dev-server` + `make dev-web`).
+
+## Разработка
+
+См. раздел [Разработка](../../README.md#разработка) в корневом README.

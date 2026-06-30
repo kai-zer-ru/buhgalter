@@ -1,42 +1,16 @@
-# sv
+# Фронтенд (SvelteKit)
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+Веб-интерфейс Бухгалтера. Сборка встраивается в Go-бинарник (`make build`).
 
-## Creating a project
+## Разработка
 
-If you're seeing this, you've probably already done this step. Congrats!
+Из корня репозитория:
 
-```sh
-# create a new project
-npx sv create my-app
+```bash
+make dev-server   # API на :8765 без встроенного фронта
+make dev-web      # Vite на http://localhost:5173 (прокси API)
 ```
 
-To recreate this project with the same configuration:
+Проверка типов: `cd web && npm run check`. E2E: `make test-e2e` (из корня).
 
-```sh
-# recreate this project
-npx sv@0.16.1 create --template minimal --types ts --add tailwindcss="plugins:none" sveltekit-adapter="adapter:static" eslint prettier --install npm web
-```
-
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```sh
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
-```
-
-## Building
-
-To create a production version of your app:
-
-```sh
-npm run build
-```
-
-You can preview the production build with `npm run preview`.
-
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+Общие команды, структура проекта и документация UI — в [README.md](../README.md) и [docs/README.md](../docs/README.md).

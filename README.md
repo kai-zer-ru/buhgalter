@@ -1,5 +1,3 @@
-
-
 # Бухгалтер
 
 Self-hosted приложение для личного учёта финансов: один бинарник с веб-интерфейсом, API и SQLite. Данные хранятся у вас — на своём сервере или домашней машине.
@@ -9,19 +7,18 @@ Self-hosted приложение для личного учёта финансо
 [![GitHub](https://img.shields.io/badge/GitHub-kai--zer--ru%2Fbuhgalter-blue?logo=github)](https://github.com/kai-zer-ru/buhgalter)
 [![Поддержать](https://img.shields.io/badge/донат-Tinkoff-FFDD2D.svg)](https://www.tbank.ru/rm/r_wKLcbFgjYa.ncgWMwrHSA/vyQvd5941/)
 
-
 ---
 
 ## Сообщество и поддержка
 
-Новости, обновления и помощь по теме:
+Новости, обновления и помощь:
 
 - **Telegram** — [@kai_zer_ru_ha](https://t.me/kai_zer_ru_ha)
 - **Max** — [kai_zer_ru_ha](https://max.ru/id251603503331_biz)
 - **Дзен** — [kai_zer_ru_ha](https://dzen.ru/kai_zer_ru_ha)
 - **VK** — [kai_zer_ru_ha](https://vk.com/kai_zer_ru_ha)
-- **Обсуждение** - [Чат в Max](https://max.ru/join/KoCsTSA3VGOCiIFdSAW0myVJEwXZi-rt9fTfGxdgk6A)
-- **Поддержка автора** - [Т-Банк](https://www.tbank.ru/rm/r_wKLcbFgjYa.ncgWMwrHSA/vyQvd5941/)
+- **Обсуждение** — [чат в Max](https://max.ru/join/KoCsTSA3VGOCiIFdSAW0myVJEwXZi-rt9fTfGxdgk6A)
+- **Поддержка автора** — [Т-Банк](https://www.tbank.ru/rm/r_wKLcbFgjYa.ncgWMwrHSA/vyQvd5941/)
 
 ---
 
@@ -29,20 +26,11 @@ Self-hosted приложение для личного учёта финансо
 
 - [О проекте](#о-проекте)
 - [Демо](#демо)
-- [Сборка из исходников](#сборка-из-исходников)
-- [Docker](#docker)
-  - [docker run](#docker-run)
-  - [docker compose](#docker-compose)
+- [Установка](#установка)
 - [Nginx (reverse proxy + HTTPS)](#nginx-reverse-proxy--https)
-- [Бинарник с GitHub Releases](#бинарник-с-github-releases)
 - [Первый запуск (/setup)](#первый-запуск-setup)
 - [Переменные окружения](#переменные-окружения)
-- [Уведомления MAX — сертификаты Минцифры](#уведомления-max--сертификаты-минцифры-обязательно)
-  - [Образ GHCR](#образ-ghcr)
-  - [Linux](#linux)
-  - [Windows](#windows)
-  - [macOS](#macos)
-  - [Секретный ключ уведомлений](#секретный-ключ-уведомлений)
+- [Уведомления MAX — сертификаты Минцифры](#уведомления-max--сертификаты-минцифры)
 - [Бэкапы](#бэкапы)
 - [Обновление](#обновление)
 - [Документация](#документация)
@@ -56,68 +44,45 @@ Self-hosted приложение для личного учёта финансо
 
 **Основные возможности:**
 
-- Счета (наличные и банковские), категории с иконками, операции и переводы **с комиссией**; на главной, в «Все операции» и на странице счёта — отдельные кнопки доход / расход / перевод; редактирование доходов и расходов (счёт, категория, сумма, описание, дата; тип не меняется; дата в будущем — плановая операция); **повтор** операции из меню «⋯» (новая запись с теми же полями, текущая дата)
-- Двойной баланс по счетам: текущий и прогноз на текущий месяц (с учётом операций `future`)
-- Кредиты с графиками платежей (редактирование сумм будущих платежей, учёт задним числом, списание ретро-платежей со счёта, выбор банка кредита)
-- Долги (дать/взять): при создании — опция «Без изменения баланса»; при погашении — переключатель «Не учитывать в балансе» (по умолчанию выключен) и счёт списания (по умолчанию — счёт долга или основной; поле скрывается, если переключатель включён)
-- Поддержка ипотеки (MVP): `property_price`, `down_payment`, автоматический расчёт суммы кредита (`price - down payment`), опция «не списывать первоначальный взнос с баланса», отдельный счёт списания взноса; аннуитетный платёж считается с ежедневным начислением процентов; можно вручную указать сумму из договора банка, если она отличается от расчётной модели
-- Автоматическая оплата кредита по локальному времени (`debit_time_local`): списание выполняется по дате/времени через планировщик, без массового предсоздания будущих транзакций; операция сохраняется с указанным временем списания; в графике и списке кредитов дата платежа показывается с этим временем; включается переключателем (по умолчанию `00:00`), отключается установкой `debit_time_local = null`
-- Для ипотек в интерфейсе используется только ежемесячная периодичность платежа (`month`)
-- Денежные суммы в кредитах отображаются в едином формате: разделители тысяч + знак валюты
-- Для системных категорий (кредиты/долги/служебные) запрещены плановые операции `future` — действует backend-валидация
-- Периодические операции: неделя/2 недели/месяц/год, время выполнения по умолчанию **08:00** в часовом поясе пользователя, отдельная страница управления, создание на основе существующей операции, inline-редактирование в списке и форма добавления по кнопке-спойлеру; на мобильных — карточки вместо таблицы
-- Длинные графики платежей отображаются с пагинацией (в том числе при создании кредита): по 10 строк, кнопки «В начало», «Назад», «Вперёд», «В конец»
-- В графике кредита оплата доступна только для ближайшего неоплаченного платежа; удаление — только для последнего оплаченного, при удалении платёж восстанавливается как неоплаченный; на странице кредита кнопка «Оплатить» в шапке — отдельно от меню «⋯»; при оплате можно выбрать счёт списания только для этого платежа (основной счёт кредита не меняется)
-- Перевод между счетами: на странице счёта в «Откуда» подставляется текущий счёт; выбранный счёт не показывается в противоположном селекте
-- Поля ввода суммы: пустое значение и ноль не отображаются как `0.00` — показывается placeholder; единообразно во всех формах
-- Действия в строках и карточках списков — меню «⋯» с подписанными пунктами (операции на главной, `/transactions`, странице счёта, периодические, категории, долги, счета и др.); на списке счетов — inline-редактирование на карточке (название, банк, начальный баланс), назначение основным, архив, удаление; на странице счёта — расширенное меню в шапке
-- Настройки → Категории: раскрытие подкатегорий по клику на название (▶/▼ после текста); «Сделать главной» — в меню «⋯»; иконка категории не кликабельна
-- Фильтры операций и статистики: на мобильных свёрнуты под спойлер «Фильтры», на широком экране всегда видны
-- Списки операций и кредитов отображаются в порядке от новых к старым
-- Импорт и экспорт (Cubux CSV/XLSX)
-- REST API и интерактивная документация OpenAPI; ответы с ошибками могут содержать `error.field` для привязки сообщения к полю формы
-- Раздел администрирования в **Настройки → Админка**: пользователи, **сброс пароля**, уведомления админам о запросах сброса, бэкапы, диагностика, секретный ключ шифрования токенов уведомлений
-- Адаптивный интерфейс для мобильных браузеров
-- In-memory кеш справочников в браузере (банки, категории, должники): меньше повторных запросов при навигации; сбрасывается при изменениях и выходе из аккаунта
-- Статистика: сводка, разбивка по категориям и периодам (группировка по дням, неделям или месяцам; подписи периода в читаемом виде), поиск по операциям; периоды — от новых к старым
-- Уведомления (Telegram, MAX) с настраиваемыми шаблонами — для MAX official обязательны [сертификаты Минцифры](#уведомления-max--сертификаты-минцифры-обязательно)
+- **Счета и операции** — наличные и банковские счета, категории с иконками, доходы, расходы и переводы (в том числе с комиссией). Плановые операции на будущую дату, повтор из меню строки, периодические списания.
+- **Долги** — дать или взять в долг; при погашении можно учитывать или не учитывать движение по счёту.
+- **Кредиты** — потребительские и ипотека: график платежей, правка будущих сумм, оплата вручную и автосписание по расписанию.
+- **Статистика** — сводка, разбивка по периодам и категориям, поиск по операциям.
+- **Импорт и экспорт** — формат Cubux (CSV/XLSX).
+- **Уведомления** — Telegram и MAX; для official API MAX нужны [сертификаты Минцифры](#уведомления-max--сертификаты-минцифры).
+- **Админка** — пользователи, сброс пароля, бэкапы, диагностика, внешний URL для доступа через reverse proxy.
+
+Детали интерфейса, API и модели данных — в [документации](docs/README.md).
 
 ## Демо
 
 Попробовать без установки: **[buhgalter-demo.kai-zer.ru](https://buhgalter-demo.kai-zer.ru/)**
 
-| Логин | Пароль        |
-| ----- | ------------- |
-| demo  | demo_1_demo   |
+| Логин | Пароль      |
+| ----- | ----------- |
+| demo  | demo_1_demo |
 
-## Сборка из исходников
+## Установка
 
-**Требования:** Go 1.26+, Node.js 22+ (только для сборки фронтенда), `make`.
+Образ Docker: `ghcr.io/kai-zer-ru/buhgalter` (тег `latest`). Порт приложения — **8765**.
 
-```bash
-git clone https://github.com/kai-zer-ru/buhgalter.git
-cd buhgalter
-make build
-./buhgalter
-```
+После любого способа ниже откройте [http://localhost:8765/setup](http://localhost:8765/setup) и пройдите [первый запуск](#первый-запуск-setup).
 
-Бинарник также попадает в `bin/buhgalter`. Откройте [http://localhost:8765](http://localhost:8765) и пройдите [первый запуск](#первый-запуск-setup).
+**Каталоги по умолчанию:**
 
-Каталоги по умолчанию: `data/` (база и маркер установки), `data/backups/` (бэкапы), `logs/`.
+| Каталог         | Содержимое                             |
+| --------------- | -------------------------------------- |
+| `data/`         | SQLite, маркер установки `.configured` |
+| `data/backups/` | файлы бэкапов БД                       |
+| `logs/`         | логи приложения                        |
 
-Для настройки (порт, allowed hosts и т.д.) создайте `.env` в каталоге запуска — см. [Переменные окружения](#переменные-окружения).
+Настройки (порт, allowed hosts) — через `.env`, см. [переменные окружения](#переменные-окружения). Подробнее: [docs/install/docker.md](docs/install/docker.md), [docs/install/manual.md](docs/install/manual.md).
 
-## Docker
-
-Образ публикуется в GHCR: `ghcr.io/kai-zer-ru/buhgalter` (рекомендуемый тег — `latest`). Подробнее — [docs/install/docker.md](docs/install/docker.md).
-
-Данные: каталоги на хосте (по умолчанию `./data`, `./backups`, `./logs` в `docker/`) монтируются в `/app/data`, `/app/backups`, `/app/logs`. Порт приложения: **8765**. Подробнее о миграции с named volumes — [docs/install/docker.md](docs/install/docker.md).
-
-Пока **внешний URL** в админке не задан, доступны **localhost** (всегда) и Host из `BUHGALTER_ALLOWED_HOSTS` в `.env` (см. [Переменные окружения](#переменные-окружения)).
+Пока **внешний URL** в админке не задан, доступны **localhost** (всегда) и Host из `BUHGALTER_ALLOWED_HOSTS`.
 
 ### docker run
 
-Один контейнер без compose — удобно для быстрой проверки или своих скриптов:
+Один контейнер без compose — удобно для быстрой проверки:
 
 ```bash
 docker pull ghcr.io/kai-zer-ru/buhgalter:latest
@@ -125,30 +90,32 @@ docker pull ghcr.io/kai-zer-ru/buhgalter:latest
 docker run -d --name buhgalter \
   -p 8765:8765 \
   -v buhgalter-data:/app/data \
-  -v buhgalter-backups:/app/backups \
+  -v buhgalter-logs:/app/logs \
   --env-file .env \
   --restart unless-stopped \
   ghcr.io/kai-zer-ru/buhgalter:latest
 ```
 
-`-p 8765:8765` — доступ с любого интерфейса хоста (в т.ч. `http://192.168.x.x:8765` в LAN). Только с этой машины: `-p 127.0.0.1:8765:8765`.
+`-p 8765:8765` — доступ с любого интерфейса хоста. Только с этой машины: `-p 127.0.0.1:8765:8765`.
 
-Локальная сборка образа: `make docker-build` (тег `buhgalter:local`), затем подставьте имя образа в `docker run`.
-
-Откройте [http://localhost:8765/setup](http://localhost:8765/setup) и пройдите [первый запуск](#первый-запуск-setup).
+Локальная сборка образа: `make docker-build` (тег `buhgalter:local`), подставьте имя образа в `docker run`.
 
 ### docker compose
 
-Рекомендуемый способ для постоянной установки — `[docker/docker-compose.yml](docker/docker-compose.yml)`:
+Рекомендуемый способ для постоянной установки — [docker/docker-compose.yml](docker/docker-compose.yml):
 
 ```bash
+cd docker
+cp .env.example .env
 docker pull ghcr.io/kai-zer-ru/buhgalter:latest
-docker compose -f docker/docker-compose.yml up -d
+docker compose up -d
 ```
 
-Каталоги на хосте по умолчанию: `./data`, `./backups`, `./logs` (настраиваются через `BUHGALTER_HOST_DATA_DIR` и аналоги в `.env`). Порт в compose: `127.0.0.1:8765:8765` (только localhost на хосте). Для доступа с других устройств в LAN замените в compose на `"8765:8765"`.
+Данные на хосте: `./data`, `./logs`; бэкапы — в `./data/backups/`.
 
-**Локальная сборка** — в compose закомментируйте `image:` и раскомментируйте `build:`:
+Порт в compose по умолчанию: `127.0.0.1:8765:8765`. Для доступа с других устройств в LAN замените на `"8765:8765"` и добавьте IP в `BUHGALTER_ALLOWED_HOSTS`.
+
+Локальная сборка — в `docker-compose.yml` раскомментируйте `build:` и закомментируйте `image:`:
 
 ```yaml
 build:
@@ -157,28 +124,48 @@ build:
 ```
 
 ```bash
-docker compose -f docker/docker-compose.yml up --build -d
+docker compose up --build -d
 ```
 
-**Обновление:**
+### Бинарник с GitHub Releases
+
+На странице [Releases](https://github.com/kai-zer-ru/buhgalter/releases) скачайте архив под свою ОС (Linux, Windows, macOS), распакуйте и запустите:
 
 ```bash
-docker compose -f docker/docker-compose.yml pull
-docker compose -f docker/docker-compose.yml up -d
+tar -xzf buhgalter_*_linux_amd64.tar.gz
+./buhgalter
 ```
+
+Проверьте контрольную сумму из `checksums.txt` в том же релизе.
+
+Запускайте из каталога, где создадутся `data/` и `logs/`, или укажите пути в `.env`.
+
+### Сборка из исходников
+
+Нужны **Go 1.26+**, **Node.js 22+** (сборка фронтенда) и `make`.
+
+```bash
+git clone https://github.com/kai-zer-ru/buhgalter.git
+cd buhgalter
+make build
+./buhgalter
+```
+
+Бинарник также попадает в `bin/buhgalter`. Подробнее — [docs/install/manual.md](docs/install/manual.md).
+
+Если `make build` падает с `EACCES` на `web/build` — `make fix-build-perms`.
 
 ## Nginx (reverse proxy + HTTPS)
 
-Приложение слушает HTTP на `:8765` без встроенного TLS. Для доступа по HTTPS поставьте nginx (или другой reverse proxy) перед бинарником или контейнером.
+Приложение слушает HTTP на `:8765` без встроенного TLS. Для HTTPS поставьте nginx (или другой reverse proxy) перед бинарником или контейнером.
 
-Готовый пример: `[docker/nginx.conf.example](docker/nginx.conf.example)`.
+Готовый пример: [docker/nginx.conf.example](docker/nginx.conf.example).
 
 ```nginx
 server {
     server_name buhgalter.my-site.ru;
 
     location / {
-
         proxy_pass http://127.0.0.1:8765;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -191,20 +178,9 @@ server {
 }
 ```
 
-Если Бухгалтер в Docker с пробросом `8765:8765`, `proxy_pass` остаётся на `http://127.0.0.1:8765` (nginx на том же хосте).
+В **Настройки → Админка** укажите **внешний URL** — например `https://buhgalter.my-site.ru` — для ссылок в уведомлениях и доступа из интернета.
 
-В разделе **Настройки → Админка** укажите **внешний URL** — например `https://buhgalter.my-site.ru` — для ссылок в уведомлениях и **доступа из интернета** через reverse proxy.
-
-## Бинарник с GitHub Releases
-
-На странице [Releases](https://github.com/kai-zer-ru/buhgalter/releases) скачайте архив под свою ОС (Linux, Windows, macOS), распакуйте и запустите:
-
-```bash
-tar -xzf buhgalter_*_linux_amd64.tar.gz
-./buhgalter
-```
-
-Проверьте контрольную сумму из `checksums.txt` в том же релизе.
+Подробнее: [docs/install/nginx.md](docs/install/nginx.md).
 
 ## Первый запуск (/setup)
 
@@ -212,56 +188,48 @@ tar -xzf buhgalter_*_linux_amd64.tar.gz
 
 1. Имя и логин администратора
 2. Пароль (дважды): минимум 8 символов, хотя бы одна буква и одна цифра, не совпадает с логином
-3. При необходимости — восстановление БД из `.db` бэкапа прямо на `/setup` (до завершения первичной настройки)
+3. При необходимости — восстановление БД из `.db` бэкапа до завершения настройки
 
-Факт завершения установки хранится в `data/.configured` (вне SQLite). Восстановление бэкапа **не** сбрасывает этот маркер — повторный setup не откроется.
-
-При сбое во время setup (например, обрыв после записи в БД) маркер синхронизируется с состоянием БД при следующем запросе; повторная отправка формы не приводит к внутренней ошибке — при уже выполненной настройке API вернёт «Настройка уже выполнена» (409).
+Факт завершения установки хранится в `data/.configured` (вне SQLite). Восстановление бэкапа **не** сбрасывает этот маркер.
 
 Если приложение за reverse proxy — см. [Nginx](#nginx-reverse-proxy--https) и поле **внешний URL** в админке.
 
 ## Переменные окружения
 
-Файл `.env` читается при старте (путь — `BUHGALTER_ENV_FILE`, по умолчанию `.env` в **текущем рабочем каталоге**). Приложение **не изменяет** `.env` — только пользователь. Уже заданные в shell переменные не перезаписываются.
+Файл `.env` читается при старте (путь — `BUHGALTER_ENV_FILE`, по умолчанию `.env` в **текущем рабочем каталоге**). Приложение **не изменяет** `.env`. Уже заданные в shell переменные не перезаписываются.
 
 **Где разместить `.env`:**
 
-- **Бинарник** — положите `.env` в каталог, из которого запускаете `./buhgalter` (обычно рядом с бинарником). Если запускаете из другого места, укажите путь через `BUHGALTER_ENV_FILE` или переменную окружения shell
-- **Docker Compose** — `cp build/release/.env.example .env` в каталоге с `docker-compose.yml`, отредактируйте
+- **Бинарник** — рядом с `./buhgalter` (каталог запуска). Или укажите путь через `BUHGALTER_ENV_FILE`.
+- **Docker Compose** — `cp docker/.env.example docker/.env` и отредактируйте.
 
-**Зачем нужен `.env`:**
-
-- Задать `BUHGALTER_ALLOWED_HOSTS` для доступа с других устройств в LAN или с удалённого сервера (без reverse proxy)
-- Переопределить порт и пути к данным/логам
-
-**Пример `.env` для запуска на удалённом сервере (без reverse proxy):**
+**Пример для доступа по IP/домену без reverse proxy:**
 
 ```env
-# IP адреса/домены, с которых разрешён прямой доступ (localhost/127.0.0.1 доступны всегда)
 BUHGALTER_ALLOWED_HOSTS=["192.168.1.100","example.com"]
 ```
 
-| Переменная               | По умолчанию                   | Описание                                                                                                                                                            |
-| ------------------------ | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `BUHGALTER_ADDR`         | `:8765`                        | Адрес и порт HTTP-сервера                                                                                                                                           |
-| `BUHGALTER_DB_PATH`      | `./data/buhgalter.db`          | Путь к файлу SQLite                                                                                                                                                 |
-| `BUHGALTER_DATA_DIR`     | `./data`                       | Каталог данных (БД, `.configured`, бэкапы)                                                                                                                          |
-| `BUHGALTER_LOG_DIR`      | `./logs`                       | Каталог логов                                                                                                                                                       |
-| `BUHGALTER_LOG_MODE`     | `prod`                         | Режим логирования: `prod` (редактирование чувствительных заголовков) или `dev` (полные request-логи и расширенная диагностика ошибок)                            |
-| `BUHGALTER_CORS_ORIGINS` | `*`                            | CORS: `*` — отражает Origin запроса (нужно для cookie-сессий; буквальный `*` с credentials запрещён браузером). Список через запятую — только перечисленные origins |
-| `BUHGALTER_ENV_FILE`     | `.env`                         | Путь к файлу конфигурации `.env` (рядом с `docker-compose.yml` или в каталоге запуска бинарника)                                                                    |
-| `BUHGALTER_ALLOWED_HOSTS` | `["127.0.0.1","localhost","::1"]` | Host для прямого доступа без reverse proxy (JSON-массив). **localhost** / `127.0.0.1` / `::1` разрешены всегда, в `.env` можно не указывать. Если запускаете на удалённом сервере и заходите по IP/домену — укажите их здесь |
-| `BUHGALTER_STATIC_EMBED` | `true`                         | Встроенный фронтенд в бинарнике (`false` — отдельный Vite dev)                                                                                                      |
+| Переменная                | По умолчанию                      | Описание |
+| ------------------------- | --------------------------------- | -------- |
+| `BUHGALTER_ADDR`          | `:8765`                           | Адрес и порт HTTP-сервера |
+| `BUHGALTER_DB_PATH`       | `./data/buhgalter.db`             | Путь к файлу SQLite |
+| `BUHGALTER_DATA_DIR`      | `./data`                          | Каталог данных (БД, `.configured`, `backups/`) |
+| `BUHGALTER_LOG_DIR`       | `./logs`                          | Каталог логов |
+| `BUHGALTER_LOG_MODE`      | `prod`                            | `prod` — редактирование чувствительных заголовков; `dev` — полные request-логи |
+| `BUHGALTER_CORS_ORIGINS`  | `*`                               | CORS: `*` отражает Origin запроса (нужно для cookie-сессий) |
+| `BUHGALTER_ENV_FILE`      | `.env`                            | Путь к файлу `.env` |
+| `BUHGALTER_ALLOWED_HOSTS` | `["127.0.0.1","localhost","::1"]` | Host для прямого доступа (JSON-массив). localhost всегда разрешён |
+| `BUHGALTER_STATIC_EMBED`  | `true`                            | Встроенный фронтенд (`false` — отдельный Vite dev) |
 
 Миграции БД применяются автоматически при старте (goose).
 
-## Уведомления MAX — сертификаты Минцифры (обязательно)
+## Уведомления MAX — сертификаты Минцифры
 
-Официальный API MAX (`platform-api2.max.ru`) использует TLS-сертификаты **НУЦ Минцифры** (Russian Trusted CA). Без доверия к ним отправка уведомлений через провайдер **official** в MAX завершится ошибкой TLS (`x509: certificate signed by unknown authority`, `unable to get local issuer certificate (20)`).
+Официальный API MAX (`platform-api2.max.ru`) использует TLS-сертификаты **НУЦ Минцифры**. Без доверия к ним отправка через провайдер **official** завершится ошибкой TLS.
 
-**Важно:** одиночные файлы `russian_trusted_sub_ca.cer` с [gosuslugi.ru/crt](https://www.gosuslugi.ru/crt) — это **старый** выпускающий центр (2022). Сертификат `*.max.ru` подписан **новым** Sub CA (2024). Нужен файл `**russian_trusted_sub_ca_2024_pem.crt`** из архива Госуслуг.
+**Важно:** нужен **Sub CA 2024** (`russian_trusted_sub_ca_2024_pem.crt`), а не старый выпуск 2022 года.
 
-Скачайте архивы (Linux, без авторизации):
+Скачайте архивы (Linux):
 
 ```bash
 mkdir -p ~/certs && cd ~/certs
@@ -269,22 +237,17 @@ curl -fsSLO https://gu-st.ru/content/lending/linux_russian_trusted_root_ca_pem.z
 curl -fsSLO https://gu-st.ru/content/lending/russian_trusted_sub_ca_pem.zip
 unzip -o linux_russian_trusted_root_ca_pem.zip
 unzip -o russian_trusted_sub_ca_pem.zip
-# нужны: russian_trusted_root_ca_pem.crt и russian_trusted_sub_ca_2024_pem.crt
 ```
 
-Портал со всеми вариантами для Windows/macOS/Android: **[gosuslugi.ru/crt](https://www.gosuslugi.ru/crt)**.
-
-После установки перезапустите Бухгалтер и проверьте тестовую отправку в **Настройки → Уведомления → MAX**.
+Портал для всех ОС: **[gosuslugi.ru/crt](https://www.gosuslugi.ru/crt)**.
 
 ### Образ GHCR
 
-В официальном образе `ghcr.io/kai-zer-ru/buhgalter` сертификаты уже добавлены в хранилище доверенных CA. **Дополнительных действий не требуется.**
+В образе `ghcr.io/kai-zer-ru/buhgalter` сертификаты уже добавлены. **Дополнительных действий не требуется.**
 
 ### Linux
 
-Используйте файлы из архивов выше: `russian_trusted_root_ca_pem.crt` и `**russian_trusted_sub_ca_2024_pem.crt`**.
-
-**Debian, Ubuntu и производные:**
+**Debian, Ubuntu:**
 
 ```bash
 cd ~/certs
@@ -292,7 +255,7 @@ sudo cp russian_trusted_root_ca_pem.crt russian_trusted_sub_ca_2024_pem.crt /usr
 sudo update-ca-certificates
 ```
 
-**Fedora, RHEL, AlmaLinux, Rocky Linux:**
+**Fedora, RHEL, AlmaLinux, Rocky:**
 
 ```bash
 cd ~/certs
@@ -302,8 +265,6 @@ sudo update-ca-trust
 
 **Arch Linux:**
 
-На Arch **не** используйте путь `/usr/share/pki/ca-trust-source/anchors` — это Fedora/RHEL. Готового пакета в официальных репозиториях Arch нет.
-
 ```bash
 cd ~/certs
 sudo cp russian_trusted_root_ca_pem.crt /etc/ca-certificates/trust-source/anchors/russian_trusted_root_ca.crt
@@ -311,15 +272,7 @@ sudo cp russian_trusted_sub_ca_2024_pem.crt /etc/ca-certificates/trust-source/an
 sudo update-ca-trust
 ```
 
-Если ранее ставили старый `russian_trusted_sub_ca.cer` — удалите его из `anchors/` (он не подходит для MAX) и оставьте **2024**-версию.
-
-Проверьте наличие обоих файлов:
-
-```bash
-ls /etc/ca-certificates/trust-source/anchors/
-```
-
-**Проверка** (успех — любой HTTP-код **без** `curl: (60) SSL certificate...`; 404/401 от API — нормально):
+Проверка (успех — любой HTTP-код **без** `curl: (60) SSL certificate...`):
 
 ```bash
 curl -v https://platform-api2.max.ru/
@@ -327,114 +280,75 @@ curl -v https://platform-api2.max.ru/
 
 ### Windows
 
-1. Скачайте архивы с [gosuslugi.ru/crt](https://www.gosuslugi.ru/crt) или распакуйте `russian_trusted_sub_ca_pem.zip` на Linux и перенесите `russian_trusted_sub_ca_2024_pem.crt` на Windows.
-2. Установите **Russian Trusted Root CA** и **Russian Trusted Sub CA (2024)** — двойной щелчок по `.cer`/`.crt` → **Установить сертификат** → **Локальный компьютер** → **Поместить все сертификаты в следующее хранилище** → **Доверенные корневые центры сертификации**.
+1. Скачайте сертификаты с [gosuslugi.ru/crt](https://www.gosuslugi.ru/crt).
+2. Установите Root CA и Sub CA 2024 в **Доверенные корневые центры сертификации** (локальный компьютер).
 3. Перезапустите `buhgalter.exe`.
-
-Через PowerShell **от имени администратора** (пути подставьте свои):
-
-```powershell
-certutil -addstore -f "ROOT" C:\certs\russian_trusted_root_ca_pem.crt
-certutil -addstore -f "ROOT" C:\certs\russian_trusted_sub_ca_2024_pem.crt
-```
 
 ### macOS
 
-1. Скачайте сертификаты с [gosuslugi.ru/crt](https://www.gosuslugi.ru/crt) — нужны корневой и **Sub CA 2024** (из `russian_trusted_sub_ca_pem.zip`).
-2. **Связка ключей** → **Системная** связка → импортируйте оба файла → для каждого: **Доверие** → **Всегда доверять**.
-3. Перезапустите бинарник Бухгалтера.
-
-Через терминал (пути подставьте свои):
-
-```bash
-sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain ~/certs/russian_trusted_root_ca_pem.crt
-sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain ~/certs/russian_trusted_sub_ca_2024_pem.crt
-```
-
-**Проверка:**
-
-```bash
-curl -v https://platform-api2.max.ru/
-```
+Импортируйте оба сертификата в **Системную** связку ключей → **Доверие** → **Всегда доверять**. Перезапустите бинарник.
 
 ### Секретный ключ уведомлений
 
-Токены Telegram и MAX шифруются AES-256-GCM. Ключ задаётся в **Настройки → Админка** — сохраняется в `system_settings.notification_secret_key`, текущее значение не отображается. **Ровно 32 символа.**
+Токены Telegram и MAX шифруются AES-256-GCM. Ключ задаётся в **Настройки → Админка** — ровно **32 символа**.
 
 ## Бэкапы
 
 В интерфейсе: **Настройки → Админка → Бэкапы**.
 
 - Ручное создание и скачивание копии базы
-- Автобэкап по расписанию (время и хранение настраиваются)
-- Восстановление из файла `.db` (нужно подтверждение `RESTORE`)
+- Автобэкап по расписанию
+- Восстановление из файла `.db` (подтверждение `RESTORE`)
 
-Файлы бэкапов лежат в `data/backups/` (или в Docker-томе `buhgalter-backups`). Перед обновлением или рискованными операциями рекомендуется сделать бэкап.
+Файлы лежат в `{каталог данных}/backups/` — при локальном запуске это `data/backups/`, в Docker — `./data/backups/` на хосте.
 
 ## Обновление
 
-Сделайте бэкап, замените бинарник/образ, перезапустите. Миграции применятся при старте.
+Сделайте бэкап, замените бинарник или образ, перезапустите. Миграции применятся при старте.
 
-**Бинарник / ручная установка:** остановите процесс, замените `buhgalter`, запустите снова. Сделайте бэкап до обновления.
-
-**Docker (compose):**
+**Docker:**
 
 ```bash
-docker compose -f docker/docker-compose.yml pull
-docker compose -f docker/docker-compose.yml up -d
+cd docker
+docker compose pull
+docker compose up -d
 ```
-
-**Docker (`docker run`):** остановите контейнер, `docker pull ghcr.io/kai-zer-ru/buhgalter:latest`, запустите снова с теми же `-v` и `-p`.
 
 ## Документация
 
-Справочники по установке, модели данных, UI-соглашениям и API — [docs/README.md](docs/README.md).
+Справочники по установке, данным, UI и API — [docs/README.md](docs/README.md).
 
 ## API-документация
 
-Документация OpenAPI доступна без авторизации — можно читать не запуская проект:
+OpenAPI доступна без авторизации:
 
-- **Демо-стенд:** [buhgalter-demo.kai-zer.ru/docs](https://buhgalter-demo.kai-zer.ru/docs)
-- **OpenAPI YAML (демо):** [buhgalter-demo.kai-zer.ru/docs/openapi.yaml](https://buhgalter-demo.kai-zer.ru/docs/openapi.yaml)
+- **Демо:** [buhgalter-demo.kai-zer.ru/docs](https://buhgalter-demo.kai-zer.ru/docs)
+- **После запуска:** [http://localhost:8765/docs](http://localhost:8765/docs)
+- **Исходник:** [docs/api/openapi.yaml](docs/api/openapi.yaml)
 
-После запуска своего сервера (порт **8765**):
-
-- **Redoc:** [http://localhost:8765/docs](http://localhost:8765/docs)
-- **OpenAPI YAML:** [http://localhost:8765/docs/openapi.yaml](http://localhost:8765/docs/openapi.yaml)
-
-Исходник спецификации в репозитории: `[docs/api/openapi.yaml](docs/api/openapi.yaml)`.
-
-В режиме разработки (`make dev-server` + `make dev-web`) те же URL доступны и через Vite: [http://localhost:5173/docs](http://localhost:5173/docs) (прокси на API).
+В режиме разработки (`make dev-server` + `make dev-web`) — также [http://localhost:5173/docs](http://localhost:5173/docs) (прокси на API).
 
 ## Разработка
 
 ```bash
-# Терминал 1 — API без встроенного фронта
-make dev-server
-
-# Терминал 2 — фронтенд (http://localhost:5173)
-make dev-web
+make dev-server   # API без встроенного фронта
+make dev-web      # фронтенд на http://localhost:5173
 ```
 
 ```bash
-make test         # go test + svelte-check + e2e (playwright)
-make test-unit    # только unit/integration + svelte-check (без e2e)
-make lint-go      # golangci-lint
-make ci           # lint + все тесты + build + docker-build
-make docker-build # сборка образа (тег buhgalter:local)
-make clear     # очистка БД, логов, бэкапов и артефактов сборки
+make test         # go test + svelte-check + e2e
+make test-unit    # без e2e
+make lint-go
+make ci           # lint + тесты + build + docker-build
+make clear        # очистка БД, логов, бэкапов и артефактов сборки
 ```
 
-Если `make build` падает с `EACCES` на `web/build` или `server/internal/static/dist` — после Docker/act файлы могли остаться от root. Запустите `make fix-build-perms` или повторите `make build` (права чинятся автоматически).
-
-
-| Команда                           | Описание                                             |
-| --------------------------------- | ---------------------------------------------------- |
-| `make download-bank-logos`        | Логотипы банков → `data/banks/`, `web/static/banks/` |
-| `make download-marketplace-logos` | Логотипы маркетплейсов → `data/category_icons/`      |
-| `make generate-category-icons`    | SVG иконок категорий                                 |
-| `make sqlc`                       | Регенерация Go из `server/queries/`                  |
-
+| Команда                           | Описание                              |
+| --------------------------------- | ------------------------------------- |
+| `make download-bank-logos`        | Логотипы банков                       |
+| `make download-marketplace-logos` | Логотипы маркетплейсов для категорий  |
+| `make generate-category-icons`    | SVG иконок категорий                  |
+| `make sqlc`                       | Регенерация Go из `server/queries/`   |
 
 ## Лицензия
 

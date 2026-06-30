@@ -1,6 +1,6 @@
 # Установка через Docker
 
-Продакшен-сценарий: запуск через готовый образ из registry.
+Запуск готового образа из GHCR. Краткий обзор — в [README.md](../../README.md#docker).
 
 ---
 
@@ -13,90 +13,66 @@ docker pull ghcr.io/kai-zer-ru/buhgalter:latest
 docker compose up -d
 ```
 
-Тег образа: `BUHGALTER_IMAGE_TAG` в `.env` (по умолчанию `latest`). В GitHub Release рядом с `docker-compose.yaml` лежат `.env` (с версией релиза) и `.env.example`.
+Откройте [http://localhost:8765/setup](http://localhost:8765/setup).
 
-Локальная сборка без pull:
+Тег образа: `BUHGALTER_IMAGE_TAG` в `.env` (по умолчанию `latest`).
+
+Локальная сборка — в `docker-compose.yml` раскомментируйте `build:` и закомментируйте `image:`:
 
 ```bash
-# в docker/docker-compose.yml раскомментируйте build: и закомментируйте image:
-docker compose -f docker/docker-compose.yml up --build -d
+docker compose up --build -d
 ```
 
 ## Теги образа
 
-| Тег | Назначение |
-|-----|------------|
-| `latest` | последний стабильный релиз (без pre-release) |
-| `vX.Y.Z` | точная версия |
-| `X.Y.Z`, `X.Y`, `X` | semver alias |
+| Тег      | Назначение                              |
+| -------- | --------------------------------------- |
+| `latest` | последний стабильный релиз              |
+| `vX.Y.Z` | точная версия                           |
+| `X.Y.Z`  | semver alias                            |
 
-## Volumes
+## Данные на хосте
 
 | На хосте (по умолчанию) | В контейнере | Назначение |
-|------|------|------------|
-| `./data` | `/app/data` | база SQLite и runtime-данные |
-| `./backups` | `/app/backups` | архивы бэкапов |
-| `./logs` | `/app/logs` | логи приложения |
+| ----------------------- | ------------ | ---------- |
+| `./data`                | `/app/data`  | БД, маркер `.configured`, **бэкапы** (`data/backups/`) |
+| `./logs`                | `/app/logs`  | логи       |
 
-Пути на хосте настраиваются через `.env`:
-`BUHGALTER_HOST_DATA_DIR`, `BUHGALTER_HOST_BACKUPS_DIR`, `BUHGALTER_HOST_LOGS_DIR`.
+Пути настраиваются через `BUHGALTER_HOST_DATA_DIR` и `BUHGALTER_HOST_LOGS_DIR` в `.env`.
 
-При первом `docker compose up` Docker создаёт отсутствующие каталоги на хосте (часто от `root`).
-Entrypoint образа перед запуском приложения создаёт `data`, `logs`, `backups` (и `logs/audit`) и выставляет владельца **uid 1000** (`buhgalter`) — ручной `chown` перед стартом не нужен.
+При первом `docker compose up` Docker создаёт каталоги на хосте. Entrypoint выставляет владельца **uid 1000** (`buhgalter`).
 
-Обновляетесь с named volumes или меняете схему каталогов — **сначала бэкап**, затем [переход на bind mounts](#docker-bind-mount-migration).
+> **Бэкапы:** приложение сохраняет их в `/app/data/backups` — на хосте это `./data/backups/`. Отдельный mount `./backups` в compose зарезервирован в образе, но приложение туда не пишет.
 
-<a id="docker-bind-mount-migration"></a>
+Порт по умолчанию в compose: `127.0.0.1:8765:8765` (только localhost). Для LAN — `"8765:8765"` и `BUHGALTER_ALLOWED_HOSTS` в `.env`.
 
-### Переход с named volumes на host-директории
-
-Если раньше использовались Docker named volumes (`buhgalter-data`, `buhgalter-backups`), а теперь вы включаете bind mounts (`./data`, `./backups`, `./logs`), учтите:
-
-- Docker создаст отсутствующие каталоги на хосте автоматически.
-- Старая база не удалится, но останется в старом volume.
-- Если не перенести данные, приложение увидит пустую `./data` и создаст новую пустую БД.
-
-Безопасный порядок миграции:
+## Обновление
 
 ```bash
-# 1) Остановить контейнер
-docker compose down
-
-# 2) Создать каталоги на хосте
-mkdir -p data backups logs
-
-# 3) Перенести данные из старых volumes
-docker run --rm -v buhgalter-data:/from -v "$(pwd)/data:/to" alpine sh -c 'cp -a /from/. /to/'
-docker run --rm -v buhgalter-backups:/from -v "$(pwd)/backups:/to" alpine sh -c 'cp -a /from/. /to/'
-
-# 4) Запустить контейнер (entrypoint поправит права на bind mounts)
+cd docker
+docker compose pull
 docker compose up -d
 ```
 
-После запуска проверьте, что в `./data` есть `buhgalter.db`, и данные в приложении на месте.
+Перед обновлением сделайте бэкап (`./data/backups/` или через админку).
 
-## Обновление контейнера
+## Переход с named volumes
 
-```bash
-docker compose -f docker/docker-compose.yml pull
-docker compose -f docker/docker-compose.yml up -d
-```
-
-## Проверка
+Если раньше использовались тома `buhgalter-data` / `buhgalter-backups`, а теперь bind mounts:
 
 ```bash
-docker run --rm -p 8765:8765 -v buhgalter-data:/app/data ghcr.io/kai-zer-ru/buhgalter:latest
+docker compose down
+mkdir -p data logs
+docker run --rm -v buhgalter-data:/from -v "$(pwd)/data:/to" alpine sh -c 'cp -a /from/. /to/'
+docker compose up -d
 ```
 
-Откройте `http://localhost:8765/setup` и проверьте `GET /api/v1/health`.
-На `/setup` можно сразу восстановить БД из `.db` (endpoint: `POST /api/v1/setup/restore`).
+Проверьте, что в `./data` есть `buhgalter.db` и данные на месте.
 
-Пока **внешний URL** в разделе **Настройки → Админка** не задан, доступ разрешён с **localhost** (всегда) и с Host из `BUHGALTER_ALLOWED_HOSTS` в `.env`. Порт в compose по умолчанию `127.0.0.1:8765:8765` — только с этого хоста; для доступа с других устройств замените на `8765:8765` и добавьте их IP в `.env`. Для HTTPS из интернета — nginx и `external_url` в админ-настройках.
+## Уведомления MAX (official API)
 
-### Уведомления MAX (official API)
-
-Образ содержит **Russian Trusted Root CA** и **Sub CA 2024** (цепочка для `platform-api2.max.ru`); файлы лежат в репозитории (`docker/certs/`), без скачивания с gu-st.ru при сборке. Обновление: `scripts/vendor_russian_ca_certs.sh`. Бинарник без Docker — [README](../../README.md#уведомления-max--сертификаты-минцифры-обязательно).
+В образе уже установлены сертификаты НУЦ Минцифры для `platform-api2.max.ru` (`docker/certs/`). Бинарник без Docker — [README](../../README.md#уведомления-max--сертификаты-минцифры).
 
 ## Reverse proxy
 
-Для HTTPS за nginx см. [nginx.md](nginx.md).
+Для HTTPS — [nginx.md](nginx.md).

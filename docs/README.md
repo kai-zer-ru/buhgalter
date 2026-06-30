@@ -1,35 +1,38 @@
-# Документация Buhgalter
+# Документация Бухгалтер
 
-Публичные справочники по данным, UI, API и установке. Стиль оформления — [style.md](style.md).
+Справочники по установке, модели данных, соглашениям интерфейса и API. Стиль оформления — [style.md](style.md).
 
-**Актуальная спецификация API:** [api/openapi.yaml](api/openapi.yaml).
+**Спецификация API:** [api/openapi.yaml](api/openapi.yaml) (интерактивно — `/docs` на запущенном сервере).
 
----
-
-## Релизы
-
-| Документ | Описание |
-|----------|----------|
-| [release-notes-v1.2.4.md](release-notes-v1.2.4.md) | Единые форматы даты/времени, диагностика (build_time), сброс пароля из уведомления, ссылки в админке, хлебные крошки |
-| [release-notes-v1.2.3.md](release-notes-v1.2.3.md) | Повторить операцию, поля суммы (placeholder), перевод (селекты и счёт по умолчанию), периодические 08:00, автосписание кредита |
-| [release-notes-v1.2.2.md](release-notes-v1.2.2.md) | Проверка обновлений (админ), кнопки доход/расход/перевод, форма операции, статистика по категориям |
-| [release-notes-v1.2.1.md](release-notes-v1.2.1.md) | Docker, логирование, ипотека, API `error.field`, UI (счета, категории, меню «⋯», редактирование операций, фильтры, кеш, статистика, погашение долга, оплата кредита) |
-| [release-notes-v1.2.0.md](release-notes-v1.2.0.md) | Периодические операции, кредиты, ипотека MVP, setup restore |
-| [release-notes-v1.1.1.md](release-notes-v1.1.1.md) | `.env`, документация и улучшения UI |
-| [release-notes-v1.1.md](release-notes-v1.1.md) | Сброс пароля, кредиты, комиссия переводов, mobile UI |
-| [../CHANGELOG.md](../CHANGELOG.md) | Полный changelog |
+История изменений по версиям — [CHANGELOG.md](../CHANGELOG.md).
 
 ---
 
-## Данные и домен
+## Установка и эксплуатация
 
 | Документ | Описание |
 |----------|----------|
-| [data-model.md](data-model.md) | ER-диаграмма, SQL, миграции |
+| [install/manual.md](install/manual.md) | Сборка и запуск бинарника |
+| [install/docker.md](install/docker.md) | Docker и compose |
+| [install/nginx.md](install/nginx.md) | Reverse proxy и HTTPS |
+
+Краткий обзор и переменные окружения — в [README.md](../README.md) в корне репозитория.
+
+---
+
+## Данные
+
+| Документ | Описание |
+|----------|----------|
+| [data-model.md](data-model.md) | Схема БД, миграции, связи сущностей |
 | [categories-and-icons.md](categories-and-icons.md) | Категории, подкатегории, иконки |
-| [transactions-display.md](transactions-display.md) | Отображение операций в UI |
+| [transactions-display.md](transactions-display.md) | Отображение операций в UI и API |
+
+---
 
 ## UI-соглашения
+
+Общие правила интерфейса — для разработчиков и при добавлении новых экранов.
 
 | Документ | Описание |
 |----------|----------|
@@ -37,26 +40,19 @@
 | [ui-dialogs.md](ui-dialogs.md) | Диалоги, подтверждения, Esc |
 | [ui-navigation.md](ui-navigation.md) | Хлебные крошки и кликабельные сущности |
 | [ui-row-actions.md](ui-row-actions.md) | Меню «⋯» в строках и спойлер фильтров |
-| [ui-api-cache.md](ui-api-cache.md) | In-memory кеш GET-ответов на сервере |
-| [ui-stats.md](ui-stats.md) | Страница `/stats` |
-| [ui-credits.md](ui-credits.md) | UI кредитов |
 | [ui-stable-layout.md](ui-stable-layout.md) | Стабильная шапка и вкладки |
 | [ui-empty-states.md](ui-empty-states.md) | Пустые состояния |
 | [ui-table-columns.md](ui-table-columns.md) | Порядок колонок таблиц |
+| [ui-stats.md](ui-stats.md) | Страница `/stats` |
+| [ui-credits.md](ui-credits.md) | Страницы кредитов |
 
-## API и импорт
+---
 
-| Документ | Описание |
-|----------|----------|
-| [api/openapi.yaml](api/openapi.yaml) | Актуальная спецификация OpenAPI |
-| [api/authentication.md](api/authentication.md) | Сессии и API-токены |
-| [import/cubux.md](import/cubux.md) | Импорт формата Cubux |
-
-## Установка
+## API, кеш и импорт
 
 | Документ | Описание |
 |----------|----------|
-| [install/manual.md](install/manual.md) | Ручная установка |
-| [install/docker.md](install/docker.md) | Docker-установка |
-| [install/nginx.md](install/nginx.md) | Reverse proxy и HTTPS |
-
+| [api/openapi.yaml](api/openapi.yaml) | OpenAPI v1 |
+| [api/authentication.md](api/authentication.md) | Сессии, API-токены, сброс пароля |
+| [ui-api-cache.md](ui-api-cache.md) | In-memory кеш GET на сервере и справочники в браузере |
+| [import/cubux.md](import/cubux.md) | Импорт и экспорт формата Cubux |

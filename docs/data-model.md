@@ -5,9 +5,9 @@
 
 Доступ к данным — через sqlc-запросы в `server/queries/`, без ORM.
 
-## Диаграмма (схема v1)
+## Диаграмма
 
-Все **19** таблиц из `server/schema.sql`:
+Основные таблицы из `server/schema.sql` (актуальный снимок для sqlc):
 
 ```mermaid
 erDiagram
@@ -72,6 +72,18 @@ erDiagram
         TEXT transfer_group_id
     }
 
+    recurring_operations {
+        TEXT type "income|expense"
+        TEXT period "week|two_weeks|month|year"
+        TEXT time_local "HH:MM"
+        TEXT next_run_at
+    }
+
+    password_reset_requests {
+        TEXT user_id UK
+        TEXT dismissed_at
+    }
+
     debtors {
         TEXT name
     }
@@ -134,6 +146,8 @@ erDiagram
     users ||--o{ accounts : owns
     users ||--o{ categories : owns
     users ||--o{ transactions : owns
+    users ||--o{ recurring_operations : owns
+    users ||--o| password_reset_requests : "pending reset"
     users ||--o{ debtors : owns
     users ||--o{ debts : owns
     users ||--o{ credits : owns
@@ -199,7 +213,7 @@ erDiagram
 - `transactions.affects_balance` — `0` при завершении кредита «без учёта в балансе»
 - Автосписание: `server/internal/scheduler` по `debit_time_local` в `users.timezone`; `transactions.transaction_date` — дата платежа + это время (UTC в БД)
 
-Подробнее: [ui-credits.md](ui-credits.md), [release-notes-v1.1.md](release-notes-v1.1.md).
+Подробнее: [ui-credits.md](ui-credits.md).
 
 ## Счета
 
@@ -230,6 +244,7 @@ erDiagram
 | debtors, debts | `internal/debt` | `debts.sql` |
 | credits | `internal/credit` | `credits.sql` |
 | stats / search | `internal/stats` | `stats.sql` |
+| recurring | `internal/recurring` | `recurring.sql` |
 | import / export | `internal/importexport` | `import.sql` |
 
 ## Защита от SQL-инъекций
@@ -249,32 +264,15 @@ erDiagram
 
 После первого стабильного релиза уже применённые миграции **не переписывать** — только новые файлы в конец цепочки.
 
-## Миграции (цепочка v1)
+## Миграции
 
-В текущей цепочке — **19** файлов, по одной таблице на миграцию:
+Цепочка goose: `server/internal/db/migrations/` (нумерация `001_`, `002_`, …).
 
-| # | Файл | Таблица |
-|---|------|---------|
-| 001 | `001_system_settings.sql` | `system_settings` (+ seed `id=1`) |
-| 002 | `002_users.sql` | `users` |
-| 003 | `003_sessions.sql` | `sessions` |
-| 004 | `004_api_tokens.sql` | `api_tokens` |
-| 005 | `005_banks.sql` | `banks` |
-| 006 | `006_accounts.sql` | `accounts` |
-| 007 | `007_categories.sql` | `categories` |
-| 008 | `008_subcategories.sql` | `subcategories` |
-| 009 | `009_transactions.sql` | `transactions` |
-| 010 | `010_debtors.sql` | `debtors` |
-| 011 | `011_debts.sql` | `debts` |
-| 012 | `012_debt_transactions.sql` | `debt_transactions` |
-| 013 | `013_credits.sql` | `credits` |
-| 014 | `014_credit_payments.sql` | `credit_payments` |
-| 015 | `015_import_idempotency.sql` | `import_idempotency` |
-| 016 | `016_import_jobs.sql` | `import_jobs` |
-| 017 | `017_notification_settings.sql` | `notification_settings` |
-| 018 | `018_notification_log.sql` | `notification_log` |
-| 019 | `019_notification_templates.sql` | `notification_templates` |
-| 020 | `020_repair_credit_schedules.sql` | маркер; repair графиков кредитов при старте (v1.1) |
-| 023 | `023_password_reset_requests.sql` | `password_reset_requests` (v1.1) |
+- Первые миграции `001`–`019` — по одной таблице на файл (`CREATE` + индексы).
+- Дальше — `ALTER`, repair-маркеры и новые таблицы, например:
+  - `020_repair_credit_schedules.sql` — repair неполных графиков при старте
+  - `023_password_reset_requests.sql` — очередь сброса пароля
+  - `026_recurring_operations.sql` — периодические операции
+  - `024_`, `027_`, `028_` — поля кредитов, ипотеки, `accounts.current_balance`
 
-Новые изменения схемы после релиза — только `024_*.sql`, … в конец цепочки.
+Уже применённые миграции **не переписывать** — только новые файлы в конец цепочки. После каждой миграции обновлять `server/schema.sql` и при необходимости запускать `make sqlc`.
