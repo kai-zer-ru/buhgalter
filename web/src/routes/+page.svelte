@@ -87,7 +87,7 @@
 		try {
 			const res = await listTransactions({
 				kind: 'future',
-				sort: 'date_asc',
+				sort: 'date_desc',
 				page: '1',
 				limit: String(txLimit)
 			});

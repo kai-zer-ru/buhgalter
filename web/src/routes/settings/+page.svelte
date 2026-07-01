@@ -39,7 +39,7 @@
 		formatAPIOperationDateTimeForDisplay,
 		fromDateLocalEnd
 	} from '$lib/dates';
-	import { dateOnlyPicker } from '$lib/datetime-picker-standards';
+	import { futureDateOnlyPicker } from '$lib/datetime-picker-standards';
 	import { toast } from '$lib/toast';
 	import CategoriesTab from '$lib/settings/CategoriesTab.svelte';
 	import ImportTab from '$lib/settings/ImportTab.svelte';
@@ -1325,7 +1325,8 @@
 					bind:value={newTokenExpiresAt}
 					disabled={newTokenNeverExpires}
 					required={!newTokenNeverExpires}
-					{...dateOnlyPicker}
+					{timezone}
+					{...futureDateOnlyPicker}
 				/>
 			</div>
 			<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

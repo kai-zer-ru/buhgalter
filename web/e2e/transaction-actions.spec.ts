@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { waitAppReady } from './helpers/auth';
+import { apiJSON, formatUTCDateTime, waitAppReady } from './helpers/auth';
 import {
 	createCashAccount,
 	createExpense,
@@ -276,4 +276,46 @@ test('dashboard: past transactions in open spoiler, planned collapsed', async ({
 	await expect(plannedGroup.getByRole('row', { name: new RegExp(plannedDesc) })).toBeVisible({
 		timeout: 10_000
 	});
+});
+
+test('dashboard: planned transactions sorted newest first', async ({ page }) => {
+	const account = await createCashAccount(page);
+	const tag = Date.now();
+	const olderDesc = `E2E planned older ${tag}`;
+	const newerDesc = `E2E planned newer ${tag}`;
+	const in2Days = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+	const in5Days = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
+
+	await apiJSON(page, 'POST', '/api/v1/transactions', {
+		account_id: account.id,
+		type: 'expense',
+		amount: '10.00',
+		description: olderDesc,
+		transaction_date: formatUTCDateTime(in2Days)
+	});
+	await apiJSON(page, 'POST', '/api/v1/transactions', {
+		account_id: account.id,
+		type: 'expense',
+		amount: '20.00',
+		description: newerDesc,
+		transaction_date: formatUTCDateTime(in5Days)
+	});
+
+	await page.goto('/');
+	await waitAppReady(page);
+
+	const plannedGroup = page.locator('details').filter({ hasText: 'Плановые' });
+	await plannedGroup.locator('summary').click();
+	await expect(plannedGroup).toHaveAttribute('open', '');
+
+	const rows = plannedGroup.locator('tbody tr');
+	await expect(rows.filter({ hasText: olderDesc })).toBeVisible({ timeout: 10_000 });
+	await expect(rows.filter({ hasText: newerDesc })).toBeVisible({ timeout: 10_000 });
+
+	const texts = await rows.allTextContents();
+	const newerIdx = texts.findIndex((t) => t.includes(newerDesc));
+	const olderIdx = texts.findIndex((t) => t.includes(olderDesc));
+	expect(newerIdx).toBeGreaterThanOrEqual(0);
+	expect(olderIdx).toBeGreaterThanOrEqual(0);
+	expect(newerIdx).toBeLessThan(olderIdx);
 });

@@ -16,3 +16,9 @@ export const operationDatetimePickerEdit = {
 export const dateOnlyPicker = {
 	timeMode: 'hidden' as const
 };
+
+/** Date-only fields where today and past dates must not be selectable (e.g. API token expiry). */
+export const futureDateOnlyPicker = {
+	timeMode: 'hidden' as const,
+	blockPastIncludingToday: true
+};
