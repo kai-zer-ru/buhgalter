@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/settingscache"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
 )
 
@@ -318,7 +319,19 @@ func PreviewTemplate(ctx context.Context, db *sql.DB, userID, triggerType, templ
 	if err != nil {
 		return "", err
 	}
-	text, err := Format(triggerType, localeCode, &template, previewData(triggerType, localeCode, timezone, currencyCode, ""))
+	data := previewData(triggerType, localeCode, timezone, currencyCode, "")
+	if triggerType == TriggerPasswordReset {
+		externalURL, err := settingscache.ExternalURL(ctx, db)
+		if err != nil {
+			return "", err
+		}
+		urlValue := ""
+		if externalURL.Valid {
+			urlValue = externalURL.String
+		}
+		data["reset_url"] = resetURLPlaceholderValue(urlValue, localeCode, previewResetUserID)
+	}
+	text, err := Format(triggerType, localeCode, &template, data)
 	if err != nil {
 		return "", err
 	}
@@ -383,7 +396,7 @@ func SendTest(ctx context.Context, db *sql.DB, userID string, channel string, bo
 	return appendLog(ctx, q, userID, TriggerTest, channel, nil, nil, "sent", text)
 }
 
-func NotifyAdminsOnPasswordReset(ctx context.Context, db *sql.DB, login, displayName, requestedAt, entityID string) error {
+func NotifyAdminsOnPasswordReset(ctx context.Context, db *sql.DB, targetUserID, login, displayName, requestedAt, entityID string) error {
 	q := sqlcdb.New(db)
 	secret, err := ResolveSecretKey(ctx, db)
 	if err != nil {
@@ -392,6 +405,14 @@ func NotifyAdminsOnPasswordReset(ctx context.Context, db *sql.DB, login, display
 	box, err := NewSecretBox(secret)
 	if err != nil {
 		return nil
+	}
+	externalURL, err := settingscache.ExternalURL(ctx, db)
+	if err != nil {
+		return err
+	}
+	externalURLValue := ""
+	if externalURL.Valid {
+		externalURLValue = externalURL.String
 	}
 	rows, err := db.QueryContext(ctx, `SELECT id FROM users WHERE is_admin = 1`)
 	if err != nil {
@@ -431,6 +452,7 @@ func NotifyAdminsOnPasswordReset(ctx context.Context, db *sql.DB, login, display
 			"display_name": display,
 			"requested_at": timeutil.FormatDisplayDateTimeShortInTimezone(requestedAt, timezone),
 			"amount":       FormatAmountDisplay(0, currencyCode),
+			"reset_url":    resetURLPlaceholderValue(externalURLValue, localeCode, targetUserID),
 		})
 		if err != nil {
 			continue

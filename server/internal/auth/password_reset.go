@@ -49,7 +49,7 @@ func RequestPasswordReset(ctx context.Context, db *sql.DB, login string) error {
 		return err
 	}
 	displayName := user.DisplayName
-	_ = notify.NotifyAdminsOnPasswordReset(ctx, db, user.Login, displayName, now, requestID)
+	_ = notify.NotifyAdminsOnPasswordReset(ctx, db, user.ID, user.Login, displayName, now, requestID)
 	return nil
 }
 

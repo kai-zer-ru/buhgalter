@@ -20,7 +20,7 @@ var fallbackTemplates = map[string]map[string]string{
 		TriggerDebtDueSoon:   "Напоминание: вернуть долг {debtor} — {amount}. (Срок: {due_date}, через {days} дн.)",
 		TriggerCreditPayment: "Платёж по кредиту «{credit}»: {amount}. Дата: {when}",
 		TriggerPlannedOp:     "Плановая операция: {type} на {amount} — {description}",
-		TriggerPasswordReset: "Запрос на восстановление пароля: {display_name} (@{login}), время: {requested_at}.",
+		TriggerPasswordReset: "Запрос на восстановление пароля: {display_name} (@{login}), время: {requested_at}.\n{reset_url}",
 		TriggerTest:          "Тестовое уведомление «Бухгалтер». Канал: {channel}.",
 	},
 	"en": {
@@ -28,7 +28,7 @@ var fallbackTemplates = map[string]map[string]string{
 		TriggerDebtDueSoon:   "Reminder: repay debt to {debtor} — {amount} (due {due_date}, in {days} days)",
 		TriggerCreditPayment: "Credit payment \"{credit}\": {amount} {when}",
 		TriggerPlannedOp:     "Planned transaction: {type} {amount} — {description}",
-		TriggerPasswordReset: "Password reset requested by {display_name} (@{login}) at {requested_at}.",
+		TriggerPasswordReset: "Password reset requested by {display_name} (@{login}) at {requested_at}.\n{reset_url}",
 		TriggerTest:          "Buhgalter test notification. Channel: {channel}.",
 	},
 }

@@ -2578,7 +2578,10 @@ components:
           type: array
           items:
             type: string
-          description: Разрешённые placeholder-ы для trigger_type
+          description: |
+            Разрешённые placeholder-ы для trigger_type.
+            Для password_reset дополнительно доступен reset_url — прямая ссылка на /admin/users?reset={user_id}
+            при настроенном external_url, иначе текст-подсказка настроить внешний URL в админке.
         is_custom:
           type: boolean
           description: true, если шаблон задан пользователем в БД

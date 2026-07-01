@@ -109,6 +109,6 @@
   "notifications.templates.debt_due_soon": "Reminder: repay debt to {debtor} — {amount} (due {due_date}, in {days} days)",
   "notifications.templates.credit_payment": "Credit payment \"{credit}\": {amount} {when}",
   "notifications.templates.planned_operation": "Planned transaction: {type} {amount} — {description}",
-  "notifications.templates.password_reset": "Password reset requested by {display_name} (@{login}) at {requested_at}.",
+  "notifications.templates.password_reset": "Password reset requested by {display_name} (@{login}) at {requested_at}.\n{reset_url}",
   "notifications.templates.test": "Buhgalter test notification. Channel: {channel}."
 }

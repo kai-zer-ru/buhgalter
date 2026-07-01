@@ -6,11 +6,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
 	. "github.com/kai-zer-ru/buhgalter/internal/notify"
+	"github.com/kai-zer-ru/buhgalter/internal/settingscache"
 )
 
 func seedNotifyUser(t *testing.T) (context.Context, *sql.DB, string) {
@@ -169,6 +171,17 @@ func TestAvailablePlaceholders(t *testing.T) {
 	if len(ph) == 0 {
 		t.Fatal("expected placeholders")
 	}
+	phReset := AvailablePlaceholders(TriggerPasswordReset)
+	found := false
+	for _, p := range phReset {
+		if p == "reset_url" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("password_reset placeholders: %v", phReset)
+	}
 }
 
 func TestSendTestTelegram(t *testing.T) {
@@ -230,6 +243,45 @@ func TestSendTestMaxChannel(t *testing.T) {
 	}
 	if err := SendTest(ctx, sqlDB, userID, ChannelMax, box); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestPreviewPasswordResetTemplateWithExternalURL(t *testing.T) {
+	ctx, sqlDB, userID := seedNotifyUser(t)
+	settingscache.Invalidate()
+
+	externalURL := "https://buhgalter.example.com"
+	_, err := sqlDB.ExecContext(ctx, `UPDATE system_settings SET external_url = ? WHERE id = 1`, externalURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	template := "Запрос: {display_name} (@{login}), {requested_at}.\n{reset_url}"
+	text, err := PreviewTemplate(ctx, sqlDB, userID, TriggerPasswordReset, template)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantLink := "https://buhgalter.example.com/admin/users?reset=00000000-0000-0000-0000-000000000001"
+	if !strings.Contains(text, wantLink) {
+		t.Fatalf("preview %q should contain %q", text, wantLink)
+	}
+}
+
+func TestPreviewPasswordResetTemplateWithoutExternalURL(t *testing.T) {
+	ctx, sqlDB, userID := seedNotifyUser(t)
+	settingscache.Invalidate()
+	_, err := sqlDB.ExecContext(ctx, `UPDATE system_settings SET external_url = NULL WHERE id = 1`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	template := "Запрос: {display_name} (@{login}), {requested_at}.\n{reset_url}"
+	text, err := PreviewTemplate(ctx, sqlDB, userID, TriggerPasswordReset, template)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(text, "Нет внешней ссылки — настройте внешний URL в админке.") {
+		t.Fatalf("preview %q should contain hint", text)
 	}
 }
 

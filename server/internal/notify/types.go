@@ -33,7 +33,7 @@ var triggerPlaceholders = map[string][]string{
 	TriggerDebtDueSoon:   {"debtor", "amount", "due_date", "days"},
 	TriggerCreditPayment: {"credit", "amount", "payment_date", "when"},
 	TriggerPlannedOp:     {"type", "amount", "description", "date"},
-	TriggerPasswordReset: {"login", "display_name", "requested_at"},
+	TriggerPasswordReset: {"login", "display_name", "requested_at", "reset_url"},
 	TriggerTest:          {"channel"},
 }
 
