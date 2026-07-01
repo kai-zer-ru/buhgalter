@@ -254,9 +254,10 @@ test('notifications negative balance toggle locks template', async ({ page }) =>
 	await expect(settingsCard.getByText('Изменения сохранены.')).toBeVisible({ timeout: 10_000 });
 
 	await expect(
-		page.locator('.card').filter({ has: page.locator('#tpl-balance_shortfall') }).getByText(
-			'Включите «Отрицательный баланс» в настройках'
-		)
+		page
+			.locator('.card')
+			.filter({ has: page.locator('#tpl-balance_shortfall') })
+			.getByText('Включите «Отрицательный баланс» в настройках')
 	).toBeVisible();
 	await expect(page.locator('#tpl-balance_shortfall')).toBeDisabled();
 });

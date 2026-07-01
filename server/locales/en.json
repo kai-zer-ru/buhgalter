@@ -109,7 +109,7 @@
   "ERR_IMPORT_CONFIRM": "confirm=true is required",
   "ERR_TOKEN_NAME_REQUIRED": "Token name is required",
   "ERR_TOKEN_EXPIRES": "Invalid expiration date",
-  "ERR_LINKED_TX_DELETE": "Cannot delete a debt transaction after settlement — delete the debt instead",
+  "ERR_LINKED_TX_DELETE": "Cannot delete the opening debt transaction while other debt operations exist — delete the debt instead",
   "notifications.templates.debt_overdue": "Debt overdue: {debtor} — {amount} (due {due_date})\n{debt_url}",
   "notifications.templates.debt_due_soon": "Reminder: repay debt to {debtor} — {amount} (due {due_date}, in {days} days)\n{debt_url}",
   "notifications.templates.credit_payment": "Credit payment \"{credit}\": {amount} {when}\n{credit_url}",

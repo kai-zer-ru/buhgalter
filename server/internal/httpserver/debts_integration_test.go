@@ -238,16 +238,8 @@ func TestDeleteDebtLinkedTransaction(t *testing.T) {
 
 	debtResp, _ := env.authedRequest(http.MethodGet, "/api/v1/debts/"+debtID, nil)
 	defer debtResp.Body.Close()
-	var gotDebt struct {
-		TransactionID  *string `json:"transaction_id"`
-		AffectsBalance bool    `json:"affects_balance"`
-	}
-	_ = json.NewDecoder(debtResp.Body).Decode(&gotDebt)
-	if gotDebt.TransactionID != nil {
-		t.Fatal("debt should be unlinked from deleted transaction")
-	}
-	if gotDebt.AffectsBalance {
-		t.Fatal("debt affects_balance should be cleared after tx delete")
+	if debtResp.StatusCode != http.StatusNotFound {
+		t.Fatalf("debt should be deleted with opening transaction, status %d", debtResp.StatusCode)
 	}
 }
 
@@ -484,8 +476,19 @@ func TestCannotDeleteDebtTransactionAfterPartialSettle(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer delSettleResp.Body.Close()
-	if delSettleResp.StatusCode != http.StatusConflict {
-		t.Fatalf("delete settle tx after partial settle status %d, want 409", delSettleResp.StatusCode)
+	if delSettleResp.StatusCode != http.StatusNoContent {
+		t.Fatalf("delete settle tx after partial settle status %d, want 204", delSettleResp.StatusCode)
+	}
+
+	debtResp, _ := env.authedRequest(http.MethodGet, "/api/v1/debts/"+debtID, nil)
+	defer debtResp.Body.Close()
+	var gotDebt struct {
+		Amount    int64 `json:"amount"`
+		IsSettled bool  `json:"is_settled"`
+	}
+	_ = json.NewDecoder(debtResp.Body).Decode(&gotDebt)
+	if gotDebt.IsSettled || gotDebt.Amount != 10000 {
+		t.Fatalf("debt should be active with amount 10000 after settle tx delete, got settled=%v amount=%d", gotDebt.IsSettled, gotDebt.Amount)
 	}
 
 	balResp, _ := env.authedRequest(http.MethodGet, "/api/v1/accounts/"+accID+"/balance", nil)
@@ -494,8 +497,8 @@ func TestCannotDeleteDebtTransactionAfterPartialSettle(t *testing.T) {
 		Balance int64 `json:"balance"`
 	}
 	_ = json.NewDecoder(balResp.Body).Decode(&bal)
-	if bal.Balance != 94000 {
-		t.Fatalf("balance should remain 94000, got %d", bal.Balance)
+	if bal.Balance != 90000 {
+		t.Fatalf("balance should be 90000 after settle tx delete, got %d", bal.Balance)
 	}
 }
 

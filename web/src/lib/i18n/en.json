@@ -726,7 +726,7 @@
 	"errors.ERR_IMPORT_CONFIRM": "confirm=true is required",
 	"errors.ERR_TOKEN_NAME_REQUIRED": "Token name is required",
 	"errors.ERR_TOKEN_EXPIRES": "Invalid expiration date",
-	"errors.ERR_LINKED_TX_DELETE": "Cannot delete a debt transaction after settlement — delete the debt instead",
+	"errors.ERR_LINKED_TX_DELETE": "Cannot delete the opening debt transaction while other debt operations exist — delete the debt instead",
 	"common.saved": "Saved",
 	"common.deleted": "Deleted",
 	"common.notFound": "Nothing found",

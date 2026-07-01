@@ -109,7 +109,7 @@
   "ERR_IMPORT_CONFIRM": "confirm=true обязателен",
   "ERR_TOKEN_NAME_REQUIRED": "Имя токена обязательно",
   "ERR_TOKEN_EXPIRES": "Некорректная дата истечения",
-  "ERR_LINKED_TX_DELETE": "Нельзя удалить операцию долга после погашения — удалите долг целиком",
+  "ERR_LINKED_TX_DELETE": "Нельзя удалить начальную операцию долга, пока есть другие операции по этому долгу — удалите долг целиком",
   "notifications.templates.debt_overdue": "Просрочен долг: {debtor} — {amount}. (Срок: {due_date})\n{debt_url}",
   "notifications.templates.debt_due_soon": "Напоминание: вернуть долг {debtor} — {amount}. (Срок: {due_date}, через {days} дн.)\n{debt_url}",
   "notifications.templates.credit_payment": "Платёж по кредиту «{credit}»: {amount}. Дата: {when}\n{credit_url}",
