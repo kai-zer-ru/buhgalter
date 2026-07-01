@@ -2674,7 +2674,7 @@ components:
       properties:
         trigger_type:
           type: string
-          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, user_registration, password_reset, test]
+          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, balance_shortfall, user_registration, password_reset, test]
         template:
           type: string
           description: Текст шаблона
@@ -2684,8 +2684,11 @@ components:
             type: string
           description: |
             Разрешённые placeholder-ы для trigger_type.
-            Для password_reset дополнительно доступен reset_url — прямая ссылка на /admin/users?reset={user_id}
-            при настроенном external_url, иначе текст-подсказка настроить внешний URL в админке.
+            Для balance_shortfall — только {amount} (недостающая сумма); шаблон добавляется к исходящим уведомлениям при включённом trigger_negative_balance.
+            URL-плейсхолдеры формируются из system_settings.external_url; при пустом external_url — текст-подсказка настроить внешний URL в админке:
+            debt_url → /debts; credit_url → /credits/{credit_id}; transaction_url → /transactions;
+            settings_url → /settings?tab=notifications; reset_url → /admin/users?reset={user_id};
+            moderation_url → /admin/users?moderate={user_id}.
         is_custom:
           type: boolean
           description: true, если шаблон задан пользователем в БД
@@ -2701,6 +2704,7 @@ components:
           trigger_debt,
           trigger_credit,
           trigger_planned,
+          trigger_negative_balance,
           trigger_user_registration,
           trigger_password_reset,
           debt_days_before,
@@ -2743,6 +2747,9 @@ components:
           type: boolean
         trigger_planned:
           type: boolean
+        trigger_negative_balance:
+          type: boolean
+          description: Дописывать к исходящим уведомлениям текст о недостатке средств на счёте
         trigger_user_registration:
           type: boolean
           description: Только для администратора — уведомление о новой регистрации
@@ -2782,7 +2789,7 @@ components:
       properties:
         trigger_type:
           type: string
-          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, user_registration, password_reset, test]
+          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, balance_shortfall, user_registration, password_reset, test]
         template:
           type: string
           minLength: 1
@@ -2817,6 +2824,9 @@ components:
           type: boolean
         trigger_planned:
           type: boolean
+        trigger_negative_balance:
+          type: boolean
+          description: Дописывать к исходящим уведомлениям текст о недостатке средств на счёте
         trigger_user_registration:
           type: boolean
           description: Только для администратора — уведомление о новой регистрации
@@ -2863,7 +2873,7 @@ components:
       properties:
         trigger_type:
           type: string
-          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, user_registration, password_reset, test]
+          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, balance_shortfall, user_registration, password_reset, test]
         template:
           type: string
           minLength: 1
@@ -2879,7 +2889,7 @@ components:
       properties:
         trigger_type:
           type: string
-          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, user_registration, password_reset, test]
+          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, balance_shortfall, user_registration, password_reset, test]
     Category:
       type: object
       properties:

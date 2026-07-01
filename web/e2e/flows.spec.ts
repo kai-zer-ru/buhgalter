@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { test, expect } from '@playwright/test';
 import { selectCombobox, selectLabeledCombobox, fillTransactionForm } from './helpers/transactions';
-import { waitAppReady, apiJSON, formatUTCDateTime } from './helpers/auth';
+import { waitAppReady, apiJSON, formatUTCDateTime, restoreAdminSession } from './helpers/auth';
 import { createCashAccount, createExpense } from './helpers/setup-data';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -122,7 +122,9 @@ test('admin create user and manual backup', async ({ page }) => {
 	await page.goto('/admin/backups');
 	await waitAppReady(page);
 	await page.getByRole('button', { name: 'Запустить сейчас' }).click();
-	await expect(page.getByText(/\.db/)).toBeVisible({ timeout: 15_000 });
+	await expect(page.getByRole('cell', { name: /^buhgalter_.*\.db$/ }).first()).toBeVisible({
+		timeout: 15_000
+	});
 });
 
 test('stats page shows summary and category sections', async ({ page }) => {
@@ -228,6 +230,62 @@ test('notifications settings load', async ({ page }) => {
 			.getByRole('heading', { name: 'Ключ шифрования не настроен' })
 			.or(page.getByRole('heading', { name: 'Telegram', exact: true }))
 	).toBeVisible();
+});
+
+test('notifications negative balance toggle locks template', async ({ page }) => {
+	await restoreAdminSession(page);
+	await apiJSON(page, 'PUT', '/api/v1/admin/settings/notification-secret', {
+		notification_secret_key: '12345678901234567890123456789012'
+	});
+
+	await page.goto('/settings?tab=notifications');
+	await waitAppReady(page);
+	await expect(page.getByRole('heading', { name: 'Настройки', level: 3 })).toBeVisible();
+
+	const settingsCard = page.locator('.card').filter({
+		has: page.getByRole('heading', { name: 'Настройки', level: 3 })
+	});
+	await expect(settingsCard.getByRole('row', { name: /Отрицательный баланс/ })).toBeVisible();
+	await settingsCard
+		.getByRole('row', { name: /Отрицательный баланс/ })
+		.getByRole('switch')
+		.click();
+	await settingsCard.getByRole('button', { name: 'Сохранить' }).click();
+	await expect(settingsCard.getByText('Изменения сохранены.')).toBeVisible({ timeout: 10_000 });
+
+	await expect(
+		page.locator('.card').filter({ has: page.locator('#tpl-balance_shortfall') }).getByText(
+			'Включите «Отрицательный баланс» в настройках'
+		)
+	).toBeVisible();
+	await expect(page.locator('#tpl-balance_shortfall')).toBeDisabled();
+});
+
+test('notifications debt toggle locks policy row', async ({ page }) => {
+	await restoreAdminSession(page);
+	await apiJSON(page, 'PUT', '/api/v1/admin/settings/notification-secret', {
+		notification_secret_key: '12345678901234567890123456789012'
+	});
+
+	await page.goto('/settings?tab=notifications');
+	await waitAppReady(page);
+
+	const settingsCard = page.locator('.card').filter({
+		has: page.getByRole('heading', { name: 'Настройки', level: 3 })
+	});
+	await settingsCard
+		.getByRole('row', { name: /^Долги/ })
+		.getByRole('switch')
+		.click();
+	await settingsCard.getByRole('button', { name: 'Сохранить' }).click();
+	await expect(settingsCard.getByText('Изменения сохранены.')).toBeVisible({ timeout: 10_000 });
+
+	const policyCard = page.locator('.card').filter({
+		has: page.getByRole('heading', { name: 'Периоды и расписание' })
+	});
+	const debtRow = policyCard.getByRole('row').filter({ hasText: 'Я должен: до срока' });
+	await expect(debtRow.getByText('Включите «Долги» в настройках')).toBeVisible();
+	await expect(debtRow.locator('input')).toBeDisabled();
 });
 
 test('admin diagnostics loads', async ({ page }) => {

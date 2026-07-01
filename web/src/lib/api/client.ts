@@ -135,6 +135,7 @@ export type NotificationSettings = {
 	trigger_debt: boolean;
 	trigger_credit: boolean;
 	trigger_planned: boolean;
+	trigger_negative_balance: boolean;
 	trigger_password_reset?: boolean;
 	trigger_user_registration?: boolean;
 	debt_days_before: number;
@@ -158,6 +159,7 @@ export type NotificationSettingsUpdate = {
 	trigger_debt?: boolean;
 	trigger_credit?: boolean;
 	trigger_planned?: boolean;
+	trigger_negative_balance?: boolean;
 	trigger_password_reset?: boolean;
 	trigger_user_registration?: boolean;
 	debt_days_before?: number;

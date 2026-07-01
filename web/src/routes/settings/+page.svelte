@@ -22,6 +22,7 @@
 		sendNotificationTest,
 		type APIToken,
 		type APITokenCreated,
+		type NotificationSettings,
 		type NotificationTemplate
 	} from '$lib/api/client';
 	import { user } from '$lib/stores/auth';
@@ -32,6 +33,7 @@
 	import PageTabs from '$lib/components/PageTabs.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import FormFeedback from '$lib/components/FormFeedback.svelte';
+	import IntegerInput from '$lib/components/IntegerInput.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
 	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
 	import { confirm } from '$lib/confirm';
@@ -91,7 +93,6 @@
 	let adminTab = $state<AdminTab>(adminTabFromSearchParams(get(page).url.searchParams));
 	let profileFeedback = $state({ error: '', success: '' });
 	let passwordFeedback = $state({ error: '', success: '' });
-	let notificationsFormFeedback = $state({ error: '', success: '' });
 	let loading = $state(false);
 
 	let displayName = $state('');
@@ -128,6 +129,7 @@
 	let triggerDebt = $state(true);
 	let triggerCredit = $state(true);
 	let triggerPlanned = $state(true);
+	let triggerNegativeBalance = $state(true);
 	let triggerPasswordReset = $state(true);
 	let triggerUserRegistration = $state(true);
 	let registrationEnabled = $state(false);
@@ -170,10 +172,197 @@
 		'debt_due_soon',
 		'credit_payment',
 		'planned_operation',
+		'balance_shortfall',
 		'password_reset',
 		'user_registration',
 		'test'
 	];
+
+	type NotificationTriggerKey =
+		| 'debt'
+		| 'credit'
+		| 'planned'
+		| 'negativeBalance'
+		| 'passwordReset'
+		| 'userRegistration';
+
+	const templateSettingKey: Partial<Record<string, NotificationTriggerKey>> = {
+		debt_overdue: 'debt',
+		debt_due_soon: 'debt',
+		credit_payment: 'credit',
+		planned_operation: 'planned',
+		balance_shortfall: 'negativeBalance',
+		password_reset: 'passwordReset',
+		user_registration: 'userRegistration'
+	};
+
+	function isNotificationTriggerEnabled(key: NotificationTriggerKey) {
+		switch (key) {
+			case 'debt':
+				return triggerDebt;
+			case 'credit':
+				return triggerCredit;
+			case 'planned':
+				return triggerPlanned;
+			case 'negativeBalance':
+				return triggerNegativeBalance;
+			case 'passwordReset':
+				return triggerPasswordReset;
+			case 'userRegistration':
+				return triggerUserRegistration;
+		}
+	}
+
+	function toggleNotificationTrigger(key: NotificationTriggerKey) {
+		switch (key) {
+			case 'debt':
+				triggerDebt = !triggerDebt;
+				break;
+			case 'credit':
+				triggerCredit = !triggerCredit;
+				break;
+			case 'planned':
+				triggerPlanned = !triggerPlanned;
+				break;
+			case 'negativeBalance':
+				triggerNegativeBalance = !triggerNegativeBalance;
+				break;
+			case 'passwordReset':
+				triggerPasswordReset = !triggerPasswordReset;
+				break;
+			case 'userRegistration':
+				triggerUserRegistration = !triggerUserRegistration;
+				break;
+		}
+	}
+
+	function notificationTriggerRows(): Array<{ key: NotificationTriggerKey; hintKey: string }> {
+		const rows: Array<{ key: NotificationTriggerKey; hintKey: string }> = [
+			{ key: 'debt', hintKey: 'debt_hint' },
+			{ key: 'credit', hintKey: 'credit_hint' },
+			{ key: 'planned', hintKey: 'planned_hint' },
+			{ key: 'negativeBalance', hintKey: 'negativeBalance_hint' }
+		];
+		if ($user?.is_admin) {
+			rows.push({ key: 'passwordReset', hintKey: 'passwordReset_hint' });
+			if (registrationEnabled) {
+				rows.push({ key: 'userRegistration', hintKey: 'userRegistration_hint' });
+			}
+		}
+		return rows;
+	}
+
+	type NotificationPolicyFieldKey =
+		| 'debtDaysBefore'
+		| 'myDebtOverdueDaysLimit'
+		| 'owedDebtOverdueStartAfterDays'
+		| 'owedDebtOverdueDaysLimit'
+		| 'creditDaysBefore';
+
+	function notificationPolicyRows(): Array<{
+		key: NotificationPolicyFieldKey;
+		triggerKey: NotificationTriggerKey;
+		nameKey: string;
+		hintKey: string;
+		min: number;
+		max: number;
+	}> {
+		return [
+			{
+				key: 'debtDaysBefore',
+				triggerKey: 'debt',
+				nameKey: 'myDebtBefore',
+				hintKey: 'myDebtBefore_hint',
+				min: 0,
+				max: 30
+			},
+			{
+				key: 'myDebtOverdueDaysLimit',
+				triggerKey: 'debt',
+				nameKey: 'myDebtOverdue',
+				hintKey: 'myDebtOverdue_hint',
+				min: 0,
+				max: 365
+			},
+			{
+				key: 'owedDebtOverdueStartAfterDays',
+				triggerKey: 'debt',
+				nameKey: 'owedDebtStart',
+				hintKey: 'owedDebtStart_hint',
+				min: 0,
+				max: 365
+			},
+			{
+				key: 'owedDebtOverdueDaysLimit',
+				triggerKey: 'debt',
+				nameKey: 'owedDebtOverdue',
+				hintKey: 'owedDebtOverdue_hint',
+				min: 0,
+				max: 365
+			},
+			{
+				key: 'creditDaysBefore',
+				triggerKey: 'credit',
+				nameKey: 'creditDays',
+				hintKey: 'creditDays_hint',
+				min: 0,
+				max: 30
+			}
+		];
+	}
+
+	function policyFieldEditable(triggerKey: NotificationTriggerKey) {
+		return isNotificationTriggerEnabled(triggerKey);
+	}
+
+	function policyScheduleEditable() {
+		return triggerDebt || triggerCredit || triggerPlanned;
+	}
+
+	function policyDisabledHint(triggerKey: NotificationTriggerKey) {
+		return $_('settings.notifications.templates.disabled_setting', {
+			values: { setting: $_(`settings.notifications.triggers.${triggerKey}`) }
+		});
+	}
+
+	function policyScheduleDisabledHint() {
+		return $_('settings.notifications.policy.disabled_schedule');
+	}
+
+	function policyFieldValue(key: NotificationPolicyFieldKey): number {
+		switch (key) {
+			case 'debtDaysBefore':
+				return debtDaysBefore;
+			case 'myDebtOverdueDaysLimit':
+				return myDebtOverdueDaysLimit;
+			case 'owedDebtOverdueStartAfterDays':
+				return owedDebtOverdueStartAfterDays;
+			case 'owedDebtOverdueDaysLimit':
+				return owedDebtOverdueDaysLimit;
+			case 'creditDaysBefore':
+				return creditDaysBefore;
+		}
+	}
+
+	function setPolicyFieldValue(key: NotificationPolicyFieldKey, value: number) {
+		switch (key) {
+			case 'debtDaysBefore':
+				debtDaysBefore = value;
+				break;
+			case 'myDebtOverdueDaysLimit':
+				myDebtOverdueDaysLimit = value;
+				break;
+			case 'owedDebtOverdueStartAfterDays':
+				owedDebtOverdueStartAfterDays = value;
+				break;
+			case 'owedDebtOverdueDaysLimit':
+				owedDebtOverdueDaysLimit = value;
+				break;
+			case 'creditDaysBefore':
+				creditDaysBefore = value;
+				break;
+		}
+	}
 
 	onMount(() => {
 		tab = tabFromSearchParams(new URL(window.location.href).searchParams);
@@ -212,10 +401,7 @@
 	$effect(() => {
 		if (tab !== 'notifications') return;
 		void loadNotifications().catch((err) => {
-			notificationsFormFeedback = {
-				error: err instanceof ApiError ? err.message : $_('common.error'),
-				success: ''
-			};
+			toast(err instanceof ApiError ? err.message : $_('common.error'), 'error');
 		});
 	});
 
@@ -264,12 +450,7 @@
 		tokens = await listTokens();
 	}
 
-	async function loadNotifications() {
-		const [data, regEnabled] = await Promise.all([
-			getNotificationSettings(),
-			getRegistrationEnabled()
-		]);
-		registrationEnabled = regEnabled;
+	function applyNotificationSettings(data: NotificationSettings) {
 		notificationsLoaded = true;
 		notificationSecretConfigured = data.secret_key_configured === true;
 		telegramEnabled = data.telegram_enabled;
@@ -285,8 +466,12 @@
 		triggerDebt = data.trigger_debt;
 		triggerCredit = data.trigger_credit;
 		triggerPlanned = data.trigger_planned;
-		triggerPasswordReset = data.trigger_password_reset ?? true;
-		triggerUserRegistration = data.trigger_user_registration ?? true;
+		triggerNegativeBalance =
+			'trigger_negative_balance' in data ? data.trigger_negative_balance : true;
+		triggerPasswordReset =
+			'trigger_password_reset' in data ? (data.trigger_password_reset ?? true) : true;
+		triggerUserRegistration =
+			'trigger_user_registration' in data ? (data.trigger_user_registration ?? true) : true;
 		debtDaysBefore = data.debt_days_before;
 		myDebtOverdueDaysLimit = data.my_debt_overdue_days_limit ?? 7;
 		owedDebtOverdueStartAfterDays = data.owed_debt_overdue_start_after_days ?? 0;
@@ -305,6 +490,15 @@
 			maxUserId: data.max_user_id ? String(data.max_user_id) : '',
 			maxRecipientId: data.max_recipient_id ? String(data.max_recipient_id) : ''
 		};
+	}
+
+	async function loadNotifications() {
+		const [data, regEnabled] = await Promise.all([
+			getNotificationSettings(),
+			getRegistrationEnabled()
+		]);
+		registrationEnabled = regEnabled;
+		applyNotificationSettings(data);
 	}
 
 	function channelHasUnsavedChanges(channel: 'telegram' | 'max') {
@@ -334,6 +528,20 @@
 
 	function triggerLabel(triggerType: string) {
 		return $_(`settings.notifications.trigger.${triggerType}`);
+	}
+
+	function templateEditable(triggerType: string) {
+		const settingKey = templateSettingKey[triggerType];
+		if (!settingKey) return true;
+		return isNotificationTriggerEnabled(settingKey);
+	}
+
+	function templateDisabledHint(triggerType: string) {
+		const settingKey = templateSettingKey[triggerType];
+		if (!settingKey) return '';
+		return $_('settings.notifications.templates.disabled_setting', {
+			values: { setting: $_(`settings.notifications.triggers.${settingKey}`) }
+		});
 	}
 
 	function orderedTemplates(list: NotificationTemplate[]) {
@@ -396,72 +604,6 @@
 		}
 	}
 
-	async function saveNotifications(e: Event) {
-		e.preventDefault();
-		if (!notificationSecretConfigured) return;
-		notificationsFormFeedback = { error: '', success: '' };
-		if (
-			!validateDaysRange(debtDaysBefore) ||
-			!validateDaysRange(creditDaysBefore) ||
-			!validateOverdueDaysLimit(myDebtOverdueDaysLimit) ||
-			!validateOverdueDaysLimit(owedDebtOverdueStartAfterDays) ||
-			!validateOverdueDaysLimit(owedDebtOverdueDaysLimit)
-		) {
-			notificationsFormFeedback = {
-				error: $_('settings.notifications.error.policy_range'),
-				success: ''
-			};
-			return;
-		}
-		if (!validateLocalTime(notificationTimeLocal)) {
-			notificationsFormFeedback = {
-				error: $_('settings.notifications.error.time_format'),
-				success: ''
-			};
-			return;
-		}
-		loading = true;
-		try {
-			await putNotificationSettings({
-				telegram_enabled: telegramEnabled,
-				telegram_bot_token: telegramBotToken.trim() || undefined,
-				telegram_chat_id: telegramChatId.trim() || undefined,
-				max_enabled: maxEnabled,
-				max_provider: maxProvider,
-				max_token: maxToken.trim() || undefined,
-				max_user_id: maxUserId.trim() ? Number(maxUserId) : null,
-				max_recipient_id: maxRecipientId.trim() ? Number(maxRecipientId) : null,
-				trigger_debt: triggerDebt,
-				trigger_credit: triggerCredit,
-				trigger_planned: triggerPlanned,
-				trigger_password_reset: $user?.is_admin ? triggerPasswordReset : undefined,
-				trigger_user_registration:
-					$user?.is_admin && registrationEnabled ? triggerUserRegistration : undefined,
-				debt_days_before: debtDaysBefore,
-				my_debt_overdue_days_limit: myDebtOverdueDaysLimit,
-				owed_debt_overdue_start_after_days: owedDebtOverdueStartAfterDays,
-				owed_debt_overdue_days_limit: owedDebtOverdueDaysLimit,
-				credit_days_before: creditDaysBefore,
-				notification_time_local: notificationTimeLocal.trim()
-			});
-			telegramBotToken = '';
-			maxToken = '';
-			await loadNotifications();
-			notificationsFormFeedback = {
-				error: '',
-				success: $_('settings.notifications.success.saved')
-			};
-			toast($_('settings.notifications.success.saved'));
-		} catch (err) {
-			notificationsFormFeedback = {
-				error: err instanceof ApiError ? err.message : $_('common.error'),
-				success: ''
-			};
-		} finally {
-			loading = false;
-		}
-	}
-
 	async function runChannelTest(channel: 'telegram' | 'max') {
 		if (!notificationSecretConfigured) return;
 		channelFeedback = {
@@ -503,13 +645,13 @@
 		blockFeedback = { ...blockFeedback, telegram: { error: '', success: '' } };
 		loading = true;
 		try {
-			await putNotificationSettings({
+			const data = await putNotificationSettings({
 				telegram_enabled: telegramEnabled,
 				telegram_bot_token: telegramBotToken.trim() || undefined,
 				telegram_chat_id: telegramChatId.trim() || undefined
 			});
 			telegramBotToken = '';
-			await loadNotifications();
+			applyNotificationSettings(data);
 			blockFeedback = {
 				...blockFeedback,
 				telegram: { error: '', success: $_('settings.notifications.success.block_saved') }
@@ -530,7 +672,7 @@
 		blockFeedback = { ...blockFeedback, max: { error: '', success: '' } };
 		loading = true;
 		try {
-			await putNotificationSettings({
+			const data = await putNotificationSettings({
 				max_enabled: maxEnabled,
 				max_provider: maxProvider,
 				max_token: maxToken.trim() || undefined,
@@ -538,7 +680,7 @@
 				max_recipient_id: maxRecipientId.trim() ? Number(maxRecipientId) : null
 			});
 			maxToken = '';
-			await loadNotifications();
+			applyNotificationSettings(data);
 			blockFeedback = {
 				...blockFeedback,
 				max: { error: '', success: $_('settings.notifications.success.block_saved') }
@@ -559,15 +701,16 @@
 		blockFeedback = { ...blockFeedback, triggerTypes: { error: '', success: '' } };
 		loading = true;
 		try {
-			await putNotificationSettings({
+			const data = await putNotificationSettings({
 				trigger_debt: triggerDebt,
 				trigger_credit: triggerCredit,
 				trigger_planned: triggerPlanned,
+				trigger_negative_balance: triggerNegativeBalance,
 				trigger_password_reset: $user?.is_admin ? triggerPasswordReset : undefined,
 				trigger_user_registration:
 					$user?.is_admin && registrationEnabled ? triggerUserRegistration : undefined
 			});
-			await loadNotifications();
+			applyNotificationSettings(data);
 			blockFeedback = {
 				...blockFeedback,
 				triggerTypes: { error: '', success: $_('settings.notifications.success.block_saved') }
@@ -611,7 +754,7 @@
 		}
 		loading = true;
 		try {
-			await putNotificationSettings({
+			const data = await putNotificationSettings({
 				debt_days_before: debtDaysBefore,
 				my_debt_overdue_days_limit: myDebtOverdueDaysLimit,
 				owed_debt_overdue_start_after_days: owedDebtOverdueStartAfterDays,
@@ -619,7 +762,7 @@
 				credit_days_before: creditDaysBefore,
 				notification_time_local: notificationTimeLocal.trim()
 			});
-			await loadNotifications();
+			applyNotificationSettings(data);
 			blockFeedback = {
 				...blockFeedback,
 				triggerPolicy: { error: '', success: $_('settings.notifications.success.block_saved') }
@@ -640,6 +783,7 @@
 
 	async function saveTemplate(triggerType: string, template: string) {
 		if (!notificationSecretConfigured) return;
+		if (!templateEditable(triggerType)) return;
 		templateFeedback = {
 			...templateFeedback,
 			[triggerType]: { error: '', success: '' }
@@ -654,10 +798,10 @@
 		}
 		loading = true;
 		try {
-			await putNotificationSettings({
+			const data = await putNotificationSettings({
 				templates: [{ trigger_type: triggerType, template }]
 			});
-			await loadNotifications();
+			applyNotificationSettings(data);
 			const success = $_('settings.notifications.success.template_saved', {
 				values: { trigger: triggerLabel(triggerType) }
 			});
@@ -681,6 +825,7 @@
 
 	async function previewTemplate(triggerType: string, template: string) {
 		if (!notificationSecretConfigured) return;
+		if (!templateEditable(triggerType)) return;
 		templateFeedback = {
 			...templateFeedback,
 			[triggerType]: { error: '', success: '' }
@@ -709,13 +854,14 @@
 
 	async function resetTemplate(triggerType: string) {
 		if (!notificationSecretConfigured) return;
+		if (!templateEditable(triggerType)) return;
 		templateFeedback = {
 			...templateFeedback,
 			[triggerType]: { error: '', success: '' }
 		};
 		try {
-			await resetNotificationTemplates(triggerType);
-			await loadNotifications();
+			const data = await resetNotificationTemplates(triggerType);
+			applyNotificationSettings(data);
 			templateFeedback = {
 				...templateFeedback,
 				[triggerType]: {
@@ -1054,466 +1200,488 @@
 			aria-hidden={!notificationSecretConfigured ? true : undefined}
 			inert={!notificationSecretConfigured}
 		>
-			<form class="space-y-6" onsubmit={saveNotifications}>
-				<div class="space-y-6">
-					<div class="card space-y-4">
-						<h3 class="text-lg font-semibold">{$_('settings.notifications.channel.telegram')}</h3>
-						<div class="flex items-center justify-between gap-4">
-							<span class="text-sm">{$_('settings.notifications.telegram.enable')}</span>
-							<ToggleSwitch
-								checked={telegramEnabled}
-								label={$_('settings.notifications.telegram.enable')}
-								onchange={() => (telegramEnabled = !telegramEnabled)}
-							/>
-						</div>
-						<div class="grid gap-3 md:grid-cols-2">
-							<input
-								class="input"
-								placeholder={telegramTokenStored && telegramBotToken.trim() === ''
-									? '********'
-									: $_('settings.notifications.telegram.bot_token')}
-								bind:value={telegramBotToken}
-							/>
-							<input
-								class="input"
-								placeholder={$_('settings.notifications.telegram.chat_id')}
-								bind:value={telegramChatId}
-							/>
-						</div>
-						{#if telegramTokenStored}
-							<p class="text-xs" style:color="var(--text-muted)">
-								{$_('settings.notifications.token_masked_hint')}
-							</p>
-						{/if}
-						<div class="space-y-1 text-xs" style:color="var(--text-muted)">
-							<p>{$_('settings.notifications.telegram.chat_id_help.title')}</p>
-							<p>{$_('settings.notifications.telegram.chat_id_help.step1')}</p>
-							<p>
-								{$_('settings.notifications.telegram.chat_id_help.step2_prefix')}
-								<a
-									href="https://api.telegram.org/bot&lt;BOT_TOKEN&gt;/getUpdates"
-									target="_blank"
-									rel="noreferrer noopener"
-									class="underline">api.telegram.org/bot&lt;BOT_TOKEN&gt;/getUpdates</a
-								>.
-							</p>
-							<p>{$_('settings.notifications.telegram.chat_id_help.step3')}</p>
-						</div>
-						<div class="flex items-center gap-2 text-sm" style:color="var(--text-muted)">
-							<span>
-								{$_('settings.notifications.status.label')}
-								{telegramConfigured
-									? $_('settings.notifications.status.configured')
-									: $_('settings.notifications.status.not_configured')}
-							</span>
-							<button
-								type="button"
-								class="btn-ghost"
-								onclick={() => runChannelTest('telegram')}
-								disabled={loading}
-							>
-								{$_('settings.notifications.test_send')}
-							</button>
-							<button
-								type="button"
-								class="btn-primary"
-								onclick={saveTelegramBlock}
-								disabled={loading}
-							>
-								{$_('settings.notifications.block_save')}
-							</button>
-						</div>
-						{#if blockFeedback.telegram.error}
-							<p class="text-sm" style:color="var(--danger)">{blockFeedback.telegram.error}</p>
-						{/if}
-						{#if blockFeedback.telegram.success}
-							<p class="text-sm" style:color="var(--primary)">{blockFeedback.telegram.success}</p>
-						{/if}
-						{#if channelFeedback.telegram.error}
-							<p class="text-sm" style:color="var(--danger)">{channelFeedback.telegram.error}</p>
-						{/if}
-						{#if channelFeedback.telegram.success}
-							<p class="text-sm" style:color="var(--primary)">{channelFeedback.telegram.success}</p>
-						{/if}
+			<div class="space-y-6">
+				<div class="card space-y-4">
+					<h3 class="text-lg font-semibold">{$_('settings.notifications.channel.telegram')}</h3>
+					<div class="flex items-center justify-between gap-4">
+						<span class="text-sm">{$_('settings.notifications.telegram.enable')}</span>
+						<ToggleSwitch
+							checked={telegramEnabled}
+							label={$_('settings.notifications.telegram.enable')}
+							onchange={() => (telegramEnabled = !telegramEnabled)}
+						/>
 					</div>
-
-					<div class="card space-y-4">
-						<h3 class="text-lg font-semibold">{$_('settings.notifications.channel.max')}</h3>
-						<div class="flex items-center justify-between gap-4">
-							<span class="text-sm">{$_('settings.notifications.max.enable')}</span>
-							<ToggleSwitch
-								checked={maxEnabled}
-								label={$_('settings.notifications.max.enable')}
-								onchange={() => (maxEnabled = !maxEnabled)}
-							/>
-						</div>
-						<div class="grid gap-3 md:grid-cols-2">
-							<Select
-								label=""
-								controlled
-								value={maxProvider}
-								onchange={(next) => (maxProvider = next as 'a161' | 'official')}
-								options={[
-									{ value: 'a161', label: 'a161' },
-									{ value: 'official', label: 'official' }
-								]}
-							/>
-							<input
-								class="input"
-								placeholder={maxTokenStored && maxToken.trim() === ''
-									? '********'
-									: $_('settings.notifications.max.token')}
-								bind:value={maxToken}
-							/>
-							{#if maxProvider === 'a161'}
-								<input
-									class="input"
-									placeholder={$_('settings.notifications.max.user_id')}
-									bind:value={maxUserId}
-								/>
-							{:else}
-								<input
-									class="input"
-									placeholder={$_('settings.notifications.max.recipient_id')}
-									bind:value={maxRecipientId}
-								/>
-							{/if}
-						</div>
-						{#if maxTokenStored}
-							<p class="text-xs" style:color="var(--text-muted)">
-								{$_('settings.notifications.token_masked_hint')}
-							</p>
-						{/if}
+					<div class="grid gap-3 md:grid-cols-2">
+						<input
+							class="input"
+							placeholder={telegramTokenStored && telegramBotToken.trim() === ''
+								? '********'
+								: $_('settings.notifications.telegram.bot_token')}
+							bind:value={telegramBotToken}
+						/>
+						<input
+							class="input"
+							placeholder={$_('settings.notifications.telegram.chat_id')}
+							bind:value={telegramChatId}
+						/>
+					</div>
+					{#if telegramTokenStored}
 						<p class="text-xs" style:color="var(--text-muted)">
-							{$_('settings.notifications.max.a161_link_prefix')}
+							{$_('settings.notifications.token_masked_hint')}
+						</p>
+					{/if}
+					<div class="space-y-1 text-xs" style:color="var(--text-muted)">
+						<p>{$_('settings.notifications.telegram.chat_id_help.title')}</p>
+						<p>{$_('settings.notifications.telegram.chat_id_help.step1')}</p>
+						<p>
+							{$_('settings.notifications.telegram.chat_id_help.step2_prefix')}
 							<a
-								href="https://notify.a161.ru"
+								href="https://api.telegram.org/bot&lt;BOT_TOKEN&gt;/getUpdates"
 								target="_blank"
 								rel="noreferrer noopener"
-								class="underline">notify.a161.ru</a
+								class="underline">api.telegram.org/bot&lt;BOT_TOKEN&gt;/getUpdates</a
 							>.
 						</p>
-						<div class="flex items-center gap-2 text-sm" style:color="var(--text-muted)">
-							<span>
-								{$_('settings.notifications.status.label')}
-								{maxConfigured
-									? $_('settings.notifications.status.configured')
-									: $_('settings.notifications.status.not_configured')}
-							</span>
+						<p>{$_('settings.notifications.telegram.chat_id_help.step3')}</p>
+					</div>
+					<div class="flex items-center gap-2 text-sm" style:color="var(--text-muted)">
+						<span>
+							{$_('settings.notifications.status.label')}
+							{telegramConfigured
+								? $_('settings.notifications.status.configured')
+								: $_('settings.notifications.status.not_configured')}
+						</span>
+						<button
+							type="button"
+							class="btn-ghost"
+							onclick={() => runChannelTest('telegram')}
+							disabled={loading}
+						>
+							{$_('settings.notifications.test_send')}
+						</button>
+						<button
+							type="button"
+							class="btn-primary"
+							onclick={saveTelegramBlock}
+							disabled={loading}
+						>
+							{$_('settings.notifications.block_save')}
+						</button>
+					</div>
+					{#if blockFeedback.telegram.error}
+						<p class="text-sm" style:color="var(--danger)">{blockFeedback.telegram.error}</p>
+					{/if}
+					{#if blockFeedback.telegram.success}
+						<p class="text-sm" style:color="var(--primary)">{blockFeedback.telegram.success}</p>
+					{/if}
+					{#if channelFeedback.telegram.error}
+						<p class="text-sm" style:color="var(--danger)">{channelFeedback.telegram.error}</p>
+					{/if}
+					{#if channelFeedback.telegram.success}
+						<p class="text-sm" style:color="var(--primary)">{channelFeedback.telegram.success}</p>
+					{/if}
+				</div>
+
+				<div class="card space-y-4">
+					<h3 class="text-lg font-semibold">{$_('settings.notifications.channel.max')}</h3>
+					<div class="flex items-center justify-between gap-4">
+						<span class="text-sm">{$_('settings.notifications.max.enable')}</span>
+						<ToggleSwitch
+							checked={maxEnabled}
+							label={$_('settings.notifications.max.enable')}
+							onchange={() => (maxEnabled = !maxEnabled)}
+						/>
+					</div>
+					<div class="grid gap-3 md:grid-cols-2">
+						<Select
+							label=""
+							controlled
+							value={maxProvider}
+							onchange={(next) => (maxProvider = next as 'a161' | 'official')}
+							options={[
+								{ value: 'a161', label: 'a161' },
+								{ value: 'official', label: 'official' }
+							]}
+						/>
+						<input
+							class="input"
+							placeholder={maxTokenStored && maxToken.trim() === ''
+								? '********'
+								: $_('settings.notifications.max.token')}
+							bind:value={maxToken}
+						/>
+						{#if maxProvider === 'a161'}
+							<input
+								class="input"
+								placeholder={$_('settings.notifications.max.user_id')}
+								bind:value={maxUserId}
+							/>
+						{:else}
+							<input
+								class="input"
+								placeholder={$_('settings.notifications.max.recipient_id')}
+								bind:value={maxRecipientId}
+							/>
+						{/if}
+					</div>
+					{#if maxTokenStored}
+						<p class="text-xs" style:color="var(--text-muted)">
+							{$_('settings.notifications.token_masked_hint')}
+						</p>
+					{/if}
+					<p class="text-xs" style:color="var(--text-muted)">
+						{$_('settings.notifications.max.a161_link_prefix')}
+						<a
+							href="https://notify.a161.ru"
+							target="_blank"
+							rel="noreferrer noopener"
+							class="underline">notify.a161.ru</a
+						>.
+					</p>
+					<div class="flex items-center gap-2 text-sm" style:color="var(--text-muted)">
+						<span>
+							{$_('settings.notifications.status.label')}
+							{maxConfigured
+								? $_('settings.notifications.status.configured')
+								: $_('settings.notifications.status.not_configured')}
+						</span>
+						<button
+							type="button"
+							class="btn-ghost"
+							onclick={() => runChannelTest('max')}
+							disabled={loading}
+						>
+							{$_('settings.notifications.test_send')}
+						</button>
+						<button type="button" class="btn-primary" onclick={saveMaxBlock} disabled={loading}>
+							{$_('settings.notifications.block_save')}
+						</button>
+					</div>
+					{#if blockFeedback.max.error}
+						<p class="text-sm" style:color="var(--danger)">{blockFeedback.max.error}</p>
+					{/if}
+					{#if blockFeedback.max.success}
+						<p class="text-sm" style:color="var(--primary)">{blockFeedback.max.success}</p>
+					{/if}
+					{#if channelFeedback.max.error}
+						<p class="text-sm" style:color="var(--danger)">{channelFeedback.max.error}</p>
+					{/if}
+					{#if channelFeedback.max.success}
+						<p class="text-sm" style:color="var(--primary)">{channelFeedback.max.success}</p>
+					{/if}
+				</div>
+
+				<div class="card space-y-4">
+					<h3 class="text-lg font-semibold">{$_('settings.notifications.triggers.title')}</h3>
+					<p class="text-sm" style:color="var(--text-muted)">
+						{$_('settings.notifications.triggers.types_hint')}
+					</p>
+					<div class="hidden md:block md:overflow-x-auto">
+						<table class="w-full text-left text-sm">
+							<thead>
+								<tr style:color="var(--text-muted)">
+									<th class="pb-3 pr-4 font-medium">
+										{$_('settings.notifications.triggers.col.name')}
+									</th>
+									<th class="pb-3 pr-4 font-medium">
+										{$_('settings.notifications.triggers.col.description')}
+									</th>
+									<th class="pb-3 text-right font-medium">
+										{$_('settings.notifications.triggers.col.state')}
+									</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each notificationTriggerRows() as row (row.key)}
+									<tr class="border-t align-top" style:border-color="var(--border)">
+										<td class="py-3 pr-4 leading-snug">
+											{$_(`settings.notifications.triggers.${row.key}`)}
+										</td>
+										<td class="py-3 pr-4 leading-relaxed" style:color="var(--text-muted)">
+											{$_(`settings.notifications.triggers.${row.hintKey}`)}
+										</td>
+										<td class="py-3 text-right">
+											<div class="flex justify-end">
+												<ToggleSwitch
+													checked={isNotificationTriggerEnabled(row.key)}
+													label={$_(`settings.notifications.triggers.${row.key}`)}
+													onchange={() => toggleNotificationTrigger(row.key)}
+												/>
+											</div>
+										</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+					<div class="space-y-3 md:hidden">
+						{#each notificationTriggerRows() as row (row.key)}
+							<article class="rounded-xl border p-4" style:border-color="var(--border)">
+								<div class="flex items-start justify-between gap-3">
+									<div class="min-w-0">
+										<p class="font-medium leading-snug">
+											{$_(`settings.notifications.triggers.${row.key}`)}
+										</p>
+										<p class="mt-1 text-sm leading-relaxed" style:color="var(--text-muted)">
+											{$_(`settings.notifications.triggers.${row.hintKey}`)}
+										</p>
+									</div>
+									<ToggleSwitch
+										checked={isNotificationTriggerEnabled(row.key)}
+										label={$_(`settings.notifications.triggers.${row.key}`)}
+										onchange={() => toggleNotificationTrigger(row.key)}
+									/>
+								</div>
+							</article>
+						{/each}
+					</div>
+					<div class="flex items-center gap-2">
+						<button
+							type="button"
+							class="btn-primary"
+							onclick={saveTriggerTypesBlock}
+							disabled={loading}
+						>
+							{$_('settings.notifications.block_save')}
+						</button>
+					</div>
+					{#if blockFeedback.triggerTypes.error}
+						<p class="text-sm" style:color="var(--danger)">{blockFeedback.triggerTypes.error}</p>
+					{/if}
+					{#if blockFeedback.triggerTypes.success}
+						<p class="text-sm" style:color="var(--primary)">
+							{blockFeedback.triggerTypes.success}
+						</p>
+					{/if}
+				</div>
+
+				<div class="card space-y-6">
+					<div class="space-y-1">
+						<h3 class="text-lg font-semibold">
+							{$_('settings.notifications.triggers.policy_title')}
+						</h3>
+						<p class="text-sm" style:color="var(--text-muted)">
+							{$_('settings.notifications.triggers.policy_hint')}
+						</p>
+					</div>
+
+					<div class="hidden md:block md:overflow-x-auto">
+						<table class="w-full text-left text-sm">
+							<thead>
+								<tr style:color="var(--text-muted)">
+									<th class="pb-3 pr-4 font-medium">
+										{$_('settings.notifications.triggers.col.name')}
+									</th>
+									<th class="pb-3 pr-4 font-medium">
+										{$_('settings.notifications.triggers.col.description')}
+									</th>
+									<th class="pb-3 text-right font-medium">
+										{$_('settings.notifications.triggers.col.state')}
+									</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each notificationPolicyRows() as row (row.key)}
+									{@const editable = policyFieldEditable(row.triggerKey)}
+									<tr
+										class="border-t align-top"
+										class:opacity-50={!editable}
+										style:border-color="var(--border)"
+									>
+										<td class="py-3 pr-4 leading-snug">
+											{$_(`settings.notifications.policy.${row.nameKey}`)}
+										</td>
+										<td class="py-3 pr-4 leading-relaxed" style:color="var(--text-muted)">
+											{$_(`settings.notifications.policy.${row.hintKey}`)}
+											{#if !editable}
+												<p class="mt-1 text-xs">{policyDisabledHint(row.triggerKey)}</p>
+											{/if}
+										</td>
+										<td class="py-3 text-right">
+											<IntegerInput
+												class="input w-20 text-right tabular-nums"
+												min={row.min}
+												max={row.max}
+												disabled={!editable}
+												value={policyFieldValue(row.key)}
+												onchange={(v) => setPolicyFieldValue(row.key, v)}
+											/>
+										</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+					<div class="space-y-3 md:hidden">
+						{#each notificationPolicyRows() as row (row.key)}
+							{@const editable = policyFieldEditable(row.triggerKey)}
+							<article
+								class="rounded-xl border p-4"
+								class:opacity-50={!editable}
+								style:border-color="var(--border)"
+							>
+								<p class="font-medium leading-snug">
+									{$_(`settings.notifications.policy.${row.nameKey}`)}
+								</p>
+								<p class="mt-1 text-sm leading-relaxed" style:color="var(--text-muted)">
+									{$_(`settings.notifications.policy.${row.hintKey}`)}
+									{#if !editable}
+										<span class="mt-1 block text-xs">{policyDisabledHint(row.triggerKey)}</span>
+									{/if}
+								</p>
+								<div class="mt-3 flex justify-end">
+									<IntegerInput
+										class="input w-20 text-right tabular-nums"
+										min={row.min}
+										max={row.max}
+										disabled={!editable}
+										value={policyFieldValue(row.key)}
+										onchange={(v) => setPolicyFieldValue(row.key, v)}
+									/>
+								</div>
+							</article>
+						{/each}
+					</div>
+
+					<section
+						class="space-y-3 border-t pt-6"
+						class:opacity-50={!policyScheduleEditable()}
+						style:border-color="var(--border)"
+					>
+						<h4 class="text-sm font-medium">
+							{$_('settings.notifications.triggers.schedule_title')}
+						</h4>
+						{#if !policyScheduleEditable()}
+							<p class="text-sm" style:color="var(--text-muted)">
+								{policyScheduleDisabledHint()}
+							</p>
+						{/if}
+						<label class="block max-w-xs space-y-1.5 text-sm">
+							<span class="block leading-snug"
+								>{$_('settings.notifications.triggers.send_time')}</span
+							>
+							<input
+								class="input w-full"
+								type="time"
+								disabled={!policyScheduleEditable()}
+								bind:value={notificationTimeLocal}
+							/>
+						</label>
+						<p class="max-w-xl text-xs leading-relaxed" style:color="var(--text-muted)">
+							{$_('settings.notifications.triggers.send_time_hint', { values: { timezone } })}
+						</p>
+					</section>
+
+					<div class="flex items-center gap-2 border-t pt-4" style:border-color="var(--border)">
+						<button
+							type="button"
+							class="btn-primary"
+							onclick={saveTriggerPolicyBlock}
+							disabled={loading}
+						>
+							{$_('settings.notifications.block_save')}
+						</button>
+					</div>
+					{#if blockFeedback.triggerPolicy.error}
+						<p class="text-sm" style:color="var(--danger)">{blockFeedback.triggerPolicy.error}</p>
+					{/if}
+					{#if blockFeedback.triggerPolicy.success}
+						<p class="text-sm" style:color="var(--primary)">
+							{blockFeedback.triggerPolicy.success}
+						</p>
+					{/if}
+				</div>
+
+				{#each visibleTemplates(templates) as tpl (tpl.trigger_type)}
+					{@const editable = templateEditable(tpl.trigger_type)}
+					<div
+						class="card space-y-4"
+						class:opacity-50={!editable}
+						class:pointer-events-none={!editable}
+						class:select-none={!editable}
+					>
+						<h3 class="text-lg font-semibold">{triggerLabel(tpl.trigger_type)}</h3>
+						{#if !editable}
+							<p class="text-sm" style:color="var(--text-muted)">
+								{templateDisabledHint(tpl.trigger_type)}
+							</p>
+						{/if}
+						<textarea
+							id={templateTextareaId(tpl.trigger_type)}
+							class="input min-h-[88px]"
+							disabled={!editable}
+							readonly={!editable}
+							value={templateValue(tpl.trigger_type, tpl.template)}
+							oninput={(e) =>
+								updateTemplate(tpl.trigger_type, (e.currentTarget as HTMLTextAreaElement).value)}
+						></textarea>
+						<p class="text-xs" style:color="var(--text-muted)">
+							{$_('settings.notifications.templates.placeholders_hint')}
+						</p>
+						<div class="flex flex-wrap gap-2">
+							{#each tpl.placeholders as placeholder (placeholder)}
+								<button
+									type="button"
+									class="btn-ghost"
+									disabled={!editable}
+									onclick={() => insertPlaceholder(tpl.trigger_type, placeholder)}
+								>
+									{`{${placeholder}}`}
+								</button>
+							{/each}
+						</div>
+						<div class="flex flex-wrap items-center gap-2">
 							<button
 								type="button"
 								class="btn-ghost"
-								onclick={() => runChannelTest('max')}
-								disabled={loading}
+								disabled={!editable}
+								onclick={() =>
+									previewTemplate(tpl.trigger_type, templateValue(tpl.trigger_type, tpl.template))}
 							>
-								{$_('settings.notifications.test_send')}
+								{$_('settings.notifications.templates.preview')}
 							</button>
-							<button type="button" class="btn-primary" onclick={saveMaxBlock} disabled={loading}>
-								{$_('settings.notifications.block_save')}
+							<button
+								type="button"
+								class="btn-ghost"
+								disabled={!editable}
+								onclick={() => resetTemplate(tpl.trigger_type)}
+							>
+								{$_('settings.notifications.templates.reset')}
 							</button>
-						</div>
-						{#if blockFeedback.max.error}
-							<p class="text-sm" style:color="var(--danger)">{blockFeedback.max.error}</p>
-						{/if}
-						{#if blockFeedback.max.success}
-							<p class="text-sm" style:color="var(--primary)">{blockFeedback.max.success}</p>
-						{/if}
-						{#if channelFeedback.max.error}
-							<p class="text-sm" style:color="var(--danger)">{channelFeedback.max.error}</p>
-						{/if}
-						{#if channelFeedback.max.success}
-							<p class="text-sm" style:color="var(--primary)">{channelFeedback.max.success}</p>
-						{/if}
-					</div>
-
-					<div class="card space-y-4">
-						<h3 class="text-lg font-semibold">{$_('settings.notifications.triggers.title')}</h3>
-						<p class="text-sm" style:color="var(--text-muted)">
-							{$_('settings.notifications.triggers.types_hint')}
-						</p>
-						<div class="grid w-full max-w-md gap-2">
-							<div class="grid grid-cols-[1fr_auto] items-center gap-3">
-								<span class="text-sm leading-tight"
-									>{$_('settings.notifications.triggers.debt')}</span
-								>
-								<ToggleSwitch
-									checked={triggerDebt}
-									label={$_('settings.notifications.triggers.debt')}
-									onchange={() => (triggerDebt = !triggerDebt)}
-								/>
-							</div>
-							<div class="grid grid-cols-[1fr_auto] items-center gap-3">
-								<span class="text-sm leading-tight"
-									>{$_('settings.notifications.triggers.credit')}</span
-								>
-								<ToggleSwitch
-									checked={triggerCredit}
-									label={$_('settings.notifications.triggers.credit')}
-									onchange={() => (triggerCredit = !triggerCredit)}
-								/>
-							</div>
-							<div class="grid grid-cols-[1fr_auto] items-center gap-3">
-								<span class="text-sm leading-tight"
-									>{$_('settings.notifications.triggers.planned')}</span
-								>
-								<ToggleSwitch
-									checked={triggerPlanned}
-									label={$_('settings.notifications.triggers.planned')}
-									onchange={() => (triggerPlanned = !triggerPlanned)}
-								/>
-							</div>
-							{#if $user?.is_admin}
-								<div class="grid grid-cols-[1fr_auto] items-center gap-3">
-									<span class="text-sm leading-tight"
-										>{$_('settings.notifications.triggers.passwordReset')}</span
-									>
-									<ToggleSwitch
-										checked={triggerPasswordReset}
-										label={$_('settings.notifications.triggers.passwordReset')}
-										onchange={() => (triggerPasswordReset = !triggerPasswordReset)}
-									/>
-								</div>
-								{#if registrationEnabled}
-									<div class="grid grid-cols-[1fr_auto] items-center gap-3">
-										<span class="text-sm leading-tight"
-											>{$_('settings.notifications.triggers.userRegistration')}</span
-										>
-										<ToggleSwitch
-											checked={triggerUserRegistration}
-											label={$_('settings.notifications.triggers.userRegistration')}
-											onchange={() => (triggerUserRegistration = !triggerUserRegistration)}
-										/>
-									</div>
-								{/if}
-							{/if}
-						</div>
-						<div class="flex items-center gap-2">
 							<button
 								type="button"
 								class="btn-primary"
-								onclick={saveTriggerTypesBlock}
-								disabled={loading}
+								disabled={loading || !editable}
+								onclick={() =>
+									saveTemplate(tpl.trigger_type, templateValue(tpl.trigger_type, tpl.template))}
 							>
 								{$_('settings.notifications.block_save')}
 							</button>
 						</div>
-						{#if blockFeedback.triggerTypes.error}
-							<p class="text-sm" style:color="var(--danger)">{blockFeedback.triggerTypes.error}</p>
+						{#if templateFeedback[tpl.trigger_type]?.error}
+							<p class="text-sm" style:color="var(--danger)">
+								{templateFeedback[tpl.trigger_type].error}
+							</p>
 						{/if}
-						{#if blockFeedback.triggerTypes.success}
+						{#if templateFeedback[tpl.trigger_type]?.success}
 							<p class="text-sm" style:color="var(--primary)">
-								{blockFeedback.triggerTypes.success}
+								{templateFeedback[tpl.trigger_type].success}
 							</p>
 						{/if}
-					</div>
-
-					<div class="card space-y-6">
-						<div class="space-y-1">
-							<h3 class="text-lg font-semibold">
-								{$_('settings.notifications.triggers.policy_title')}
-							</h3>
-							<p class="text-sm" style:color="var(--text-muted)">
-								{$_('settings.notifications.triggers.policy_hint')}
-							</p>
-						</div>
-
-						<section class="space-y-3">
-							<h4 class="text-sm font-medium">
-								{$_('settings.notifications.triggers.debt_policy_title')}
-							</h4>
-							<div class="grid gap-4 sm:grid-cols-2">
-								<label class="block space-y-1.5 text-sm">
-									<span class="block leading-snug"
-										>{$_('settings.notifications.triggers.my_debt_before_days')}</span
-									>
-									<input
-										class="input w-full"
-										type="number"
-										min="0"
-										max="30"
-										bind:value={debtDaysBefore}
-									/>
-								</label>
-								<label class="block space-y-1.5 text-sm">
-									<span class="block leading-snug"
-										>{$_('settings.notifications.triggers.my_debt_overdue_limit_days')}</span
-									>
-									<input
-										class="input w-full"
-										type="number"
-										min="0"
-										max="365"
-										bind:value={myDebtOverdueDaysLimit}
-									/>
-								</label>
-								<label class="block space-y-1.5 text-sm">
-									<span class="block leading-snug"
-										>{$_('settings.notifications.triggers.owed_debt_start_after_days')}</span
-									>
-									<input
-										class="input w-full"
-										type="number"
-										min="0"
-										max="365"
-										bind:value={owedDebtOverdueStartAfterDays}
-									/>
-								</label>
-								<label class="block space-y-1.5 text-sm">
-									<span class="block leading-snug"
-										>{$_('settings.notifications.triggers.owed_debt_overdue_limit_days')}</span
-									>
-									<input
-										class="input w-full"
-										type="number"
-										min="0"
-										max="365"
-										bind:value={owedDebtOverdueDaysLimit}
-									/>
-								</label>
-							</div>
-						</section>
-
-						<section class="space-y-3">
-							<h4 class="text-sm font-medium">
-								{$_('settings.notifications.triggers.credit_policy_title')}
-							</h4>
-							<label class="block max-w-xs space-y-1.5 text-sm">
-								<span class="block leading-snug"
-									>{$_('settings.notifications.triggers.credit_days')}</span
-								>
-								<input
-									class="input w-full"
-									type="number"
-									min="0"
-									max="30"
-									bind:value={creditDaysBefore}
-								/>
-							</label>
-						</section>
-
-						<section class="space-y-3 border-t pt-6" style:border-color="var(--border)">
-							<h4 class="text-sm font-medium">
-								{$_('settings.notifications.triggers.schedule_title')}
-							</h4>
-							<label class="block max-w-xs space-y-1.5 text-sm">
-								<span class="block leading-snug"
-									>{$_('settings.notifications.triggers.send_time')}</span
-								>
-								<input class="input w-full" type="time" bind:value={notificationTimeLocal} />
-							</label>
-							<p class="max-w-xl text-xs leading-relaxed" style:color="var(--text-muted)">
-								{$_('settings.notifications.triggers.send_time_hint', { values: { timezone } })}
-							</p>
-						</section>
-
-						<div class="flex items-center gap-2 border-t pt-4" style:border-color="var(--border)">
-							<button
-								type="button"
-								class="btn-primary"
-								onclick={saveTriggerPolicyBlock}
-								disabled={loading}
+						{#if previewText[tpl.trigger_type]}
+							<div
+								class="rounded border p-2 text-sm"
+								style:border-color="var(--border); color: var(--text-muted);"
 							>
-								{$_('settings.notifications.block_save')}
-							</button>
-						</div>
-						{#if blockFeedback.triggerPolicy.error}
-							<p class="text-sm" style:color="var(--danger)">{blockFeedback.triggerPolicy.error}</p>
-						{/if}
-						{#if blockFeedback.triggerPolicy.success}
-							<p class="text-sm" style:color="var(--primary)">
-								{blockFeedback.triggerPolicy.success}
-							</p>
+								<p class="mb-1 text-xs font-medium">
+									{$_('settings.notifications.templates.preview_result')}
+								</p>
+								<p>{previewText[tpl.trigger_type]}</p>
+							</div>
 						{/if}
 					</div>
-
-					{#each visibleTemplates(templates) as tpl (tpl.trigger_type)}
-						<div class="card space-y-4">
-							<h3 class="text-lg font-semibold">{triggerLabel(tpl.trigger_type)}</h3>
-							<textarea
-								id={templateTextareaId(tpl.trigger_type)}
-								class="input min-h-[88px]"
-								value={templateValue(tpl.trigger_type, tpl.template)}
-								oninput={(e) =>
-									updateTemplate(tpl.trigger_type, (e.currentTarget as HTMLTextAreaElement).value)}
-							></textarea>
-							<p class="text-xs" style:color="var(--text-muted)">
-								{$_('settings.notifications.templates.placeholders_hint')}
-							</p>
-							<div class="flex flex-wrap gap-2">
-								{#each tpl.placeholders as placeholder (placeholder)}
-									<button
-										type="button"
-										class="btn-ghost"
-										onclick={() => insertPlaceholder(tpl.trigger_type, placeholder)}
-									>
-										{`{${placeholder}}`}
-									</button>
-								{/each}
-							</div>
-							<div class="flex flex-wrap items-center gap-2">
-								<button
-									type="button"
-									class="btn-ghost"
-									onclick={() =>
-										previewTemplate(
-											tpl.trigger_type,
-											templateValue(tpl.trigger_type, tpl.template)
-										)}
-								>
-									{$_('settings.notifications.templates.preview')}
-								</button>
-								<button
-									type="button"
-									class="btn-ghost"
-									onclick={() => resetTemplate(tpl.trigger_type)}
-								>
-									{$_('settings.notifications.templates.reset')}
-								</button>
-								<button
-									type="button"
-									class="btn-primary"
-									onclick={() =>
-										saveTemplate(tpl.trigger_type, templateValue(tpl.trigger_type, tpl.template))}
-									disabled={loading}
-								>
-									{$_('settings.notifications.block_save')}
-								</button>
-							</div>
-							{#if templateFeedback[tpl.trigger_type]?.error}
-								<p class="text-sm" style:color="var(--danger)">
-									{templateFeedback[tpl.trigger_type].error}
-								</p>
-							{/if}
-							{#if templateFeedback[tpl.trigger_type]?.success}
-								<p class="text-sm" style:color="var(--primary)">
-									{templateFeedback[tpl.trigger_type].success}
-								</p>
-							{/if}
-							{#if previewText[tpl.trigger_type]}
-								<div
-									class="rounded border p-2 text-sm"
-									style:border-color="var(--border); color: var(--text-muted);"
-								>
-									<p class="mb-1 text-xs font-medium">
-										{$_('settings.notifications.templates.preview_result')}
-									</p>
-									<p>{previewText[tpl.trigger_type]}</p>
-								</div>
-							{/if}
-						</div>
-					{/each}
-					<FormFeedback
-						error={notificationsFormFeedback.error}
-						success={notificationsFormFeedback.success}
-					/>
-					<button
-						type="submit"
-						class="btn-primary"
-						disabled={loading || !notificationSecretConfigured}
-						>{$_('settings.notifications.save_all')}</button
-					>
-				</div>
-			</form>
+				{/each}
+			</div>
 		</div>
 	{/if}
 {:else if tab === 'categories'}

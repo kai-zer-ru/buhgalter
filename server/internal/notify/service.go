@@ -35,6 +35,7 @@ type SettingsView struct {
 	TriggerDebt                   bool           `json:"trigger_debt"`
 	TriggerCredit                 bool           `json:"trigger_credit"`
 	TriggerPlanned                bool           `json:"trigger_planned"`
+	TriggerNegativeBalance        bool           `json:"trigger_negative_balance"`
 	TriggerUserRegistration       bool           `json:"trigger_user_registration"`
 	TriggerPasswordReset          bool           `json:"trigger_password_reset"`
 	DebtDaysBefore                int64          `json:"debt_days_before"`
@@ -63,6 +64,7 @@ type UpdateSettingsInput struct {
 	TriggerDebt                   *bool            `json:"trigger_debt,omitempty"`
 	TriggerCredit                 *bool            `json:"trigger_credit,omitempty"`
 	TriggerPlanned                *bool            `json:"trigger_planned,omitempty"`
+	TriggerNegativeBalance        *bool            `json:"trigger_negative_balance,omitempty"`
 	TriggerUserRegistration       *bool            `json:"trigger_user_registration,omitempty"`
 	TriggerPasswordReset          *bool            `json:"trigger_password_reset,omitempty"`
 	DebtDaysBefore                *int64           `json:"debt_days_before,omitempty"`
@@ -126,6 +128,7 @@ func getSettingsOnce(ctx context.Context, sqlDB *sql.DB, userID string) (Setting
 		TriggerDebt:                   settings.TriggerDebt == 1,
 		TriggerCredit:                 settings.TriggerCredit == 1,
 		TriggerPlanned:                settings.TriggerPlanned == 1,
+		TriggerNegativeBalance:        settings.TriggerNegativeBalance == 1,
 		TriggerUserRegistration:       isAdmin && regEnabled && settings.TriggerUserRegistration == 1,
 		TriggerPasswordReset:          isAdmin && settings.TriggerPasswordReset == 1,
 		DebtDaysBefore:                settings.DebtDaysBefore,
@@ -172,6 +175,37 @@ func UpdateSettings(ctx context.Context, db *sql.DB, userID string, in UpdateSet
 	isAdmin, err := userIsAdmin(ctx, db, userID)
 	if err != nil {
 		return SettingsView{}, err
+	}
+
+	triggerDebt := settings.TriggerDebt == 1
+	if in.TriggerDebt != nil {
+		triggerDebt = *in.TriggerDebt
+	}
+	triggerCredit := settings.TriggerCredit == 1
+	if in.TriggerCredit != nil {
+		triggerCredit = *in.TriggerCredit
+	}
+	triggerPlanned := settings.TriggerPlanned == 1
+	if in.TriggerPlanned != nil {
+		triggerPlanned = *in.TriggerPlanned
+	}
+	if in.DebtDaysBefore != nil && !PolicySettingEnabled(triggerDebt, triggerCredit, triggerPlanned, "debt_days_before") {
+		return SettingsView{}, fmt.Errorf("debt_days_before requires trigger_debt to be enabled")
+	}
+	if in.MyDebtOverdueDaysLimit != nil && !PolicySettingEnabled(triggerDebt, triggerCredit, triggerPlanned, "my_debt_overdue_days_limit") {
+		return SettingsView{}, fmt.Errorf("my_debt_overdue_days_limit requires trigger_debt to be enabled")
+	}
+	if in.OwedDebtOverdueStartAfterDays != nil && !PolicySettingEnabled(triggerDebt, triggerCredit, triggerPlanned, "owed_debt_overdue_start_after_days") {
+		return SettingsView{}, fmt.Errorf("owed_debt_overdue_start_after_days requires trigger_debt to be enabled")
+	}
+	if in.OwedDebtOverdueDaysLimit != nil && !PolicySettingEnabled(triggerDebt, triggerCredit, triggerPlanned, "owed_debt_overdue_days_limit") {
+		return SettingsView{}, fmt.Errorf("owed_debt_overdue_days_limit requires trigger_debt to be enabled")
+	}
+	if in.CreditDaysBefore != nil && !PolicySettingEnabled(triggerDebt, triggerCredit, triggerPlanned, "credit_days_before") {
+		return SettingsView{}, fmt.Errorf("credit_days_before requires trigger_credit to be enabled")
+	}
+	if in.NotificationTimeLocal != nil && !PolicySettingEnabled(triggerDebt, triggerCredit, triggerPlanned, "notification_time_local") {
+		return SettingsView{}, fmt.Errorf("notification_time_local requires at least one scheduled trigger (debt, credit, or planned) to be enabled")
 	}
 
 	if in.MaxProvider != nil {
@@ -233,6 +267,9 @@ func UpdateSettings(ctx context.Context, db *sql.DB, userID string, in UpdateSet
 	if in.TriggerPlanned != nil {
 		settings.TriggerPlanned = boolToInt(*in.TriggerPlanned)
 	}
+	if in.TriggerNegativeBalance != nil {
+		settings.TriggerNegativeBalance = boolToInt(*in.TriggerNegativeBalance)
+	}
 	if in.TriggerUserRegistration != nil {
 		if !isAdmin {
 			return SettingsView{}, fmt.Errorf("trigger_user_registration is admin-only")
@@ -292,6 +329,9 @@ func UpdateSettings(ctx context.Context, db *sql.DB, userID string, in UpdateSet
 				return SettingsView{}, fmt.Errorf("unknown trigger_type: %s", trigger)
 			}
 		}
+		if !TemplateSettingEnabled(settings, trigger) {
+			return SettingsView{}, fmt.Errorf("template %s requires its notification setting to be enabled", trigger)
+		}
 		template := strings.TrimSpace(tpl.Template)
 		if len(template) < 1 || len(template) > 500 {
 			return SettingsView{}, fmt.Errorf("template length must be in range 1..500")
@@ -321,6 +361,7 @@ func UpdateSettings(ctx context.Context, db *sql.DB, userID string, in UpdateSet
 		TriggerDebt:                   settings.TriggerDebt,
 		TriggerCredit:                 settings.TriggerCredit,
 		TriggerPlanned:                settings.TriggerPlanned,
+		TriggerNegativeBalance:        settings.TriggerNegativeBalance,
 		TriggerUserRegistration:       settings.TriggerUserRegistration,
 		TriggerPasswordReset:          settings.TriggerPasswordReset,
 		DebtDaysBefore:                settings.DebtDaysBefore,
@@ -348,6 +389,9 @@ func PreviewTemplate(ctx context.Context, db *sql.DB, userID, triggerType, templ
 	if err := rejectRegistrationDependentTrigger(ctx, db, userID, triggerType); err != nil {
 		return "", err
 	}
+	if err := rejectTemplateWhenSettingDisabled(ctx, db, userID, triggerType); err != nil {
+		return "", err
+	}
 	if err := ValidateTemplate(triggerType, template); err != nil {
 		return "", err
 	}
@@ -355,18 +399,15 @@ func PreviewTemplate(ctx context.Context, db *sql.DB, userID, triggerType, templ
 	if err != nil {
 		return "", err
 	}
-	data := previewData(triggerType, localeCode, timezone, currencyCode, "")
-	if triggerType == TriggerPasswordReset {
-		externalURL, err := settingscache.ExternalURL(ctx, db)
-		if err != nil {
-			return "", err
-		}
-		urlValue := ""
-		if externalURL.Valid {
-			urlValue = externalURL.String
-		}
-		data["reset_url"] = resetURLPlaceholderValue(urlValue, localeCode, previewResetUserID)
+	externalURL, err := settingscache.ExternalURL(ctx, db)
+	if err != nil {
+		return "", err
 	}
+	urlValue := ""
+	if externalURL.Valid {
+		urlValue = externalURL.String
+	}
+	data := previewData(triggerType, localeCode, timezone, currencyCode, "", urlValue)
 	text, err := Format(triggerType, localeCode, &template, data)
 	if err != nil {
 		return "", err
@@ -419,7 +460,19 @@ func SendTest(ctx context.Context, db *sql.DB, userID string, channel string, bo
 	if value, ok := customMap[TriggerTest]; ok {
 		custom = &value
 	}
-	text, err := Format(TriggerTest, localeCode, custom, previewData(TriggerTest, localeCode, timezone, currencyCode, channel))
+	externalURL, err := settingscache.ExternalURL(ctx, db)
+	if err != nil {
+		return err
+	}
+	urlValue := ""
+	if externalURL.Valid {
+		urlValue = externalURL.String
+	}
+	channelValue := strings.TrimSpace(channel)
+	if channelValue == "" {
+		channelValue = ChannelTelegram
+	}
+	text, err := Format(TriggerTest, localeCode, custom, previewData(TriggerTest, localeCode, timezone, currencyCode, channelValue, urlValue))
 	if err != nil {
 		return err
 	}
@@ -629,6 +682,21 @@ func registrationEnabled(ctx context.Context, db *sql.DB) (bool, error) {
 	return enabled == 1, nil
 }
 
+func rejectTemplateWhenSettingDisabled(ctx context.Context, db *sql.DB, userID, triggerType string) error {
+	q := sqlcdb.New(db)
+	if err := q.EnsureNotificationSettings(ctx, userID); err != nil {
+		return err
+	}
+	settings, err := q.GetNotificationSettings(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if TemplateSettingEnabled(settings, triggerType) {
+		return nil
+	}
+	return fmt.Errorf("template %s requires its notification setting to be enabled", triggerType)
+}
+
 func rejectRegistrationDependentTrigger(ctx context.Context, db *sql.DB, userID, triggerType string) error {
 	if !RequiresRegistrationEnabled(triggerType) {
 		return nil
@@ -667,30 +735,48 @@ func userFormatting(ctx context.Context, db *sql.DB, userID string) (localeCode,
 	return normalizeLocale(localeCode), timezone, currencyCode, nil
 }
 
-func previewData(triggerType, localeCode, timezone, currencyCode, channel string) FormatData {
+func previewData(triggerType, localeCode, timezone, currencyCode, channel, externalURL string) FormatData {
 	now := time.Now().UTC()
 	futureDate := now.Add(48 * time.Hour).Format("2006-01-02 15:04:05")
 	channelValue := strings.TrimSpace(channel)
 	if channelValue == "" {
 		channelValue = ChannelTelegram
 	}
-	return map[string]string{
-		"debtor":         choose(normalizeLocale(localeCode) == "ru", "Денис", "Denis"),
-		"amount":         FormatAmountDisplay(1000000, currencyCode),
-		"due_date":       timeutil.FormatDisplayDateInTimezone(now.Add(-24*time.Hour).Format(timeutil.Layout), timezone),
-		"days":           "2",
-		"credit":         choose(normalizeLocale(localeCode) == "ru", "Ипотека", "Mortgage"),
-		"payment_date":   timeutil.FormatDisplayDateInTimezone(futureDate, timezone),
-		"when":           RelativeWhen(localeCode, futureDate, now, timezone),
-		"type":           localizedOperationType(localeCode, "expense"),
-		"description":    choose(normalizeLocale(localeCode) == "ru", "Подписка", "Subscription"),
-		"date":           timeutil.FormatDisplayDateTimeShortInTimezone(now.Format(timeutil.Layout), timezone),
-		"login":          choose(normalizeLocale(localeCode) == "ru", "user1", "user1"),
-		"display_name":   choose(normalizeLocale(localeCode) == "ru", "Пользователь", "User"),
-		"requested_at":   timeutil.FormatDisplayDateTimeShortInTimezone(now.Format(timeutil.Layout), timezone),
-		"registered_at":  timeutil.FormatDisplayDateTimeShortInTimezone(now.Format(timeutil.Layout), timezone),
-		"moderation_url": "https://buhgalter.example/admin/users?moderate=00000000-0000-0000-0000-000000000001",
-		"channel":        channelValue,
+	data := FormatData{
+		"debtor":        choose(normalizeLocale(localeCode) == "ru", "Денис", "Denis"),
+		"amount":        FormatAmountDisplay(1000000, currencyCode),
+		"due_date":      timeutil.FormatDisplayDateInTimezone(now.Add(-24*time.Hour).Format(timeutil.Layout), timezone),
+		"days":          "2",
+		"credit":        choose(normalizeLocale(localeCode) == "ru", "Ипотека", "Mortgage"),
+		"payment_date":  timeutil.FormatDisplayDateInTimezone(futureDate, timezone),
+		"when":          RelativeWhen(localeCode, futureDate, now, timezone),
+		"type":          localizedOperationType(localeCode, "expense"),
+		"description":   choose(normalizeLocale(localeCode) == "ru", "Подписка", "Subscription"),
+		"date":          timeutil.FormatDisplayDateTimeShortInTimezone(now.Format(timeutil.Layout), timezone),
+		"login":         choose(normalizeLocale(localeCode) == "ru", "user1", "user1"),
+		"display_name":  choose(normalizeLocale(localeCode) == "ru", "Пользователь", "User"),
+		"requested_at":  timeutil.FormatDisplayDateTimeShortInTimezone(now.Format(timeutil.Layout), timezone),
+		"registered_at": timeutil.FormatDisplayDateTimeShortInTimezone(now.Format(timeutil.Layout), timezone),
+		"channel":       channelValue,
+	}
+	applyPreviewURLs(triggerType, data, externalURL, localeCode)
+	return data
+}
+
+func applyPreviewURLs(triggerType string, data FormatData, externalURL, localeCode string) {
+	switch triggerType {
+	case TriggerDebtOverdue, TriggerDebtDueSoon:
+		data["debt_url"] = debtURLPlaceholderValue(externalURL, localeCode, previewDebtID)
+	case TriggerCreditPayment:
+		data["credit_url"] = creditURLPlaceholderValue(externalURL, localeCode, previewCreditID)
+	case TriggerPlannedOp:
+		data["transaction_url"] = transactionURLPlaceholderValue(externalURL, localeCode, previewTransactionID)
+	case TriggerTest:
+		data["settings_url"] = settingsURLPlaceholderValue(externalURL, localeCode)
+	case TriggerPasswordReset:
+		data["reset_url"] = resetURLPlaceholderValue(externalURL, localeCode, previewResetUserID)
+	case TriggerUserRegistration:
+		data["moderation_url"] = moderationURLPlaceholderValue(externalURL, localeCode, previewResetUserID)
 	}
 }
 

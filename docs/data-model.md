@@ -201,6 +201,13 @@ erDiagram
 - `DELETE /debts/{id}` — каскадно снимает связи и удаляет привязанные `transactions`.
 - `DELETE /transactions/{id}` для связанной операции — запрещено (409), если есть погашения (`role=settle`).
 
+## Уведомления
+
+- `notification_settings.trigger_negative_balance` — дописывать суффикс о недостатке средств к исходящим напоминаниям (кредит, плановый расход/перевод, долг «я должен»).
+- `notification_templates.trigger_type` включает `balance_shortfall` — шаблон суффикса с placeholder `{amount}` (недостающая сумма); редактирование в API/UI только при включённом связанном переключателе в блоке «Настройки» (долги → `debt_*`, кредиты → `credit_payment`, и т.д.).
+- Блокировка периодов и расписания при выключенном toggle — [notifications.md](notifications.md).
+- Подробнее о недостатке средств: [balance-shortfall-notifications.md](../roadmap/balance-shortfall-notifications.md).
+
 ## Кредиты и операции
 
 - `credits.credit_kind`: `consumer` | `mortgage` (ипотека: `property_price`, `down_payment`, сумма кредита = `property_price - down_payment`; потребкредит: опционально `principal_affects_balance` — доход на счёт при создании)

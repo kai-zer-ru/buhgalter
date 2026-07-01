@@ -16,22 +16,24 @@ type localeCatalog struct {
 
 var fallbackTemplates = map[string]map[string]string{
 	"ru": {
-		TriggerDebtOverdue:      "Просрочен долг: {debtor} — {amount}. (Срок: {due_date})",
-		TriggerDebtDueSoon:      "Напоминание: вернуть долг {debtor} — {amount}. (Срок: {due_date}, через {days} дн.)",
-		TriggerCreditPayment:    "Платёж по кредиту «{credit}»: {amount}. Дата: {when}",
-		TriggerPlannedOp:        "Плановая операция: {type} на {amount} — {description}",
+		TriggerDebtOverdue:      "Просрочен долг: {debtor} — {amount}. (Срок: {due_date})\n{debt_url}",
+		TriggerDebtDueSoon:      "Напоминание: вернуть долг {debtor} — {amount}. (Срок: {due_date}, через {days} дн.)\n{debt_url}",
+		TriggerCreditPayment:    "Платёж по кредиту «{credit}»: {amount}. Дата: {when}\n{credit_url}",
+		TriggerPlannedOp:        "Плановая операция: {type} на {amount} — {description}\n{transaction_url}",
+		TriggerBalanceShortfall: "На балансе не хватает {amount}!",
 		TriggerUserRegistration: "Новая регистрация: {display_name} (@{login}), {registered_at}. Модерация: {moderation_url}",
 		TriggerPasswordReset:    "Запрос на восстановление пароля: {display_name} (@{login}), время: {requested_at}.\n{reset_url}",
-		TriggerTest:             "Тестовое уведомление «Бухгалтер». Канал: {channel}.",
+		TriggerTest:             "Тестовое уведомление «Бухгалтер». Канал: {channel}.\n{settings_url}",
 	},
 	"en": {
-		TriggerDebtOverdue:      "Debt overdue: {debtor} — {amount} (due {due_date})",
-		TriggerDebtDueSoon:      "Reminder: repay debt to {debtor} — {amount} (due {due_date}, in {days} days)",
-		TriggerCreditPayment:    "Credit payment \"{credit}\": {amount} {when}",
-		TriggerPlannedOp:        "Planned transaction: {type} {amount} — {description}",
+		TriggerDebtOverdue:      "Debt overdue: {debtor} — {amount} (due {due_date})\n{debt_url}",
+		TriggerDebtDueSoon:      "Reminder: repay debt to {debtor} — {amount} (due {due_date}, in {days} days)\n{debt_url}",
+		TriggerCreditPayment:    "Credit payment \"{credit}\": {amount} {when}\n{credit_url}",
+		TriggerPlannedOp:        "Planned transaction: {type} {amount} — {description}\n{transaction_url}",
+		TriggerBalanceShortfall: "Insufficient balance: {amount} short!",
 		TriggerUserRegistration: "New registration: {display_name} (@{login}), {registered_at}. Moderation: {moderation_url}",
 		TriggerPasswordReset:    "Password reset requested by {display_name} (@{login}) at {requested_at}.\n{reset_url}",
-		TriggerTest:             "Buhgalter test notification. Channel: {channel}.",
+		TriggerTest:             "Buhgalter test notification. Channel: {channel}.\n{settings_url}",
 	},
 }
 

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/settingscache"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
 )
 
@@ -103,14 +104,17 @@ func (w *Worker) runForUser(ctx context.Context, userID string, nowUTC, nowLocal
 	if err != nil {
 		return err
 	}
+	balanceEnabled := settings.TriggerNegativeBalance == 1
+	lookup := newBalanceLookup(q, userID)
+	externalURL := resolveExternalURL(ctx, w.DB)
 	cutoff := nowLocal.In(time.UTC).Format("2006-01-02 15:04:05")
-	if err := w.processPlanned(ctx, q, settings, userID, localeCode, timezone, currencyCode, cutoff, nowLocal); err != nil {
+	if err := w.processPlanned(ctx, q, settings, userID, localeCode, timezone, currencyCode, cutoff, nowLocal, balanceEnabled, lookup, externalURL); err != nil {
 		return err
 	}
-	if err := w.processDebts(ctx, q, settings, userID, localeCode, timezone, currencyCode, nowLocal); err != nil {
+	if err := w.processDebts(ctx, q, settings, userID, localeCode, timezone, currencyCode, nowLocal, balanceEnabled, lookup, externalURL); err != nil {
 		return err
 	}
-	if err := w.processCreditPayments(ctx, q, settings, userID, localeCode, timezone, currencyCode, nowUTC, nowLocal); err != nil {
+	if err := w.processCreditPayments(ctx, q, settings, userID, localeCode, timezone, currencyCode, nowUTC, nowLocal, balanceEnabled, lookup, externalURL); err != nil {
 		return err
 	}
 	return nil
@@ -122,6 +126,9 @@ func (w *Worker) processPlanned(
 	settings sqlcdb.NotificationSetting,
 	userID, localeCode, timezone, currencyCode, cutoff string,
 	nowLocal time.Time,
+	balanceEnabled bool,
+	lookup balanceLookup,
+	externalURL string,
 ) error {
 	rows, err := q.ListDueFutureTransactions(ctx, sqlcdb.ListDueFutureTransactionsParams{
 		UserID:          userID,
@@ -149,13 +156,20 @@ func (w *Worker) processPlanned(
 	for _, tx := range rows {
 		dateKey := nowLocal.Format("2006-01-02")
 		text, err := Format(TriggerPlannedOp, localeCode, customMap[TriggerPlannedOp], FormatData{
-			"type":        localizedOperationType(localeCode, tx.Type),
-			"amount":      FormatAmountDisplay(tx.Amount, currencyCode),
-			"description": normalizeDescription(tx.Description),
-			"date":        timeutil.FormatDisplayDateTimeShortInTimezone(tx.TransactionDate, timezone),
+			"type":            localizedOperationType(localeCode, tx.Type),
+			"amount":          FormatAmountDisplay(tx.Amount, currencyCode),
+			"description":     normalizeDescription(tx.Description),
+			"date":            timeutil.FormatDisplayDateTimeShortInTimezone(tx.TransactionDate, timezone),
+			"transaction_url": transactionURLPlaceholderValue(externalURL, localeCode, tx.ID),
 		})
 		if err != nil {
 			continue
+		}
+		if tx.AffectsBalance == 1 && (tx.Type == "expense" || tx.Type == "transfer") {
+			text, err = formatWithBalanceShortfall(ctx, lookup, balanceEnabled, localeCode, currencyCode, customMap, text, tx.AccountID, tx.Amount)
+			if err != nil {
+				continue
+			}
 		}
 		w.sendByChannels(ctx, q, settings, userID, TriggerPlannedOp, tx.ID, dateKey, text)
 	}
@@ -168,6 +182,9 @@ func (w *Worker) processDebts(
 	settings sqlcdb.NotificationSetting,
 	userID, localeCode, timezone, currencyCode string,
 	nowLocal time.Time,
+	balanceEnabled bool,
+	lookup balanceLookup,
+	externalURL string,
 ) error {
 	if settings.TriggerDebt != 1 {
 		return nil
@@ -192,9 +209,16 @@ func (w *Worker) processDebts(
 			"amount":   FormatAmountDisplay(row.Amount, currencyCode),
 			"due_date": timeutil.FormatDisplayDateInTimezone(row.DueDate, timezone),
 			"days":     int64ToString(int64(max(diff, 0))),
+			"debt_url": debtURLPlaceholderValue(externalURL, localeCode, row.ID),
 		})
 		if err != nil {
 			continue
+		}
+		if row.Direction == "borrowed" && row.AffectsBalance == 1 && row.OpenAccountID != nil && strings.TrimSpace(*row.OpenAccountID) != "" {
+			text, err = formatWithBalanceShortfall(ctx, lookup, balanceEnabled, localeCode, currencyCode, customMap, text, *row.OpenAccountID, row.Amount)
+			if err != nil {
+				continue
+			}
 		}
 		dateKey := nowLocal.Format("2006-01-02")
 		w.sendByChannels(ctx, q, settings, userID, trigger, row.ID, dateKey, text)
@@ -262,6 +286,9 @@ func (w *Worker) processCreditPayments(
 	settings sqlcdb.NotificationSetting,
 	userID, localeCode, timezone, currencyCode string,
 	nowUTC, nowLocal time.Time,
+	balanceEnabled bool,
+	lookup balanceLookup,
+	externalURL string,
 ) error {
 	if settings.TriggerCredit != 1 {
 		return nil
@@ -289,7 +316,12 @@ func (w *Worker) processCreditPayments(
 			"amount":       FormatAmountDisplay(row.Amount, currencyCode),
 			"payment_date": timeutil.FormatDisplayDateInTimezone(row.PaymentDate, timezone),
 			"when":         RelativeWhen(localeCode, row.PaymentDate, nowUTC, timezone),
+			"credit_url":   creditURLPlaceholderValue(externalURL, localeCode, row.CreditID),
 		})
+		if err != nil {
+			continue
+		}
+		text, err = formatWithBalanceShortfall(ctx, lookup, balanceEnabled, localeCode, currencyCode, customMap, text, row.DebitAccountID, row.Amount)
 		if err != nil {
 			continue
 		}
@@ -397,4 +429,12 @@ func parseNotificationSendTime(value string) (int, int) {
 		return 0, 0
 	}
 	return parsed.Hour(), parsed.Minute()
+}
+
+func resolveExternalURL(ctx context.Context, db *sql.DB) string {
+	externalURL, err := settingscache.ExternalURL(ctx, db)
+	if err != nil || !externalURL.Valid {
+		return ""
+	}
+	return strings.TrimSpace(externalURL.String)
 }
