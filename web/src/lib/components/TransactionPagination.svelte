@@ -13,11 +13,14 @@
 </script>
 
 {#if totalPages > 1}
-	<div class="flex flex-wrap items-center justify-between gap-2">
-		<p class="text-sm" style:color="var(--text-muted)">
+	<div class="flex flex-wrap items-center justify-center gap-2 sm:justify-between">
+		<p class="w-full text-center text-sm sm:w-auto sm:text-left" style:color="var(--text-muted)">
 			{$_('transactions.pagination.page', { values: { page, pages: totalPages } })}
 		</p>
-		<div class="flex items-center gap-2">
+		<div class="flex flex-wrap items-center justify-center gap-2">
+			<button type="button" class="btn-ghost" disabled={page <= 1} onclick={() => onchange(1)}>
+				{$_('transactions.pagination.first')}
+			</button>
 			<button
 				type="button"
 				class="btn-ghost"
@@ -33,6 +36,14 @@
 				onclick={() => onchange(Math.min(totalPages, page + 1))}
 			>
 				{$_('transactions.pagination.next')}
+			</button>
+			<button
+				type="button"
+				class="btn-ghost"
+				disabled={page >= totalPages}
+				onclick={() => onchange(totalPages)}
+			>
+				{$_('transactions.pagination.last')}
 			</button>
 		</div>
 	</div>

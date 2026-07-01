@@ -3,8 +3,29 @@ package importexport
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func TestFormatCubuxAmount(t *testing.T) {
+	tests := []struct {
+		kopecks int64
+		want    string
+	}{
+		{5000, "50.00"},
+		{23797, "237.97"},
+		{3102446, "31024.46"},
+	}
+	for _, tc := range tests {
+		got := FormatCubuxAmount(tc.kopecks)
+		if got != tc.want {
+			t.Fatalf("%d kopecks: got %q want %q", tc.kopecks, got, tc.want)
+		}
+		if strings.Contains(got, "_") || strings.Contains(got, "₽") {
+			t.Fatalf("%d kopecks: unexpected symbols in %q", tc.kopecks, got)
+		}
+	}
+}
 
 func TestParseCubuxAmount(t *testing.T) {
 	tests := []struct {

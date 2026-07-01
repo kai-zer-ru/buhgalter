@@ -30,7 +30,7 @@
 	let transactions = $state<Transaction[]>([]);
 	let total = $state(0);
 	let page = $state(1);
-	const limit = 50;
+	const limit = 20;
 	let loading = $state(true);
 	let filterLoading = $state(false);
 	let error = $state('');

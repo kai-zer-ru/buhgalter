@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { waitAppReady } from './helpers/auth';
+import { apiJSON, formatUTCDateTime, waitAppReady } from './helpers/auth';
 import { createCashAccount, createExpense, createIncome } from './helpers/setup-data';
 import { selectCombobox } from './helpers/transactions';
 
@@ -65,4 +65,48 @@ test('mobile filters spoiler expands fields', async ({ page }) => {
 	await expect(summary).toBeVisible();
 	await summary.click();
 	await expect(page.locator('#tx-filter-type')).toBeVisible();
+});
+
+test('pagination shows 20 rows per page with full navigation', async ({ page }) => {
+	const account = await createCashAccount(page, `E2E Paginate ${Date.now()}`);
+	for (let i = 0; i < 21; i++) {
+		const date = new Date(Date.now() - (20 - i) * 60_000);
+		await apiJSON(page, 'POST', '/api/v1/transactions', {
+			account_id: account.id,
+			type: 'expense',
+			amount: `${100 + i}.00`,
+			description: `E2E pag ${i}`,
+			transaction_date: formatUTCDateTime(date)
+		});
+	}
+
+	await page.goto('/transactions');
+	await waitAppReady(page);
+	await selectCombobox(page, 'tx-filter-account', { label: account.name });
+	await expect(page).toHaveURL(/account_id=/, { timeout: 10_000 });
+
+	const rows = page.locator('table tbody tr');
+
+	await expect(page.getByRole('button', { name: 'В начало' })).toBeVisible({ timeout: 10_000 });
+	await expect(page.getByRole('button', { name: 'Назад' })).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'Вперёд' })).toBeEnabled();
+	await expect(page.getByRole('button', { name: 'В конец' })).toBeEnabled();
+	await expect(rows).toHaveCount(20, { timeout: 10_000 });
+	await expect(page.getByRole('row', { name: /120\.00/ })).toBeVisible();
+	await expect(page.getByRole('row', { name: /100\.00/ })).toHaveCount(0);
+
+	await page.getByRole('button', { name: 'Вперёд' }).click();
+	await expect(page).toHaveURL(/page=2/, { timeout: 10_000 });
+	await expect(rows).toHaveCount(1, { timeout: 10_000 });
+	await expect(page.getByRole('row', { name: /100\.00/ })).toBeVisible();
+
+	await page.getByRole('button', { name: 'В начало' }).click();
+	await expect(page).toHaveURL(/page=1/, { timeout: 10_000 });
+	await expect(rows).toHaveCount(20, { timeout: 10_000 });
+	await expect(page.getByRole('row', { name: /120\.00/ })).toBeVisible();
+
+	await page.getByRole('button', { name: 'В конец' }).click();
+	await expect(page).toHaveURL(/page=2/, { timeout: 10_000 });
+	await expect(rows).toHaveCount(1, { timeout: 10_000 });
+	await expect(page.getByRole('row', { name: /100\.00/ })).toBeVisible();
 });

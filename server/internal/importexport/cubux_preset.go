@@ -110,9 +110,9 @@ func normalizeAmountNumber(raw string) string {
 	return sign + intPart + "." + fracPart
 }
 
-// FormatCubuxAmount formats kopecks as Cubux-compatible amount string.
+// FormatCubuxAmount formats kopecks as a decimal amount for CSV/XLSX export.
 func FormatCubuxAmount(kopecks int64) string {
-	return money.FormatRubles(kopecks) + "_-₽"
+	return money.FormatRubles(kopecks)
 }
 
 // ParseCubuxDate parses DD.MM.YYYY dates.

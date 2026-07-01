@@ -4,6 +4,7 @@ import {
 	createCashAccount,
 	createExpense,
 	createIncome,
+	createPlannedExpense,
 	createTransfer
 } from './helpers/setup-data';
 import { confirmDialog, rowMenuAction } from './helpers/ui';
@@ -248,4 +249,31 @@ test('create transfer with commission', async ({ page }) => {
 	await page.goto('/transactions');
 	await waitAppReady(page);
 	await expect(page.getByText('5.00').first()).toBeVisible({ timeout: 10_000 });
+});
+
+test('dashboard: past transactions in open spoiler, planned collapsed', async ({ page }) => {
+	const account = await createCashAccount(page);
+	const pastDesc = `E2E dash past ${Date.now()}`;
+	const plannedDesc = `E2E dash planned ${Date.now()}`;
+	await createExpense(page, account.id, '42.00', pastDesc);
+	await createPlannedExpense(page, account.id, '51.00', plannedDesc);
+
+	await page.goto('/');
+	await waitAppReady(page);
+
+	const pastGroup = page.locator('details').filter({ hasText: 'Прошлые операции' });
+	const plannedGroup = page.locator('details').filter({ hasText: 'Плановые' });
+	await expect(pastGroup).toHaveAttribute('open', '');
+	await expect(pastGroup.getByRole('row', { name: new RegExp(pastDesc) })).toBeVisible({
+		timeout: 10_000
+	});
+
+	await expect(plannedGroup).not.toHaveAttribute('open');
+	await expect(page.getByRole('row', { name: new RegExp(plannedDesc) })).toHaveCount(0);
+
+	await plannedGroup.locator('summary').click();
+	await expect(plannedGroup).toHaveAttribute('open', '');
+	await expect(plannedGroup.getByRole('row', { name: new RegExp(plannedDesc) })).toBeVisible({
+		timeout: 10_000
+	});
 });

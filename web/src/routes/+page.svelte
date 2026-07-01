@@ -7,6 +7,7 @@
 		ApiError,
 		deleteTransaction,
 		getDashboard,
+		listTransactions,
 		type Dashboard,
 		type Transaction
 	} from '$lib/api/client';
@@ -34,14 +35,27 @@
 	let repeatTransfer = $state<Transaction | null>(null);
 	let newTxType = $state<'expense' | 'income'>('expense');
 
+	const txLimit = 10;
+	let pastTx = $state<Transaction[]>([]);
+	let pastTotal = $state(0);
+	let pastLoading = $state(false);
+	let plannedTx = $state<Transaction[]>([]);
+	let plannedTotal = $state(0);
+	let plannedLoading = $state(false);
+
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
-	const recentTx = $derived(dash ? dedupeTransferLegs(dash.recent_transactions) : []);
+	const pastVisible = $derived(dedupeTransferLegs(pastTx));
+	const plannedVisible = $derived(dedupeTransferLegs(plannedTx));
+	const txSiblings = $derived([...pastTx, ...plannedTx]);
+	const hasDebts = $derived(
+		dash != null && (dash.debts_summary.i_owe > 0 || dash.debts_summary.owed_to_me > 0)
+	);
 
 	onMount(() => {
-		void load();
+		void loadAll();
 	});
 
-	async function load() {
+	async function loadDashboard() {
 		loading = true;
 		error = '';
 		try {
@@ -51,6 +65,47 @@
 		} finally {
 			loading = false;
 		}
+	}
+
+	async function loadPastTx() {
+		pastLoading = true;
+		try {
+			const res = await listTransactions({
+				kind: 'manual',
+				sort: 'date_desc',
+				page: '1',
+				limit: String(txLimit)
+			});
+			pastTx = res.data;
+			pastTotal = res.meta.total;
+		} catch (err) {
+			error = err instanceof ApiError ? err.message : $_('common.error');
+		} finally {
+			pastLoading = false;
+		}
+	}
+
+	async function loadPlannedTx() {
+		plannedLoading = true;
+		try {
+			const res = await listTransactions({
+				kind: 'future',
+				sort: 'date_asc',
+				page: '1',
+				limit: String(txLimit)
+			});
+			plannedTx = res.data;
+			plannedTotal = res.meta.total;
+		} catch (err) {
+			error = err instanceof ApiError ? err.message : $_('common.error');
+		} finally {
+			plannedLoading = false;
+		}
+	}
+
+	async function loadAll() {
+		await loadDashboard();
+		await Promise.all([loadPastTx(), loadPlannedTx()]);
 	}
 
 	function openNewTransaction(type: 'expense' | 'income') {
@@ -105,7 +160,7 @@
 		try {
 			await deleteTransaction(tx.id);
 			toast($_('common.deleted'));
-			await load();
+			await loadAll();
 		} catch (err) {
 			error = err instanceof ApiError ? err.message : $_('common.error');
 		}
@@ -145,38 +200,43 @@
 	{:else if error}
 		<p style:color="var(--danger)">{error}</p>
 	{:else if dash}
-		<div class="card">
-			<p class="text-sm" style:color="var(--text-muted)">{$_('dashboard.total')}</p>
-			<p class="text-3xl font-semibold tabular-nums">
-				{formatBalance(fromCents(dash.total_balance), $user?.currency ?? 'RUB')}
-			</p>
-			{#if dash.total_forecast !== dash.total_balance}
-				<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
-					{$_('dashboard.withPlans')}:
-					{formatBalance(fromCents(dash.total_forecast), $user?.currency ?? 'RUB')}
+		<div class="grid gap-4 sm:grid-cols-2">
+			<div class="card">
+				<p class="text-sm" style:color="var(--text-muted)">{$_('dashboard.total')}</p>
+				<p class="text-3xl font-semibold tabular-nums">
+					{formatBalance(fromCents(dash.total_balance), $user?.currency ?? 'RUB')}
 				</p>
-			{/if}
-		</div>
-
-		{#if dash.debts_summary && (dash.debts_summary.i_owe > 0 || dash.debts_summary.owed_to_me > 0)}
-			<div class="card space-y-1">
-				{#if dash.debts_summary.i_owe > 0}
-					<p class="tabular-nums" style:color="var(--danger)">
-						{$_('debts.summary.iOwe')}:
-						{formatBalance(fromCents(dash.debts_summary.i_owe), $user?.currency ?? 'RUB')}
+				{#if dash.total_forecast !== dash.total_balance}
+					<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
+						{$_('dashboard.withPlans')}:
+						{formatBalance(fromCents(dash.total_forecast), $user?.currency ?? 'RUB')}
 					</p>
 				{/if}
-				{#if dash.debts_summary.owed_to_me > 0}
-					<p class="tabular-nums" style:color="var(--primary)">
-						{$_('debts.summary.owedToMe')}:
-						{formatBalance(fromCents(dash.debts_summary.owed_to_me), $user?.currency ?? 'RUB')}
-					</p>
-				{/if}
-				<p class="text-sm">
-					<a href={resolve('/debts')} style:color="var(--primary)">{$_('debts.more')}</a>
-				</p>
 			</div>
-		{/if}
+			<a href={resolve('/debts')} class="card block transition hover:opacity-90">
+				<p class="text-sm" style:color="var(--text-muted)">{$_('debts.title')}</p>
+				<div class="mt-1 space-y-1">
+					{#if hasDebts}
+						{#if dash.debts_summary.i_owe > 0}
+							<p class="tabular-nums" style:color="var(--danger)">
+								{$_('debts.summary.iOwe')}:
+								{formatBalance(fromCents(dash.debts_summary.i_owe), $user?.currency ?? 'RUB')}
+							</p>
+						{/if}
+						{#if dash.debts_summary.owed_to_me > 0}
+							<p class="tabular-nums" style:color="var(--primary)">
+								{$_('debts.summary.owedToMe')}:
+								{formatBalance(fromCents(dash.debts_summary.owed_to_me), $user?.currency ?? 'RUB')}
+							</p>
+						{/if}
+					{:else}
+						<p class="text-3xl font-semibold tabular-nums" style:color="var(--primary)">
+							{$_('debts.summary.none')}
+						</p>
+					{/if}
+				</div>
+			</a>
+		</div>
 
 		{#if dash.accounts.length === 0}
 			<EmptyStateCard message={$_('dashboard.accountsEmpty')} />
@@ -207,31 +267,103 @@
 
 		<section>
 			<h2 class="mb-3 text-lg font-medium">{$_('dashboard.recent')}</h2>
-			{#if recentTx.length === 0}
-				<EmptyStateCard message={$_('transactions.empty')} />
+			{#if pastLoading && plannedLoading && pastTotal === 0 && plannedTotal === 0}
+				<p style:color="var(--text-muted)">{$_('common.loading')}</p>
 			{:else}
-				<div class="card md:overflow-x-auto">
-					<TransactionList
-						transactions={recentTx}
-						siblings={dash.recent_transactions}
-						{tz}
-						emptyMessage={$_('transactions.empty')}
-						showDescription
-						showAmountSign
-						showEdit
-						showDelete
-						onmakeRecurring={(tx) =>
-							void goto(resolve(`/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`))}
-						onrepeat={openRepeat}
-						onedit={openEdit}
-						ondelete={(tx) => void removeTx(tx)}
-					/>
+				<div class="card overflow-hidden">
+					{#if !pastLoading && !plannedLoading && pastTotal === 0 && plannedTotal === 0}
+						<p
+							class="flex min-h-[7rem] items-center justify-center px-4 py-6 text-center text-sm"
+							style:color="var(--text-muted)"
+						>
+							{$_('transactions.empty')}
+						</p>
+					{:else}
+						{#if plannedTotal > 0 || plannedLoading}
+							<details
+								class:border-b={pastTotal > 0 || pastLoading}
+								style:border-color="var(--border)"
+							>
+								<summary
+									class="cursor-pointer list-none px-4 py-3 text-sm font-medium select-none [&::-webkit-details-marker]:hidden"
+								>
+									{$_('dashboard.group.planned')}
+									<span class="ml-1 font-normal tabular-nums" style:color="var(--text-muted)">
+										({plannedTotal})
+									</span>
+								</summary>
+								{#if plannedLoading}
+									<p class="px-4 pb-4 text-sm" style:color="var(--text-muted)">
+										{$_('common.loading')}
+									</p>
+								{:else}
+									<div class="md:overflow-x-auto">
+										<TransactionList
+											transactions={plannedVisible}
+											siblings={txSiblings}
+											{tz}
+											emptyMessage={$_('transactions.empty')}
+											showDescription
+											showAmountSign
+											showEdit
+											showDelete
+											onmakeRecurring={(tx) =>
+												void goto(
+													resolve(`/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`)
+												)}
+											onrepeat={openRepeat}
+											onedit={openEdit}
+											ondelete={(tx) => void removeTx(tx)}
+										/>
+									</div>
+								{/if}
+							</details>
+						{/if}
+
+						{#if pastTotal > 0 || pastLoading}
+							<details open>
+								<summary
+									class="cursor-pointer list-none px-4 py-3 text-sm font-medium select-none [&::-webkit-details-marker]:hidden"
+								>
+									{$_('dashboard.group.past')}
+									<span class="ml-1 font-normal tabular-nums" style:color="var(--text-muted)">
+										({pastTotal})
+									</span>
+								</summary>
+								{#if pastLoading}
+									<p class="px-4 pb-4 text-sm" style:color="var(--text-muted)">
+										{$_('common.loading')}
+									</p>
+								{:else}
+									<div class="md:overflow-x-auto">
+										<TransactionList
+											transactions={pastVisible}
+											siblings={txSiblings}
+											{tz}
+											emptyMessage={$_('transactions.empty')}
+											showDescription
+											showAmountSign
+											showEdit
+											showDelete
+											onmakeRecurring={(tx) =>
+												void goto(
+													resolve(`/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`)
+												)}
+											onrepeat={openRepeat}
+											onedit={openEdit}
+											ondelete={(tx) => void removeTx(tx)}
+										/>
+									</div>
+								{/if}
+							</details>
+						{/if}
+					{/if}
+					<div class="border-t px-4 py-3" style:border-color="var(--border)">
+						<a href={resolve('/transactions')} class="btn-ghost">
+							{$_('transactions.all')}
+						</a>
+					</div>
 				</div>
-				<p class="mt-2">
-					<a href={resolve('/transactions')} style:color="var(--primary)"
-						>{$_('transactions.all')}</a
-					>
-				</p>
 			{/if}
 		</section>
 	{/if}
@@ -247,17 +379,17 @@
 		editTx = null;
 		repeatTx = null;
 	}}
-	onsaved={load}
+	onsaved={loadAll}
 />
 <TransferForm
 	bind:open={transferOpen}
 	editTx={editTransfer}
 	repeatFrom={repeatTransfer}
-	siblings={dash?.recent_transactions ?? []}
+	siblings={txSiblings}
 	onclose={() => {
 		transferOpen = false;
 		editTransfer = null;
 		repeatTransfer = null;
 	}}
-	onsaved={load}
+	onsaved={loadAll}
 />

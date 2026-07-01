@@ -43,6 +43,28 @@ export async function createExpense(
 	);
 }
 
+export async function createPlannedExpense(
+	page: Page,
+	accountId: string,
+	amount: string,
+	description?: string
+) {
+	const desc = description ?? `E2E planned ${Date.now()}`;
+	const future = new Date(Date.now() + 72 * 60 * 60 * 1000);
+	return apiJSON<{ id: string; amount_display: string; description?: string }>(
+		page,
+		'POST',
+		'/api/v1/transactions',
+		{
+			account_id: accountId,
+			type: 'expense',
+			amount,
+			description: desc,
+			transaction_date: formatUTCDateTime(future)
+		}
+	);
+}
+
 export async function createIncome(
 	page: Page,
 	accountId: string,

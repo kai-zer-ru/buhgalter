@@ -4,8 +4,9 @@ import { createCashAccount, createTransfer } from './helpers/setup-data';
 import { confirmDialog, rowMenuAction } from './helpers/ui';
 
 test('accounts list: edit name inline', async ({ page }) => {
-	const account = await createCashAccount(page, 'E2E Rename Me');
-	const newName = `E2E Renamed ${Date.now()}`;
+	const unique = Date.now();
+	const account = await createCashAccount(page, `E2E Rename Me ${unique}`);
+	const newName = `E2E Renamed ${unique}`;
 
 	await page.goto('/accounts');
 	await waitAppReady(page);
@@ -23,8 +24,9 @@ test('accounts list: edit name inline', async ({ page }) => {
 });
 
 test('accounts list: make primary account', async ({ page }) => {
-	const primary = await createCashAccount(page, 'E2E Primary Target');
-	await createCashAccount(page, 'E2E Non Primary');
+	const unique = Date.now();
+	const primary = await createCashAccount(page, `E2E Primary Target ${unique}`);
+	await createCashAccount(page, `E2E Non Primary ${unique}`);
 
 	await page.goto('/accounts');
 	await waitAppReady(page);
@@ -35,7 +37,7 @@ test('accounts list: make primary account', async ({ page }) => {
 });
 
 test('accounts list: archive removes card', async ({ page }) => {
-	const account = await createCashAccount(page, 'E2E Archive Me');
+	const account = await createCashAccount(page, `E2E Archive Me ${Date.now()}`);
 
 	await page.goto('/accounts');
 	await waitAppReady(page);
@@ -46,8 +48,9 @@ test('accounts list: archive removes card', async ({ page }) => {
 });
 
 test('account detail: edit via header menu', async ({ page }) => {
-	const account = await createCashAccount(page, 'E2E Detail Edit');
-	const newName = `E2E Detail Renamed ${Date.now()}`;
+	const unique = Date.now();
+	const account = await createCashAccount(page, `E2E Detail Edit ${unique}`);
+	const newName = `E2E Detail Renamed ${unique}`;
 
 	await page.goto(`/accounts/${account.id}`);
 	await waitAppReady(page);
@@ -62,7 +65,7 @@ test('account detail: edit via header menu', async ({ page }) => {
 });
 
 test('account detail: delete account redirects to list', async ({ page }) => {
-	const account = await createCashAccount(page, 'E2E Delete Me');
+	const account = await createCashAccount(page, `E2E Delete Me ${Date.now()}`);
 
 	await page.goto(`/accounts/${account.id}`);
 	await waitAppReady(page);
@@ -77,7 +80,7 @@ test('account detail: delete account redirects to list', async ({ page }) => {
 });
 
 test('dashboard: click account card opens account page', async ({ page }) => {
-	const account = await createCashAccount(page, 'E2E Dashboard Nav');
+	const account = await createCashAccount(page, `E2E Dashboard Nav ${Date.now()}`);
 
 	await page.goto('/');
 	await waitAppReady(page);
