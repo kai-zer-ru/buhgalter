@@ -405,22 +405,8 @@
 			};
 			return;
 		}
-		for (const [triggerType, template] of Object.entries(templatesDirty)) {
-			const templateError = validateTemplateText(template);
-			if (templateError) {
-				notificationsFormFeedback = {
-					error: `${triggerLabel(triggerType)}: ${templateError}`,
-					success: ''
-				};
-				return;
-			}
-		}
 		loading = true;
 		try {
-			const templateUpdates = Object.entries(templatesDirty).map(([trigger_type, template]) => ({
-				trigger_type,
-				template
-			}));
 			await putNotificationSettings({
 				telegram_enabled: telegramEnabled,
 				telegram_bot_token: telegramBotToken.trim() || undefined,
@@ -439,8 +425,7 @@
 				owed_debt_overdue_start_after_days: owedDebtOverdueStartAfterDays,
 				owed_debt_overdue_days_limit: owedDebtOverdueDaysLimit,
 				credit_days_before: creditDaysBefore,
-				notification_time_local: notificationTimeLocal.trim(),
-				templates: templateUpdates.length > 0 ? templateUpdates : undefined
+				notification_time_local: notificationTimeLocal.trim()
 			});
 			telegramBotToken = '';
 			maxToken = '';
@@ -654,15 +639,14 @@
 				templates: [{ trigger_type: triggerType, template }]
 			});
 			await loadNotifications();
+			const success = $_('settings.notifications.success.template_saved', {
+				values: { trigger: triggerLabel(triggerType) }
+			});
 			templateFeedback = {
 				...templateFeedback,
-				[triggerType]: {
-					error: '',
-					success: $_('settings.notifications.success.template_saved', {
-						values: { trigger: triggerLabel(triggerType) }
-					})
-				}
+				[triggerType]: { error: '', success }
 			};
+			toast(success);
 		} catch (err) {
 			templateFeedback = {
 				...templateFeedback,
@@ -1411,99 +1395,82 @@
 						{/if}
 					</div>
 
-					<div class="card space-y-4">
-						<h3 class="text-lg font-semibold">{$_('settings.notifications.templates.title')}</h3>
-						{#each orderedTemplates(templates) as tpl (tpl.trigger_type)}
-							<details class="rounded-lg border p-3" style:border-color="var(--border)" open>
-								<summary class="flex cursor-pointer items-center justify-between gap-2">
-									<span class="font-medium">{triggerLabel(tpl.trigger_type)}</span>
-									<span class="text-xs" style:color="var(--text-muted)">
-										{tpl.is_custom
-											? $_('settings.notifications.templates.state.custom')
-											: $_('settings.notifications.templates.state.default')}
-									</span>
-								</summary>
-								<div class="mt-3 space-y-2">
-									<textarea
-										id={templateTextareaId(tpl.trigger_type)}
-										class="input min-h-[88px]"
-										value={templateValue(tpl.trigger_type, tpl.template)}
-										oninput={(e) =>
-											updateTemplate(
-												tpl.trigger_type,
-												(e.currentTarget as HTMLTextAreaElement).value
-											)}></textarea>
-									<p class="text-xs" style:color="var(--text-muted)">
-										{$_('settings.notifications.templates.placeholders_hint')}
+					{#each orderedTemplates(templates) as tpl (tpl.trigger_type)}
+						<div class="card space-y-4">
+							<h3 class="text-lg font-semibold">{triggerLabel(tpl.trigger_type)}</h3>
+							<textarea
+								id={templateTextareaId(tpl.trigger_type)}
+								class="input min-h-[88px]"
+								value={templateValue(tpl.trigger_type, tpl.template)}
+								oninput={(e) =>
+									updateTemplate(tpl.trigger_type, (e.currentTarget as HTMLTextAreaElement).value)}
+							></textarea>
+							<p class="text-xs" style:color="var(--text-muted)">
+								{$_('settings.notifications.templates.placeholders_hint')}
+							</p>
+							<div class="flex flex-wrap gap-2">
+								{#each tpl.placeholders as placeholder (placeholder)}
+									<button
+										type="button"
+										class="btn-ghost"
+										onclick={() => insertPlaceholder(tpl.trigger_type, placeholder)}
+									>
+										{`{${placeholder}}`}
+									</button>
+								{/each}
+							</div>
+							<div class="flex flex-wrap items-center gap-2">
+								<button
+									type="button"
+									class="btn-ghost"
+									onclick={() =>
+										previewTemplate(
+											tpl.trigger_type,
+											templateValue(tpl.trigger_type, tpl.template)
+										)}
+								>
+									{$_('settings.notifications.templates.preview')}
+								</button>
+								<button
+									type="button"
+									class="btn-ghost"
+									onclick={() => resetTemplate(tpl.trigger_type)}
+								>
+									{$_('settings.notifications.templates.reset')}
+								</button>
+								<button
+									type="button"
+									class="btn-primary"
+									onclick={() =>
+										saveTemplate(tpl.trigger_type, templateValue(tpl.trigger_type, tpl.template))}
+									disabled={loading}
+								>
+									{$_('settings.notifications.block_save')}
+								</button>
+							</div>
+							{#if templateFeedback[tpl.trigger_type]?.error}
+								<p class="text-sm" style:color="var(--danger)">
+									{templateFeedback[tpl.trigger_type].error}
+								</p>
+							{/if}
+							{#if templateFeedback[tpl.trigger_type]?.success}
+								<p class="text-sm" style:color="var(--primary)">
+									{templateFeedback[tpl.trigger_type].success}
+								</p>
+							{/if}
+							{#if previewText[tpl.trigger_type]}
+								<div
+									class="rounded border p-2 text-sm"
+									style:border-color="var(--border); color: var(--text-muted);"
+								>
+									<p class="mb-1 text-xs font-medium">
+										{$_('settings.notifications.templates.preview_result')}
 									</p>
-									<div class="flex flex-wrap gap-2">
-										{#each tpl.placeholders as placeholder (placeholder)}
-											<button
-												type="button"
-												class="btn-ghost"
-												onclick={() => insertPlaceholder(tpl.trigger_type, placeholder)}
-											>
-												{`{${placeholder}}`}
-											</button>
-										{/each}
-									</div>
-									<div class="flex flex-wrap gap-2">
-										<button
-											type="button"
-											class="btn-ghost"
-											onclick={() =>
-												saveTemplate(
-													tpl.trigger_type,
-													templateValue(tpl.trigger_type, tpl.template)
-												)}
-											disabled={loading}
-										>
-											{$_('settings.notifications.templates.save')}
-										</button>
-										<button
-											type="button"
-											class="btn-ghost"
-											onclick={() =>
-												previewTemplate(
-													tpl.trigger_type,
-													templateValue(tpl.trigger_type, tpl.template)
-												)}
-										>
-											{$_('settings.notifications.templates.preview')}
-										</button>
-										<button
-											type="button"
-											class="btn-ghost"
-											onclick={() => resetTemplate(tpl.trigger_type)}
-										>
-											{$_('settings.notifications.templates.reset')}
-										</button>
-									</div>
-									{#if templateFeedback[tpl.trigger_type]?.error}
-										<p class="text-sm" style:color="var(--danger)">
-											{templateFeedback[tpl.trigger_type].error}
-										</p>
-									{/if}
-									{#if templateFeedback[tpl.trigger_type]?.success}
-										<p class="text-sm" style:color="var(--primary)">
-											{templateFeedback[tpl.trigger_type].success}
-										</p>
-									{/if}
-									{#if previewText[tpl.trigger_type]}
-										<div
-											class="rounded border p-2 text-sm"
-											style:border-color="var(--border); color: var(--text-muted);"
-										>
-											<p class="mb-1 text-xs font-medium">
-												{$_('settings.notifications.templates.preview_result')}
-											</p>
-											<p>{previewText[tpl.trigger_type]}</p>
-										</div>
-									{/if}
+									<p>{previewText[tpl.trigger_type]}</p>
 								</div>
-							</details>
-						{/each}
-					</div>
+							{/if}
+						</div>
+					{/each}
 					<FormFeedback
 						error={notificationsFormFeedback.error}
 						success={notificationsFormFeedback.success}
