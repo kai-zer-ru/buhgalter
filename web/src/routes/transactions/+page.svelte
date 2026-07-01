@@ -289,7 +289,9 @@
 					showEdit
 					showDelete
 					onmakeRecurring={(tx) =>
-						void goto(resolve(`/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`))}
+						void goto(
+							resolve(`/settings/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`)
+						)}
 					onrepeat={openRepeat}
 					onedit={openEdit}
 					ondelete={(tx) => void removeTx(tx)}

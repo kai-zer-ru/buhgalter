@@ -17,7 +17,6 @@
 		type RecurringOperation,
 		type Subcategory
 	} from '$lib/api/client';
-	import BackLink from '$lib/components/BackLink.svelte';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
 	import { dateOnlyPicker } from '$lib/datetime-picker-standards';
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
@@ -133,7 +132,7 @@
 			active = true;
 			formOpen = true;
 			await loadSubcategories();
-			await goto(resolve('/recurring-operations'), {
+			await goto(resolve('/settings/recurring-operations'), {
 				replaceState: true,
 				noScroll: true,
 				keepFocus: true
@@ -476,20 +475,7 @@
 	</form>
 {/snippet}
 
-<svelte:head>
-	<title>{$_('recurring.title')} — {$_('app.title')}</title>
-</svelte:head>
-
 <div class="space-y-5">
-	<BackLink
-		items={[
-			{ href: '/', label: $_('nav.home') },
-			{ href: '/recurring-operations', label: $_('recurring.title') }
-		]}
-	/>
-
-	<h1 class="text-2xl font-semibold">{$_('recurring.title')}</h1>
-
 	{#if loading}
 		<p style:color="var(--text-muted)">{$_('common.loading')}</p>
 	{:else if items.length === 0}

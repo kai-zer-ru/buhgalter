@@ -47,7 +47,10 @@ test('register creates account when registration is enabled', async ({ page }) =
 
 	await waitAppReady(page);
 	await expect(page).toHaveURL(/\/(\?.*)?$/);
-	await expect(page.getByText(`E2E Reg ${tag}`).first()).toBeVisible({ timeout: 10_000 });
+	await expect(page.getByRole('button', { name: 'Выйти' })).toBeVisible({ timeout: 10_000 });
+	await page.goto('/settings');
+	await waitAppReady(page);
+	await expect(page.locator('#display')).toHaveValue(`E2E Reg ${tag}`);
 
 	await page.context().clearCookies();
 	await login(page);
@@ -193,7 +196,7 @@ test('import CSV commits transactions', async ({ page }) => {
 	fs.writeFileSync(csvPath, csv, 'utf8');
 
 	try {
-		await page.goto('/settings?tab=import');
+		await page.goto('/settings/import');
 		await waitAppReady(page);
 		await page.locator('input[type="file"]').setInputFiles(csvPath);
 		await expect(page.getByText(path.basename(csvPath))).toBeVisible({ timeout: 10_000 });

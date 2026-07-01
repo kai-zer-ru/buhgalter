@@ -179,7 +179,7 @@ test('make transaction recurring opens prefilled form', async ({ page }) => {
 	await rowMenuAction(page, row, 'Сделать периодической');
 
 	await waitAppReady(page);
-	await expect(page).toHaveURL(/\/recurring-operations\/?$/);
+	await expect(page).toHaveURL(/\/settings\/recurring-operations\/?$/);
 	await expect(page.locator('#recurring-amount-create')).toHaveValue(/88\.50/);
 	await expect(page.locator('#recurring-description-create')).toHaveValue(description);
 	await expect(page.getByText('Форма заполнена по операции')).toBeVisible();

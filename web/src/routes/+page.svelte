@@ -304,7 +304,9 @@
 											showDelete
 											onmakeRecurring={(tx) =>
 												void goto(
-													resolve(`/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`)
+													resolve(
+														`/settings/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`
+													)
 												)}
 											onrepeat={openRepeat}
 											onedit={openEdit}
@@ -342,7 +344,9 @@
 											showDelete
 											onmakeRecurring={(tx) =>
 												void goto(
-													resolve(`/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`)
+													resolve(
+														`/settings/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`
+													)
 												)}
 											onrepeat={openRepeat}
 											onedit={openEdit}

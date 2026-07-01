@@ -8,7 +8,7 @@ test.describe.configure({ mode: 'serial' });
 
 async function createRecurring(page: import('@playwright/test').Page, description: string) {
 	const account = await createCashAccount(page);
-	await page.goto('/recurring-operations');
+	await page.goto('/settings/recurring-operations');
 	await waitAppReady(page);
 	await page.getByRole('button', { name: 'Добавить' }).click();
 	await page.locator('#recurring-amount-create').fill('55');
@@ -25,7 +25,7 @@ test('create recurring uses 08:00 local time by default', async ({ page }) => {
 	const account = await createCashAccount(page);
 	const description = `E2E Rec Time ${Date.now()}`;
 
-	await page.goto('/recurring-operations');
+	await page.goto('/settings/recurring-operations');
 	await waitAppReady(page);
 
 	let postedTime = '';
@@ -84,7 +84,7 @@ test('create weekly recurring with weekday selector', async ({ page }) => {
 	const account = await createCashAccount(page);
 	const description = `E2E Weekly ${Date.now()}`;
 
-	await page.goto('/recurring-operations');
+	await page.goto('/settings/recurring-operations');
 	await waitAppReady(page);
 	await page.getByRole('button', { name: 'Добавить' }).click();
 	await page.locator('#recurring-amount-create').fill('33');

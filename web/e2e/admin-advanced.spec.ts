@@ -86,17 +86,14 @@ test('admin: diagnostics copy button', async ({ page }) => {
 	await copyBtn.click();
 });
 
-test('admin system tab loads for admin user', async ({ page }) => {
-	await page.goto('/settings?tab=admin&admin_tab=system');
+test('admin system page loads for admin user', async ({ page }) => {
+	await page.goto('/admin');
 	await waitAppReady(page);
-	await expect(page.getByRole('tab', { name: 'Система', exact: true })).toHaveAttribute(
-		'aria-selected',
-		'true'
-	);
+	await expect(page.getByRole('heading', { name: 'Система', level: 1 })).toBeVisible();
 });
 
-test('admin: support links visible in settings tab', async ({ page }) => {
-	await page.goto('/settings?tab=admin&admin_tab=system');
+test('admin: support links visible on /admin', async ({ page }) => {
+	await page.goto('/admin');
 	await waitAppReady(page);
 
 	const support = page.getByRole('link', { name: 'Поддержать проект' });
@@ -109,8 +106,8 @@ test('admin: support links visible in settings tab', async ({ page }) => {
 	await expect(repository).toHaveAttribute('target', '_blank');
 });
 
-test('admin: support links visible on /admin routes', async ({ page }) => {
-	await page.goto('/admin');
+test('admin: support links visible on subpages', async ({ page }) => {
+	await page.goto('/admin/users');
 	await waitAppReady(page);
 
 	await expect(page.getByRole('link', { name: 'Поддержать проект' })).toBeVisible();

@@ -5,6 +5,12 @@
 		| '/'
 		| '/accounts'
 		| '/settings'
+		| '/settings/password'
+		| '/settings/tokens'
+		| '/settings/notifications'
+		| '/settings/categories'
+		| '/settings/import'
+		| '/settings/recurring-operations'
 		| '/admin'
 		| '/admin/users'
 		| '/admin/backups'
@@ -14,13 +20,11 @@
 		| '/transactions'
 		| '/stats'
 		| '/debtors'
-		| '/accounts/new'
-		| '/recurring-operations';
+		| '/accounts/new';
 
 	export type BreadcrumbItem = {
 		href: BackLinkHref;
 		label: string;
-		search?: string;
 	};
 
 	let {
@@ -30,19 +34,18 @@
 	} = $props();
 
 	function target(item: BreadcrumbItem): string {
-		return item.search ? `${resolve(item.href)}?${item.search}` : resolve(item.href);
+		return resolve(item.href);
 	}
 </script>
 
 {#if items.length > 0}
 	<nav class="breadcrumbs" aria-label="Breadcrumbs">
 		<ol class="flex flex-wrap items-center gap-1.5">
-			{#each items as item, index (`${index}:${item.href}:${item.label}:${item.search ?? ''}`)}
+			{#each items as item, index (`${index}:${item.href}:${item.label}`)}
 				<li class="inline-flex items-center gap-1.5">
 					{#if index < items.length - 1}
-						<!-- eslint-disable svelte/no-navigation-without-resolve -- path built with resolve() helper -->
+						<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() in target() -->
 						<a href={target(item)} class="breadcrumb-link">{item.label}</a>
-						<!-- eslint-enable svelte/no-navigation-without-resolve -->
 						<span class="breadcrumb-separator" aria-hidden="true">/</span>
 					{:else}
 						<span class="breadcrumb-current" aria-current="page">{item.label}</span>

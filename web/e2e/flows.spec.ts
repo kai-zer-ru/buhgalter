@@ -70,7 +70,7 @@ test('create transfer', async ({ page }) => {
 });
 
 test('import csv preview', async ({ page }) => {
-	await page.goto('/settings?tab=import');
+	await page.goto('/settings/import');
 	await waitAppReady(page);
 	const fileInput = page.locator('input[type="file"]');
 	await fileInput.setInputFiles(path.join(__dirname, 'fixtures', 'sample.csv'));
@@ -83,7 +83,7 @@ test('import csv preview', async ({ page }) => {
 });
 
 test('export tab opens download link', async ({ page }) => {
-	await page.goto('/settings?tab=import');
+	await page.goto('/settings/import');
 	await waitAppReady(page);
 	await page.getByRole('tab', { name: 'Экспорт', exact: true }).click();
 	await expect(page.getByRole('button', { name: 'Скачать CSV' })).toBeVisible();
@@ -99,7 +99,7 @@ test('settings change theme', async ({ page }) => {
 });
 
 test('create API token', async ({ page }) => {
-	await page.goto('/settings?tab=tokens');
+	await page.goto('/settings/tokens');
 	await waitAppReady(page);
 	await page.locator('#token-name').fill('E2E Token');
 	await page.getByRole('button', { name: 'Создать' }).click();
@@ -122,7 +122,11 @@ test('admin create user and manual backup', async ({ page }) => {
 	await page.goto('/admin/backups');
 	await waitAppReady(page);
 	await page.getByRole('button', { name: 'Запустить сейчас' }).click();
-	await expect(page.getByText(/\.db/)).toBeVisible({ timeout: 15_000 });
+	await expect(page.locator('table td.font-mono').filter({ hasText: /\.db$/ }).first()).toBeVisible(
+		{
+			timeout: 15_000
+		}
+	);
 });
 
 test('stats page shows summary and category sections', async ({ page }) => {
@@ -147,7 +151,7 @@ test('stats page shows summary and category sections', async ({ page }) => {
 
 test('add expense category', async ({ page }) => {
 	const name = `E2E Cat ${Date.now()}`;
-	await page.goto('/settings?tab=categories');
+	await page.goto('/settings/categories');
 	await waitAppReady(page);
 	await page.getByPlaceholder('Название категории').fill(name);
 	await page.getByRole('button', { name: 'Создать' }).click();
@@ -203,7 +207,7 @@ test('create debt and settle', async ({ page }) => {
 
 test('create recurring operation', async ({ page }) => {
 	const description = `E2E Recurring ${Date.now()}`;
-	await page.goto('/recurring-operations');
+	await page.goto('/settings/recurring-operations');
 	await waitAppReady(page);
 	await page.getByRole('button', { name: 'Добавить' }).click();
 	await page.locator('#recurring-amount-create').fill('99');
@@ -217,12 +221,9 @@ test('create recurring operation', async ({ page }) => {
 });
 
 test('notifications settings load', async ({ page }) => {
-	await page.goto('/settings?tab=notifications');
+	await page.goto('/settings/notifications');
 	await waitAppReady(page);
-	await expect(page.getByRole('tab', { name: 'Уведомления' })).toHaveAttribute(
-		'aria-selected',
-		'true'
-	);
+	await expect(page.getByRole('heading', { name: 'Уведомления', level: 1 })).toBeVisible();
 	await expect(
 		page
 			.getByRole('heading', { name: 'Ключ шифрования не настроен' })

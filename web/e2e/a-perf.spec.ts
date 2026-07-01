@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { test } from '@playwright/test';
 import { apiJSON, formatUTCDateTime } from './helpers/auth';
 import {
 	checkPageLoadWithin,
@@ -16,17 +16,13 @@ const AUTHENTICATED_ROUTES = [
 	'/stats',
 	'/credits',
 	'/debts',
-	'/recurring-operations',
+	'/settings/import',
 	'/settings',
-	'/settings?tab=password',
-	'/settings?tab=tokens',
-	'/settings?tab=notifications',
-	'/settings?tab=categories',
-	'/settings?tab=import',
-	'/settings?tab=admin&admin_tab=system',
-	'/settings?tab=admin&admin_tab=users',
-	'/settings?tab=admin&admin_tab=backups',
-	'/settings?tab=admin&admin_tab=diagnostics',
+	'/settings/password',
+	'/settings/tokens',
+	'/settings/notifications',
+	'/settings/categories',
+	'/settings/recurring-operations',
 	'/admin',
 	'/admin/users',
 	'/admin/backups',
@@ -83,9 +79,7 @@ test(`authenticated routes page load (warn if > ${MAX_PAGE_LOAD_MS}ms)`, async (
 		...AUTHENTICATED_ROUTES,
 		`/accounts/${account.id}`,
 		`/credits/${credit.id}`,
-		`/debtors/${debt.debtor_id}`,
-		'/import',
-		'/settings/categories'
+		`/debtors/${debt.debtor_id}`
 	];
 
 	for (const route of routes) {
@@ -102,10 +96,4 @@ test(`public routes page load (warn if > ${MAX_PAGE_LOAD_MS}ms)`, async ({ page 
 	}
 
 	await checkPageLoadWithin(page, '/docs');
-});
-
-test('legacy import redirect page load (warn if slow)', async ({ page }) => {
-	const elapsed = await measurePageLoad(page, '/import');
-	warnIfPageLoadSlow(elapsed, '/import');
-	await expect(page).toHaveURL(/\/settings\?tab=import/);
 });
