@@ -99,6 +99,10 @@ test('pagination shows 20 rows per page with full navigation', async ({ page }) 
 	await expect(page).toHaveURL(/page=2/, { timeout: 10_000 });
 	await expect(rows).toHaveCount(1, { timeout: 10_000 });
 	await expect(page.getByRole('row', { name: /100\.00/ })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Вперёд' })).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'В конец' })).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'В начало' })).toBeEnabled();
+	await expect(page.getByRole('button', { name: 'Назад' })).toBeEnabled();
 
 	await page.getByRole('button', { name: 'В начало' }).click();
 	await expect(page).toHaveURL(/page=1/, { timeout: 10_000 });

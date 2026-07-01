@@ -43,6 +43,7 @@
 | [ui-stable-layout.md](ui-stable-layout.md) | Стабильная шапка и вкладки |
 | [ui-empty-states.md](ui-empty-states.md) | Пустые состояния |
 | [ui-table-columns.md](ui-table-columns.md) | Порядок колонок таблиц |
+| [ui-pagination.md](ui-pagination.md) | Постраничная навигация (`TransactionPagination`) |
 | [ui-stats.md](ui-stats.md) | Страница `/stats` |
 | [ui-credits.md](ui-credits.md) | Страницы кредитов |
 

@@ -29,6 +29,7 @@
 	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
 	import IconButton from '$lib/components/IconButton.svelte';
 	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
+	import TransactionPagination from '$lib/components/TransactionPagination.svelte';
 	import { toast } from '$lib/toast';
 	import { confirm } from '$lib/confirm';
 	import {
@@ -905,31 +906,14 @@
 							</div>
 						{/if}
 						{@render paymentTable(visiblePendingPayments, scheduleEditing)}
-						{#if scheduleGroups.pending.length > schedulePageSize}
-							<div class="flex items-center justify-between gap-2 px-4 pb-4 text-sm">
-								<button
-									type="button"
-									class="btn-ghost"
-									disabled={pendingPageSafe <= 1}
-									onclick={() => (pendingPage = Math.max(1, pendingPageSafe - 1))}
-								>
-									{$_('transactions.pagination.prev')}
-								</button>
-								<span style:color="var(--text-muted)">
-									{$_('transactions.pagination.page', {
-										values: { page: pendingPageSafe, pages: pendingPages }
-									})}
-								</span>
-								<button
-									type="button"
-									class="btn-ghost"
-									disabled={pendingPageSafe >= pendingPages}
-									onclick={() => (pendingPage = Math.min(pendingPages, pendingPageSafe + 1))}
-								>
-									{$_('transactions.pagination.next')}
-								</button>
-							</div>
-						{/if}
+						<div class="px-4 pb-4">
+							<TransactionPagination
+								page={pendingPageSafe}
+								limit={schedulePageSize}
+								total={scheduleGroups.pending.length}
+								onchange={(p) => (pendingPage = p)}
+							/>
+						</div>
 					</details>
 				{/if}
 
@@ -947,31 +931,14 @@
 							<FieldHint text={$_('credits.schedule.appliedHint')} />
 						</div>
 						{@render paymentTable(visibleAppliedPayments)}
-						{#if scheduleGroups.applied.length > schedulePageSize}
-							<div class="flex items-center justify-between gap-2 px-4 pb-4 text-sm">
-								<button
-									type="button"
-									class="btn-ghost"
-									disabled={appliedPageSafe <= 1}
-									onclick={() => (appliedPage = Math.max(1, appliedPageSafe - 1))}
-								>
-									{$_('transactions.pagination.prev')}
-								</button>
-								<span style:color="var(--text-muted)">
-									{$_('transactions.pagination.page', {
-										values: { page: appliedPageSafe, pages: appliedPages }
-									})}
-								</span>
-								<button
-									type="button"
-									class="btn-ghost"
-									disabled={appliedPageSafe >= appliedPages}
-									onclick={() => (appliedPage = Math.min(appliedPages, appliedPageSafe + 1))}
-								>
-									{$_('transactions.pagination.next')}
-								</button>
-							</div>
-						{/if}
+						<div class="px-4 pb-4">
+							<TransactionPagination
+								page={appliedPageSafe}
+								limit={schedulePageSize}
+								total={scheduleGroups.applied.length}
+								onchange={(p) => (appliedPage = p)}
+							/>
+						</div>
 					</details>
 				{/if}
 
@@ -989,32 +956,14 @@
 							<FieldHint text={$_('credits.field.retroactiveHint')} />
 						</div>
 						{@render paymentTable(visibleRetroactivePayments)}
-						{#if scheduleGroups.retroactive.length > schedulePageSize}
-							<div class="flex items-center justify-between gap-2 px-4 pb-4 text-sm">
-								<button
-									type="button"
-									class="btn-ghost"
-									disabled={retroactivePageSafe <= 1}
-									onclick={() => (retroactivePage = Math.max(1, retroactivePageSafe - 1))}
-								>
-									{$_('transactions.pagination.prev')}
-								</button>
-								<span style:color="var(--text-muted)">
-									{$_('transactions.pagination.page', {
-										values: { page: retroactivePageSafe, pages: retroactivePages }
-									})}
-								</span>
-								<button
-									type="button"
-									class="btn-ghost"
-									disabled={retroactivePageSafe >= retroactivePages}
-									onclick={() =>
-										(retroactivePage = Math.min(retroactivePages, retroactivePageSafe + 1))}
-								>
-									{$_('transactions.pagination.next')}
-								</button>
-							</div>
-						{/if}
+						<div class="px-4 pb-4">
+							<TransactionPagination
+								page={retroactivePageSafe}
+								limit={schedulePageSize}
+								total={scheduleGroups.retroactive.length}
+								onchange={(p) => (retroactivePage = p)}
+							/>
+						</div>
 					</details>
 				{/if}
 			</div>

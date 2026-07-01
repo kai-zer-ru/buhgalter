@@ -18,6 +18,7 @@
 	import FormFeedback from '$lib/components/FormFeedback.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
 	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
+	import TransactionPagination from '$lib/components/TransactionPagination.svelte';
 	import { defaultAccountId } from '$lib/accounts';
 	import { toast } from '$lib/toast';
 	import {
@@ -843,50 +844,15 @@
 							</article>
 						{/each}
 					</div>
-					{#if scheduleRows.length > schedulePageSize}
-						<div
-							class="flex flex-wrap items-center justify-between gap-2 border-t px-3 py-2 text-sm"
-							style:border-color="var(--border)"
-						>
-							<button
-								type="button"
-								class="btn-ghost"
-								disabled={schedulePageSafe <= 1}
-								onclick={() => (schedulePage = 1)}
-							>
-								{$_('transactions.pagination.first')}
-							</button>
-							<button
-								type="button"
-								class="btn-ghost"
-								disabled={schedulePageSafe <= 1}
-								onclick={() => (schedulePage = Math.max(1, schedulePageSafe - 1))}
-							>
-								{$_('transactions.pagination.prev')}
-							</button>
-							<span class="tabular-nums" style:color="var(--text-muted)">
-								{$_('transactions.pagination.page', {
-									values: { page: schedulePageSafe, pages: scheduleTotalPages }
-								})}
-							</span>
-							<button
-								type="button"
-								class="btn-ghost"
-								disabled={schedulePageSafe >= scheduleTotalPages}
-								onclick={() => (schedulePage = Math.min(scheduleTotalPages, schedulePageSafe + 1))}
-							>
-								{$_('transactions.pagination.next')}
-							</button>
-							<button
-								type="button"
-								class="btn-ghost"
-								disabled={schedulePageSafe >= scheduleTotalPages}
-								onclick={() => (schedulePage = scheduleTotalPages)}
-							>
-								{$_('transactions.pagination.last')}
-							</button>
-						</div>
-					{/if}
+					<div class="border-t" style:border-color="var(--border)">
+						<TransactionPagination
+							page={schedulePageSafe}
+							limit={schedulePageSize}
+							total={scheduleRows.length}
+							onchange={(p) => (schedulePage = p)}
+							class="px-3 py-2 text-sm"
+						/>
+					</div>
 				{/if}
 			</div>
 		</div>

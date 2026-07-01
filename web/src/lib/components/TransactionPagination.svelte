@@ -6,14 +6,15 @@
 		limit: number;
 		total: number;
 		onchange: (nextPage: number) => void;
+		class?: string;
 	};
 
-	let { page, limit, total, onchange }: Props = $props();
+	let { page, limit, total, onchange, class: className = '' }: Props = $props();
 	const totalPages = $derived(Math.max(1, Math.ceil(total / Math.max(1, limit))));
 </script>
 
 {#if totalPages > 1}
-	<div class="flex flex-wrap items-center justify-center gap-2 sm:justify-between">
+	<div class="flex flex-wrap items-center justify-center gap-2 sm:justify-between {className}">
 		<p class="w-full text-center text-sm sm:w-auto sm:text-left" style:color="var(--text-muted)">
 			{$_('transactions.pagination.page', { values: { page, pages: totalPages } })}
 		</p>

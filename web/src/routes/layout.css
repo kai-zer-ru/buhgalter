@@ -135,13 +135,13 @@ html.dark {
 	}
 
 	.btn-ghost {
-		@apply cursor-pointer rounded-xl border px-3 py-2 text-sm transition;
+		@apply cursor-pointer rounded-xl border px-3 py-2 text-sm transition disabled:cursor-not-allowed disabled:opacity-40;
 		color: var(--text-muted);
 		border-color: var(--border);
 		background-color: transparent;
 	}
 
-	.btn-ghost:hover {
+	.btn-ghost:hover:not(:disabled) {
 		background-color: color-mix(in srgb, var(--border) 50%, transparent);
 		color: var(--text);
 	}
