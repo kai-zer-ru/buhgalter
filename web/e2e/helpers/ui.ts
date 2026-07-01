@@ -1,5 +1,21 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 
+export type ToastType = 'success' | 'error' | 'warning' | 'info';
+
+function toastRole(type: ToastType): 'alert' | 'status' {
+	return type === 'error' || type === 'warning' ? 'alert' : 'status';
+}
+
+export function toastLocator(page: Page, type: ToastType, text?: string): Locator {
+	let loc = page.getByRole(toastRole(type));
+	if (text) loc = loc.filter({ hasText: text });
+	return loc;
+}
+
+export async function expectToast(page: Page, type: ToastType, text: string, timeout = 10_000) {
+	await expect(toastLocator(page, type, text)).toBeVisible({ timeout });
+}
+
 export async function dismissBlockingModals(page: Page) {
 	const update = page.getByRole('dialog').getByRole('button', { name: 'Понятно' });
 	if (await update.isVisible().catch(() => false)) {

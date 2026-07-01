@@ -13,7 +13,7 @@
 		onclose: () => void;
 	} = $props();
 
-	const backupsUrl = `${resolve('/settings')}?tab=admin&admin_tab=backups`;
+	const backupsUrl = resolve('/admin/backups');
 
 	function handleDismiss() {
 		if (update.latest_version) {

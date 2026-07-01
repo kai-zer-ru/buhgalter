@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { _ } from 'svelte-i18n';
 	import { getSetupStatus, postSetup, postSetupRestore } from '$lib/api/client';
-	import { formatApiError } from '$lib/api/errors';
 	import { validatePasswordPolicy } from '$lib/password-policy';
 	import AppIcon from '$lib/components/AppIcon.svelte';
+	import { toast } from '$lib/toast';
 
 	let adminLogin = $state('admin');
 	let adminDisplayName = $state('');
@@ -11,13 +11,10 @@
 	let adminPasswordConfirm = $state('');
 	let registrationEnabled = $state(false);
 	let externalURL = $state('');
-	let error = $state('');
 	let loading = $state(false);
 	let showPassword = $state(false);
 	let restoreFile = $state<File | null>(null);
 	let restoreLoading = $state(false);
-	let restoreError = $state('');
-	let restoreSuccess = $state('');
 
 	const passwordOk = $derived(validatePasswordPolicy(adminPassword, adminLogin));
 	const passwordsMatch = $derived(
@@ -29,9 +26,8 @@
 
 	async function submit(e: Event) {
 		e.preventDefault();
-		error = '';
 		if (!formValid) {
-			error = $_('errors.PASSWORDS_MISMATCH');
+			toast.error($_('errors.PASSWORDS_MISMATCH'));
 			return;
 		}
 		loading = true;
@@ -46,7 +42,7 @@
 			});
 			window.location.href = '/login';
 		} catch (err) {
-			error = formatApiError(err, 'setup.error');
+			toast.fromError(err, 'setup.error');
 		} finally {
 			loading = false;
 		}
@@ -55,15 +51,11 @@
 	function onRestoreFileChange(e: Event) {
 		const target = e.target as HTMLInputElement;
 		restoreFile = target.files?.[0] ?? null;
-		restoreError = '';
-		restoreSuccess = '';
 	}
 
 	async function submitRestore() {
-		restoreError = '';
-		restoreSuccess = '';
 		if (!restoreFile) {
-			restoreError = $_('setup.restore.file_required');
+			toast.error($_('setup.restore.file_required'));
 			return;
 		}
 		restoreLoading = true;
@@ -74,9 +66,9 @@
 				return;
 			}
 			await getSetupStatus();
-			restoreSuccess = $_('setup.restore.success_continue');
+			toast($_('setup.restore.success_continue'));
 		} catch (err) {
-			restoreError = formatApiError(err, 'setup.restore.error');
+			toast.fromError(err, 'setup.restore.error');
 		} finally {
 			restoreLoading = false;
 		}
@@ -157,12 +149,6 @@
 									{$_('setup.restore.submit')}
 								{/if}
 							</button>
-							{#if restoreError}
-								<p class="text-xs text-red-600">{restoreError}</p>
-							{/if}
-							{#if restoreSuccess}
-								<p class="text-xs text-emerald-700">{restoreSuccess}</p>
-							{/if}
 						</div>
 					</div>
 				</div>
@@ -309,16 +295,6 @@
 						<p class="mt-1.5 text-xs text-slate-400">{$_('setup.external_url.hint')}</p>
 					</div>
 				</div>
-
-				{#if error}
-					<div
-						class="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
-						role="alert"
-					>
-						<span class="mt-0.5">⚠️</span>
-						<span>{error}</span>
-					</div>
-				{/if}
 
 				<button
 					type="submit"

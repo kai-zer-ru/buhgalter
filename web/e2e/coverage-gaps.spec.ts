@@ -5,7 +5,7 @@ import { test, expect } from '@playwright/test';
 import { login, apiJSON, restoreAdminSession, waitAppReady } from './helpers/auth';
 import { advanceImportToPreview, commitImportFromPreview } from './helpers/import';
 import { createCashAccount, createIncome } from './helpers/setup-data';
-import { confirmDialog, rowMenuAction } from './helpers/ui';
+import { confirmDialog, expectToast, rowMenuAction } from './helpers/ui';
 import {
 	fillEditTxAmount,
 	fillTransactionForm,
@@ -66,7 +66,10 @@ test('register creates account when registration is enabled', async ({ page }) =
 
 	await waitAppReady(page);
 	await expect(page).toHaveURL(/\/(\?.*)?$/);
-	await expect(page.getByText(`E2E Reg ${tag}`).first()).toBeVisible({ timeout: 10_000 });
+	await expect(page.getByRole('button', { name: 'Выйти' })).toBeVisible({ timeout: 10_000 });
+	await page.goto('/settings');
+	await waitAppReady(page);
+	await expect(page.locator('#display')).toHaveValue(`E2E Reg ${tag}`);
 
 	await restoreAdminSession(page);
 	await apiJSON(page, 'PUT', '/api/v1/admin/settings', {
@@ -87,9 +90,7 @@ test('admin root saves system settings', async ({ page }) => {
 		.first()
 		.getByRole('button', { name: 'Сохранить', exact: true })
 		.click();
-	await expect(page.locator('form.card.max-w-lg').first().getByText('Сохранено')).toBeVisible({
-		timeout: 10_000
-	});
+	await expectToast(page, 'success', 'Сохранено');
 
 	await page.getByRole('switch', { name: 'Открытая регистрация' }).click();
 	await page.locator('#external').fill('');
@@ -98,9 +99,7 @@ test('admin root saves system settings', async ({ page }) => {
 		.first()
 		.getByRole('button', { name: 'Сохранить', exact: true })
 		.click();
-	await expect(page.locator('form.card.max-w-lg').first().getByText('Сохранено')).toBeVisible({
-		timeout: 10_000
-	});
+	await expectToast(page, 'success', 'Сохранено');
 });
 
 test('create credit from credits list UI', async ({ page }) => {
@@ -215,7 +214,7 @@ test('import CSV commits transactions', async ({ page }) => {
 	fs.writeFileSync(csvPath, csv, 'utf8');
 
 	try {
-		await page.goto('/settings?tab=import');
+		await page.goto('/settings/import');
 		await waitAppReady(page);
 		await page.locator('input[type="file"]').setInputFiles(csvPath);
 		await expect(page.getByText(path.basename(csvPath))).toBeVisible({ timeout: 10_000 });

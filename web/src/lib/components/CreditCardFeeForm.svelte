@@ -1,9 +1,8 @@
 <script lang="ts">
 	import { _ } from 'svelte-i18n';
-	import { ApiError, createTransaction, listCategories, type Account } from '$lib/api/client';
+	import { createTransaction, listCategories, type Account } from '$lib/api/client';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
 	import { operationDatetimePickerCreate } from '$lib/datetime-picker-standards';
-	import FormFeedback from '$lib/components/FormFeedback.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
 	import { COMMISSION_USAGE_COMMENT } from '$lib/credit-card';
@@ -25,13 +24,11 @@
 	let dateTimeValue = $state('');
 	let commissionCategoryId = $state('');
 	let saving = $state(false);
-	let error = $state('');
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
 
 	$effect(() => {
 		if (!open) return;
-		error = '';
 		amount = '';
 		dateTimeValue = nowDatetimeLocal(tz);
 		void loadCommissionCategory();
@@ -46,11 +43,10 @@
 	async function save(e: Event) {
 		e.preventDefault();
 		if (!commissionCategoryId) {
-			error = $_('common.error');
+			toast($_('common.error'), 'error');
 			return;
 		}
 		saving = true;
-		error = '';
 		try {
 			await createTransaction({
 				account_id: account.id,
@@ -64,7 +60,7 @@
 			toast($_('common.saved'));
 			onsaved();
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err, 'common.error');
 		} finally {
 			saving = false;
 		}
@@ -92,7 +88,6 @@
 			usePortal
 			required
 		/>
-		<FormFeedback {error} />
 	</form>
 
 	{#snippet footer()}

@@ -12,8 +12,6 @@
 		runBackup,
 		type BackupFile
 	} from '$lib/api/client';
-	import { formatApiError } from '$lib/api/errors';
-	import FormFeedback from '$lib/components/FormFeedback.svelte';
 	import { formatAPIDateTimeForDisplay } from '$lib/dates';
 	import { logout, user } from '$lib/stores/auth';
 	import { confirm } from '$lib/confirm';
@@ -26,8 +24,6 @@
 	let restoreFile = $state<File | null>(null);
 	let restoreFileInput: HTMLInputElement | undefined = $state();
 	let restoreConfirm = $state('');
-	let scheduleFeedback = $state({ error: '', success: '' });
-	let restoreFeedback = $state({ error: '', success: '' });
 	let loading = $state(false);
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
 	const restoreReady = $derived(restoreConfirm === 'RESTORE' && restoreFile !== null);
@@ -50,7 +46,6 @@
 
 	async function saveSettings(e: Event) {
 		e.preventDefault();
-		scheduleFeedback = { error: '', success: '' };
 		loading = true;
 		try {
 			await putBackupSettings({
@@ -58,25 +53,22 @@
 				backup_time: backupTime,
 				backup_retention: backupRetention
 			});
-			scheduleFeedback = { error: '', success: $_('admin.backups.saved') };
 			toast($_('admin.backups.saved'));
 		} catch (err) {
-			scheduleFeedback = { error: formatApiError(err), success: '' };
+			toast.fromError(err);
 		} finally {
 			loading = false;
 		}
 	}
 
 	async function manualBackup() {
-		scheduleFeedback = { error: '', success: '' };
 		loading = true;
 		try {
 			await runBackup();
 			await refresh();
-			scheduleFeedback = { error: '', success: $_('admin.backups.created') };
 			toast($_('admin.backups.created'));
 		} catch (err) {
-			scheduleFeedback = { error: formatApiError(err), success: '' };
+			toast.fromError(err);
 		} finally {
 			loading = false;
 		}
@@ -84,13 +76,12 @@
 
 	async function handleRestore(e: Event) {
 		e.preventDefault();
-		restoreFeedback = { error: '', success: '' };
 		if (!restoreFile) {
-			restoreFeedback = { error: $_('admin.backups.pick_file'), success: '' };
+			toast.error($_('admin.backups.pick_file'));
 			return;
 		}
 		if (restoreConfirm !== 'RESTORE') {
-			restoreFeedback = { error: $_('admin.backups.restore_type'), success: '' };
+			toast.error($_('admin.backups.restore_type'));
 			return;
 		}
 		const ok = await confirm({
@@ -106,7 +97,7 @@
 			await logout();
 			window.location.href = resolve('/login');
 		} catch (err) {
-			restoreFeedback = { error: formatApiError(err), success: '' };
+			toast.fromError(err);
 		} finally {
 			loading = false;
 		}
@@ -178,7 +169,6 @@
 				{$_('admin.backups.run_now')}
 			</button>
 		</div>
-		<FormFeedback error={scheduleFeedback.error} success={scheduleFeedback.success} />
 	</form>
 
 	<div class="card">
@@ -293,7 +283,6 @@
 			/>
 		</div>
 
-		<FormFeedback error={restoreFeedback.error} success={restoreFeedback.success} />
 		<button type="submit" class="btn-primary" disabled={loading || !restoreReady}>
 			{$_('admin.backups.restore.submit')}
 		</button>

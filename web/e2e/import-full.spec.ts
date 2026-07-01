@@ -16,7 +16,7 @@ async function ensureImportAccount(page: import('@playwright/test').Page) {
 
 test('import CSV wizard reaches mapping step', async ({ page }) => {
 	await ensureImportAccount(page);
-	await page.goto('/settings?tab=import');
+	await page.goto('/settings/import');
 	await waitAppReady(page);
 
 	const fileInput = page.locator('input[type="file"]');
@@ -32,7 +32,7 @@ test('import CSV wizard reaches mapping step', async ({ page }) => {
 });
 
 test('export CSV download button is enabled with filters', async ({ page }) => {
-	await page.goto('/settings?tab=import');
+	await page.goto('/settings/import');
 	await waitAppReady(page);
 	await page.getByRole('tab', { name: 'Экспорт', exact: true }).click();
 

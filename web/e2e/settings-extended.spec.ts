@@ -19,7 +19,7 @@ test('profile: change display name', async ({ page }) => {
 });
 
 test('password tab loads form fields', async ({ page }) => {
-	await page.goto('/settings?tab=password');
+	await page.goto('/settings/password');
 	await waitAppReady(page);
 
 	await expect(page.locator('#old')).toBeVisible();
@@ -30,7 +30,7 @@ test('password tab loads form fields', async ({ page }) => {
 test('tokens: revoke created API token', async ({ page }) => {
 	const tokenName = `E2E Revoke ${Date.now()}`;
 
-	await page.goto('/settings?tab=tokens');
+	await page.goto('/settings/tokens');
 	await waitAppReady(page);
 	await page.locator('#token-name').fill(tokenName);
 	await page.getByRole('button', { name: 'Создать' }).click();
@@ -47,7 +47,7 @@ test('tokens: revoke created API token', async ({ page }) => {
 test('tokens: perpetual token shows risk warning', async ({ page }) => {
 	const tokenName = `E2E Perpetual ${Date.now()}`;
 
-	await page.goto('/settings?tab=tokens');
+	await page.goto('/settings/tokens');
 	await waitAppReady(page);
 	await page.locator('#token-name').fill(tokenName);
 	await page.getByRole('switch', { name: 'Бессрочный' }).click();
@@ -61,7 +61,7 @@ test('tokens: perpetual token shows risk warning', async ({ page }) => {
 test('categories: delete expense category', async ({ page }) => {
 	const name = `E2E Cat Del ${Date.now()}`;
 
-	await page.goto('/settings?tab=categories');
+	await page.goto('/settings/categories');
 	await waitAppReady(page);
 	await page.getByPlaceholder('Название категории').fill(name);
 	await page.getByRole('button', { name: 'Создать' }).click();
@@ -76,7 +76,7 @@ test('categories: delete expense category', async ({ page }) => {
 test('categories: create income category on Доходы tab', async ({ page }) => {
 	const name = `E2E Income ${Date.now()}`;
 
-	await page.goto('/settings?tab=categories');
+	await page.goto('/settings/categories');
 	await waitAppReady(page);
 	await page.getByRole('button', { name: 'Доходы', exact: true }).click();
 	await page.getByPlaceholder('Название категории').fill(name);
@@ -87,7 +87,7 @@ test('categories: create income category on Доходы tab', async ({ page }) 
 test('categories: make primary shows badge', async ({ page }) => {
 	const name = `E2E Primary Cat ${Date.now()}`;
 
-	await page.goto('/settings?tab=categories');
+	await page.goto('/settings/categories');
 	await waitAppReady(page);
 	await page.getByPlaceholder('Название категории').fill(name);
 	await page.getByRole('button', { name: 'Создать' }).click();

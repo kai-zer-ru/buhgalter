@@ -77,6 +77,14 @@ import {
 
 В API для границ суток: `fromDateLocalStart` / `fromDateLocalEnd`.
 
+### Только будущие даты
+
+`blockPastIncludingToday={true}` — в календаре недоступны сегодня и все прошлые дни; минимум — **завтра** в TZ пользователя (`timezone` prop). Кнопка «Сегодня» скрыта. Константа `futureDateOnlyPicker` (вместе с `timezone` на форме).
+
+| Где | Поле |
+|-----|------|
+| `settings` (API-токены) | срок действия |
+
 ---
 
 ## Форматы вывода (не пикер)
@@ -103,6 +111,7 @@ import {
 
 - [ ] Момент операции → `optional` + `operationDatetimePickerCreate` / `Edit`
 - [ ] Только календарная дата → `dateOnlyPicker`
+- [ ] Только будущие даты (не сегодня) → `futureDateOnlyPicker` + `timezone`
 - [ ] Список/уведомление → `formatAPIOperationDateTimeForDisplay` или `formatAPIDateForDisplay`
 - [ ] Не форматировать даты вручную в шаблонах
 

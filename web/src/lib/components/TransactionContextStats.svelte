@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { _ } from 'svelte-i18n';
-	import { ApiError, getStatsContext, type StatsContext } from '$lib/api/client';
+	import { getStatsContext, type StatsContext } from '$lib/api/client';
 	import { formatBalance } from '$lib/finance';
 	import { fromCents } from '$lib/money';
+	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
 
 	type Props = {
@@ -12,7 +13,6 @@
 	let { params = {} }: Props = $props();
 	let summary = $state<StatsContext | null>(null);
 	let loading = $state(false);
-	let error = $state('');
 
 	const currency = $derived($user?.currency ?? 'RUB');
 	const paramsKey = $derived(JSON.stringify(params));
@@ -24,11 +24,10 @@
 
 	async function load() {
 		loading = true;
-		error = '';
 		try {
 			summary = await getStatsContext(params);
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 			summary = null;
 		} finally {
 			loading = false;
@@ -39,8 +38,6 @@
 <div class="card">
 	{#if loading}
 		<p class="text-sm" style:color="var(--text-muted)">{$_('common.loading')}</p>
-	{:else if error}
-		<p class="text-sm" style:color="var(--danger)">{error}</p>
 	{:else if summary}
 		<div class="grid gap-3 md:grid-cols-3">
 			<div>

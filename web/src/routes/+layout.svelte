@@ -16,6 +16,7 @@
 	import UpdateAvailableModal from '$lib/components/UpdateAvailableModal.svelte';
 	import AppIcon from '$lib/components/AppIcon.svelte';
 	import IconButton from '$lib/components/IconButton.svelte';
+	import NavDropdown, { type NavDropdownItem } from '$lib/components/NavDropdown.svelte';
 	import ToastContainer from '$lib/components/ToastContainer.svelte';
 	import AdminPasswordResetBanner from '$lib/components/AdminPasswordResetBanner.svelte';
 	import AdminPendingUsersBanner from '$lib/components/AdminPendingUsersBanner.svelte';
@@ -64,12 +65,7 @@
 		isActive: (pathname: string, search: URLSearchParams) => boolean;
 	};
 
-	const navItems: NavItem[] = [
-		{
-			href: resolve('/'),
-			labelKey: 'nav.home',
-			isActive: (p) => p === '/'
-		},
+	const flatNavItems: NavItem[] = [
 		{
 			href: resolve('/accounts'),
 			labelKey: 'nav.accounts',
@@ -86,11 +82,6 @@
 			isActive: (p) => p.startsWith('/credits')
 		},
 		{
-			href: resolve('/recurring-operations'),
-			labelKey: 'nav.recurring',
-			isActive: (p) => p.startsWith('/recurring-operations')
-		},
-		{
 			href: resolve('/budget'),
 			labelKey: 'nav.budget',
 			isActive: (p) => p.startsWith('/budget')
@@ -99,13 +90,77 @@
 			href: resolve('/stats'),
 			labelKey: 'nav.stats',
 			isActive: (p) => p.startsWith('/stats')
-		},
-		{
-			href: resolve('/settings'),
-			labelKey: 'nav.settings',
-			isActive: (p, search) => p.startsWith('/settings') && search.get('tab') !== 'accounts'
 		}
 	];
+
+	const settingsNavItems: NavDropdownItem[] = [
+		{
+			path: '/settings',
+			labelKey: 'settings.tab.profile',
+			isActive: (p) => p === '/settings'
+		},
+		{
+			path: '/settings/password',
+			labelKey: 'settings.tab.password',
+			isActive: (p) => p === '/settings/password'
+		},
+		{
+			path: '/settings/tokens',
+			labelKey: 'settings.tab.tokens',
+			isActive: (p) => p === '/settings/tokens'
+		},
+		{
+			path: '/settings/notifications',
+			labelKey: 'settings.tab.notifications',
+			isActive: (p) => p === '/settings/notifications'
+		},
+		{
+			path: '/settings/categories',
+			labelKey: 'settings.tab.categories',
+			isActive: (p) => p === '/settings/categories'
+		},
+		{
+			path: '/settings/import',
+			labelKey: 'settings.tab.import',
+			isActive: (p) => p === '/settings/import'
+		},
+		{
+			path: '/settings/recurring-operations',
+			labelKey: 'nav.recurring',
+			isActive: (p) => p.startsWith('/settings/recurring-operations')
+		}
+	];
+
+	const adminNavItems: NavDropdownItem[] = [
+		{
+			path: '/admin',
+			labelKey: 'admin.tab.system',
+			isActive: (p) => p === '/admin'
+		},
+		{
+			path: '/admin/users',
+			labelKey: 'admin.tab.users',
+			isActive: (p) => p.startsWith('/admin/users')
+		},
+		{
+			path: '/admin/backups',
+			labelKey: 'admin.tab.backups',
+			isActive: (p) => p.startsWith('/admin/backups')
+		},
+		{
+			path: '/admin/diagnostics',
+			labelKey: 'admin.tab.diagnostics',
+			isActive: (p) => p.startsWith('/admin/diagnostics')
+		}
+	];
+
+	function isSettingsGroupActive(p: string) {
+		return p === '/settings' || p.startsWith('/settings/');
+	}
+
+	function isAdminGroupActive(p: string) {
+		return p === '/admin' || p.startsWith('/admin/');
+	}
 
 	function navLinkClass(active: boolean, base: string) {
 		return active ? `${base} nav-link-active` : base;
@@ -264,7 +319,7 @@
 								<div
 									class="popover-panel nav-mobile-panel absolute right-0 z-[60] mt-2 max-h-[min(70dvh,24rem)] min-w-[12rem] overflow-y-auto p-2"
 								>
-									{#each navItems as item (item.labelKey)}
+									{#each flatNavItems as item (item.labelKey)}
 										<a
 											href={item.href}
 											class={navLinkClass(isNavItemActive(item), 'nav-mobile-link')}
@@ -272,11 +327,27 @@
 											onclick={closeNav}>{$_(item.labelKey)}</a
 										>
 									{/each}
+									<NavDropdown
+										labelKey="nav.settings"
+										items={settingsNavItems}
+										isGroupActive={isSettingsGroupActive}
+										mobile
+										onNavigate={closeNav}
+									/>
+									{#if $user?.is_admin}
+										<NavDropdown
+											labelKey="nav.admin"
+											items={adminNavItems}
+											isGroupActive={isAdminGroupActive}
+											mobile
+											onNavigate={closeNav}
+										/>
+									{/if}
 								</div>
 							{/if}
 						</div>
 						<nav class="hidden items-center gap-2 sm:flex">
-							{#each navItems as item (item.labelKey)}
+							{#each flatNavItems as item (item.labelKey)}
 								{#if !item.mobileOnly}
 									<a
 										href={item.href}
@@ -285,15 +356,19 @@
 									>
 								{/if}
 							{/each}
-						</nav>
-						<span class="hidden text-sm lg:inline ml-[5px]" style:color="var(--text-muted)">
-							{#if $user.display_name && $user.display_name !== $user.login}
-								{$user.display_name}
-								<span class="opacity-70">(@{$user.login})</span>
-							{:else}
-								@{$user.login}
+							<NavDropdown
+								labelKey="nav.settings"
+								items={settingsNavItems}
+								isGroupActive={isSettingsGroupActive}
+							/>
+							{#if $user?.is_admin}
+								<NavDropdown
+									labelKey="nav.admin"
+									items={adminNavItems}
+									isGroupActive={isAdminGroupActive}
+								/>
 							{/if}
-						</span>
+						</nav>
 						<IconButton
 							icon="logout"
 							label={$_('nav.logout')}

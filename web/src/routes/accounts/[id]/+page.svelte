@@ -4,7 +4,6 @@
 	import { page } from '$app/stores';
 	import { _ } from 'svelte-i18n';
 	import {
-		ApiError,
 		archiveAccount,
 		deleteAccount,
 		deleteTransaction,
@@ -37,7 +36,6 @@
 	import TransferForm from '$lib/components/TransferForm.svelte';
 	import CreditCardFeeForm from '$lib/components/CreditCardFeeForm.svelte';
 	import { isCreditCard } from '$lib/credit-card';
-	import { formatApiError } from '$lib/api/errors';
 	import { confirm } from '$lib/confirm';
 	import { toast } from '$lib/toast';
 	import { formatBalance } from '$lib/finance';
@@ -63,7 +61,6 @@
 	let loading = $state(true);
 	let filterLoading = $state(false);
 	let saving = $state(false);
-	let error = $state('');
 	let txOpen = $state(false);
 	let transferOpen = $state(false);
 	let payTransferOpen = $state(false);
@@ -140,7 +137,6 @@
 	async function load() {
 		if (!id) return;
 		loading = true;
-		error = '';
 		try {
 			const [account, accountBalance, bankList, expenseCats, incomeCats, accountList] =
 				await Promise.all([
@@ -166,7 +162,7 @@
 			editing = $page.url.searchParams.get('edit') === '1';
 			await loadTransactions();
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			loading = false;
 		}
@@ -191,7 +187,7 @@
 			transactions = result.data;
 			txTotal = result.meta.total;
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			filterLoading = false;
 		}
@@ -223,7 +219,6 @@
 		e.preventDefault();
 		if (!acc) return;
 		saving = true;
-		error = '';
 		try {
 			acc = await updateAccount(acc.id, {
 				name,
@@ -236,7 +231,7 @@
 			editing = false;
 			toast($_('common.saved'));
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			saving = false;
 		}
@@ -251,7 +246,7 @@
 				toast($_('common.saved'));
 			}
 		} catch (err) {
-			toast(formatApiError(err), 'error');
+			toast.fromError(err);
 		}
 	}
 
@@ -261,7 +256,7 @@
 			acc = await setPrimaryAccount(acc.id);
 			toast($_('common.saved'));
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		}
 	}
 
@@ -278,7 +273,7 @@
 			toast($_('common.deleted'));
 			await goto(resolve('/accounts'));
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		}
 	}
 
@@ -373,7 +368,7 @@
 			toast($_('common.deleted'));
 			await load();
 		} catch (err) {
-			toast(err instanceof ApiError ? err.message : $_('common.error'), 'error');
+			toast.fromError(err);
 		}
 	}
 
@@ -442,7 +437,7 @@
 	{#if loading}
 		<p style:color="var(--text-muted)">{$_('common.loading')}</p>
 	{:else if !acc}
-		<p style:color="var(--danger)">{error || $_('common.error')}</p>
+		<!-- load failed; toast shown -->
 	{:else}
 		<div class="card">
 			<div class="flex items-start gap-4">
@@ -587,10 +582,6 @@
 					{/if}
 				</div>
 			</div>
-
-			{#if error}
-				<p class="mt-3 text-sm" style:color="var(--danger)">{error}</p>
-			{/if}
 		</div>
 
 		<div class="relative space-y-3">
@@ -633,7 +624,9 @@
 					showEdit
 					showDelete
 					onmakeRecurring={(tx) =>
-						void goto(resolve(`/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`))}
+						void goto(
+							resolve(`/settings/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`)
+						)}
 					onrepeat={openRepeat}
 					onedit={openEdit}
 					ondelete={(tx) => void removeTx(tx)}

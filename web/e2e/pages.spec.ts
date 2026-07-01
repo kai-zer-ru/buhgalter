@@ -9,17 +9,13 @@ const AUTHENTICATED_ROUTES = [
 	'/stats',
 	'/credits',
 	'/debts',
-	'/recurring-operations',
 	'/settings',
-	'/settings?tab=password',
-	'/settings?tab=tokens',
-	'/settings?tab=notifications',
-	'/settings?tab=categories',
-	'/settings?tab=import',
-	'/settings?tab=admin&admin_tab=system',
-	'/settings?tab=admin&admin_tab=users',
-	'/settings?tab=admin&admin_tab=backups',
-	'/settings?tab=admin&admin_tab=diagnostics',
+	'/settings/password',
+	'/settings/tokens',
+	'/settings/notifications',
+	'/settings/categories',
+	'/settings/import',
+	'/settings/recurring-operations',
 	'/admin',
 	'/admin/users',
 	'/admin/backups',
@@ -99,15 +95,5 @@ test.describe('authenticated pages', () => {
 			await waitAppReady(page);
 			await expect(page).not.toHaveURL(/\/login/);
 		}
-	});
-
-	test('legacy routes redirect to settings tabs', async ({ page }) => {
-		await page.goto('/import');
-		await waitAppReady(page);
-		await expect(page).toHaveURL(/\/settings\?tab=import/);
-
-		await page.goto('/settings/categories');
-		await waitAppReady(page);
-		await expect(page).toHaveURL(/\/settings\?tab=categories/);
 	});
 });

@@ -5,7 +5,6 @@
 	import { tr } from '$lib/i18n';
 	import { budgetRemainingCell } from '$lib/budget-display';
 	import {
-		ApiError,
 		getStatsByCategory,
 		getStatsByPeriod,
 		getStatsSummary,
@@ -45,10 +44,10 @@
 	import { formatMoneyDisplay, fromCents } from '$lib/money';
 	import { formatStatsPeriod } from '$lib/stats-period';
 	import { user } from '$lib/stores/auth';
+	import { toast } from '$lib/toast';
 
 	let loading = $state(true);
 	let filterLoading = $state(false);
-	let error = $state('');
 	let summary = $state<StatsSummary | null>(null);
 	let byCategory = $state<StatsCategoryItem[]>([]);
 	let budgetByCategory = $state<Record<string, BudgetSummaryItem>>({});
@@ -187,7 +186,7 @@
 			creditByName = toCreditMap([...meta.active_credits, ...meta.closed_credits]);
 			metaLoaded = true;
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		}
 	}
 
@@ -213,7 +212,6 @@
 		}
 		if (initial) loading = true;
 		else filterLoading = true;
-		error = '';
 		try {
 			const params = statsParams();
 			const month = budgetMonthKey();
@@ -249,7 +247,7 @@
 				searchRows = [];
 			}
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			loading = false;
 			filterLoading = false;
@@ -414,8 +412,6 @@
 
 	{#if loading}
 		<p style:color="var(--text-muted)">{$_('common.loading')}</p>
-	{:else if error}
-		<p style:color="var(--danger)">{error}</p>
 	{:else}
 		<div class="relative space-y-4" class:opacity-60={filterLoading}>
 			{#if filterLoading}

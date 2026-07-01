@@ -43,13 +43,26 @@ test('accounts breadcrumb shows section trail', async ({ page }) => {
 });
 
 test('settings breadcrumb reflects active tab', async ({ page }) => {
-	await page.goto('/settings?tab=password');
+	await page.goto('/settings/password');
 	await waitAppReady(page);
 
 	const crumbs = page.locator('.breadcrumbs');
 	await expect(crumbs.getByRole('link', { name: 'Главная' })).toBeVisible();
 	await expect(crumbs.getByRole('link', { name: 'Настройки' })).toBeVisible();
 	await expect(crumbs.getByText('Пароль', { exact: true })).toBeVisible();
+});
+
+test('settings dropdown navigates to password', async ({ page }) => {
+	await page.setViewportSize({ width: 1280, height: 720 });
+	await page.goto('/');
+	await waitAppReady(page);
+
+	await page.getByRole('button', { name: 'Настройки' }).click();
+	await page.getByRole('menuitem', { name: 'Пароль' }).click();
+	await waitAppReady(page);
+
+	await expect(page).toHaveURL(/\/settings\/password/);
+	await expect(page.getByRole('heading', { name: 'Пароль', level: 1 })).toBeVisible();
 });
 
 test('nav links highlight active section', async ({ page }) => {

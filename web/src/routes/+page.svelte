@@ -4,7 +4,6 @@
 	import { resolve } from '$app/paths';
 	import { _ } from 'svelte-i18n';
 	import {
-		ApiError,
 		deleteTransaction,
 		getBudgetSummary,
 		getDashboard,
@@ -30,7 +29,6 @@
 
 	let dash = $state<Dashboard | null>(null);
 	let loading = $state(true);
-	let error = $state('');
 	let txOpen = $state(false);
 	let transferOpen = $state(false);
 	let editTx = $state<Transaction | null>(null);
@@ -73,11 +71,10 @@
 
 	async function loadDashboard() {
 		loading = true;
-		error = '';
 		try {
 			dash = await getDashboard();
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			loading = false;
 		}
@@ -95,7 +92,7 @@
 			pastTx = res.data;
 			pastTotal = res.meta.total;
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			pastLoading = false;
 		}
@@ -106,14 +103,14 @@
 		try {
 			const res = await listTransactions({
 				kind: 'future',
-				sort: 'date_asc',
+				sort: 'date_desc',
 				page: '1',
 				limit: String(txLimit)
 			});
 			plannedTx = res.data;
 			plannedTotal = res.meta.total;
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			plannedLoading = false;
 		}
@@ -187,7 +184,7 @@
 			toast($_('common.deleted'));
 			await loadAll();
 		} catch (err) {
-			toast(err instanceof ApiError ? err.message : $_('common.error'), 'error');
+			toast.fromError(err);
 		}
 	}
 </script>
@@ -290,8 +287,6 @@
 
 	{#if loading}
 		<p style:color="var(--text-muted)">{$_('common.loading')}</p>
-	{:else if error}
-		<p style:color="var(--danger)">{error}</p>
 	{:else if dash}
 		{#if hasCreditCards}
 			<div class="space-y-4">
@@ -485,7 +480,9 @@
 											showDelete
 											onmakeRecurring={(tx) =>
 												void goto(
-													resolve(`/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`)
+													resolve(
+														`/settings/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`
+													)
 												)}
 											onrepeat={openRepeat}
 											onedit={openEdit}
@@ -523,7 +520,9 @@
 											showDelete
 											onmakeRecurring={(tx) =>
 												void goto(
-													resolve(`/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`)
+													resolve(
+														`/settings/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`
+													)
 												)}
 											onrepeat={openRepeat}
 											onedit={openEdit}
