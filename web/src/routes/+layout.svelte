@@ -91,6 +91,11 @@
 			isActive: (p) => p.startsWith('/recurring-operations')
 		},
 		{
+			href: resolve('/budget'),
+			labelKey: 'nav.budget',
+			isActive: (p) => p.startsWith('/budget')
+		},
+		{
 			href: resolve('/stats'),
 			labelKey: 'nav.stats',
 			isActive: (p) => p.startsWith('/stats')

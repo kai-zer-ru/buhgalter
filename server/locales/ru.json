@@ -116,6 +116,7 @@
   "notifications.templates.credit_payment": "Платёж по кредиту «{credit}»: {amount}. Дата: {when}\n{credit_url}",
   "notifications.templates.planned_operation": "Плановая операция: {type} на {amount} — {description}\n{transaction_url}",
   "notifications.templates.balance_shortfall": "На балансе не хватает {amount}!",
+  "notifications.templates.budget_threshold": "{name}: потрачено {spent} из {planned} ({percent}%)\n{budget_url}",
   "notifications.templates.password_reset": "Запрос на восстановление пароля: {display_name} (@{login}), время: {requested_at}.\n{reset_url}",
   "notifications.templates.user_registration": "Новая регистрация: {display_name} (@{login}), {registered_at}. Модерация: {moderation_url}",
   "notifications.templates.test": "Тестовое уведомление «Бухгалтер». Канал: {channel}.\n{settings_url}"

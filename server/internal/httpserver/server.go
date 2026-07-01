@@ -18,6 +18,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	"github.com/kai-zer-ru/buhgalter/internal/backup"
 	"github.com/kai-zer-ru/buhgalter/internal/bank"
+	"github.com/kai-zer-ru/buhgalter/internal/budget"
 	"github.com/kai-zer-ru/buhgalter/internal/category"
 	"github.com/kai-zer-ru/buhgalter/internal/config"
 	"github.com/kai-zer-ru/buhgalter/internal/credit"
@@ -92,6 +93,7 @@ func (s *Server) Handler() http.Handler {
 	debtHandler := &debt.Handler{Store: dbHandle, Audit: s.audit}
 	creditHandler := &credit.Handler{Store: dbHandle, Audit: s.audit}
 	recurringHandler := &recurring.Handler{Store: dbHandle, Audit: s.audit}
+	budgetHandler := &budget.Handler{Store: dbHandle, Audit: s.audit}
 	importHandler := &importexport.Handler{Store: dbHandle, Audit: s.audit, Logger: s.logger}
 	statsHandler := &stats.Handler{Store: dbHandle}
 	uiHandler := &ui.Handler{Store: dbHandle}
@@ -145,6 +147,15 @@ func (s *Server) Handler() http.Handler {
 			ar.Post("/recurring-operations", recurringHandler.Create)
 			ar.Put("/recurring-operations/{id}", recurringHandler.Update)
 			ar.Delete("/recurring-operations/{id}", recurringHandler.Delete)
+
+			ar.Get("/budgets/summary", budgetHandler.Summary)
+			ar.Get("/budgets", budgetHandler.List)
+			ar.Post("/budgets/copy-from-previous", budgetHandler.CopyFromPrevious)
+			ar.Post("/budgets", budgetHandler.Create)
+			ar.Post("/budgets/{id}/copy-next", budgetHandler.CopyNext)
+			ar.Patch("/budgets/{id}", budgetHandler.Update)
+			ar.Delete("/budgets/{id}", budgetHandler.Delete)
+
 			if os.Getenv("BUHGALTER_E2E") == "1" {
 				ar.Post("/test/recurring-operations/{id}/run-now", recurringHandler.E2ERunNow)
 				ar.Post("/test/credits/{id}/apply-due", creditHandler.E2EApplyDue)
@@ -207,6 +218,14 @@ func (s *Server) Handler() http.Handler {
 			ar.Get("/stats/by-period", statsHandler.ByPeriod)
 			ar.Get("/stats/search", statsHandler.Search)
 			ar.Get("/stats/context", statsHandler.Context)
+
+			ar.Get("/budgets/summary", budgetHandler.Summary)
+			ar.Get("/budgets", budgetHandler.List)
+			ar.Post("/budgets/copy-from-previous", budgetHandler.CopyFromPrevious)
+			ar.Post("/budgets", budgetHandler.Create)
+			ar.Post("/budgets/{id}/copy-next", budgetHandler.CopyNext)
+			ar.Patch("/budgets/{id}", budgetHandler.Update)
+			ar.Delete("/budgets/{id}", budgetHandler.Delete)
 
 			ar.Get("/ui/meta", uiHandler.Meta)
 		})

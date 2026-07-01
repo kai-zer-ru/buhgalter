@@ -6,8 +6,10 @@
 	import {
 		ApiError,
 		deleteTransaction,
+		getBudgetSummary,
 		getDashboard,
 		listTransactions,
+		type BudgetSummaryItem,
 		type Dashboard,
 		type Transaction
 	} from '$lib/api/client';
@@ -23,6 +25,7 @@
 	import { dedupeTransferLegs } from '$lib/transaction-display';
 	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
+	import { tr } from '$lib/i18n';
 
 	let dash = $state<Dashboard | null>(null);
 	let loading = $state(true);
@@ -42,8 +45,15 @@
 	let plannedTx = $state<Transaction[]>([]);
 	let plannedTotal = $state(0);
 	let plannedLoading = $state(false);
+	let budgetItems = $state<BudgetSummaryItem[]>([]);
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
+	const categoryBudgets = $derived(
+		[...budgetItems]
+			.filter((b) => b.scope !== 'all_expense')
+			.sort((a, b) => b.percent - a.percent)
+	);
+	const allExpenseBudget = $derived(budgetItems.find((b) => b.scope === 'all_expense'));
 	const pastVisible = $derived(dedupeTransferLegs(pastTx));
 	const plannedVisible = $derived(dedupeTransferLegs(plannedTx));
 	const txSiblings = $derived([...pastTx, ...plannedTx]);
@@ -51,6 +61,12 @@
 		dash != null && (dash.debts_summary.i_owe > 0 || dash.debts_summary.owed_to_me > 0)
 	);
 	const hasCreditCards = $derived(dash != null && dash.credit_cards_summary != null);
+
+	function budgetProgressClass(status: string) {
+		if (status === 'exceeded') return 'bg-red-500';
+		if (status === 'warning') return 'bg-amber-500';
+		return 'bg-emerald-500';
+	}
 
 	onMount(() => {
 		void loadAll();
@@ -104,9 +120,18 @@
 		}
 	}
 
+	async function loadBudget() {
+		try {
+			const res = await getBudgetSummary();
+			budgetItems = res.items;
+		} catch {
+			budgetItems = [];
+		}
+	}
+
 	async function loadAll() {
 		await loadDashboard();
-		await Promise.all([loadPastTx(), loadPlannedTx()]);
+		await Promise.all([loadPastTx(), loadPlannedTx(), loadBudget()]);
 	}
 
 	function openNewTransaction(type: 'expense' | 'income') {
@@ -171,6 +196,77 @@
 <svelte:head>
 	<title>{$_('dashboard.title')} — {$_('app.title')}</title>
 </svelte:head>
+
+{#snippet budgetWidget()}
+	{#if budgetItems.length > 0}
+		<div class="card space-y-2">
+			<div class="flex items-center justify-between gap-2">
+				<p class="text-sm" style:color="var(--text-muted)">{$_('budget.widget.title')}</p>
+				<a href={resolve('/budget')} class="text-xs hover:underline" style:color="var(--primary)">
+					{$_('budget.widget.more')} →
+				</a>
+			</div>
+			{#if allExpenseBudget}
+				<div>
+					<div class="flex items-baseline justify-between gap-2">
+						<span class="truncate text-sm font-medium">{allExpenseBudget.name}</span>
+						<span class="shrink-0 text-xs tabular-nums" style:color="var(--text-muted)">
+							{allExpenseBudget.spent_display} / {allExpenseBudget.planned_display}
+						</span>
+					</div>
+					<div
+						class="mt-1.5 h-1.5 overflow-hidden rounded-full"
+						style:background-color="color-mix(in srgb, var(--border) 80%, transparent)"
+					>
+						<div
+							class="h-full transition-all {budgetProgressClass(allExpenseBudget.status)}"
+							style="width: {Math.min(allExpenseBudget.percent, 100)}%"
+						></div>
+					</div>
+					<p class="mt-1 text-xs tabular-nums" style:color="var(--text-muted)">
+						{allExpenseBudget.percent}% ·
+						{tr('budget.remaining', {
+							values: { amount: allExpenseBudget.remaining_display }
+						})}
+					</p>
+				</div>
+			{/if}
+			{#if categoryBudgets.length > 0}
+				<details class={allExpenseBudget ? 'border-t pt-2' : ''} style:border-color="var(--border)">
+					<summary
+						class="cursor-pointer list-none text-xs font-medium select-none [&::-webkit-details-marker]:hidden"
+						style:color="var(--text-muted)"
+					>
+						{tr('budget.widget.categories', {
+							values: { count: String(categoryBudgets.length) }
+						})}
+					</summary>
+					<ul class="mt-2 space-y-1.5">
+						{#each categoryBudgets as item (item.id)}
+							<li>
+								<div class="flex items-center justify-between gap-2 text-xs">
+									<span class="truncate">{item.name}</span>
+									<span class="shrink-0 tabular-nums" style:color="var(--text-muted)">
+										{item.percent}%
+									</span>
+								</div>
+								<div
+									class="mt-0.5 h-1 overflow-hidden rounded-full"
+									style:background-color="color-mix(in srgb, var(--border) 80%, transparent)"
+								>
+									<div
+										class="h-full {budgetProgressClass(item.status)}"
+										style="width: {Math.min(item.percent, 100)}%"
+									></div>
+								</div>
+							</li>
+						{/each}
+					</ul>
+				</details>
+			{/if}
+		</div>
+	{/if}
+{/snippet}
 
 <div class="space-y-6">
 	<div class="flex flex-wrap items-center justify-between gap-3">
@@ -243,7 +339,7 @@
 					</div>
 				</div>
 				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-					<a href={resolve('/debts')} class="card block transition hover:opacity-90">
+					<a href={resolve('/debts')} class="card block self-start transition hover:opacity-90">
 						<p class="text-sm" style:color="var(--text-muted)">{$_('debts.title')}</p>
 						<div class="mt-1 space-y-1">
 							{#if hasDebts}
@@ -285,7 +381,7 @@
 						</p>
 					{/if}
 				</div>
-				<a href={resolve('/debts')} class="card block transition hover:opacity-90">
+				<a href={resolve('/debts')} class="card block self-start transition hover:opacity-90">
 					<p class="text-sm" style:color="var(--text-muted)">{$_('debts.title')}</p>
 					<div class="mt-1 space-y-1">
 						{#if hasDebts}
@@ -313,6 +409,8 @@
 				</a>
 			</div>
 		{/if}
+
+		{@render budgetWidget()}
 
 		{#if dash.accounts.length === 0}
 			<EmptyStateCard message={$_('dashboard.accountsEmpty')} />

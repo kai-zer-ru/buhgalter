@@ -63,6 +63,19 @@ func settingsNotificationsPath() string {
 	return "/settings?tab=notifications"
 }
 
+func budgetPath() string {
+	return "/budget"
+}
+
+func budgetURLPlaceholderValue(externalURL, localeCode string) string {
+	return externalURLPlaceholderValue(externalURL, localeCode, budgetPath())
+}
+
+// BudgetURLPlaceholderValue is the exported alias for template previews and budget notifications.
+func BudgetURLPlaceholderValue(externalURL, localeCode string) string {
+	return budgetURLPlaceholderValue(externalURL, localeCode)
+}
+
 func debtURLPlaceholderValue(externalURL, localeCode, debtID string) string {
 	return externalURLPlaceholderValue(externalURL, localeCode, debtPath(debtID))
 }

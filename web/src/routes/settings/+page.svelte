@@ -130,6 +130,7 @@
 	let triggerCredit = $state(true);
 	let triggerPlanned = $state(true);
 	let triggerNegativeBalance = $state(true);
+	let triggerBudget = $state(true);
 	let triggerPasswordReset = $state(true);
 	let triggerUserRegistration = $state(true);
 	let registrationEnabled = $state(false);
@@ -173,6 +174,7 @@
 		'credit_payment',
 		'planned_operation',
 		'balance_shortfall',
+		'budget_threshold',
 		'password_reset',
 		'user_registration',
 		'test'
@@ -183,6 +185,7 @@
 		| 'credit'
 		| 'planned'
 		| 'negativeBalance'
+		| 'budget'
 		| 'passwordReset'
 		| 'userRegistration';
 
@@ -192,6 +195,7 @@
 		credit_payment: 'credit',
 		planned_operation: 'planned',
 		balance_shortfall: 'negativeBalance',
+		budget_threshold: 'budget',
 		password_reset: 'passwordReset',
 		user_registration: 'userRegistration'
 	};
@@ -206,6 +210,8 @@
 				return triggerPlanned;
 			case 'negativeBalance':
 				return triggerNegativeBalance;
+			case 'budget':
+				return triggerBudget;
 			case 'passwordReset':
 				return triggerPasswordReset;
 			case 'userRegistration':
@@ -227,6 +233,9 @@
 			case 'negativeBalance':
 				triggerNegativeBalance = !triggerNegativeBalance;
 				break;
+			case 'budget':
+				triggerBudget = !triggerBudget;
+				break;
 			case 'passwordReset':
 				triggerPasswordReset = !triggerPasswordReset;
 				break;
@@ -241,7 +250,8 @@
 			{ key: 'debt', hintKey: 'debt_hint' },
 			{ key: 'credit', hintKey: 'credit_hint' },
 			{ key: 'planned', hintKey: 'planned_hint' },
-			{ key: 'negativeBalance', hintKey: 'negativeBalance_hint' }
+			{ key: 'negativeBalance', hintKey: 'negativeBalance_hint' },
+			{ key: 'budget', hintKey: 'budget_hint' }
 		];
 		if ($user?.is_admin) {
 			rows.push({ key: 'passwordReset', hintKey: 'passwordReset_hint' });
@@ -468,6 +478,7 @@
 		triggerPlanned = data.trigger_planned;
 		triggerNegativeBalance =
 			'trigger_negative_balance' in data ? data.trigger_negative_balance : true;
+		triggerBudget = 'trigger_budget' in data ? data.trigger_budget : true;
 		triggerPasswordReset =
 			'trigger_password_reset' in data ? (data.trigger_password_reset ?? true) : true;
 		triggerUserRegistration =
@@ -706,6 +717,7 @@
 				trigger_credit: triggerCredit,
 				trigger_planned: triggerPlanned,
 				trigger_negative_balance: triggerNegativeBalance,
+				trigger_budget: triggerBudget,
 				trigger_password_reset: $user?.is_admin ? triggerPasswordReset : undefined,
 				trigger_user_registration:
 					$user?.is_admin && registrationEnabled ? triggerUserRegistration : undefined

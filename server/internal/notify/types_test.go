@@ -14,6 +14,7 @@ func TestTemplateSettingEnabled(t *testing.T) {
 		TriggerCredit:           1,
 		TriggerPlanned:          1,
 		TriggerNegativeBalance:  1,
+		TriggerBudget:           1,
 		TriggerPasswordReset:    1,
 		TriggerUserRegistration: 1,
 	}
@@ -29,6 +30,7 @@ func TestTemplateSettingEnabled(t *testing.T) {
 		{TriggerCreditPayment, true, false},
 		{TriggerPlannedOp, true, false},
 		{TriggerBalanceShortfall, true, false},
+		{TriggerBudgetThreshold, true, false},
 		{TriggerPasswordReset, true, false},
 		{TriggerUserRegistration, true, false},
 		{TriggerTest, true, true},

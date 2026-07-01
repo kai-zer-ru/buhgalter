@@ -97,6 +97,7 @@ SELECT
     trigger_credit,
     trigger_planned,
     trigger_negative_balance,
+    trigger_budget,
     trigger_user_registration,
     trigger_password_reset,
     debt_days_before,
@@ -127,6 +128,7 @@ func (q *Queries) GetNotificationSettings(ctx context.Context, userID string) (N
 		&i.TriggerCredit,
 		&i.TriggerPlanned,
 		&i.TriggerNegativeBalance,
+		&i.TriggerBudget,
 		&i.TriggerUserRegistration,
 		&i.TriggerPasswordReset,
 		&i.DebtDaysBefore,
@@ -230,6 +232,7 @@ INSERT INTO notification_settings (
     trigger_credit,
     trigger_planned,
     trigger_negative_balance,
+    trigger_budget,
     trigger_user_registration,
     trigger_password_reset,
     debt_days_before,
@@ -239,7 +242,7 @@ INSERT INTO notification_settings (
     credit_days_before,
     notification_time_local,
     updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(user_id) DO UPDATE SET
     telegram_enabled = excluded.telegram_enabled,
     telegram_bot_token = excluded.telegram_bot_token,
@@ -253,6 +256,7 @@ ON CONFLICT(user_id) DO UPDATE SET
     trigger_credit = excluded.trigger_credit,
     trigger_planned = excluded.trigger_planned,
     trigger_negative_balance = excluded.trigger_negative_balance,
+    trigger_budget = excluded.trigger_budget,
     trigger_user_registration = excluded.trigger_user_registration,
     trigger_password_reset = excluded.trigger_password_reset,
     debt_days_before = excluded.debt_days_before,
@@ -278,6 +282,7 @@ type UpsertNotificationSettingsParams struct {
 	TriggerCredit                 int64   `json:"trigger_credit"`
 	TriggerPlanned                int64   `json:"trigger_planned"`
 	TriggerNegativeBalance        int64   `json:"trigger_negative_balance"`
+	TriggerBudget                 int64   `json:"trigger_budget"`
 	TriggerUserRegistration       int64   `json:"trigger_user_registration"`
 	TriggerPasswordReset          int64   `json:"trigger_password_reset"`
 	DebtDaysBefore                int64   `json:"debt_days_before"`
@@ -304,6 +309,7 @@ func (q *Queries) UpsertNotificationSettings(ctx context.Context, arg UpsertNoti
 		arg.TriggerCredit,
 		arg.TriggerPlanned,
 		arg.TriggerNegativeBalance,
+		arg.TriggerBudget,
 		arg.TriggerUserRegistration,
 		arg.TriggerPasswordReset,
 		arg.DebtDaysBefore,

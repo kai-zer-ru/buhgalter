@@ -29,6 +29,7 @@ API: `GET` / `PUT` `/api/v1/user/notifications`, preview и reset шаблоно
 | Кредиты | `trigger_credit` | `credit_payment` |
 | Плановые | `trigger_planned` | `planned_operation` |
 | Отрицательный баланс | `trigger_negative_balance` | `balance_shortfall` (+ проверка баланса в worker) |
+| Бюджет | `trigger_budget` | `budget_threshold` |
 | Восстановление пароля | `trigger_password_reset` | `password_reset` (только админ) |
 | Регистрация пользователя | `trigger_user_registration` | `user_registration` (только админ, если регистрация включена) |
 
@@ -84,6 +85,14 @@ Placeholder `{amount}` — недостающая сумма. Формула: `m
 
 ---
 
+## Бюджет
+
+При включённом **«Бюджет»** worker и hook после расходной операции отправляют `budget_threshold`, когда фактические расходы по лимиту достигают `alert_at_percent` или 100%. Дедупликация — `budget_alert_sent`. Подробнее — [budget.md](budget.md).
+
+Плейсхолдеры: `{name}`, `{spent}`, `{planned}`, `{percent}`, `{budget_url}` → `/budget`.
+
+---
+
 ## Ссылки в шаблонах
 
 Базовый URL — `system_settings.external_url` (админка → «Внешний URL»). При пустом значении вместо ссылки подставляется подсказка: «Нет внешней ссылки — настройте внешний URL в админке» (EN: *No external link — configure the external URL in admin settings.*).
@@ -96,6 +105,7 @@ Placeholder `{amount}` — недостающая сумма. Формула: `m
 | `test` | `{settings_url}` | `/settings?tab=notifications` |
 | `password_reset` | `{reset_url}` | `/admin/users?reset={user_id}` |
 | `user_registration` | `{moderation_url}` | `/admin/users?moderate={user_id}` |
+| `budget_threshold` | `{budget_url}` | `/budget` |
 
 Шаблон `balance_shortfall` — только `{amount}` (суффикс к основному сообщению, без отдельной ссылки).
 
@@ -114,6 +124,7 @@ Placeholder `{amount}` — недостающая сумма. Формула: `m
 | Gating шаблонов | `TemplateSettingEnabled` |
 | Gating периодов | `PolicySettingEnabled` |
 | Суффикс баланса | [`balance.go`](../server/internal/notify/balance.go) |
+| Пороги бюджета | [`budgetnotify/check.go`](../server/internal/budgetnotify/check.go) |
 | URL в шаблонах | [`urls.go`](../server/internal/notify/urls.go) |
 
 Dedup и `notification_log.trigger_type` — основной триггер (не `balance_shortfall`).

@@ -8,6 +8,7 @@ const (
 	TriggerCreditPayment    = "credit_payment"
 	TriggerPlannedOp        = "planned_operation"
 	TriggerBalanceShortfall = "balance_shortfall"
+	TriggerBudgetThreshold  = "budget_threshold"
 	TriggerUserRegistration = "user_registration"
 	TriggerPasswordReset    = "password_reset"
 	TriggerTest             = "test"
@@ -29,6 +30,7 @@ var triggerOrder = []string{
 	TriggerCreditPayment,
 	TriggerPlannedOp,
 	TriggerBalanceShortfall,
+	TriggerBudgetThreshold,
 	TriggerUserRegistration,
 	TriggerPasswordReset,
 	TriggerTest,
@@ -40,6 +42,7 @@ var triggerPlaceholders = map[string][]string{
 	TriggerCreditPayment:    {"credit", "amount", "payment_date", "when", "credit_url"},
 	TriggerPlannedOp:        {"type", "amount", "description", "date", "transaction_url"},
 	TriggerBalanceShortfall: {"amount"},
+	TriggerBudgetThreshold:  {"name", "spent", "planned", "percent", "budget_url"},
 	TriggerUserRegistration: {"login", "display_name", "registered_at", "moderation_url"},
 	TriggerPasswordReset:    {"login", "display_name", "requested_at", "reset_url"},
 	TriggerTest:             {"channel", "settings_url"},
@@ -63,6 +66,8 @@ func TemplateSettingEnabled(settings sqlcdb.NotificationSetting, triggerType str
 		return settings.TriggerPlanned == 1
 	case TriggerBalanceShortfall:
 		return settings.TriggerNegativeBalance == 1
+	case TriggerBudgetThreshold:
+		return settings.TriggerBudget == 1
 	case TriggerPasswordReset:
 		return settings.TriggerPasswordReset == 1
 	case TriggerUserRegistration:

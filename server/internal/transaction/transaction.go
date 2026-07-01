@@ -14,6 +14,7 @@ import (
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/debt"
 	"github.com/kai-zer-ru/buhgalter/internal/money"
+	"github.com/kai-zer-ru/buhgalter/internal/budgetnotify"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
 )
 
@@ -269,6 +270,7 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Tra
 	if err := refreshAccountBalances(ctx, db, userID, in.AccountID); err != nil {
 		return Transaction{}, err
 	}
+	maybeNotifyBudget(ctx, db, userID, in.Type)
 	return GetByID(ctx, db, userID, id)
 }
 
@@ -341,6 +343,7 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in UpdateInput) 
 	if err := refreshAccountBalances(ctx, db, userID, uniqueAccountIDs(existing.AccountID, in.AccountID)...); err != nil {
 		return Transaction{}, err
 	}
+	maybeNotifyBudget(ctx, db, userID, in.Type)
 	return GetByID(ctx, db, userID, id)
 }
 
@@ -390,7 +393,11 @@ func Delete(ctx context.Context, db *sql.DB, userID, id string) error {
 	if err := dbTx.Commit(); err != nil {
 		return err
 	}
-	return refreshAccountBalances(ctx, db, userID, existing.AccountID)
+	if err := refreshAccountBalances(ctx, db, userID, existing.AccountID); err != nil {
+		return err
+	}
+	maybeNotifyBudget(ctx, db, userID, existing.Type)
+	return nil
 }
 
 func Activate(ctx context.Context, db *sql.DB, userID, id string) (Transaction, error) {
@@ -722,4 +729,10 @@ func resolveSubcategory(ctx context.Context, db *sql.DB, userID string, category
 // ResolveKindForDate is exported for tests.
 func ResolveKindForDate(ctx context.Context, db *sql.DB, userID string, txDate time.Time) (string, error) {
 	return resolveKind(ctx, db, userID, txDate)
+}
+
+func maybeNotifyBudget(ctx context.Context, db *sql.DB, userID, txType string) {
+	if txType == "expense" {
+		budgetnotify.CheckThresholdsAfterTx(ctx, db, userID)
+	}
 }

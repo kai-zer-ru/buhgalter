@@ -15,6 +15,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/audit"
 	"github.com/kai-zer-ru/buhgalter/internal/backup"
 	"github.com/kai-zer-ru/buhgalter/internal/bank"
+	"github.com/kai-zer-ru/buhgalter/internal/budgetnotify"
 	"github.com/kai-zer-ru/buhgalter/internal/config"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
@@ -102,6 +103,7 @@ func main() {
 	defer creditSched.Stop()
 
 	notifyWorker := notify.NewWorker(manager.DB(), logger)
+	notify.BudgetThresholdChecker = budgetnotify.CheckThresholdsForUser
 	notifyWorker.Start()
 	defer notifyWorker.Stop()
 
