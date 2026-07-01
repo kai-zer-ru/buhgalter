@@ -59,6 +59,8 @@ type Credit struct {
 	DownPayment               int64   `json:"down_payment"`
 	DownPaymentAffectsBalance int64   `json:"down_payment_affects_balance"`
 	DownPaymentTransactionID  *string `json:"down_payment_transaction_id"`
+	PrincipalAffectsBalance   int64   `json:"principal_affects_balance"`
+	PrincipalTransactionID    *string `json:"principal_transaction_id"`
 	IssueDate                 string  `json:"issue_date"`
 	TermMonths                int64   `json:"term_months"`
 	InterestRate              float64 `json:"interest_rate"`

@@ -3398,6 +3398,12 @@ components:
         down_payment_transaction_id:
           type: string
           nullable: true
+        principal_affects_balance:
+          type: boolean
+          description: true, если сумма кредита учтена как доход на счёте при создании
+        principal_transaction_id:
+          type: string
+          nullable: true
         issue_date:
           type: string
         term_months:
@@ -3571,7 +3577,7 @@ components:
           type: string
           nullable: true
           pattern: '^([01]\d|2[0-3]):([0-5]\d)$'
-          description: Локальное время автосписания в формате HH:MM; null/пусто отключает автосписание для кредита
+          description: Локальное время автосписания в формате HH:MM; null/пусто отключает автосписание; в UI по умолчанию 08:00
         bank_id:
           type: string
           nullable: true
@@ -3584,6 +3590,12 @@ components:
             Число последних ретроактивных платежей (дата &lt; сегодня), для которых при создании
             списать расход со счёта `debit_account_id`. Только при `added_retroactively=true`.
             Не больше числа прошлых платежей в графике.
+        principal_affects_balance:
+          type: boolean
+          description: >
+            Только для consumer с interest_rate &gt; 0. Если true — доход на сумму кредита
+            на `debit_account_id` в дату выдачи. Недоступно, если в графике есть платёж
+            с датой раньше начала текущих суток (TZ пользователя).
         create_transactions:
           type: boolean
           description: >

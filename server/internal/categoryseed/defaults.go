@@ -25,7 +25,7 @@ type defaultCategory struct {
 }
 
 // DefaultCount is the number of categories seeded for a new user (including system).
-const DefaultCount = 11
+const DefaultCount = 12
 
 var defaultCategories = []defaultCategory{
 	{Type: "expense", Name: "Транспорт", Icon: "transport", Sort: 1, IsPrimary: true},
@@ -40,6 +40,7 @@ var defaultCategories = []defaultCategory{
 var systemCategories = []defaultCategory{
 	{Type: "expense", Name: CommissionCategoryName, Icon: "percent", Sort: 9997, IsSystem: true},
 	{Type: "expense", Name: CreditCategoryName, Icon: "loan", Sort: 9998, IsSystem: true},
+	{Type: "income", Name: CreditCategoryName, Icon: "loan", Sort: 9998, IsSystem: true},
 	{Type: "expense", Name: DebtCategoryName, Icon: "loan", Sort: 9999, IsSystem: true},
 	{Type: "income", Name: DebtCategoryName, Icon: "loan", Sort: 9999, IsSystem: true},
 }
@@ -140,6 +141,20 @@ func CreditCategoryID(ctx context.Context, db sqlcdb.DBTX, userID string) (strin
 	}
 	row, err := sqlcdb.New(db).GetCategoryByNameAndType(ctx, sqlcdb.GetCategoryByNameAndTypeParams{
 		UserID: userID, Name: CreditCategoryName, Type: "expense",
+	})
+	if err != nil {
+		return "", err
+	}
+	return row.ID, nil
+}
+
+// CreditIncomeCategoryID returns the system income «Кредиты» category id.
+func CreditIncomeCategoryID(ctx context.Context, db sqlcdb.DBTX, userID string) (string, error) {
+	if err := EnsureSystemCategories(ctx, db, userID); err != nil {
+		return "", err
+	}
+	row, err := sqlcdb.New(db).GetCategoryByNameAndType(ctx, sqlcdb.GetCategoryByNameAndTypeParams{
+		UserID: userID, Name: CreditCategoryName, Type: "income",
 	})
 	if err != nil {
 		return "", err

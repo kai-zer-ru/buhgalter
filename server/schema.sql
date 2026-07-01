@@ -197,6 +197,8 @@ CREATE TABLE credits (
     down_payment        INTEGER NOT NULL DEFAULT 0,
     down_payment_affects_balance INTEGER NOT NULL DEFAULT 0,
     down_payment_transaction_id TEXT REFERENCES transactions(id),
+    principal_affects_balance INTEGER NOT NULL DEFAULT 0,
+    principal_transaction_id TEXT REFERENCES transactions(id),
     issue_date          TEXT NOT NULL,
     term_months         INTEGER NOT NULL,
     interest_rate       REAL NOT NULL DEFAULT 0,

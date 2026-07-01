@@ -1163,6 +1163,8 @@ export type Credit = {
 	down_payment_display?: string;
 	down_payment_affects_balance?: boolean;
 	down_payment_transaction_id?: string | null;
+	principal_affects_balance?: boolean;
+	principal_transaction_id?: string | null;
 	issue_date: string;
 	term_months: number;
 	interest_rate: number;
