@@ -4,13 +4,16 @@ import { createCashAccount, createExpense, createIncome } from './helpers/setup-
 import { selectCombobox } from './helpers/transactions';
 
 test('filter transactions by type expense', async ({ page }) => {
-	const account = await createCashAccount(page);
+	const tag = Date.now();
+	const account = await createCashAccount(page, `E2E Filter Expense ${tag}`);
 	await createExpense(page, account.id, '10.00', 'E2E filter expense');
 	await createIncome(page, account.id, '20.00', 'E2E filter income');
 
 	await page.goto('/transactions');
 	await waitAppReady(page);
 
+	await selectCombobox(page, 'tx-filter-account', { label: account.name });
+	await expect(page).toHaveURL(/account_id=/, { timeout: 10_000 });
 	await selectCombobox(page, 'tx-filter-type', { label: 'Расход' });
 	await expect(page).toHaveURL(/type=expense/, { timeout: 10_000 });
 	await expect(page.getByRole('row', { name: /10\.00/ })).toBeVisible({ timeout: 10_000 });

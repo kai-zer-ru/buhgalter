@@ -8,8 +8,6 @@
 		putAdminNotificationSecretKey,
 		putAdminSettings
 	} from '$lib/api/client';
-	import { formatApiError } from '$lib/api/errors';
-	import FormFeedback from '$lib/components/FormFeedback.svelte';
 	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
 
@@ -17,10 +15,6 @@
 	let externalURL = $state('');
 	let secretKeySet = $state(false);
 	let notificationSecretKey = $state('');
-	let systemError = $state('');
-	let systemSuccess = $state('');
-	let secretError = $state('');
-	let secretSuccess = $state('');
 	let loading = $state(false);
 
 	onMount(async () => {
@@ -36,8 +30,6 @@
 
 	async function submit(e: Event) {
 		e.preventDefault();
-		systemError = '';
-		systemSuccess = '';
 		loading = true;
 		try {
 			await putAdminSettings({
@@ -46,20 +38,17 @@
 			});
 			const s = await getAdminSettings();
 			secretKeySet = s.secret_key_set;
-			systemSuccess = $_('common.saved');
 			toast($_('common.saved'));
 		} catch (err) {
-			systemError = formatApiError(err);
+			toast.fromError(err);
 		} finally {
 			loading = false;
 		}
 	}
 
 	async function saveSecretKey() {
-		secretError = '';
-		secretSuccess = '';
 		if (!notificationSecretKey.trim()) {
-			secretError = $_('admin.system.secret.enter');
+			toast.error($_('admin.system.secret.enter'));
 			return;
 		}
 		loading = true;
@@ -68,10 +57,9 @@
 			notificationSecretKey = '';
 			const s = await getAdminSettings();
 			secretKeySet = s.secret_key_set;
-			secretSuccess = $_('admin.system.secret.saved');
 			toast($_('admin.system.secret.saved'));
 		} catch (err) {
-			secretError = formatApiError(err);
+			toast.fromError(err);
 		} finally {
 			loading = false;
 		}
@@ -115,7 +103,6 @@
 			/>
 		</div>
 		<button type="submit" class="btn-primary" disabled={loading}>{$_('common.save')}</button>
-		<FormFeedback error={systemError} success={systemSuccess} />
 	</form>
 
 	<div class="card max-w-lg space-y-2">
@@ -141,6 +128,5 @@
 		<button type="button" class="btn-primary" onclick={saveSecretKey} disabled={loading}>
 			{$_('admin.system.secret.save')}
 		</button>
-		<FormFeedback error={secretError} success={secretSuccess} />
 	</div>
 </div>

@@ -16,7 +16,6 @@
 	import { formatAuthUserApiError } from '$lib/auth/api-errors';
 	import { user } from '$lib/stores/auth';
 	import { confirm } from '$lib/confirm';
-	import FormFeedback from '$lib/components/FormFeedback.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
 	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
 	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
@@ -30,15 +29,12 @@
 	let password = $state('');
 	let passwordConfirm = $state('');
 	let isAdmin = $state(false);
-	let formError = $state('');
-	let listError = $state('');
 	let loading = $state(false);
 
 	let resetOpen = $state(false);
 	let resetUser = $state<AdminUser | null>(null);
 	let resetPassword = $state('');
 	let resetPasswordConfirm = $state('');
-	let resetError = $state('');
 	let resetLoading = $state(false);
 	/** Prevents the ?reset= query effect from reopening the modal after cancel. */
 	let dismissedResetQuery = $state<string | null>(null);
@@ -126,7 +122,6 @@
 		resetUser = u;
 		resetPassword = '';
 		resetPasswordConfirm = '';
-		resetError = '';
 		resetOpen = true;
 	}
 
@@ -212,9 +207,8 @@
 
 	async function submit(e: Event) {
 		e.preventDefault();
-		formError = '';
 		if (!formValid) {
-			formError = $_('admin.users.passwordMismatch');
+			toast.error($_('admin.users.passwordMismatch'));
 			return;
 		}
 		loading = true;
@@ -234,7 +228,7 @@
 			users = await listAdminUsers();
 			toast($_('common.saved'));
 		} catch (err) {
-			formError = formatAuthUserApiError(err);
+			toast.fromError(err);
 		} finally {
 			loading = false;
 		}
@@ -242,9 +236,8 @@
 
 	async function submitResetPassword() {
 		if (!resetUser) return;
-		resetError = '';
 		if (!resetFormValid) {
-			resetError = $_('admin.users.reset.invalid');
+			toast.error($_('admin.users.reset.invalid'));
 			return;
 		}
 		resetLoading = true;
@@ -256,7 +249,7 @@
 			toast($_('common.saved'));
 			closeResetPassword();
 		} catch (err) {
-			resetError = formatAuthUserApiError(err);
+			toast.fromError(err);
 		} finally {
 			resetLoading = false;
 		}
@@ -271,14 +264,13 @@
 			});
 			if (!ok) return;
 		}
-		listError = '';
 		try {
 			await updateAdminUserStatus(u.id, status);
 			users = await listAdminUsers();
 			refreshPendingUsersBanner();
 			toast($_('common.saved'));
 		} catch (err) {
-			listError = formatAuthUserApiError(err);
+			toast.fromError(err);
 		}
 	}
 
@@ -289,13 +281,12 @@
 			danger: true
 		});
 		if (!ok) return;
-		listError = '';
 		try {
 			await deleteAdminUser(id);
 			users = await listAdminUsers();
 			toast($_('common.deleted'));
 		} catch (err) {
-			listError = formatAuthUserApiError(err);
+			toast.fromError(err);
 		}
 	}
 
@@ -416,10 +407,7 @@
 		<button type="submit" class="btn-primary" disabled={loading || !formValid}>
 			{$_('common.create')}
 		</button>
-		<FormFeedback error={formError} />
 	</form>
-
-	<FormFeedback error={listError} />
 
 	<div class="card md:overflow-x-auto">
 		<div class="hidden md:block">
@@ -522,7 +510,6 @@
 				<p class="text-sm" style:color="var(--danger)">{$_('admin.users.passwordMismatch')}</p>
 			{/if}
 			<p class="text-xs" style:color="var(--text-muted)">{$_('auth.password.requirements')}</p>
-			<FormFeedback error={resetError} />
 		</div>
 		{#snippet footer()}
 			<button type="button" class="btn-ghost" onclick={closeResetPassword}>
@@ -555,7 +542,9 @@
 					}
 				})}
 			</p>
-			<FormFeedback error={moderateError} />
+			{#if moderateError}
+				<p class="text-sm" style:color="var(--danger)">{moderateError}</p>
+			{/if}
 		</div>
 		{#snippet footer()}
 			<button type="button" class="btn-ghost" onclick={closeModeration}>

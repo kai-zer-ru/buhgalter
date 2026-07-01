@@ -3,7 +3,6 @@
 	import { resolve } from '$app/paths';
 	import { _ } from 'svelte-i18n';
 	import {
-		ApiError,
 		archiveAccount,
 		deleteAccount,
 		listAccounts,
@@ -25,7 +24,6 @@
 	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import { confirm } from '$lib/confirm';
-	import { formatApiError } from '$lib/api/errors';
 	import { formatBalance } from '$lib/finance';
 	import { formatMoneyForInput, toAPIAmount } from '$lib/money';
 	import { toast } from '$lib/toast';
@@ -37,7 +35,7 @@
 	let filter = $state<'active' | 'archived'>('active');
 	let loading = $state(true);
 	let filterLoading = $state(false);
-	let error = $state('');
+	let ready = $state(false);
 	let primarySavingId = $state('');
 	let actionSavingId = $state('');
 	let editingId = $state<string | null>(null);
@@ -63,7 +61,6 @@
 		} else {
 			loading = true;
 		}
-		error = '';
 		try {
 			const [accountList, bankList, activeList] = await Promise.all([
 				listAccounts(filter),
@@ -73,8 +70,9 @@
 			accounts = accountList;
 			banks = bankList;
 			activeAccounts = activeList;
+			ready = true;
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			loading = false;
 			filterLoading = false;
@@ -114,7 +112,6 @@
 		e.preventDefault();
 		if (savingEditId) return;
 		savingEditId = acc.id;
-		error = '';
 		try {
 			const updated = await updateAccount(acc.id, {
 				name: editName,
@@ -127,7 +124,7 @@
 			editingId = null;
 			toast($_('common.saved'));
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			savingEditId = '';
 		}
@@ -136,7 +133,6 @@
 	async function makePrimary(id: string) {
 		if (!id || primarySavingId) return;
 		primarySavingId = id;
-		error = '';
 		try {
 			const updated = await setPrimaryAccount(id);
 			accounts = accounts.map((acc) => ({
@@ -144,7 +140,7 @@
 				is_primary: acc.id === updated.id
 			}));
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			primarySavingId = '';
 		}
@@ -153,7 +149,6 @@
 	async function archive(id: string) {
 		if (!id || actionSavingId) return;
 		actionSavingId = id;
-		error = '';
 		try {
 			await archiveAccount(id);
 			accounts = accounts.filter((acc) => acc.id !== id);
@@ -161,7 +156,7 @@
 			if (editingId === id) editingId = null;
 			toast($_('common.saved'));
 		} catch (err) {
-			toast(formatApiError(err), 'error');
+			toast.fromError(err);
 		} finally {
 			actionSavingId = '';
 		}
@@ -170,7 +165,6 @@
 	async function unarchive(id: string) {
 		if (!id || actionSavingId) return;
 		actionSavingId = id;
-		error = '';
 		try {
 			const restored = await unarchiveAccount(id);
 			accounts = accounts.filter((acc) => acc.id !== id);
@@ -178,7 +172,7 @@
 			if (editingId === id) editingId = null;
 			toast($_('common.saved'));
 		} catch (err) {
-			toast(formatApiError(err), 'error');
+			toast.fromError(err);
 		} finally {
 			actionSavingId = '';
 		}
@@ -193,14 +187,13 @@
 		});
 		if (!ok) return;
 		actionSavingId = id;
-		error = '';
 		try {
 			await deleteAccount(id);
 			accounts = accounts.filter((acc) => acc.id !== id);
 			if (editingId === id) editingId = null;
 			toast($_('common.deleted'));
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			actionSavingId = '';
 		}
@@ -301,8 +294,8 @@
 
 	{#if loading}
 		<p style:color="var(--text-muted)">{$_('common.loading')}</p>
-	{:else if error}
-		<p style:color="var(--danger)">{error}</p>
+	{:else if !ready}
+		<!-- load failed; toast shown -->
 	{:else if accounts.length === 0 && filterLoading}
 		<EmptyStateCard message={$_('common.loading')} ariaBusy />
 	{:else if accounts.length === 0}

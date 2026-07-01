@@ -23,6 +23,7 @@
 	--primary: #047857;
 	--primary-hover: #065f46;
 	--danger: #dc2626;
+	--warning: #d97706;
 }
 
 html.dark {
@@ -39,6 +40,7 @@ html.dark {
 	--primary: #0d9488;
 	--primary-hover: #14b8a6;
 	--danger: #f87171;
+	--warning: #fbbf24;
 }
 
 @layer base {

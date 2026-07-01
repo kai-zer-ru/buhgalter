@@ -17,7 +17,7 @@ test('new account balance field shows placeholder instead of 0.00', async ({ pag
 
 test('recurring operation form amount field starts empty', async ({ page }) => {
 	await createCashAccount(page);
-	await page.goto('/recurring-operations');
+	await page.goto('/settings/recurring-operations');
 	await waitAppReady(page);
 	await page.getByRole('button', { name: 'Добавить' }).click();
 	await expectEmptyMoneyInput(page.locator('#recurring-amount-create'));

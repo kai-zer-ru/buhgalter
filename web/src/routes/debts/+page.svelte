@@ -2,7 +2,6 @@
 	import { onMount } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import {
-		ApiError,
 		deleteDebt,
 		getDebtsSummary,
 		listDebts,
@@ -27,7 +26,6 @@
 	let summary = $state<DebtsSummary | null>(null);
 	let loading = $state(true);
 	let filterLoading = $state(false);
-	let error = $state('');
 	let formOpen = $state(false);
 	let formDirection = $state<'lent' | 'borrowed'>('lent');
 	let settleOpen = $state(false);
@@ -44,14 +42,13 @@
 		} else {
 			loading = true;
 		}
-		error = '';
 		try {
 			const settled = tab === 'active' ? 'false' : 'true';
 			const [summaryData, list] = await Promise.all([getDebtsSummary(), listDebts({ settled })]);
 			summary = summaryData;
 			debts = list;
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			loading = false;
 			filterLoading = false;
@@ -124,8 +121,6 @@
 
 	{#if loading}
 		<p style:color="var(--text-muted)">{$_('common.loading')}</p>
-	{:else if error}
-		<p style:color="var(--danger)">{error}</p>
 	{:else if debts.length === 0 && filterLoading}
 		<EmptyStateCard message={$_('common.loading')} ariaBusy />
 	{:else if debts.length === 0}

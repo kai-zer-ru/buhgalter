@@ -7,12 +7,16 @@
 	import { dropdownListStyle } from '$lib/dropdown-position';
 	import FieldHint from '$lib/components/FieldHint.svelte';
 	import { _ } from 'svelte-i18n';
+	import { todayDateLocal } from '$lib/dates';
 	import {
 		buildDatetimeLocal,
 		calendarCells,
 		formatDateButtonLabel,
 		formatDatetimeButtonLabel,
-		parseDatetimeLocal
+		isCalendarDayDisabled,
+		nextCalendarDay,
+		parseDatetimeLocal,
+		type CalendarDate
 	} from '$lib/datetime-picker';
 
 	type TimeMode = 'hidden' | 'optional' | 'visible';
@@ -26,7 +30,9 @@
 		usePortal = false,
 		timeMode = 'optional' as TimeMode,
 		defaultTime = 'now' as 'now' | 'preserve' | string,
-		required = false
+		required = false,
+		blockPastIncludingToday = false,
+		timezone = ''
 	}: {
 		value?: string;
 		id?: string;
@@ -37,6 +43,9 @@
 		timeMode?: TimeMode;
 		defaultTime?: 'now' | 'preserve' | string;
 		required?: boolean;
+		blockPastIncludingToday?: boolean;
+		/** User TZ for min-date when blockPastIncludingToday; falls back to browser local. */
+		timezone?: string;
 	} = $props();
 
 	let open = $state(false);
@@ -75,6 +84,20 @@
 	);
 
 	const cells = $derived(calendarCells(viewYear, viewMonth));
+	const minSelectableDate = $derived.by((): CalendarDate | null => {
+		if (!blockPastIncludingToday) return null;
+		if (timezone) {
+			const today = parseDatetimeLocal(todayDateLocal(timezone));
+			if (!today) return null;
+			return nextCalendarDay(today);
+		}
+		const now = new Date();
+		return nextCalendarDay({
+			year: now.getFullYear(),
+			month: now.getMonth() + 1,
+			day: now.getDate()
+		});
+	});
 	const weekdays = $derived([
 		$_('datetime.weekday.mon'),
 		$_('datetime.weekday.tue'),
@@ -116,11 +139,17 @@
 	}
 
 	function setDate(year: number, month: number, day: number) {
+		const cell = { year, month, day };
+		if (isCalendarDayDisabled(cell, minSelectableDate)) return;
 		viewYear = year;
 		viewMonth = month;
 		const { hour, minute } = effectiveTime();
 		value = buildDatetimeLocal(year, month, day, hour, minute);
 		if (timeMode !== 'visible') close();
+	}
+
+	function isDisabledCell(cell: CalendarDate): boolean {
+		return isCalendarDayDisabled(cell, minSelectableDate);
 	}
 
 	function isSelectedCell(cell: { year: number; month: number; day: number }): boolean {
@@ -311,10 +340,13 @@
 					{#each cells as cell, index (`${cell.year}-${cell.month}-${cell.day}-${index}`)}
 						<button
 							type="button"
-							class="datetime-day-btn h-9 cursor-pointer rounded-lg px-0 py-2 text-sm transition"
+							class="datetime-day-btn h-9 rounded-lg px-0 py-2 text-sm transition"
 							class:datetime-day-muted={!cell.inMonth}
 							class:datetime-day-selected={isSelectedCell(cell)}
 							class:datetime-day-today={isTodayCell(cell)}
+							class:datetime-day-disabled={isDisabledCell(cell)}
+							class:cursor-pointer={!isDisabledCell(cell)}
+							disabled={isDisabledCell(cell)}
 							onclick={() => setDate(cell.year, cell.month, cell.day)}
 						>
 							{cell.day}
@@ -383,7 +415,7 @@
 				</div>
 			{/if}
 			<div class="mt-3 flex justify-end gap-2">
-				{#if panelView === 'days'}
+				{#if panelView === 'days' && !blockPastIncludingToday}
 					<button type="button" class="btn-ghost datetime-footer-btn text-sm" onclick={selectToday}>
 						{$_('datetime.today')}
 					</button>
@@ -409,8 +441,14 @@
 		background-color: transparent;
 	}
 
-	.datetime-day-btn:hover:not(.datetime-day-selected) {
+	.datetime-day-btn:hover:not(.datetime-day-selected):not(.datetime-day-disabled) {
 		background-color: color-mix(in srgb, var(--text) 14%, var(--bg-popover));
+	}
+
+	.datetime-day-disabled {
+		color: color-mix(in srgb, var(--text-muted) 45%, transparent);
+		cursor: not-allowed;
+		opacity: 0.45;
 	}
 
 	.datetime-day-selected {

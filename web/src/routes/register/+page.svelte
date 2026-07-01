@@ -11,7 +11,6 @@
 	let displayName = $state('');
 	let password = $state('');
 	let passwordConfirm = $state('');
-	let error = $state('');
 	let loginError = $state('');
 	let passwordError = $state('');
 	let loading = $state(false);
@@ -25,11 +24,10 @@
 
 	async function submit(e: Event) {
 		e.preventDefault();
-		error = '';
 		loginError = '';
 		passwordError = '';
 		if (!formValid) {
-			error = $_('admin.users.passwordMismatch');
+			toast.error($_('admin.users.passwordMismatch'));
 			return;
 		}
 		loading = true;
@@ -47,7 +45,7 @@
 			const field = authUserApiField(err);
 			if (field === 'login') loginError = message;
 			else if (field === 'password') passwordError = message;
-			else error = message;
+			else toast.error(message);
 		} finally {
 			loading = false;
 		}
@@ -113,9 +111,6 @@
 					</p>
 				{/if}
 			</div>
-			{#if error}
-				<p class="text-sm" style:color="var(--danger)">{error}</p>
-			{/if}
 			<button type="submit" class="btn-primary w-full" disabled={loading || !formValid}>
 				{loading ? $_('common.loading') : $_('register.submit')}
 			</button>

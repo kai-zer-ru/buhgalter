@@ -6,7 +6,6 @@
 	import { page } from '$app/stores';
 	import { _ } from 'svelte-i18n';
 	import {
-		ApiError,
 		createCategory,
 		createSubcategory,
 		deleteCategory,
@@ -51,7 +50,6 @@
 	let subs = $state<Record<string, Subcategory[]>>({});
 	let expanded = $state<Record<string, boolean>>({});
 	let loading = $state(true);
-	let error = $state('');
 
 	let editingId = $state<string | null>(null);
 	let editName = $state('');
@@ -124,11 +122,10 @@
 
 	async function load() {
 		loading = true;
-		error = '';
 		try {
 			categories = await listCategories(tab);
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			loading = false;
 		}
@@ -177,7 +174,7 @@
 			toast($_('common.saved'));
 			await load();
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		}
 	}
 
@@ -195,7 +192,7 @@
 			toast($_('common.saved'));
 			await load();
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		}
 	}
 
@@ -211,7 +208,7 @@
 			toast($_('common.deleted'));
 			await load();
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		}
 	}
 
@@ -233,7 +230,7 @@
 			await tick();
 			document.getElementById(subInputId(categoryId))?.focus();
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		}
 	}
 
@@ -257,7 +254,7 @@
 			editingSubId = null;
 			toast($_('common.saved'));
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		}
 	}
 
@@ -276,7 +273,7 @@
 				[categoryId]: (subs[categoryId] ?? []).filter((s) => s.id !== subId)
 			};
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		}
 	}
 
@@ -293,7 +290,7 @@
 		try {
 			categories = await reorderCategories(tab, ids);
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		}
 	}
 
@@ -308,7 +305,7 @@
 		try {
 			subs = { ...subs, [categoryId]: await reorderSubcategories(categoryId, ids) };
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		}
 	}
 
@@ -319,7 +316,7 @@
 			categories = categories.map((c) => ({ ...c, is_primary: c.id === id }));
 			toast($_('common.saved'));
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		}
 	}
 
@@ -371,10 +368,6 @@
 			</button>
 		</div>
 	</div>
-
-	{#if error}
-		<p class="text-sm" style:color="var(--danger)">{error}</p>
-	{/if}
 
 	<div class="card space-y-3">
 		<h2 class="font-medium">{$_('categories.add')}</h2>

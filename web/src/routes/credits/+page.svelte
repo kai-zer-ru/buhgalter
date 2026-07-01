@@ -1,14 +1,14 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { _ } from 'svelte-i18n';
-	import { ApiError, listBanks, listCredits, type Bank, type Credit } from '$lib/api/client';
+	import { listBanks, listCredits, type Bank, type Credit } from '$lib/api/client';
 	import BackLink from '$lib/components/BackLink.svelte';
 	import CreditForm from '$lib/components/CreditForm.svelte';
 	import CreditList from '$lib/components/CreditList.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
-	import FormFeedback from '$lib/components/FormFeedback.svelte';
 	import PageTabs from '$lib/components/PageTabs.svelte';
 	import SectionHeader from '$lib/components/SectionHeader.svelte';
+	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
 
 	let tab = $state<'active' | 'closed'>('active');
@@ -16,7 +16,6 @@
 	let banks = $state<Bank[]>([]);
 	let loading = $state(true);
 	let filterLoading = $state(false);
-	let error = $state('');
 	let formOpen = $state(false);
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
@@ -27,7 +26,6 @@
 	async function load(opts: { tabChange?: boolean } = {}) {
 		if (opts?.tabChange) filterLoading = true;
 		else loading = true;
-		error = '';
 		try {
 			const status = tab === 'active' ? 'active' : 'closed';
 			const [creditsList, banksList] = await Promise.all([listCredits({ status }), listBanks()]);
@@ -38,7 +36,7 @@
 			});
 			banks = banksList;
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			loading = false;
 			filterLoading = false;
@@ -95,10 +93,8 @@
 	{:else if credits.length === 0 && filterLoading}
 		<EmptyStateCard message={$_('common.loading')} ariaBusy />
 	{:else if credits.length === 0}
-		<FormFeedback {error} />
 		<EmptyStateCard message={tab === 'closed' ? $_('credits.empty.closed') : $_('credits.empty')} />
 	{:else}
-		<FormFeedback {error} />
 		<div class="relative card md:overflow-x-auto" class:opacity-60={filterLoading}>
 			{#if filterLoading}
 				<p

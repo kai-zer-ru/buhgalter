@@ -15,7 +15,6 @@
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
 	import { dateOnlyPicker, defaultAutoDebitTimeLocal } from '$lib/datetime-picker-standards';
 	import FieldHint from '$lib/components/FieldHint.svelte';
-	import FormFeedback from '$lib/components/FormFeedback.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
 	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
 	import TransactionPagination from '$lib/components/TransactionPagination.svelte';
@@ -72,7 +71,6 @@
 	let scheduleError = $state('');
 	let lastScheduleKey = $state('');
 	let saving = $state(false);
-	let error = $state('');
 	let schedulePage = $state(1);
 
 	const schedulePageSize = 10;
@@ -222,7 +220,6 @@
 		lastScheduleKey = '';
 		lastBaseScheduleKey = '';
 		scheduleError = '';
-		error = '';
 		schedulePage = 1;
 	}
 
@@ -467,19 +464,18 @@
 	});
 
 	async function submit() {
-		error = '';
 		if (!debitAccountId) {
-			error = $_('credits.error.noAccount');
+			toast.error($_('credits.error.noAccount'));
 			return;
 		}
 		if (!effectivePrincipal.trim()) {
-			error = $_('credits.error.mortgageFields');
+			toast.error($_('credits.error.mortgageFields'));
 			return;
 		}
 		if (!scheduleRowsComplete()) {
-			error = isManualInterval
-				? $_('credits.error.manualIncomplete')
-				: $_('credits.schedule.empty');
+			toast.error(
+				isManualInterval ? $_('credits.error.manualIncomplete') : $_('credits.schedule.empty')
+			);
 			return;
 		}
 		saving = true;
@@ -518,7 +514,7 @@
 			toast($_('common.saved'));
 			onsaved();
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			saving = false;
 		}
@@ -935,8 +931,6 @@
 				<FieldHint text={$_('credits.field.debitTimeHint')} />
 			</label>
 		{/if}
-
-		<FormFeedback {error} />
 	</div>
 	{#snippet footer()}
 		<button type="button" class="btn-ghost" onclick={onclose}>{$_('common.cancel')}</button>

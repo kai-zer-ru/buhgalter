@@ -3,7 +3,6 @@
 	import { resolve } from '$app/paths';
 	import { _ } from 'svelte-i18n';
 	import {
-		ApiError,
 		addCreditPayment,
 		completeCredit,
 		deleteCredit,
@@ -23,7 +22,6 @@
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
 	import { dateOnlyPicker, defaultAutoDebitTimeLocal } from '$lib/datetime-picker-standards';
 	import FieldHint from '$lib/components/FieldHint.svelte';
-	import FormFeedback from '$lib/components/FormFeedback.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
@@ -53,7 +51,6 @@
 	let accounts = $state<Account[]>([]);
 	let banks = $state<Bank[]>([]);
 	let loading = $state(true);
-	let error = $state('');
 	let payOpen = $state(false);
 	let payAmount = $state('');
 	let payAccountId = $state('');
@@ -63,23 +60,16 @@
 	let setDebitTimeOpen = $state(false);
 	let debitTimeLocal = $state('');
 	let autoDebitEnabled = $state(false);
-	let setDebitTimeError = $state('');
 	let changeNameOpen = $state(false);
 	let newCreditName = $state('');
-	let changeNameError = $state('');
 	let changeBankOpen = $state(false);
 	let newBankId = $state('');
-	let changeBankError = $state('');
 	let completeOpen = $state(false);
 	let completeDateLocal = $state('');
 	let completeMode = $state<'account' | 'skip'>('account');
-	let payError = $state('');
 	let paySubmitting = $state(false);
-	let completeError = $state('');
-	let changeAccountError = $state('');
 	let scheduleEditing = $state(false);
 	let scheduleEditRows = $state<{ id: string; amount: string }[]>([]);
-	let scheduleEditError = $state('');
 	let scheduleSaving = $state(false);
 	let refreshing = $state(false);
 	let pendingPage = $state(1);
@@ -109,9 +99,6 @@
 		} else {
 			refreshing = true;
 		}
-		if (!silent) {
-			error = '';
-		}
 		try {
 			const [c, accs, bankList] = await Promise.all([getCredit(id), listAccounts(), listBanks()]);
 			credit = c;
@@ -124,11 +111,7 @@
 			appliedPage = 1;
 			retroactivePage = 1;
 		} catch (err) {
-			if (!silent) {
-				error = err instanceof ApiError ? err.message : $_('common.error');
-			} else {
-				toast(err instanceof ApiError ? err.message : $_('common.error'));
-			}
+			toast.fromError(err);
 		} finally {
 			if (!silent || !credit) {
 				loading = false;
@@ -191,7 +174,6 @@
 
 	async function submitPay() {
 		if (!credit) return;
-		payError = '';
 		paySubmitting = true;
 		const previousCredit = credit;
 		const schedule = credit.schedule ?? [];
@@ -215,7 +197,7 @@
 			await load({ silent: true });
 		} catch (err) {
 			credit = previousCredit;
-			payError = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 			await load({ silent: true });
 		} finally {
 			paySubmitting = false;
@@ -224,20 +206,18 @@
 
 	async function submitChangeAccount() {
 		if (!credit) return;
-		changeAccountError = '';
 		try {
 			await updateCredit(credit.id, { debit_account_id: newAccountId });
 			changeAccountOpen = false;
 			toast($_('common.saved'));
 			await load();
 		} catch (err) {
-			changeAccountError = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		}
 	}
 
 	async function submitComplete() {
 		if (!credit) return;
-		completeError = '';
 		try {
 			await completeCredit(credit.id, {
 				affects_balance: completeMode === 'account',
@@ -247,7 +227,7 @@
 			toast($_('common.saved'));
 			await load();
 		} catch (err) {
-			completeError = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		}
 	}
 
@@ -261,12 +241,11 @@
 			danger: true
 		});
 		const mode = cascade ? 'cascade' : 'keep_transactions';
-		error = '';
 		try {
 			await deleteCredit(credit.id, mode);
 			window.location.href = resolve('/credits');
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		}
 	}
 
@@ -289,7 +268,6 @@
 
 	function openPay() {
 		if (!credit) return;
-		payError = '';
 		payAmount = defaultPayAmount(credit);
 		payAccountId = credit.debit_account_id;
 		payDateLocal = defaultPayDate(credit);
@@ -298,7 +276,6 @@
 
 	function openComplete() {
 		if (!credit) return;
-		completeError = '';
 		completeDateLocal = todayDateLocal(tz);
 		completeMode = credit.remaining_amount > 0 ? 'account' : 'skip';
 		completeOpen = true;
@@ -306,14 +283,12 @@
 
 	function openChangeAccount() {
 		if (!credit) return;
-		changeAccountError = '';
 		newAccountId = credit.debit_account_id;
 		changeAccountOpen = true;
 	}
 
 	function openSetDebitTime() {
 		if (!credit) return;
-		setDebitTimeError = '';
 		debitTimeLocal = credit.debit_time_local ?? '';
 		autoDebitEnabled = Boolean((credit.debit_time_local ?? '').trim());
 		setDebitTimeOpen = true;
@@ -321,17 +296,15 @@
 
 	function openChangeName() {
 		if (!credit) return;
-		changeNameError = '';
 		newCreditName = credit.name?.trim() || '';
 		changeNameOpen = true;
 	}
 
 	async function submitChangeName() {
 		if (!credit) return;
-		changeNameError = '';
 		const trimmedName = newCreditName.trim();
 		if (!trimmedName) {
-			changeNameError = $_('credits.error.nameRequired');
+			toast.error($_('credits.error.nameRequired'));
 			return;
 		}
 		try {
@@ -340,13 +313,12 @@
 			toast($_('common.saved'));
 			await load();
 		} catch (err) {
-			changeNameError = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		}
 	}
 
 	async function submitDebitTime() {
 		if (!credit) return;
-		setDebitTimeError = '';
 		try {
 			const nextDebitTime = autoDebitEnabled
 				? debitTimeLocal.trim() || defaultAutoDebitTimeLocal
@@ -356,27 +328,25 @@
 			toast($_('common.saved'));
 			await load();
 		} catch (err) {
-			setDebitTimeError = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		}
 	}
 
 	function openChangeBank() {
 		if (!credit) return;
-		changeBankError = '';
 		newBankId = credit.bank_id ?? '';
 		changeBankOpen = true;
 	}
 
 	async function submitChangeBank() {
 		if (!credit) return;
-		changeBankError = '';
 		try {
 			await updateCredit(credit.id, { bank_id: newBankId || null });
 			changeBankOpen = false;
 			toast($_('common.saved'));
 			await load();
 		} catch (err) {
-			changeBankError = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		}
 	}
 
@@ -396,7 +366,6 @@
 
 	function openScheduleEdit() {
 		if (!credit) return;
-		scheduleEditError = '';
 		scheduleEditRows = (credit.schedule ?? [])
 			.filter(canEditPayment)
 			.map((p) => ({ id: p.id, amount: formatMoneyForInput(fromCents(p.amount)) }));
@@ -406,12 +375,10 @@
 	function cancelScheduleEdit() {
 		scheduleEditing = false;
 		scheduleEditRows = [];
-		scheduleEditError = '';
 	}
 
 	async function submitScheduleEdit() {
 		if (!credit) return;
-		scheduleEditError = '';
 		scheduleSaving = true;
 		try {
 			const payments = scheduleEditRows.map((row) => ({
@@ -424,7 +391,7 @@
 			toast($_('common.saved'));
 			await load();
 		} catch (err) {
-			scheduleEditError = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			scheduleSaving = false;
 		}
@@ -521,7 +488,6 @@
 
 	function openPayForPayment(p: CreditPayment) {
 		if (!credit) return;
-		payError = '';
 		const amountCents = Math.min(p.amount, credit.remaining_amount);
 		payAmount = fromCents(amountCents);
 		payAccountId = credit.debit_account_id;
@@ -635,8 +601,6 @@
 
 	{#if loading}
 		<p style:color="var(--text-muted)">{$_('common.loading')}</p>
-	{:else if error}
-		<p style:color="var(--danger)">{error}</p>
 	{:else if credit}
 		<div class="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-start md:justify-between">
 			<div>
@@ -886,7 +850,6 @@
 						{#if scheduleEditing}
 							<div class="px-4 pb-2">
 								<FieldHint text={$_('credits.schedule.editHint')} />
-								<FormFeedback error={scheduleEditError} />
 								<div class="mt-2 flex flex-wrap gap-2">
 									<button
 										type="button"
@@ -998,7 +961,6 @@
 					{$_('credits.pay.preview')}: {formatBalance(fromCents(payRemaining()!), currency)}
 				</p>
 			{/if}
-			<FormFeedback error={payError} />
 		</div>
 		{#snippet footer()}
 			<button type="button" class="btn-ghost" onclick={() => (payOpen = false)}>
@@ -1057,7 +1019,6 @@
 				{...dateOnlyPicker}
 				usePortal
 			/>
-			<FormFeedback error={completeError} />
 		</div>
 		{#snippet footer()}
 			<button type="button" class="btn-ghost" onclick={() => (completeOpen = false)}>
@@ -1083,7 +1044,6 @@
 				options={accountOptions}
 				usePortal
 			/>
-			<FormFeedback error={changeAccountError} />
 		</div>
 		{#snippet footer()}
 			<button type="button" class="btn-ghost" onclick={() => (changeAccountOpen = false)}>
@@ -1124,7 +1084,6 @@
 				</label>
 				<FieldHint text={$_('credits.field.debitTimeHint')} />
 			{/if}
-			<FormFeedback error={setDebitTimeError} />
 		</div>
 		{#snippet footer()}
 			<button type="button" class="btn-ghost" onclick={() => (setDebitTimeOpen = false)}>
@@ -1148,7 +1107,6 @@
 				<span class="text-sm" style:color="var(--text-muted)">{$_('credits.field.name')}</span>
 				<input class="input w-full" bind:value={newCreditName} maxlength="128" />
 			</label>
-			<FormFeedback error={changeNameError} />
 		</div>
 		{#snippet footer()}
 			<button type="button" class="btn-ghost" onclick={() => (changeNameOpen = false)}>
@@ -1174,7 +1132,6 @@
 				options={bankOptions}
 				usePortal
 			/>
-			<FormFeedback error={changeBankError} />
 		</div>
 		{#snippet footer()}
 			<button type="button" class="btn-ghost" onclick={() => (changeBankOpen = false)}>

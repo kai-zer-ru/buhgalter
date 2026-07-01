@@ -5,7 +5,6 @@
 	import { page as pageStore } from '$app/stores';
 	import { _ } from 'svelte-i18n';
 	import {
-		ApiError,
 		deleteTransaction,
 		getUIMeta,
 		listTransactions,
@@ -33,7 +32,6 @@
 	const limit = 20;
 	let loading = $state(true);
 	let filterLoading = $state(false);
-	let error = $state('');
 	let txOpen = $state(false);
 	let transferOpen = $state(false);
 	let editTx = $state<Transaction | null>(null);
@@ -128,13 +126,12 @@
 	async function load(initial = false) {
 		if (initial) loading = true;
 		else filterLoading = true;
-		error = '';
 		try {
 			const result = await listTransactions(requestParams());
 			transactions = result.data;
 			total = result.meta.total;
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			loading = false;
 			filterLoading = false;
@@ -232,7 +229,7 @@
 			toast($_('common.deleted'));
 			await load();
 		} catch (err) {
-			toast(err instanceof ApiError ? err.message : $_('common.error'), 'error');
+			toast.fromError(err);
 		}
 	}
 </script>
@@ -281,8 +278,6 @@
 
 	{#if loading}
 		<p style:color="var(--text-muted)">{$_('common.loading')}</p>
-	{:else if error}
-		<p style:color="var(--danger)">{error}</p>
 	{:else}
 		<div class="relative space-y-3">
 			<div class="card md:overflow-x-auto" class:opacity-60={filterLoading}>
@@ -294,7 +289,9 @@
 					showEdit
 					showDelete
 					onmakeRecurring={(tx) =>
-						void goto(resolve(`/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`))}
+						void goto(
+							resolve(`/settings/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`)
+						)}
 					onrepeat={openRepeat}
 					onedit={openEdit}
 					ondelete={(tx) => void removeTx(tx)}

@@ -5,7 +5,6 @@
 	import { page } from '$app/stores';
 	import { _ } from 'svelte-i18n';
 	import {
-		ApiError,
 		createRecurringOperation,
 		deleteRecurringOperation,
 		getTransaction,
@@ -18,7 +17,6 @@
 		type RecurringOperation,
 		type Subcategory
 	} from '$lib/api/client';
-	import BackLink from '$lib/components/BackLink.svelte';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
 	import { dateOnlyPicker } from '$lib/datetime-picker-standards';
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
@@ -41,7 +39,6 @@
 	let subcategories = $state<Subcategory[]>([]);
 	let loading = $state(true);
 	let saving = $state(false);
-	let error = $state('');
 	let editId = $state<string | null>(null);
 	let formOpen = $state(false);
 
@@ -96,7 +93,6 @@
 
 	async function loadAll() {
 		loading = true;
-		error = '';
 		try {
 			const [ops, meta] = await Promise.all([listRecurringOperations(), getUIMeta()]);
 			items = ops;
@@ -113,7 +109,7 @@
 			await loadSubcategories();
 			await prefillFromQueryTransaction();
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			loading = false;
 		}
@@ -136,7 +132,7 @@
 			active = true;
 			formOpen = true;
 			await loadSubcategories();
-			await goto(resolve('/recurring-operations'), {
+			await goto(resolve('/settings/recurring-operations'), {
 				replaceState: true,
 				noScroll: true,
 				keepFocus: true
@@ -225,14 +221,13 @@
 			await loadAll();
 			if (editId === item.id) resetForm();
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		}
 	}
 
 	async function submit(e: Event) {
 		e.preventDefault();
 		saving = true;
-		error = '';
 		try {
 			const payload = {
 				type,
@@ -263,7 +258,7 @@
 			resetForm();
 			formOpen = false;
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			saving = false;
 		}
@@ -477,26 +472,10 @@
 				<button type="button" class="btn-ghost" onclick={resetForm}>{$_('common.cancel')}</button>
 			{/if}
 		</div>
-		{#if error}
-			<p class="text-sm" style:color="var(--danger)">{error}</p>
-		{/if}
 	</form>
 {/snippet}
 
-<svelte:head>
-	<title>{$_('recurring.title')} — {$_('app.title')}</title>
-</svelte:head>
-
 <div class="space-y-5">
-	<BackLink
-		items={[
-			{ href: '/', label: $_('nav.home') },
-			{ href: '/recurring-operations', label: $_('recurring.title') }
-		]}
-	/>
-
-	<h1 class="text-2xl font-semibold">{$_('recurring.title')}</h1>
-
 	{#if loading}
 		<p style:color="var(--text-muted)">{$_('common.loading')}</p>
 	{:else if items.length === 0}

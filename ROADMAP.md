@@ -12,6 +12,7 @@
 - [v1.2.2](#v122)
 - [v1.2.3](#v123)
 - [v1.2.4](#v124)
+- [v1.2.5](#v125)
 - [v1.3.0](#v130)
 - [Общие планы](#общие-планы)
 
@@ -103,6 +104,14 @@
 - [x] Шаблоны сообщений - разбить на блоки и сохранять каждый отдельно
 - [x] Отдельный компонент пагинации · [ui-pagination.md](docs/ui-pagination.md)
 - [x] [Release notes](docs/release-notes-v1.2.4.md) · [date-time-display](docs/date-time-display.md)
+
+## v1.2.5
+
+- [x] Единая система in-app toast-уведомлений (успех, ошибка, предупреждение) · [ui-toast.md](docs/ui-toast.md)
+- [x] Многоуровневое меню сверху · [ui-navigation.md](docs/ui-navigation.md)
+- [x] Сортировка в плановых операциях на главной, от новых к старым.
+- [x] Баг. Создаётся АПИ-токен с датой истечения в прошлом. Надо блокировать в календаре прошлые даты, включая сегодня. Это отдельным параметром в компоненте "Календарь" задаётся.
+- [x] [Release notes](docs/release-notes-v1.2.5.md) · [ui-toast.md](docs/ui-toast.md) · [ui-navigation.md](docs/ui-navigation.md) · [date-time-display.md](docs/date-time-display.md)
 
 ## v1.3.0
 

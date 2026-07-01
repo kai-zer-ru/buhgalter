@@ -72,12 +72,34 @@ function shiftMonth(year: number, month: number, delta: number): { year: number;
 	return { year: y, month: m };
 }
 
-export type CalendarCell = {
-	day: number;
-	month: number;
+export type CalendarDate = {
 	year: number;
+	month: number;
+	day: number;
+};
+
+export type CalendarCell = CalendarDate & {
 	inMonth: boolean;
 };
+
+/** Negative if a < b, zero if equal, positive if a > b (calendar day, no time). */
+export function compareCalendarDates(a: CalendarDate, b: CalendarDate): number {
+	if (a.year !== b.year) return a.year - b.year;
+	if (a.month !== b.month) return a.month - b.month;
+	return a.day - b.day;
+}
+
+/** True when cell is strictly before min (min itself is selectable). */
+export function isCalendarDayDisabled(cell: CalendarDate, min: CalendarDate | null): boolean {
+	if (!min) return false;
+	return compareCalendarDates(cell, min) < 0;
+}
+
+/** Calendar day immediately after the given date (local Date arithmetic). */
+export function nextCalendarDay(date: CalendarDate): CalendarDate {
+	const d = new Date(date.year, date.month - 1, date.day + 1);
+	return { year: d.getFullYear(), month: d.getMonth() + 1, day: d.getDate() };
+}
 
 export function calendarCells(year: number, month: number): CalendarCell[] {
 	const firstWeekday = weekdayMondayFirst(year, month, 1);

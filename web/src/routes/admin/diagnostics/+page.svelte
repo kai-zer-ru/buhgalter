@@ -1,15 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { _ } from 'svelte-i18n';
-	import { ApiError, getAdminDiagnostics, type AdminDiagnostics } from '$lib/api/client';
-	import FormFeedback from '$lib/components/FormFeedback.svelte';
+	import { getAdminDiagnostics, type AdminDiagnostics } from '$lib/api/client';
 	import { formatAPIDateTimeForDisplay } from '$lib/dates';
+	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
 
 	let diagnostics = $state<AdminDiagnostics | null>(null);
 	let loading = $state(true);
-	let error = $state('');
-	let copyStatus = $state('');
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
 
@@ -37,7 +35,7 @@
 		try {
 			diagnostics = await getAdminDiagnostics();
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			loading = false;
 		}
@@ -75,20 +73,17 @@
 
 	async function copyForReport() {
 		if (!diagnostics) return;
-		copyStatus = '';
 		try {
 			await navigator.clipboard.writeText(buildReportText(diagnostics));
-			copyStatus = $_('admin.diagnostics.copied');
+			toast($_('admin.diagnostics.copied'));
 		} catch {
-			copyStatus = $_('admin.diagnostics.failed_copy');
+			toast.error($_('admin.diagnostics.failed_copy'));
 		}
 	}
 </script>
 
 {#if loading}
 	<div class="card">{$_('common.loading')}</div>
-{:else if error}
-	<p class="text-sm" style:color="var(--danger)">{error}</p>
 {:else if diagnostics}
 	<div class="space-y-4">
 		<div class="card space-y-3">
@@ -98,9 +93,6 @@
 					{$_('admin.diagnostics.copy')}
 				</button>
 			</div>
-			{#if copyStatus}
-				<FormFeedback success={copyStatus} />
-			{/if}
 		</div>
 
 		<div class="card md:overflow-x-auto">
