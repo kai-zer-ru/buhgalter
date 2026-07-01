@@ -518,16 +518,21 @@ export type Bank = {
 	sort_order: number;
 };
 
+export type AccountType = 'cash' | 'bank' | 'credit_card';
+
 export type Account = {
 	id: string;
 	name: string;
-	type: 'cash' | 'bank';
+	type: AccountType;
 	bank_id: string | null;
 	bank_name?: string | null;
 	bank_icon?: string | null;
 	initial_balance: number;
 	balance: number;
 	balance_display: string;
+	credit_limit?: number | null;
+	credit_limit_display?: string | null;
+	payment_account_id?: string | null;
 	status: 'active' | 'archived';
 	is_primary: boolean;
 	created_at: string;
@@ -562,7 +567,7 @@ export function listBanks() {
 export type UIMetaAccountRef = {
 	id: string;
 	name: string;
-	type: 'cash' | 'bank';
+	type: AccountType;
 	status: 'active' | 'archived';
 	bank_id?: string;
 };
@@ -595,9 +600,11 @@ export function getAccount(id: string) {
 
 export function createAccount(payload: {
 	name: string;
-	type: 'cash' | 'bank';
+	type: AccountType;
 	bank_id?: string;
 	initial_balance: string;
+	credit_limit?: string;
+	payment_account_id?: string;
 }) {
 	return request<Account>('/api/v1/accounts', {
 		method: 'POST',
@@ -607,7 +614,13 @@ export function createAccount(payload: {
 
 export function updateAccount(
 	id: string,
-	payload: { name: string; bank_id?: string; initial_balance?: string }
+	payload: {
+		name: string;
+		bank_id?: string;
+		initial_balance?: string;
+		credit_limit?: string;
+		payment_account_id?: string | null;
+	}
 ) {
 	return request<Account>(`/api/v1/accounts/${id}`, {
 		method: 'PUT',
@@ -802,13 +815,25 @@ export type StatsContext = StatsSummary & {
 export type AccountBalanceSummary = {
 	id: string;
 	name: string;
-	type: 'cash' | 'bank';
+	type: AccountType;
 	bank_icon?: string | null;
 	balance: number;
 	balance_display: string;
 	forecast_balance: number;
 	forecast_display: string;
 	has_future_this_month: boolean;
+	credit_limit?: number | null;
+	credit_limit_display?: string | null;
+};
+
+export type CreditCardsSummary = {
+	total_balance: number;
+	total_forecast: number;
+	total_limit: number;
+	count: number;
+	total_balance_display: string;
+	total_forecast_display: string;
+	total_limit_display: string;
 };
 
 export type AccountsSummary = {
@@ -820,6 +845,7 @@ export type AccountsSummary = {
 export type Dashboard = {
 	total_balance: number;
 	total_forecast: number;
+	credit_cards_summary?: CreditCardsSummary | null;
 	accounts: AccountBalanceSummary[];
 	recent_transactions: Transaction[];
 	debts_summary: DebtsSummary;
@@ -1289,8 +1315,9 @@ export type AccountMappingSuggestion = {
 	mode: 'create' | 'existing';
 	account_id?: string;
 	account_name?: string;
-	account_type?: 'cash' | 'bank';
+	account_type?: AccountType;
 	bank_id?: string;
+	credit_limit?: string;
 };
 
 export type CategoryMappingSuggestion = {
@@ -1350,8 +1377,9 @@ export type ImportJob = {
 export type AccountMapEntry = {
 	mode: 'create' | 'existing';
 	account_id?: string;
-	account_type?: 'cash' | 'bank';
+	account_type?: AccountType;
 	bank_id?: string;
+	credit_limit?: string;
 };
 
 export type ImportOptions = {

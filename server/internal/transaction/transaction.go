@@ -67,19 +67,20 @@ type ListResult struct {
 }
 
 var (
-	ErrNotFound              = errors.New("transaction not found")
-	ErrTransferNotFound      = errors.New("transfer not found")
-	ErrInvalidType           = errors.New("invalid transaction type")
-	ErrInvalidAccount        = errors.New("invalid account")
-	ErrAccountArchived       = errors.New("account is archived")
-	ErrInvalidCategory       = errors.New("invalid category")
-	ErrCategoryTypeMatch     = errors.New("category type mismatch")
-	ErrInvalidSubcategory    = errors.New("invalid subcategory")
-	ErrInvalidDate           = errors.New("invalid transaction date")
-	ErrInvalidAmount         = errors.New("invalid amount")
-	ErrSameAccount           = errors.New("same account for transfer")
-	ErrSystemCategoryPlanned = errors.New("system category cannot be planned")
-	ErrTypeChange            = errors.New("transaction type cannot be changed")
+	ErrNotFound                      = errors.New("transaction not found")
+	ErrTransferNotFound              = errors.New("transfer not found")
+	ErrInvalidType                   = errors.New("invalid transaction type")
+	ErrInvalidAccount                = errors.New("invalid account")
+	ErrAccountArchived               = errors.New("account is archived")
+	ErrInvalidCategory               = errors.New("invalid category")
+	ErrCategoryTypeMatch             = errors.New("category type mismatch")
+	ErrInvalidSubcategory            = errors.New("invalid subcategory")
+	ErrInvalidDate                   = errors.New("invalid transaction date")
+	ErrInvalidAmount                 = errors.New("invalid amount")
+	ErrSameAccount                   = errors.New("same account for transfer")
+	ErrCreditCardPaymentExceedsLimit = errors.New("credit card payment exceeds limit")
+	ErrSystemCategoryPlanned         = errors.New("system category cannot be planned")
+	ErrTypeChange                    = errors.New("transaction type cannot be changed")
 )
 
 func queries(db sqlcdb.DBTX) *sqlcdb.Queries {

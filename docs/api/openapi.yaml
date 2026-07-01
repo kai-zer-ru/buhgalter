@@ -828,9 +828,19 @@ paths:
       summary: Создать счёт
       security:
         - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountCreate'
       responses:
         '201':
           description: Счёт создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
   /accounts/{id}:
     get:
       summary: Получить счёт
@@ -845,11 +855,15 @@ paths:
       responses:
         '200':
           description: Счёт
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
     put:
       summary: Обновить счёт
       description: |
-        Имя, банк (для `type=bank`), начальный баланс. В UI — inline-форма на `/accounts` или форма на
-        `/accounts/{id}`; поля с подписями (`accounts.field.name`, `accounts.field.bank`, `accounts.field.balance`).
+        Имя, банк (для `type=bank` / `credit_card`), лимит и счёт для переводов (для `credit_card`),
+        начальный баланс. В UI — inline-форма на `/accounts` или форма на `/accounts/{id}`.
       security:
         - sessionCookie: []
       parameters:
@@ -858,9 +872,19 @@ paths:
           required: true
           schema:
             type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountUpdate'
       responses:
         '200':
           description: Счёт обновлён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
     delete:
       summary: Удалить счёт
       description: |
@@ -3156,6 +3180,90 @@ components:
           nullable: true
         transaction_date:
           type: string
+    Account:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          enum: [cash, bank, credit_card]
+        bank_id:
+          type: string
+          nullable: true
+        bank_name:
+          type: string
+          nullable: true
+        bank_icon:
+          type: string
+          nullable: true
+        initial_balance:
+          type: integer
+          description: Копейки
+        balance:
+          type: integer
+        balance_display:
+          type: string
+        credit_limit:
+          type: integer
+          nullable: true
+          description: Лимит кредитной карты, копейки
+        credit_limit_display:
+          type: string
+          nullable: true
+        payment_account_id:
+          type: string
+          nullable: true
+          description: Счёт по умолчанию для переводов на карту
+        status:
+          type: string
+          enum: [active, archived]
+        is_primary:
+          type: boolean
+        created_at:
+          type: string
+        updated_at:
+          type: string
+    AccountCreate:
+      type: object
+      required: [name, type]
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [cash, bank, credit_card]
+        bank_id:
+          type: string
+          description: Обязателен для `bank` и `credit_card`
+        credit_limit:
+          type: string
+          description: Лимит карты, рубли (`"65000.00"`); обязателен для `credit_card`
+        payment_account_id:
+          type: string
+          nullable: true
+          description: Счёт `cash`/`bank` для переводов на карту
+        initial_balance:
+          type: string
+          description: Рубли (`"0.00"`)
+    AccountUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        bank_id:
+          type: string
+          description: Для `bank` и `credit_card`
+        credit_limit:
+          type: string
+          description: Лимит карты, рубли
+        payment_account_id:
+          type: string
+          nullable: true
+        initial_balance:
+          type: string
     AccountBalanceSummary:
       type: object
       properties:
@@ -3165,7 +3273,7 @@ components:
           type: string
         type:
           type: string
-          enum: [cash, bank]
+          enum: [cash, bank, credit_card]
           description: Для иконки на главной (`AccountIcon`)
         bank_icon:
           type: string
@@ -3182,6 +3290,30 @@ components:
           type: string
         has_future_this_month:
           type: boolean
+        credit_limit:
+          type: integer
+          nullable: true
+          description: Лимит кредитной карты, копейки
+        credit_limit_display:
+          type: string
+          nullable: true
+    CreditCardsSummary:
+      type: object
+      properties:
+        total_balance:
+          type: integer
+        total_forecast:
+          type: integer
+        total_limit:
+          type: integer
+        count:
+          type: integer
+        total_balance_display:
+          type: string
+        total_forecast_display:
+          type: string
+        total_limit_display:
+          type: string
     AccountsSummary:
       type: object
       properties:
@@ -3200,6 +3332,9 @@ components:
           type: integer
         total_forecast:
           type: integer
+        credit_cards_summary:
+          $ref: '#/components/schemas/CreditCardsSummary'
+          nullable: true
         accounts:
           type: array
           items:
@@ -3910,11 +4045,14 @@ components:
                 type: string
               account_type:
                 type: string
-                enum: [cash, bank]
+                enum: [cash, bank, credit_card]
                 description: Предлагаемый тип при mode=create
               bank_id:
                 type: string
-                description: ID банка при account_type=bank
+                description: ID банка при account_type=bank или credit_card
+              credit_limit:
+                type: string
+                description: Лимит карты, рубли; обязателен при account_type=credit_card и mode=create
         categories_to_create:
           type: array
           items:

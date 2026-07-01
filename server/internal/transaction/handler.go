@@ -281,7 +281,7 @@ func (h *Handler) AccountBalance(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
-	ab, err := EnrichAccountBalance(r.Context(), h.Store.DB(), info.User.ID, row.ID, row.Name, row.Type, row.BankIcon, row.InitialBalance)
+	ab, err := EnrichAccountBalance(r.Context(), h.Store.DB(), info.User.ID, row.ID, row.Name, row.Type, row.BankIcon, row.InitialBalance, row.CreditLimit)
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
@@ -391,6 +391,8 @@ func writeTxError(w http.ResponseWriter, r *http.Request, err error) bool {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_SUBCATEGORY_NOT_FOUND")
 	case errors.Is(err, ErrSameAccount):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_TRANSFER_SAME_ACCOUNT")
+	case errors.Is(err, ErrCreditCardPaymentExceedsLimit):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_CARD_PAYMENT_EXCEEDS_LIMIT")
 	default:
 		if strings.Contains(err.Error(), "transfer endpoint") {
 			apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_USE_TRANSFERS_ENDPOINT")

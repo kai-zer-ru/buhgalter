@@ -49,7 +49,7 @@ erDiagram
     }
 
     accounts {
-        TEXT type "cash|bank"
+        TEXT type "cash|bank|credit_card"
         TEXT status "active|archived"
         INTEGER is_primary
         INTEGER initial_balance
@@ -229,8 +229,13 @@ erDiagram
 
 | Поле | Описание |
 |------|----------|
+| `accounts.type` | `cash`, `bank`, `credit_card` |
+| `accounts.credit_limit` | лимит кредитной карты, копейки; только для `credit_card` |
+| `accounts.payment_account_id` | счёт по умолчанию для переводов на карту (опционально) |
 | `accounts.is_primary` | `1` — основной счёт среди `status = active`; не более одного на пользователя |
 | API | `POST /api/v1/accounts/{id}/primary` |
+
+Подробнее о типе `credit_card`: [ui-credit-cards.md](ui-credit-cards.md).
 
 ## Изоляция данных
 

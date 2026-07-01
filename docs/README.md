@@ -47,6 +47,7 @@
 | [ui-pagination.md](ui-pagination.md) | Постраничная навигация (`TransactionPagination`) |
 | [ui-stats.md](ui-stats.md) | Страница `/stats` |
 | [ui-credits.md](ui-credits.md) | Страницы кредитов |
+| [ui-credit-cards.md](ui-credit-cards.md) | Кредитные карты (тип счёта) |
 
 ---
 

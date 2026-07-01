@@ -127,6 +127,8 @@ SELECT
     a.bank_id,
     a.initial_balance,
     a.current_balance,
+    a.credit_limit,
+    a.payment_account_id,
     a.status,
     a.is_primary,
     a.created_at,
@@ -144,18 +146,20 @@ type GetAccountByIDParams struct {
 }
 
 type GetAccountByIDRow struct {
-	ID             string  `json:"id"`
-	Name           string  `json:"name"`
-	Type           string  `json:"type"`
-	BankID         *string `json:"bank_id"`
-	InitialBalance int64   `json:"initial_balance"`
-	CurrentBalance int64   `json:"current_balance"`
-	Status         string  `json:"status"`
-	IsPrimary      int64   `json:"is_primary"`
-	CreatedAt      string  `json:"created_at"`
-	UpdatedAt      string  `json:"updated_at"`
-	BankName       *string `json:"bank_name"`
-	BankIcon       *string `json:"bank_icon"`
+	ID               string  `json:"id"`
+	Name             string  `json:"name"`
+	Type             string  `json:"type"`
+	BankID           *string `json:"bank_id"`
+	InitialBalance   int64   `json:"initial_balance"`
+	CurrentBalance   int64   `json:"current_balance"`
+	CreditLimit      *int64  `json:"credit_limit"`
+	PaymentAccountID *string `json:"payment_account_id"`
+	Status           string  `json:"status"`
+	IsPrimary        int64   `json:"is_primary"`
+	CreatedAt        string  `json:"created_at"`
+	UpdatedAt        string  `json:"updated_at"`
+	BankName         *string `json:"bank_name"`
+	BankIcon         *string `json:"bank_icon"`
 }
 
 func (q *Queries) GetAccountByID(ctx context.Context, arg GetAccountByIDParams) (GetAccountByIDRow, error) {
@@ -168,6 +172,8 @@ func (q *Queries) GetAccountByID(ctx context.Context, arg GetAccountByIDParams) 
 		&i.BankID,
 		&i.InitialBalance,
 		&i.CurrentBalance,
+		&i.CreditLimit,
+		&i.PaymentAccountID,
 		&i.Status,
 		&i.IsPrimary,
 		&i.CreatedAt,
@@ -186,6 +192,8 @@ SELECT
     a.bank_id,
     a.initial_balance,
     a.current_balance,
+    a.credit_limit,
+    a.payment_account_id,
     a.status,
     a.is_primary,
     a.created_at,
@@ -204,18 +212,20 @@ type GetActiveAccountByNameParams struct {
 }
 
 type GetActiveAccountByNameRow struct {
-	ID             string  `json:"id"`
-	Name           string  `json:"name"`
-	Type           string  `json:"type"`
-	BankID         *string `json:"bank_id"`
-	InitialBalance int64   `json:"initial_balance"`
-	CurrentBalance int64   `json:"current_balance"`
-	Status         string  `json:"status"`
-	IsPrimary      int64   `json:"is_primary"`
-	CreatedAt      string  `json:"created_at"`
-	UpdatedAt      string  `json:"updated_at"`
-	BankName       *string `json:"bank_name"`
-	BankIcon       *string `json:"bank_icon"`
+	ID               string  `json:"id"`
+	Name             string  `json:"name"`
+	Type             string  `json:"type"`
+	BankID           *string `json:"bank_id"`
+	InitialBalance   int64   `json:"initial_balance"`
+	CurrentBalance   int64   `json:"current_balance"`
+	CreditLimit      *int64  `json:"credit_limit"`
+	PaymentAccountID *string `json:"payment_account_id"`
+	Status           string  `json:"status"`
+	IsPrimary        int64   `json:"is_primary"`
+	CreatedAt        string  `json:"created_at"`
+	UpdatedAt        string  `json:"updated_at"`
+	BankName         *string `json:"bank_name"`
+	BankIcon         *string `json:"bank_icon"`
 }
 
 func (q *Queries) GetActiveAccountByName(ctx context.Context, arg GetActiveAccountByNameParams) (GetActiveAccountByNameRow, error) {
@@ -228,6 +238,8 @@ func (q *Queries) GetActiveAccountByName(ctx context.Context, arg GetActiveAccou
 		&i.BankID,
 		&i.InitialBalance,
 		&i.CurrentBalance,
+		&i.CreditLimit,
+		&i.PaymentAccountID,
 		&i.Status,
 		&i.IsPrimary,
 		&i.CreatedAt,
@@ -240,21 +252,24 @@ func (q *Queries) GetActiveAccountByName(ctx context.Context, arg GetActiveAccou
 
 const insertAccount = `-- name: InsertAccount :exec
 INSERT INTO accounts (
-    id, user_id, name, type, bank_id, initial_balance, current_balance, status, is_primary, created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)
+    id, user_id, name, type, bank_id, initial_balance, current_balance,
+    credit_limit, payment_account_id, status, is_primary, created_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)
 `
 
 type InsertAccountParams struct {
-	ID             string  `json:"id"`
-	UserID         string  `json:"user_id"`
-	Name           string  `json:"name"`
-	Type           string  `json:"type"`
-	BankID         *string `json:"bank_id"`
-	InitialBalance int64   `json:"initial_balance"`
-	CurrentBalance int64   `json:"current_balance"`
-	IsPrimary      int64   `json:"is_primary"`
-	CreatedAt      string  `json:"created_at"`
-	UpdatedAt      string  `json:"updated_at"`
+	ID               string  `json:"id"`
+	UserID           string  `json:"user_id"`
+	Name             string  `json:"name"`
+	Type             string  `json:"type"`
+	BankID           *string `json:"bank_id"`
+	InitialBalance   int64   `json:"initial_balance"`
+	CurrentBalance   int64   `json:"current_balance"`
+	CreditLimit      *int64  `json:"credit_limit"`
+	PaymentAccountID *string `json:"payment_account_id"`
+	IsPrimary        int64   `json:"is_primary"`
+	CreatedAt        string  `json:"created_at"`
+	UpdatedAt        string  `json:"updated_at"`
 }
 
 func (q *Queries) InsertAccount(ctx context.Context, arg InsertAccountParams) error {
@@ -266,6 +281,8 @@ func (q *Queries) InsertAccount(ctx context.Context, arg InsertAccountParams) er
 		arg.BankID,
 		arg.InitialBalance,
 		arg.CurrentBalance,
+		arg.CreditLimit,
+		arg.PaymentAccountID,
 		arg.IsPrimary,
 		arg.CreatedAt,
 		arg.UpdatedAt,
@@ -325,6 +342,8 @@ SELECT
     a.bank_id,
     a.initial_balance,
     a.current_balance,
+    a.credit_limit,
+    a.payment_account_id,
     a.status,
     a.is_primary,
     a.created_at,
@@ -338,18 +357,20 @@ ORDER BY a.name
 `
 
 type ListAccountsByUserActiveRow struct {
-	ID             string  `json:"id"`
-	Name           string  `json:"name"`
-	Type           string  `json:"type"`
-	BankID         *string `json:"bank_id"`
-	InitialBalance int64   `json:"initial_balance"`
-	CurrentBalance int64   `json:"current_balance"`
-	Status         string  `json:"status"`
-	IsPrimary      int64   `json:"is_primary"`
-	CreatedAt      string  `json:"created_at"`
-	UpdatedAt      string  `json:"updated_at"`
-	BankName       *string `json:"bank_name"`
-	BankIcon       *string `json:"bank_icon"`
+	ID               string  `json:"id"`
+	Name             string  `json:"name"`
+	Type             string  `json:"type"`
+	BankID           *string `json:"bank_id"`
+	InitialBalance   int64   `json:"initial_balance"`
+	CurrentBalance   int64   `json:"current_balance"`
+	CreditLimit      *int64  `json:"credit_limit"`
+	PaymentAccountID *string `json:"payment_account_id"`
+	Status           string  `json:"status"`
+	IsPrimary        int64   `json:"is_primary"`
+	CreatedAt        string  `json:"created_at"`
+	UpdatedAt        string  `json:"updated_at"`
+	BankName         *string `json:"bank_name"`
+	BankIcon         *string `json:"bank_icon"`
 }
 
 func (q *Queries) ListAccountsByUserActive(ctx context.Context, userID string) ([]ListAccountsByUserActiveRow, error) {
@@ -368,6 +389,8 @@ func (q *Queries) ListAccountsByUserActive(ctx context.Context, userID string) (
 			&i.BankID,
 			&i.InitialBalance,
 			&i.CurrentBalance,
+			&i.CreditLimit,
+			&i.PaymentAccountID,
 			&i.Status,
 			&i.IsPrimary,
 			&i.CreatedAt,
@@ -396,6 +419,8 @@ SELECT
     a.bank_id,
     a.initial_balance,
     a.current_balance,
+    a.credit_limit,
+    a.payment_account_id,
     a.status,
     a.is_primary,
     a.created_at,
@@ -414,18 +439,20 @@ type ListAccountsByUserAndStatusParams struct {
 }
 
 type ListAccountsByUserAndStatusRow struct {
-	ID             string  `json:"id"`
-	Name           string  `json:"name"`
-	Type           string  `json:"type"`
-	BankID         *string `json:"bank_id"`
-	InitialBalance int64   `json:"initial_balance"`
-	CurrentBalance int64   `json:"current_balance"`
-	Status         string  `json:"status"`
-	IsPrimary      int64   `json:"is_primary"`
-	CreatedAt      string  `json:"created_at"`
-	UpdatedAt      string  `json:"updated_at"`
-	BankName       *string `json:"bank_name"`
-	BankIcon       *string `json:"bank_icon"`
+	ID               string  `json:"id"`
+	Name             string  `json:"name"`
+	Type             string  `json:"type"`
+	BankID           *string `json:"bank_id"`
+	InitialBalance   int64   `json:"initial_balance"`
+	CurrentBalance   int64   `json:"current_balance"`
+	CreditLimit      *int64  `json:"credit_limit"`
+	PaymentAccountID *string `json:"payment_account_id"`
+	Status           string  `json:"status"`
+	IsPrimary        int64   `json:"is_primary"`
+	CreatedAt        string  `json:"created_at"`
+	UpdatedAt        string  `json:"updated_at"`
+	BankName         *string `json:"bank_name"`
+	BankIcon         *string `json:"bank_icon"`
 }
 
 func (q *Queries) ListAccountsByUserAndStatus(ctx context.Context, arg ListAccountsByUserAndStatusParams) ([]ListAccountsByUserAndStatusRow, error) {
@@ -444,6 +471,8 @@ func (q *Queries) ListAccountsByUserAndStatus(ctx context.Context, arg ListAccou
 			&i.BankID,
 			&i.InitialBalance,
 			&i.CurrentBalance,
+			&i.CreditLimit,
+			&i.PaymentAccountID,
 			&i.Status,
 			&i.IsPrimary,
 			&i.CreatedAt,
@@ -572,17 +601,19 @@ func (q *Queries) SetAccountPrimary(ctx context.Context, arg SetAccountPrimaryPa
 
 const updateAccount = `-- name: UpdateAccount :exec
 UPDATE accounts
-SET name = ?, bank_id = ?, initial_balance = ?, updated_at = ?
+SET name = ?, bank_id = ?, initial_balance = ?, credit_limit = ?, payment_account_id = ?, updated_at = ?
 WHERE id = ? AND user_id = ?
 `
 
 type UpdateAccountParams struct {
-	Name           string  `json:"name"`
-	BankID         *string `json:"bank_id"`
-	InitialBalance int64   `json:"initial_balance"`
-	UpdatedAt      string  `json:"updated_at"`
-	ID             string  `json:"id"`
-	UserID         string  `json:"user_id"`
+	Name             string  `json:"name"`
+	BankID           *string `json:"bank_id"`
+	InitialBalance   int64   `json:"initial_balance"`
+	CreditLimit      *int64  `json:"credit_limit"`
+	PaymentAccountID *string `json:"payment_account_id"`
+	UpdatedAt        string  `json:"updated_at"`
+	ID               string  `json:"id"`
+	UserID           string  `json:"user_id"`
 }
 
 func (q *Queries) UpdateAccount(ctx context.Context, arg UpdateAccountParams) error {
@@ -590,6 +621,8 @@ func (q *Queries) UpdateAccount(ctx context.Context, arg UpdateAccountParams) er
 		arg.Name,
 		arg.BankID,
 		arg.InitialBalance,
+		arg.CreditLimit,
+		arg.PaymentAccountID,
 		arg.UpdatedAt,
 		arg.ID,
 		arg.UserID,

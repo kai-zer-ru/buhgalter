@@ -79,5 +79,6 @@ export function isColumnMapValid(map: Record<string, string>): boolean {
 /** Suggested account type when auto-creating from import file. */
 export function accountTypeLabel(type: string, t: (key: string) => string): string {
 	if (type === 'bank') return t('accounts.type.bank');
+	if (type === 'credit_card') return t('accounts.type.credit_card');
 	return t('accounts.type.cash');
 }

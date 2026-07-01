@@ -342,3 +342,113 @@ func TestDefaultCategoriesOnUserCreate(t *testing.T) {
 		t.Fatalf("expected 1 system %s category, got %d", categoryseed.CommissionCategoryName, commissionCount)
 	}
 }
+
+func TestCreateCreditCardAccount(t *testing.T) {
+	env := setupConfigured(t)
+	seedBanks(t, env)
+	env.login(t, "admin", "secret123")
+
+	body, _ := json.Marshal(map[string]string{
+		"name": "Тинькофф Black", "type": "cash", "initial_balance": "0",
+	})
+	resp, err := env.authedRequest(http.MethodPost, "/api/v1/accounts", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("create debit status %d", resp.StatusCode)
+	}
+
+	bodyCC, _ := json.Marshal(map[string]string{
+		"name":            "Кредитка",
+		"type":            "credit_card",
+		"bank_id":         "tinkoff",
+		"credit_limit":    "65000.00",
+		"initial_balance": "0",
+	})
+	respCC, err := env.authedRequest(http.MethodPost, "/api/v1/accounts", bytes.NewReader(bodyCC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respCC.Body.Close()
+	if respCC.StatusCode != http.StatusCreated {
+		t.Fatalf("create credit card status %d", respCC.StatusCode)
+	}
+	var acc struct {
+		Type               string `json:"type"`
+		CreditLimit        int64  `json:"credit_limit"`
+		CreditLimitDisplay string `json:"credit_limit_display"`
+	}
+	_ = json.NewDecoder(respCC.Body).Decode(&acc)
+	if acc.Type != "credit_card" || acc.CreditLimit != 6500000 {
+		t.Fatalf("unexpected credit card: %+v", acc)
+	}
+	if acc.CreditLimitDisplay != "65000.00" {
+		t.Fatalf("credit limit display %q", acc.CreditLimitDisplay)
+	}
+}
+
+func TestArchiveCreditCardRequiresFullBalance(t *testing.T) {
+	env := setupConfigured(t)
+	seedBanks(t, env)
+	env.login(t, "admin", "secret123")
+
+	bodyCC, _ := json.Marshal(map[string]string{
+		"name":            "Кредитка архив",
+		"type":            "credit_card",
+		"bank_id":         "tinkoff",
+		"credit_limit":    "1000.00",
+		"initial_balance": "0",
+	})
+	respCC, err := env.authedRequest(http.MethodPost, "/api/v1/accounts", bytes.NewReader(bodyCC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respCC.Body.Close()
+	if respCC.StatusCode != http.StatusCreated {
+		t.Fatalf("create credit card status %d", respCC.StatusCode)
+	}
+	var created struct {
+		ID string `json:"id"`
+	}
+	_ = json.NewDecoder(respCC.Body).Decode(&created)
+
+	archResp, err := env.authedRequest(http.MethodPost, "/api/v1/accounts/"+created.ID+"/archive", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer archResp.Body.Close()
+	if archResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("archive unpaid card status %d, want 400", archResp.StatusCode)
+	}
+
+	bodyPaid, _ := json.Marshal(map[string]string{
+		"name":            "Кредитка оплачена",
+		"type":            "credit_card",
+		"bank_id":         "tinkoff",
+		"credit_limit":    "1000.00",
+		"initial_balance": "1000.00",
+	})
+	respPaid, err := env.authedRequest(http.MethodPost, "/api/v1/accounts", bytes.NewReader(bodyPaid))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respPaid.Body.Close()
+	if respPaid.StatusCode != http.StatusCreated {
+		t.Fatalf("create paid credit card status %d", respPaid.StatusCode)
+	}
+	var paid struct {
+		ID string `json:"id"`
+	}
+	_ = json.NewDecoder(respPaid.Body).Decode(&paid)
+
+	archResp2, err := env.authedRequest(http.MethodPost, "/api/v1/accounts/"+paid.ID+"/archive", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer archResp2.Body.Close()
+	if archResp2.StatusCode != http.StatusOK {
+		t.Fatalf("archive paid card status %d", archResp2.StatusCode)
+	}
+}

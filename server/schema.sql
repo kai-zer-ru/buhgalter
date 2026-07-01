@@ -1,6 +1,15 @@
 -- Snapshot for sqlc (source of truth: internal/db/migrations/*.sql via goose).
 -- After each migration, update this file before `make sqlc`.
 
+-- SQLite catalog (sqlc schema stub; system table at runtime).
+CREATE TABLE sqlite_master (
+    type TEXT,
+    name TEXT,
+    tbl_name TEXT,
+    rootpage INTEGER,
+    sql TEXT
+);
+
 CREATE TABLE system_settings (
     id              INTEGER PRIMARY KEY CHECK (id = 1),
     is_configured   INTEGER NOT NULL DEFAULT 0,
@@ -66,19 +75,38 @@ CREATE TABLE banks (
 );
 
 CREATE TABLE accounts (
-    id              TEXT PRIMARY KEY,
-    user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    name            TEXT NOT NULL,
-    type            TEXT NOT NULL CHECK (type IN ('cash', 'bank')),
-    bank_id         TEXT REFERENCES banks(id),
-    initial_balance INTEGER NOT NULL DEFAULT 0,
-    current_balance INTEGER NOT NULL DEFAULT 0,
-    status          TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'archived')),
-    is_primary      INTEGER NOT NULL DEFAULT 0,
-    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+    id                  TEXT PRIMARY KEY,
+    user_id             TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name                TEXT NOT NULL,
+    type                TEXT NOT NULL CHECK (type IN ('cash', 'bank', 'credit_card')),
+    bank_id             TEXT REFERENCES banks(id),
+    initial_balance     INTEGER NOT NULL DEFAULT 0,
+    current_balance     INTEGER NOT NULL DEFAULT 0,
+    credit_limit        INTEGER,
+    payment_account_id  TEXT REFERENCES accounts(id),
+    status              TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'archived')),
+    is_primary          INTEGER NOT NULL DEFAULT 0,
+    created_at          TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at          TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX idx_accounts_user ON accounts(user_id);
+
+-- Staging table for migration 033 rebuild (sqlc schema; ephemeral at runtime).
+CREATE TABLE accounts_new (
+    id                  TEXT PRIMARY KEY,
+    user_id             TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name                TEXT NOT NULL,
+    type                TEXT NOT NULL CHECK (type IN ('cash', 'bank', 'credit_card')),
+    bank_id             TEXT REFERENCES banks(id),
+    initial_balance     INTEGER NOT NULL DEFAULT 0,
+    current_balance     INTEGER NOT NULL DEFAULT 0,
+    credit_limit        INTEGER,
+    payment_account_id  TEXT REFERENCES accounts_new(id),
+    status              TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'archived')),
+    is_primary          INTEGER NOT NULL DEFAULT 0,
+    created_at          TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at          TEXT NOT NULL DEFAULT (datetime('now'))
+);
 
 CREATE TABLE categories (
     id              TEXT PRIMARY KEY,

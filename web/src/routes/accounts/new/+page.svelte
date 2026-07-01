@@ -3,34 +3,57 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { _ } from 'svelte-i18n';
-	import { ApiError, createAccount, listBanks, type Bank } from '$lib/api/client';
+	import {
+		ApiError,
+		createAccount,
+		listAccounts,
+		listBanks,
+		type Account,
+		type AccountType,
+		type Bank
+	} from '$lib/api/client';
 	import BackLink from '$lib/components/BackLink.svelte';
 	import FormFeedback from '$lib/components/FormFeedback.svelte';
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
+	import Select from '$lib/components/Select.svelte';
+	import { debitAccounts } from '$lib/credit-card';
 	import { toast } from '$lib/toast';
 	import { bankIconUrl } from '$lib/finance';
 	import { toAPIAmount } from '$lib/money';
 
 	let name = $state('');
-	let type = $state<'cash' | 'bank'>('cash');
+	let type = $state<AccountType>('cash');
 	let bankId = $state('');
 	let bankSearch = $state('');
+	let creditLimit = $state('');
 	let initialBalance = $state('');
+	let paymentAccountId = $state('');
 	let banks = $state<Bank[]>([]);
+	let debitAccountList = $state<Account[]>([]);
 	let loading = $state(false);
 	let error = $state('');
 
 	const filteredBanks = $derived(
 		banks.filter((b) => b.name.toLowerCase().includes(bankSearch.toLowerCase()))
 	);
+	const needsBank = $derived(type === 'bank' || type === 'credit_card');
+	const paymentOptions = $derived(
+		debitAccounts(debitAccountList).map((a) => ({ value: a.id, label: a.name }))
+	);
 
 	onMount(async () => {
 		try {
-			banks = await listBanks();
+			const [bankList, accountList] = await Promise.all([listBanks(), listAccounts()]);
+			banks = bankList;
+			debitAccountList = accountList;
 		} catch {
 			error = $_('common.error');
 		}
 	});
+
+	function applyLimitToBalance() {
+		if (creditLimit.trim()) initialBalance = creditLimit;
+	}
 
 	async function submit(e: Event) {
 		e.preventDefault();
@@ -40,8 +63,11 @@
 			const acc = await createAccount({
 				name,
 				type,
-				bank_id: type === 'bank' ? bankId : undefined,
-				initial_balance: toAPIAmount(initialBalance || '0')
+				bank_id: needsBank ? bankId : undefined,
+				initial_balance: toAPIAmount(initialBalance || '0'),
+				credit_limit: type === 'credit_card' ? toAPIAmount(creditLimit) : undefined,
+				payment_account_id:
+					type === 'credit_card' && paymentAccountId ? paymentAccountId : undefined
 			});
 			await goto(resolve(`/accounts/${acc.id}`));
 			toast($_('common.saved'));
@@ -75,7 +101,7 @@
 			<span class="mb-2 block text-sm" style:color="var(--text-muted)"
 				>{$_('accounts.field.type')}</span
 			>
-			<div class="flex gap-2">
+			<div class="flex flex-wrap gap-2">
 				<button
 					type="button"
 					class={type === 'cash' ? 'tab tab-active' : 'tab'}
@@ -90,10 +116,17 @@
 				>
 					{$_('accounts.type.bank')}
 				</button>
+				<button
+					type="button"
+					class={type === 'credit_card' ? 'tab tab-active' : 'tab'}
+					onclick={() => (type = 'credit_card')}
+				>
+					{$_('accounts.type.credit_card')}
+				</button>
 			</div>
 		</div>
 
-		{#if type === 'bank'}
+		{#if needsBank}
 			<div>
 				<label class="mb-1 block text-sm" style:color="var(--text-muted)" for="bank-search">
 					{$_('accounts.field.bank')}
@@ -131,15 +164,44 @@
 			</div>
 		{/if}
 
+		{#if type === 'credit_card'}
+			<div>
+				<label class="mb-1 block text-sm" style:color="var(--text-muted)" for="credit-limit">
+					{$_('accounts.field.creditLimit')}
+				</label>
+				<MoneyInput id="credit-limit" bind:value={creditLimit} required />
+			</div>
+			<Select
+				label={$_('accounts.field.paymentAccount')}
+				bind:value={paymentAccountId}
+				options={[
+					{ value: '', label: $_('accounts.creditCard.paymentAccountDefault') },
+					...paymentOptions
+				]}
+				usePortal
+			/>
+		{/if}
+
 		<div>
 			<label class="mb-1 block text-sm" style:color="var(--text-muted)" for="balance">
 				{$_('accounts.field.balance')}
 			</label>
 			<MoneyInput id="balance" bind:value={initialBalance} />
+			{#if type === 'credit_card'}
+				<button type="button" class="btn-ghost mt-1 text-sm" onclick={applyLimitToBalance}>
+					{$_('accounts.creditCard.limitButton')}
+				</button>
+			{/if}
 		</div>
 
 		<div class="flex gap-2 pt-2">
-			<button type="submit" class="btn-primary" disabled={loading || (type === 'bank' && !bankId)}>
+			<button
+				type="submit"
+				class="btn-primary"
+				disabled={loading ||
+					(needsBank && !bankId) ||
+					(type === 'credit_card' && !creditLimit.trim())}
+			>
 				{loading ? $_('common.loading') : $_('common.create')}
 			</button>
 			<a href={resolve('/accounts')} class="btn-ghost">{$_('common.cancel')}</a>

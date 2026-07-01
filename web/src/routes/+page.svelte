@@ -50,6 +50,7 @@
 	const hasDebts = $derived(
 		dash != null && (dash.debts_summary.i_owe > 0 || dash.debts_summary.owed_to_me > 0)
 	);
+	const hasCreditCards = $derived(dash != null && dash.credit_cards_summary != null);
 
 	onMount(() => {
 		void loadAll();
@@ -200,43 +201,118 @@
 	{:else if error}
 		<p style:color="var(--danger)">{error}</p>
 	{:else if dash}
-		<div class="grid gap-4 sm:grid-cols-2">
-			<div class="card">
-				<p class="text-sm" style:color="var(--text-muted)">{$_('dashboard.total')}</p>
-				<p class="text-3xl font-semibold tabular-nums">
-					{formatBalance(fromCents(dash.total_balance), $user?.currency ?? 'RUB')}
-				</p>
-				{#if dash.total_forecast !== dash.total_balance}
-					<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
-						{$_('dashboard.withPlans')}:
-						{formatBalance(fromCents(dash.total_forecast), $user?.currency ?? 'RUB')}
-					</p>
-				{/if}
+		{#if hasCreditCards}
+			<div class="space-y-4">
+				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+					<div class="card">
+						<p class="text-sm" style:color="var(--text-muted)">{$_('dashboard.total')}</p>
+						<p class="text-3xl font-semibold tabular-nums">
+							{formatBalance(fromCents(dash.total_balance), $user?.currency ?? 'RUB')}
+						</p>
+						{#if dash.total_forecast !== dash.total_balance}
+							<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
+								{$_('dashboard.withPlans')}:
+								{formatBalance(fromCents(dash.total_forecast), $user?.currency ?? 'RUB')}
+							</p>
+						{/if}
+					</div>
+					<div class="card">
+						<p class="text-sm" style:color="var(--text-muted)">{$_('dashboard.creditCards')}</p>
+						<p class="text-3xl font-semibold tabular-nums">
+							{formatBalance(
+								dash.credit_cards_summary!.total_balance_display,
+								$user?.currency ?? 'RUB'
+							)}
+						</p>
+						<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
+							{$_('accounts.field.creditLimit')}:
+							{formatBalance(
+								dash.credit_cards_summary!.total_limit_display,
+								$user?.currency ?? 'RUB'
+							)}
+						</p>
+						{#if dash.credit_cards_summary!.total_forecast !== dash.credit_cards_summary!.total_balance}
+							<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
+								{$_('dashboard.withPlans')}:
+								{formatBalance(
+									dash.credit_cards_summary!.total_forecast_display,
+									$user?.currency ?? 'RUB'
+								)}
+							</p>
+						{/if}
+					</div>
+				</div>
+				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+					<a href={resolve('/debts')} class="card block transition hover:opacity-90">
+						<p class="text-sm" style:color="var(--text-muted)">{$_('debts.title')}</p>
+						<div class="mt-1 space-y-1">
+							{#if hasDebts}
+								{#if dash.debts_summary.i_owe > 0}
+									<p class="tabular-nums" style:color="var(--danger)">
+										{$_('debts.summary.iOwe')}:
+										{formatBalance(fromCents(dash.debts_summary.i_owe), $user?.currency ?? 'RUB')}
+									</p>
+								{/if}
+								{#if dash.debts_summary.owed_to_me > 0}
+									<p class="tabular-nums" style:color="var(--primary)">
+										{$_('debts.summary.owedToMe')}:
+										{formatBalance(
+											fromCents(dash.debts_summary.owed_to_me),
+											$user?.currency ?? 'RUB'
+										)}
+									</p>
+								{/if}
+							{:else}
+								<p class="text-3xl font-semibold tabular-nums" style:color="var(--primary)">
+									{$_('debts.summary.none')}
+								</p>
+							{/if}
+						</div>
+					</a>
+				</div>
 			</div>
-			<a href={resolve('/debts')} class="card block transition hover:opacity-90">
-				<p class="text-sm" style:color="var(--text-muted)">{$_('debts.title')}</p>
-				<div class="mt-1 space-y-1">
-					{#if hasDebts}
-						{#if dash.debts_summary.i_owe > 0}
-							<p class="tabular-nums" style:color="var(--danger)">
-								{$_('debts.summary.iOwe')}:
-								{formatBalance(fromCents(dash.debts_summary.i_owe), $user?.currency ?? 'RUB')}
-							</p>
-						{/if}
-						{#if dash.debts_summary.owed_to_me > 0}
-							<p class="tabular-nums" style:color="var(--primary)">
-								{$_('debts.summary.owedToMe')}:
-								{formatBalance(fromCents(dash.debts_summary.owed_to_me), $user?.currency ?? 'RUB')}
-							</p>
-						{/if}
-					{:else}
-						<p class="text-3xl font-semibold tabular-nums" style:color="var(--primary)">
-							{$_('debts.summary.none')}
+		{:else}
+			<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+				<div class="card">
+					<p class="text-sm" style:color="var(--text-muted)">{$_('dashboard.total')}</p>
+					<p class="text-3xl font-semibold tabular-nums">
+						{formatBalance(fromCents(dash.total_balance), $user?.currency ?? 'RUB')}
+					</p>
+					{#if dash.total_forecast !== dash.total_balance}
+						<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
+							{$_('dashboard.withPlans')}:
+							{formatBalance(fromCents(dash.total_forecast), $user?.currency ?? 'RUB')}
 						</p>
 					{/if}
 				</div>
-			</a>
-		</div>
+				<a href={resolve('/debts')} class="card block transition hover:opacity-90">
+					<p class="text-sm" style:color="var(--text-muted)">{$_('debts.title')}</p>
+					<div class="mt-1 space-y-1">
+						{#if hasDebts}
+							{#if dash.debts_summary.i_owe > 0}
+								<p class="tabular-nums" style:color="var(--danger)">
+									{$_('debts.summary.iOwe')}:
+									{formatBalance(fromCents(dash.debts_summary.i_owe), $user?.currency ?? 'RUB')}
+								</p>
+							{/if}
+							{#if dash.debts_summary.owed_to_me > 0}
+								<p class="tabular-nums" style:color="var(--primary)">
+									{$_('debts.summary.owedToMe')}:
+									{formatBalance(
+										fromCents(dash.debts_summary.owed_to_me),
+										$user?.currency ?? 'RUB'
+									)}
+								</p>
+							{/if}
+						{:else}
+							<p class="text-3xl font-semibold tabular-nums" style:color="var(--primary)">
+								{$_('debts.summary.none')}
+							</p>
+						{/if}
+					</div>
+				</a>
+			</div>
+		{/if}
 
 		{#if dash.accounts.length === 0}
 			<EmptyStateCard message={$_('dashboard.accountsEmpty')} />
@@ -253,6 +329,12 @@
 							<p class="mt-1 text-xl font-semibold tabular-nums">
 								{formatBalance(acc.balance_display, $user?.currency ?? 'RUB')}
 							</p>
+							{#if acc.credit_limit_display}
+								<p class="mt-0.5 text-sm tabular-nums" style:color="var(--text-muted)">
+									{$_('accounts.field.creditLimit')}:
+									{formatBalance(acc.credit_limit_display, $user?.currency ?? 'RUB')}
+								</p>
+							{/if}
 							{#if acc.forecast_balance !== acc.balance}
 								<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
 									{$_('dashboard.withPlans')}:

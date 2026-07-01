@@ -6,6 +6,9 @@ import { ApiError } from './client';
 export function formatApiError(err: unknown, fallbackKey = 'common.error'): string {
 	const t = get(_);
 	if (err instanceof ApiError) {
+		if (err.message && err.code === 'VALIDATION_ERROR') {
+			return err.message;
+		}
 		const byCode = t(`errors.${err.code}`);
 		if (byCode && byCode !== `errors.${err.code}`) {
 			return byCode;
