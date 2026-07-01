@@ -3,26 +3,40 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 версии — [SemVer](https://semver.org/lang/ru/).
 
-Подробные release notes для пользователей: [docs/release-notes-v1.2.4.md](docs/release-notes-v1.2.4.md).
+Подробные release notes для пользователей: [docs/release-notes-v1.2.5.md](docs/release-notes-v1.2.5.md).
 
-## [v1.2.5] — unreleased
+## [v1.2.5] — 2026-07-01
 
 ### Добавлено
 
 **UI/UX**
 
 - **In-app toast:** единая кратковременная обратная связь внизу справа — успех, ошибка, предупреждение, информация; API `toast.success` / `toast.error` / `toast.fromError` ([ui-toast.md](docs/ui-toast.md))
-- **Многоуровневое меню:** выпадающие «Настройки» и «Админка» в шапке; настройки и периодические операции — отдельные маршруты `/settings/*` ([ui-navigation.md](docs/ui-navigation.md))
+- **Многоуровневое меню:** выпадающие «Настройки» и «Админка» в шапке (`NavDropdown`); настройки и периодические операции — отдельные маршруты `/settings/*` ([ui-navigation.md](docs/ui-navigation.md))
+- **DateTimePicker:** параметр `blockPastIncludingToday` — в календаре недоступны сегодня и прошлые дни; константа `futureDateOnlyPicker` для форм с датой только в будущем ([date-time-display.md](docs/date-time-display.md))
 
 ### Изменено
 
 **UI/UX**
 
-- Настройки разбиты на отдельные страницы (`/settings`, `/settings/password`, …); админка — только `/admin/*`; старые URL с `?tab=` и `/import`, `/recurring-operations` не поддерживаются
-- Верхнее меню: пункт «Главная» убран (переход на дашборд — по клику на название приложения); в хлебных крошках «Главная» сохранена
+- Настройки разбиты на отдельные страницы (`/settings`, `/settings/password`, …) с layout и крошками; вкладки вынесены в `ProfileTab`, `PasswordTab`, `TokensTab`, `NotificationsTab`; админка — только `/admin/*`; старые URL с `?tab=` и `/import`, `/recurring-operations` не поддерживаются
+- Верхнее меню: пункт «Главная» убран (переход на дашборд — по клику на название приложения); в хлебных крошках «Главная» сохранена; крошки админки — «Главная / Админка / …» (без «Настройки»)
 - Главная: плановые операции в спойлере «Плановые» — сортировка по дате убыванию (от новых к старым), как у прошлых
 - Ошибки и успехи действий (сохранение, удаление, валидация при submit) выводятся через toast вместо inline-текста под формами; подсказки у полей и постоянные баннеры без изменений
 - Удалён компонент `FormFeedback`
+
+### Исправлено
+
+**UI/UX**
+
+- **API-токены:** при создании с явной датой истечения нельзя выбрать сегодня и прошлые дни в календаре — минимум завтра в TZ пользователя (`futureDateOnlyPicker` на `/settings/tokens`)
+
+### Техническое
+
+- Unit: `web/src/lib/toast.test.ts`, `web/src/lib/api/errors.test.ts`, `web/src/lib/datetime-picker.test.ts`
+- e2e: `toast.spec.ts` — toast success/error; `z-navigation.spec.ts` — выпадающее меню настроек, крошки; `transaction-actions.spec.ts` — сортировка плановых на главной; `settings-extended.spec.ts` — API-токены
+- [docs/release-notes-v1.2.5.md](docs/release-notes-v1.2.5.md), [ui-toast.md](docs/ui-toast.md), [ui-navigation.md](docs/ui-navigation.md), [date-time-display.md](docs/date-time-display.md), [transactions-display.md](docs/transactions-display.md)
+- Версия `1.2.5`
 
 ## [v1.2.4] — 2026-07-01
 
@@ -527,6 +541,7 @@
 - Стек: Go 1.26+, SQLite, SvelteKit, встроенный статический фронтенд (`embedstatic`)
 - Команда `make version vX.Y.Z` — единая простановка semver во всех артефактах (`VERSION`, OpenAPI, Dockerfile, …)
 
+[v1.2.5]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.2.5
 [v1.2.4]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.2.4
 [v1.1.1]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.1.1
 [v1.1.0]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.1.0
