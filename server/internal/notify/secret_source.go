@@ -4,12 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"strings"
+
+	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 )
 
 // ResolveSecretKey returns the notification encryption key from system_settings only.
 func ResolveSecretKey(ctx context.Context, db *sql.DB) (string, error) {
-	var raw string
-	if err := db.QueryRowContext(ctx, `SELECT notification_secret_key FROM system_settings WHERE id = 1`).Scan(&raw); err != nil {
+	raw, err := sqlcdb.New(db).GetNotificationSecretKey(ctx)
+	if err != nil {
 		return "", err
 	}
 	return strings.TrimSpace(raw), nil

@@ -21,7 +21,7 @@
 	import BackLink from '$lib/components/BackLink.svelte';
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
-	import { dateOnlyPicker } from '$lib/datetime-picker-standards';
+	import { dateOnlyPicker, defaultAutoDebitTimeLocal } from '$lib/datetime-picker-standards';
 	import FieldHint from '$lib/components/FieldHint.svelte';
 	import FormFeedback from '$lib/components/FormFeedback.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
@@ -348,7 +348,9 @@
 		if (!credit) return;
 		setDebitTimeError = '';
 		try {
-			const nextDebitTime = autoDebitEnabled ? debitTimeLocal.trim() || '00:00' : null;
+			const nextDebitTime = autoDebitEnabled
+				? debitTimeLocal.trim() || defaultAutoDebitTimeLocal
+				: null;
 			await updateCredit(credit.id, { debit_time_local: nextDebitTime });
 			setDebitTimeOpen = false;
 			toast($_('common.saved'));
@@ -1108,7 +1110,8 @@
 					label={$_('credits.field.autoDebit')}
 					onchange={() => {
 						autoDebitEnabled = !autoDebitEnabled;
-						if (autoDebitEnabled && !debitTimeLocal.trim()) debitTimeLocal = '00:00';
+						if (autoDebitEnabled && !debitTimeLocal.trim())
+							debitTimeLocal = defaultAutoDebitTimeLocal;
 					}}
 				/>
 			</div>

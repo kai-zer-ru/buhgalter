@@ -17,6 +17,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/backup"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
 	"github.com/kai-zer-ru/buhgalter/internal/httpserver"
+	"github.com/kai-zer-ru/buhgalter/internal/notify"
 )
 
 type testEnv struct {
@@ -782,4 +783,334 @@ func TestPasswordResetRequestAdminFlow(t *testing.T) {
 	env.cookie = ""
 	env.token = ""
 	env.login(t, "bob", "newbobpass1")
+}
+
+func setupWithRegistration(t *testing.T) *testEnv {
+	t.Helper()
+	dir := t.TempDir()
+	mgr, err := db.NewManager(filepath.Join(dir, "test.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = mgr.Close() })
+
+	cfg := testConfig(dir)
+	logger, closer, err := httpserver.InitLogger(filepath.Join(dir, "logs"), "prod")
+	if err != nil {
+		t.Fatalf("logger: %v", err)
+	}
+	t.Cleanup(func() { _ = closer.Close() })
+
+	backupSvc := &backup.Service{Manager: mgr, BackupDir: httpserver.BackupDir(dir)}
+	auditLogger := audit.New(filepath.Join(dir, "logs", "audit"))
+	srv := httpserver.New(cfg, mgr, logger, auditLogger, backupSvc)
+	ts := httptest.NewServer(srv.Handler())
+
+	body, _ := json.Marshal(map[string]any{
+		"admin_login":            "admin",
+		"admin_display_name":     "Admin",
+		"admin_password":         "secret123",
+		"admin_password_confirm": "secret123",
+		"registration_enabled":   true,
+		"external_url":           "",
+	})
+	resp, err := http.Post(ts.URL+"/api/v1/setup", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+
+	env := &testEnv{server: ts, db: mgr.DB(), dir: dir}
+	env.login(t, "admin", "secret123")
+	t.Cleanup(ts.Close)
+	return env
+}
+
+func apiErrorCode(t *testing.T, resp *http.Response) string {
+	t.Helper()
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode error body: %v", err)
+	}
+	return body.Error.Code
+}
+
+func TestUserStatusRegistrationAndModeration(t *testing.T) {
+	env := setupWithRegistration(t)
+
+	regBody, _ := json.Marshal(map[string]string{
+		"login": "pending1", "password": "userpass1", "password_confirm": "userpass1",
+		"display_name": "Pending",
+	})
+	regResp, err := http.Post(env.server.URL+"/api/v1/auth/register", "application/json", bytes.NewReader(regBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer regResp.Body.Close()
+	if regResp.StatusCode != http.StatusCreated {
+		t.Fatalf("register status %d", regResp.StatusCode)
+	}
+	var regResult struct {
+		User struct {
+			Status string `json:"status"`
+		} `json:"user"`
+	}
+	if err := json.NewDecoder(regResp.Body).Decode(&regResult); err != nil {
+		t.Fatal(err)
+	}
+	if regResult.User.Status != "pending" {
+		t.Fatalf("expected pending, got %q", regResult.User.Status)
+	}
+	for _, c := range regResp.Cookies() {
+		if c.Name == "session" && c.Value != "" {
+			t.Fatal("expected no session cookie")
+		}
+	}
+
+	loginBody, _ := json.Marshal(map[string]string{"login": "pending1", "password": "userpass1"})
+	loginResp, err := http.Post(env.server.URL+"/api/v1/auth/login", "application/json", bytes.NewReader(loginBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer loginResp.Body.Close()
+	if loginResp.StatusCode != http.StatusForbidden {
+		t.Fatalf("login pending status %d", loginResp.StatusCode)
+	}
+	if code := apiErrorCode(t, loginResp); code != "USER_PENDING_MODERATION" {
+		t.Fatalf("expected USER_PENDING_MODERATION, got %q", code)
+	}
+
+	usersResp, err := env.authedRequest(http.MethodGet, "/api/v1/admin/users", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer usersResp.Body.Close()
+	var users []struct {
+		ID     string `json:"id"`
+		Login  string `json:"login"`
+		Status string `json:"status"`
+	}
+	if err := json.NewDecoder(usersResp.Body).Decode(&users); err != nil {
+		t.Fatal(err)
+	}
+	var pendingID string
+	for _, u := range users {
+		if u.Login == "pending1" {
+			pendingID = u.ID
+			if u.Status != "pending" {
+				t.Fatalf("list status %q", u.Status)
+			}
+		}
+	}
+	if pendingID == "" {
+		t.Fatal("pending user not in list")
+	}
+
+	statusBody, _ := json.Marshal(map[string]string{"status": "active"})
+	actResp, err := env.authedRequest(http.MethodPut, "/api/v1/admin/users/"+pendingID+"/status", bytes.NewReader(statusBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	actResp.Body.Close()
+	if actResp.StatusCode != http.StatusOK {
+		t.Fatalf("activate status %d", actResp.StatusCode)
+	}
+
+	loginResp2, err := http.Post(env.server.URL+"/api/v1/auth/login", "application/json", bytes.NewReader(loginBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer loginResp2.Body.Close()
+	if loginResp2.StatusCode != http.StatusOK {
+		t.Fatalf("login after activate status %d", loginResp2.StatusCode)
+	}
+}
+
+func TestUserStatusRegistrationNotificationLog(t *testing.T) {
+	env := setupWithRegistration(t)
+
+	secret := "12345678901234567890123456789012"
+	_, err := env.db.Exec(`UPDATE system_settings SET notification_secret_key = ? WHERE id = 1`, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	box, err := notify.NewSecretBox(secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, err := box.Encrypt("telegram-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var adminID string
+	if err := env.db.QueryRow(`SELECT id FROM users WHERE login = 'admin'`).Scan(&adminID); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err = env.db.Exec(`
+		INSERT INTO notification_settings (
+			user_id, telegram_enabled, telegram_bot_token, telegram_chat_id,
+			max_enabled, trigger_debt, trigger_credit, trigger_planned,
+			trigger_user_registration, debt_days_before, credit_days_before,
+			notification_time_local, updated_at
+		) VALUES (?, 1, ?, '12345', 0, 0, 0, 0, 1, 1, 1, '00:00', ?)
+		ON CONFLICT(user_id) DO UPDATE SET
+			telegram_enabled = 1,
+			telegram_bot_token = excluded.telegram_bot_token,
+			telegram_chat_id = excluded.telegram_chat_id,
+			trigger_user_registration = 1`,
+		adminID, token, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer mock.Close()
+	t.Setenv("BUHGALTER_TELEGRAM_BASE_URL", mock.URL)
+
+	regBody, _ := json.Marshal(map[string]string{
+		"login": "notifyreg", "password": "userpass1", "password_confirm": "userpass1",
+		"display_name": "Notify",
+	})
+	regResp, err := http.Post(env.server.URL+"/api/v1/auth/register", "application/json", bytes.NewReader(regBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	regResp.Body.Close()
+	if regResp.StatusCode != http.StatusCreated {
+		t.Fatalf("register status %d", regResp.StatusCode)
+	}
+
+	var newUserID string
+	if err := env.db.QueryRow(`SELECT id FROM users WHERE login = 'notifyreg'`).Scan(&newUserID); err != nil {
+		t.Fatal(err)
+	}
+
+	var count int
+	if err := env.db.QueryRow(`
+		SELECT COUNT(*) FROM notification_log
+		WHERE user_id = ? AND trigger_type = ? AND entity_id = ?`,
+		adminID, notify.TriggerUserRegistration, newUserID).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count == 0 {
+		t.Fatal("expected notification_log entry for user_registration")
+	}
+}
+
+func TestUserStatusBanInvalidatesSession(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+
+	createBody, _ := json.Marshal(map[string]any{
+		"login": "banme", "password": "userpass1", "password_confirm": "userpass1",
+		"display_name": "Ban", "is_admin": false,
+	})
+	createResp, err := env.authedRequest(http.MethodPost, "/api/v1/admin/users", bytes.NewReader(createBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	createResp.Body.Close()
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create status %d", createResp.StatusCode)
+	}
+
+	env.login(t, "banme", "userpass1")
+	banmeCookie := env.cookie
+	meResp, err := env.authedRequest(http.MethodGet, "/api/v1/auth/me", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	meResp.Body.Close()
+	if meResp.StatusCode != http.StatusOK {
+		t.Fatalf("me before ban %d", meResp.StatusCode)
+	}
+
+	env.login(t, "admin", "secret123")
+	usersResp, err := env.authedRequest(http.MethodGet, "/api/v1/admin/users", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer usersResp.Body.Close()
+	var users []struct {
+		ID    string `json:"id"`
+		Login string `json:"login"`
+	}
+	_ = json.NewDecoder(usersResp.Body).Decode(&users)
+	var banID string
+	for _, u := range users {
+		if u.Login == "banme" {
+			banID = u.ID
+		}
+	}
+	if banID == "" {
+		t.Fatal("banme not found")
+	}
+
+	banBody, _ := json.Marshal(map[string]string{"status": "banned"})
+	banResp, err := env.authedRequest(http.MethodPut, "/api/v1/admin/users/"+banID+"/status", bytes.NewReader(banBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	banResp.Body.Close()
+	if banResp.StatusCode != http.StatusOK {
+		t.Fatalf("ban status %d", banResp.StatusCode)
+	}
+
+	env.cookie = banmeCookie
+	meResp2, err := env.authedRequest(http.MethodGet, "/api/v1/auth/me", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	meResp2.Body.Close()
+	if meResp2.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("me after ban %d, expected session invalidated", meResp2.StatusCode)
+	}
+
+	loginBody, _ := json.Marshal(map[string]string{"login": "banme", "password": "userpass1"})
+	loginResp, err := http.Post(env.server.URL+"/api/v1/auth/login", "application/json", bytes.NewReader(loginBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer loginResp.Body.Close()
+	if loginResp.StatusCode != http.StatusForbidden {
+		t.Fatalf("login banned status %d", loginResp.StatusCode)
+	}
+	if code := apiErrorCode(t, loginResp); code != "USER_BANNED" {
+		t.Fatalf("expected USER_BANNED, got %q", code)
+	}
+}
+
+func TestUserStatusSelfChangeForbidden(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+
+	usersResp, err := env.authedRequest(http.MethodGet, "/api/v1/admin/users", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer usersResp.Body.Close()
+	var users []struct {
+		ID string `json:"id"`
+	}
+	_ = json.NewDecoder(usersResp.Body).Decode(&users)
+	if len(users) == 0 {
+		t.Fatal("no users")
+	}
+
+	statusBody, _ := json.Marshal(map[string]string{"status": "banned"})
+	selfResp, err := env.authedRequest(http.MethodPut, "/api/v1/admin/users/"+users[0].ID+"/status", bytes.NewReader(statusBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	selfResp.Body.Close()
+	if selfResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("self status change %d", selfResp.StatusCode)
+	}
 }

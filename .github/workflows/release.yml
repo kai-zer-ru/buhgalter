@@ -26,7 +26,7 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1
-      - run: make sqlc-check openapi-check
+      - run: make sqlc-check inline-sql-check openapi-check
       - run: python3 scripts/build_category_icons_json.py
       - run: npm ci
         working-directory: web

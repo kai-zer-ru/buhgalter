@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/kai-zer-ru/buhgalter/internal/apperror"
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
+	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 )
 
 type resetUserPasswordRequest struct {
@@ -65,8 +66,7 @@ func (h *Handler) ResetUserPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var targetLogin string
-	err := h.Store.DB().QueryRowContext(r.Context(), `SELECT login FROM users WHERE id = ?`, targetID).Scan(&targetLogin)
+	targetLogin, err := sqlcdb.New(h.Store.DB()).GetUserLogin(r.Context(), targetID)
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
 		return

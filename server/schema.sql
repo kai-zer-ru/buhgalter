@@ -27,6 +27,7 @@ CREATE TABLE users (
     currency        TEXT NOT NULL DEFAULT 'RUB',
     timezone        TEXT NOT NULL DEFAULT 'Europe/Moscow',
     theme           TEXT NOT NULL DEFAULT 'light',
+    status          TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'pending', 'banned')),
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -196,6 +197,8 @@ CREATE TABLE credits (
     down_payment        INTEGER NOT NULL DEFAULT 0,
     down_payment_affects_balance INTEGER NOT NULL DEFAULT 0,
     down_payment_transaction_id TEXT REFERENCES transactions(id),
+    principal_affects_balance INTEGER NOT NULL DEFAULT 0,
+    principal_transaction_id TEXT REFERENCES transactions(id),
     issue_date          TEXT NOT NULL,
     term_months         INTEGER NOT NULL,
     interest_rate       REAL NOT NULL DEFAULT 0,
@@ -243,6 +246,15 @@ CREATE TABLE import_idempotency (
 );
 CREATE INDEX idx_import_idempotency_user_key ON import_idempotency (user_id, idempotency_key);
 
+CREATE TABLE password_reset_requests (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL,
+    dismissed_at TEXT
+);
+CREATE INDEX idx_password_reset_requests_pending ON password_reset_requests(user_id)
+WHERE dismissed_at IS NULL;
+
 CREATE TABLE import_jobs (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -270,6 +282,7 @@ CREATE TABLE notification_settings (
     trigger_debt        INTEGER NOT NULL DEFAULT 1,
     trigger_credit      INTEGER NOT NULL DEFAULT 1,
     trigger_planned     INTEGER NOT NULL DEFAULT 1,
+    trigger_user_registration INTEGER NOT NULL DEFAULT 1,
     trigger_password_reset INTEGER NOT NULL DEFAULT 1,
     debt_days_before    INTEGER NOT NULL DEFAULT 1,
     my_debt_overdue_days_limit INTEGER NOT NULL DEFAULT 7,
@@ -297,7 +310,8 @@ CREATE INDEX idx_notification_log_dedup
 CREATE TABLE notification_templates (
     user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     trigger_type    TEXT NOT NULL CHECK (trigger_type IN (
-                        'debt_overdue', 'debt_due_soon', 'credit_payment', 'planned_operation', 'password_reset', 'test'
+                        'debt_overdue', 'debt_due_soon', 'credit_payment', 'planned_operation',
+                        'user_registration', 'password_reset', 'test'
                     )),
     template        TEXT NOT NULL,
     updated_at      TEXT NOT NULL DEFAULT (datetime('now')),

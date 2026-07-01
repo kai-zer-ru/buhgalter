@@ -2,7 +2,6 @@ package admin
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"net/http"
 	"os"
@@ -18,6 +17,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	"github.com/kai-zer-ru/buhgalter/internal/config"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
+	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/notify"
 	"github.com/kai-zer-ru/buhgalter/internal/settingscache"
 )
@@ -49,6 +49,7 @@ type userItem struct {
 	Login       string `json:"login"`
 	DisplayName string `json:"display_name"`
 	IsAdmin     bool   `json:"is_admin"`
+	Status      string `json:"status"`
 	CreatedAt   string `json:"created_at"`
 }
 
@@ -82,22 +83,17 @@ type diagnosticsResponse struct {
 }
 
 func (h *Handler) GetSettings(w http.ResponseWriter, r *http.Request) {
-	var reg int
-	var externalURL sql.NullString
-	var secretKey sql.NullString
-	err := h.Store.DB().QueryRowContext(r.Context(), `
-		SELECT registration_enabled, external_url, notification_secret_key FROM system_settings WHERE id = 1`,
-	).Scan(&reg, &externalURL, &secretKey)
+	row, err := sqlcdb.New(h.Store.DB()).GetAdminSettings(r.Context())
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
 
-	resp := settingsResponse{RegistrationEnabled: reg == 1}
-	if externalURL.Valid {
-		resp.ExternalURL = externalURL.String
+	resp := settingsResponse{RegistrationEnabled: row.RegistrationEnabled == 1}
+	if row.ExternalUrl != nil {
+		resp.ExternalURL = *row.ExternalUrl
 	}
-	resp.SecretKeySet = secretKey.Valid && strings.TrimSpace(secretKey.String) != ""
+	resp.SecretKeySet = strings.TrimSpace(row.NotificationSecretKey) != ""
 	writeJSON(w, http.StatusOK, resp)
 }
 
@@ -120,22 +116,15 @@ func (h *Handler) PutSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reg := 0
+	reg := int64(0)
 	if req.RegistrationEnabled {
 		reg = 1
 	}
-	var external any
-	if externalURL == "" {
-		external = nil
-	} else {
-		external = externalURL
-	}
-	_, err := h.Store.DB().ExecContext(r.Context(), `
-		UPDATE system_settings
-		SET registration_enabled = ?, external_url = ?, updated_at = datetime('now')
-		WHERE id = 1`, reg, external,
-	)
-	if err != nil {
+	q := sqlcdb.New(h.Store.DB())
+	if err := q.UpdateAdminSettings(r.Context(), sqlcdb.UpdateAdminSettingsParams{
+		RegistrationEnabled: reg,
+		ExternalUrl:         optionalExternalURL(externalURL),
+	}); err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
@@ -147,12 +136,11 @@ func (h *Handler) PutSettings(w http.ResponseWriter, r *http.Request) {
 		"external_url_set":     externalURL != "",
 	})
 
-	var currentSecret string
-	_ = h.Store.DB().QueryRowContext(r.Context(), `SELECT notification_secret_key FROM system_settings WHERE id = 1`).Scan(&currentSecret)
+	secretKey, _ := q.GetNotificationSecretKey(r.Context())
 	writeJSON(w, http.StatusOK, settingsResponse{
 		RegistrationEnabled: req.RegistrationEnabled,
 		ExternalURL:         externalURL,
-		SecretKeySet:        strings.TrimSpace(currentSecret) != "",
+		SecretKeySet:        strings.TrimSpace(secretKey) != "",
 	})
 }
 
@@ -178,12 +166,7 @@ func (h *Handler) PutNotificationSecretKey(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	_, err := h.Store.DB().ExecContext(r.Context(), `
-		UPDATE system_settings
-		SET notification_secret_key = ?, updated_at = datetime('now')
-		WHERE id = 1`, secret,
-	)
-	if err != nil {
+	if err := sqlcdb.New(h.Store.DB()).UpdateNotificationSecretKey(r.Context(), secret); err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
@@ -193,46 +176,35 @@ func (h *Handler) PutNotificationSecretKey(w http.ResponseWriter, r *http.Reques
 		"secret_key_set": true,
 	})
 
-	var reg int
-	var externalURL sql.NullString
-	var secretRaw sql.NullString
-	if err := h.Store.DB().QueryRowContext(r.Context(), `
-		SELECT registration_enabled, external_url, notification_secret_key FROM system_settings WHERE id = 1`,
-	).Scan(&reg, &externalURL, &secretRaw); err != nil {
+	row, err := sqlcdb.New(h.Store.DB()).GetAdminSettings(r.Context())
+	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
-	resp := settingsResponse{RegistrationEnabled: reg == 1, SecretKeySet: strings.TrimSpace(secretRaw.String) != ""}
-	if externalURL.Valid {
-		resp.ExternalURL = externalURL.String
+	resp := settingsResponse{RegistrationEnabled: row.RegistrationEnabled == 1, SecretKeySet: strings.TrimSpace(row.NotificationSecretKey) != ""}
+	if row.ExternalUrl != nil {
+		resp.ExternalURL = *row.ExternalUrl
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
 
 func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.Store.DB().QueryContext(r.Context(), `
-		SELECT id, login, COALESCE(display_name, ''), is_admin, created_at
-		FROM users ORDER BY created_at ASC`,
-	)
+	rows, err := sqlcdb.New(h.Store.DB()).ListUsers(r.Context())
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
-	defer rows.Close()
 
-	var users []userItem
-	for rows.Next() {
-		var u userItem
-		var isAdmin int
-		if err := rows.Scan(&u.ID, &u.Login, &u.DisplayName, &isAdmin, &u.CreatedAt); err != nil {
-			apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
-			return
-		}
-		u.IsAdmin = isAdmin == 1
-		users = append(users, u)
-	}
-	if users == nil {
-		users = []userItem{}
+	users := make([]userItem, 0, len(rows))
+	for _, row := range rows {
+		users = append(users, userItem{
+			ID:          row.ID,
+			Login:       row.Login,
+			DisplayName: row.DisplayName,
+			IsAdmin:     row.IsAdmin == 1,
+			Status:      row.Status,
+			CreatedAt:   row.CreatedAt,
+		})
 	}
 	writeJSON(w, http.StatusOK, users)
 }
@@ -280,7 +252,7 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, err := auth.CreateUser(r.Context(), h.Store.DB(), login, hash, displayName, req.IsAdmin)
+	userID, err := auth.CreateUser(r.Context(), h.Store.DB(), login, hash, displayName, req.IsAdmin, auth.UserStatusActive)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
 			apperror.WriteR(w, r, http.StatusConflict, apperror.ValidationError, "CONFLICT_LOGIN_TAKEN")
@@ -290,8 +262,12 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var createdAt string
-	_ = h.Store.DB().QueryRowContext(r.Context(), `SELECT created_at FROM users WHERE id = ?`, userID).Scan(&createdAt)
+	var createdAt, status string
+	created, err := sqlcdb.New(h.Store.DB()).GetUserCreatedAtAndStatus(r.Context(), userID)
+	if err == nil {
+		createdAt = created.CreatedAt
+		status = created.Status
+	}
 
 	ip := auth.ClientIP(r)
 	_ = h.Audit.Log("admin.user.create", info.User.ID, info.User.Login, ip, map[string]any{
@@ -303,6 +279,7 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		Login:       login,
 		DisplayName: displayName,
 		IsAdmin:     req.IsAdmin,
+		Status:      status,
 		CreatedAt:   createdAt,
 	})
 }
@@ -320,15 +297,14 @@ func (h *Handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var login string
-	err := h.Store.DB().QueryRowContext(r.Context(), `SELECT login FROM users WHERE id = ?`, targetID).Scan(&login)
+	q := sqlcdb.New(h.Store.DB())
+	login, err := q.GetUserLogin(r.Context(), targetID)
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
 		return
 	}
 
-	_, err = h.Store.DB().ExecContext(r.Context(), `DELETE FROM users WHERE id = ?`, targetID)
-	if err != nil {
+	if err := q.DeleteUser(r.Context(), targetID); err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
@@ -341,18 +317,14 @@ func (h *Handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetDiagnostics(w http.ResponseWriter, r *http.Request) {
-	var externalURL, previousVersion sql.NullString
-	if err := h.Store.DB().QueryRowContext(r.Context(), `
-		SELECT external_url, previous_app_version
-		FROM system_settings
-		WHERE id = 1`,
-	).Scan(&externalURL, &previousVersion); err != nil {
+	diag, err := sqlcdb.New(h.Store.DB()).GetDiagnosticsSettings(r.Context())
+	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
 
-	var usersCount int64
-	if err := h.Store.DB().QueryRowContext(r.Context(), `SELECT COUNT(*) FROM users`).Scan(&usersCount); err != nil {
+	usersCount, err := sqlcdb.New(h.Store.DB()).CountUsers(r.Context())
+	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
@@ -381,11 +353,11 @@ func (h *Handler) GetDiagnostics(w http.ResponseWriter, r *http.Request) {
 		StaticEmbed:        h.Config.StaticEmbed,
 		Env:                h.publicEnv(),
 	}
-	if externalURL.Valid {
-		resp.ExternalURL = externalURL.String
+	if diag.ExternalUrl != nil {
+		resp.ExternalURL = *diag.ExternalUrl
 	}
-	if previousVersion.Valid && strings.TrimSpace(previousVersion.String) != "" {
-		v := strings.TrimSpace(previousVersion.String)
+	if diag.PreviousAppVersion != nil && strings.TrimSpace(*diag.PreviousAppVersion) != "" {
+		v := strings.TrimSpace(*diag.PreviousAppVersion)
 		resp.PreviousAppVersion = &v
 	}
 
@@ -448,4 +420,12 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+func optionalExternalURL(s string) *string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil
+	}
+	return &s
 }

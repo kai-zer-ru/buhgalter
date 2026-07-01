@@ -15,6 +15,10 @@
   "CONFLICT": "Конфликт данных",
   "ALREADY_CONFIGURED": "Начальная настройка уже выполнена",
   "SERVICE_UNAVAILABLE": "Сервер временно недоступен",
+  "USER_PENDING_MODERATION": "Учётная запись ожидает активации администратором",
+  "USER_BANNED": "Учётная запись заблокирована",
+  "USER_STATUS_INVALID": "Некорректный статус пользователя",
+  "USER_STATUS_TRANSITION": "Недопустимое изменение статуса",
   "ERR_INVALID_JSON": "Некорректный JSON",
   "ERR_LOGIN_PASSWORD_REQUIRED": "Логин и пароль обязательны",
   "ERR_LOGIN_LENGTH": "Логин должен быть от 3 до 32 символов",
@@ -29,6 +33,7 @@
   "ERR_SECRET_KEY_EMPTY": "Ключ шифрования не должен быть пустым",
   "ERR_SECRET_KEY_INVALID": "Ключ должен содержать ровно 32 символа",
   "ERR_CANNOT_DELETE_SELF": "Нельзя удалить себя",
+  "ERR_CANNOT_CHANGE_OWN_STATUS": "Нельзя менять свой статус",
   "ERR_LANGUAGE": "Язык должен быть ru или en",
   "ERR_CURRENCY": "Валюта должна быть RUB, USD или EUR",
   "ERR_THEME": "Тема должна быть light или dark",
@@ -110,5 +115,6 @@
   "notifications.templates.credit_payment": "Платёж по кредиту «{credit}»: {amount}. Дата: {when}",
   "notifications.templates.planned_operation": "Плановая операция: {type} на {amount} — {description}",
   "notifications.templates.password_reset": "Запрос на восстановление пароля: {display_name} (@{login}), время: {requested_at}.\n{reset_url}",
+  "notifications.templates.user_registration": "Новая регистрация: {display_name} (@{login}), {registered_at}. Модерация: {moderation_url}",
   "notifications.templates.test": "Тестовое уведомление «Бухгалтер». Канал: {channel}."
 }

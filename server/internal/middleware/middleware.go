@@ -67,6 +67,10 @@ func Logger(logger *slog.Logger, verbose bool) func(http.Handler) http.Handler {
 				logger.Error("request", attrs...)
 				return
 			}
+			if isNoiseProbe(r.URL.Path) {
+				logger.Debug("request", attrs...)
+				return
+			}
 			logger.Info("request", attrs...)
 		})
 	}

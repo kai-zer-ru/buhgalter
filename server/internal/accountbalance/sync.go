@@ -156,20 +156,8 @@ func Refresh(ctx context.Context, db *sql.DB, userID string, accountIDs ...strin
 
 // BackfillAll recomputes current_balance for every account in the database.
 func BackfillAll(ctx context.Context, db *sql.DB) error {
-	rows, err := db.QueryContext(ctx, `SELECT DISTINCT user_id FROM accounts`)
+	userIDs, err := sqlcdb.New(db).ListDistinctAccountUserIDs(ctx)
 	if err != nil {
-		return err
-	}
-	defer rows.Close()
-	var userIDs []string
-	for rows.Next() {
-		var userID string
-		if err := rows.Scan(&userID); err != nil {
-			return err
-		}
-		userIDs = append(userIDs, userID)
-	}
-	if err := rows.Err(); err != nil {
 		return err
 	}
 	for _, userID := range userIDs {

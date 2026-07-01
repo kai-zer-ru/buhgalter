@@ -1,4 +1,4 @@
-VERSION ?= 1.2.4
+VERSION ?= 1.3.0
 INSTALL_METHOD ?= manual
 BUILD_COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILD_TIME ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -7,7 +7,7 @@ LDFLAGS := -X main.version=$(VERSION) -X main.installMethod=$(INSTALL_METHOD) -X
 OPENAPI_SRC := docs/api/openapi.yaml
 OPENAPI_DST := server/internal/docs/openapi.yaml
 
-.PHONY: dev dev-server dev-web build web-build category-icons-json copy-static copy-openapi openapi-check server-build fix-build-perms test test-unit test-e2e test-coverage lint lint-go prepare prepare-go prepare-web prepare-gen docker-build act-push act-release tag-release migrate ci sqlc sqlc-check download-bank-logos download-marketplace-logos clear version
+.PHONY: dev dev-server dev-web build web-build category-icons-json copy-static copy-openapi openapi-check inline-sql-check server-build fix-build-perms test test-unit test-e2e test-coverage lint lint-go prepare prepare-go prepare-web prepare-gen prepare-sql-check docker-build act-push act-release tag-release migrate ci sqlc sqlc-check download-bank-logos download-marketplace-logos clear version
 
 DOCKER_COMPOSE := docker compose -f docker/docker-compose.yml
 
@@ -28,8 +28,8 @@ copy-openapi:
 
 openapi-check: copy-openapi
 	@python3 scripts/check_openapi_error_examples.py $(OPENAPI_SRC)
-	@git diff --exit-code -- $(OPENAPI_DST) || \
-		(echo "openapi: run 'make copy-openapi' and commit $(OPENAPI_DST)" && exit 1)
+	@git diff --exit-code -- $(OPENAPI_SRC) $(OPENAPI_DST) || \
+		(echo "openapi: run 'make copy-openapi' and commit $(OPENAPI_SRC) and $(OPENAPI_DST)" && exit 1)
 
 build: fix-build-perms category-icons-json web-build copy-static copy-openapi server-build
 
@@ -89,7 +89,7 @@ lint: lint-go
 	cd web && npm run lint
 
 # Автофикс форматирования, линтера и сгенерированных артефактов перед коммитом / make ci.
-prepare: prepare-go prepare-web prepare-gen
+prepare: prepare-go prepare-web prepare-gen prepare-sql-check
 
 prepare-go:
 	cd server && golangci-lint fmt ./...
@@ -99,6 +99,8 @@ prepare-web:
 	cd web && npm run lint:fix
 
 prepare-gen: sqlc category-icons-json openapi-check
+
+prepare-sql-check: sqlc-check inline-sql-check
 
 DOCKER_IMAGE_TAG ?= buhgalter:local
 
@@ -112,7 +114,7 @@ docker-build:
 		-t $(DOCKER_IMAGE_TAG) \
 		.
 
-ci: lint-go sqlc-check openapi-check category-icons-json
+ci: lint-go sqlc-check inline-sql-check openapi-check category-icons-json
 	cd web && npm ci && npm run lint
 	$(MAKE) test
 	$(MAKE) docker-build
@@ -128,6 +130,9 @@ sqlc:
 sqlc-check: sqlc
 	@git diff --exit-code -- server/internal/db/sqlc server/schema.sql server/queries || \
 		(echo "sqlc: run 'make sqlc' and commit generated files" && exit 1)
+
+inline-sql-check:
+	python3 scripts/check_inline_sql.py
 
 download-bank-logos:
 	python3 scripts/download_bank_logos.py

@@ -12,6 +12,7 @@
 		createToken,
 		deleteToken,
 		getNotificationSettings,
+		getRegistrationEnabled,
 		getUserSettings,
 		listTokens,
 		previewNotificationTemplate,
@@ -128,6 +129,8 @@
 	let triggerCredit = $state(true);
 	let triggerPlanned = $state(true);
 	let triggerPasswordReset = $state(true);
+	let triggerUserRegistration = $state(true);
+	let registrationEnabled = $state(false);
 	let debtDaysBefore = $state(1);
 	let myDebtOverdueDaysLimit = $state(7);
 	let owedDebtOverdueStartAfterDays = $state(0);
@@ -168,6 +171,7 @@
 		'credit_payment',
 		'planned_operation',
 		'password_reset',
+		'user_registration',
 		'test'
 	];
 
@@ -261,7 +265,11 @@
 	}
 
 	async function loadNotifications() {
-		const data = await getNotificationSettings();
+		const [data, regEnabled] = await Promise.all([
+			getNotificationSettings(),
+			getRegistrationEnabled()
+		]);
+		registrationEnabled = regEnabled;
 		notificationsLoaded = true;
 		notificationSecretConfigured = data.secret_key_configured === true;
 		telegramEnabled = data.telegram_enabled;
@@ -278,6 +286,7 @@
 		triggerCredit = data.trigger_credit;
 		triggerPlanned = data.trigger_planned;
 		triggerPasswordReset = data.trigger_password_reset ?? true;
+		triggerUserRegistration = data.trigger_user_registration ?? true;
 		debtDaysBefore = data.debt_days_before;
 		myDebtOverdueDaysLimit = data.my_debt_overdue_days_limit ?? 7;
 		owedDebtOverdueStartAfterDays = data.owed_debt_overdue_start_after_days ?? 0;
@@ -333,6 +342,12 @@
 			const bi = triggerOrder.indexOf(b.trigger_type);
 			return (ai < 0 ? Number.MAX_SAFE_INTEGER : ai) - (bi < 0 ? Number.MAX_SAFE_INTEGER : bi);
 		});
+	}
+
+	function visibleTemplates(list: NotificationTemplate[]) {
+		return orderedTemplates(list).filter(
+			(tpl) => tpl.trigger_type !== 'user_registration' || registrationEnabled
+		);
 	}
 
 	function validateTemplateText(template: string) {
@@ -420,6 +435,8 @@
 				trigger_credit: triggerCredit,
 				trigger_planned: triggerPlanned,
 				trigger_password_reset: $user?.is_admin ? triggerPasswordReset : undefined,
+				trigger_user_registration:
+					$user?.is_admin && registrationEnabled ? triggerUserRegistration : undefined,
 				debt_days_before: debtDaysBefore,
 				my_debt_overdue_days_limit: myDebtOverdueDaysLimit,
 				owed_debt_overdue_start_after_days: owedDebtOverdueStartAfterDays,
@@ -546,7 +563,9 @@
 				trigger_debt: triggerDebt,
 				trigger_credit: triggerCredit,
 				trigger_planned: triggerPlanned,
-				trigger_password_reset: $user?.is_admin ? triggerPasswordReset : undefined
+				trigger_password_reset: $user?.is_admin ? triggerPasswordReset : undefined,
+				trigger_user_registration:
+					$user?.is_admin && registrationEnabled ? triggerUserRegistration : undefined
 			});
 			await loadNotifications();
 			blockFeedback = {
@@ -1254,6 +1273,18 @@
 										onchange={() => (triggerPasswordReset = !triggerPasswordReset)}
 									/>
 								</div>
+								{#if registrationEnabled}
+									<div class="grid grid-cols-[1fr_auto] items-center gap-3">
+										<span class="text-sm leading-tight"
+											>{$_('settings.notifications.triggers.userRegistration')}</span
+										>
+										<ToggleSwitch
+											checked={triggerUserRegistration}
+											label={$_('settings.notifications.triggers.userRegistration')}
+											onchange={() => (triggerUserRegistration = !triggerUserRegistration)}
+										/>
+									</div>
+								{/if}
 							{/if}
 						</div>
 						<div class="flex items-center gap-2">
@@ -1395,7 +1426,7 @@
 						{/if}
 					</div>
 
-					{#each orderedTemplates(templates) as tpl (tpl.trigger_type)}
+					{#each visibleTemplates(templates) as tpl (tpl.trigger_type)}
 						<div class="card space-y-4">
 							<h3 class="text-lg font-semibold">{triggerLabel(tpl.trigger_type)}</h3>
 							<textarea

@@ -59,6 +59,8 @@ type Credit struct {
 	DownPayment               int64   `json:"down_payment"`
 	DownPaymentAffectsBalance int64   `json:"down_payment_affects_balance"`
 	DownPaymentTransactionID  *string `json:"down_payment_transaction_id"`
+	PrincipalAffectsBalance   int64   `json:"principal_affects_balance"`
+	PrincipalTransactionID    *string `json:"principal_transaction_id"`
 	IssueDate                 string  `json:"issue_date"`
 	TermMonths                int64   `json:"term_months"`
 	InterestRate              float64 `json:"interest_rate"`
@@ -164,6 +166,7 @@ type NotificationSetting struct {
 	TriggerDebt                   int64   `json:"trigger_debt"`
 	TriggerCredit                 int64   `json:"trigger_credit"`
 	TriggerPlanned                int64   `json:"trigger_planned"`
+	TriggerUserRegistration       int64   `json:"trigger_user_registration"`
 	TriggerPasswordReset          int64   `json:"trigger_password_reset"`
 	DebtDaysBefore                int64   `json:"debt_days_before"`
 	MyDebtOverdueDaysLimit        int64   `json:"my_debt_overdue_days_limit"`
@@ -179,6 +182,13 @@ type NotificationTemplate struct {
 	TriggerType string `json:"trigger_type"`
 	Template    string `json:"template"`
 	UpdatedAt   string `json:"updated_at"`
+}
+
+type PasswordResetRequest struct {
+	ID          string  `json:"id"`
+	UserID      string  `json:"user_id"`
+	CreatedAt   string  `json:"created_at"`
+	DismissedAt *string `json:"dismissed_at"`
 }
 
 type RecurringOperation struct {
@@ -266,6 +276,7 @@ type User struct {
 	Currency     string  `json:"currency"`
 	Timezone     string  `json:"timezone"`
 	Theme        string  `json:"theme"`
+	Status       string  `json:"status"`
 	CreatedAt    string  `json:"created_at"`
 	UpdatedAt    string  `json:"updated_at"`
 }

@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"sync"
 	"time"
+
+	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 )
 
 type externalAccess struct {
@@ -33,12 +35,13 @@ func ExternalURL(ctx context.Context, db *sql.DB) (sql.NullString, error) {
 	}
 	mu.RUnlock()
 
-	var externalURL sql.NullString
-	err := db.QueryRowContext(ctx, `
-		SELECT external_url FROM system_settings WHERE id = 1`,
-	).Scan(&externalURL)
+	raw, err := sqlcdb.New(db).GetExternalURL(ctx)
 	if err != nil {
 		return sql.NullString{}, err
+	}
+	var externalURL sql.NullString
+	if raw != nil {
+		externalURL = sql.NullString{String: *raw, Valid: true}
 	}
 
 	mu.Lock()

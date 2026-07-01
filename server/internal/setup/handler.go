@@ -15,6 +15,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/bank"
 	"github.com/kai-zer-ru/buhgalter/internal/categoryseed"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
+	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/settingscache"
 
 	"github.com/google/uuid"
@@ -55,19 +56,14 @@ type restoreResponse struct {
 func (h *Handler) Status(w http.ResponseWriter, r *http.Request) {
 	configured := syncConfiguredMarker(h.DataDir, h.Store.DB())
 
-	var regEnabled int
-	var externalURL sql.NullString
-	_ = h.Store.DB().QueryRowContext(r.Context(), `
-		SELECT registration_enabled, external_url FROM system_settings WHERE id = 1`,
-	).Scan(&regEnabled, &externalURL)
-
+	row, _ := sqlcdb.New(h.Store.DB()).GetSetupStatus(r.Context())
 	resp := statusResponse{
 		Configured:          configured,
 		Database:            "SQLite",
-		RegistrationEnabled: regEnabled == 1,
+		RegistrationEnabled: row.RegistrationEnabled == 1,
 	}
-	if externalURL.Valid {
-		resp.ExternalURL = externalURL.String
+	if row.ExternalUrl != nil {
+		resp.ExternalURL = *row.ExternalUrl
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -140,12 +136,14 @@ func (h *Handler) Setup(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	_, err = tx.Exec(`
-		INSERT INTO users (id, login, password_hash, display_name, is_admin)
-		VALUES (?, ?, ?, ?, 1)`,
-		userID, login, hash, displayName,
-	)
-	if err != nil {
+	if err := sqlcdb.New(tx).InsertUser(r.Context(), sqlcdb.InsertUserParams{
+		ID:           userID,
+		Login:        login,
+		PasswordHash: hash,
+		DisplayName:  strPtr(displayName),
+		IsAdmin:      1,
+		Status:       string(auth.UserStatusActive),
+	}); err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
@@ -155,28 +153,15 @@ func (h *Handler) Setup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var external any
-	if externalURL == "" {
-		external = nil
-	} else {
-		external = externalURL
-	}
-
-	reg := 0
+	reg := int64(0)
 	if req.RegistrationEnabled {
 		reg = 1
 	}
 
-	_, err = tx.Exec(`
-		UPDATE system_settings
-		SET is_configured = 1,
-		    external_url = ?,
-		    registration_enabled = ?,
-		    updated_at = datetime('now')
-		WHERE id = 1`,
-		external, reg,
-	)
-	if err != nil {
+	if err := sqlcdb.New(tx).CompleteSetup(r.Context(), sqlcdb.CompleteSetupParams{
+		ExternalUrl:         strPtr(externalURL),
+		RegistrationEnabled: reg,
+	}); err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
@@ -280,9 +265,15 @@ func syncConfiguredMarker(dataDir string, sqlDB *sql.DB) bool {
 }
 
 func adminUserExists(ctx context.Context, sqlDB *sql.DB) (bool, error) {
-	var n int
-	err := sqlDB.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE is_admin = 1`).Scan(&n)
+	n, err := sqlcdb.New(sqlDB).CountAdminUsers(ctx)
 	return n > 0, err
+}
+
+func strPtr(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/kai-zer-ru/buhgalter/internal/categoryseed"
+	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/pressly/goose/v3"
 	_ "modernc.org/sqlite"
 )
@@ -71,13 +72,14 @@ func syncDBPath(db *sql.DB, path string) error {
 	if err != nil {
 		abs = path
 	}
-	_, err = db.Exec(`UPDATE system_settings SET db_path = ? WHERE id = 1`, abs)
-	return err
+	if err := sqlcdb.New(db).UpdateDBPath(context.Background(), abs); err != nil {
+		return err
+	}
+	return nil
 }
 
 func IsConfigured(db *sql.DB) (bool, error) {
-	var configured int
-	err := db.QueryRow(`SELECT is_configured FROM system_settings WHERE id = 1`).Scan(&configured)
+	configured, err := sqlcdb.New(db).GetIsConfigured(context.Background())
 	if err != nil {
 		return false, err
 	}

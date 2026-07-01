@@ -172,44 +172,34 @@ func (w *Worker) processDebts(
 	if settings.TriggerDebt != 1 {
 		return nil
 	}
-	rows, err := w.DB.QueryContext(ctx, `
-		SELECT d.id, dt.name, d.amount, d.due_date, d.direction
-		FROM debts d
-		JOIN debtors dt ON dt.id = d.debtor_id
-		WHERE d.user_id = ? AND d.is_settled = 0`, userID)
+	rows, err := q.ListActiveDebtsByUser(ctx, userID)
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
 	customTemplates, err := q.ListNotificationTemplates(ctx, userID)
 	if err != nil {
 		return err
 	}
 	customMap := toTemplateMap(customTemplates)
-	for rows.Next() {
-		var id, debtor, dueDate, direction string
-		var amount int64
-		if err := rows.Scan(&id, &debtor, &amount, &dueDate, &direction); err != nil {
-			return err
-		}
-		diff := localDayDiff(nowLocal, dueDate, timezone)
-		trigger, ok := pickDebtTrigger(settings, strings.TrimSpace(direction), diff)
+	for _, row := range rows {
+		diff := localDayDiff(nowLocal, row.DueDate, timezone)
+		trigger, ok := pickDebtTrigger(settings, strings.TrimSpace(row.Direction), diff)
 		if !ok {
 			continue
 		}
 		text, err := Format(trigger, localeCode, customMap[trigger], FormatData{
-			"debtor":   debtor,
-			"amount":   FormatAmountDisplay(amount, currencyCode),
-			"due_date": timeutil.FormatDisplayDateInTimezone(dueDate, timezone),
+			"debtor":   row.DebtorName,
+			"amount":   FormatAmountDisplay(row.Amount, currencyCode),
+			"due_date": timeutil.FormatDisplayDateInTimezone(row.DueDate, timezone),
 			"days":     int64ToString(int64(max(diff, 0))),
 		})
 		if err != nil {
 			continue
 		}
 		dateKey := nowLocal.Format("2006-01-02")
-		w.sendByChannels(ctx, q, settings, userID, trigger, id, dateKey, text)
+		w.sendByChannels(ctx, q, settings, userID, trigger, row.ID, dateKey, text)
 	}
-	return rows.Err()
+	return nil
 }
 
 func pickDebtTrigger(settings sqlcdb.NotificationSetting, direction string, dayDiff int) (string, bool) {
@@ -276,43 +266,37 @@ func (w *Worker) processCreditPayments(
 	if settings.TriggerCredit != 1 {
 		return nil
 	}
-	rows, err := w.DB.QueryContext(ctx, `
-		SELECT cp.id, COALESCE(c.name, 'Кредит'), cp.amount, cp.payment_date
-		FROM credit_payments cp
-		JOIN credits c ON c.id = cp.credit_id
-		WHERE c.user_id = ? AND c.status = 'active' AND cp.kind = 'scheduled' AND cp.is_applied = 0`, userID)
+	rows, err := q.CreditPaymentsUnappliedByUser(ctx, userID)
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
 	customTemplates, err := q.ListNotificationTemplates(ctx, userID)
 	if err != nil {
 		return err
 	}
 	customMap := toTemplateMap(customTemplates)
-	for rows.Next() {
-		var id, creditName, payDate string
-		var amount int64
-		if err := rows.Scan(&id, &creditName, &amount, &payDate); err != nil {
-			return err
-		}
-		diff := localDayDiff(nowLocal, payDate, timezone)
+	for _, row := range rows {
+		diff := localDayDiff(nowLocal, row.PaymentDate, timezone)
 		if diff != 0 && diff != int(settings.CreditDaysBefore) {
 			continue
 		}
+		creditName := "Кредит"
+		if row.CreditName != nil && *row.CreditName != "" {
+			creditName = *row.CreditName
+		}
 		text, err := Format(TriggerCreditPayment, localeCode, customMap[TriggerCreditPayment], FormatData{
 			"credit":       creditName,
-			"amount":       FormatAmountDisplay(amount, currencyCode),
-			"payment_date": timeutil.FormatDisplayDateInTimezone(payDate, timezone),
-			"when":         RelativeWhen(localeCode, payDate, nowUTC, timezone),
+			"amount":       FormatAmountDisplay(row.Amount, currencyCode),
+			"payment_date": timeutil.FormatDisplayDateInTimezone(row.PaymentDate, timezone),
+			"when":         RelativeWhen(localeCode, row.PaymentDate, nowUTC, timezone),
 		})
 		if err != nil {
 			continue
 		}
 		dateKey := nowLocal.Format("2006-01-02")
-		w.sendByChannels(ctx, q, settings, userID, TriggerCreditPayment, id, dateKey, text)
+		w.sendByChannels(ctx, q, settings, userID, TriggerCreditPayment, row.ID, dateKey, text)
 	}
-	return rows.Err()
+	return nil
 }
 
 func (w *Worker) sendByChannels(ctx context.Context, q *sqlcdb.Queries, settings sqlcdb.NotificationSetting, userID, triggerType, entityID, dateKey, text string) {

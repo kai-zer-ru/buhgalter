@@ -6,7 +6,9 @@
 	import { page } from '$app/stores';
 	import { _ } from 'svelte-i18n';
 	import { ApiError, getSetupStatus } from '$lib/api/client';
-	import { loadUser, logout, user, hasRecentSession } from '$lib/stores/auth';
+	import { loadUser, logout, user, hasRecentSession, clearSessionHint } from '$lib/stores/auth';
+	import { isPublicAppRoute, sessionExpiredTick } from '$lib/auth/session-expired';
+	import { invalidateApiCache } from '$lib/api/cache';
 	import { registerServiceWorker } from '$lib/pwa';
 	import { initTheme, syncThemeFromUser } from '$lib/stores/theme';
 	import { setLocale } from '$lib/i18n';
@@ -16,6 +18,7 @@
 	import IconButton from '$lib/components/IconButton.svelte';
 	import ToastContainer from '$lib/components/ToastContainer.svelte';
 	import AdminPasswordResetBanner from '$lib/components/AdminPasswordResetBanner.svelte';
+	import AdminPendingUsersBanner from '$lib/components/AdminPendingUsersBanner.svelte';
 	import { checkForVersionUpdate, type PendingVersionUpdate } from '$lib/version-check';
 	import './layout.css';
 
@@ -35,6 +38,24 @@
 
 	const path = $derived($page.url.pathname);
 	const isSetup = $derived(path === '/setup');
+
+	$effect(() => {
+		if ($sessionExpiredTick === 0) return;
+		clearSessionHint();
+		user.set(null);
+		invalidateApiCache();
+		if (ready && !bootError && !isPublicAppRoute(path)) {
+			void goto(resolve('/login'), { replaceState: true });
+		}
+	});
+
+	$effect(() => {
+		if (!ready || bootError) return;
+		if (isPublicAppRoute(path)) return;
+		if ($user === null) {
+			void goto(resolve('/login'), { replaceState: true });
+		}
+	});
 
 	type NavItem = {
 		href: string;
@@ -280,6 +301,7 @@
 		</header>
 		<main class="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
 			<AdminPasswordResetBanner />
+			<AdminPendingUsersBanner />
 			{@render children()}
 		</main>
 	</div>

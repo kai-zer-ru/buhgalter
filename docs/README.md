@@ -25,6 +25,7 @@
 | Документ | Описание |
 |----------|----------|
 | [data-model.md](data-model.md) | Схема БД, миграции, связи сущностей |
+| [sql-access.md](sql-access.md) | Где писать SQL: sqlc vs inline, исключения, миграция legacy |
 | [categories-and-icons.md](categories-and-icons.md) | Категории, подкатегории, иконки |
 | [transactions-display.md](transactions-display.md) | Отображение операций в UI и API |
 
@@ -55,5 +56,6 @@
 |----------|----------|
 | [api/openapi.yaml](api/openapi.yaml) | OpenAPI v1 |
 | [api/authentication.md](api/authentication.md) | Сессии, API-токены, сброс пароля |
+| [api/user-status.md](api/user-status.md) | Статус пользователя, модерация, блокировка |
 | [ui-api-cache.md](ui-api-cache.md) | In-memory кеш GET на сервере и справочники в браузере |
 | [import/cubux.md](import/cubux.md) | Импорт и экспорт формата Cubux |
