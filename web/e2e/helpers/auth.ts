@@ -130,7 +130,13 @@ export async function apiJSON<T>(
 		method,
 		data: body ?? undefined
 	});
-	expect(response.ok(), `API ${method} ${path} failed with ${response.status()}`).toBeTruthy();
+	if (!response.ok()) {
+		const detail = await response.text().catch(() => '');
+		expect(
+			response.ok(),
+			`API ${method} ${path} failed with ${response.status()}${detail ? `: ${detail}` : ''}`
+		).toBeTruthy();
+	}
 	if (response.status() === 204) return undefined as T;
 	return (await response.json()) as T;
 }

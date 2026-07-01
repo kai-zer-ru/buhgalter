@@ -26,6 +26,7 @@
 	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
 	import { tr } from '$lib/i18n';
+	import { budgetStatusLine } from '$lib/budget-display';
 
 	let dash = $state<Dashboard | null>(null);
 	let loading = $state(true);
@@ -49,9 +50,7 @@
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
 	const categoryBudgets = $derived(
-		[...budgetItems]
-			.filter((b) => b.scope !== 'all_expense')
-			.sort((a, b) => b.percent - a.percent)
+		[...budgetItems].filter((b) => b.scope !== 'all_expense').sort((a, b) => b.percent - a.percent)
 	);
 	const allExpenseBudget = $derived(budgetItems.find((b) => b.scope === 'all_expense'));
 	const pastVisible = $derived(dedupeTransferLegs(pastTx));
@@ -224,10 +223,7 @@
 						></div>
 					</div>
 					<p class="mt-1 text-xs tabular-nums" style:color="var(--text-muted)">
-						{allExpenseBudget.percent}% ·
-						{tr('budget.remaining', {
-							values: { amount: allExpenseBudget.remaining_display }
-						})}
+						{budgetStatusLine(allExpenseBudget)}
 					</p>
 				</div>
 			{/if}

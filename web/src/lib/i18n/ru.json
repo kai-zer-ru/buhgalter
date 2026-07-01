@@ -876,6 +876,8 @@
 	"budget.children": "По категориям: {spent} / {planned}",
 	"budget.progress": "{spent} / {planned}",
 	"budget.remaining": "Остаток: {amount}",
+	"budget.remaining_line": "Остаток: {amount} · {percent}%",
+	"budget.exceeded": "Превышение на {amount} рублей, {percent}%",
 	"budget.widget.title": "Бюджет месяца",
 	"budget.widget.more": "Подробнее",
 	"budget.widget.all_expense": "Расходы: {percent}% от плана",

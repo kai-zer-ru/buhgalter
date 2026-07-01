@@ -876,6 +876,8 @@
 	"budget.children": "By categories: {spent} / {planned}",
 	"budget.progress": "{spent} / {planned}",
 	"budget.remaining": "Remaining: {amount}",
+	"budget.remaining_line": "Remaining: {amount} · {percent}%",
+	"budget.exceeded": "Exceeded by {amount}, {percent}%",
 	"budget.widget.title": "Monthly budget",
 	"budget.widget.more": "Details",
 	"budget.widget.all_expense": "Expenses: {percent}% of plan",

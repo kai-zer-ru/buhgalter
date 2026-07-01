@@ -3,6 +3,7 @@ package notify
 import (
 	"context"
 	"database/sql"
+	"log/slog"
 
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 )
@@ -12,7 +13,7 @@ var BudgetThresholdChecker func(ctx context.Context, db *sql.DB, userID string) 
 
 // Deliver sends a notification on all enabled channels with deduplication.
 func Deliver(ctx context.Context, db *sql.DB, settings sqlcdb.NotificationSetting, userID, triggerType, entityID, dedupDate, text string) {
-	w := &Worker{DB: db}
+	w := &Worker{DB: db, Logger: slog.Default()}
 	w.sendByChannels(ctx, sqlcdb.New(db), settings, userID, triggerType, entityID, dedupDate, text)
 }
 

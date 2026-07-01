@@ -42,20 +42,25 @@ export async function createExpense(
 	page: Page,
 	accountId: string,
 	amount: string,
-	description?: string
+	description?: string,
+	categoryId?: string
 ) {
 	const desc = description ?? `E2E expense ${Date.now()}`;
+	const payload: Record<string, string> = {
+		account_id: accountId,
+		type: 'expense',
+		amount,
+		description: desc,
+		transaction_date: formatUTCDateTime(new Date())
+	};
+	if (categoryId) {
+		payload.category_id = categoryId;
+	}
 	return apiJSON<{ id: string; amount_display: string; description?: string }>(
 		page,
 		'POST',
 		'/api/v1/transactions',
-		{
-			account_id: accountId,
-			type: 'expense',
-			amount,
-			description: desc,
-			transaction_date: formatUTCDateTime(new Date())
-		}
+		payload
 	);
 }
 
