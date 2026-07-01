@@ -44,6 +44,7 @@
 | [ui-empty-states.md](ui-empty-states.md) | Пустые состояния |
 | [ui-table-columns.md](ui-table-columns.md) | Порядок колонок таблиц |
 | [ui-pagination.md](ui-pagination.md) | Постраничная навигация (`TransactionPagination`) |
+| [ui-toast.md](ui-toast.md) | In-app toast (успех, ошибка, предупреждение) |
 | [ui-stats.md](ui-stats.md) | Страница `/stats` |
 | [ui-credits.md](ui-credits.md) | Страницы кредитов |
 

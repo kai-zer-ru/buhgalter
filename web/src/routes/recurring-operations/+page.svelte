@@ -5,7 +5,6 @@
 	import { page } from '$app/stores';
 	import { _ } from 'svelte-i18n';
 	import {
-		ApiError,
 		createRecurringOperation,
 		deleteRecurringOperation,
 		getTransaction,
@@ -41,7 +40,6 @@
 	let subcategories = $state<Subcategory[]>([]);
 	let loading = $state(true);
 	let saving = $state(false);
-	let error = $state('');
 	let editId = $state<string | null>(null);
 	let formOpen = $state(false);
 
@@ -96,7 +94,6 @@
 
 	async function loadAll() {
 		loading = true;
-		error = '';
 		try {
 			const [ops, meta] = await Promise.all([listRecurringOperations(), getUIMeta()]);
 			items = ops;
@@ -113,7 +110,7 @@
 			await loadSubcategories();
 			await prefillFromQueryTransaction();
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			loading = false;
 		}
@@ -225,14 +222,13 @@
 			await loadAll();
 			if (editId === item.id) resetForm();
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		}
 	}
 
 	async function submit(e: Event) {
 		e.preventDefault();
 		saving = true;
-		error = '';
 		try {
 			const payload = {
 				type,
@@ -263,7 +259,7 @@
 			resetForm();
 			formOpen = false;
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			saving = false;
 		}
@@ -477,9 +473,6 @@
 				<button type="button" class="btn-ghost" onclick={resetForm}>{$_('common.cancel')}</button>
 			{/if}
 		</div>
-		{#if error}
-			<p class="text-sm" style:color="var(--danger)">{error}</p>
-		{/if}
 	</form>
 {/snippet}
 

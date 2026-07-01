@@ -1,13 +1,12 @@
 <script lang="ts">
 	import { _ } from 'svelte-i18n';
-	import { ApiError, listAccounts, settleDebt, type Account, type Debt } from '$lib/api/client';
+	import { listAccounts, settleDebt, type Account, type Debt } from '$lib/api/client';
 	import { defaultAccountId } from '$lib/accounts';
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
 	import { operationDatetimePickerCreate } from '$lib/datetime-picker-standards';
 	import FieldHint from '$lib/components/FieldHint.svelte';
-	import FormFeedback from '$lib/components/FormFeedback.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
 	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
 	import { toast } from '$lib/toast';
@@ -30,7 +29,6 @@
 	let skipBalance = $state(false);
 	let accounts = $state<Account[]>([]);
 	let saving = $state(false);
-	let error = $state('');
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
 	const accountOptions = $derived(accounts.map((acc) => ({ value: acc.id, label: acc.name })));
@@ -43,7 +41,6 @@
 	async function init() {
 		if (!debt) return;
 		const currentDebt = debt;
-		error = '';
 		amount = formatMoneyForInput(currentDebt.amount_display);
 		settledAtLocal = nowDatetimeLocal(tz);
 		skipBalance = false;
@@ -57,7 +54,6 @@
 	async function save() {
 		if (!debt) return;
 		saving = true;
-		error = '';
 		try {
 			const settled_at = fromDatetimeLocalValue(settledAtLocal, tz);
 			const affectsBalance = !skipBalance;
@@ -75,12 +71,7 @@
 			toast($_('common.saved'));
 			onsaved();
 		} catch (err) {
-			error =
-				err instanceof ApiError
-					? err.message
-					: err instanceof Error
-						? err.message
-						: $_('common.error');
+			toast.fromError(err);
 		} finally {
 			saving = false;
 		}
@@ -136,8 +127,6 @@
 					usePortal
 				/>
 			{/if}
-
-			<FormFeedback {error} />
 		</div>
 		{#snippet footer()}
 			<button type="button" class="btn-ghost" onclick={close}>{$_('common.cancel')}</button>

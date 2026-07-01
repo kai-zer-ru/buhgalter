@@ -4,7 +4,6 @@
 	import { resolve } from '$app/paths';
 	import { _ } from 'svelte-i18n';
 	import {
-		ApiError,
 		deleteTransaction,
 		getDashboard,
 		listTransactions,
@@ -26,7 +25,6 @@
 
 	let dash = $state<Dashboard | null>(null);
 	let loading = $state(true);
-	let error = $state('');
 	let txOpen = $state(false);
 	let transferOpen = $state(false);
 	let editTx = $state<Transaction | null>(null);
@@ -57,11 +55,10 @@
 
 	async function loadDashboard() {
 		loading = true;
-		error = '';
 		try {
 			dash = await getDashboard();
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			loading = false;
 		}
@@ -79,7 +76,7 @@
 			pastTx = res.data;
 			pastTotal = res.meta.total;
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			pastLoading = false;
 		}
@@ -97,7 +94,7 @@
 			plannedTx = res.data;
 			plannedTotal = res.meta.total;
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			plannedLoading = false;
 		}
@@ -162,7 +159,7 @@
 			toast($_('common.deleted'));
 			await loadAll();
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		}
 	}
 </script>
@@ -197,8 +194,6 @@
 
 	{#if loading}
 		<p style:color="var(--text-muted)">{$_('common.loading')}</p>
-	{:else if error}
-		<p style:color="var(--danger)">{error}</p>
 	{:else if dash}
 		<div class="grid gap-4 sm:grid-cols-2">
 			<div class="card">

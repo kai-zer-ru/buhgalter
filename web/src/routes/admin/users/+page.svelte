@@ -5,7 +5,6 @@
 	import { page } from '$app/stores';
 	import { _ } from 'svelte-i18n';
 	import {
-		ApiError,
 		createAdminUser,
 		deleteAdminUser,
 		listAdminUsers,
@@ -14,7 +13,6 @@
 	} from '$lib/api/client';
 	import { user } from '$lib/stores/auth';
 	import { confirm } from '$lib/confirm';
-	import FormFeedback from '$lib/components/FormFeedback.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
 	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
 	import { toast } from '$lib/toast';
@@ -26,15 +24,12 @@
 	let password = $state('');
 	let passwordConfirm = $state('');
 	let isAdmin = $state(false);
-	let formError = $state('');
-	let listError = $state('');
 	let loading = $state(false);
 
 	let resetOpen = $state(false);
 	let resetUser = $state<AdminUser | null>(null);
 	let resetPassword = $state('');
 	let resetPasswordConfirm = $state('');
-	let resetError = $state('');
 	let resetLoading = $state(false);
 	/** Prevents the ?reset= query effect from reopening the modal after cancel. */
 	let dismissedResetQuery = $state<string | null>(null);
@@ -87,7 +82,6 @@
 		resetUser = u;
 		resetPassword = '';
 		resetPasswordConfirm = '';
-		resetError = '';
 		resetOpen = true;
 	}
 
@@ -113,9 +107,8 @@
 
 	async function submit(e: Event) {
 		e.preventDefault();
-		formError = '';
 		if (!formValid) {
-			formError = 'Пароли не совпадают или слишком короткие';
+			toast.error('Пароли не совпадают или слишком короткие');
 			return;
 		}
 		loading = true;
@@ -135,7 +128,7 @@
 			users = await listAdminUsers();
 			toast($_('common.saved'));
 		} catch (err) {
-			formError = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			loading = false;
 		}
@@ -143,9 +136,8 @@
 
 	async function submitResetPassword() {
 		if (!resetUser) return;
-		resetError = '';
 		if (!resetFormValid) {
-			resetError = $_('admin.users.reset.invalid');
+			toast.error($_('admin.users.reset.invalid'));
 			return;
 		}
 		resetLoading = true;
@@ -157,7 +149,7 @@
 			toast($_('common.saved'));
 			closeResetPassword();
 		} catch (err) {
-			resetError = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			resetLoading = false;
 		}
@@ -170,13 +162,12 @@
 			danger: true
 		});
 		if (!ok) return;
-		listError = '';
 		try {
 			await deleteAdminUser(id);
 			users = await listAdminUsers();
 			toast($_('common.deleted'));
 		} catch (err) {
-			listError = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		}
 	}
 </script>
@@ -242,10 +233,7 @@
 		<button type="submit" class="btn-primary" disabled={loading || !formValid}>
 			{$_('common.create')}
 		</button>
-		<FormFeedback error={formError} />
 	</form>
-
-	<FormFeedback error={listError} />
 
 	<div class="card md:overflow-x-auto">
 		<div class="hidden md:block">
@@ -351,7 +339,6 @@
 				<p class="text-sm" style:color="var(--danger)">{$_('admin.users.passwordMismatch')}</p>
 			{/if}
 			<p class="text-xs" style:color="var(--text-muted)">{$_('auth.password.requirements')}</p>
-			<FormFeedback error={resetError} />
 		</div>
 		{#snippet footer()}
 			<button type="button" class="btn-ghost" onclick={closeResetPassword}>

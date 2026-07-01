@@ -2,17 +2,17 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { _ } from 'svelte-i18n';
-	import { ApiError, register } from '$lib/api/client';
+	import { register } from '$lib/api/client';
 	import { user, markSessionHint } from '$lib/stores/auth';
 	import { syncThemeFromUser } from '$lib/stores/theme';
 	import { setLocale } from '$lib/i18n';
 	import { validatePasswordPolicy } from '$lib/password-policy';
+	import { toast } from '$lib/toast';
 
 	let loginName = $state('');
 	let displayName = $state('');
 	let password = $state('');
 	let passwordConfirm = $state('');
-	let error = $state('');
 	let loading = $state(false);
 
 	const passwordsMatch = $derived(passwordConfirm.length === 0 || password === passwordConfirm);
@@ -24,9 +24,8 @@
 
 	async function submit(e: Event) {
 		e.preventDefault();
-		error = '';
 		if (!formValid) {
-			error = 'Пароли не совпадают или слишком короткие';
+			toast.error('Пароли не совпадают или слишком короткие');
 			return;
 		}
 		loading = true;
@@ -43,7 +42,7 @@
 			syncThemeFromUser(res.user.theme);
 			await goto(resolve('/'));
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			loading = false;
 		}
@@ -101,9 +100,6 @@
 					<p class="mt-1 text-xs" style:color="var(--danger)">Пароли не совпадают</p>
 				{/if}
 			</div>
-			{#if error}
-				<p class="text-sm" style:color="var(--danger)">{error}</p>
-			{/if}
 			<button type="submit" class="btn-primary w-full" disabled={loading || !formValid}>
 				{loading ? $_('common.loading') : $_('register.submit')}
 			</button>

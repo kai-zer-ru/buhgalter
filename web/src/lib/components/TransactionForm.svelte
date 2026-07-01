@@ -11,7 +11,6 @@
 		type Subcategory,
 		type Transaction
 	} from '$lib/api/client';
-	import { ApiError } from '$lib/api/client';
 	import { fromDatetimeLocalValue, nowDatetimeLocal, toDatetimeLocalValue } from '$lib/dates';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
 	import {
@@ -19,7 +18,6 @@
 		operationDatetimePickerEdit
 	} from '$lib/datetime-picker-standards';
 	import FieldHint from '$lib/components/FieldHint.svelte';
-	import FormFeedback from '$lib/components/FormFeedback.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
 	import Select from '$lib/components/Select.svelte';
@@ -60,7 +58,6 @@
 	let categories = $state<Category[]>([]);
 	let subcategories = $state<Subcategory[]>([]);
 	let saving = $state(false);
-	let error = $state('');
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
 	const editing = $derived(!!transaction);
@@ -104,7 +101,6 @@
 		repeatSource: Transaction | null,
 		createType: 'expense' | 'income'
 	) {
-		error = '';
 		if (editSource) {
 			txType = editSource.type === 'income' ? 'income' : 'expense';
 			amount = formatMoneyForInput(editSource.amount_display);
@@ -165,7 +161,6 @@
 	async function save(e: Event) {
 		e.preventDefault();
 		saving = true;
-		error = '';
 		try {
 			const payload = {
 				account_id: selectedAccount,
@@ -186,7 +181,7 @@
 			toast($_('common.saved'));
 			onsaved();
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			saving = false;
 		}
@@ -274,8 +269,6 @@
 				<FieldHint text={$_('transactions.field.plannedHint')} />
 			</div>
 		{/if}
-
-		<FormFeedback {error} />
 	</form>
 
 	{#snippet footer()}

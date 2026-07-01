@@ -1,4 +1,4 @@
-VERSION ?= 1.2.4
+VERSION ?= 1.2.5
 INSTALL_METHOD ?= manual
 BUILD_COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILD_TIME ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")

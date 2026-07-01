@@ -3,22 +3,19 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { _ } from 'svelte-i18n';
-	import { ApiError, getRegistrationEnabled, login, requestPasswordReset } from '$lib/api/client';
+	import { getRegistrationEnabled, login, requestPasswordReset } from '$lib/api/client';
 	import { user, markSessionHint } from '$lib/stores/auth';
 	import { syncThemeFromUser } from '$lib/stores/theme';
 	import { setLocale } from '$lib/i18n';
 	import ModalShell from '$lib/components/ModalShell.svelte';
-	import FormFeedback from '$lib/components/FormFeedback.svelte';
 	import { toast } from '$lib/toast';
 
 	let loginName = $state('');
 	let password = $state('');
-	let error = $state('');
 	let loading = $state(false);
 	let registrationEnabled = $state(false);
 	let resetOpen = $state(false);
 	let resetLogin = $state('');
-	let resetError = $state('');
 	let resetLoading = $state(false);
 	let resetSent = $state(false);
 
@@ -28,7 +25,6 @@
 
 	async function submit(e: Event) {
 		e.preventDefault();
-		error = '';
 		loading = true;
 		try {
 			const res = await login(loginName.trim(), password);
@@ -38,7 +34,7 @@
 			syncThemeFromUser(res.user.theme);
 			await goto(resolve('/'));
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			loading = false;
 		}
@@ -46,16 +42,14 @@
 
 	function openResetRequest() {
 		resetLogin = loginName.trim();
-		resetError = '';
 		resetSent = false;
 		resetOpen = true;
 	}
 
 	async function submitResetRequest() {
-		resetError = '';
 		const name = resetLogin.trim();
 		if (name.length < 3) {
-			resetError = $_('login.reset.loginRequired');
+			toast.error($_('login.reset.loginRequired'));
 			return;
 		}
 		resetLoading = true;
@@ -64,7 +58,7 @@
 			resetSent = true;
 			toast($_('login.reset.sent'));
 		} catch (err) {
-			resetError = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			resetLoading = false;
 		}
@@ -95,9 +89,6 @@
 					required
 				/>
 			</div>
-			{#if error}
-				<p class="text-sm" style:color="var(--danger)">{error}</p>
-			{/if}
 			<button type="submit" class="btn-primary w-full" disabled={loading}>
 				{loading ? $_('common.loading') : $_('login.submit')}
 			</button>
@@ -136,7 +127,6 @@
 					<span class="text-sm" style:color="var(--text-muted)">{$_('login.login')}</span>
 					<input class="input w-full" bind:value={resetLogin} autocomplete="username" required />
 				</label>
-				<FormFeedback error={resetError} />
 			{/if}
 		</div>
 		{#snippet footer()}

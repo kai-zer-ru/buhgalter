@@ -2,19 +2,19 @@
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { _ } from 'svelte-i18n';
-	import { ApiError, listAccounts, setPrimaryAccount, type Account } from '$lib/api/client';
+	import { listAccounts, setPrimaryAccount, type Account } from '$lib/api/client';
 	import AccountIcon from '$lib/components/AccountIcon.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
 	import PageTabs from '$lib/components/PageTabs.svelte';
 	import SectionHeader from '$lib/components/SectionHeader.svelte';
 	import { formatBalance } from '$lib/finance';
+	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
 
 	let accounts = $state<Account[]>([]);
 	let filter = $state<'active' | 'archived'>('active');
 	let loading = $state(true);
 	let filterLoading = $state(false);
-	let error = $state('');
 
 	async function load(opts: { filterChange?: boolean } = {}) {
 		if (opts?.filterChange) {
@@ -22,11 +22,10 @@
 		} else {
 			loading = true;
 		}
-		error = '';
 		try {
 			accounts = await listAccounts(filter);
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			loading = false;
 			filterLoading = false;
@@ -49,7 +48,7 @@
 			await setPrimaryAccount(id);
 			accounts = accounts.map((a) => ({ ...a, is_primary: a.id === id }));
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		}
 	}
 </script>
@@ -71,10 +70,6 @@
 		]}
 		onchange={(next) => setFilter(next as 'active' | 'archived')}
 	/>
-
-	{#if error}
-		<p class="text-sm" style:color="var(--danger)">{error}</p>
-	{/if}
 
 	{#if loading}
 		<p style:color="var(--text-muted)">{$_('common.loading')}</p>

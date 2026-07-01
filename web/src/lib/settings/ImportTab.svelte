@@ -4,7 +4,6 @@
 	import { _, locale } from 'svelte-i18n';
 	import { tr } from '$lib/i18n';
 	import {
-		ApiError,
 		createImportJob,
 		exportCSVUrl,
 		getImportJob,
@@ -64,7 +63,6 @@
 	let deduplicate = $state(true);
 	let dragOver = $state(false);
 	let loading = $state(false);
-	let error = $state('');
 	let report = $state<ImportReport | null>(null);
 	let finalReport = $state<ImportReport | null>(null);
 	let importJob = $state<ImportJob | null>(null);
@@ -141,7 +139,7 @@
 				step = 'done';
 			}
 			if (current.status === 'failed') {
-				error = current.error_message ?? $_('common.error');
+				toast.error(current.error_message ?? $_('common.error'));
 			}
 		} catch {
 			// stale or unavailable job id, ignore and reset persisted state
@@ -154,11 +152,10 @@
 		if (!f) return;
 		const lower = f.name.toLowerCase();
 		if (!lower.endsWith('.csv') && !lower.endsWith('.xlsx')) {
-			error = $_('import.error.format');
+			toast.error($_('import.error.format'));
 			return;
 		}
 		file = f;
-		error = '';
 		fileHeaders = [];
 		columnMap = {};
 		subcategoryMap = {};
@@ -188,7 +185,6 @@
 
 	async function goFromSettings() {
 		if (!file) return;
-		error = '';
 		if (preset === 'custom') {
 			loading = true;
 			try {
@@ -197,7 +193,7 @@
 				columnMap = guessColumnMap(fileHeaders);
 				step = 'mapping';
 			} catch (err) {
-				error = err instanceof ApiError ? err.message : $_('common.error');
+				toast.fromError(err);
 			} finally {
 				loading = false;
 			}
@@ -208,10 +204,9 @@
 
 	function goFromMapping() {
 		if (!isColumnMapValid(columnMap)) {
-			error = $_('import.mapping.required');
+			toast.error($_('import.mapping.required'));
 			return;
 		}
-		error = '';
 		void runPreview();
 	}
 
@@ -254,7 +249,6 @@
 	async function runPreview() {
 		if (!file) return;
 		loading = true;
-		error = '';
 		try {
 			const raw = normalizeImportReport(await previewImport(importOpts()));
 			initAccountMapFromReport(raw.account_mappings);
@@ -268,7 +262,7 @@
 				newImportAttemptKey();
 			}
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 			loading = false;
 		}
 	}
@@ -444,11 +438,11 @@
 		for (const m of report?.account_mappings ?? []) {
 			const entry = mapEntry(m);
 			if (entry.mode === 'existing' && !entry.account_id) {
-				error = $_('import.accounts.pick_existing', { values: { name: m.file_name } });
+				toast.error($_('import.accounts.pick_existing', { values: { name: m.file_name } }));
 				return false;
 			}
 			if (entry.mode === 'create' && entry.account_type === 'bank' && !entry.bank_id) {
-				error = $_('import.accounts.pick_bank', { values: { name: m.file_name } });
+				toast.error($_('import.accounts.pick_bank', { values: { name: m.file_name } }));
 				return false;
 			}
 		}
@@ -456,7 +450,6 @@
 	}
 
 	function goFromAccounts() {
-		error = '';
 		syncAccountMapFromUI();
 		if (!validateAccountMap()) return;
 		step = (report?.category_mappings?.length ?? 0) > 0 ? 'categories' : 'preview';
@@ -508,7 +501,7 @@
 		for (const m of report?.category_mappings ?? []) {
 			const entry = categoryMapEntry(m);
 			if (entry.mode === 'existing' && !entry.category_id) {
-				error = $_('import.categories.pick_existing', { values: { name: m.file_name } });
+				toast.error($_('import.categories.pick_existing', { values: { name: m.file_name } }));
 				return false;
 			}
 		}
@@ -570,7 +563,9 @@
 			if (catEntry.mode !== 'existing') continue;
 			const entry = subcategoryMapEntry(m);
 			if (entry.mode === 'existing' && !entry.subcategory_id) {
-				error = $_('import.subcategories.pick_existing', { values: { name: m.file_subcategory } });
+				toast.error(
+					$_('import.subcategories.pick_existing', { values: { name: m.file_subcategory } })
+				);
 				return false;
 			}
 		}
@@ -578,7 +573,6 @@
 	}
 
 	async function goFromCategories() {
-		error = '';
 		syncCategoryMapFromUI();
 		if (!validateCategoryMap()) return;
 		if (autoSubcategory) {
@@ -596,14 +590,13 @@
 			newImportAttemptKey();
 			step = raw.subcategory_mappings.length > 0 ? 'subcategories' : 'preview';
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			loading = false;
 		}
 	}
 
 	function goFromSubcategories() {
-		error = '';
 		syncSubcategoryMapFromUI();
 		if (!validateSubcategoryMap()) return;
 		newImportAttemptKey();
@@ -629,13 +622,13 @@
 				}
 				if (current.status === 'failed') {
 					clearActiveImportJobID();
-					error = current.error_message ?? $_('common.error');
+					toast.error(current.error_message ?? $_('common.error'));
 					step = 'preview';
 					return;
 				}
 			} catch (err) {
 				clearActiveImportJobID();
-				error = err instanceof ApiError ? err.message : $_('common.error');
+				toast.fromError(err);
 				step = 'preview';
 				return;
 			}
@@ -655,7 +648,6 @@
 		if (!ok) return;
 
 		loading = true;
-		error = '';
 		try {
 			if (!importAttemptKey) {
 				newImportAttemptKey();
@@ -669,7 +661,7 @@
 			loading = false;
 			void pollImportJob(importJob.id);
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 			loading = false;
 		}
 	}
@@ -690,7 +682,6 @@
 		subcategoriesByCategory = {};
 		autoSubcategory = true;
 		importAttemptKey = '';
-		error = '';
 	}
 
 	function accountOptionLabel(acc: Account): string {
@@ -829,10 +820,6 @@
 			</button>
 		</div>
 	{:else}
-		{#if error}
-			<p class="text-sm" style:color="var(--danger)">{error}</p>
-		{/if}
-
 		{#if step === 'upload'}
 			<div
 				class="card flex min-h-48 flex-col items-center justify-center gap-3 border-2 border-dashed p-8 text-center transition-colors"
@@ -1062,9 +1049,6 @@
 						</div>
 					{/each}
 				</div>
-				{#if error}
-					<p class="text-sm" style:color="var(--danger)">{error}</p>
-				{/if}
 				<button type="button" class="btn-primary" onclick={goFromAccounts}>
 					{$_('import.settings.next')}
 				</button>
@@ -1166,9 +1150,6 @@
 						onchange={() => (autoSubcategory = !autoSubcategory)}
 					/>
 				</div>
-				{#if error}
-					<p class="text-sm" style:color="var(--danger)">{error}</p>
-				{/if}
 				<div class="flex gap-2">
 					<button
 						type="button"
@@ -1276,9 +1257,6 @@
 						</div>
 					{/each}
 				</div>
-				{#if error}
-					<p class="text-sm" style:color="var(--danger)">{error}</p>
-				{/if}
 				<div class="flex gap-2">
 					<button type="button" class="btn-ghost" onclick={() => (step = 'categories')}>
 						{$_('import.mapping.back')}

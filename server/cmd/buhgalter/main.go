@@ -26,7 +26,7 @@ import (
 )
 
 var (
-	version       = "1.2.4"
+	version       = "1.2.5"
 	installMethod = "dev"
 	buildCommit   = "unknown"
 	buildTime     = ""

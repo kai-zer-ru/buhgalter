@@ -7,7 +7,6 @@
 	import { _, locale } from 'svelte-i18n';
 	import { tr } from '$lib/i18n';
 	import {
-		ApiError,
 		changePassword,
 		createToken,
 		deleteToken,
@@ -30,12 +29,10 @@
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
 	import PageTabs from '$lib/components/PageTabs.svelte';
 	import Select from '$lib/components/Select.svelte';
-	import FormFeedback from '$lib/components/FormFeedback.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
 	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
 	import { confirm } from '$lib/confirm';
 	import { validatePasswordPolicy } from '$lib/password-policy';
-	import { formatApiError } from '$lib/api/errors';
 	import {
 		apiDateTimeToRFC3339,
 		defaultTokenExpiryLocal,
@@ -88,9 +85,6 @@
 
 	let tab = $state<Tab>(tabFromSearchParams(get(page).url.searchParams));
 	let adminTab = $state<AdminTab>(adminTabFromSearchParams(get(page).url.searchParams));
-	let profileFeedback = $state({ error: '', success: '' });
-	let passwordFeedback = $state({ error: '', success: '' });
-	let notificationsFormFeedback = $state({ error: '', success: '' });
 	let loading = $state(false);
 
 	let displayName = $state('');
@@ -107,7 +101,6 @@
 	let newTokenName = $state('');
 	let newTokenExpiresAt = $state('');
 	let newTokenNeverExpires = $state(false);
-	let tokenFormError = $state('');
 	let createdToken = $state<APITokenCreated | null>(null);
 
 	let notificationsLoaded = $state(false);
@@ -137,22 +130,6 @@
 	let templates = $state<NotificationTemplate[]>([]);
 	let templatesDirty = $state<Record<string, string>>({});
 	let previewText = $state<Record<string, string>>({});
-	let templateFeedback = $state<Record<string, { error: string; success: string }>>({});
-	let channelFeedback = $state<Record<'telegram' | 'max', { error: string; success: string }>>({
-		telegram: { error: '', success: '' },
-		max: { error: '', success: '' }
-	});
-	let blockFeedback = $state<
-		Record<
-			'telegram' | 'max' | 'triggerTypes' | 'triggerPolicy',
-			{ error: string; success: string }
-		>
-	>({
-		telegram: { error: '', success: '' },
-		max: { error: '', success: '' },
-		triggerTypes: { error: '', success: '' },
-		triggerPolicy: { error: '', success: '' }
-	});
 	let persistedNotificationState = $state({
 		telegramEnabled: false,
 		telegramChatId: '',
@@ -189,10 +166,7 @@
 				await loadProfile();
 				await loadTokens();
 			} catch (err) {
-				profileFeedback = {
-					error: err instanceof ApiError ? err.message : $_('common.error'),
-					success: ''
-				};
+				toast.fromError(err);
 			}
 		})();
 		return () => window.removeEventListener('popstate', syncTabFromLocation);
@@ -208,10 +182,7 @@
 	$effect(() => {
 		if (tab !== 'notifications') return;
 		void loadNotifications().catch((err) => {
-			notificationsFormFeedback = {
-				error: err instanceof ApiError ? err.message : $_('common.error'),
-				success: ''
-			};
+			toast.fromError(err);
 		});
 	});
 
@@ -287,7 +258,6 @@
 		templates = data.templates;
 		templatesDirty = {};
 		previewText = {};
-		templateFeedback = {};
 		persistedNotificationState = {
 			telegramEnabled: data.telegram_enabled,
 			telegramChatId: data.telegram_chat_id ?? '',
@@ -384,7 +354,6 @@
 	async function saveNotifications(e: Event) {
 		e.preventDefault();
 		if (!notificationSecretConfigured) return;
-		notificationsFormFeedback = { error: '', success: '' };
 		if (
 			!validateDaysRange(debtDaysBefore) ||
 			!validateDaysRange(creditDaysBefore) ||
@@ -392,17 +361,11 @@
 			!validateOverdueDaysLimit(owedDebtOverdueStartAfterDays) ||
 			!validateOverdueDaysLimit(owedDebtOverdueDaysLimit)
 		) {
-			notificationsFormFeedback = {
-				error: $_('settings.notifications.error.policy_range'),
-				success: ''
-			};
+			toast.error($_('settings.notifications.error.policy_range'));
 			return;
 		}
 		if (!validateLocalTime(notificationTimeLocal)) {
-			notificationsFormFeedback = {
-				error: $_('settings.notifications.error.time_format'),
-				success: ''
-			};
+			toast.error($_('settings.notifications.error.time_format'));
 			return;
 		}
 		loading = true;
@@ -430,16 +393,9 @@
 			telegramBotToken = '';
 			maxToken = '';
 			await loadNotifications();
-			notificationsFormFeedback = {
-				error: '',
-				success: $_('settings.notifications.success.saved')
-			};
 			toast($_('settings.notifications.success.saved'));
 		} catch (err) {
-			notificationsFormFeedback = {
-				error: err instanceof ApiError ? err.message : $_('common.error'),
-				success: ''
-			};
+			toast.fromError(err);
 		} finally {
 			loading = false;
 		}
@@ -447,35 +403,16 @@
 
 	async function runChannelTest(channel: 'telegram' | 'max') {
 		if (!notificationSecretConfigured) return;
-		channelFeedback = {
-			...channelFeedback,
-			[channel]: { error: '', success: '' }
-		};
 		if (channelHasUnsavedChanges(channel)) {
-			channelFeedback = {
-				...channelFeedback,
-				[channel]: { error: $_('settings.notifications.error.save_before_test'), success: '' }
-			};
+			toast.error($_('settings.notifications.error.save_before_test'));
 			return;
 		}
 		loading = true;
 		try {
 			await sendNotificationTest(channel);
-			channelFeedback = {
-				...channelFeedback,
-				[channel]: {
-					error: '',
-					success: $_('settings.notifications.success.test_sent', { values: { channel } })
-				}
-			};
+			toast($_('settings.notifications.success.test_sent', { values: { channel } }));
 		} catch (err) {
-			channelFeedback = {
-				...channelFeedback,
-				[channel]: {
-					error: err instanceof ApiError ? err.message : $_('common.error'),
-					success: ''
-				}
-			};
+			toast.fromError(err);
 		} finally {
 			loading = false;
 		}
@@ -483,7 +420,6 @@
 
 	async function saveTelegramBlock() {
 		if (!notificationSecretConfigured) return;
-		blockFeedback = { ...blockFeedback, telegram: { error: '', success: '' } };
 		loading = true;
 		try {
 			await putNotificationSettings({
@@ -493,16 +429,9 @@
 			});
 			telegramBotToken = '';
 			await loadNotifications();
-			blockFeedback = {
-				...blockFeedback,
-				telegram: { error: '', success: $_('settings.notifications.success.block_saved') }
-			};
 			toast($_('settings.notifications.success.block_saved'));
 		} catch (err) {
-			blockFeedback = {
-				...blockFeedback,
-				telegram: { error: err instanceof ApiError ? err.message : $_('common.error'), success: '' }
-			};
+			toast.fromError(err);
 		} finally {
 			loading = false;
 		}
@@ -510,7 +439,6 @@
 
 	async function saveMaxBlock() {
 		if (!notificationSecretConfigured) return;
-		blockFeedback = { ...blockFeedback, max: { error: '', success: '' } };
 		loading = true;
 		try {
 			await putNotificationSettings({
@@ -522,16 +450,9 @@
 			});
 			maxToken = '';
 			await loadNotifications();
-			blockFeedback = {
-				...blockFeedback,
-				max: { error: '', success: $_('settings.notifications.success.block_saved') }
-			};
 			toast($_('settings.notifications.success.block_saved'));
 		} catch (err) {
-			blockFeedback = {
-				...blockFeedback,
-				max: { error: err instanceof ApiError ? err.message : $_('common.error'), success: '' }
-			};
+			toast.fromError(err);
 		} finally {
 			loading = false;
 		}
@@ -539,7 +460,6 @@
 
 	async function saveTriggerTypesBlock() {
 		if (!notificationSecretConfigured) return;
-		blockFeedback = { ...blockFeedback, triggerTypes: { error: '', success: '' } };
 		loading = true;
 		try {
 			await putNotificationSettings({
@@ -549,19 +469,9 @@
 				trigger_password_reset: $user?.is_admin ? triggerPasswordReset : undefined
 			});
 			await loadNotifications();
-			blockFeedback = {
-				...blockFeedback,
-				triggerTypes: { error: '', success: $_('settings.notifications.success.block_saved') }
-			};
 			toast($_('settings.notifications.success.block_saved'));
 		} catch (err) {
-			blockFeedback = {
-				...blockFeedback,
-				triggerTypes: {
-					error: err instanceof ApiError ? err.message : $_('common.error'),
-					success: ''
-				}
-			};
+			toast.fromError(err);
 		} finally {
 			loading = false;
 		}
@@ -569,7 +479,6 @@
 
 	async function saveTriggerPolicyBlock() {
 		if (!notificationSecretConfigured) return;
-		blockFeedback = { ...blockFeedback, triggerPolicy: { error: '', success: '' } };
 		if (
 			!validateDaysRange(debtDaysBefore) ||
 			!validateDaysRange(creditDaysBefore) ||
@@ -577,17 +486,11 @@
 			!validateOverdueDaysLimit(owedDebtOverdueStartAfterDays) ||
 			!validateOverdueDaysLimit(owedDebtOverdueDaysLimit)
 		) {
-			blockFeedback = {
-				...blockFeedback,
-				triggerPolicy: { error: $_('settings.notifications.error.policy_range'), success: '' }
-			};
+			toast.error($_('settings.notifications.error.policy_range'));
 			return;
 		}
 		if (!validateLocalTime(notificationTimeLocal)) {
-			blockFeedback = {
-				...blockFeedback,
-				triggerPolicy: { error: $_('settings.notifications.error.time_format'), success: '' }
-			};
+			toast.error($_('settings.notifications.error.time_format'));
 			return;
 		}
 		loading = true;
@@ -601,19 +504,9 @@
 				notification_time_local: notificationTimeLocal.trim()
 			});
 			await loadNotifications();
-			blockFeedback = {
-				...blockFeedback,
-				triggerPolicy: { error: '', success: $_('settings.notifications.success.block_saved') }
-			};
 			toast($_('settings.notifications.success.block_saved'));
 		} catch (err) {
-			blockFeedback = {
-				...blockFeedback,
-				triggerPolicy: {
-					error: err instanceof ApiError ? err.message : $_('common.error'),
-					success: ''
-				}
-			};
+			toast.fromError(err);
 		} finally {
 			loading = false;
 		}
@@ -621,16 +514,9 @@
 
 	async function saveTemplate(triggerType: string, template: string) {
 		if (!notificationSecretConfigured) return;
-		templateFeedback = {
-			...templateFeedback,
-			[triggerType]: { error: '', success: '' }
-		};
 		const templateError = validateTemplateText(template);
 		if (templateError) {
-			templateFeedback = {
-				...templateFeedback,
-				[triggerType]: { error: templateError, success: '' }
-			};
+			toast.error(templateError);
 			return;
 		}
 		loading = true;
@@ -642,19 +528,9 @@
 			const success = $_('settings.notifications.success.template_saved', {
 				values: { trigger: triggerLabel(triggerType) }
 			});
-			templateFeedback = {
-				...templateFeedback,
-				[triggerType]: { error: '', success }
-			};
 			toast(success);
 		} catch (err) {
-			templateFeedback = {
-				...templateFeedback,
-				[triggerType]: {
-					error: err instanceof ApiError ? err.message : $_('common.error'),
-					success: ''
-				}
-			};
+			toast.fromError(err);
 		} finally {
 			loading = false;
 		}
@@ -662,64 +538,36 @@
 
 	async function previewTemplate(triggerType: string, template: string) {
 		if (!notificationSecretConfigured) return;
-		templateFeedback = {
-			...templateFeedback,
-			[triggerType]: { error: '', success: '' }
-		};
 		const templateError = validateTemplateText(template);
 		if (templateError) {
-			templateFeedback = {
-				...templateFeedback,
-				[triggerType]: { error: templateError, success: '' }
-			};
+			toast.error(templateError);
 			return;
 		}
 		try {
 			const result = await previewNotificationTemplate({ trigger_type: triggerType, template });
 			previewText = { ...previewText, [triggerType]: result.text };
 		} catch (err) {
-			templateFeedback = {
-				...templateFeedback,
-				[triggerType]: {
-					error: err instanceof ApiError ? err.message : $_('common.error'),
-					success: ''
-				}
-			};
+			toast.fromError(err);
 		}
 	}
 
 	async function resetTemplate(triggerType: string) {
 		if (!notificationSecretConfigured) return;
-		templateFeedback = {
-			...templateFeedback,
-			[triggerType]: { error: '', success: '' }
-		};
 		try {
 			await resetNotificationTemplates(triggerType);
 			await loadNotifications();
-			templateFeedback = {
-				...templateFeedback,
-				[triggerType]: {
-					error: '',
-					success: $_('settings.notifications.success.template_reset', {
-						values: { trigger: triggerLabel(triggerType) }
-					})
-				}
-			};
+			toast(
+				$_('settings.notifications.success.template_reset', {
+					values: { trigger: triggerLabel(triggerType) }
+				})
+			);
 		} catch (err) {
-			templateFeedback = {
-				...templateFeedback,
-				[triggerType]: {
-					error: err instanceof ApiError ? err.message : $_('common.error'),
-					success: ''
-				}
-			};
+			toast.fromError(err);
 		}
 	}
 
 	async function saveProfile(e: Event) {
 		e.preventDefault();
-		profileFeedback = { error: '', success: '' };
 		loading = true;
 		try {
 			const updated = await putUserSettings({
@@ -734,10 +582,9 @@
 			setLocale(updated.language);
 			user.update((u) => (u ? { ...u, ...updated } : u));
 			timezone = updated.timezone;
-			profileFeedback = { error: '', success: $_('common.saved') };
 			toast($_('common.saved'));
 		} catch (err) {
-			profileFeedback = { error: formatApiError(err), success: '' };
+			toast.fromError(err);
 		} finally {
 			loading = false;
 		}
@@ -745,17 +592,16 @@
 
 	async function savePassword(e: Event) {
 		e.preventDefault();
-		passwordFeedback = { error: '', success: '' };
 		if (newPassword !== confirmPassword) {
-			passwordFeedback = { error: $_('errors.PASSWORDS_MISMATCH'), success: '' };
+			toast.error($_('errors.PASSWORDS_MISMATCH'));
 			return;
 		}
 		if (!validatePasswordPolicy(newPassword, $user?.login ?? '')) {
-			passwordFeedback = { error: $_('auth.password.requirements'), success: '' };
+			toast.error($_('auth.password.requirements'));
 			return;
 		}
 		if (oldPassword === newPassword) {
-			passwordFeedback = { error: $_('errors.PASSWORD_UNCHANGED'), success: '' };
+			toast.error($_('errors.PASSWORD_UNCHANGED'));
 			return;
 		}
 		loading = true;
@@ -764,10 +610,9 @@
 			oldPassword = '';
 			newPassword = '';
 			confirmPassword = '';
-			passwordFeedback = { error: '', success: $_('settings.password.changed') };
 			toast($_('settings.password.changed'));
 		} catch (err) {
-			passwordFeedback = { error: formatApiError(err), success: '' };
+			toast.fromError(err);
 		} finally {
 			loading = false;
 		}
@@ -775,7 +620,6 @@
 
 	async function handleCreateToken(e: Event) {
 		e.preventDefault();
-		tokenFormError = '';
 		loading = true;
 		try {
 			const opts = newTokenNeverExpires
@@ -790,7 +634,7 @@
 			toast($_('common.saved'));
 			await loadTokens();
 		} catch (err) {
-			tokenFormError = formatApiError(err);
+			toast.fromError(err);
 		} finally {
 			loading = false;
 		}
@@ -966,7 +810,6 @@
 				{ value: 'dark', label: $_('settings.theme.dark') }
 			]}
 		/>
-		<FormFeedback error={profileFeedback.error} success={profileFeedback.success} />
 		<button type="submit" class="btn-primary" disabled={loading}>{$_('settings.save')}</button>
 	</form>
 {:else if tab === 'password'}
@@ -998,7 +841,6 @@
 			>
 			<input id="confirm" type="password" class="input" bind:value={confirmPassword} required />
 		</div>
-		<FormFeedback error={passwordFeedback.error} success={passwordFeedback.success} />
 		<button type="submit" class="btn-primary" disabled={loading}>{$_('settings.save')}</button>
 	</form>
 {:else if tab === 'notifications'}
@@ -1104,18 +946,6 @@
 								{$_('settings.notifications.block_save')}
 							</button>
 						</div>
-						{#if blockFeedback.telegram.error}
-							<p class="text-sm" style:color="var(--danger)">{blockFeedback.telegram.error}</p>
-						{/if}
-						{#if blockFeedback.telegram.success}
-							<p class="text-sm" style:color="var(--primary)">{blockFeedback.telegram.success}</p>
-						{/if}
-						{#if channelFeedback.telegram.error}
-							<p class="text-sm" style:color="var(--danger)">{channelFeedback.telegram.error}</p>
-						{/if}
-						{#if channelFeedback.telegram.success}
-							<p class="text-sm" style:color="var(--primary)">{channelFeedback.telegram.success}</p>
-						{/if}
 					</div>
 
 					<div class="card space-y-4">
@@ -1193,18 +1023,6 @@
 								{$_('settings.notifications.block_save')}
 							</button>
 						</div>
-						{#if blockFeedback.max.error}
-							<p class="text-sm" style:color="var(--danger)">{blockFeedback.max.error}</p>
-						{/if}
-						{#if blockFeedback.max.success}
-							<p class="text-sm" style:color="var(--primary)">{blockFeedback.max.success}</p>
-						{/if}
-						{#if channelFeedback.max.error}
-							<p class="text-sm" style:color="var(--danger)">{channelFeedback.max.error}</p>
-						{/if}
-						{#if channelFeedback.max.success}
-							<p class="text-sm" style:color="var(--primary)">{channelFeedback.max.success}</p>
-						{/if}
 					</div>
 
 					<div class="card space-y-4">
@@ -1266,14 +1084,6 @@
 								{$_('settings.notifications.block_save')}
 							</button>
 						</div>
-						{#if blockFeedback.triggerTypes.error}
-							<p class="text-sm" style:color="var(--danger)">{blockFeedback.triggerTypes.error}</p>
-						{/if}
-						{#if blockFeedback.triggerTypes.success}
-							<p class="text-sm" style:color="var(--primary)">
-								{blockFeedback.triggerTypes.success}
-							</p>
-						{/if}
 					</div>
 
 					<div class="card space-y-6">
@@ -1385,14 +1195,6 @@
 								{$_('settings.notifications.block_save')}
 							</button>
 						</div>
-						{#if blockFeedback.triggerPolicy.error}
-							<p class="text-sm" style:color="var(--danger)">{blockFeedback.triggerPolicy.error}</p>
-						{/if}
-						{#if blockFeedback.triggerPolicy.success}
-							<p class="text-sm" style:color="var(--primary)">
-								{blockFeedback.triggerPolicy.success}
-							</p>
-						{/if}
 					</div>
 
 					{#each orderedTemplates(templates) as tpl (tpl.trigger_type)}
@@ -1448,16 +1250,6 @@
 									{$_('settings.notifications.block_save')}
 								</button>
 							</div>
-							{#if templateFeedback[tpl.trigger_type]?.error}
-								<p class="text-sm" style:color="var(--danger)">
-									{templateFeedback[tpl.trigger_type].error}
-								</p>
-							{/if}
-							{#if templateFeedback[tpl.trigger_type]?.success}
-								<p class="text-sm" style:color="var(--primary)">
-									{templateFeedback[tpl.trigger_type].success}
-								</p>
-							{/if}
 							{#if previewText[tpl.trigger_type]}
 								<div
 									class="rounded border p-2 text-sm"
@@ -1471,10 +1263,6 @@
 							{/if}
 						</div>
 					{/each}
-					<FormFeedback
-						error={notificationsFormFeedback.error}
-						success={notificationsFormFeedback.success}
-					/>
 					<button
 						type="submit"
 						class="btn-primary"
@@ -1558,7 +1346,6 @@
 					{$_('settings.tokens.perpetual_warning')}
 				</p>
 			{/if}
-			<FormFeedback error={tokenFormError} />
 		</form>
 
 		{#if createdToken}

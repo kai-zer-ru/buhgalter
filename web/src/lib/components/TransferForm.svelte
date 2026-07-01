@@ -7,13 +7,11 @@
 		type Account,
 		type Transaction
 	} from '$lib/api/client';
-	import { ApiError } from '$lib/api/client';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
 	import {
 		operationDatetimePickerCreate,
 		operationDatetimePickerEdit
 	} from '$lib/datetime-picker-standards';
-	import FormFeedback from '$lib/components/FormFeedback.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
 	import Select from '$lib/components/Select.svelte';
@@ -53,7 +51,6 @@
 	let dateTimeValue = $state('');
 	let accounts = $state<Account[]>([]);
 	let saving = $state(false);
-	let error = $state('');
 	let groupId = $state('');
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
@@ -79,7 +76,6 @@
 		related: Transaction[],
 		contextAccountId: string
 	) {
-		error = '';
 		if (editSource?.transfer_group_id) {
 			const legs = transferGroupLegs(editSource, related);
 			const metaLeg = legs.length >= 2 ? transferOutLeg(editSource, legs) : editSource;
@@ -124,7 +120,6 @@
 	async function save(e: Event) {
 		e.preventDefault();
 		saving = true;
-		error = '';
 		const payload = {
 			from_account_id: fromAccount,
 			to_account_id: toAccount,
@@ -143,7 +138,7 @@
 			toast($_('common.saved'));
 			onsaved();
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			saving = false;
 		}
@@ -245,7 +240,6 @@
 			usePortal
 			required
 		/>
-		<FormFeedback {error} />
 	</form>
 
 	{#snippet footer()}

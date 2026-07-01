@@ -3,9 +3,8 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { _ } from 'svelte-i18n';
-	import { ApiError, createAccount, listBanks, type Bank } from '$lib/api/client';
+	import { createAccount, listBanks, type Bank } from '$lib/api/client';
 	import BackLink from '$lib/components/BackLink.svelte';
-	import FormFeedback from '$lib/components/FormFeedback.svelte';
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
 	import { toast } from '$lib/toast';
 	import { bankIconUrl } from '$lib/finance';
@@ -18,7 +17,6 @@
 	let initialBalance = $state('');
 	let banks = $state<Bank[]>([]);
 	let loading = $state(false);
-	let error = $state('');
 
 	const filteredBanks = $derived(
 		banks.filter((b) => b.name.toLowerCase().includes(bankSearch.toLowerCase()))
@@ -27,15 +25,14 @@
 	onMount(async () => {
 		try {
 			banks = await listBanks();
-		} catch {
-			error = $_('common.error');
+		} catch (err) {
+			toast.fromError(err);
 		}
 	});
 
 	async function submit(e: Event) {
 		e.preventDefault();
 		loading = true;
-		error = '';
 		try {
 			const acc = await createAccount({
 				name,
@@ -46,7 +43,7 @@
 			await goto(resolve(`/accounts/${acc.id}`));
 			toast($_('common.saved'));
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			loading = false;
 		}
@@ -144,6 +141,5 @@
 			</button>
 			<a href={resolve('/accounts')} class="btn-ghost">{$_('common.cancel')}</a>
 		</div>
-		<FormFeedback {error} />
 	</form>
 </div>

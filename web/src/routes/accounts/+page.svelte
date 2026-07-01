@@ -3,7 +3,6 @@
 	import { resolve } from '$app/paths';
 	import { _ } from 'svelte-i18n';
 	import {
-		ApiError,
 		archiveAccount,
 		deleteAccount,
 		listAccounts,
@@ -28,7 +27,7 @@
 	let accounts = $state<Account[]>([]);
 	let banks = $state<Bank[]>([]);
 	let loading = $state(true);
-	let error = $state('');
+	let ready = $state(false);
 	let primarySavingId = $state('');
 	let actionSavingId = $state('');
 	let editingId = $state<string | null>(null);
@@ -45,13 +44,13 @@
 
 	async function load() {
 		loading = true;
-		error = '';
 		try {
 			const [accountList, bankList] = await Promise.all([listAccounts(), listBanks()]);
 			accounts = accountList;
 			banks = bankList;
+			ready = true;
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			loading = false;
 		}
@@ -72,7 +71,6 @@
 		e.preventDefault();
 		if (savingEditId) return;
 		savingEditId = acc.id;
-		error = '';
 		try {
 			const updated = await updateAccount(acc.id, {
 				name: editName,
@@ -83,7 +81,7 @@
 			editingId = null;
 			toast($_('common.saved'));
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			savingEditId = '';
 		}
@@ -92,7 +90,6 @@
 	async function makePrimary(id: string) {
 		if (!id || primarySavingId) return;
 		primarySavingId = id;
-		error = '';
 		try {
 			const updated = await setPrimaryAccount(id);
 			accounts = accounts.map((acc) => ({
@@ -100,7 +97,7 @@
 				is_primary: acc.id === updated.id
 			}));
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			primarySavingId = '';
 		}
@@ -109,14 +106,13 @@
 	async function archive(id: string) {
 		if (!id || actionSavingId) return;
 		actionSavingId = id;
-		error = '';
 		try {
 			await archiveAccount(id);
 			accounts = accounts.filter((acc) => acc.id !== id);
 			if (editingId === id) editingId = null;
 			toast($_('common.saved'));
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			actionSavingId = '';
 		}
@@ -131,14 +127,13 @@
 		});
 		if (!ok) return;
 		actionSavingId = id;
-		error = '';
 		try {
 			await deleteAccount(id);
 			accounts = accounts.filter((acc) => acc.id !== id);
 			if (editingId === id) editingId = null;
 			toast($_('common.deleted'));
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			actionSavingId = '';
 		}
@@ -202,8 +197,8 @@
 
 	{#if loading}
 		<p style:color="var(--text-muted)">{$_('common.loading')}</p>
-	{:else if error}
-		<p style:color="var(--danger)">{error}</p>
+	{:else if !ready}
+		<!-- load failed; toast shown -->
 	{:else if accounts.length === 0}
 		<EmptyStateCard message={$_('accounts.empty')} />
 	{:else}

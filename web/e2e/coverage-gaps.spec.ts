@@ -5,7 +5,7 @@ import { test, expect } from '@playwright/test';
 import { login, apiJSON, waitAppReady } from './helpers/auth';
 import { advanceImportToPreview, commitImportFromPreview } from './helpers/import';
 import { createCashAccount, createIncome } from './helpers/setup-data';
-import { confirmDialog, rowMenuAction } from './helpers/ui';
+import { confirmDialog, expectToast, rowMenuAction } from './helpers/ui';
 import {
 	fillEditTxAmount,
 	fillTransactionForm,
@@ -69,9 +69,7 @@ test('admin root saves system settings', async ({ page }) => {
 		.first()
 		.getByRole('button', { name: 'Сохранить', exact: true })
 		.click();
-	await expect(page.locator('form.card.max-w-lg').first().getByText('Сохранено')).toBeVisible({
-		timeout: 10_000
-	});
+	await expectToast(page, 'success', 'Сохранено');
 
 	await page.getByRole('switch', { name: 'Открытая регистрация' }).click();
 	await page.locator('#external').fill('');
@@ -80,9 +78,7 @@ test('admin root saves system settings', async ({ page }) => {
 		.first()
 		.getByRole('button', { name: 'Сохранить', exact: true })
 		.click();
-	await expect(page.locator('form.card.max-w-lg').first().getByText('Сохранено')).toBeVisible({
-		timeout: 10_000
-	});
+	await expectToast(page, 'success', 'Сохранено');
 });
 
 test('create credit from credits list UI', async ({ page }) => {

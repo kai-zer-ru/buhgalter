@@ -3,7 +3,6 @@
 	import { page } from '$app/stores';
 	import { _ } from 'svelte-i18n';
 	import {
-		ApiError,
 		deleteDebt,
 		getDebtor,
 		type Debt,
@@ -25,7 +24,6 @@
 
 	let detail = $state<DebtorDetail | null>(null);
 	let loading = $state(true);
-	let error = $state('');
 	let formOpen = $state(false);
 	let formDirection = $state<'lent' | 'borrowed'>('lent');
 	let tab = $state<'active' | 'settled'>('active');
@@ -52,11 +50,10 @@
 	async function load() {
 		if (!debtorId) return;
 		loading = true;
-		error = '';
 		try {
 			detail = await getDebtor(debtorId);
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			loading = false;
 		}
@@ -100,8 +97,6 @@
 
 	{#if loading && !detail}
 		<p style:color="var(--text-muted)">{$_('common.loading')}</p>
-	{:else if error && !detail}
-		<p style:color="var(--danger)">{error}</p>
 	{:else if detail}
 		<div class="flex flex-wrap items-center justify-between gap-3">
 			<h1 class="text-2xl font-semibold">{detail.name}</h1>

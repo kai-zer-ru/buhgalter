@@ -4,7 +4,6 @@
 	import { page } from '$app/stores';
 	import { _ } from 'svelte-i18n';
 	import {
-		ApiError,
 		archiveAccount,
 		deleteAccount,
 		deleteTransaction,
@@ -57,7 +56,6 @@
 	let loading = $state(true);
 	let filterLoading = $state(false);
 	let saving = $state(false);
-	let error = $state('');
 	let txOpen = $state(false);
 	let transferOpen = $state(false);
 	let editTx = $state<Transaction | null>(null);
@@ -126,7 +124,6 @@
 	async function load() {
 		if (!id) return;
 		loading = true;
-		error = '';
 		try {
 			const [account, accountBalance, bankList, expenseCats, incomeCats] = await Promise.all([
 				getAccount(id),
@@ -147,7 +144,7 @@
 			editing = $page.url.searchParams.get('edit') === '1';
 			await loadTransactions();
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			loading = false;
 		}
@@ -172,7 +169,7 @@
 			transactions = result.data;
 			txTotal = result.meta.total;
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			filterLoading = false;
 		}
@@ -200,7 +197,6 @@
 		e.preventDefault();
 		if (!acc) return;
 		saving = true;
-		error = '';
 		try {
 			acc = await updateAccount(acc.id, {
 				name,
@@ -211,7 +207,7 @@
 			editing = false;
 			toast($_('common.saved'));
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		} finally {
 			saving = false;
 		}
@@ -223,7 +219,7 @@
 			acc = acc.status === 'active' ? await archiveAccount(acc.id) : await unarchiveAccount(acc.id);
 			accBalance = await getAccountBalance(acc.id);
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		}
 	}
 
@@ -233,7 +229,7 @@
 			acc = await setPrimaryAccount(acc.id);
 			toast($_('common.saved'));
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		}
 	}
 
@@ -250,7 +246,7 @@
 			toast($_('common.deleted'));
 			await goto(resolve('/accounts'));
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		}
 	}
 
@@ -327,7 +323,7 @@
 			toast($_('common.deleted'));
 			await load();
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast.fromError(err);
 		}
 	}
 
@@ -396,7 +392,7 @@
 	{#if loading}
 		<p style:color="var(--text-muted)">{$_('common.loading')}</p>
 	{:else if !acc}
-		<p style:color="var(--danger)">{error || $_('common.error')}</p>
+		<!-- load failed; toast shown -->
 	{:else}
 		<div class="card">
 			<div class="flex items-start gap-4">
@@ -505,10 +501,6 @@
 					{/if}
 				</div>
 			</div>
-
-			{#if error}
-				<p class="mt-3 text-sm" style:color="var(--danger)">{error}</p>
-			{/if}
 		</div>
 
 		<div class="relative space-y-3">

@@ -10,13 +10,11 @@
 		type Debt,
 		type Debtor
 	} from '$lib/api/client';
-	import { ApiError } from '$lib/api/client';
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
 	import { dateOnlyPicker, operationDatetimePickerCreate } from '$lib/datetime-picker-standards';
 	import FieldHint from '$lib/components/FieldHint.svelte';
-	import FormFeedback from '$lib/components/FormFeedback.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
 	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
 	import { defaultAccountId } from '$lib/accounts';
@@ -66,7 +64,6 @@
 	let accounts = $state<Account[]>([]);
 	let activeDebts = $state<Debt[]>([]);
 	let saving = $state(false);
-	let error = $state('');
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
 
@@ -117,7 +114,6 @@
 	});
 
 	async function init() {
-		error = '';
 		direction = defaultDirection ?? 'lent';
 		amount = '';
 		debtorId = fixedDebtorId ?? '';
@@ -140,7 +136,6 @@
 
 	async function save() {
 		saving = true;
-		error = '';
 		try {
 			if (directionConflict) {
 				throw new Error(directionConflict);
@@ -170,12 +165,7 @@
 			toast($_('common.saved'));
 			onsaved();
 		} catch (err) {
-			error =
-				err instanceof ApiError
-					? err.message
-					: err instanceof Error
-						? err.message
-						: $_('common.error');
+			toast.fromError(err);
 		} finally {
 			saving = false;
 		}
@@ -261,7 +251,9 @@
 			<input class="input w-full" bind:value={description} />
 		</label>
 
-		<FormFeedback error={directionConflict || error} />
+		{#if directionConflict}
+			<p class="text-sm" style:color="var(--danger)" role="alert">{directionConflict}</p>
+		{/if}
 	</div>
 	{#snippet footer()}
 		<button type="button" class="btn-ghost" onclick={onclose}>{$_('common.cancel')}</button>
