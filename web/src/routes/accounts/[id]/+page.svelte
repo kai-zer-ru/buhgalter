@@ -327,7 +327,7 @@
 			toast($_('common.deleted'));
 			await load();
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			toast(err instanceof ApiError ? err.message : $_('common.error'), 'error');
 		}
 	}
 

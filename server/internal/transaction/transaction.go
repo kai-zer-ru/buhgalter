@@ -373,12 +373,7 @@ func Delete(ctx context.Context, db *sql.DB, userID, id string) error {
 	defer func() { _ = dbTx.Rollback() }()
 
 	q := queries(dbTx)
-	if err := q.ClearDebtTransactionLink(ctx, sqlcdb.ClearDebtTransactionLinkParams{
-		TransactionID: &id, UserID: userID,
-	}); err != nil {
-		return err
-	}
-	if err := q.DeleteDebtTransactionLink(ctx, id); err != nil {
+	if err := debt.OnTransactionDelete(ctx, q, userID, id); err != nil {
 		return err
 	}
 	if err := credit.OnTransactionDelete(ctx, q, userID, id); err != nil {

@@ -76,6 +76,19 @@ func (q *Queries) CountActiveDebtsByDebtorAndDirection(ctx context.Context, arg 
 	return count, err
 }
 
+const countDebtLinksByDebt = `-- name: CountDebtLinksByDebt :one
+SELECT COUNT(*)
+FROM debt_transactions
+WHERE debt_id = ?
+`
+
+func (q *Queries) CountDebtLinksByDebt(ctx context.Context, debtID string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countDebtLinksByDebt, debtID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countSettleLinksByDebt = `-- name: CountSettleLinksByDebt :one
 SELECT COUNT(*)
 FROM debt_transactions
@@ -857,6 +870,25 @@ func (q *Queries) ReduceDebtAmount(ctx context.Context, arg ReduceDebtAmountPara
 	return result.RowsAffected()
 }
 
+const reopenDebt = `-- name: ReopenDebt :execrows
+UPDATE debts
+SET is_settled = 0, settled_at = NULL
+WHERE id = ? AND user_id = ? AND is_settled = 1
+`
+
+type ReopenDebtParams struct {
+	ID     string `json:"id"`
+	UserID string `json:"user_id"`
+}
+
+func (q *Queries) ReopenDebt(ctx context.Context, arg ReopenDebtParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, reopenDebt, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const settleDebt = `-- name: SettleDebt :execrows
 UPDATE debts
 SET is_settled = 1, settled_at = ?
@@ -871,6 +903,47 @@ type SettleDebtParams struct {
 
 func (q *Queries) SettleDebt(ctx context.Context, arg SettleDebtParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, settleDebt, arg.SettledAt, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const sumSettleTxAmountsByDebtExcluding = `-- name: SumSettleTxAmountsByDebtExcluding :one
+SELECT CAST(COALESCE(SUM(t.amount), 0) AS INTEGER)
+FROM debt_transactions dtx
+INNER JOIN transactions t ON t.id = dtx.transaction_id AND t.user_id = ?1
+WHERE dtx.debt_id = ?2 AND dtx.role = 'settle'
+  AND dtx.transaction_id != ?3
+`
+
+type SumSettleTxAmountsByDebtExcludingParams struct {
+	UserID      string `json:"user_id"`
+	DebtID      string `json:"debt_id"`
+	ExcludeTxID string `json:"exclude_tx_id"`
+}
+
+func (q *Queries) SumSettleTxAmountsByDebtExcluding(ctx context.Context, arg SumSettleTxAmountsByDebtExcludingParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, sumSettleTxAmountsByDebtExcluding, arg.UserID, arg.DebtID, arg.ExcludeTxID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const updateDebtAmount = `-- name: UpdateDebtAmount :execrows
+UPDATE debts
+SET amount = ?
+WHERE id = ? AND user_id = ?
+`
+
+type UpdateDebtAmountParams struct {
+	Amount int64  `json:"amount"`
+	ID     string `json:"id"`
+	UserID string `json:"user_id"`
+}
+
+func (q *Queries) UpdateDebtAmount(ctx context.Context, arg UpdateDebtAmountParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateDebtAmount, arg.Amount, arg.ID, arg.UserID)
 	if err != nil {
 		return 0, err
 	}

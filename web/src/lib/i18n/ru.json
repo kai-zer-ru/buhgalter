@@ -726,7 +726,7 @@
 	"errors.ERR_IMPORT_CONFIRM": "confirm=true обязателен",
 	"errors.ERR_TOKEN_NAME_REQUIRED": "Имя токена обязательно",
 	"errors.ERR_TOKEN_EXPIRES": "Некорректная дата истечения",
-	"errors.ERR_LINKED_TX_DELETE": "Нельзя удалить операцию долга после погашения — удалите долг целиком",
+	"errors.ERR_LINKED_TX_DELETE": "Нельзя удалить начальную операцию долга, пока есть другие операции по этому долгу — удалите долг целиком",
 	"common.saved": "Сохранено",
 	"common.deleted": "Удалено",
 	"common.notFound": "Ничего не найдено",
