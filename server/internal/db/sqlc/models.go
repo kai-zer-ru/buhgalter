@@ -166,6 +166,7 @@ type NotificationSetting struct {
 	TriggerDebt                   int64   `json:"trigger_debt"`
 	TriggerCredit                 int64   `json:"trigger_credit"`
 	TriggerPlanned                int64   `json:"trigger_planned"`
+	TriggerNegativeBalance        int64   `json:"trigger_negative_balance"`
 	TriggerUserRegistration       int64   `json:"trigger_user_registration"`
 	TriggerPasswordReset          int64   `json:"trigger_password_reset"`
 	DebtDaysBefore                int64   `json:"debt_days_before"`

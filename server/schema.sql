@@ -282,6 +282,7 @@ CREATE TABLE notification_settings (
     trigger_debt        INTEGER NOT NULL DEFAULT 1,
     trigger_credit      INTEGER NOT NULL DEFAULT 1,
     trigger_planned     INTEGER NOT NULL DEFAULT 1,
+    trigger_negative_balance INTEGER NOT NULL DEFAULT 1,
     trigger_user_registration INTEGER NOT NULL DEFAULT 1,
     trigger_password_reset INTEGER NOT NULL DEFAULT 1,
     debt_days_before    INTEGER NOT NULL DEFAULT 1,
@@ -311,6 +312,7 @@ CREATE TABLE notification_templates (
     user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     trigger_type    TEXT NOT NULL CHECK (trigger_type IN (
                         'debt_overdue', 'debt_due_soon', 'credit_payment', 'planned_operation',
+                        'balance_shortfall',
                         'user_registration', 'password_reset', 'test'
                     )),
     template        TEXT NOT NULL,

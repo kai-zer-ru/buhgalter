@@ -57,5 +57,7 @@
 | [api/openapi.yaml](api/openapi.yaml) | OpenAPI v1 |
 | [api/authentication.md](api/authentication.md) | Сессии, API-токены, сброс пароля |
 | [api/user-status.md](api/user-status.md) | Статус пользователя, модерация, блокировка |
+| [notifications.md](notifications.md) | Уведомления: настройки, периоды, шаблоны, блокировка UI/API |
+| [../roadmap/balance-shortfall-notifications.md](../roadmap/balance-shortfall-notifications.md) | Недостаток средств в тексте уведомлений |
 | [ui-api-cache.md](ui-api-cache.md) | In-memory кеш GET на сервере и справочники в браузере |
 | [import/cubux.md](import/cubux.md) | Импорт и экспорт формата Cubux |

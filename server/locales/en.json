@@ -110,11 +110,12 @@
   "ERR_TOKEN_NAME_REQUIRED": "Token name is required",
   "ERR_TOKEN_EXPIRES": "Invalid expiration date",
   "ERR_LINKED_TX_DELETE": "Cannot delete a debt transaction after settlement — delete the debt instead",
-  "notifications.templates.debt_overdue": "Debt overdue: {debtor} — {amount} (due {due_date})",
-  "notifications.templates.debt_due_soon": "Reminder: repay debt to {debtor} — {amount} (due {due_date}, in {days} days)",
-  "notifications.templates.credit_payment": "Credit payment \"{credit}\": {amount} {when}",
-  "notifications.templates.planned_operation": "Planned transaction: {type} {amount} — {description}",
+  "notifications.templates.debt_overdue": "Debt overdue: {debtor} — {amount} (due {due_date})\n{debt_url}",
+  "notifications.templates.debt_due_soon": "Reminder: repay debt to {debtor} — {amount} (due {due_date}, in {days} days)\n{debt_url}",
+  "notifications.templates.credit_payment": "Credit payment \"{credit}\": {amount} {when}\n{credit_url}",
+  "notifications.templates.planned_operation": "Planned transaction: {type} {amount} — {description}\n{transaction_url}",
+  "notifications.templates.balance_shortfall": "Insufficient balance: {amount} short!",
   "notifications.templates.password_reset": "Password reset requested by {display_name} (@{login}) at {requested_at}.\n{reset_url}",
   "notifications.templates.user_registration": "New registration: {display_name} (@{login}), {registered_at}. Moderation: {moderation_url}",
-  "notifications.templates.test": "Buhgalter test notification. Channel: {channel}."
+  "notifications.templates.test": "Buhgalter test notification. Channel: {channel}.\n{settings_url}"
 }

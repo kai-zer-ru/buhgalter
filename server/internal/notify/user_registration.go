@@ -25,15 +25,23 @@ func NotifyAdminsOnUserRegistration(ctx context.Context, db *sql.DB, userID, log
 	if err != nil {
 		return err
 	}
+	externalURL, err := settingscache.ExternalURL(ctx, db)
+	if err != nil {
+		return err
+	}
+	externalURLValue := ""
+	if externalURL.Valid {
+		externalURLValue = externalURL.String
+	}
 	for _, adminID := range adminIDs {
-		if err := notifyAdminUserRegistration(ctx, db, q, box, adminID, userID, login, displayName, registeredAt); err != nil {
+		if err := notifyAdminUserRegistration(ctx, db, q, box, adminID, userID, login, displayName, registeredAt, externalURLValue); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func notifyAdminUserRegistration(ctx context.Context, db *sql.DB, q *sqlcdb.Queries, box *SecretBox, adminID, userID, login, displayName, registeredAt string) error {
+func notifyAdminUserRegistration(ctx context.Context, db *sql.DB, q *sqlcdb.Queries, box *SecretBox, adminID, userID, login, displayName, registeredAt, externalURLValue string) error {
 	if err := q.EnsureNotificationSettings(ctx, adminID); err != nil {
 		return nil
 	}
@@ -57,7 +65,7 @@ func notifyAdminUserRegistration(ctx context.Context, db *sql.DB, q *sqlcdb.Quer
 	if display == "" {
 		display = login
 	}
-	modURL := moderationURL(ctx, db, userID, localeCode)
+	modURL := moderationURLPlaceholderValue(externalURLValue, localeCode, userID)
 	text, err := Format(TriggerUserRegistration, localeCode, customMap[TriggerUserRegistration], FormatData{
 		"login":          login,
 		"display_name":   display,
@@ -91,16 +99,4 @@ func notifyAdminUserRegistration(ctx context.Context, db *sql.DB, q *sqlcdb.Quer
 		_ = appendLog(ctx, q, adminID, TriggerUserRegistration, channel, &userID, &dateKey, "sent", text)
 	}
 	return nil
-}
-
-func moderationURL(ctx context.Context, db *sql.DB, userID, localeCode string) string {
-	externalURL, err := settingscache.ExternalURL(ctx, db)
-	if err != nil || !externalURL.Valid || strings.TrimSpace(externalURL.String) == "" {
-		if normalizeLocale(localeCode) == "en" {
-			return "configure external URL in admin settings"
-		}
-		return "настройте внешний URL в админке"
-	}
-	base := strings.TrimRight(strings.TrimSpace(externalURL.String), "/")
-	return base + "/admin/users?moderate=" + userID
 }
