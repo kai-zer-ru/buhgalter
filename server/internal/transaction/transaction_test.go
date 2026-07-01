@@ -2,6 +2,7 @@ package transaction
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"path/filepath"
 	"testing"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/kai-zer-ru/buhgalter/internal/accountbalance"
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
+	"github.com/kai-zer-ru/buhgalter/internal/bank"
 	"github.com/kai-zer-ru/buhgalter/internal/category"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
@@ -500,5 +502,127 @@ func TestCreateWithSubcategoryName(t *testing.T) {
 	}
 	if tx.SubcategoryID == nil || *tx.SubcategoryID == "" {
 		t.Fatal("expected subcategory id")
+	}
+}
+
+func seedBanksForTest(t *testing.T, ctx context.Context, database *sql.DB) {
+	t.Helper()
+	if err := bank.SeedIfEmpty(ctx, database); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func insertCreditCardAccount(t *testing.T, ctx context.Context, database *sql.DB, userID, id string, limit, balance int64) {
+	t.Helper()
+	seedBanksForTest(t, ctx, database)
+	_, err := database.ExecContext(ctx, `
+		INSERT INTO accounts (id, user_id, name, type, bank_id, credit_limit, initial_balance, current_balance, status, created_at, updated_at)
+		VALUES (?, ?, 'Кредитка', 'credit_card', 'tinkoff', ?, ?, ?, 'active', datetime('now'), datetime('now'))`,
+		id, userID, limit, balance, balance)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func commissionDescription(t *testing.T, ctx context.Context, database *sql.DB, userID, groupID string, amount int64) string {
+	t.Helper()
+	var desc sql.NullString
+	err := database.QueryRowContext(ctx, `
+		SELECT description FROM transactions
+		WHERE user_id = ? AND transfer_group_id = ? AND type = 'expense' AND amount = ?`,
+		userID, groupID, amount).Scan(&desc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !desc.Valid {
+		return ""
+	}
+	return desc.String
+}
+
+func TestDashboardExcludesCreditCards(t *testing.T) {
+	handle, env := seedEnvFull(t)
+	database := handle.DB()
+	ctx := context.Background()
+	insertCreditCardAccount(t, ctx, database, env.userID, "cc-1", 6_500_000, 50_000)
+	if err := accountbalance.Refresh(ctx, database, env.userID); err != nil {
+		t.Fatal(err)
+	}
+
+	dash, err := DashboardForUser(ctx, database, env.userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dash.TotalBalance != 200_000 {
+		t.Fatalf("total balance %d, want 200000 (cash only)", dash.TotalBalance)
+	}
+	if dash.CreditCardsSummary == nil {
+		t.Fatal("expected credit_cards_summary")
+	}
+	if dash.CreditCardsSummary.Count != 1 || dash.CreditCardsSummary.TotalBalance != 50_000 {
+		t.Fatalf("credit summary %+v", dash.CreditCardsSummary)
+	}
+	if dash.CreditCardsSummary.TotalLimit != 6_500_000 {
+		t.Fatalf("total limit %d", dash.CreditCardsSummary.TotalLimit)
+	}
+}
+
+func TestTransferCommissionCreditCardDescriptions(t *testing.T) {
+	handle, env := seedEnvFull(t)
+	database := handle.DB()
+	ctx := context.Background()
+	past := timeutil.NowUTC().Add(-time.Hour)
+	insertCreditCardAccount(t, ctx, database, env.userID, "cc-1", 6_500_000, 0)
+	if err := accountbalance.Refresh(ctx, database, env.userID); err != nil {
+		t.Fatal(err)
+	}
+
+	toCC, err := CreateTransfer(ctx, database, env.userID, TransferInput{
+		FromAccountID: env.accountID, ToAccountID: "cc-1",
+		Amount: 10_000, Commission: 100, TransactionDate: past,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := commissionDescription(t, ctx, database, env.userID, toCC.GroupID, 100); got != "Комиссия за использование карты" {
+		t.Fatalf("to credit card commission desc %q", got)
+	}
+
+	fromCC, err := CreateTransfer(ctx, database, env.userID, TransferInput{
+		FromAccountID: "cc-1", ToAccountID: env.account2,
+		Amount: 5_000, Commission: 50, TransactionDate: past,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := commissionDescription(t, ctx, database, env.userID, fromCC.GroupID, 50); got != "Комиссия за перевод" {
+		t.Fatalf("from credit card commission desc %q", got)
+	}
+}
+
+func TestCreditCardPaymentExceedsLimit(t *testing.T) {
+	handle, env := seedEnvFull(t)
+	database := handle.DB()
+	ctx := context.Background()
+	past := timeutil.NowUTC().Add(-time.Hour)
+	insertCreditCardAccount(t, ctx, database, env.userID, "cc-1", 200_000, 100_000)
+	if err := accountbalance.Refresh(ctx, database, env.userID); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := CreateTransfer(ctx, database, env.userID, TransferInput{
+		FromAccountID: env.accountID, ToAccountID: "cc-1",
+		Amount: 150_000, TransactionDate: past,
+	})
+	if !errors.Is(err, ErrCreditCardPaymentExceedsLimit) {
+		t.Fatalf("expected ErrCreditCardPaymentExceedsLimit, got %v", err)
+	}
+
+	_, err = CreateTransfer(ctx, database, env.userID, TransferInput{
+		FromAccountID: env.accountID, ToAccountID: "cc-1",
+		Amount: 100_000, TransactionDate: past,
+	})
+	if err != nil {
+		t.Fatalf("payment within limit: %v", err)
 	}
 }

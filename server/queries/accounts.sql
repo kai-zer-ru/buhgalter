@@ -6,6 +6,8 @@ SELECT
     a.bank_id,
     a.initial_balance,
     a.current_balance,
+    a.credit_limit,
+    a.payment_account_id,
     a.status,
     a.is_primary,
     a.created_at,
@@ -24,6 +26,8 @@ SELECT
     a.bank_id,
     a.initial_balance,
     a.current_balance,
+    a.credit_limit,
+    a.payment_account_id,
     a.status,
     a.is_primary,
     a.created_at,
@@ -43,6 +47,8 @@ SELECT
     a.bank_id,
     a.initial_balance,
     a.current_balance,
+    a.credit_limit,
+    a.payment_account_id,
     a.status,
     a.is_primary,
     a.created_at,
@@ -56,12 +62,13 @@ ORDER BY a.name;
 
 -- name: InsertAccount :exec
 INSERT INTO accounts (
-    id, user_id, name, type, bank_id, initial_balance, current_balance, status, is_primary, created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?);
+    id, user_id, name, type, bank_id, initial_balance, current_balance,
+    credit_limit, payment_account_id, status, is_primary, created_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?);
 
 -- name: UpdateAccount :exec
 UPDATE accounts
-SET name = ?, bank_id = ?, initial_balance = ?, updated_at = ?
+SET name = ?, bank_id = ?, initial_balance = ?, credit_limit = ?, payment_account_id = ?, updated_at = ?
 WHERE id = ? AND user_id = ?;
 
 -- name: UpdateAccountStatus :execrows
@@ -118,6 +125,8 @@ SELECT
     a.bank_id,
     a.initial_balance,
     a.current_balance,
+    a.credit_limit,
+    a.payment_account_id,
     a.status,
     a.is_primary,
     a.created_at,

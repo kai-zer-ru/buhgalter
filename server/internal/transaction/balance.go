@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/kai-zer-ru/buhgalter/internal/account"
 	"github.com/kai-zer-ru/buhgalter/internal/accountbalance"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/debt"
@@ -23,6 +24,18 @@ type AccountBalance struct {
 	ForecastBalance    int64   `json:"forecast_balance"`
 	ForecastDisplay    string  `json:"forecast_display"`
 	HasFutureThisMonth bool    `json:"has_future_this_month"`
+	CreditLimit        *int64  `json:"credit_limit,omitempty"`
+	CreditLimitDisplay *string `json:"credit_limit_display,omitempty"`
+}
+
+type CreditCardsSummary struct {
+	TotalBalance         int64  `json:"total_balance"`
+	TotalForecast        int64  `json:"total_forecast"`
+	TotalLimit           int64  `json:"total_limit"`
+	Count                int    `json:"count"`
+	TotalBalanceDisplay  string `json:"total_balance_display"`
+	TotalForecastDisplay string `json:"total_forecast_display"`
+	TotalLimitDisplay    string `json:"total_limit_display"`
 }
 
 type AccountsSummary struct {
@@ -32,11 +45,12 @@ type AccountsSummary struct {
 }
 
 type Dashboard struct {
-	TotalBalance       int64            `json:"total_balance"`
-	TotalForecast      int64            `json:"total_forecast"`
-	Accounts           []AccountBalance `json:"accounts"`
-	RecentTransactions []Transaction    `json:"recent_transactions"`
-	DebtsSummary       debt.Summary     `json:"debts_summary"`
+	TotalBalance       int64               `json:"total_balance"`
+	TotalForecast      int64               `json:"total_forecast"`
+	CreditCardsSummary *CreditCardsSummary `json:"credit_cards_summary,omitempty"`
+	Accounts           []AccountBalance    `json:"accounts"`
+	RecentTransactions []Transaction       `json:"recent_transactions"`
+	DebtsSummary       debt.Summary        `json:"debts_summary"`
 }
 
 // Balance returns stored current balance for an account.
@@ -123,7 +137,29 @@ func sumInt64(v interface{}, err error) (int64, error) {
 	}
 }
 
-func EnrichAccountBalance(ctx context.Context, db *sql.DB, userID, accountID, accountName, accountType string, bankIcon *string, initialBalance int64) (AccountBalance, error) {
+func accountBalanceFromRow(
+	id, name, accType string,
+	bankIcon *string,
+	balance int64,
+	creditLimit *int64,
+) AccountBalance {
+	ab := AccountBalance{
+		ID:             id,
+		Name:           name,
+		Type:           accType,
+		BankIcon:       bankIcon,
+		Balance:        balance,
+		BalanceDisplay: money.FormatRubles(balance),
+		CreditLimit:    creditLimit,
+	}
+	if creditLimit != nil {
+		s := money.FormatRubles(*creditLimit)
+		ab.CreditLimitDisplay = &s
+	}
+	return ab
+}
+
+func EnrichAccountBalance(ctx context.Context, db *sql.DB, userID, accountID, accountName, accountType string, bankIcon *string, initialBalance int64, creditLimit *int64) (AccountBalance, error) {
 	bal, err := Balance(ctx, db, userID, accountID, initialBalance)
 	if err != nil {
 		return AccountBalance{}, err
@@ -137,17 +173,11 @@ func EnrichAccountBalance(ctx context.Context, db *sql.DB, userID, accountID, ac
 		return AccountBalance{}, err
 	}
 	fc := forecasts[accountID]
-	return AccountBalance{
-		ID:                 accountID,
-		Name:               accountName,
-		Type:               accountType,
-		BankIcon:           bankIcon,
-		Balance:            bal,
-		BalanceDisplay:     money.FormatRubles(bal),
-		ForecastBalance:    fc.Balance,
-		ForecastDisplay:    money.FormatRubles(fc.Balance),
-		HasFutureThisMonth: fc.HasFutureThisMonth,
-	}, nil
+	ab := accountBalanceFromRow(accountID, accountName, accountType, bankIcon, bal, creditLimit)
+	ab.ForecastBalance = fc.Balance
+	ab.ForecastDisplay = money.FormatRubles(fc.Balance)
+	ab.HasFutureThisMonth = fc.HasFutureThisMonth
+	return ab, nil
 }
 
 func AccountsSummaryForUser(ctx context.Context, db *sql.DB, userID string) (AccountsSummary, error) {
@@ -159,16 +189,10 @@ func AccountsSummaryForUser(ctx context.Context, db *sql.DB, userID string) (Acc
 	out := make([]AccountBalance, 0, len(rows))
 	for _, row := range rows {
 		balances[row.ID] = row.CurrentBalance
-		out = append(out, AccountBalance{
-			ID:              row.ID,
-			Name:            row.Name,
-			Type:            row.Type,
-			BankIcon:        row.BankIcon,
-			Balance:         row.CurrentBalance,
-			BalanceDisplay:  money.FormatRubles(row.CurrentBalance),
-			ForecastBalance: row.CurrentBalance,
-			ForecastDisplay: money.FormatRubles(row.CurrentBalance),
-		})
+		ab := accountBalanceFromRow(row.ID, row.Name, row.Type, row.BankIcon, row.CurrentBalance, row.CreditLimit)
+		ab.ForecastBalance = row.CurrentBalance
+		ab.ForecastDisplay = money.FormatRubles(row.CurrentBalance)
+		out = append(out, ab)
 	}
 	tz, err := userTimezone(ctx, db, userID)
 	if err != nil {
@@ -185,6 +209,9 @@ func AccountsSummaryForUser(ctx context.Context, db *sql.DB, userID string) (Acc
 			out[i].ForecastDisplay = money.FormatRubles(fc.Balance)
 			out[i].HasFutureThisMonth = fc.HasFutureThisMonth
 		}
+		if account.IsCreditCard(out[i].Type) {
+			continue
+		}
 		totalBal += out[i].Balance
 		totalForecast += out[i].ForecastBalance
 	}
@@ -193,6 +220,34 @@ func AccountsSummaryForUser(ctx context.Context, db *sql.DB, userID string) (Acc
 		TotalBalance:  totalBal,
 		TotalForecast: totalForecast,
 	}, nil
+}
+
+func creditCardsSummaryFromAccounts(accounts []AccountBalance) *CreditCardsSummary {
+	var count int
+	var totalBal, totalForecast, totalLimit int64
+	for _, acc := range accounts {
+		if !account.IsCreditCard(acc.Type) {
+			continue
+		}
+		count++
+		totalBal += acc.Balance
+		totalForecast += acc.ForecastBalance
+		if acc.CreditLimit != nil {
+			totalLimit += *acc.CreditLimit
+		}
+	}
+	if count == 0 {
+		return nil
+	}
+	return &CreditCardsSummary{
+		TotalBalance:         totalBal,
+		TotalForecast:        totalForecast,
+		TotalLimit:           totalLimit,
+		Count:                count,
+		TotalBalanceDisplay:  money.FormatRubles(totalBal),
+		TotalForecastDisplay: money.FormatRubles(totalForecast),
+		TotalLimitDisplay:    money.FormatRubles(totalLimit),
+	}
 }
 
 func DashboardForUser(ctx context.Context, db *sql.DB, userID string) (Dashboard, error) {
@@ -214,6 +269,7 @@ func DashboardForUser(ctx context.Context, db *sql.DB, userID string) (Dashboard
 	return Dashboard{
 		TotalBalance:       summary.TotalBalance,
 		TotalForecast:      summary.TotalForecast,
+		CreditCardsSummary: creditCardsSummaryFromAccounts(summary.Accounts),
 		Accounts:           summary.Accounts,
 		RecentTransactions: recent,
 		DebtsSummary:       debtsSummary,

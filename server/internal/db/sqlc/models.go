@@ -5,17 +5,35 @@
 package sqlc
 
 type Account struct {
-	ID             string  `json:"id"`
-	UserID         string  `json:"user_id"`
-	Name           string  `json:"name"`
-	Type           string  `json:"type"`
-	BankID         *string `json:"bank_id"`
-	InitialBalance int64   `json:"initial_balance"`
-	CurrentBalance int64   `json:"current_balance"`
-	Status         string  `json:"status"`
-	IsPrimary      int64   `json:"is_primary"`
-	CreatedAt      string  `json:"created_at"`
-	UpdatedAt      string  `json:"updated_at"`
+	ID               string  `json:"id"`
+	UserID           string  `json:"user_id"`
+	Name             string  `json:"name"`
+	Type             string  `json:"type"`
+	BankID           *string `json:"bank_id"`
+	InitialBalance   int64   `json:"initial_balance"`
+	CurrentBalance   int64   `json:"current_balance"`
+	CreditLimit      *int64  `json:"credit_limit"`
+	PaymentAccountID *string `json:"payment_account_id"`
+	Status           string  `json:"status"`
+	IsPrimary        int64   `json:"is_primary"`
+	CreatedAt        string  `json:"created_at"`
+	UpdatedAt        string  `json:"updated_at"`
+}
+
+type AccountsNew struct {
+	ID               string  `json:"id"`
+	UserID           string  `json:"user_id"`
+	Name             string  `json:"name"`
+	Type             string  `json:"type"`
+	BankID           *string `json:"bank_id"`
+	InitialBalance   int64   `json:"initial_balance"`
+	CurrentBalance   int64   `json:"current_balance"`
+	CreditLimit      *int64  `json:"credit_limit"`
+	PaymentAccountID *string `json:"payment_account_id"`
+	Status           string  `json:"status"`
+	IsPrimary        int64   `json:"is_primary"`
+	CreatedAt        string  `json:"created_at"`
+	UpdatedAt        string  `json:"updated_at"`
 }
 
 type ApiToken struct {
@@ -222,6 +240,14 @@ type Session struct {
 	IpAddress    *string `json:"ip_address"`
 	UserAgent    *string `json:"user_agent"`
 	CreatedAt    string  `json:"created_at"`
+}
+
+type SqliteMaster struct {
+	Type     *string `json:"type"`
+	Name     *string `json:"name"`
+	TblName  *string `json:"tbl_name"`
+	Rootpage *int64  `json:"rootpage"`
+	Sql      *string `json:"sql"`
 }
 
 type Subcategory struct {

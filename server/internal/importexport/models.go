@@ -83,8 +83,9 @@ type RowError struct {
 type AccountMapEntry struct {
 	Mode        string `json:"mode"` // create | existing
 	AccountID   string `json:"account_id,omitempty"`
-	AccountType string `json:"account_type,omitempty"` // cash | bank (create)
-	BankID      string `json:"bank_id,omitempty"`      // required when account_type=bank
+	AccountType string `json:"account_type,omitempty"` // cash | bank | credit_card (create)
+	BankID      string `json:"bank_id,omitempty"`      // bank / credit_card
+	CreditLimit string `json:"credit_limit,omitempty"` // credit_card create
 }
 
 // AccountMappingSuggestion is a proposed mapping for one account name from the file.
@@ -93,8 +94,9 @@ type AccountMappingSuggestion struct {
 	Mode        string  `json:"mode"` // existing | create
 	AccountID   *string `json:"account_id,omitempty"`
 	AccountName *string `json:"account_name,omitempty"`
-	AccountType *string `json:"account_type,omitempty"` // cash | bank (create)
+	AccountType *string `json:"account_type,omitempty"` // cash | bank | credit_card (create)
 	BankID      *string `json:"bank_id,omitempty"`
+	CreditLimit *string `json:"credit_limit,omitempty"`
 }
 
 // CategoryMapEntry maps a file category to create or existing category.

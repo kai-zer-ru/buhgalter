@@ -66,6 +66,7 @@
   "ERR_ACCOUNT_ARCHIVED_EDIT": "Cannot edit archived account",
   "ERR_ACCOUNT_PRIMARY_ARCHIVED": "Cannot set archived account as primary",
   "ERR_ACCOUNT_INVALID_BALANCE": "Invalid balance",
+  "ERR_CREDIT_CARD_ARCHIVE_NOT_FULLY_PAID": "Archive a credit card only when fully paid (balance equals limit)",
   "ERR_DEBTOR_NAME_REQUIRED": "Debtor name is required",
   "ERR_DEBT_DIRECTION": "Direction must be lent or borrowed",
   "ERR_INVALID_AMOUNT": "Invalid amount",

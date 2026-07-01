@@ -18,16 +18,18 @@
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import { defaultAccountId } from '$lib/accounts';
+	import { maxCreditCardPaymentKopecks, resolvePaymentAccountId } from '$lib/credit-card';
 	import { fromDatetimeLocalValue, nowDatetimeLocal, toDatetimeLocalValue } from '$lib/dates';
-	import { formatMoneyForInput, toAPIAmount } from '$lib/money';
-	import { pickOtherAccountId, transferAccountOptions } from '$lib/transfer-accounts';
+	import { formatMoneyForInput, fromCents, toAPIAmount, toCents } from '$lib/money';
 	import { transferAccountIds, transferGroupLegs, transferOutLeg } from '$lib/transaction-display';
+	import { pickOtherAccountId, transferAccountOptions } from '$lib/transfer-accounts';
 	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
 
 	type Props = {
 		open: boolean;
 		accountId?: string;
+		creditCardPay?: Account | null;
 		editTx?: Transaction | null;
 		repeatFrom?: Transaction | null;
 		siblings?: Transaction[];
@@ -38,6 +40,7 @@
 	let {
 		open = $bindable(),
 		accountId = '',
+		creditCardPay = null,
 		editTx = null,
 		repeatFrom = null,
 		siblings = [],
@@ -60,12 +63,25 @@
 	const editing = $derived(Boolean(groupId));
 	const fromAcc = $derived(accounts.find((a) => a.id === fromAccount));
 	const canFullBalance = $derived(Boolean(fromAcc && fromAcc.balance > 0 && !editing));
-	const fromAccountOptions = $derived(transferAccountOptions(accounts, toAccount));
+	const fromAccountOptions = $derived(
+		creditCardPay
+			? transferAccountOptions(
+					accounts.filter((a) => a.type !== 'credit_card'),
+					toAccount
+				)
+			: transferAccountOptions(accounts, toAccount)
+	);
 	const toAccountOptions = $derived(transferAccountOptions(accounts, fromAccount));
+	const payMode = $derived(Boolean(creditCardPay && !editing));
+	const maxPayKopecks = $derived(creditCardPay ? maxCreditCardPaymentKopecks(creditCardPay) : null);
+	const payExceedsMax = $derived(
+		maxPayKopecks != null && amount.trim() !== '' && toCents(amount) > maxPayKopecks
+	);
+	const canFullLimit = $derived(payMode && maxPayKopecks != null && maxPayKopecks > 0);
 
 	$effect(() => {
 		if (!open) return;
-		void init(editTx, repeatFrom, siblings, accountId);
+		void init(editTx, repeatFrom, siblings, accountId, creditCardPay);
 	});
 
 	$effect(() => {
@@ -77,7 +93,8 @@
 		editSource: Transaction | null | undefined,
 		repeatSource: Transaction | null | undefined,
 		related: Transaction[],
-		contextAccountId: string
+		contextAccountId: string,
+		payCard: Account | null | undefined
 	) {
 		error = '';
 		if (editSource?.transfer_group_id) {
@@ -115,9 +132,14 @@
 		}
 		accounts = await listAccounts('active');
 		if (!editSource?.transfer_group_id && !repeatSource?.transfer_group_id) {
-			const from = defaultAccountId(accounts, contextAccountId);
-			fromAccount = from;
-			toAccount = pickOtherAccountId(accounts, from);
+			if (payCard) {
+				fromAccount = resolvePaymentAccountId(payCard, accounts) ?? '';
+				toAccount = payCard.id;
+			} else {
+				const from = defaultAccountId(accounts, contextAccountId);
+				fromAccount = from;
+				toAccount = pickOtherAccountId(accounts, from);
+			}
 		}
 	}
 
@@ -154,6 +176,11 @@
 		amount = fromAcc.balance_display;
 	}
 
+	function fillFullLimit() {
+		if (maxPayKopecks == null || maxPayKopecks <= 0) return;
+		amount = formatMoneyForInput(fromCents(maxPayKopecks));
+	}
+
 	function swapAccounts() {
 		const from = fromAccount;
 		fromAccount = toAccount;
@@ -166,64 +193,97 @@
 	}
 </script>
 
-<ModalShell bind:open title={$_('transactions.transfer')} onclose={close}>
+<ModalShell
+	bind:open
+	title={payMode ? $_('accounts.creditCard.pay') : $_('transactions.transfer')}
+	onclose={close}
+>
 	<form id="transfer-form" class="space-y-4" onsubmit={save}>
-		<div class="grid grid-cols-[auto_1fr] gap-x-2 gap-y-4">
-			<button
-				type="button"
-				class="btn-ghost col-start-1 row-start-1 row-span-2 flex h-11 w-10 shrink-0 items-center justify-center self-center"
-				onclick={swapAccounts}
-				aria-label={$_('transfers.swap_accounts')}
-				title={$_('transfers.swap_accounts')}
-			>
-				<svg
-					xmlns="http://www.w3.org/2000/svg"
-					width="20"
-					height="20"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
+		{#if payMode}
+			<Select
+				id="from-acc"
+				label={$_('transactions.field.from')}
+				bind:value={fromAccount}
+				options={fromAccountOptions}
+				usePortal
+			/>
+		{:else}
+			<div class="grid grid-cols-[auto_1fr] gap-x-2 gap-y-4">
+				<button
+					type="button"
+					class="btn-ghost col-start-1 row-start-1 row-span-2 flex h-11 w-10 shrink-0 items-center justify-center self-center"
+					onclick={swapAccounts}
+					aria-label={$_('transfers.swap_accounts')}
+					title={$_('transfers.swap_accounts')}
 				>
-					<path d="M7 16V4M7 4L3 8M7 4l4 4" />
-					<path d="M17 8v12M17 20l4-4M17 20l-4-4" />
-				</svg>
-			</button>
-			<div class="col-start-2 row-start-1">
-				<Select
-					id="from-acc"
-					label={$_('transactions.field.from')}
-					bind:value={fromAccount}
-					options={fromAccountOptions}
-					usePortal
-				/>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						width="20"
+						height="20"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<path d="M7 16V4M7 4L3 8M7 4l4 4" />
+						<path d="M17 8v12M17 20l4-4M17 20l-4-4" />
+					</svg>
+				</button>
+				<div class="col-start-2 row-start-1">
+					<Select
+						id="from-acc"
+						label={$_('transactions.field.from')}
+						bind:value={fromAccount}
+						options={fromAccountOptions}
+						usePortal
+					/>
+				</div>
+				<div class="col-start-2 row-start-2">
+					<Select
+						id="to-acc"
+						label={$_('transactions.field.to')}
+						bind:value={toAccount}
+						options={toAccountOptions}
+						usePortal
+					/>
+				</div>
 			</div>
-			<div class="col-start-2 row-start-2">
-				<Select
-					id="to-acc"
-					label={$_('transactions.field.to')}
-					bind:value={toAccount}
-					options={toAccountOptions}
-					usePortal
-				/>
-			</div>
-		</div>
+		{/if}
 		<div>
 			<label class="mb-1 block text-sm font-medium" for="tr-amount"
 				>{$_('transactions.field.amount')}</label
 			>
 			<MoneyInput id="tr-amount" bind:value={amount} required />
-			<button
-				type="button"
-				class="btn-ghost mt-1 text-sm"
-				disabled={!canFullBalance}
-				onclick={fillFullBalance}
-			>
-				{$_('transfers.full_balance')}
-			</button>
+			{#if payExceedsMax && maxPayKopecks != null}
+				<p class="mt-1 text-sm" style:color="var(--danger)">
+					{$_('accounts.creditCard.payExceedsMax', {
+						values: { max: fromCents(maxPayKopecks) }
+					})}
+				</p>
+			{/if}
+			<div class="mt-1 flex flex-wrap gap-2">
+				<button
+					type="button"
+					class="btn-ghost text-sm"
+					disabled={!canFullBalance}
+					onclick={fillFullBalance}
+				>
+					{$_('transfers.full_balance')}
+				</button>
+				{#if payMode}
+					<button
+						type="button"
+						class="btn-ghost text-sm"
+						disabled={!canFullLimit}
+						onclick={fillFullLimit}
+					>
+						{$_('accounts.creditCard.payFullLimit')}
+					</button>
+				{/if}
+			</div>
 		</div>
 		<div>
 			<label class="mb-1 block text-sm font-medium" for="tr-commission"
