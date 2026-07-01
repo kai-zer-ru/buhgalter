@@ -27,8 +27,8 @@
 	import { confirm } from '$lib/confirm';
 	import { formatMoneyForInput, toAPIAmount } from '$lib/money';
 	import { toast } from '$lib/toast';
-	import { user } from '$lib/stores/auth';
 	import { tr } from '$lib/i18n';
+	import { budgetStatusLine } from '$lib/budget-display';
 
 	let items = $state<BudgetSummaryItem[]>([]);
 	let canCopyFromPrevious = $state(false);
@@ -53,7 +53,6 @@
 	let copying = $state(false);
 
 	const month = $derived($page.url.searchParams.get('month') ?? currentMonthKey());
-	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
 
 	const monthLabel = $derived.by(() => {
 		void $_;
@@ -76,9 +75,7 @@
 	);
 	const usedSubcategoryIds = $derived(
 		new Set(
-			items
-				.filter((i) => i.scope === 'subcategory' && i.id !== editId)
-				.map((i) => i.subcategory_id)
+			items.filter((i) => i.scope === 'subcategory' && i.id !== editId).map((i) => i.subcategory_id)
 		)
 	);
 	const categoryOptions = $derived(
@@ -112,7 +109,7 @@
 		const [y, m] = month.split('-').map(Number);
 		const d = new Date(y, m - 1 + delta, 1);
 		const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-		void goto(`${resolve('/budget')}?month=${key}`, { replaceState: true, keepFocus: true });
+		void goto(resolve(`/budget?month=${key}`), { replaceState: true, keepFocus: true });
 	}
 
 	function progressClass(status: string) {
@@ -303,7 +300,7 @@
 	});
 
 	$effect(() => {
-		month;
+		if (!month) return;
 		void loadAll();
 	});
 
@@ -531,7 +528,7 @@
 						></div>
 					</div>
 					<p class="text-sm tabular-nums" style:color="var(--text-muted)">
-						{tr('budget.remaining', { values: { amount: item.remaining_display } })} · {item.percent}%
+						{budgetStatusLine(item)}
 					</p>
 					<p class="text-sm" style:color="var(--text-muted)">
 						{tr('budget.copy_status', {

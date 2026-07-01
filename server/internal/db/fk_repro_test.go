@@ -1,30 +1,43 @@
 package db
 
 import (
+	"database/sql"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/pressly/goose/v3"
 )
 
 func TestMigration033WithProductionDSN(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "prod-dsn.db")
 
-	// Bootstrap to v32 using normal Open (includes 033 on fresh db - skip)
-	// Use two-phase: first open creates full db, we need only up to 032.
-	// Simpler: copy migration 033 SQL and run on db at v32 state.
-	mgr, err := NewManager(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	db, err := sql.Open("sqlite", sqliteDSN(path, false))
 	if err != nil {
 		t.Fatal(err)
 	}
-	sqlDB := mgr.DB()
-
-	// Downgrade goose version to re-run 033
-	if _, err := sqlDB.Exec(`DELETE FROM goose_db_version WHERE version_id >= 33`); err != nil {
+	goose.SetBaseFS(migrationsFS)
+	if err := goose.SetDialect("sqlite3"); err != nil {
 		t.Fatal(err)
 	}
-	// Restore pre-033 accounts schema
-	if _, err := sqlDB.Exec(`
+	if err := goose.UpTo(db, "migrations", 32); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Restore pre-033 accounts schema (simulate production DB at goose v32).
+	db2, err := sql.Open("sqlite", sqliteDSN(path, false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db2.Exec(`
 		PRAGMA foreign_keys=OFF;
 		DROP TABLE IF EXISTS accounts;
 		CREATE TABLE accounts (
@@ -46,9 +59,11 @@ func TestMigration033WithProductionDSN(t *testing.T) {
 	`); err != nil {
 		t.Fatal(err)
 	}
-	_ = mgr.Close()
+	if err := db2.Close(); err != nil {
+		t.Fatal(err)
+	}
 
-	// Re-open like production — runs pending 033
+	// Re-open like production — runs pending 033+
 	mgr2, err := NewManager(path)
 	if err != nil {
 		t.Fatalf("re-open migrate 033: %v", err)

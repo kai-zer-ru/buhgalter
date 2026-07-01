@@ -42,7 +42,7 @@ func TestApplyPreviewURLs(t *testing.T) {
 
 	const base = "https://host.example"
 	data := FormatData{}
-	applyPreviewURLs(TriggerCreditPayment, data, base, "ru")
+	applyPreviewURLs(TriggerCreditPayment, data, base, "ru", "RUB")
 	if data["credit_url"] != base+"/credits/"+previewCreditID {
 		t.Fatalf("preview credit url: %q", data["credit_url"])
 	}

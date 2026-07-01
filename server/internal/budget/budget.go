@@ -60,44 +60,44 @@ type Budget struct {
 }
 
 type Period struct {
-	PeriodStart     string `json:"period_start"`
-	PlannedAmount   int64  `json:"planned_amount"`
-	PlannedDisplay  string `json:"planned_display"`
-	RolloverAmount  int64  `json:"rollover_amount"`
+	PeriodStart    string `json:"period_start"`
+	PlannedAmount  int64  `json:"planned_amount"`
+	PlannedDisplay string `json:"planned_display"`
+	RolloverAmount int64  `json:"rollover_amount"`
 }
 
 type SummaryItem struct {
-	ID              string  `json:"id"`
-	Name            string  `json:"name"`
-	Scope           string  `json:"scope"`
-	CategoryID      *string `json:"category_id"`
-	CategoryName    *string `json:"category_name,omitempty"`
-	CategoryIcon    *string `json:"category_icon,omitempty"`
-	SubcategoryID   *string `json:"subcategory_id"`
-	SubcategoryName *string `json:"subcategory_name,omitempty"`
-	AccountID       *string `json:"account_id"`
-	AccountName     *string `json:"account_name,omitempty"`
-	Planned         int64   `json:"planned"`
-	PlannedDisplay  string  `json:"planned_display"`
-	Spent           int64   `json:"spent"`
-	SpentDisplay    string  `json:"spent_display"`
-	Remaining       int64   `json:"remaining"`
-	RemainingDisplay string `json:"remaining_display"`
-	Percent         int     `json:"percent"`
-	Status          string  `json:"status"`
-	AlertAtPercent   int64   `json:"alert_at_percent"`
-	IsActive         bool    `json:"is_active"`
-	CopyForward      bool    `json:"copy_forward"`
-	ChildrenPlanned  int64   `json:"children_planned,omitempty"`
-	ChildrenPlannedDisplay string `json:"children_planned_display,omitempty"`
-	ChildrenSpent    int64   `json:"children_spent,omitempty"`
-	ChildrenSpentDisplay string `json:"children_spent_display,omitempty"`
+	ID                     string  `json:"id"`
+	Name                   string  `json:"name"`
+	Scope                  string  `json:"scope"`
+	CategoryID             *string `json:"category_id"`
+	CategoryName           *string `json:"category_name,omitempty"`
+	CategoryIcon           *string `json:"category_icon,omitempty"`
+	SubcategoryID          *string `json:"subcategory_id"`
+	SubcategoryName        *string `json:"subcategory_name,omitempty"`
+	AccountID              *string `json:"account_id"`
+	AccountName            *string `json:"account_name,omitempty"`
+	Planned                int64   `json:"planned"`
+	PlannedDisplay         string  `json:"planned_display"`
+	Spent                  int64   `json:"spent"`
+	SpentDisplay           string  `json:"spent_display"`
+	Remaining              int64   `json:"remaining"`
+	RemainingDisplay       string  `json:"remaining_display"`
+	Percent                int     `json:"percent"`
+	Status                 string  `json:"status"`
+	AlertAtPercent         int64   `json:"alert_at_percent"`
+	IsActive               bool    `json:"is_active"`
+	CopyForward            bool    `json:"copy_forward"`
+	ChildrenPlanned        int64   `json:"children_planned,omitempty"`
+	ChildrenPlannedDisplay string  `json:"children_planned_display,omitempty"`
+	ChildrenSpent          int64   `json:"children_spent,omitempty"`
+	ChildrenSpentDisplay   string  `json:"children_spent_display,omitempty"`
 }
 
 type SummaryResult struct {
-	Items                 []SummaryItem `json:"items"`
-	Month                 string        `json:"month"`
-	CanCopyFromPrevious   bool          `json:"can_copy_from_previous"`
+	Items               []SummaryItem `json:"items"`
+	Month               string        `json:"month"`
+	CanCopyFromPrevious bool          `json:"can_copy_from_previous"`
 }
 
 type Input struct {

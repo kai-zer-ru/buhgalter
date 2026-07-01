@@ -10,9 +10,9 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/budget"
 	"github.com/kai-zer-ru/buhgalter/internal/category"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
+	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/stats"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
-	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 )
 
 func seedBudgetEnv(t *testing.T) (context.Context, *sql.DB, string, string, string) {

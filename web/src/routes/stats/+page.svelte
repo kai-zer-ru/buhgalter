@@ -3,6 +3,7 @@
 	import { resolve } from '$app/paths';
 	import { _, locale } from 'svelte-i18n';
 	import { tr } from '$lib/i18n';
+	import { budgetRemainingCell } from '$lib/budget-display';
 	import {
 		ApiError,
 		getStatsByCategory,
@@ -35,7 +36,12 @@
 		categorySelectLabel,
 		duplicateCategoryNames
 	} from '$lib/category-label';
-	import { fromDateLocalEnd, fromDateLocalStart, dateOnlyLocalValue, todayDateLocal } from '$lib/dates';
+	import {
+		fromDateLocalEnd,
+		fromDateLocalStart,
+		dateOnlyLocalValue,
+		todayDateLocal
+	} from '$lib/dates';
 	import { formatMoneyDisplay, fromCents } from '$lib/money';
 	import { formatStatsPeriod } from '$lib/stats-period';
 	import { user } from '$lib/stores/auth';
@@ -215,7 +221,11 @@
 				getStatsSummary(params),
 				getStatsByCategory(params),
 				getStatsByPeriod({ ...params, group_by: groupBy }),
-				getBudgetSummary(month).catch(() => ({ items: [] as BudgetSummaryItem[], month, can_copy_from_previous: false }))
+				getBudgetSummary(month).catch(() => ({
+					items: [] as BudgetSummaryItem[],
+					month,
+					can_copy_from_previous: false
+				}))
 			]);
 			summary = summaryRes;
 			byCategory = categoryRes.items;
@@ -563,7 +573,7 @@
 							<dt style:color="var(--text-muted)">{$_('budget.stats.remaining')}</dt>
 							<dd class="tabular-nums">
 								{budgetByCategory[row.category_id]
-									? budgetByCategory[row.category_id].remaining_display
+									? budgetRemainingCell(budgetByCategory[row.category_id])
 									: '—'}
 							</dd>
 						</div>
@@ -614,7 +624,7 @@
 						</td>
 						<td class="p-2 tabular-nums">
 							{budgetByCategory[row.category_id]
-								? budgetByCategory[row.category_id].remaining_display
+								? budgetRemainingCell(budgetByCategory[row.category_id])
 								: '—'}
 						</td>
 					{/if}

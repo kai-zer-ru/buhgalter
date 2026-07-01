@@ -11,6 +11,7 @@ import (
 
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
+	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	. "github.com/kai-zer-ru/buhgalter/internal/notify"
 	"github.com/kai-zer-ru/buhgalter/internal/settingscache"
 )
@@ -331,3 +332,28 @@ func TestGetSettingsHidesUserRegistrationWhenDisabled(t *testing.T) {
 }
 
 func strPtr(s string) *string { return &s }
+
+func TestDeliverNoPanicWithoutSecretKey(t *testing.T) {
+	t.Parallel()
+
+	ctx, sqlDB, userID := seedNotifyUser(t)
+	_, err := sqlDB.ExecContext(ctx, `UPDATE system_settings SET notification_secret_key = '' WHERE id = 1`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := sqlcdb.New(sqlDB)
+	if err := q.EnsureNotificationSettings(ctx, userID); err != nil {
+		t.Fatal(err)
+	}
+	settings, err := q.GetNotificationSettings(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer func() {
+		if rec := recover(); rec != nil {
+			t.Fatalf("Deliver panicked: %v", rec)
+		}
+	}()
+	Deliver(ctx, sqlDB, settings, userID, TriggerBudgetThreshold, "budget-1", "2026-07-01", "test message")
+}

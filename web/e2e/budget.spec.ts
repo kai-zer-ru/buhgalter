@@ -1,25 +1,35 @@
 import { test, expect } from '@playwright/test';
-import { waitAppReady } from './helpers/auth';
+import { apiJSON, waitAppReady } from './helpers/auth';
 import { createCashAccount, createExpense } from './helpers/setup-data';
-import { selectLabeledCombobox } from './helpers/transactions';
+import { selectLabeledCombobox } from './helpers/combobox';
 
 test('budget: create limit → expense → progress', async ({ page }) => {
 	const accountName = `Budget Acc ${Date.now()}`;
-	await createCashAccount(page, accountName, '5000');
+	const account = await createCashAccount(page, accountName);
+	const meta = await apiJSON<{
+		expense_categories: { id: string; name: string; is_system: boolean }[];
+	}>(page, 'GET', '/api/v1/ui/meta');
+	const summary = await apiJSON<{
+		items: { scope: string; category_id?: string }[];
+	}>(page, 'GET', '/api/v1/budgets/summary');
+	const usedCategoryIds = new Set(
+		summary.items
+			.filter((i) => i.scope === 'category' && i.category_id)
+			.map((i) => i.category_id as string)
+	);
+	const category = meta.expense_categories.find((c) => !c.is_system && !usedCategoryIds.has(c.id))!;
 
 	await page.goto('/budget');
 	await waitAppReady(page);
 	await page.getByRole('button', { name: 'Добавить' }).click();
 	await page.getByLabel('Название').fill('Продукты E2E');
-	await selectLabeledCombobox(page, 'Область', 'Категория');
-	const catSelect = page.locator('label').filter({ hasText: 'Категория' }).locator('..').getByRole('combobox');
-	await catSelect.click();
-	await page.getByRole('option').first().click();
+	await selectLabeledCombobox(page, 'Область', { label: 'Категория' });
+	await selectLabeledCombobox(page, 'Категория', { label: category.name });
 	await page.getByLabel('Лимит').fill('1000');
-	await page.getByRole('button', { name: 'Сохранить' }).click();
+	await page.getByRole('button', { name: 'Создать' }).click();
 	await expect(page.getByText('Продукты E2E')).toBeVisible({ timeout: 10_000 });
 
-	await createExpense(page, { amount: '200', account: accountName });
+	await createExpense(page, account.id, '200.00', 'E2E budget progress', category.id);
 
 	await page.goto('/budget');
 	await waitAppReady(page);
