@@ -5,9 +5,20 @@
 
 Подробные release notes для пользователей: [docs/release-notes-v1.2.4.md](docs/release-notes-v1.2.4.md).
 
-## [v1.2.4] — 0000-00-00
+## [v1.2.4] — 2026-07-01
 
 > **ОБЯЗАТЕЛЬНО СДЕЛАЙТЕ БЕКАП!** Перед обновлением сохраните копию базы (`data/buhgalter.db`) и каталога `backups/`.
+
+### Добавлено
+
+**API**
+
+- **API-токены:** поля `never_expires` и `expires_at` (RFC3339) в `POST /api/v1/user/tokens`; по умолчанию срок действия — **30 дней**; бессрочный токен (`never_expires: true`) — в UI предупреждение о риске; отозвать можно только **свой** токен (чужой — `404 NOT_FOUND`). См. [docs/api/authentication.md](docs/api/authentication.md)
+
+**UI/UX**
+
+- **DateTimePicker:** кнопка **«Сегодня»** в календаре — быстрый выбор текущей даты
+- **Пагинация:** компонент `TransactionPagination` — единые кнопки «В начало / Назад / Вперёд / В конец» на `/transactions`, странице счёта, графике кредита и превью графика ([ui-pagination.md](docs/ui-pagination.md))
 
 ### Изменено
 
@@ -15,16 +26,23 @@
 
 - **Форматы даты и времени:** единые правила отображения по всему UI — дата `31.12.2026`, дата-время `31.12.2026 12:00:00`; в списках операций, долгах, кредитах, периодических операциях и плейсхолдерах уведомлений `{date}` / `{requested_at}` — **без секунд** (`31.12.2026 12:00`). Константы: web `$lib/dates.ts` (`DISPLAY_*_FORMAT`), Go `timeutil/display.go` (`Display*Layout`); гайд [docs/date-time-display.md](docs/date-time-display.md)
 - **DateTimePicker:** кнопка пикера и стандарты `operationDatetimePickerCreate` / `Edit`, `dateOnlyPicker` — подписи в формате `дд.мм.гггг` / `дд.мм.гггг чч:мм`
+- **Главная:** блоки **«Общий баланс»** и **«Долги»** — в одной строке на десктопе (`sm:grid-cols-2`); на мобильных — два отдельных блока
+- **Главная — последние операции:** плановые (`kind=future`) и прошлые (`kind=manual`) — в спойлерах `<details>` по **10** записей; плановые **сверху**, свёрнуты по умолчанию; прошлые — открыты; внизу карточки — кнопка **«Все операции»** ([transactions-display.md](docs/transactions-display.md))
+- **Настройки → уведомления:** каждый шаблон — отдельная карточка с кнопкой **Сохранить** (без общей формы на все шаблоны сразу); предпросмотр и сброс — в карточке шаблона
 - **Админка — диагностика и бекапы:** `build_time` и `created_at` через `formatAPIDateTimeForDisplay` (с секундами), а не сырой RFC3339
 - **Админка:** компонент `AdminSupportLinks` — ссылки «Поддержать проект» и «Репозиторий» на `/admin/*` и в **Настройки → Администрирование → Система**
-- **Хлебные крошки:** на всех разделах и вложенных экранах — цепочка от «Главная» через раздел (счета, настройки, админка и т.д.); в настройках и админке учитываются вкладки
+- **Хлебные крошки:** на всех разделах и вложенных экранах — цепочка от «Главная» через раздел (счета, настройки, админка и т.д.); в настройках и админке учитываются вкладки ([ui-navigation.md](docs/ui-navigation.md))
 - **Уведомления — сброс пароля (Telegram/MAX):** в сообщении о запросе сброса пароля — ссылка для перехода к сбросу (`/admin/users?reset=…`); если внешний URL не настроен — текст «настройте внешний URL в админке». В редакторе шаблонов доступен плейсхолдер `{reset_url}`
 
 **Backend**
 
 - **Уведомления:** форматирование плейсхолдеров даты/времени через `timeutil.FormatDisplay*` в часовом поясе пользователя; `{date}` и `{requested_at}` — без секунд
 - **Уведомления — сброс пароля:** плейсхолдер `{reset_url}` в шаблоне `password_reset` — ссылка на `/admin/users?reset={user_id}` при настроенном `external_url`, иначе подсказка настроить внешний URL в админке
-- **Экспорт Cubux (CSV):** суммы в колонках «Сумма списания» / «Сумма пополнения» — десятичное число (`237.97`), без суффикса `_-₽`; импорт по-прежнему принимает оба формата
+- **Экспорт Cubux (CSV):** суммы в колонках «Сумма списания» / «Сумма пополнения» — десятичное число (`237.97`), без суффикса `_-₽`; импорт по-прежнему принимает оба формата ([import/cubux.md](docs/import/cubux.md))
+
+**Сборка и релиз**
+
+- **Docker (GHCR):** `provenance: false` в `release.yml` — образы снова корректно отображают платформы `linux/amd64` и `linux/arm64` (раньше из-за attestation manifests в GHCR показывалось `unknown/unknown`)
 
 ### Исправлено
 
@@ -34,9 +52,10 @@
 
 ### Техническое
 
-- Unit: `server/internal/timeutil/display_test.go`, `web/src/lib/dates.test.ts`, `web/src/lib/datetime-picker.test.ts`, `server/internal/notify/formatter_test.go` (форматы в тестовых данных)
-- e2e: `date-time-display.spec.ts` — формат даты в списке операций и `build_time` в диагностике; `admin-advanced.spec.ts` — закрытие сброса пароля по «Отмена», ссылки поддержки
-- [docs/release-notes-v1.2.4.md](docs/release-notes-v1.2.4.md), [date-time-display.md](docs/date-time-display.md), [transactions-display.md](docs/transactions-display.md)
+- Unit/integration: `internal/user` (handler, tokens), `auth_integration_test` — создание/отзыв API-токенов, `never_expires`, `expires_at`, отзыв чужого токена; `internal/auth/session_test.go`
+- Unit: `server/internal/timeutil/display_test.go`, `web/src/lib/dates.test.ts`, `web/src/lib/datetime-picker.test.ts`, `server/internal/notify/formatter_test.go`, `server/internal/importexport/cubux_test.go`
+- e2e: `date-time-display.spec.ts` — формат даты в списке операций и `build_time` в диагностике; `admin-advanced.spec.ts` — закрытие сброса пароля по «Отмена», ссылки поддержки; `settings-extended.spec.ts` — API-токены; `transaction-filters.spec.ts`, `transaction-actions.spec.ts` — главная и пагинация
+- [docs/release-notes-v1.2.4.md](docs/release-notes-v1.2.4.md), [date-time-display.md](docs/date-time-display.md), [transactions-display.md](docs/transactions-display.md), [ui-pagination.md](docs/ui-pagination.md), [api/authentication.md](docs/api/authentication.md), [import/cubux.md](docs/import/cubux.md)
 - Версия `1.2.4`
 
 ## [v1.2.3] — 2026-06-30
@@ -489,6 +508,7 @@
 - Стек: Go 1.26+, SQLite, SvelteKit, встроенный статический фронтенд (`embedstatic`)
 - Команда `make version vX.Y.Z` — единая простановка semver во всех артефактах (`VERSION`, OpenAPI, Dockerfile, …)
 
+[v1.2.4]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.2.4
 [v1.1.1]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.1.1
 [v1.1.0]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.1.0
 [v1.0.0]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.0.0

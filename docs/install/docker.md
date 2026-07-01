@@ -31,6 +31,8 @@ docker compose up --build -d
 | `vX.Y.Z` | точная версия                           |
 | `X.Y.Z`  | semver alias                            |
 
+Платформы: **linux/amd64**, **linux/arm64** (multi-arch manifest). С v1.2.4 в CI отключены provenance attestation manifests — в GHCR снова корректно отображаются архитектуры (раньше могло показываться `unknown/unknown`).
+
 ## Данные на хосте
 
 | На хосте (по умолчанию) | В контейнере | Назначение |
