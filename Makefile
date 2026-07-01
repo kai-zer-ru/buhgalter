@@ -98,7 +98,7 @@ prepare-go:
 prepare-web:
 	cd web && npm run lint:fix
 
-prepare-gen: sqlc copy-openapi category-icons-json
+prepare-gen: sqlc category-icons-json openapi-check
 
 DOCKER_IMAGE_TAG ?= buhgalter:local
 

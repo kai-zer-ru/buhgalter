@@ -348,6 +348,11 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+              examples:
+                token_name_required:
+                  $ref: '#/components/examples/ApiErrorTokenNameRequired'
+                token_expires:
+                  $ref: '#/components/examples/ApiErrorTokenExpires'
   /user/tokens/{id}:
     delete:
       summary: Отозвать API-токен
@@ -2359,6 +2364,18 @@ components:
         error:
           code: VALIDATION_ERROR
           message: Новый пароль должен отличаться от текущего
+    ApiErrorTokenNameRequired:
+      summary: Имя API-токена не указано
+      value:
+        error:
+          code: VALIDATION_ERROR
+          message: Имя токена обязательно
+    ApiErrorTokenExpires:
+      summary: Некорректная дата истечения API-токена
+      value:
+        error:
+          code: VALIDATION_ERROR
+          message: Некорректная дата истечения
     ApiErrorNotificationChannel:
       summary: Канал уведомлений не настроен
       value:
@@ -3859,7 +3876,7 @@ components:
           type: string
           format: date-time
           nullable: true
-          description: `null` — бессрочный токен
+          description: "null — бессрочный токен"
         last_used_at:
           type: string
           format: date-time
@@ -3879,7 +3896,7 @@ components:
         expires_at:
           type: string
           format: date-time
-          description: Явная дата истечения (RFC3339); игнорируется при `never_expires: true`
+          description: "Явная дата истечения (RFC3339); игнорируется при never_expires: true"
     APITokenCreated:
       allOf:
         - $ref: '#/components/schemas/APIToken'
@@ -3891,4 +3908,4 @@ components:
               description: Полное значение токена (только в ответе на создание)
             never_expires:
               type: boolean
-              description: `true`, если токен бессрочный
+              description: "true, если токен бессрочный"
