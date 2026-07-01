@@ -3,7 +3,8 @@
 Схема БД — **SQLite**. Источник правды по миграциям: `server/internal/db/migrations/` (goose).  
 Снимок для [sqlc](https://sqlc.dev): `server/schema.sql` (обновлять после каждой миграции).
 
-Доступ к данным — через sqlc-запросы в `server/queries/`, без ORM.
+Доступ к данным в production-коде — через [sqlc](https://sqlc.dev)-запросы в `server/queries/`, без ORM.  
+Правила размещения SQL: [sql-access.md](sql-access.md).
 
 ## Диаграмма
 
@@ -25,6 +26,7 @@ erDiagram
         TEXT language
         TEXT timezone
         INTEGER is_admin
+        TEXT status
     }
 
     sessions {
@@ -201,8 +203,8 @@ erDiagram
 
 ## Кредиты и операции
 
-- `credits.credit_kind`: `consumer` | `mortgage` (ипотека: `property_price`, `down_payment`, сумма кредита = `property_price - down_payment`)
-- `credits.payment_interval`: `month` | `week` | `two_weeks` | `manual` (для ипотеки в MVP — только `month`)
+- `credits.credit_kind`: `consumer` | `mortgage` (ипотека: `property_price`, `down_payment`, сумма кредита = `property_price - down_payment`; потребкредит: опционально `principal_affects_balance` — доход на счёт при создании)
+- `credits.payment_interval`: `month` | `week` | `two_weeks` | `manual` (для ипотеки — только `month`)
 - `credit_payments.kind`: `scheduled`, `auto`, `retroactive`; `early` — legacy
 - График ипотеки: ежедневное начисление процентов; автоплатёж через `MonthlyPaymentMortgage`, ручной — через `monthly_payment` в create/preview (отдельный алгоритм, без отклонения «слишком высокого» платежа)
 - График потребительского кредита: аннуитет с проверкой ручного `monthly_payment` (минимум — покрытие процентов, максимум — укладывание в срок)
@@ -235,17 +237,25 @@ erDiagram
 
 ## Пакеты и sqlc-запросы
 
-| Сущность | Go-пакет | sqlc (`server/queries/`) |
-|----------|----------|---------------------------|
-| accounts | `internal/account` | `accounts.sql` |
-| banks | `internal/bank` | `banks.sql` |
-| categories | `internal/category` | `categories.sql` |
-| transactions | `internal/transaction` | `transactions.sql` |
-| debtors, debts | `internal/debt` | `debts.sql` |
-| credits | `internal/credit` | `credits.sql` |
-| stats / search | `internal/stats` | `stats.sql` |
-| recurring | `internal/recurring` | `recurring.sql` |
-| import / export | `internal/importexport` | `import.sql` |
+| Сущность | Go-пакет | sqlc (`server/queries/`) | Статус |
+|----------|----------|---------------------------|--------|
+| accounts | `internal/account` | `accounts.sql` | sqlc |
+| banks | `internal/bank` | `banks.sql` | sqlc |
+| categories | `internal/category` | `categories.sql` | sqlc |
+| transactions | `internal/transaction` | `transactions.sql` | sqlc |
+| debtors, debts | `internal/debt` | `debts.sql` | sqlc |
+| credits | `internal/credit` | `credits.sql` | sqlc |
+| stats / search | `internal/stats` | `stats.sql` | sqlc |
+| recurring | `internal/recurring` | `recurring_operations.sql` | sqlc |
+| notifications | `internal/notify` | `notifications.sql` | sqlc |
+| import / export | `internal/importexport` | `import.sql` | sqlc |
+| users | `internal/auth`, `internal/user`, `internal/admin`, `internal/setup` | `users.sql` | sqlc |
+| sessions | `internal/auth` | `sessions.sql` | sqlc |
+| api_tokens | `internal/auth`, `internal/user` | `api_tokens.sql` | sqlc |
+| password_reset | `internal/auth` | `password_reset_requests.sql` | sqlc |
+| system_settings | `internal/admin`, `internal/auth`, `internal/settingscache`, `internal/backup`, `internal/notify`, `internal/db`, `cmd/buhgalter`, `internal/setup` | `system_settings.sql` | sqlc |
+
+Колонка «Статус»: **sqlc** — запросы в `server/queries/`; исключения — см. [sql-access.md](sql-access.md).
 
 ## Защита от SQL-инъекций
 

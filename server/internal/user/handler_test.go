@@ -33,7 +33,7 @@ func testEnv(t *testing.T) (*Handler, *db.Handle, auth.User) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	userID, err := auth.CreateUser(ctx, mgr.DB(), "testuser", hash, "Test User", false)
+	userID, err := auth.CreateUser(ctx, mgr.DB(), "testuser", hash, "Test User", false, auth.UserStatusActive)
 	if err != nil {
 		t.Fatal(err)
 	}

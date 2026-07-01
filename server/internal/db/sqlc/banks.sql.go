@@ -54,3 +54,32 @@ func (q *Queries) ListBanks(ctx context.Context) ([]Bank, error) {
 	}
 	return items, nil
 }
+
+const upsertBank = `-- name: UpsertBank :exec
+INSERT INTO banks (id, name, bic, icon_path, sort_order)
+VALUES (?, ?, ?, ?, ?)
+ON CONFLICT(id) DO UPDATE SET
+    name = excluded.name,
+    bic = excluded.bic,
+    icon_path = excluded.icon_path,
+    sort_order = excluded.sort_order
+`
+
+type UpsertBankParams struct {
+	ID        string  `json:"id"`
+	Name      string  `json:"name"`
+	Bic       *string `json:"bic"`
+	IconPath  string  `json:"icon_path"`
+	SortOrder int64   `json:"sort_order"`
+}
+
+func (q *Queries) UpsertBank(ctx context.Context, arg UpsertBankParams) error {
+	_, err := q.db.ExecContext(ctx, upsertBank,
+		arg.ID,
+		arg.Name,
+		arg.Bic,
+		arg.IconPath,
+		arg.SortOrder,
+	)
+	return err
+}

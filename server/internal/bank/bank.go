@@ -34,22 +34,19 @@ func SeedIfEmpty(ctx context.Context, db *sql.DB) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	q := sqlcdb.New(tx)
 	for _, b := range banks {
-		var bic any
+		var bic *string
 		if b.BIC != "" {
-			bic = b.BIC
+			bic = &b.BIC
 		}
-		_, err := tx.ExecContext(ctx, `
-			INSERT INTO banks (id, name, bic, icon_path, sort_order)
-			VALUES (?, ?, ?, ?, ?)
-			ON CONFLICT(id) DO UPDATE SET
-				name = excluded.name,
-				bic = excluded.bic,
-				icon_path = excluded.icon_path,
-				sort_order = excluded.sort_order`,
-			b.ID, b.Name, bic, b.IconPath, b.SortOrder,
-		)
-		if err != nil {
+		if err := q.UpsertBank(ctx, sqlcdb.UpsertBankParams{
+			ID:        b.ID,
+			Name:      b.Name,
+			Bic:       bic,
+			IconPath:  b.IconPath,
+			SortOrder: int64(b.SortOrder),
+		}); err != nil {
 			return fmt.Errorf("upsert bank %s: %w", b.ID, err)
 		}
 	}

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 )
 
 type ImportJobStatus string
@@ -39,75 +40,36 @@ func createImportJobRecord(ctx context.Context, db *sql.DB, userID, filename str
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	job.CreatedAt = now
-	_, err := db.ExecContext(ctx, `
-		INSERT INTO import_jobs (
-			id, user_id, filename, status, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?)
-	`, job.ID, userID, filename, string(job.Status), now, now)
-	if err != nil {
+	if err := sqlcdb.New(db).InsertImportJob(ctx, sqlcdb.InsertImportJobParams{
+		ID:        job.ID,
+		UserID:    userID,
+		Filename:  filename,
+		Status:    string(job.Status),
+		CreatedAt: now,
+		UpdatedAt: now,
+	}); err != nil {
 		return ImportJob{}, err
 	}
 	return job, nil
 }
 
 func getImportJobRecord(ctx context.Context, db *sql.DB, userID, jobID string) (ImportJob, error) {
-	row := db.QueryRowContext(ctx, `
-		SELECT id, filename, status, error_message, report_json, created_at, started_at, finished_at
-		FROM import_jobs
-		WHERE id = ? AND user_id = ?
-	`, jobID, userID)
-
-	var (
-		job        ImportJob
-		statusRaw  string
-		errMsg     sql.NullString
-		reportRaw  sql.NullString
-		startedAt  sql.NullString
-		finishedAt sql.NullString
-	)
-	if err := row.Scan(
-		&job.ID,
-		&job.Filename,
-		&statusRaw,
-		&errMsg,
-		&reportRaw,
-		&job.CreatedAt,
-		&startedAt,
-		&finishedAt,
-	); err != nil {
+	row, err := sqlcdb.New(db).GetImportJob(ctx, sqlcdb.GetImportJobParams{ID: jobID, UserID: userID})
+	if err != nil {
 		return ImportJob{}, err
 	}
-	job.Status = ImportJobStatus(statusRaw)
-	if errMsg.Valid && errMsg.String != "" {
-		msg := errMsg.String
-		job.Error = &msg
-	}
-	if reportRaw.Valid && reportRaw.String != "" {
-		var rep Report
-		if err := json.Unmarshal([]byte(reportRaw.String), &rep); err != nil {
-			return ImportJob{}, fmt.Errorf("decode report_json: %w", err)
-		}
-		job.Report = &rep
-	}
-	if startedAt.Valid && startedAt.String != "" {
-		v := startedAt.String
-		job.StartedAt = &v
-	}
-	if finishedAt.Valid && finishedAt.String != "" {
-		v := finishedAt.String
-		job.FinishedAt = &v
-	}
-	return job, nil
+	return importJobFromRow(row)
 }
 
 func setImportJobRunning(ctx context.Context, db *sql.DB, userID, jobID string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
-	_, err := db.ExecContext(ctx, `
-		UPDATE import_jobs
-		SET status = ?, started_at = ?, updated_at = ?
-		WHERE id = ? AND user_id = ?
-	`, string(ImportJobRunning), now, now, jobID, userID)
-	return err
+	return sqlcdb.New(db).SetImportJobRunning(ctx, sqlcdb.SetImportJobRunningParams{
+		Status:    string(ImportJobRunning),
+		StartedAt: &now,
+		UpdatedAt: now,
+		ID:        jobID,
+		UserID:    userID,
+	})
 }
 
 func setImportJobDone(ctx context.Context, db *sql.DB, userID, jobID string, report Report) error {
@@ -116,12 +78,15 @@ func setImportJobDone(ctx context.Context, db *sql.DB, userID, jobID string, rep
 	if err != nil {
 		return err
 	}
-	_, err = db.ExecContext(ctx, `
-		UPDATE import_jobs
-		SET status = ?, report_json = ?, error_message = NULL, finished_at = ?, updated_at = ?
-		WHERE id = ? AND user_id = ?
-	`, string(ImportJobDone), string(data), now, now, jobID, userID)
-	return err
+	reportJSON := string(data)
+	return sqlcdb.New(db).SetImportJobDone(ctx, sqlcdb.SetImportJobDoneParams{
+		Status:     string(ImportJobDone),
+		ReportJson: &reportJSON,
+		FinishedAt: &now,
+		UpdatedAt:  now,
+		ID:         jobID,
+		UserID:     userID,
+	})
 }
 
 func setImportJobProgress(ctx context.Context, db *sql.DB, userID, jobID string, report Report) error {
@@ -130,12 +95,13 @@ func setImportJobProgress(ctx context.Context, db *sql.DB, userID, jobID string,
 	if err != nil {
 		return err
 	}
-	_, err = db.ExecContext(ctx, `
-		UPDATE import_jobs
-		SET report_json = ?, updated_at = ?
-		WHERE id = ? AND user_id = ?
-	`, string(data), now, jobID, userID)
-	return err
+	reportJSON := string(data)
+	return sqlcdb.New(db).SetImportJobProgress(ctx, sqlcdb.SetImportJobProgressParams{
+		ReportJson: &reportJSON,
+		UpdatedAt:  now,
+		ID:         jobID,
+		UserID:     userID,
+	})
 }
 
 func setImportJobFailed(ctx context.Context, db *sql.DB, userID, jobID string, importErr error) error {
@@ -144,29 +110,27 @@ func setImportJobFailed(ctx context.Context, db *sql.DB, userID, jobID string, i
 	if importErr != nil {
 		msg = importErr.Error()
 	}
-	_, err := db.ExecContext(ctx, `
-		UPDATE import_jobs
-		SET status = ?, error_message = ?, finished_at = ?, updated_at = ?
-		WHERE id = ? AND user_id = ?
-	`, string(ImportJobFailed), msg, now, now, jobID, userID)
-	return err
+	return sqlcdb.New(db).SetImportJobFailed(ctx, sqlcdb.SetImportJobFailedParams{
+		Status:       string(ImportJobFailed),
+		ErrorMessage: &msg,
+		FinishedAt:   &now,
+		UpdatedAt:    now,
+		ID:           jobID,
+		UserID:       userID,
+	})
 }
 
 func failInterruptedJobs(ctx context.Context, db *sql.DB) (int64, error) {
 	now := time.Now().UTC().Format(time.RFC3339)
-	res, err := db.ExecContext(ctx, `
-		UPDATE import_jobs
-		SET status = ?, error_message = ?, finished_at = ?, updated_at = ?
-		WHERE status IN (?, ?) AND finished_at IS NULL
-	`, string(ImportJobFailed), "import interrupted: server restarted", now, now, string(ImportJobQueued), string(ImportJobRunning))
-	if err != nil {
-		return 0, err
-	}
-	affected, err := res.RowsAffected()
-	if err != nil {
-		return 0, err
-	}
-	return affected, nil
+	msg := "import interrupted: server restarted"
+	return sqlcdb.New(db).FailInterruptedImportJobs(ctx, sqlcdb.FailInterruptedImportJobsParams{
+		Status:       string(ImportJobFailed),
+		ErrorMessage: &msg,
+		FinishedAt:   &now,
+		UpdatedAt:    now,
+		Status_2:     string(ImportJobQueued),
+		Status_3:     string(ImportJobRunning),
+	})
 }
 
 // RecoverInterruptedJobs marks stale queued/running jobs as failed after restart.
@@ -176,4 +140,31 @@ func RecoverInterruptedJobs(ctx context.Context, db *sql.DB) (int64, error) {
 
 func isNotFound(err error) bool {
 	return errors.Is(err, sql.ErrNoRows)
+}
+
+func importJobFromRow(row sqlcdb.GetImportJobRow) (ImportJob, error) {
+	job := ImportJob{
+		ID:        row.ID,
+		Filename:  row.Filename,
+		Status:    ImportJobStatus(row.Status),
+		CreatedAt: row.CreatedAt,
+	}
+	if row.ErrorMessage != nil && *row.ErrorMessage != "" {
+		msg := *row.ErrorMessage
+		job.Error = &msg
+	}
+	if row.ReportJson != nil && *row.ReportJson != "" {
+		var rep Report
+		if err := json.Unmarshal([]byte(*row.ReportJson), &rep); err != nil {
+			return ImportJob{}, fmt.Errorf("decode report_json: %w", err)
+		}
+		job.Report = &rep
+	}
+	if row.StartedAt != nil && *row.StartedAt != "" {
+		job.StartedAt = row.StartedAt
+	}
+	if row.FinishedAt != nil && *row.FinishedAt != "" {
+		job.FinishedAt = row.FinishedAt
+	}
+	return job, nil
 }

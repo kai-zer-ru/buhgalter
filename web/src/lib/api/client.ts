@@ -1,6 +1,7 @@
 import { get } from 'svelte/store';
 import { locale } from 'svelte-i18n';
 import { cachedGet, invalidateApiCache, seedStaticRef } from '$lib/api/cache';
+import { notifySessionExpired, shouldRedirectApi401 } from '$lib/auth/session-expired';
 
 const API_BASE = '';
 
@@ -13,7 +14,8 @@ export class ApiError extends Error {
 	constructor(
 		public code: string,
 		message: string,
-		public status: number
+		public status: number,
+		public field?: string
 	) {
 		super(message);
 		this.name = 'ApiError';
@@ -42,14 +44,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 	if (!res.ok) {
 		let code = 'UNKNOWN';
 		let message = res.statusText;
+		let field: string | undefined;
 		try {
 			const body = await res.json();
 			code = body?.error?.code ?? code;
 			message = body?.error?.message ?? message;
+			field = body?.error?.field || undefined;
 		} catch {
 			// ignore
 		}
-		throw new ApiError(code, message, res.status);
+		if (res.status === 401 && shouldRedirectApi401(path)) {
+			notifySessionExpired();
+		}
+		throw new ApiError(code, message, res.status, field);
 	}
 
 	if (res.status === 204) {
@@ -86,11 +93,14 @@ export type VersionCheckResult = {
 	release_url?: string;
 };
 
+export type UserStatus = 'active' | 'pending' | 'banned';
+
 export type User = {
 	id: string;
 	login: string;
 	display_name: string;
 	is_admin: boolean;
+	status: UserStatus;
 	language: string;
 	currency: string;
 	timezone: string;
@@ -126,6 +136,7 @@ export type NotificationSettings = {
 	trigger_credit: boolean;
 	trigger_planned: boolean;
 	trigger_password_reset?: boolean;
+	trigger_user_registration?: boolean;
 	debt_days_before: number;
 	my_debt_overdue_days_limit: number;
 	owed_debt_overdue_start_after_days: number;
@@ -148,6 +159,7 @@ export type NotificationSettingsUpdate = {
 	trigger_credit?: boolean;
 	trigger_planned?: boolean;
 	trigger_password_reset?: boolean;
+	trigger_user_registration?: boolean;
 	debt_days_before?: number;
 	my_debt_overdue_days_limit?: number;
 	owed_debt_overdue_start_after_days?: number;
@@ -194,6 +206,7 @@ export type AdminUser = {
 	login: string;
 	display_name: string;
 	is_admin: boolean;
+	status: UserStatus;
 	created_at: string;
 };
 
@@ -265,7 +278,7 @@ export function register(
 	passwordConfirm: string,
 	displayName: string
 ) {
-	return request<{ token: string; user: User }>('/api/v1/auth/register', {
+	return request<{ user: User }>('/api/v1/auth/register', {
 		method: 'POST',
 		body: JSON.stringify({
 			login,
@@ -437,6 +450,13 @@ export function createAdminUser(payload: {
 
 export function deleteAdminUser(id: string) {
 	return request<void>(`/api/v1/admin/users/${id}`, { method: 'DELETE' });
+}
+
+export function updateAdminUserStatus(id: string, status: 'active' | 'banned') {
+	return request<AdminUser>(`/api/v1/admin/users/${id}/status`, {
+		method: 'PUT',
+		body: JSON.stringify({ status })
+	});
 }
 
 export function getAdminDiagnostics() {
@@ -1143,6 +1163,8 @@ export type Credit = {
 	down_payment_display?: string;
 	down_payment_affects_balance?: boolean;
 	down_payment_transaction_id?: string | null;
+	principal_affects_balance?: boolean;
+	principal_transaction_id?: string | null;
 	issue_date: string;
 	term_months: number;
 	interest_rate: number;

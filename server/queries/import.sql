@@ -25,3 +25,37 @@ WHERE t.user_id = ?
       ORDER BY x.created_at ASC, x.id ASC
       LIMIT 1
   ));
+
+-- name: InsertImportJob :exec
+INSERT INTO import_jobs (id, user_id, filename, status, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?);
+
+-- name: GetImportJob :one
+SELECT id, filename, status, error_message, report_json, created_at, started_at, finished_at
+FROM import_jobs WHERE id = ? AND user_id = ?;
+
+-- name: SetImportJobRunning :exec
+UPDATE import_jobs
+SET status = ?, started_at = ?, updated_at = ?
+WHERE id = ? AND user_id = ?;
+
+-- name: SetImportJobDone :exec
+UPDATE import_jobs
+SET status = ?, report_json = ?, error_message = NULL, finished_at = ?, updated_at = ?
+WHERE id = ? AND user_id = ?;
+
+-- name: SetImportJobProgress :exec
+UPDATE import_jobs
+SET report_json = ?, updated_at = ?
+WHERE id = ? AND user_id = ?;
+
+-- name: SetImportJobFailed :exec
+UPDATE import_jobs
+SET status = ?, error_message = ?, finished_at = ?, updated_at = ?
+WHERE id = ? AND user_id = ?;
+
+-- name: FailInterruptedImportJobs :execrows
+UPDATE import_jobs
+SET status = ?, error_message = ?, finished_at = ?, updated_at = ?
+WHERE status IN (?, ?) AND finished_at IS NULL;
+

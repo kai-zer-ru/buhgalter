@@ -35,6 +35,7 @@ type SettingsView struct {
 	TriggerDebt                   bool           `json:"trigger_debt"`
 	TriggerCredit                 bool           `json:"trigger_credit"`
 	TriggerPlanned                bool           `json:"trigger_planned"`
+	TriggerUserRegistration       bool           `json:"trigger_user_registration"`
 	TriggerPasswordReset          bool           `json:"trigger_password_reset"`
 	DebtDaysBefore                int64          `json:"debt_days_before"`
 	MyDebtOverdueDaysLimit        int64          `json:"my_debt_overdue_days_limit"`
@@ -62,6 +63,7 @@ type UpdateSettingsInput struct {
 	TriggerDebt                   *bool            `json:"trigger_debt,omitempty"`
 	TriggerCredit                 *bool            `json:"trigger_credit,omitempty"`
 	TriggerPlanned                *bool            `json:"trigger_planned,omitempty"`
+	TriggerUserRegistration       *bool            `json:"trigger_user_registration,omitempty"`
 	TriggerPasswordReset          *bool            `json:"trigger_password_reset,omitempty"`
 	DebtDaysBefore                *int64           `json:"debt_days_before,omitempty"`
 	MyDebtOverdueDaysLimit        *int64           `json:"my_debt_overdue_days_limit,omitempty"`
@@ -103,6 +105,10 @@ func getSettingsOnce(ctx context.Context, sqlDB *sql.DB, userID string) (Setting
 	if err != nil {
 		return SettingsView{}, err
 	}
+	regEnabled, err := registrationEnabled(ctx, sqlDB)
+	if err != nil {
+		return SettingsView{}, err
+	}
 	custom := make(map[string]string, len(templates))
 	for _, tpl := range templates {
 		custom[tpl.TriggerType] = tpl.Template
@@ -120,6 +126,7 @@ func getSettingsOnce(ctx context.Context, sqlDB *sql.DB, userID string) (Setting
 		TriggerDebt:                   settings.TriggerDebt == 1,
 		TriggerCredit:                 settings.TriggerCredit == 1,
 		TriggerPlanned:                settings.TriggerPlanned == 1,
+		TriggerUserRegistration:       isAdmin && regEnabled && settings.TriggerUserRegistration == 1,
 		TriggerPasswordReset:          isAdmin && settings.TriggerPasswordReset == 1,
 		DebtDaysBefore:                settings.DebtDaysBefore,
 		MyDebtOverdueDaysLimit:        settings.MyDebtOverdueDaysLimit,
@@ -131,6 +138,9 @@ func getSettingsOnce(ctx context.Context, sqlDB *sql.DB, userID string) (Setting
 	}
 	for _, trigger := range triggerOrder {
 		if !isAdmin && IsAdminOnlyTrigger(trigger) {
+			continue
+		}
+		if RequiresRegistrationEnabled(trigger) && !regEnabled {
 			continue
 		}
 		customTemplate, ok := custom[trigger]
@@ -223,6 +233,19 @@ func UpdateSettings(ctx context.Context, db *sql.DB, userID string, in UpdateSet
 	if in.TriggerPlanned != nil {
 		settings.TriggerPlanned = boolToInt(*in.TriggerPlanned)
 	}
+	if in.TriggerUserRegistration != nil {
+		if !isAdmin {
+			return SettingsView{}, fmt.Errorf("trigger_user_registration is admin-only")
+		}
+		regEnabled, err := registrationEnabled(ctx, db)
+		if err != nil {
+			return SettingsView{}, err
+		}
+		if !regEnabled {
+			return SettingsView{}, fmt.Errorf("trigger_user_registration requires registration to be enabled")
+		}
+		settings.TriggerUserRegistration = boolToInt(*in.TriggerUserRegistration)
+	}
 	if in.TriggerPasswordReset != nil {
 		if !isAdmin {
 			return SettingsView{}, fmt.Errorf("trigger_password_reset is admin-only")
@@ -260,6 +283,15 @@ func UpdateSettings(ctx context.Context, db *sql.DB, userID string, in UpdateSet
 		if !isAdmin && IsAdminOnlyTrigger(trigger) {
 			return SettingsView{}, fmt.Errorf("unknown trigger_type: %s", trigger)
 		}
+		if RequiresRegistrationEnabled(trigger) {
+			regEnabled, err := registrationEnabled(ctx, db)
+			if err != nil {
+				return SettingsView{}, err
+			}
+			if !regEnabled {
+				return SettingsView{}, fmt.Errorf("unknown trigger_type: %s", trigger)
+			}
+		}
 		template := strings.TrimSpace(tpl.Template)
 		if len(template) < 1 || len(template) > 500 {
 			return SettingsView{}, fmt.Errorf("template length must be in range 1..500")
@@ -289,6 +321,7 @@ func UpdateSettings(ctx context.Context, db *sql.DB, userID string, in UpdateSet
 		TriggerDebt:                   settings.TriggerDebt,
 		TriggerCredit:                 settings.TriggerCredit,
 		TriggerPlanned:                settings.TriggerPlanned,
+		TriggerUserRegistration:       settings.TriggerUserRegistration,
 		TriggerPasswordReset:          settings.TriggerPasswordReset,
 		DebtDaysBefore:                settings.DebtDaysBefore,
 		MyDebtOverdueDaysLimit:        settings.MyDebtOverdueDaysLimit,
@@ -311,6 +344,9 @@ func PreviewTemplate(ctx context.Context, db *sql.DB, userID, triggerType, templ
 	template = strings.TrimSpace(template)
 	if _, ok := triggerPlaceholders[triggerType]; !ok {
 		return "", fmt.Errorf("unknown trigger_type: %s", triggerType)
+	}
+	if err := rejectRegistrationDependentTrigger(ctx, db, userID, triggerType); err != nil {
+		return "", err
 	}
 	if err := ValidateTemplate(triggerType, template); err != nil {
 		return "", err
@@ -347,6 +383,9 @@ func ResetTemplates(ctx context.Context, db *sql.DB, userID string, triggerType 
 	trigger := strings.TrimSpace(*triggerType)
 	if _, ok := triggerPlaceholders[trigger]; !ok {
 		return fmt.Errorf("unknown trigger_type: %s", trigger)
+	}
+	if err := rejectRegistrationDependentTrigger(ctx, db, userID, trigger); err != nil {
+		return err
 	}
 	_, err := q.DeleteNotificationTemplate(ctx, sqlcdb.DeleteNotificationTemplateParams{
 		UserID:      userID,
@@ -414,16 +453,11 @@ func NotifyAdminsOnPasswordReset(ctx context.Context, db *sql.DB, targetUserID, 
 	if externalURL.Valid {
 		externalURLValue = externalURL.String
 	}
-	rows, err := db.QueryContext(ctx, `SELECT id FROM users WHERE is_admin = 1`)
+	adminIDs, err := q.ListAdminUserIDs(ctx)
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var adminID string
-		if err := rows.Scan(&adminID); err != nil {
-			return err
-		}
+	for _, adminID := range adminIDs {
 		if err := q.EnsureNotificationSettings(ctx, adminID); err != nil {
 			continue
 		}
@@ -480,7 +514,7 @@ func NotifyAdminsOnPasswordReset(ctx context.Context, db *sql.DB, targetUserID, 
 			_ = appendLog(ctx, q, adminID, TriggerPasswordReset, channel, &entityID, &dateKey, "sent", text)
 		}
 	}
-	return rows.Err()
+	return nil
 }
 
 func appendLog(ctx context.Context, q *sqlcdb.Queries, userID, triggerType, channel string, entityID, dedupDate *string, status, message string) error {
@@ -572,25 +606,58 @@ func decryptSecret(raw *string, box *SecretBox) (string, error) {
 }
 
 func userLanguage(ctx context.Context, db *sql.DB, userID string) (string, error) {
-	var language string
-	if err := db.QueryRowContext(ctx, `SELECT language FROM users WHERE id = ?`, userID).Scan(&language); err != nil {
+	language, err := sqlcdb.New(db).GetUserLanguage(ctx, userID)
+	if err != nil {
 		return "", err
 	}
 	return normalizeLocale(language), nil
 }
 
 func userIsAdmin(ctx context.Context, db *sql.DB, userID string) (bool, error) {
-	var isAdmin int64
-	if err := db.QueryRowContext(ctx, `SELECT is_admin FROM users WHERE id = ?`, userID).Scan(&isAdmin); err != nil {
+	isAdmin, err := sqlcdb.New(db).GetUserIsAdmin(ctx, userID)
+	if err != nil {
 		return false, err
 	}
 	return isAdmin == 1, nil
 }
 
+func registrationEnabled(ctx context.Context, db *sql.DB) (bool, error) {
+	enabled, err := sqlcdb.New(db).GetRegistrationEnabled(ctx)
+	if err != nil {
+		return false, err
+	}
+	return enabled == 1, nil
+}
+
+func rejectRegistrationDependentTrigger(ctx context.Context, db *sql.DB, userID, triggerType string) error {
+	if !RequiresRegistrationEnabled(triggerType) {
+		return nil
+	}
+	isAdmin, err := userIsAdmin(ctx, db, userID)
+	if err != nil {
+		return err
+	}
+	if !isAdmin {
+		return fmt.Errorf("unknown trigger_type: %s", triggerType)
+	}
+	regEnabled, err := registrationEnabled(ctx, db)
+	if err != nil {
+		return err
+	}
+	if !regEnabled {
+		return fmt.Errorf("unknown trigger_type: %s", triggerType)
+	}
+	return nil
+}
+
 func userFormatting(ctx context.Context, db *sql.DB, userID string) (localeCode, timezone, currencyCode string, err error) {
-	if err = db.QueryRowContext(ctx, `SELECT language, timezone, currency FROM users WHERE id = ?`, userID).Scan(&localeCode, &timezone, &currencyCode); err != nil {
+	row, err := sqlcdb.New(db).GetUserFormatting(ctx, userID)
+	if err != nil {
 		return "", "", "", err
 	}
+	localeCode = row.Language
+	timezone = row.Timezone
+	currencyCode = row.Currency
 	if strings.TrimSpace(timezone) == "" {
 		timezone = "Europe/Moscow"
 	}
@@ -608,20 +675,22 @@ func previewData(triggerType, localeCode, timezone, currencyCode, channel string
 		channelValue = ChannelTelegram
 	}
 	return map[string]string{
-		"debtor":       choose(normalizeLocale(localeCode) == "ru", "Денис", "Denis"),
-		"amount":       FormatAmountDisplay(1000000, currencyCode),
-		"due_date":     timeutil.FormatDisplayDateInTimezone(now.Add(-24*time.Hour).Format(timeutil.Layout), timezone),
-		"days":         "2",
-		"credit":       choose(normalizeLocale(localeCode) == "ru", "Ипотека", "Mortgage"),
-		"payment_date": timeutil.FormatDisplayDateInTimezone(futureDate, timezone),
-		"when":         RelativeWhen(localeCode, futureDate, now, timezone),
-		"type":         localizedOperationType(localeCode, "expense"),
-		"description":  choose(normalizeLocale(localeCode) == "ru", "Подписка", "Subscription"),
-		"date":         timeutil.FormatDisplayDateTimeShortInTimezone(now.Format(timeutil.Layout), timezone),
-		"login":        choose(normalizeLocale(localeCode) == "ru", "user1", "user1"),
-		"display_name": choose(normalizeLocale(localeCode) == "ru", "Пользователь", "User"),
-		"requested_at": timeutil.FormatDisplayDateTimeShortInTimezone(now.Format(timeutil.Layout), timezone),
-		"channel":      channelValue,
+		"debtor":         choose(normalizeLocale(localeCode) == "ru", "Денис", "Denis"),
+		"amount":         FormatAmountDisplay(1000000, currencyCode),
+		"due_date":       timeutil.FormatDisplayDateInTimezone(now.Add(-24*time.Hour).Format(timeutil.Layout), timezone),
+		"days":           "2",
+		"credit":         choose(normalizeLocale(localeCode) == "ru", "Ипотека", "Mortgage"),
+		"payment_date":   timeutil.FormatDisplayDateInTimezone(futureDate, timezone),
+		"when":           RelativeWhen(localeCode, futureDate, now, timezone),
+		"type":           localizedOperationType(localeCode, "expense"),
+		"description":    choose(normalizeLocale(localeCode) == "ru", "Подписка", "Subscription"),
+		"date":           timeutil.FormatDisplayDateTimeShortInTimezone(now.Format(timeutil.Layout), timezone),
+		"login":          choose(normalizeLocale(localeCode) == "ru", "user1", "user1"),
+		"display_name":   choose(normalizeLocale(localeCode) == "ru", "Пользователь", "User"),
+		"requested_at":   timeutil.FormatDisplayDateTimeShortInTimezone(now.Format(timeutil.Layout), timezone),
+		"registered_at":  timeutil.FormatDisplayDateTimeShortInTimezone(now.Format(timeutil.Layout), timezone),
+		"moderation_url": "https://buhgalter.example/admin/users?moderate=00000000-0000-0000-0000-000000000001",
+		"channel":        channelValue,
 	}
 }
 

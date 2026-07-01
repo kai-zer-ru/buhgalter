@@ -37,7 +37,7 @@ func seedEnvFull(t *testing.T) (*db.Handle, seedEnv) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	userID, err := auth.CreateUser(ctx, sqlDB, "txuser", hash, "Tx User", false)
+	userID, err := auth.CreateUser(ctx, sqlDB, "txuser", hash, "Tx User", false, auth.UserStatusActive)
 	if err != nil {
 		t.Fatal(err)
 	}

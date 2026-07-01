@@ -527,6 +527,33 @@ func (q *Queries) ListAllAccountIDsByUser(ctx context.Context, userID string) ([
 	return items, nil
 }
 
+const listDistinctAccountUserIDs = `-- name: ListDistinctAccountUserIDs :many
+SELECT DISTINCT user_id FROM accounts
+`
+
+func (q *Queries) ListDistinctAccountUserIDs(ctx context.Context) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listDistinctAccountUserIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var user_id string
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setAccountPrimary = `-- name: SetAccountPrimary :exec
 UPDATE accounts
 SET is_primary = 1

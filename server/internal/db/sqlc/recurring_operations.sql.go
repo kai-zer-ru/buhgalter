@@ -370,6 +370,25 @@ func (q *Queries) MarkRecurringOperationRan(ctx context.Context, arg MarkRecurri
 	return result.RowsAffected()
 }
 
+const setRecurringOperationNextRunAt = `-- name: SetRecurringOperationNextRunAt :execrows
+UPDATE recurring_operations SET next_run_at = ?
+WHERE id = ? AND user_id = ?
+`
+
+type SetRecurringOperationNextRunAtParams struct {
+	NextRunAt string `json:"next_run_at"`
+	ID        string `json:"id"`
+	UserID    string `json:"user_id"`
+}
+
+func (q *Queries) SetRecurringOperationNextRunAt(ctx context.Context, arg SetRecurringOperationNextRunAtParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, setRecurringOperationNextRunAt, arg.NextRunAt, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const updateRecurringOperation = `-- name: UpdateRecurringOperation :execrows
 UPDATE recurring_operations
 SET type = ?, amount = ?, description = ?,

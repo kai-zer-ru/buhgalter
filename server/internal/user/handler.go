@@ -2,7 +2,6 @@ package user
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -16,6 +15,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/audit"
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
+	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/notify"
 )
 
@@ -145,14 +145,7 @@ func (h *Handler) PutSettings(w http.ResponseWriter, r *http.Request) {
 		theme = info.User.Theme
 	}
 
-	_, err := h.Store.DB().ExecContext(r.Context(), `
-		UPDATE users
-		SET display_name = ?, language = ?, currency = ?, timezone = ?, theme = ?,
-		    updated_at = datetime('now')
-		WHERE id = ?`,
-		displayName, language, currency, timezone, theme, info.User.ID,
-	)
-	if err != nil {
+	if err := auth.UpdateUserProfile(r.Context(), h.Store.DB(), info.User.ID, displayName, language, currency, timezone, theme); err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
@@ -338,11 +331,7 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = h.Store.DB().ExecContext(r.Context(), `
-		UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?`,
-		newHash, info.User.ID,
-	)
-	if err != nil {
+	if err := auth.SetUserPassword(r.Context(), h.Store.DB(), info.User.ID, newHash); err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
@@ -359,34 +348,27 @@ func (h *Handler) ListTokens(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := h.Store.DB().QueryContext(r.Context(), `
-		SELECT id, name, token_prefix, expires_at, last_used_at, created_at
-		FROM api_tokens WHERE user_id = ? ORDER BY created_at DESC`, info.User.ID,
-	)
+	rows, err := sqlcdb.New(h.Store.DB()).ListAPITokensByUser(r.Context(), info.User.ID)
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
-	defer rows.Close()
 
-	var items []tokenListItem
-	for rows.Next() {
-		var item tokenListItem
-		var expiresAt, lastUsedAt sql.NullString
-		if err := rows.Scan(&item.ID, &item.Name, &item.TokenPrefix, &expiresAt, &lastUsedAt, &item.CreatedAt); err != nil {
-			apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
-			return
+	items := make([]tokenListItem, 0, len(rows))
+	for _, row := range rows {
+		item := tokenListItem{
+			ID:          row.ID,
+			Name:        row.Name,
+			TokenPrefix: row.TokenPrefix,
+			CreatedAt:   row.CreatedAt,
 		}
-		if expiresAt.Valid {
-			item.ExpiresAt = &expiresAt.String
+		if row.ExpiresAt != nil {
+			item.ExpiresAt = row.ExpiresAt
 		}
-		if lastUsedAt.Valid {
-			item.LastUsedAt = &lastUsedAt.String
+		if row.LastUsedAt != nil {
+			item.LastUsedAt = row.LastUsedAt
 		}
 		items = append(items, item)
-	}
-	if items == nil {
-		items = []tokenListItem{}
 	}
 	writeJSON(w, http.StatusOK, items)
 }
@@ -409,7 +391,7 @@ func (h *Handler) CreateToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	expiresVal, expiresPtr, perpetual, err := resolveTokenExpiry(req.NeverExpires, req.ExpiresAt, time.Now())
+	_, expiresPtr, perpetual, err := resolveTokenExpiry(req.NeverExpires, req.ExpiresAt, time.Now())
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_TOKEN_EXPIRES")
 		return
@@ -422,18 +404,19 @@ func (h *Handler) CreateToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id := uuid.NewString()
-	_, err = h.Store.DB().ExecContext(r.Context(), `
-		INSERT INTO api_tokens (id, user_id, name, token_hash, token_prefix, expires_at)
-		VALUES (?, ?, ?, ?, ?, ?)`,
-		id, info.User.ID, name, hash, prefix, expiresVal,
-	)
-	if err != nil {
+	if err := sqlcdb.New(h.Store.DB()).InsertAPIToken(r.Context(), sqlcdb.InsertAPITokenParams{
+		ID:          id,
+		UserID:      info.User.ID,
+		Name:        name,
+		TokenHash:   hash,
+		TokenPrefix: prefix,
+		ExpiresAt:   expiresPtr,
+	}); err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
 
-	var createdAt string
-	_ = h.Store.DB().QueryRowContext(r.Context(), `SELECT created_at FROM api_tokens WHERE id = ?`, id).Scan(&createdAt)
+	createdAt, _ := sqlcdb.New(h.Store.DB()).GetAPITokenCreatedAt(r.Context(), id)
 
 	ip := auth.ClientIP(r)
 	_ = h.Audit.Log("user.token.create", info.User.ID, info.User.Login, ip, map[string]any{
@@ -460,26 +443,22 @@ func (h *Handler) DeleteToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id := chi.URLParam(r, "id")
-	var name, prefix string
-	err := h.Store.DB().QueryRowContext(r.Context(), `
-		SELECT name, token_prefix FROM api_tokens WHERE id = ? AND user_id = ?`,
-		id, info.User.ID,
-	).Scan(&name, &prefix)
+	q := sqlcdb.New(h.Store.DB())
+	meta, err := q.GetAPITokenMeta(r.Context(), sqlcdb.GetAPITokenMetaParams{ID: id, UserID: info.User.ID})
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
 		return
 	}
 
-	_, err = h.Store.DB().ExecContext(r.Context(), `DELETE FROM api_tokens WHERE id = ? AND user_id = ?`, id, info.User.ID)
-	if err != nil {
+	if err := q.DeleteAPIToken(r.Context(), sqlcdb.DeleteAPITokenParams{ID: id, UserID: info.User.ID}); err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
 
 	ip := auth.ClientIP(r)
 	_ = h.Audit.Log("user.token.revoke", info.User.ID, info.User.Login, ip, map[string]any{
-		"token_name":   name,
-		"token_prefix": prefix,
+		"token_name":   meta.Name,
+		"token_prefix": meta.TokenPrefix,
 	})
 	w.WriteHeader(http.StatusNoContent)
 }

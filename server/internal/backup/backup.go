@@ -1,6 +1,7 @@
 package backup
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/kai-zer-ru/buhgalter/internal/db"
+	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 )
 
 type Service struct {
@@ -152,8 +154,8 @@ func (s *Service) Restore(src io.Reader) error {
 }
 
 func (s *Service) applyRetention() error {
-	var retention int
-	if err := s.Manager.DB().QueryRow(`SELECT backup_retention FROM system_settings WHERE id = 1`).Scan(&retention); err != nil {
+	retention, err := sqlcdb.New(s.Manager.DB()).GetBackupRetention(context.Background())
+	if err != nil {
 		return err
 	}
 	if retention <= 0 {
@@ -164,7 +166,7 @@ func (s *Service) applyRetention() error {
 	if err != nil {
 		return err
 	}
-	if len(files) <= retention {
+	if len(files) <= int(retention) {
 		return nil
 	}
 	for _, f := range files[retention:] {
@@ -180,18 +182,18 @@ type Settings struct {
 }
 
 func (s *Service) GetSettings() (Settings, error) {
-	var enabled, retention int
-	var backupTime string
-	err := s.Manager.DB().QueryRow(`
-		SELECT backup_enabled, backup_time, backup_retention FROM system_settings WHERE id = 1`,
-	).Scan(&enabled, &backupTime, &retention)
+	row, err := sqlcdb.New(s.Manager.DB()).GetBackupSettings(context.Background())
 	if err != nil {
 		return Settings{}, err
 	}
+	backupTime := ""
+	if row.BackupTime != nil {
+		backupTime = *row.BackupTime
+	}
 	return Settings{
-		BackupEnabled:   enabled == 1,
+		BackupEnabled:   row.BackupEnabled == 1,
 		BackupTime:      backupTime,
-		BackupRetention: retention,
+		BackupRetention: int(row.BackupRetention),
 	}, nil
 }
 
@@ -199,14 +201,14 @@ func (s *Service) UpdateSettings(enabled bool, backupTime string, retention int)
 	if retention < 1 {
 		retention = 1
 	}
-	en := 0
+	en := int64(0)
 	if enabled {
 		en = 1
 	}
-	_, err := s.Manager.DB().Exec(`
-		UPDATE system_settings
-		SET backup_enabled = ?, backup_time = ?, backup_retention = ?, updated_at = datetime('now')
-		WHERE id = 1`, en, backupTime, retention,
-	)
-	return err
+	bt := backupTime
+	return sqlcdb.New(s.Manager.DB()).UpdateBackupSettings(context.Background(), sqlcdb.UpdateBackupSettingsParams{
+		BackupEnabled:   en,
+		BackupTime:      &bt,
+		BackupRetention: int64(retention),
+	})
 }

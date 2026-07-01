@@ -1,6 +1,7 @@
 import { writable } from 'svelte/store';
 import type { User } from '$lib/api/client';
 import { ApiError, getMe, isTransientHttpError, logout as apiLogout } from '$lib/api/client';
+import { resetSessionExpiredSignal } from '$lib/auth/session-expired';
 
 export const user = writable<User | null>(null);
 export const authReady = writable(false);
@@ -16,6 +17,7 @@ function sleep(ms: number) {
 export function markSessionHint() {
 	try {
 		sessionStorage.setItem(SESSION_HINT_KEY, '1');
+		resetSessionExpiredSignal();
 	} catch {
 		// ignore private mode
 	}

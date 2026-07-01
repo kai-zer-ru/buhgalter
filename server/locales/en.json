@@ -15,6 +15,10 @@
   "CONFLICT": "Conflict",
   "ALREADY_CONFIGURED": "Initial setup is already complete",
   "SERVICE_UNAVAILABLE": "Service temporarily unavailable",
+  "USER_PENDING_MODERATION": "Your account is awaiting administrator approval",
+  "USER_BANNED": "Your account has been blocked",
+  "USER_STATUS_INVALID": "Invalid user status",
+  "USER_STATUS_TRANSITION": "This status change is not allowed",
   "ERR_INVALID_JSON": "Invalid JSON",
   "ERR_LOGIN_PASSWORD_REQUIRED": "Login and password are required",
   "ERR_LOGIN_LENGTH": "Login must be 3 to 32 characters",
@@ -29,6 +33,7 @@
   "ERR_SECRET_KEY_EMPTY": "Notification secret key must not be empty",
   "ERR_SECRET_KEY_INVALID": "Key must be exactly 32 characters",
   "ERR_CANNOT_DELETE_SELF": "You cannot delete your own account",
+  "ERR_CANNOT_CHANGE_OWN_STATUS": "You cannot change your own status",
   "ERR_LANGUAGE": "Language must be ru or en",
   "ERR_CURRENCY": "Currency must be RUB, USD, or EUR",
   "ERR_THEME": "Theme must be light or dark",
@@ -110,5 +115,6 @@
   "notifications.templates.credit_payment": "Credit payment \"{credit}\": {amount} {when}",
   "notifications.templates.planned_operation": "Planned transaction: {type} {amount} — {description}",
   "notifications.templates.password_reset": "Password reset requested by {display_name} (@{login}) at {requested_at}.\n{reset_url}",
+  "notifications.templates.user_registration": "New registration: {display_name} (@{login}), {registered_at}. Moderation: {moderation_url}",
   "notifications.templates.test": "Buhgalter test notification. Channel: {channel}."
 }

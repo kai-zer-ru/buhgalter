@@ -21,31 +21,24 @@ type repairCreditRow struct {
 // RepairShortSchedules appends missing scheduled payments for credits created with the
 // old schedule generator that stopped early when principal was covered.
 func RepairShortSchedules(ctx context.Context, db *sql.DB) error {
-	rows, err := db.QueryContext(ctx, `
-		SELECT id, user_id, principal_amount, issue_date, term_months, interest_rate,
-		       payment_interval, monthly_payment, added_retroactively
-		FROM credits
-		WHERE status = 'active' AND payment_interval != 'manual'`)
+	rows, err := queries(db).ListActiveCreditsForScheduleRepair(ctx)
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
 
 	var credits []repairCreditRow
-	for rows.Next() {
-		var r repairCreditRow
-		var addedRetro int64
-		if err := rows.Scan(
-			&r.id, &r.userID, &r.principal, &r.issueDate, &r.termMonths, &r.interestRate,
-			&r.paymentInterval, &r.monthlyPayment, &addedRetro,
-		); err != nil {
-			return err
-		}
-		r.addedRetroactively = addedRetro == 1
-		credits = append(credits, r)
-	}
-	if err := rows.Err(); err != nil {
-		return err
+	for _, row := range rows {
+		credits = append(credits, repairCreditRow{
+			id:                 row.ID,
+			userID:             row.UserID,
+			principal:          row.PrincipalAmount,
+			issueDate:          row.IssueDate,
+			termMonths:         int(row.TermMonths),
+			interestRate:       row.InterestRate,
+			paymentInterval:    row.PaymentInterval,
+			monthlyPayment:     row.MonthlyPayment,
+			addedRetroactively: row.AddedRetroactively == 1,
+		})
 	}
 
 	for _, c := range credits {
