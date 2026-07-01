@@ -311,6 +311,7 @@ CREATE TABLE notification_settings (
     trigger_credit      INTEGER NOT NULL DEFAULT 1,
     trigger_planned     INTEGER NOT NULL DEFAULT 1,
     trigger_negative_balance INTEGER NOT NULL DEFAULT 1,
+    trigger_budget INTEGER NOT NULL DEFAULT 1,
     trigger_user_registration INTEGER NOT NULL DEFAULT 1,
     trigger_password_reset INTEGER NOT NULL DEFAULT 1,
     debt_days_before    INTEGER NOT NULL DEFAULT 1,
@@ -340,11 +341,58 @@ CREATE TABLE notification_templates (
     user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     trigger_type    TEXT NOT NULL CHECK (trigger_type IN (
                         'debt_overdue', 'debt_due_soon', 'credit_payment', 'planned_operation',
-                        'balance_shortfall',
+                        'balance_shortfall', 'budget_threshold',
                         'user_registration', 'password_reset', 'test'
                     )),
     template        TEXT NOT NULL,
     updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (user_id, trigger_type)
+);
+
+CREATE TABLE budgets (
+    id              TEXT PRIMARY KEY,
+    user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name            TEXT NOT NULL,
+    scope           TEXT NOT NULL CHECK (scope IN ('category', 'subcategory', 'all_expense', 'all_income')),
+    category_id     TEXT REFERENCES categories(id),
+    subcategory_id  TEXT REFERENCES subcategories(id),
+    amount          INTEGER NOT NULL CHECK (amount > 0),
+    period          TEXT NOT NULL DEFAULT 'month' CHECK (period = 'month'),
+    account_id      TEXT REFERENCES accounts(id),
+    month           TEXT NOT NULL DEFAULT '',
+    copy_forward    INTEGER NOT NULL DEFAULT 0,
+    rollover        INTEGER NOT NULL DEFAULT 0,
+    alert_at_percent INTEGER NOT NULL DEFAULT 90,
+    is_active       INTEGER NOT NULL DEFAULT 1,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_budgets_user ON budgets(user_id);
+CREATE UNIQUE INDEX idx_budgets_active_unique ON budgets(
+    user_id,
+    scope,
+    IFNULL(category_id, ''),
+    IFNULL(subcategory_id, ''),
+    month
+) WHERE is_active = 1;
+
+CREATE TABLE budget_periods (
+    id              TEXT PRIMARY KEY,
+    budget_id       TEXT NOT NULL REFERENCES budgets(id) ON DELETE CASCADE,
+    period_start    TEXT NOT NULL,
+    planned_amount  INTEGER NOT NULL CHECK (planned_amount > 0),
+    rollover_amount INTEGER NOT NULL DEFAULT 0,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (budget_id, period_start)
+);
+CREATE INDEX idx_budget_periods_budget ON budget_periods(budget_id);
+
+CREATE TABLE budget_alert_sent (
+    budget_id           TEXT NOT NULL REFERENCES budgets(id) ON DELETE CASCADE,
+    period_start        TEXT NOT NULL,
+    threshold_percent   INTEGER NOT NULL,
+    sent_at             TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (budget_id, period_start, threshold_percent)
 );
 

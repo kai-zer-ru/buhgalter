@@ -1973,6 +1973,164 @@ paths:
           description: Удалена
         '404':
           description: Не найдена
+  /budgets/summary:
+    get:
+      summary: Сводка бюджетов за месяц (план vs факт)
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: month
+          in: query
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}$'
+          description: Календарный месяц (YYYY-MM) в timezone пользователя
+      responses:
+        '200':
+          description: Сводка бюджетов за месяц
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BudgetSummaryResponse'
+  /budgets/copy-from-previous:
+    post:
+      summary: Скопировать все бюджеты с прошлого месяца
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: month
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}$'
+          description: Целевой месяц (YYYY-MM)
+      responses:
+        '201':
+          description: Скопированные бюджеты
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BudgetItem'
+        '400':
+          description: Нечего копировать (ERR_BUDGET_NOTHING_TO_COPY)
+  /budgets:
+    get:
+      summary: Список шаблонов бюджетов
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: month
+          in: query
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}$'
+      responses:
+        '200':
+          description: Список бюджетов
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BudgetItem'
+    post:
+      summary: Создать бюджет
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BudgetUpsertRequest'
+      responses:
+        '201':
+          description: Бюджет создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BudgetItem'
+  /budgets/{id}:
+    patch:
+      summary: Обновить бюджет
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BudgetUpsertRequest'
+      responses:
+        '200':
+          description: Бюджет обновлён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BudgetItem'
+        '404':
+          description: Не найден
+        '409':
+          description: Дубликат активного бюджета
+    delete:
+      summary: Удалить бюджет
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Удалён
+        '404':
+          description: Не найден
+  /budgets/{id}/copy-next:
+    post:
+      summary: Копировать бюджет на следующий месяц
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Новый бюджет в следующем месяце (copy_forward = false)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BudgetItem'
+        '404':
+          description: Не найден
+        '409':
+          description: В следующем месяце уже есть бюджет с тем же scope (ERR_BUDGET_COPY_EXISTS)
   /transactions/{id}:
     get:
       summary: Получить операцию
@@ -2699,7 +2857,7 @@ components:
       properties:
         trigger_type:
           type: string
-          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, balance_shortfall, user_registration, password_reset, test]
+          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, balance_shortfall, budget_threshold, user_registration, password_reset, test]
         template:
           type: string
           description: Текст шаблона
@@ -2730,6 +2888,7 @@ components:
           trigger_credit,
           trigger_planned,
           trigger_negative_balance,
+          trigger_budget,
           trigger_user_registration,
           trigger_password_reset,
           debt_days_before,
@@ -2775,6 +2934,9 @@ components:
         trigger_negative_balance:
           type: boolean
           description: Дописывать к исходящим уведомлениям текст о недостатке средств на счёте
+        trigger_budget:
+          type: boolean
+          description: Уведомления о превышении порога бюджета
         trigger_user_registration:
           type: boolean
           description: Только для администратора — уведомление о новой регистрации
@@ -2814,7 +2976,7 @@ components:
       properties:
         trigger_type:
           type: string
-          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, balance_shortfall, user_registration, password_reset, test]
+          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, balance_shortfall, budget_threshold, user_registration, password_reset, test]
         template:
           type: string
           minLength: 1
@@ -2852,6 +3014,9 @@ components:
         trigger_negative_balance:
           type: boolean
           description: Дописывать к исходящим уведомлениям текст о недостатке средств на счёте
+        trigger_budget:
+          type: boolean
+          description: Уведомления о превышении порога бюджета
         trigger_user_registration:
           type: boolean
           description: Только для администратора — уведомление о новой регистрации
@@ -2898,7 +3063,7 @@ components:
       properties:
         trigger_type:
           type: string
-          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, balance_shortfall, user_registration, password_reset, test]
+          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, balance_shortfall, budget_threshold, user_registration, password_reset, test]
         template:
           type: string
           minLength: 1
@@ -2914,7 +3079,7 @@ components:
       properties:
         trigger_type:
           type: string
-          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, balance_shortfall, user_registration, password_reset, test]
+          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, balance_shortfall, budget_threshold, user_registration, password_reset, test]
     Category:
       type: object
       properties:
@@ -3800,6 +3965,137 @@ components:
           type: string
           nullable: true
           description: ID банка; допускается null для очистки поля
+    BudgetItem:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        scope:
+          type: string
+          enum: [category, subcategory, all_expense]
+        category_id:
+          type: string
+          nullable: true
+        category_name:
+          type: string
+          nullable: true
+        category_icon:
+          type: string
+          nullable: true
+        subcategory_id:
+          type: string
+          nullable: true
+        subcategory_name:
+          type: string
+          nullable: true
+        account_id:
+          type: string
+          nullable: true
+        account_name:
+          type: string
+          nullable: true
+        amount:
+          type: integer
+          description: Лимит в копейках
+        amount_display:
+          type: string
+        period:
+          type: string
+          enum: [month]
+        month:
+          type: string
+          pattern: '^\d{4}-\d{2}$'
+          description: Календарный месяц бюджета (YYYY-MM)
+        copy_forward:
+          type: boolean
+          description: Авто-копирование на следующий месяц при первом открытии
+        alert_at_percent:
+          type: integer
+          description: Порог уведомления; по умолчанию 90
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+        updated_at:
+          type: string
+    BudgetSummaryItem:
+      allOf:
+        - $ref: '#/components/schemas/BudgetItem'
+        - type: object
+          properties:
+            planned:
+              type: integer
+            planned_display:
+              type: string
+            spent:
+              type: integer
+            spent_display:
+              type: string
+            remaining:
+              type: integer
+            remaining_display:
+              type: string
+            percent:
+              type: integer
+            status:
+              type: string
+              enum: [ok, warning, exceeded]
+            period_start:
+              type: string
+            copy_forward:
+              type: boolean
+            children_planned:
+              type: integer
+              description: Сумма planned дочерних бюджетов (только all_expense)
+            children_planned_display:
+              type: string
+            children_spent:
+              type: integer
+            children_spent_display:
+              type: string
+    BudgetSummaryResponse:
+      type: object
+      properties:
+        month:
+          type: string
+          pattern: '^\d{4}-\d{2}$'
+        can_copy_from_previous:
+          type: boolean
+          description: true, если в выбранном месяце нет бюджетов, а в предыдущем есть
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/BudgetSummaryItem'
+    BudgetUpsertRequest:
+      type: object
+      required: [name, scope, amount]
+      properties:
+        name:
+          type: string
+        scope:
+          type: string
+          enum: [category, subcategory, all_expense]
+        category_id:
+          type: string
+        subcategory_id:
+          type: string
+        account_id:
+          type: string
+        amount:
+          type: string
+          description: Сумма в рублях с дробной частью
+        alert_at_percent:
+          type: integer
+          minimum: 0
+          maximum: 100
+          default: 90
+        is_active:
+          type: boolean
+        copy_forward:
+          type: boolean
+          default: false
     RecurringOperation:
       type: object
       properties:

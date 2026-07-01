@@ -8,6 +8,7 @@
 		getStatsByCategory,
 		getStatsByPeriod,
 		getStatsSummary,
+		getBudgetSummary,
 		getUIMeta,
 		searchStats,
 		type Account,
@@ -17,6 +18,7 @@
 		type StatsCategoryItem,
 		type StatsPeriodItem,
 		type StatsSummary,
+		type BudgetSummaryItem,
 		type Transaction
 	} from '$lib/api/client';
 	import BackLink from '$lib/components/BackLink.svelte';
@@ -33,7 +35,7 @@
 		categorySelectLabel,
 		duplicateCategoryNames
 	} from '$lib/category-label';
-	import { fromDateLocalEnd, fromDateLocalStart, dateOnlyLocalValue } from '$lib/dates';
+	import { fromDateLocalEnd, fromDateLocalStart, dateOnlyLocalValue, todayDateLocal } from '$lib/dates';
 	import { formatMoneyDisplay, fromCents } from '$lib/money';
 	import { formatStatsPeriod } from '$lib/stats-period';
 	import { user } from '$lib/stores/auth';
@@ -43,6 +45,7 @@
 	let error = $state('');
 	let summary = $state<StatsSummary | null>(null);
 	let byCategory = $state<StatsCategoryItem[]>([]);
+	let budgetByCategory = $state<Record<string, BudgetSummaryItem>>({});
 	let byPeriod = $state<StatsPeriodItem[]>([]);
 	let searchRows = $state<Transaction[]>([]);
 	let accounts = $state<Account[]>([]);
@@ -192,6 +195,12 @@
 		return params;
 	}
 
+	function budgetMonthKey(): string {
+		const raw = (toLocal || fromLocal || todayDateLocal(tz)).split('T')[0];
+		const [y, m] = raw.split('-');
+		return `${y}-${m}`;
+	}
+
 	async function loadStats(initial = false) {
 		if (!metaLoaded && initial) {
 			await loadMeta();
@@ -201,14 +210,23 @@
 		error = '';
 		try {
 			const params = statsParams();
-			const [summaryRes, categoryRes, periodRes] = await Promise.all([
+			const month = budgetMonthKey();
+			const [summaryRes, categoryRes, periodRes, budgetRes] = await Promise.all([
 				getStatsSummary(params),
 				getStatsByCategory(params),
-				getStatsByPeriod({ ...params, group_by: groupBy })
+				getStatsByPeriod({ ...params, group_by: groupBy }),
+				getBudgetSummary(month).catch(() => ({ items: [] as BudgetSummaryItem[], month, can_copy_from_previous: false }))
 			]);
 			summary = summaryRes;
 			byCategory = categoryRes.items;
 			byPeriod = periodRes.items;
+			const bmap: Record<string, BudgetSummaryItem> = {};
+			for (const b of budgetRes.items) {
+				if (b.scope === 'category' && b.category_id) {
+					bmap[b.category_id] = b;
+				}
+			}
+			budgetByCategory = bmap;
 			if (search.trim()) {
 				const searchRes = await searchStats({
 					...params,
@@ -490,7 +508,7 @@
 									{#if byCategoryExpense.length === 0}
 										<EmptyStateCard message={$_('transactions.empty')} />
 									{:else}
-										{@render categorySection(byCategoryExpense)}
+										{@render categorySection(byCategoryExpense, true)}
 									{/if}
 								</section>
 							{/if}
@@ -516,7 +534,7 @@
 	{/if}
 </div>
 
-{#snippet categorySection(rows: StatsCategoryItem[])}
+{#snippet categorySection(rows: StatsCategoryItem[], showBudget = false)}
 	<div class="space-y-3 md:hidden">
 		{#each rows as row (row.category_id)}
 			<article class="rounded-xl border p-3" style:border-color="var(--border)">
@@ -532,6 +550,24 @@
 						<dt style:color="var(--text-muted)">{$_('transactions.col.amount')}</dt>
 						<dd class="tabular-nums">{formatMoneyDisplay(fromCents(row.total))}</dd>
 					</div>
+					{#if showBudget}
+						<div class="flex justify-between gap-2">
+							<dt style:color="var(--text-muted)">{$_('budget.stats.planned')}</dt>
+							<dd class="tabular-nums">
+								{budgetByCategory[row.category_id]
+									? budgetByCategory[row.category_id].planned_display
+									: '—'}
+							</dd>
+						</div>
+						<div class="flex justify-between gap-2">
+							<dt style:color="var(--text-muted)">{$_('budget.stats.remaining')}</dt>
+							<dd class="tabular-nums">
+								{budgetByCategory[row.category_id]
+									? budgetByCategory[row.category_id].remaining_display
+									: '—'}
+							</dd>
+						</div>
+					{/if}
 					<div class="flex justify-between gap-2">
 						<dt style:color="var(--text-muted)">%</dt>
 						<dd>{row.percentage.toFixed(1)}</dd>
@@ -549,6 +585,10 @@
 			<tr style:color="var(--text-muted)">
 				<th class="p-2">{$_('transactions.col.category')}</th>
 				<th class="p-2">{$_('transactions.col.amount')}</th>
+				{#if showBudget}
+					<th class="p-2">{$_('budget.stats.planned')}</th>
+					<th class="p-2">{$_('budget.stats.remaining')}</th>
+				{/if}
 				<th class="p-2">%</th>
 				<th class="p-2">{$_('stats.summary.count')}</th>
 			</tr>
@@ -566,6 +606,18 @@
 						</a>
 					</td>
 					<td class="p-2 tabular-nums">{formatMoneyDisplay(fromCents(row.total))}</td>
+					{#if showBudget}
+						<td class="p-2 tabular-nums">
+							{budgetByCategory[row.category_id]
+								? budgetByCategory[row.category_id].planned_display
+								: '—'}
+						</td>
+						<td class="p-2 tabular-nums">
+							{budgetByCategory[row.category_id]
+								? budgetByCategory[row.category_id].remaining_display
+								: '—'}
+						</td>
+					{/if}
 					<td class="p-2">{row.percentage.toFixed(1)}</td>
 					<td class="p-2">{row.count}</td>
 				</tr>

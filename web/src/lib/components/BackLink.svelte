@@ -15,7 +15,8 @@
 		| '/stats'
 		| '/debtors'
 		| '/accounts/new'
-		| '/recurring-operations';
+		| '/recurring-operations'
+		| '/budget';
 
 	export type BreadcrumbItem = {
 		href: BackLinkHref;

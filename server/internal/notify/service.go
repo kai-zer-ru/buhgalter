@@ -36,6 +36,7 @@ type SettingsView struct {
 	TriggerCredit                 bool           `json:"trigger_credit"`
 	TriggerPlanned                bool           `json:"trigger_planned"`
 	TriggerNegativeBalance        bool           `json:"trigger_negative_balance"`
+	TriggerBudget                 bool           `json:"trigger_budget"`
 	TriggerUserRegistration       bool           `json:"trigger_user_registration"`
 	TriggerPasswordReset          bool           `json:"trigger_password_reset"`
 	DebtDaysBefore                int64          `json:"debt_days_before"`
@@ -65,6 +66,7 @@ type UpdateSettingsInput struct {
 	TriggerCredit                 *bool            `json:"trigger_credit,omitempty"`
 	TriggerPlanned                *bool            `json:"trigger_planned,omitempty"`
 	TriggerNegativeBalance        *bool            `json:"trigger_negative_balance,omitempty"`
+	TriggerBudget                 *bool            `json:"trigger_budget,omitempty"`
 	TriggerUserRegistration       *bool            `json:"trigger_user_registration,omitempty"`
 	TriggerPasswordReset          *bool            `json:"trigger_password_reset,omitempty"`
 	DebtDaysBefore                *int64           `json:"debt_days_before,omitempty"`
@@ -129,6 +131,7 @@ func getSettingsOnce(ctx context.Context, sqlDB *sql.DB, userID string) (Setting
 		TriggerCredit:                 settings.TriggerCredit == 1,
 		TriggerPlanned:                settings.TriggerPlanned == 1,
 		TriggerNegativeBalance:        settings.TriggerNegativeBalance == 1,
+		TriggerBudget:                 settings.TriggerBudget == 1,
 		TriggerUserRegistration:       isAdmin && regEnabled && settings.TriggerUserRegistration == 1,
 		TriggerPasswordReset:          isAdmin && settings.TriggerPasswordReset == 1,
 		DebtDaysBefore:                settings.DebtDaysBefore,
@@ -270,6 +273,9 @@ func UpdateSettings(ctx context.Context, db *sql.DB, userID string, in UpdateSet
 	if in.TriggerNegativeBalance != nil {
 		settings.TriggerNegativeBalance = boolToInt(*in.TriggerNegativeBalance)
 	}
+	if in.TriggerBudget != nil {
+		settings.TriggerBudget = boolToInt(*in.TriggerBudget)
+	}
 	if in.TriggerUserRegistration != nil {
 		if !isAdmin {
 			return SettingsView{}, fmt.Errorf("trigger_user_registration is admin-only")
@@ -362,6 +368,7 @@ func UpdateSettings(ctx context.Context, db *sql.DB, userID string, in UpdateSet
 		TriggerCredit:                 settings.TriggerCredit,
 		TriggerPlanned:                settings.TriggerPlanned,
 		TriggerNegativeBalance:        settings.TriggerNegativeBalance,
+		TriggerBudget:                 settings.TriggerBudget,
 		TriggerUserRegistration:       settings.TriggerUserRegistration,
 		TriggerPasswordReset:          settings.TriggerPasswordReset,
 		DebtDaysBefore:                settings.DebtDaysBefore,
@@ -759,11 +766,11 @@ func previewData(triggerType, localeCode, timezone, currencyCode, channel, exter
 		"registered_at": timeutil.FormatDisplayDateTimeShortInTimezone(now.Format(timeutil.Layout), timezone),
 		"channel":       channelValue,
 	}
-	applyPreviewURLs(triggerType, data, externalURL, localeCode)
+	applyPreviewURLs(triggerType, data, externalURL, localeCode, currencyCode)
 	return data
 }
 
-func applyPreviewURLs(triggerType string, data FormatData, externalURL, localeCode string) {
+func applyPreviewURLs(triggerType string, data FormatData, externalURL, localeCode, currencyCode string) {
 	switch triggerType {
 	case TriggerDebtOverdue, TriggerDebtDueSoon:
 		data["debt_url"] = debtURLPlaceholderValue(externalURL, localeCode, previewDebtID)
@@ -771,6 +778,12 @@ func applyPreviewURLs(triggerType string, data FormatData, externalURL, localeCo
 		data["credit_url"] = creditURLPlaceholderValue(externalURL, localeCode, previewCreditID)
 	case TriggerPlannedOp:
 		data["transaction_url"] = transactionURLPlaceholderValue(externalURL, localeCode, previewTransactionID)
+	case TriggerBudgetThreshold:
+		data["name"] = choose(normalizeLocale(localeCode) == "ru", "Продукты", "Groceries")
+		data["spent"] = FormatAmountDisplay(240000, currencyCode)
+		data["planned"] = FormatAmountDisplay(300000, currencyCode)
+		data["percent"] = "80"
+		data["budget_url"] = budgetURLPlaceholderValue(externalURL, localeCode)
 	case TriggerTest:
 		data["settings_url"] = settingsURLPlaceholderValue(externalURL, localeCode)
 	case TriggerPasswordReset:

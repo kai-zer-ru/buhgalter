@@ -55,6 +55,42 @@ type Bank struct {
 	SortOrder int64   `json:"sort_order"`
 }
 
+type Budget struct {
+	ID             string  `json:"id"`
+	UserID         string  `json:"user_id"`
+	Name           string  `json:"name"`
+	Scope          string  `json:"scope"`
+	CategoryID     *string `json:"category_id"`
+	SubcategoryID  *string `json:"subcategory_id"`
+	Amount         int64   `json:"amount"`
+	Period         string  `json:"period"`
+	AccountID      *string `json:"account_id"`
+	Month          string  `json:"month"`
+	CopyForward    int64   `json:"copy_forward"`
+	Rollover       int64   `json:"rollover"`
+	AlertAtPercent int64   `json:"alert_at_percent"`
+	IsActive       int64   `json:"is_active"`
+	CreatedAt      string  `json:"created_at"`
+	UpdatedAt      string  `json:"updated_at"`
+}
+
+type BudgetAlertSent struct {
+	BudgetID         string `json:"budget_id"`
+	PeriodStart      string `json:"period_start"`
+	ThresholdPercent int64  `json:"threshold_percent"`
+	SentAt           string `json:"sent_at"`
+}
+
+type BudgetPeriod struct {
+	ID             string `json:"id"`
+	BudgetID       string `json:"budget_id"`
+	PeriodStart    string `json:"period_start"`
+	PlannedAmount  int64  `json:"planned_amount"`
+	RolloverAmount int64  `json:"rollover_amount"`
+	CreatedAt      string `json:"created_at"`
+	UpdatedAt      string `json:"updated_at"`
+}
+
 type Category struct {
 	ID        string `json:"id"`
 	UserID    string `json:"user_id"`
@@ -185,6 +221,7 @@ type NotificationSetting struct {
 	TriggerCredit                 int64   `json:"trigger_credit"`
 	TriggerPlanned                int64   `json:"trigger_planned"`
 	TriggerNegativeBalance        int64   `json:"trigger_negative_balance"`
+	TriggerBudget                 int64   `json:"trigger_budget"`
 	TriggerUserRegistration       int64   `json:"trigger_user_registration"`
 	TriggerPasswordReset          int64   `json:"trigger_password_reset"`
 	DebtDaysBefore                int64   `json:"debt_days_before"`

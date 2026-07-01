@@ -27,6 +27,7 @@
 | [data-model.md](data-model.md) | Схема БД, миграции, связи сущностей |
 | [sql-access.md](sql-access.md) | Где писать SQL: sqlc vs inline, исключения, миграция legacy |
 | [categories-and-icons.md](categories-and-icons.md) | Категории, подкатегории, иконки |
+| [budget.md](budget.md) | Бюджет: помесячные лимиты, копирование, план vs факт, API |
 | [transactions-display.md](transactions-display.md) | Отображение операций в UI и API |
 
 ---
@@ -46,6 +47,7 @@
 | [ui-table-columns.md](ui-table-columns.md) | Порядок колонок таблиц |
 | [ui-pagination.md](ui-pagination.md) | Постраничная навигация (`TransactionPagination`) |
 | [ui-stats.md](ui-stats.md) | Страница `/stats` |
+| [ui-budget.md](ui-budget.md) | Страница `/budget`, форма, копирование, виджет на главной (спойлер категорий) |
 | [ui-credits.md](ui-credits.md) | Страницы кредитов |
 | [ui-credit-cards.md](ui-credit-cards.md) | Кредитные карты (тип счёта) |
 

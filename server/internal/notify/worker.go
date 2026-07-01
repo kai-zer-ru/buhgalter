@@ -117,6 +117,9 @@ func (w *Worker) runForUser(ctx context.Context, userID string, nowUTC, nowLocal
 	if err := w.processCreditPayments(ctx, q, settings, userID, localeCode, timezone, currencyCode, nowUTC, nowLocal, balanceEnabled, lookup, externalURL); err != nil {
 		return err
 	}
+	if err := w.processBudgetThresholds(ctx, userID); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -420,6 +423,13 @@ func max(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func (w *Worker) processBudgetThresholds(ctx context.Context, userID string) error {
+	if BudgetThresholdChecker == nil {
+		return nil
+	}
+	return BudgetThresholdChecker(ctx, w.DB, userID)
 }
 
 func parseNotificationSendTime(value string) (int, int) {

@@ -136,6 +136,7 @@ export type NotificationSettings = {
 	trigger_credit: boolean;
 	trigger_planned: boolean;
 	trigger_negative_balance: boolean;
+	trigger_budget: boolean;
 	trigger_password_reset?: boolean;
 	trigger_user_registration?: boolean;
 	debt_days_before: number;
@@ -160,6 +161,7 @@ export type NotificationSettingsUpdate = {
 	trigger_credit?: boolean;
 	trigger_planned?: boolean;
 	trigger_negative_balance?: boolean;
+	trigger_budget?: boolean;
 	trigger_password_reset?: boolean;
 	trigger_user_registration?: boolean;
 	debt_days_before?: number;
@@ -1016,6 +1018,120 @@ export function updateRecurringOperation(
 
 export function deleteRecurringOperation(id: string) {
 	return request<void>(`/api/v1/recurring-operations/${id}`, { method: 'DELETE' });
+}
+
+export type BudgetScope = 'category' | 'subcategory' | 'all_expense';
+
+export type BudgetItem = {
+	id: string;
+	name: string;
+	scope: BudgetScope;
+	category_id?: string;
+	category_name?: string;
+	category_icon?: string;
+	subcategory_id?: string;
+	subcategory_name?: string;
+	account_id?: string;
+	account_name?: string;
+	month?: string;
+	copy_forward?: boolean;
+	amount: number;
+	amount_display: string;
+	period: string;
+	alert_at_percent: number;
+	is_active: boolean;
+	created_at: string;
+	updated_at: string;
+};
+
+export type BudgetSummaryItem = BudgetItem & {
+	planned: number;
+	planned_display: string;
+	spent: number;
+	spent_display: string;
+	remaining: number;
+	remaining_display: string;
+	percent: number;
+	status: 'ok' | 'warning' | 'exceeded';
+	children_planned?: number;
+	children_planned_display?: string;
+	children_spent?: number;
+	children_spent_display?: string;
+	period_start: string;
+};
+
+export type BudgetSummaryResponse = {
+	items: BudgetSummaryItem[];
+	month: string;
+	can_copy_from_previous: boolean;
+};
+
+export function listBudgets(month?: string) {
+	const q = month ? `?month=${encodeURIComponent(month)}` : '';
+	return request<BudgetItem[]>(`/api/v1/budgets${q}`);
+}
+
+export function getBudgetSummary(month?: string) {
+	const q = month ? `?month=${encodeURIComponent(month)}` : '';
+	return request<BudgetSummaryResponse>(`/api/v1/budgets/summary${q}`);
+}
+
+export function createBudget(
+	payload: {
+		name: string;
+		scope: BudgetScope;
+		category_id?: string;
+		subcategory_id?: string;
+		account_id?: string;
+		amount: string;
+		alert_at_percent?: number;
+		is_active?: boolean;
+		copy_forward?: boolean;
+	},
+	month?: string
+) {
+	const q = month ? `?month=${encodeURIComponent(month)}` : '';
+	return request<BudgetItem>(`/api/v1/budgets${q}`, {
+		method: 'POST',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function updateBudget(
+	id: string,
+	payload: {
+		name: string;
+		scope: BudgetScope;
+		category_id?: string;
+		subcategory_id?: string;
+		account_id?: string;
+		amount: string;
+		alert_at_percent?: number;
+		is_active?: boolean;
+		copy_forward?: boolean;
+	},
+	month?: string
+) {
+	const q = month ? `?month=${encodeURIComponent(month)}` : '';
+	return request<BudgetItem>(`/api/v1/budgets/${id}${q}`, {
+		method: 'PATCH',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function deleteBudget(id: string) {
+	return request<void>(`/api/v1/budgets/${id}`, { method: 'DELETE' });
+}
+
+export function copyBudgetToNextMonth(id: string) {
+	return request<BudgetItem>(`/api/v1/budgets/${id}/copy-next`, { method: 'POST' });
+}
+
+export function copyBudgetsFromPreviousMonth(month: string) {
+	return request<{ items: BudgetItem[] }>(
+		`/api/v1/budgets/copy-from-previous?month=${encodeURIComponent(month)}`,
+		{ method: 'POST' }
+	);
 }
 
 export function createTransfer(payload: {
