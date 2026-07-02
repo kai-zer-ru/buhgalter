@@ -6,7 +6,7 @@ API: `GET` / `PUT` `/api/v1/user/notifications`, preview и reset шаблоно
 
 ---
 
-## Вкладка «Уведомления» (`/settings?tab=notifications`)
+## Вкладка «Уведомления» (`/settings/notifications`)
 
 Доступна после настройки ключа шифрования уведомлений (админка). Блоки сохраняются **отдельными кнопками «Сохранить»**; после PUT состояние берётся из **ответа API** (`applyNotificationSettings`), не из повторного GET.
 
@@ -103,7 +103,7 @@ Placeholder `{amount}` — недостающая сумма. Формула: `m
 | `debt_overdue`, `debt_due_soon` | `{debt_url}` | `/debts` |
 | `credit_payment` | `{credit_url}` | `/credits/{credit_id}` |
 | `planned_operation` | `{transaction_url}` | `/transactions` |
-| `test` | `{settings_url}` | `/settings?tab=notifications` |
+| `test` | `{settings_url}` | `/settings/notifications` |
 | `password_reset` | `{reset_url}` | `/admin/users?reset={user_id}` |
 | `user_registration` | `{moderation_url}` | `/admin/users?moderate={user_id}` |
 | `budget_threshold` | `{budget_url}` | `/budget` |

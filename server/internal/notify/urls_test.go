@@ -15,7 +15,7 @@ func TestExternalURLPlaceholderValue(t *testing.T) {
 	if got := transactionURLPlaceholderValue(base, "en", "tx-1"); got != base+"/transactions" {
 		t.Fatalf("transaction url: %q", got)
 	}
-	if got := settingsURLPlaceholderValue(base, "ru"); got != base+"/settings?tab=notifications" {
+	if got := settingsURLPlaceholderValue(base, "ru"); got != base+"/settings/notifications" {
 		t.Fatalf("settings url: %q", got)
 	}
 	if got := debtURLPlaceholderValue("", "ru", "debt-1"); got != externalURLMissingHint("ru") {

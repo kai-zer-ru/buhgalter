@@ -2928,7 +2928,7 @@ components:
             Для balance_shortfall — только {amount} (недостающая сумма); шаблон добавляется к исходящим уведомлениям при включённом trigger_negative_balance.
             URL-плейсхолдеры формируются из system_settings.external_url; при пустом external_url — текст-подсказка настроить внешний URL в админке:
             debt_url → /debts; credit_url → /credits/{credit_id}; transaction_url → /transactions;
-            settings_url → /settings?tab=notifications; reset_url → /admin/users?reset={user_id};
+            settings_url → /settings/notifications; reset_url → /admin/users?reset={user_id};
             moderation_url → /admin/users?moderate={user_id}.
         is_custom:
           type: boolean

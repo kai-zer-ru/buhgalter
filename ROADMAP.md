@@ -130,6 +130,7 @@
 - [x] [Поддержание баланса](roadmap/maintaining-balance.md)
 - [x] переверстать /stats, блоки горизонтальными сделать
 - [x] основной контейнер на страницах сделать шире на десктопе
+- [x] [Release notes](docs/release-notes-v1.3.0.md) · [budget.md](docs/budget.md) · [ui-credit-cards.md](docs/ui-credit-cards.md) · [accounts-archive-delete.md](docs/accounts-archive-delete.md) · [balance-maintenance.md](docs/balance-maintenance.md) · [api/user-status.md](docs/api/user-status.md) · [sql-access.md](docs/sql-access.md)
 
 ## Общие планы
 
