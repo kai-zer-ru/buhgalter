@@ -74,7 +74,7 @@ Badge-метки и спойлеры графика на `/credits` — [ui-cred
 | «Настройки ▼» | Профиль, Пароль, API-токены, Уведомления, Категории, Импорт/экспорт, Периодические операции |
 | «Админка ▼» | Только для `is_admin`: Система, Пользователи, Бэкапы, Диагностика |
 | Десктоп | `NavDropdown` + `.popover-panel` |
-| Мобилка | Гамбургер; внутри — плоские ссылки + accordion-группы для настроек и админки |
+| Мобилка | Гамбургер; панель `.nav-mobile-panel` под шапкой (не на всю высоту экрана); **drill-down** для «Настройки» и «Админка» — отдельный экран подменю с кнопкой «Назад», без длинного accordion |
 | Активный пункт | `.nav-link-active` по pathname; для групп — любой путь внутри `/settings/*` или `/admin/*` |
 | Закрытие | `afterNavigate` сбрасывает меню; backdrop по тапу вне меню |
 
@@ -95,6 +95,10 @@ Layout настроек: `web/src/routes/settings/+layout.svelte` — крошк
 Layout админки: `web/src/routes/admin/+layout.svelte` — крошки, `h1`, `AdminSupportLinks` внизу на всех `/admin/*`.
 
 Touch-targets и карточки таблиц — [ui-stable-layout.md](ui-stable-layout.md), `web/src/routes/layout.css` (`@media (pointer: coarse)`).
+
+### Ширина контента (v1.3)
+
+Шапка и `<main>` — `max-w-5xl` (`80rem`, `--container-5xl` в `layout.css`); на узких экранах — полная ширина с отступами `px-4` / `sm:px-6`.
 
 Меню «⋯» в строках и спойлер фильтров — [ui-row-actions.md](ui-row-actions.md).
 
@@ -118,7 +122,7 @@ Touch-targets и карточки таблиц — [ui-stable-layout.md](ui-stab
 |---------|------------|
 | `/settings/categories` | Расходы / Доходы |
 | `/settings/import` | Импорт / Экспорт |
-| `/accounts` | Активные / Архив |
+| `/accounts` | Активные / Архивные / Удалённые |
 | `/debts` | Активные / Закрытые |
 | `/debtors/[id]` (секция долгов) | Активные / Закрытые |
 | `/credits` | Активные / Завершённые |

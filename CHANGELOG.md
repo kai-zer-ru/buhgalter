@@ -3,9 +3,76 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 версии — [SemVer](https://semver.org/lang/ru/).
 
-Подробные release notes для пользователей: [docs/release-notes-v1.2.5.md](docs/release-notes-v1.2.5.md).
+Подробные release notes для пользователей: [docs/release-notes-v1.3.0.md](docs/release-notes-v1.3.0.md).
+
+## [v1.3.0] — 2026-07-02
+
+> **ОБЯЗАТЕЛЬНО СДЕЛАЙТЕ БЕКАП!** Перед обновлением сохраните копию базы (`data/buhgalter.db`) и каталога `backups/`.
+
+### Добавлено
+
+**Пользователи и админка**
+
+- **Статус пользователя:** `active` / `pending` / `banned`; саморегистрация → `pending` без сессии; `PUT /api/v1/admin/users/{id}/status`; меню «⋯» в `/admin/users`; плашка и попап `?moderate=`; уведомление админам `user_registration` ([api/user-status.md](docs/api/user-status.md), миграция `029_user_status.sql`)
+
+**Счета**
+
+- **Кредитная карта** (`type=credit_card`): лимит, счёт погашения, блок `credit_cards_summary` на главной, «Оплатить» / «Списать комиссию», импорт Cubux ([ui-credit-cards.md](docs/ui-credit-cards.md), `033_credit_card_accounts.sql`)
+- **Архивация и мягкое удаление:** `archived` / `deleted`, автоперевод остатка для `cash`/`bank`, правила для `credit_card`, вкладки «Архивные» / «Удалённые» ([accounts-archive-delete.md](docs/accounts-archive-delete.md), `040_account_deleted_status.sql`)
+- **Автопополнение** (`bank`): порог, цель, счёт списания; hook после операций; уведомление `auto_topup_disabled` ([balance-maintenance.md](docs/balance-maintenance.md), `041_account_auto_topup.sql`)
+
+**Кредиты**
+
+- **Учёт суммы займа в балансе** при создании потребительского кредита: `principal_affects_balance`, операция дохода на `debit_account_id`; блокировка при платеже в графике с датой в прошлом (`031_credit_principal_income.sql`)
+
+**Бюджет**
+
+- Помесячные лимиты (`scope`: category / subcategory / all_expense), `copy_forward`, CRUD и `GET /budgets/summary`; страница `/budget`; виджет на главной; колонки в `/stats`; триггер `budget_threshold` ([budget.md](docs/budget.md), [ui-budget.md](docs/ui-budget.md), миграции `034`–`039`, `036`, `037`)
+
+**Уведомления**
+
+- **Недостаток средств:** `trigger_negative_balance`, шаблон `balance_shortfall`, суффикс к `credit_payment` / `planned_operation` / `debt_*` ([notifications.md](docs/notifications.md), `032_notification_balance_shortfall.sql`)
+- **Ссылки в шаблонах:** `{debt_url}`, `{credit_url}`, `{transaction_url}`, `{budget_url}`, `{moderation_url}` и др. — [`urls.go`](server/internal/notify/urls.go)
+
+**UI/UX**
+
+- **`MoneyDisplay`** — единый компонент read-only сумм; `formatMoneyForDisplay` для i18n ([transactions-display.md](docs/transactions-display.md))
+
+### Изменено
+
+**UI/UX**
+
+- Верхнее меню: пункт **«Бюджет»**; на мобильных — drill-down подменю «Настройки» / «Админка» вместо длинного accordion ([ui-navigation.md](docs/ui-navigation.md))
+- Главная: счета под спойлером на `< sm`; индикатор автопополнения у `bank`-счетов
+- `/stats`: блоки «По категориям» и «По периодам» — full-width строками (категории выше периодов); сводка без колонки «Разница» ([ui-stats.md](docs/ui-stats.md))
+- Ширина контента на десктопе: `max-w-5xl` (`80rem`, `--container-5xl` в `layout.css`)
+- Категория дохода **«Кредиты»** при `principal_affects_balance` — суффикс «(Доход)» в фильтрах и статистике
+
+**Backend**
+
+- Доменный SQL — через **sqlc** (`server/queries/`); CI `make inline-sql-check` ([sql-access.md](docs/sql-access.md))
+
+### Исправлено
+
+**Уведомления**
+
+- `{settings_url}` в шаблоне `test` — канонический путь `/settings/notifications` (не устаревший `?tab=`)
+
+**Долги**
+
+- Удаление операции «Взял/Дал в долг»: единственная начальная операция удаляет долг; погашение — пересчёт остатка; начальную операцию нельзя удалить при наличии погашений (`debt/transaction_delete.go`)
+
+### Техническое
+
+- Миграции `029`–`041`
+- Unit: `money-display.test.ts`, `credit-card.test.ts`, `account_delete_test.go`, notify/balance tests
+- e2e: `budget.spec.ts`, `budget-home.spec.ts`, `budget-stats.spec.ts`, `credit-card.spec.ts`, `credits-principal-income.spec.ts`, `accounts-management.spec.ts`, `dashboard-accounts.spec.ts`, `admin-advanced.spec.ts` (модерация)
+- [docs/release-notes-v1.3.0.md](docs/release-notes-v1.3.0.md)
+- Версия `1.3.0`
 
 ## [v1.2.5] — 2026-07-01
+
+> **ОБЯЗАТЕЛЬНО СДЕЛАЙТЕ БЕКАП!** Перед обновлением сохраните копию базы (`data/buhgalter.db`) и каталога `backups/`.
 
 ### Добавлено
 

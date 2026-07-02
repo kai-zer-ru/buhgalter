@@ -61,7 +61,7 @@ func transactionPath(transactionID string) string {
 }
 
 func settingsNotificationsPath() string {
-	return "/settings?tab=notifications"
+	return "/settings/notifications"
 }
 
 func budgetPath() string {
