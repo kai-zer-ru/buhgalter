@@ -19,6 +19,7 @@
 	import { maxCreditCardPaymentKopecks, resolvePaymentAccountId } from '$lib/credit-card';
 	import { fromDatetimeLocalValue, nowDatetimeLocal, toDatetimeLocalValue } from '$lib/dates';
 	import { formatMoneyForInput, fromCents, toAPIAmount, toCents } from '$lib/money';
+	import { formatMoneyForDisplay } from '$lib/money-display';
 	import { transferAccountIds, transferGroupLegs, transferOutLeg } from '$lib/transaction-display';
 	import { pickOtherAccountId, transferAccountOptions } from '$lib/transfer-accounts';
 	import { toast } from '$lib/toast';
@@ -255,7 +256,7 @@
 			{#if payExceedsMax && maxPayKopecks != null}
 				<p class="mt-1 text-sm" style:color="var(--danger)">
 					{$_('accounts.creditCard.payExceedsMax', {
-						values: { max: fromCents(maxPayKopecks) }
+						values: { max: formatMoneyForDisplay({ cents: maxPayKopecks }) }
 					})}
 				</p>
 			{/if}

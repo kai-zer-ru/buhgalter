@@ -1,6 +1,6 @@
 import type { BudgetSummaryItem } from '$lib/api/client';
 import { tr } from '$lib/i18n';
-import { fromCents } from '$lib/money';
+import { formatMoneyDisplay, fromCents } from '$lib/money';
 
 type BudgetStatusFields = Pick<
 	BudgetSummaryItem,
@@ -23,7 +23,7 @@ export function budgetStatusLine(item: BudgetStatusFields): string {
 		});
 	}
 	return tr('budget.remaining_line', {
-		values: { amount: item.remaining_display, percent: String(item.percent) }
+		values: { amount: formatMoneyDisplay(item.remaining_display), percent: String(item.percent) }
 	});
 }
 
@@ -34,5 +34,5 @@ export function budgetRemainingCell(item: BudgetStatusFields): string {
 			values: { amount: overshootAmount(item), percent: String(item.percent) }
 		});
 	}
-	return item.remaining_display;
+	return formatMoneyDisplay(item.remaining_display);
 }

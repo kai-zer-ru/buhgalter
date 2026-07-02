@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { _ } from 'svelte-i18n';
-	import { formatBalance } from '$lib/finance';
-	import { fromCents } from '$lib/money';
+	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
 	import { user } from '$lib/stores/auth';
 
 	type Props = {
@@ -18,13 +17,13 @@
 	<div>
 		<p class="text-sm" style:color="var(--text-muted)">{$_('debts.summary.iOwe')}</p>
 		<p class="text-xl font-semibold tabular-nums" style:color="var(--danger)">
-			{formatBalance(fromCents(iOwe), currency)}
+			<MoneyDisplay cents={iOwe} {currency} class="" />
 		</p>
 	</div>
 	<div>
 		<p class="text-sm" style:color="var(--text-muted)">{$_('debts.summary.owedToMe')}</p>
 		<p class="text-xl font-semibold tabular-nums" style:color="var(--primary)">
-			{formatBalance(fromCents(owedToMe), currency)}
+			<MoneyDisplay cents={owedToMe} {currency} class="" />
 		</p>
 	</div>
 </div>

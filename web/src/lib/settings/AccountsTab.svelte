@@ -7,7 +7,7 @@
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
 	import PageTabs from '$lib/components/PageTabs.svelte';
 	import SectionHeader from '$lib/components/SectionHeader.svelte';
-	import { formatBalance } from '$lib/finance';
+	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
 	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
 
@@ -118,7 +118,11 @@
 						</button>
 					{/if}
 					<div class="shrink-0 text-right font-semibold tabular-nums">
-						{formatBalance(acc.balance_display, $user?.currency ?? 'RUB')}
+						<MoneyDisplay
+							value={acc.balance_display}
+							currency={$user?.currency ?? 'RUB'}
+							class=""
+						/>
 					</div>
 				</div>
 			{/each}

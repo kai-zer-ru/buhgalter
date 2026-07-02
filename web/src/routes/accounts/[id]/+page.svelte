@@ -38,7 +38,7 @@
 	import { isCreditCard } from '$lib/credit-card';
 	import { confirm } from '$lib/confirm';
 	import { toast } from '$lib/toast';
-	import { formatBalance } from '$lib/finance';
+	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
 	import { formatMoneyForInput, toAPIAmount } from '$lib/money';
 	import { fromDateLocalEnd, fromDateLocalStart } from '$lib/dates';
 	import { dedupeTransferLegs } from '$lib/transaction-display';
@@ -536,24 +536,30 @@
 									{/if}
 								</div>
 								<p class="mt-1 text-3xl font-semibold tabular-nums">
-									{formatBalance(
-										accBalance?.balance_display ?? acc.balance_display,
-										$user?.currency ?? 'RUB'
-									)}
+									<MoneyDisplay
+										value={accBalance?.balance_display ?? acc.balance_display}
+										currency={$user?.currency ?? 'RUB'}
+										class=""
+									/>
 								</p>
 								{#if acc.credit_limit_display}
 									<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
 										{$_('accounts.field.creditLimit')}:
-										{formatBalance(acc.credit_limit_display, $user?.currency ?? 'RUB')}
+										<MoneyDisplay
+											value={acc.credit_limit_display}
+											currency={$user?.currency ?? 'RUB'}
+											class=""
+										/>
 									</p>
 								{/if}
 								{#if accBalance ? accBalance.forecast_balance !== accBalance.balance : false}
 									<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
 										{$_('dashboard.withPlans')}:
-										{formatBalance(
-											accBalance?.forecast_display ?? acc.balance_display,
-											$user?.currency ?? 'RUB'
-										)}
+										<MoneyDisplay
+											value={accBalance?.forecast_display ?? acc.balance_display}
+											currency={$user?.currency ?? 'RUB'}
+											class=""
+										/>
 									</p>
 								{/if}
 							</div>
