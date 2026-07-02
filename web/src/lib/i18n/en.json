@@ -762,6 +762,7 @@
 	"settings.timezone.zones": "IANA zones",
 	"transactions.filters.toggle": "Filters",
 	"nav.menu": "Menu",
+	"nav.back": "Back",
 	"settings.password.changed": "Password changed",
 	"settings.password.current": "Current password",
 	"settings.password.new": "New password",
