@@ -436,93 +436,6 @@
 				</div>
 			</div>
 
-			<div class="grid gap-4 lg:grid-cols-2">
-				<div class="card md:overflow-x-auto">
-					<h2 class="mb-2 text-lg font-medium">{$_('stats.section.period')}</h2>
-					{#if byPeriod.length === 0}
-						<EmptyStateCard message={$_('transactions.empty')} />
-					{:else}
-						<div class="mb-3 space-y-2 md:hidden">
-							{#each byPeriod as row (row.period)}
-								<div class="space-y-1">
-									<div class="text-xs" style:color="var(--text-muted)">
-										{periodLabel(row.period)}
-									</div>
-									<div class="flex gap-1">
-										<div
-											class="h-2 rounded bg-emerald-500"
-											style:width={`${Math.max(2, (Math.abs(row.income) / periodMax) * 100)}%`}
-											title={`${$_('stats.summary.income')}: ${formatMoneyForDisplay({ cents: row.income })}`}
-										></div>
-										<div
-											class="h-2 rounded bg-rose-500"
-											style:width={`${Math.max(2, (Math.abs(row.expense) / periodMax) * 100)}%`}
-											title={`${$_('stats.summary.expense')}: ${formatMoneyForDisplay({ cents: row.expense })}`}
-										></div>
-									</div>
-								</div>
-							{/each}
-						</div>
-						<table class="hidden w-full text-left text-sm md:table">
-							<thead>
-								<tr style:color="var(--text-muted)">
-									<th class="p-2">{$_('stats.period')}</th>
-									<th class="p-2">{$_('stats.summary.income')}</th>
-									<th class="p-2">{$_('stats.summary.expense')}</th>
-								</tr>
-							</thead>
-							<tbody>
-								{#each byPeriod as row (row.period)}
-									<tr class="border-t" style:border-color="var(--border)">
-										<td class="p-2">{periodLabel(row.period)}</td>
-										<td class="p-2"><MoneyDisplay cents={row.income} class="" /></td>
-										<td class="p-2"><MoneyDisplay cents={row.expense} class="" /></td>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					{/if}
-				</div>
-
-				<div class="card md:overflow-x-auto">
-					<h2 class="mb-2 text-lg font-medium">{$_('stats.section.categories')}</h2>
-					{#if byCategory.length === 0}
-						<EmptyStateCard message={$_('transactions.empty')} />
-					{:else}
-						<div class="space-y-6">
-							{#if showCategoryIncome}
-								<section>
-									{#if type === ''}
-										<h3 class="mb-2 text-sm font-medium" style:color="var(--text-muted)">
-											{$_('stats.summary.income')}
-										</h3>
-									{/if}
-									{#if byCategoryIncome.length === 0}
-										<EmptyStateCard message={$_('transactions.empty')} />
-									{:else}
-										{@render categorySection(byCategoryIncome)}
-									{/if}
-								</section>
-							{/if}
-							{#if showCategoryExpense}
-								<section>
-									{#if type === ''}
-										<h3 class="mb-2 text-sm font-medium" style:color="var(--text-muted)">
-											{$_('stats.summary.expense')}
-										</h3>
-									{/if}
-									{#if byCategoryExpense.length === 0}
-										<EmptyStateCard message={$_('transactions.empty')} />
-									{:else}
-										{@render categorySection(byCategoryExpense, true)}
-									{/if}
-								</section>
-							{/if}
-						</div>
-					{/if}
-				</div>
-			</div>
-
 			{#if search.trim()}
 				<div class="card md:overflow-x-auto">
 					<h2 class="mb-2 text-lg font-medium">{$_('stats.section.search')}</h2>
@@ -536,6 +449,91 @@
 					/>
 				</div>
 			{/if}
+
+			<div class="card md:overflow-x-auto">
+				<h2 class="mb-2 text-lg font-medium">{$_('stats.section.categories')}</h2>
+				{#if byCategory.length === 0}
+					<EmptyStateCard message={$_('transactions.empty')} />
+				{:else}
+					<div class="space-y-6">
+						{#if showCategoryIncome}
+							<section>
+								{#if type === ''}
+									<h3 class="mb-2 text-sm font-medium" style:color="var(--text-muted)">
+										{$_('stats.summary.income')}
+									</h3>
+								{/if}
+								{#if byCategoryIncome.length === 0}
+									<EmptyStateCard message={$_('transactions.empty')} />
+								{:else}
+									{@render categorySection(byCategoryIncome)}
+								{/if}
+							</section>
+						{/if}
+						{#if showCategoryExpense}
+							<section>
+								{#if type === ''}
+									<h3 class="mb-2 text-sm font-medium" style:color="var(--text-muted)">
+										{$_('stats.summary.expense')}
+									</h3>
+								{/if}
+								{#if byCategoryExpense.length === 0}
+									<EmptyStateCard message={$_('transactions.empty')} />
+								{:else}
+									{@render categorySection(byCategoryExpense, true)}
+								{/if}
+							</section>
+						{/if}
+					</div>
+				{/if}
+			</div>
+
+			<div class="card md:overflow-x-auto">
+				<h2 class="mb-2 text-lg font-medium">{$_('stats.section.period')}</h2>
+				{#if byPeriod.length === 0}
+					<EmptyStateCard message={$_('transactions.empty')} />
+				{:else}
+					<div class="mb-3 space-y-2 md:hidden">
+						{#each byPeriod as row (row.period)}
+							<div class="space-y-1">
+								<div class="text-xs" style:color="var(--text-muted)">
+									{periodLabel(row.period)}
+								</div>
+								<div class="flex gap-1">
+									<div
+										class="h-2 rounded bg-emerald-500"
+										style:width={`${Math.max(2, (Math.abs(row.income) / periodMax) * 100)}%`}
+										title={`${$_('stats.summary.income')}: ${formatMoneyForDisplay({ cents: row.income })}`}
+									></div>
+									<div
+										class="h-2 rounded bg-rose-500"
+										style:width={`${Math.max(2, (Math.abs(row.expense) / periodMax) * 100)}%`}
+										title={`${$_('stats.summary.expense')}: ${formatMoneyForDisplay({ cents: row.expense })}`}
+									></div>
+								</div>
+							</div>
+						{/each}
+					</div>
+					<table class="hidden w-full text-left text-sm md:table">
+						<thead>
+							<tr style:color="var(--text-muted)">
+								<th class="p-2">{$_('stats.period')}</th>
+								<th class="p-2">{$_('stats.summary.income')}</th>
+								<th class="p-2">{$_('stats.summary.expense')}</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each byPeriod as row (row.period)}
+								<tr class="border-t" style:border-color="var(--border)">
+									<td class="p-2">{periodLabel(row.period)}</td>
+									<td class="p-2"><MoneyDisplay cents={row.income} class="" /></td>
+									<td class="p-2"><MoneyDisplay cents={row.expense} class="" /></td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				{/if}
+			</div>
 		</div>
 	{/if}
 </div>
