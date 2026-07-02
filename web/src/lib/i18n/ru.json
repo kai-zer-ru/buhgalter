@@ -255,6 +255,7 @@
 	"dashboard.total": "Общий баланс",
 	"dashboard.withPlans": "С учётом плановых",
 	"dashboard.recent": "Последние операции",
+	"dashboard.accountsSection": "Счета",
 	"dashboard.group.past": "Прошлые операции",
 	"dashboard.group.planned": "Плановые",
 	"dashboard.accountsEmpty": "Создайте первый счёт, чтобы учитывать баланс и операции",

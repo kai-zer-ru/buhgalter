@@ -261,6 +261,27 @@ html.dark {
 		display: none;
 	}
 
+	.dashboard-accounts-panel > summary {
+		@apply cursor-pointer list-none text-sm font-medium;
+	}
+
+	.dashboard-accounts-summary {
+		@apply flex items-center justify-between gap-2;
+	}
+
+	.dashboard-accounts-chevron {
+		@apply h-5 w-5 shrink-0 transition-transform duration-150;
+		color: var(--text-muted);
+	}
+
+	.dashboard-accounts-panel[open] > .dashboard-accounts-summary .dashboard-accounts-chevron {
+		transform: rotate(180deg);
+	}
+
+	.dashboard-accounts-panel > summary::-webkit-details-marker {
+		display: none;
+	}
+
 	.page-tabs-scroll {
 		@apply -mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0;
 		scrollbar-width: none;
@@ -317,6 +338,12 @@ html.dark {
 		.breadcrumb-current,
 		.input {
 			min-height: 2.75rem;
+		}
+	}
+
+	@media (min-width: 640px) {
+		.dashboard-accounts-panel > summary {
+			display: none;
 		}
 	}
 
