@@ -1,13 +1,35 @@
 import { test, expect } from '@playwright/test';
 import { waitAppReady } from './helpers/auth';
 
+test('mobile menu drill-down opens settings submenu', async ({ page }) => {
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.goto('/');
+	await waitAppReady(page);
+
+	await page.getByRole('button', { name: 'Меню' }).click();
+	await expect(page.locator('.nav-mobile-panel')).toBeVisible();
+	await page.locator('.nav-mobile-panel').getByRole('menuitem', { name: 'Настройки' }).click();
+	await expect(
+		page.locator('.nav-mobile-panel').getByRole('menuitem', { name: 'Счета' })
+	).toBeHidden();
+	await expect(
+		page.locator('.nav-mobile-panel').getByRole('menuitem', { name: 'Пароль' })
+	).toBeVisible();
+
+	await page.locator('.nav-mobile-panel').getByRole('button', { name: 'Назад' }).click();
+	await expect(
+		page.locator('.nav-mobile-panel').getByRole('menuitem', { name: 'Счета' })
+	).toBeVisible();
+});
+
 test('mobile menu navigates to stats', async ({ page }) => {
 	await page.setViewportSize({ width: 390, height: 844 });
 	await page.goto('/');
 	await waitAppReady(page);
 
 	await page.getByRole('button', { name: 'Меню' }).click();
-	await page.locator('.nav-mobile-panel').getByRole('link', { name: 'Статистика' }).click();
+	await expect(page.locator('.nav-mobile-panel')).toBeVisible();
+	await page.locator('.nav-mobile-panel').getByRole('menuitem', { name: 'Статистика' }).click();
 	await waitAppReady(page);
 
 	await expect(page).toHaveURL(/\/stats/);

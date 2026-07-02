@@ -27,15 +27,33 @@
 	let ready = $state(false);
 	let bootError = $state<string | null>(null);
 	let navOpen = $state(false);
+	let mobileNavView = $state<'root' | 'settings' | 'admin'>('root');
 	let pendingUpdate = $state<PendingVersionUpdate | null>(null);
+	let headerEl = $state<HTMLElement | undefined>();
 
 	afterNavigate(() => {
 		navOpen = false;
+		mobileNavView = 'root';
 	});
 
 	function closeNav() {
 		navOpen = false;
+		mobileNavView = 'root';
 	}
+
+	$effect(() => {
+		const el = headerEl;
+		if (!el || typeof ResizeObserver === 'undefined') return;
+
+		const update = () => {
+			el.style.setProperty('--header-height', `${el.getBoundingClientRect().height}px`);
+		};
+		update();
+
+		const observer = new ResizeObserver(update);
+		observer.observe(el);
+		return () => observer.disconnect();
+	});
 
 	const path = $derived($page.url.pathname);
 	const isSetup = $derived(path === '/setup');
@@ -170,6 +188,10 @@
 		return item.isActive(path, $page.url.searchParams);
 	}
 
+	function isDropdownItemActive(item: NavDropdownItem) {
+		return item.isActive ? item.isActive(path) : path === item.path;
+	}
+
 	async function goReady(route: '/' | '/login' | '/setup') {
 		ready = true;
 		await goto(resolve(route));
@@ -281,7 +303,8 @@
 			></button>
 		{/if}
 		<header
-			class="sticky top-0 z-50 border-b px-4 py-3 backdrop-blur-sm sm:px-6 sm:py-4"
+			bind:this={headerEl}
+			class="app-header sticky top-0 z-50 border-b px-4 py-3 backdrop-blur-sm sm:px-6 sm:py-4"
 			style:border-color="var(--border)"
 			style:background-color="color-mix(in srgb, var(--bg-elevated) 85%, transparent)"
 		>
@@ -295,7 +318,7 @@
 				</a>
 				{#if $user}
 					<div class="flex shrink-0 items-center gap-1">
-						<div class="relative sm:hidden">
+						<div class="sm:hidden">
 							<button
 								type="button"
 								class="btn-icon btn-ghost btn-nav"
@@ -315,36 +338,6 @@
 									<path d="M4 7h16M4 12h16M4 17h16" />
 								</svg>
 							</button>
-							{#if navOpen}
-								<div
-									class="popover-panel nav-mobile-panel absolute right-0 z-[60] mt-2 max-h-[min(70dvh,24rem)] min-w-[12rem] overflow-y-auto p-2"
-								>
-									{#each flatNavItems as item (item.labelKey)}
-										<a
-											href={item.href}
-											class={navLinkClass(isNavItemActive(item), 'nav-mobile-link')}
-											aria-current={isNavItemActive(item) ? 'page' : undefined}
-											onclick={closeNav}>{$_(item.labelKey)}</a
-										>
-									{/each}
-									<NavDropdown
-										labelKey="nav.settings"
-										items={settingsNavItems}
-										isGroupActive={isSettingsGroupActive}
-										mobile
-										onNavigate={closeNav}
-									/>
-									{#if $user?.is_admin}
-										<NavDropdown
-											labelKey="nav.admin"
-											items={adminNavItems}
-											isGroupActive={isAdminGroupActive}
-											mobile
-											onNavigate={closeNav}
-										/>
-									{/if}
-								</div>
-							{/if}
 						</div>
 						<nav class="hidden items-center gap-2 sm:flex">
 							{#each flatNavItems as item (item.labelKey)}
@@ -378,6 +371,89 @@
 					</div>
 				{/if}
 			</div>
+			{#if navOpen}
+				<div class="popover-panel nav-mobile-panel p-2 sm:hidden" role="menu">
+					{#if mobileNavView === 'root'}
+						{#each flatNavItems as item (item.labelKey)}
+							<a
+								href={item.href}
+								class={navLinkClass(isNavItemActive(item), 'nav-mobile-link')}
+								aria-current={isNavItemActive(item) ? 'page' : undefined}
+								role="menuitem"
+								onclick={closeNav}>{$_(item.labelKey)}</a
+							>
+						{/each}
+						<button
+							type="button"
+							class={navLinkClass(isSettingsGroupActive(path), 'nav-mobile-link nav-mobile-drill')}
+							role="menuitem"
+							onclick={() => (mobileNavView = 'settings')}
+						>
+							<span>{$_('nav.settings')}</span>
+							<svg
+								aria-hidden="true"
+								class="nav-mobile-chevron"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+							>
+								<path d="m9 6 6 6-6 6" />
+							</svg>
+						</button>
+						{#if $user?.is_admin}
+							<button
+								type="button"
+								class={navLinkClass(isAdminGroupActive(path), 'nav-mobile-link nav-mobile-drill')}
+								role="menuitem"
+								onclick={() => (mobileNavView = 'admin')}
+							>
+								<span>{$_('nav.admin')}</span>
+								<svg
+									aria-hidden="true"
+									class="nav-mobile-chevron"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+								>
+									<path d="m9 6 6 6-6 6" />
+								</svg>
+							</button>
+						{/if}
+					{:else}
+						<button
+							type="button"
+							class="nav-mobile-link nav-mobile-back"
+							onclick={() => (mobileNavView = 'root')}
+						>
+							<svg
+								aria-hidden="true"
+								class="nav-mobile-chevron"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+							>
+								<path d="m15 6-6 6 6 6" />
+							</svg>
+							<span>{$_('nav.back')}</span>
+						</button>
+						<p class="nav-mobile-submenu-title">
+							{mobileNavView === 'settings' ? $_('nav.settings') : $_('nav.admin')}
+						</p>
+						{#each mobileNavView === 'settings' ? settingsNavItems : adminNavItems as item (item.path)}
+							<a
+								href={resolve(item.path)}
+								class={navLinkClass(isDropdownItemActive(item), 'nav-mobile-link')}
+								aria-current={isDropdownItemActive(item) ? 'page' : undefined}
+								role="menuitem"
+								onclick={closeNav}>{$_(item.labelKey)}</a
+							>
+						{/each}
+					{/if}
+				</div>
+			{/if}
 		</header>
 		<main class="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
 			<AdminPasswordResetBanner />

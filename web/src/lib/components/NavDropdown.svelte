@@ -16,15 +16,11 @@
 	let {
 		labelKey,
 		items,
-		isGroupActive,
-		mobile = false,
-		onNavigate
+		isGroupActive
 	}: {
 		labelKey: string;
 		items: NavDropdownItem[];
 		isGroupActive: (pathname: string) => boolean;
-		mobile?: boolean;
-		onNavigate?: () => void;
 	} = $props();
 
 	let open = $state(false);
@@ -94,7 +90,6 @@
 
 	function handleItemClick() {
 		close();
-		onNavigate?.();
 	}
 
 	function onTriggerKeydown(event: KeyboardEvent) {
@@ -109,91 +104,50 @@
 	}
 </script>
 
-{#if mobile}
-	<div class="nav-mobile-group">
-		<button
-			type="button"
-			class="nav-mobile-link flex w-full items-center justify-between gap-2 {groupActive
-				? 'nav-link-active'
-				: ''}"
-			aria-expanded={open}
-			onclick={toggle}
+<div class="relative">
+	<button
+		type="button"
+		bind:this={triggerEl}
+		class="btn-ghost btn-nav inline-flex items-center gap-1 {groupActive ? 'nav-link-active' : ''}"
+		aria-expanded={open}
+		aria-haspopup="true"
+		onclick={toggle}
+		onpointerdown={onTriggerPointerDown}
+		onkeydown={onTriggerKeydown}
+	>
+		<span>{$_(labelKey)}</span>
+		<svg
+			aria-hidden="true"
+			class="h-3.5 w-3.5 shrink-0 opacity-70"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			stroke-width="2"
 		>
-			<span>{$_(labelKey)}</span>
-			<svg
-				aria-hidden="true"
-				class="h-4 w-4 shrink-0 transition-transform {open ? 'rotate-180' : ''}"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-			>
-				<path d="M6 9l6 6 6-6" />
-			</svg>
-		</button>
-		{#if open}
-			<div class="flex flex-col gap-0.5 py-1 pl-3">
-				{#each items as item (item.path)}
-					<a
-						href={resolve(item.path)}
-						class="nav-mobile-link text-sm {itemActive(item) ? 'nav-link-active' : ''}"
-						aria-current={itemActive(item) ? 'page' : undefined}
-						onclick={handleItemClick}
-					>
-						{$_(item.labelKey)}
-					</a>
-				{/each}
-			</div>
-		{/if}
-	</div>
-{:else}
-	<div class="relative">
-		<button
-			type="button"
-			bind:this={triggerEl}
-			class="btn-ghost btn-nav inline-flex items-center gap-1 {groupActive
-				? 'nav-link-active'
-				: ''}"
-			aria-expanded={open}
-			aria-haspopup="true"
-			onclick={toggle}
-			onpointerdown={onTriggerPointerDown}
-			onkeydown={onTriggerKeydown}
+			<path d="M6 9l6 6 6-6" />
+		</svg>
+	</button>
+	{#if open}
+		<div
+			bind:this={menuEl}
+			class="popover-panel min-w-[12rem] p-1"
+			style={menuStyle}
+			role="menu"
+			use:portal={document.body}
 		>
-			<span>{$_(labelKey)}</span>
-			<svg
-				aria-hidden="true"
-				class="h-3.5 w-3.5 shrink-0 opacity-70"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-			>
-				<path d="M6 9l6 6 6-6" />
-			</svg>
-		</button>
-		{#if open}
-			<div
-				bind:this={menuEl}
-				class="popover-panel min-w-[12rem] p-1"
-				style={menuStyle}
-				role="menu"
-				use:portal={document.body}
-			>
-				{#each items as item (item.path)}
-					<a
-						href={resolve(item.path)}
-						class="block rounded-lg px-3 py-2 text-sm hover:opacity-90 {itemActive(item)
-							? 'nav-link-active'
-							: ''}"
-						role="menuitem"
-						aria-current={itemActive(item) ? 'page' : undefined}
-						onclick={handleItemClick}
-					>
-						{$_(item.labelKey)}
-					</a>
-				{/each}
-			</div>
-		{/if}
-	</div>
-{/if}
+			{#each items as item (item.path)}
+				<a
+					href={resolve(item.path)}
+					class="block rounded-lg px-3 py-2 text-sm hover:opacity-90 {itemActive(item)
+						? 'nav-link-active'
+						: ''}"
+					role="menuitem"
+					aria-current={itemActive(item) ? 'page' : undefined}
+					onclick={handleItemClick}
+				>
+					{$_(item.labelKey)}
+				</a>
+			{/each}
+		</div>
+	{/if}
+</div>
