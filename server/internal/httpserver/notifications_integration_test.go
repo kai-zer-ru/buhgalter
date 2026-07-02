@@ -227,6 +227,155 @@ func TestNotificationsTemplateReset(t *testing.T) {
 	}
 }
 
+func TestNotificationsDebtTemplateRejectedWhenDisabled(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+	setNotificationSecretKey(t, env)
+
+	disableBody, _ := json.Marshal(map[string]any{
+		"trigger_debt": false,
+	})
+	disableResp, err := env.authedRequest(http.MethodPut, "/api/v1/user/notifications", bytes.NewReader(disableBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	disableResp.Body.Close()
+	if disableResp.StatusCode != http.StatusOK {
+		t.Fatalf("disable trigger status %d", disableResp.StatusCode)
+	}
+
+	templateBody, _ := json.Marshal(map[string]any{
+		"templates": []map[string]string{
+			{
+				"trigger_type": "debt_overdue",
+				"template":     "Долг: {debtor} {amount}",
+			},
+		},
+	})
+	templateResp, err := env.authedRequest(http.MethodPut, "/api/v1/user/notifications", bytes.NewReader(templateBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer templateResp.Body.Close()
+	if templateResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 when saving debt template with disabled trigger, got %d", templateResp.StatusCode)
+	}
+}
+
+func TestNotificationsDebtPolicyRejectedWhenDisabled(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+	setNotificationSecretKey(t, env)
+
+	disableBody, _ := json.Marshal(map[string]any{
+		"trigger_debt": false,
+	})
+	disableResp, err := env.authedRequest(http.MethodPut, "/api/v1/user/notifications", bytes.NewReader(disableBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	disableResp.Body.Close()
+	if disableResp.StatusCode != http.StatusOK {
+		t.Fatalf("disable trigger status %d", disableResp.StatusCode)
+	}
+
+	policyBody, _ := json.Marshal(map[string]any{
+		"debt_days_before": 5,
+	})
+	policyResp, err := env.authedRequest(http.MethodPut, "/api/v1/user/notifications", bytes.NewReader(policyBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer policyResp.Body.Close()
+	if policyResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 when saving debt_days_before with disabled trigger, got %d", policyResp.StatusCode)
+	}
+}
+
+func TestNotificationsTriggerNegativeBalanceRoundtrip(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+	setNotificationSecretKey(t, env)
+
+	disableBody, _ := json.Marshal(map[string]any{
+		"trigger_negative_balance": false,
+	})
+	disableResp, err := env.authedRequest(http.MethodPut, "/api/v1/user/notifications", bytes.NewReader(disableBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer disableResp.Body.Close()
+	if disableResp.StatusCode != http.StatusOK {
+		t.Fatalf("disable trigger status %d", disableResp.StatusCode)
+	}
+	var putPayload map[string]any
+	if err := json.NewDecoder(disableResp.Body).Decode(&putPayload); err != nil {
+		t.Fatal(err)
+	}
+	if putPayload["trigger_negative_balance"] != false {
+		t.Fatalf("PUT response: expected trigger_negative_balance=false, got %v", putPayload["trigger_negative_balance"])
+	}
+
+	getResp, err := env.authedRequest(http.MethodGet, "/api/v1/user/notifications", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer getResp.Body.Close()
+	var getPayload map[string]any
+	if err := json.NewDecoder(getResp.Body).Decode(&getPayload); err != nil {
+		t.Fatal(err)
+	}
+	if getPayload["trigger_negative_balance"] != false {
+		t.Fatalf("GET response: expected trigger_negative_balance=false, got %v", getPayload["trigger_negative_balance"])
+	}
+}
+
+func TestNotificationsBalanceShortfallTemplateRejectedWhenDisabled(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+	setNotificationSecretKey(t, env)
+
+	disableBody, _ := json.Marshal(map[string]any{
+		"trigger_negative_balance": false,
+	})
+	disableResp, err := env.authedRequest(http.MethodPut, "/api/v1/user/notifications", bytes.NewReader(disableBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	disableResp.Body.Close()
+	if disableResp.StatusCode != http.StatusOK {
+		t.Fatalf("disable trigger status %d", disableResp.StatusCode)
+	}
+
+	templateBody, _ := json.Marshal(map[string]any{
+		"templates": []map[string]string{
+			{
+				"trigger_type": "balance_shortfall",
+				"template":     "Не хватает {amount}",
+			},
+		},
+	})
+	templateResp, err := env.authedRequest(http.MethodPut, "/api/v1/user/notifications", bytes.NewReader(templateBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer templateResp.Body.Close()
+	if templateResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 when saving balance_shortfall template with disabled trigger, got %d", templateResp.StatusCode)
+	}
+
+	getResp, err := env.authedRequest(http.MethodGet, "/api/v1/user/notifications", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer getResp.Body.Close()
+	var payload map[string]any
+	_ = json.NewDecoder(getResp.Body).Decode(&payload)
+	if payload["trigger_negative_balance"] != false {
+		t.Fatalf("expected trigger_negative_balance=false, got %v", payload["trigger_negative_balance"])
+	}
+}
+
 func setNotificationSecretKey(t *testing.T, env *testEnv) {
 	t.Helper()
 

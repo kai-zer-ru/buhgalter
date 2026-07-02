@@ -35,6 +35,10 @@ type SettingsView struct {
 	TriggerDebt                   bool           `json:"trigger_debt"`
 	TriggerCredit                 bool           `json:"trigger_credit"`
 	TriggerPlanned                bool           `json:"trigger_planned"`
+	TriggerNegativeBalance        bool           `json:"trigger_negative_balance"`
+	TriggerBudget                 bool           `json:"trigger_budget"`
+	TriggerAutoTopupDisabled      bool           `json:"trigger_auto_topup_disabled"`
+	TriggerUserRegistration       bool           `json:"trigger_user_registration"`
 	TriggerPasswordReset          bool           `json:"trigger_password_reset"`
 	DebtDaysBefore                int64          `json:"debt_days_before"`
 	MyDebtOverdueDaysLimit        int64          `json:"my_debt_overdue_days_limit"`
@@ -62,6 +66,10 @@ type UpdateSettingsInput struct {
 	TriggerDebt                   *bool            `json:"trigger_debt,omitempty"`
 	TriggerCredit                 *bool            `json:"trigger_credit,omitempty"`
 	TriggerPlanned                *bool            `json:"trigger_planned,omitempty"`
+	TriggerNegativeBalance        *bool            `json:"trigger_negative_balance,omitempty"`
+	TriggerBudget                 *bool            `json:"trigger_budget,omitempty"`
+	TriggerAutoTopupDisabled      *bool            `json:"trigger_auto_topup_disabled,omitempty"`
+	TriggerUserRegistration       *bool            `json:"trigger_user_registration,omitempty"`
 	TriggerPasswordReset          *bool            `json:"trigger_password_reset,omitempty"`
 	DebtDaysBefore                *int64           `json:"debt_days_before,omitempty"`
 	MyDebtOverdueDaysLimit        *int64           `json:"my_debt_overdue_days_limit,omitempty"`
@@ -103,6 +111,10 @@ func getSettingsOnce(ctx context.Context, sqlDB *sql.DB, userID string) (Setting
 	if err != nil {
 		return SettingsView{}, err
 	}
+	regEnabled, err := registrationEnabled(ctx, sqlDB)
+	if err != nil {
+		return SettingsView{}, err
+	}
 	custom := make(map[string]string, len(templates))
 	for _, tpl := range templates {
 		custom[tpl.TriggerType] = tpl.Template
@@ -120,6 +132,10 @@ func getSettingsOnce(ctx context.Context, sqlDB *sql.DB, userID string) (Setting
 		TriggerDebt:                   settings.TriggerDebt == 1,
 		TriggerCredit:                 settings.TriggerCredit == 1,
 		TriggerPlanned:                settings.TriggerPlanned == 1,
+		TriggerNegativeBalance:        settings.TriggerNegativeBalance == 1,
+		TriggerBudget:                 settings.TriggerBudget == 1,
+		TriggerAutoTopupDisabled:      settings.TriggerAutoTopupDisabled == 1,
+		TriggerUserRegistration:       isAdmin && regEnabled && settings.TriggerUserRegistration == 1,
 		TriggerPasswordReset:          isAdmin && settings.TriggerPasswordReset == 1,
 		DebtDaysBefore:                settings.DebtDaysBefore,
 		MyDebtOverdueDaysLimit:        settings.MyDebtOverdueDaysLimit,
@@ -131,6 +147,9 @@ func getSettingsOnce(ctx context.Context, sqlDB *sql.DB, userID string) (Setting
 	}
 	for _, trigger := range triggerOrder {
 		if !isAdmin && IsAdminOnlyTrigger(trigger) {
+			continue
+		}
+		if RequiresRegistrationEnabled(trigger) && !regEnabled {
 			continue
 		}
 		customTemplate, ok := custom[trigger]
@@ -162,6 +181,37 @@ func UpdateSettings(ctx context.Context, db *sql.DB, userID string, in UpdateSet
 	isAdmin, err := userIsAdmin(ctx, db, userID)
 	if err != nil {
 		return SettingsView{}, err
+	}
+
+	triggerDebt := settings.TriggerDebt == 1
+	if in.TriggerDebt != nil {
+		triggerDebt = *in.TriggerDebt
+	}
+	triggerCredit := settings.TriggerCredit == 1
+	if in.TriggerCredit != nil {
+		triggerCredit = *in.TriggerCredit
+	}
+	triggerPlanned := settings.TriggerPlanned == 1
+	if in.TriggerPlanned != nil {
+		triggerPlanned = *in.TriggerPlanned
+	}
+	if in.DebtDaysBefore != nil && !PolicySettingEnabled(triggerDebt, triggerCredit, triggerPlanned, "debt_days_before") {
+		return SettingsView{}, fmt.Errorf("debt_days_before requires trigger_debt to be enabled")
+	}
+	if in.MyDebtOverdueDaysLimit != nil && !PolicySettingEnabled(triggerDebt, triggerCredit, triggerPlanned, "my_debt_overdue_days_limit") {
+		return SettingsView{}, fmt.Errorf("my_debt_overdue_days_limit requires trigger_debt to be enabled")
+	}
+	if in.OwedDebtOverdueStartAfterDays != nil && !PolicySettingEnabled(triggerDebt, triggerCredit, triggerPlanned, "owed_debt_overdue_start_after_days") {
+		return SettingsView{}, fmt.Errorf("owed_debt_overdue_start_after_days requires trigger_debt to be enabled")
+	}
+	if in.OwedDebtOverdueDaysLimit != nil && !PolicySettingEnabled(triggerDebt, triggerCredit, triggerPlanned, "owed_debt_overdue_days_limit") {
+		return SettingsView{}, fmt.Errorf("owed_debt_overdue_days_limit requires trigger_debt to be enabled")
+	}
+	if in.CreditDaysBefore != nil && !PolicySettingEnabled(triggerDebt, triggerCredit, triggerPlanned, "credit_days_before") {
+		return SettingsView{}, fmt.Errorf("credit_days_before requires trigger_credit to be enabled")
+	}
+	if in.NotificationTimeLocal != nil && !PolicySettingEnabled(triggerDebt, triggerCredit, triggerPlanned, "notification_time_local") {
+		return SettingsView{}, fmt.Errorf("notification_time_local requires at least one scheduled trigger (debt, credit, or planned) to be enabled")
 	}
 
 	if in.MaxProvider != nil {
@@ -223,6 +273,28 @@ func UpdateSettings(ctx context.Context, db *sql.DB, userID string, in UpdateSet
 	if in.TriggerPlanned != nil {
 		settings.TriggerPlanned = boolToInt(*in.TriggerPlanned)
 	}
+	if in.TriggerNegativeBalance != nil {
+		settings.TriggerNegativeBalance = boolToInt(*in.TriggerNegativeBalance)
+	}
+	if in.TriggerBudget != nil {
+		settings.TriggerBudget = boolToInt(*in.TriggerBudget)
+	}
+	if in.TriggerAutoTopupDisabled != nil {
+		settings.TriggerAutoTopupDisabled = boolToInt(*in.TriggerAutoTopupDisabled)
+	}
+	if in.TriggerUserRegistration != nil {
+		if !isAdmin {
+			return SettingsView{}, fmt.Errorf("trigger_user_registration is admin-only")
+		}
+		regEnabled, err := registrationEnabled(ctx, db)
+		if err != nil {
+			return SettingsView{}, err
+		}
+		if !regEnabled {
+			return SettingsView{}, fmt.Errorf("trigger_user_registration requires registration to be enabled")
+		}
+		settings.TriggerUserRegistration = boolToInt(*in.TriggerUserRegistration)
+	}
 	if in.TriggerPasswordReset != nil {
 		if !isAdmin {
 			return SettingsView{}, fmt.Errorf("trigger_password_reset is admin-only")
@@ -260,6 +332,18 @@ func UpdateSettings(ctx context.Context, db *sql.DB, userID string, in UpdateSet
 		if !isAdmin && IsAdminOnlyTrigger(trigger) {
 			return SettingsView{}, fmt.Errorf("unknown trigger_type: %s", trigger)
 		}
+		if RequiresRegistrationEnabled(trigger) {
+			regEnabled, err := registrationEnabled(ctx, db)
+			if err != nil {
+				return SettingsView{}, err
+			}
+			if !regEnabled {
+				return SettingsView{}, fmt.Errorf("unknown trigger_type: %s", trigger)
+			}
+		}
+		if !TemplateSettingEnabled(settings, trigger) {
+			return SettingsView{}, fmt.Errorf("template %s requires its notification setting to be enabled", trigger)
+		}
 		template := strings.TrimSpace(tpl.Template)
 		if len(template) < 1 || len(template) > 500 {
 			return SettingsView{}, fmt.Errorf("template length must be in range 1..500")
@@ -289,6 +373,10 @@ func UpdateSettings(ctx context.Context, db *sql.DB, userID string, in UpdateSet
 		TriggerDebt:                   settings.TriggerDebt,
 		TriggerCredit:                 settings.TriggerCredit,
 		TriggerPlanned:                settings.TriggerPlanned,
+		TriggerNegativeBalance:        settings.TriggerNegativeBalance,
+		TriggerBudget:                 settings.TriggerBudget,
+		TriggerAutoTopupDisabled:      settings.TriggerAutoTopupDisabled,
+		TriggerUserRegistration:       settings.TriggerUserRegistration,
 		TriggerPasswordReset:          settings.TriggerPasswordReset,
 		DebtDaysBefore:                settings.DebtDaysBefore,
 		MyDebtOverdueDaysLimit:        settings.MyDebtOverdueDaysLimit,
@@ -312,6 +400,12 @@ func PreviewTemplate(ctx context.Context, db *sql.DB, userID, triggerType, templ
 	if _, ok := triggerPlaceholders[triggerType]; !ok {
 		return "", fmt.Errorf("unknown trigger_type: %s", triggerType)
 	}
+	if err := rejectRegistrationDependentTrigger(ctx, db, userID, triggerType); err != nil {
+		return "", err
+	}
+	if err := rejectTemplateWhenSettingDisabled(ctx, db, userID, triggerType); err != nil {
+		return "", err
+	}
 	if err := ValidateTemplate(triggerType, template); err != nil {
 		return "", err
 	}
@@ -319,18 +413,15 @@ func PreviewTemplate(ctx context.Context, db *sql.DB, userID, triggerType, templ
 	if err != nil {
 		return "", err
 	}
-	data := previewData(triggerType, localeCode, timezone, currencyCode, "")
-	if triggerType == TriggerPasswordReset {
-		externalURL, err := settingscache.ExternalURL(ctx, db)
-		if err != nil {
-			return "", err
-		}
-		urlValue := ""
-		if externalURL.Valid {
-			urlValue = externalURL.String
-		}
-		data["reset_url"] = resetURLPlaceholderValue(urlValue, localeCode, previewResetUserID)
+	externalURL, err := settingscache.ExternalURL(ctx, db)
+	if err != nil {
+		return "", err
 	}
+	urlValue := ""
+	if externalURL.Valid {
+		urlValue = externalURL.String
+	}
+	data := previewData(triggerType, localeCode, timezone, currencyCode, "", urlValue)
 	text, err := Format(triggerType, localeCode, &template, data)
 	if err != nil {
 		return "", err
@@ -347,6 +438,9 @@ func ResetTemplates(ctx context.Context, db *sql.DB, userID string, triggerType 
 	trigger := strings.TrimSpace(*triggerType)
 	if _, ok := triggerPlaceholders[trigger]; !ok {
 		return fmt.Errorf("unknown trigger_type: %s", trigger)
+	}
+	if err := rejectRegistrationDependentTrigger(ctx, db, userID, trigger); err != nil {
+		return err
 	}
 	_, err := q.DeleteNotificationTemplate(ctx, sqlcdb.DeleteNotificationTemplateParams{
 		UserID:      userID,
@@ -380,7 +474,19 @@ func SendTest(ctx context.Context, db *sql.DB, userID string, channel string, bo
 	if value, ok := customMap[TriggerTest]; ok {
 		custom = &value
 	}
-	text, err := Format(TriggerTest, localeCode, custom, previewData(TriggerTest, localeCode, timezone, currencyCode, channel))
+	externalURL, err := settingscache.ExternalURL(ctx, db)
+	if err != nil {
+		return err
+	}
+	urlValue := ""
+	if externalURL.Valid {
+		urlValue = externalURL.String
+	}
+	channelValue := strings.TrimSpace(channel)
+	if channelValue == "" {
+		channelValue = ChannelTelegram
+	}
+	text, err := Format(TriggerTest, localeCode, custom, previewData(TriggerTest, localeCode, timezone, currencyCode, channelValue, urlValue))
 	if err != nil {
 		return err
 	}
@@ -414,16 +520,11 @@ func NotifyAdminsOnPasswordReset(ctx context.Context, db *sql.DB, targetUserID, 
 	if externalURL.Valid {
 		externalURLValue = externalURL.String
 	}
-	rows, err := db.QueryContext(ctx, `SELECT id FROM users WHERE is_admin = 1`)
+	adminIDs, err := q.ListAdminUserIDs(ctx)
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var adminID string
-		if err := rows.Scan(&adminID); err != nil {
-			return err
-		}
+	for _, adminID := range adminIDs {
 		if err := q.EnsureNotificationSettings(ctx, adminID); err != nil {
 			continue
 		}
@@ -480,7 +581,7 @@ func NotifyAdminsOnPasswordReset(ctx context.Context, db *sql.DB, targetUserID, 
 			_ = appendLog(ctx, q, adminID, TriggerPasswordReset, channel, &entityID, &dateKey, "sent", text)
 		}
 	}
-	return rows.Err()
+	return nil
 }
 
 func appendLog(ctx context.Context, q *sqlcdb.Queries, userID, triggerType, channel string, entityID, dedupDate *string, status, message string) error {
@@ -572,25 +673,73 @@ func decryptSecret(raw *string, box *SecretBox) (string, error) {
 }
 
 func userLanguage(ctx context.Context, db *sql.DB, userID string) (string, error) {
-	var language string
-	if err := db.QueryRowContext(ctx, `SELECT language FROM users WHERE id = ?`, userID).Scan(&language); err != nil {
+	language, err := sqlcdb.New(db).GetUserLanguage(ctx, userID)
+	if err != nil {
 		return "", err
 	}
 	return normalizeLocale(language), nil
 }
 
 func userIsAdmin(ctx context.Context, db *sql.DB, userID string) (bool, error) {
-	var isAdmin int64
-	if err := db.QueryRowContext(ctx, `SELECT is_admin FROM users WHERE id = ?`, userID).Scan(&isAdmin); err != nil {
+	isAdmin, err := sqlcdb.New(db).GetUserIsAdmin(ctx, userID)
+	if err != nil {
 		return false, err
 	}
 	return isAdmin == 1, nil
 }
 
+func registrationEnabled(ctx context.Context, db *sql.DB) (bool, error) {
+	enabled, err := sqlcdb.New(db).GetRegistrationEnabled(ctx)
+	if err != nil {
+		return false, err
+	}
+	return enabled == 1, nil
+}
+
+func rejectTemplateWhenSettingDisabled(ctx context.Context, db *sql.DB, userID, triggerType string) error {
+	q := sqlcdb.New(db)
+	if err := q.EnsureNotificationSettings(ctx, userID); err != nil {
+		return err
+	}
+	settings, err := q.GetNotificationSettings(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if TemplateSettingEnabled(settings, triggerType) {
+		return nil
+	}
+	return fmt.Errorf("template %s requires its notification setting to be enabled", triggerType)
+}
+
+func rejectRegistrationDependentTrigger(ctx context.Context, db *sql.DB, userID, triggerType string) error {
+	if !RequiresRegistrationEnabled(triggerType) {
+		return nil
+	}
+	isAdmin, err := userIsAdmin(ctx, db, userID)
+	if err != nil {
+		return err
+	}
+	if !isAdmin {
+		return fmt.Errorf("unknown trigger_type: %s", triggerType)
+	}
+	regEnabled, err := registrationEnabled(ctx, db)
+	if err != nil {
+		return err
+	}
+	if !regEnabled {
+		return fmt.Errorf("unknown trigger_type: %s", triggerType)
+	}
+	return nil
+}
+
 func userFormatting(ctx context.Context, db *sql.DB, userID string) (localeCode, timezone, currencyCode string, err error) {
-	if err = db.QueryRowContext(ctx, `SELECT language, timezone, currency FROM users WHERE id = ?`, userID).Scan(&localeCode, &timezone, &currencyCode); err != nil {
+	row, err := sqlcdb.New(db).GetUserFormatting(ctx, userID)
+	if err != nil {
 		return "", "", "", err
 	}
+	localeCode = row.Language
+	timezone = row.Timezone
+	currencyCode = row.Currency
 	if strings.TrimSpace(timezone) == "" {
 		timezone = "Europe/Moscow"
 	}
@@ -600,28 +749,60 @@ func userFormatting(ctx context.Context, db *sql.DB, userID string) (localeCode,
 	return normalizeLocale(localeCode), timezone, currencyCode, nil
 }
 
-func previewData(triggerType, localeCode, timezone, currencyCode, channel string) FormatData {
+func previewData(triggerType, localeCode, timezone, currencyCode, channel, externalURL string) FormatData {
 	now := time.Now().UTC()
 	futureDate := now.Add(48 * time.Hour).Format("2006-01-02 15:04:05")
 	channelValue := strings.TrimSpace(channel)
 	if channelValue == "" {
 		channelValue = ChannelTelegram
 	}
-	return map[string]string{
-		"debtor":       choose(normalizeLocale(localeCode) == "ru", "Денис", "Denis"),
-		"amount":       FormatAmountDisplay(1000000, currencyCode),
-		"due_date":     timeutil.FormatDisplayDateInTimezone(now.Add(-24*time.Hour).Format(timeutil.Layout), timezone),
-		"days":         "2",
-		"credit":       choose(normalizeLocale(localeCode) == "ru", "Ипотека", "Mortgage"),
-		"payment_date": timeutil.FormatDisplayDateInTimezone(futureDate, timezone),
-		"when":         RelativeWhen(localeCode, futureDate, now, timezone),
-		"type":         localizedOperationType(localeCode, "expense"),
-		"description":  choose(normalizeLocale(localeCode) == "ru", "Подписка", "Subscription"),
-		"date":         timeutil.FormatDisplayDateTimeShortInTimezone(now.Format(timeutil.Layout), timezone),
-		"login":        choose(normalizeLocale(localeCode) == "ru", "user1", "user1"),
-		"display_name": choose(normalizeLocale(localeCode) == "ru", "Пользователь", "User"),
-		"requested_at": timeutil.FormatDisplayDateTimeShortInTimezone(now.Format(timeutil.Layout), timezone),
-		"channel":      channelValue,
+	data := FormatData{
+		"debtor":        choose(normalizeLocale(localeCode) == "ru", "Денис", "Denis"),
+		"amount":        FormatAmountDisplay(1000000, currencyCode),
+		"due_date":      timeutil.FormatDisplayDateInTimezone(now.Add(-24*time.Hour).Format(timeutil.Layout), timezone),
+		"days":          "2",
+		"credit":        choose(normalizeLocale(localeCode) == "ru", "Ипотека", "Mortgage"),
+		"payment_date":  timeutil.FormatDisplayDateInTimezone(futureDate, timezone),
+		"when":          RelativeWhen(localeCode, futureDate, now, timezone),
+		"type":          localizedOperationType(localeCode, "expense"),
+		"description":   choose(normalizeLocale(localeCode) == "ru", "Подписка", "Subscription"),
+		"date":          timeutil.FormatDisplayDateTimeShortInTimezone(now.Format(timeutil.Layout), timezone),
+		"login":         choose(normalizeLocale(localeCode) == "ru", "user1", "user1"),
+		"display_name":  choose(normalizeLocale(localeCode) == "ru", "Пользователь", "User"),
+		"requested_at":  timeutil.FormatDisplayDateTimeShortInTimezone(now.Format(timeutil.Layout), timezone),
+		"registered_at": timeutil.FormatDisplayDateTimeShortInTimezone(now.Format(timeutil.Layout), timezone),
+		"channel":       channelValue,
+	}
+	applyPreviewURLs(triggerType, data, externalURL, localeCode, currencyCode)
+	return data
+}
+
+func applyPreviewURLs(triggerType string, data FormatData, externalURL, localeCode, currencyCode string) {
+	switch triggerType {
+	case TriggerDebtOverdue, TriggerDebtDueSoon:
+		data["debt_url"] = debtURLPlaceholderValue(externalURL, localeCode, previewDebtID)
+	case TriggerCreditPayment:
+		data["credit_url"] = creditURLPlaceholderValue(externalURL, localeCode, previewCreditID)
+	case TriggerPlannedOp:
+		data["transaction_url"] = transactionURLPlaceholderValue(externalURL, localeCode, previewTransactionID)
+	case TriggerBudgetThreshold:
+		data["name"] = choose(normalizeLocale(localeCode) == "ru", "Продукты", "Groceries")
+		data["spent"] = FormatAmountDisplay(240000, currencyCode)
+		data["planned"] = FormatAmountDisplay(300000, currencyCode)
+		data["percent"] = "80"
+		data["budget_url"] = budgetURLPlaceholderValue(externalURL, localeCode)
+	case TriggerAutoTopupDisabled:
+		data["account"] = choose(normalizeLocale(localeCode) == "ru", "Яндекс", "Yandex")
+		data["source_account"] = choose(normalizeLocale(localeCode) == "ru", "Сбер", "Sber")
+		data["amount"] = FormatAmountDisplay(250000, currencyCode)
+		data["source_balance"] = FormatAmountDisplay(100000, currencyCode)
+		data["account_url"] = accountURLPlaceholderValue(externalURL, localeCode, previewAccountID)
+	case TriggerTest:
+		data["settings_url"] = settingsURLPlaceholderValue(externalURL, localeCode)
+	case TriggerPasswordReset:
+		data["reset_url"] = resetURLPlaceholderValue(externalURL, localeCode, previewResetUserID)
+	case TriggerUserRegistration:
+		data["moderation_url"] = moderationURLPlaceholderValue(externalURL, localeCode, previewResetUserID)
 	}
 }
 

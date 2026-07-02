@@ -1,6 +1,7 @@
 import { get } from 'svelte/store';
 import { locale } from 'svelte-i18n';
 import { cachedGet, invalidateApiCache, seedStaticRef } from '$lib/api/cache';
+import { notifySessionExpired, shouldRedirectApi401 } from '$lib/auth/session-expired';
 
 const API_BASE = '';
 
@@ -13,7 +14,8 @@ export class ApiError extends Error {
 	constructor(
 		public code: string,
 		message: string,
-		public status: number
+		public status: number,
+		public field?: string
 	) {
 		super(message);
 		this.name = 'ApiError';
@@ -42,14 +44,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 	if (!res.ok) {
 		let code = 'UNKNOWN';
 		let message = res.statusText;
+		let field: string | undefined;
 		try {
 			const body = await res.json();
 			code = body?.error?.code ?? code;
 			message = body?.error?.message ?? message;
+			field = body?.error?.field || undefined;
 		} catch {
 			// ignore
 		}
-		throw new ApiError(code, message, res.status);
+		if (res.status === 401 && shouldRedirectApi401(path)) {
+			notifySessionExpired();
+		}
+		throw new ApiError(code, message, res.status, field);
 	}
 
 	if (res.status === 204) {
@@ -86,11 +93,14 @@ export type VersionCheckResult = {
 	release_url?: string;
 };
 
+export type UserStatus = 'active' | 'pending' | 'banned';
+
 export type User = {
 	id: string;
 	login: string;
 	display_name: string;
 	is_admin: boolean;
+	status: UserStatus;
 	language: string;
 	currency: string;
 	timezone: string;
@@ -125,7 +135,11 @@ export type NotificationSettings = {
 	trigger_debt: boolean;
 	trigger_credit: boolean;
 	trigger_planned: boolean;
+	trigger_negative_balance: boolean;
+	trigger_budget: boolean;
+	trigger_auto_topup_disabled: boolean;
 	trigger_password_reset?: boolean;
+	trigger_user_registration?: boolean;
 	debt_days_before: number;
 	my_debt_overdue_days_limit: number;
 	owed_debt_overdue_start_after_days: number;
@@ -147,7 +161,11 @@ export type NotificationSettingsUpdate = {
 	trigger_debt?: boolean;
 	trigger_credit?: boolean;
 	trigger_planned?: boolean;
+	trigger_negative_balance?: boolean;
+	trigger_budget?: boolean;
+	trigger_auto_topup_disabled?: boolean;
 	trigger_password_reset?: boolean;
+	trigger_user_registration?: boolean;
 	debt_days_before?: number;
 	my_debt_overdue_days_limit?: number;
 	owed_debt_overdue_start_after_days?: number;
@@ -194,6 +212,7 @@ export type AdminUser = {
 	login: string;
 	display_name: string;
 	is_admin: boolean;
+	status: UserStatus;
 	created_at: string;
 };
 
@@ -265,7 +284,7 @@ export function register(
 	passwordConfirm: string,
 	displayName: string
 ) {
-	return request<{ token: string; user: User }>('/api/v1/auth/register', {
+	return request<{ user: User }>('/api/v1/auth/register', {
 		method: 'POST',
 		body: JSON.stringify({
 			login,
@@ -439,6 +458,13 @@ export function deleteAdminUser(id: string) {
 	return request<void>(`/api/v1/admin/users/${id}`, { method: 'DELETE' });
 }
 
+export function updateAdminUserStatus(id: string, status: 'active' | 'banned') {
+	return request<AdminUser>(`/api/v1/admin/users/${id}/status`, {
+		method: 'PUT',
+		body: JSON.stringify({ status })
+	});
+}
+
 export function getAdminDiagnostics() {
 	return request<AdminDiagnostics>('/api/v1/admin/diagnostics');
 }
@@ -496,17 +522,28 @@ export type Bank = {
 	sort_order: number;
 };
 
+export type AccountType = 'cash' | 'bank' | 'credit_card';
+
 export type Account = {
 	id: string;
 	name: string;
-	type: 'cash' | 'bank';
+	type: AccountType;
 	bank_id: string | null;
 	bank_name?: string | null;
 	bank_icon?: string | null;
 	initial_balance: number;
 	balance: number;
 	balance_display: string;
-	status: 'active' | 'archived';
+	credit_limit?: number | null;
+	credit_limit_display?: string | null;
+	payment_account_id?: string | null;
+	auto_topup_enabled?: boolean;
+	auto_topup_threshold?: number | null;
+	auto_topup_threshold_display?: string | null;
+	auto_topup_target?: number | null;
+	auto_topup_target_display?: string | null;
+	auto_topup_source_account_id?: string | null;
+	status: 'active' | 'archived' | 'deleted';
 	is_primary: boolean;
 	created_at: string;
 	updated_at: string;
@@ -540,8 +577,8 @@ export function listBanks() {
 export type UIMetaAccountRef = {
 	id: string;
 	name: string;
-	type: 'cash' | 'bank';
-	status: 'active' | 'archived';
+	type: AccountType;
+	status: 'active' | 'archived' | 'deleted';
 	bank_id?: string;
 };
 
@@ -561,7 +598,7 @@ export async function getUIMeta() {
 	return meta;
 }
 
-export function listAccounts(status?: 'active' | 'archived') {
+export function listAccounts(status?: 'active' | 'archived' | 'deleted') {
 	const q = status ? `?status=${status}` : '';
 	const path = `/api/v1/accounts${q}`;
 	return request<Account[]>(path);
@@ -573,9 +610,11 @@ export function getAccount(id: string) {
 
 export function createAccount(payload: {
 	name: string;
-	type: 'cash' | 'bank';
+	type: AccountType;
 	bank_id?: string;
 	initial_balance: string;
+	credit_limit?: string;
+	payment_account_id?: string;
 }) {
 	return request<Account>('/api/v1/accounts', {
 		method: 'POST',
@@ -585,7 +624,17 @@ export function createAccount(payload: {
 
 export function updateAccount(
 	id: string,
-	payload: { name: string; bank_id?: string; initial_balance?: string }
+	payload: {
+		name: string;
+		bank_id?: string;
+		initial_balance?: string;
+		credit_limit?: string;
+		payment_account_id?: string | null;
+		auto_topup_enabled?: boolean;
+		auto_topup_threshold?: string;
+		auto_topup_target?: string;
+		auto_topup_source_account_id?: string;
+	}
 ) {
 	return request<Account>(`/api/v1/accounts/${id}`, {
 		method: 'PUT',
@@ -593,8 +642,11 @@ export function updateAccount(
 	});
 }
 
-export function archiveAccount(id: string) {
-	return request<Account>(`/api/v1/accounts/${id}/archive`, { method: 'POST' });
+export function archiveAccount(id: string, transferToAccountId?: string) {
+	const q = transferToAccountId
+		? `?transfer_to_account_id=${encodeURIComponent(transferToAccountId)}`
+		: '';
+	return request<Account>(`/api/v1/accounts/${id}/archive${q}`, { method: 'POST' });
 }
 
 export function unarchiveAccount(id: string) {
@@ -605,8 +657,11 @@ export function setPrimaryAccount(id: string) {
 	return request<Account>(`/api/v1/accounts/${id}/primary`, { method: 'POST' });
 }
 
-export function deleteAccount(id: string) {
-	return request<void>(`/api/v1/accounts/${id}`, { method: 'DELETE' });
+export function deleteAccount(id: string, transferToAccountId?: string) {
+	const q = transferToAccountId
+		? `?transfer_to_account_id=${encodeURIComponent(transferToAccountId)}`
+		: '';
+	return request<void>(`/api/v1/accounts/${id}${q}`, { method: 'DELETE' });
 }
 
 export function listCategories(type?: 'income' | 'expense') {
@@ -684,7 +739,9 @@ export type Transaction = {
 	id: string;
 	account_id: string;
 	account_name?: string;
+	account_status?: 'active' | 'archived' | 'deleted';
 	transfer_account_name?: string;
+	transfer_account_status?: 'active' | 'archived' | 'deleted';
 	type: 'income' | 'expense' | 'transfer';
 	kind: 'manual' | 'future';
 	amount: number;
@@ -780,13 +837,31 @@ export type StatsContext = StatsSummary & {
 export type AccountBalanceSummary = {
 	id: string;
 	name: string;
-	type: 'cash' | 'bank';
+	type: AccountType;
 	bank_icon?: string | null;
 	balance: number;
 	balance_display: string;
 	forecast_balance: number;
 	forecast_display: string;
 	has_future_this_month: boolean;
+	credit_limit?: number | null;
+	credit_limit_display?: string | null;
+	auto_topup_enabled?: boolean;
+	auto_topup_threshold?: number | null;
+	auto_topup_threshold_display?: string | null;
+	auto_topup_target?: number | null;
+	auto_topup_target_display?: string | null;
+	auto_topup_source_account_id?: string | null;
+};
+
+export type CreditCardsSummary = {
+	total_balance: number;
+	total_forecast: number;
+	total_limit: number;
+	count: number;
+	total_balance_display: string;
+	total_forecast_display: string;
+	total_limit_display: string;
 };
 
 export type AccountsSummary = {
@@ -798,6 +873,7 @@ export type AccountsSummary = {
 export type Dashboard = {
 	total_balance: number;
 	total_forecast: number;
+	credit_cards_summary?: CreditCardsSummary | null;
 	accounts: AccountBalanceSummary[];
 	recent_transactions: Transaction[];
 	debts_summary: DebtsSummary;
@@ -968,6 +1044,120 @@ export function updateRecurringOperation(
 
 export function deleteRecurringOperation(id: string) {
 	return request<void>(`/api/v1/recurring-operations/${id}`, { method: 'DELETE' });
+}
+
+export type BudgetScope = 'category' | 'subcategory' | 'all_expense';
+
+export type BudgetItem = {
+	id: string;
+	name: string;
+	scope: BudgetScope;
+	category_id?: string;
+	category_name?: string;
+	category_icon?: string;
+	subcategory_id?: string;
+	subcategory_name?: string;
+	account_id?: string;
+	account_name?: string;
+	month?: string;
+	copy_forward?: boolean;
+	amount: number;
+	amount_display: string;
+	period: string;
+	alert_at_percent: number;
+	is_active: boolean;
+	created_at: string;
+	updated_at: string;
+};
+
+export type BudgetSummaryItem = BudgetItem & {
+	planned: number;
+	planned_display: string;
+	spent: number;
+	spent_display: string;
+	remaining: number;
+	remaining_display: string;
+	percent: number;
+	status: 'ok' | 'warning' | 'exceeded';
+	children_planned?: number;
+	children_planned_display?: string;
+	children_spent?: number;
+	children_spent_display?: string;
+	period_start: string;
+};
+
+export type BudgetSummaryResponse = {
+	items: BudgetSummaryItem[];
+	month: string;
+	can_copy_from_previous: boolean;
+};
+
+export function listBudgets(month?: string) {
+	const q = month ? `?month=${encodeURIComponent(month)}` : '';
+	return request<BudgetItem[]>(`/api/v1/budgets${q}`);
+}
+
+export function getBudgetSummary(month?: string) {
+	const q = month ? `?month=${encodeURIComponent(month)}` : '';
+	return request<BudgetSummaryResponse>(`/api/v1/budgets/summary${q}`);
+}
+
+export function createBudget(
+	payload: {
+		name: string;
+		scope: BudgetScope;
+		category_id?: string;
+		subcategory_id?: string;
+		account_id?: string;
+		amount: string;
+		alert_at_percent?: number;
+		is_active?: boolean;
+		copy_forward?: boolean;
+	},
+	month?: string
+) {
+	const q = month ? `?month=${encodeURIComponent(month)}` : '';
+	return request<BudgetItem>(`/api/v1/budgets${q}`, {
+		method: 'POST',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function updateBudget(
+	id: string,
+	payload: {
+		name: string;
+		scope: BudgetScope;
+		category_id?: string;
+		subcategory_id?: string;
+		account_id?: string;
+		amount: string;
+		alert_at_percent?: number;
+		is_active?: boolean;
+		copy_forward?: boolean;
+	},
+	month?: string
+) {
+	const q = month ? `?month=${encodeURIComponent(month)}` : '';
+	return request<BudgetItem>(`/api/v1/budgets/${id}${q}`, {
+		method: 'PATCH',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function deleteBudget(id: string) {
+	return request<void>(`/api/v1/budgets/${id}`, { method: 'DELETE' });
+}
+
+export function copyBudgetToNextMonth(id: string) {
+	return request<BudgetItem>(`/api/v1/budgets/${id}/copy-next`, { method: 'POST' });
+}
+
+export function copyBudgetsFromPreviousMonth(month: string) {
+	return request<{ items: BudgetItem[] }>(
+		`/api/v1/budgets/copy-from-previous?month=${encodeURIComponent(month)}`,
+		{ method: 'POST' }
+	);
 }
 
 export function createTransfer(payload: {
@@ -1143,6 +1333,8 @@ export type Credit = {
 	down_payment_display?: string;
 	down_payment_affects_balance?: boolean;
 	down_payment_transaction_id?: string | null;
+	principal_affects_balance?: boolean;
+	principal_transaction_id?: string | null;
 	issue_date: string;
 	term_months: number;
 	interest_rate: number;
@@ -1265,8 +1457,9 @@ export type AccountMappingSuggestion = {
 	mode: 'create' | 'existing';
 	account_id?: string;
 	account_name?: string;
-	account_type?: 'cash' | 'bank';
+	account_type?: AccountType;
 	bank_id?: string;
+	credit_limit?: string;
 };
 
 export type CategoryMappingSuggestion = {
@@ -1326,8 +1519,9 @@ export type ImportJob = {
 export type AccountMapEntry = {
 	mode: 'create' | 'existing';
 	account_id?: string;
-	account_type?: 'cash' | 'bank';
+	account_type?: AccountType;
 	bank_id?: string;
+	credit_limit?: string;
 };
 
 export type ImportOptions = {

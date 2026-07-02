@@ -25,8 +25,12 @@
 | Документ | Описание |
 |----------|----------|
 | [data-model.md](data-model.md) | Схема БД, миграции, связи сущностей |
+| [sql-access.md](sql-access.md) | Где писать SQL: sqlc vs inline, исключения, миграция legacy |
 | [categories-and-icons.md](categories-and-icons.md) | Категории, подкатегории, иконки |
+| [budget.md](budget.md) | Бюджет: помесячные лимиты, копирование, план vs факт, API |
 | [transactions-display.md](transactions-display.md) | Отображение операций в UI и API |
+| [accounts-archive-delete.md](accounts-archive-delete.md) | Архивация, мягкое удаление счётов, автоперевод остатка |
+| [balance-maintenance.md](balance-maintenance.md) | Автопополнение банковских счетов по порогу баланса |
 
 ---
 
@@ -46,7 +50,10 @@
 | [ui-pagination.md](ui-pagination.md) | Постраничная навигация (`TransactionPagination`) |
 | [ui-toast.md](ui-toast.md) | In-app toast (успех, ошибка, предупреждение) |
 | [ui-stats.md](ui-stats.md) | Страница `/stats` |
+| [ui-budget.md](ui-budget.md) | Страница `/budget`, форма, копирование, виджет на главной (спойлер категорий) |
 | [ui-credits.md](ui-credits.md) | Страницы кредитов |
+| [ui-credit-cards.md](ui-credit-cards.md) | Кредитные карты (тип счёта) |
+| [ui-balance-maintenance.md](ui-balance-maintenance.md) | Автопополнение банковского счёта |
 
 ---
 
@@ -56,5 +63,8 @@
 |----------|----------|
 | [api/openapi.yaml](api/openapi.yaml) | OpenAPI v1 |
 | [api/authentication.md](api/authentication.md) | Сессии, API-токены, сброс пароля |
+| [api/user-status.md](api/user-status.md) | Статус пользователя, модерация, блокировка |
+| [notifications.md](notifications.md) | Уведомления: настройки, периоды, шаблоны, блокировка UI/API |
+| [../roadmap/balance-shortfall-notifications.md](../roadmap/balance-shortfall-notifications.md) | Недостаток средств в тексте уведомлений |
 | [ui-api-cache.md](ui-api-cache.md) | In-memory кеш GET на сервере и справочники в браузере |
 | [import/cubux.md](import/cubux.md) | Импорт и экспорт формата Cubux |

@@ -16,7 +16,7 @@
 |------|------|----------|
 | `POST` | `/api/v1/auth/login` | Вход, выдаёт session + token в ответе |
 | `POST` | `/api/v1/auth/logout` | Выход и инвалидирование сессии |
-| `POST` | `/api/v1/auth/register` | Регистрация (если включена) |
+| `POST` | `/api/v1/auth/register` | Регистрация (если включена); статус `pending`, без сессии |
 | `GET` | `/api/v1/auth/verify` | Проверка валидности токена |
 | `GET` | `/api/v1/auth/me` | Текущий пользователь |
 | `POST` | `/api/v1/auth/request-password-reset` | Запрос сброса пароля (v1.1; body: `{ "login" }`) |
@@ -54,6 +54,10 @@ Self-service смены пароля по e-mail **нет**. Сценарий д
 3. Администратор: `PUT /api/v1/admin/users/{id}/password` — новый пароль; сессии пользователя инвалидируются.
 
 Таблица БД: `password_reset_requests` (миграция `023_password_reset_requests.sql`).
+
+## Статус пользователя (v1.3.0)
+
+Модерация регистрации и блокировка учётных записей — см. [user-status.md](user-status.md).
 
 ## Ошибки
 

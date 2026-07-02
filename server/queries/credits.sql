@@ -9,6 +9,8 @@ SELECT
     c.down_payment,
     c.down_payment_affects_balance,
     c.down_payment_transaction_id,
+    c.principal_affects_balance,
+    c.principal_transaction_id,
     c.issue_date,
     c.term_months,
     c.interest_rate,
@@ -45,6 +47,8 @@ SELECT
     c.down_payment,
     c.down_payment_affects_balance,
     c.down_payment_transaction_id,
+    c.principal_affects_balance,
+    c.principal_transaction_id,
     c.issue_date,
     c.term_months,
     c.interest_rate,
@@ -71,11 +75,13 @@ WHERE c.id = ? AND c.user_id = ?;
 -- name: InsertCredit :exec
 INSERT INTO credits (
     id, user_id, name, credit_kind, principal_amount, property_price, down_payment,
-    down_payment_affects_balance, down_payment_transaction_id, issue_date, term_months, interest_rate,
+    down_payment_affects_balance, down_payment_transaction_id,
+    principal_affects_balance, principal_transaction_id,
+    issue_date, term_months, interest_rate,
     payment_interval, paid_amount, monthly_payment, debit_account_id,
     debit_time_local, bank_id, bank_id_locked,
     added_retroactively, recorded_at, status, closed_at, created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: UpdateCredit :execrows
 UPDATE credits
@@ -97,6 +103,16 @@ WHERE id = ? AND user_id = ?;
 -- name: SetCreditDownPaymentTransaction :exec
 UPDATE credits
 SET down_payment_transaction_id = ?
+WHERE id = ? AND user_id = ?;
+
+-- name: SetCreditPrincipalTransaction :exec
+UPDATE credits
+SET principal_transaction_id = ?
+WHERE id = ? AND user_id = ?;
+
+-- name: ClearCreditLinkedTransactions :exec
+UPDATE credits
+SET down_payment_transaction_id = NULL, principal_transaction_id = NULL, updated_at = ?
 WHERE id = ? AND user_id = ?;
 
 -- name: CloseCredit :execrows
@@ -268,5 +284,23 @@ UPDATE transactions
 SET account_id = ?, updated_at = ?
 WHERE id = ? AND user_id = ? AND kind = 'future';
 
--- name: ListUsersWithTimezone :many
-SELECT id, timezone FROM users;
+-- name: ListActiveCreditsForScheduleRepair :many
+SELECT id, user_id, principal_amount, issue_date, term_months, interest_rate,
+       payment_interval, monthly_payment, added_retroactively
+FROM credits
+WHERE status = 'active' AND payment_interval != 'manual';
+
+-- name: BackdateFirstUnappliedScheduledPayment :execrows
+UPDATE credit_payments SET payment_date = datetime('now', '-1 day')
+WHERE id = (
+    SELECT cp2.id FROM credit_payments cp2
+    WHERE cp2.credit_id = ? AND cp2.is_applied = 0 AND cp2.kind = 'scheduled' LIMIT 1
+);
+
+-- name: CreditPaymentsUnappliedByUser :many
+SELECT cp.id, cp.credit_id, c.name AS credit_name, c.debit_account_id, cp.amount, cp.payment_date
+FROM credit_payments cp
+JOIN credits c ON c.id = cp.credit_id
+WHERE cp.is_applied = 0 AND cp.kind = 'scheduled'
+  AND c.status = 'active' AND c.user_id = ?;
+

@@ -17,6 +17,10 @@ SELECT
     trigger_debt,
     trigger_credit,
     trigger_planned,
+    trigger_negative_balance,
+    trigger_budget,
+    trigger_auto_topup_disabled,
+    trigger_user_registration,
     trigger_password_reset,
     debt_days_before,
     my_debt_overdue_days_limit,
@@ -42,6 +46,10 @@ INSERT INTO notification_settings (
     trigger_debt,
     trigger_credit,
     trigger_planned,
+    trigger_negative_balance,
+    trigger_budget,
+    trigger_auto_topup_disabled,
+    trigger_user_registration,
     trigger_password_reset,
     debt_days_before,
     my_debt_overdue_days_limit,
@@ -50,7 +58,7 @@ INSERT INTO notification_settings (
     credit_days_before,
     notification_time_local,
     updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(user_id) DO UPDATE SET
     telegram_enabled = excluded.telegram_enabled,
     telegram_bot_token = excluded.telegram_bot_token,
@@ -63,6 +71,10 @@ ON CONFLICT(user_id) DO UPDATE SET
     trigger_debt = excluded.trigger_debt,
     trigger_credit = excluded.trigger_credit,
     trigger_planned = excluded.trigger_planned,
+    trigger_negative_balance = excluded.trigger_negative_balance,
+    trigger_budget = excluded.trigger_budget,
+    trigger_auto_topup_disabled = excluded.trigger_auto_topup_disabled,
+    trigger_user_registration = excluded.trigger_user_registration,
     trigger_password_reset = excluded.trigger_password_reset,
     debt_days_before = excluded.debt_days_before,
     my_debt_overdue_days_limit = excluded.my_debt_overdue_days_limit,

@@ -13,6 +13,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/audit"
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
+	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/money"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
 )
@@ -42,6 +43,7 @@ type createCreditRequest struct {
 	AddedRetroactively        *bool                 `json:"added_retroactively"`
 	RetroactiveDebitCount     *int                  `json:"retroactive_debit_count"`
 	CreateTransactions        *bool                 `json:"create_transactions"`
+	PrincipalAffectsBalance   *bool                 `json:"principal_affects_balance"`
 	ScheduleSeed              []scheduleSeedRequest `json:"schedule_seed"`
 }
 
@@ -406,17 +408,11 @@ func (h *Handler) E2EApplyDue(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_INVALID_DEBIT_TIME")
 		return
 	}
-	res, err := sqlDB.ExecContext(ctx, `
-		UPDATE credit_payments SET payment_date = datetime('now', '-1 day')
-		WHERE id = (
-			SELECT id FROM credit_payments
-			WHERE credit_id = ? AND is_applied = 0 AND kind = 'scheduled' LIMIT 1
-		)`, creditID)
+	n, err := sqlcdb.New(sqlDB).BackdateFirstUnappliedScheduledPayment(ctx, creditID)
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
-	n, _ := res.RowsAffected()
 	if n == 0 {
 		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
 		return
@@ -503,6 +499,9 @@ func parseCreateInput(req createCreditRequest) (CreateInput, error) {
 	}
 	if req.RetroactiveDebitCount != nil {
 		in.RetroactiveDebitCount = *req.RetroactiveDebitCount
+	}
+	if req.PrincipalAffectsBalance != nil {
+		in.PrincipalAffectsBalance = *req.PrincipalAffectsBalance
 	}
 	if len(req.MonthlyPayment) > 0 && string(req.MonthlyPayment) != "null" {
 		mp, err := money.ParseAmount(req.MonthlyPayment)
@@ -608,6 +607,10 @@ func writeCreditError(w http.ResponseWriter, r *http.Request, err error) bool {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_INVALID_KIND")
 	case errors.Is(err, ErrInvalidMortgageFields):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_INVALID_MORTGAGE")
+	case errors.Is(err, ErrPrincipalIncomePastPayment):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_PRINCIPAL_INCOME_PAST_PAYMENT")
+	case errors.Is(err, ErrInvalidPrincipalIncome):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_INVALID_PRINCIPAL_INCOME")
 	case errors.Is(err, ErrCreditBankLocked):
 		apperror.WriteR(w, r, http.StatusConflict, apperror.Conflict, "CONFLICT_CREDIT_BANK_LOCKED")
 	case errors.Is(err, ErrNoPendingPayment):

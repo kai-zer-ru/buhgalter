@@ -11,7 +11,9 @@ OpenAPI-схемы: [`Transaction`](api/openapi.yaml#/components/schemas/Transac
 | Поле | Тип | Описание |
 |------|-----|----------|
 | `account_name` | string | Имя счёта ноги (`accounts.name` по `account_id`) |
+| `account_status` | string | Статус счёта ноги: `active` \| `archived` \| `deleted` |
 | `transfer_account_name` | string | Имя второго счёта перевода (`JOIN` по `transfer_account_id`) |
+| `transfer_account_status` | string | Статус второго счёта перевода |
 | `transfer_is_out` | bool | Только для `type=transfer`: `true` — исходящая нога (первая в `transfer_group_id` по `created_at ASC`), `false` — входящая |
 | `category_name`, `category_icon` | | Из `categories` |
 | `amount_display` | string | `"1234.56"` для UI |
@@ -52,6 +54,8 @@ OpenAPI-схемы: [`Transaction`](api/openapi.yaml#/components/schemas/Transac
 | Доход | `на Зарплатная карта` |
 
 Для перевода при **одной ноге** в списке (фильтр `account_id`) направление берётся из `transfer_is_out`, а не из локального `min(created_at)` среди видимых строк.
+
+Для счетов со статусом `archived` или `deleted` компонент `TransactionAccountCell` добавляет суффикс «(архив)» / «(удалён)» по полям `account_status` и `transfer_account_status`.
 
 ## Префикс суммы
 
@@ -141,6 +145,8 @@ OpenAPI: `CreateTransferRequest.commission`, схема `Transfer`.
 
 `TransactionList` — меню «⋯» в каждой строке (повторить, сделать периодической, изменить, удалить). На мобильных меню в шапке карточки рядом с суммой. Используется на **главной** («Последние операции»), `/transactions`, странице счёта.
 
+На странице **удалённого** счёта (`/accounts/[id]`, `status = deleted`) в меню операций доступно только **«Повторить»** — см. [accounts-archive-delete.md](accounts-archive-delete.md).
+
 **Повторить (v1.2.3)** — открывает форму **создания** новой операции с полями из выбранной строки (счёт, категория, сумма, описание; для перевода — счета, сумма, комиссия); дата — текущая. Работает для **дохода**, **расхода** и **перевода**. Доход/расход — `TransactionForm` (`repeatFrom`); перевод — `TransferForm` (`repeatFrom`). Недоступно для операций с `credit_payment_linked` и для дохода/расхода в **системных категориях** (как «Сделать периодической»).
 
 ## Категории с одинаковым именем
@@ -149,7 +155,11 @@ OpenAPI: `CreateTransferRequest.commission`, схема `Transfer`.
 
 ## Формат денег
 
-`web/src/lib/money.ts`: отображение и ввод с разделителем тысяч **пробелом** (`10 000.00`). Компонент `MoneyInput.svelte` — при вводе курсор сохраняется при форматировании (`mapMoneyInputCursor`).
+`web/src/lib/money.ts`: отображение и ввод с разделителем тысяч **пробелом** (`10 000.00`).
+
+**Отображение сумм в UI:** компонент `MoneyDisplay.svelte` (`web/src/lib/components/MoneyDisplay.svelte`) — единая точка для read-only сумм. Принимает `value` (строка `_display` из API), `cents` (копейки) и опционально `currency` (добавляет символ валюты, например `₽`). Логика форматирования — в `$lib/money-display.ts` (`formatMoneyForDisplay`); для интерполяции в i18n (`tr(..., { values: { amount } })`) используйте ту же функцию.
+
+**Ввод:** компонент `MoneyInput.svelte` — при вводе курсор сохраняется при форматировании (`mapMoneyInputCursor`).
 
 **Поля ввода суммы (v1.2.3):** пустое значение и ноль не показываются как `0.00` — поле остаётся пустым, подсказка `placeholder="0.00"`. При потере фокуса нулевой ввод очищается (`formatMoneyInput`). Для подстановки значений из API в формы используйте `formatMoneyForInput`, не `formatMoneyDisplay`.
 
@@ -157,6 +167,7 @@ OpenAPI: `CreateTransferRequest.commission`, схема `Transfer`.
 
 - `TestTransferRollbackOnError` — атомарность перевода при сбое второй ноги (SQLite-триггер в интеграционном тесте).
 - `money.test.ts` — стабильность курсора в `MoneyInput`, `formatMoneyForInput` / `formatMoneyInput` (ноль → пусто).
+- `money-display.test.ts` — `formatMoneyForDisplay` (разделитель тысяч, валюта).
 - `accounts.test.ts` — `defaultAccountId` (контекстный счёт vs основной).
 - `e2e/money-input.spec.ts` — пустые поля суммы и placeholder в формах счёта, операций, перевода, периодических операций.
 - `e2e/transaction-filters.spec.ts` — фильтры и пагинация на `/transactions` (20 на страницу).
@@ -170,11 +181,12 @@ OpenAPI: `CreateTransferRequest.commission`, схема `Transfer`.
 2. Для списка одного счёта передавать `{ singleAccount: true }` в `transactionAmountSign`.
 3. Передавать полный массив `siblings` в хелперы маршрута (для случая двух ног в одном ответе).
 4. На общих списках применять `dedupeTransferLegs` перед `{#each}`.
-5. Соблюдать порядок колонок — [ui-table-columns.md](ui-table-columns.md) (дата → счёт → … → сумма).
+5. Суммы в разметке — через `MoneyDisplay`; в строках i18n — `formatMoneyForDisplay` из `$lib/money-display.ts`.
+6. Соблюдать порядок колонок — [ui-table-columns.md](ui-table-columns.md) (дата → счёт → … → сумма).
 
 ## Общий компонент списка
 
-Для снижения дублирования разметки таблиц операций на этапе релизной полировки допускается вынести общий компонент:
+Для снижения дублирования разметки таблиц операций допускается вынести общий компонент:
 
 - `$lib/components/TransactionList.svelte` — единая таблица строк операций;
 - входные данные: `transactions`, `siblings`, режим отображения (`singleAccount`, скрытие/показ колонки описания и действий);

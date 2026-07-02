@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kai-zer-ru/buhgalter/internal/accountbalance"
+	"github.com/kai-zer-ru/buhgalter/internal/balancehooks"
 	"github.com/kai-zer-ru/buhgalter/internal/categoryseed"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/money"
@@ -289,6 +290,7 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Deb
 		if err := accountbalance.Refresh(ctx, db, userID, in.AccountID); err != nil {
 			return Debt{}, err
 		}
+		balancehooks.NotifyRefresh(ctx, db, userID, in.AccountID)
 	}
 	return GetByID(ctx, db, userID, id)
 }
@@ -369,6 +371,7 @@ func Settle(ctx context.Context, db *sql.DB, userID, id string, in SettleInput) 
 		if err := accountbalance.Refresh(ctx, db, userID, in.AccountID); err != nil {
 			return Debt{}, err
 		}
+		balancehooks.NotifyRefresh(ctx, db, userID, in.AccountID)
 	}
 	return GetByID(ctx, db, userID, id)
 }
@@ -413,6 +416,7 @@ func Delete(ctx context.Context, db *sql.DB, userID, id string) error {
 		return err
 	}
 	_ = accountbalance.Refresh(ctx, db, userID)
+	balancehooks.NotifyAllRefresh(ctx, db, userID)
 	return nil
 }
 

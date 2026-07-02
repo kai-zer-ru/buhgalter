@@ -18,6 +18,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	"github.com/kai-zer-ru/buhgalter/internal/backup"
 	"github.com/kai-zer-ru/buhgalter/internal/bank"
+	"github.com/kai-zer-ru/buhgalter/internal/budget"
 	"github.com/kai-zer-ru/buhgalter/internal/category"
 	"github.com/kai-zer-ru/buhgalter/internal/config"
 	"github.com/kai-zer-ru/buhgalter/internal/credit"
@@ -54,6 +55,7 @@ func (s *Server) Handler() http.Handler {
 	verboseLogs := s.cfg.LogMode == "dev"
 	r.Use(appmw.RequestID)
 	r.Use(appmw.RequestIDToContext)
+	r.Use(appmw.RejectNoiseProbes)
 	r.Use(appmw.Recovery(s.logger))
 	r.Use(appmw.Logger(s.logger, verboseLogs))
 	r.Use(appmw.CORS(s.cfg.CORSOrigins))
@@ -61,8 +63,14 @@ func (s *Server) Handler() http.Handler {
 	r.Use(chimw.Compress(5))
 
 	setupHandler := &setup.Handler{DataDir: s.cfg.DataDir, Store: dbHandle, Audit: s.audit, Backup: s.backup}
-	loginLimiter := appmw.NewIPRateLimiter(5, time.Minute)
-	passwordResetLimiter := appmw.NewIPRateLimiter(5, time.Minute)
+	loginLimit := 5
+	passwordResetLimit := 5
+	if os.Getenv("BUHGALTER_E2E") == "1" {
+		loginLimit = 1000
+		passwordResetLimit = 1000
+	}
+	loginLimiter := appmw.NewIPRateLimiter(loginLimit, time.Minute)
+	passwordResetLimiter := appmw.NewIPRateLimiter(passwordResetLimit, time.Minute)
 	authHandler := &auth.Handler{
 		Store:                dbHandle,
 		Audit:                s.audit,
@@ -80,11 +88,14 @@ func (s *Server) Handler() http.Handler {
 	backupHandler := &backup.Handler{Service: s.backup, Audit: s.audit}
 	bankHandler := &bank.Handler{Store: dbHandle}
 	accountHandler := &account.Handler{Store: dbHandle, Audit: s.audit}
+	accountArchiveHandler := &accountArchiveHandler{store: dbHandle, audit: s.audit}
+	accountDeleteHandler := &accountDeleteHandler{store: dbHandle, audit: s.audit}
 	categoryHandler := &category.Handler{Store: dbHandle, Audit: s.audit}
 	transactionHandler := &transaction.Handler{Store: dbHandle, Audit: s.audit}
 	debtHandler := &debt.Handler{Store: dbHandle, Audit: s.audit}
 	creditHandler := &credit.Handler{Store: dbHandle, Audit: s.audit}
 	recurringHandler := &recurring.Handler{Store: dbHandle, Audit: s.audit}
+	budgetHandler := &budget.Handler{Store: dbHandle, Audit: s.audit}
 	importHandler := &importexport.Handler{Store: dbHandle, Audit: s.audit, Logger: s.logger}
 	statsHandler := &stats.Handler{Store: dbHandle}
 	uiHandler := &ui.Handler{Store: dbHandle}
@@ -104,7 +115,7 @@ func (s *Server) Handler() http.Handler {
 
 		api.Route("/auth", func(ar chi.Router) {
 			ar.Post("/login", authHandler.Login)
-			ar.Post("/register", authHandler.Register)
+			ar.With(apiCacheMW).Post("/register", authHandler.Register)
 			ar.Post("/request-password-reset", authHandler.RequestPasswordReset)
 			ar.Get("/verify", authHandler.Verify)
 			ar.With(auth.RequireAuth(dbHandle), apiCacheMW).Post("/logout", authHandler.Logout)
@@ -122,10 +133,10 @@ func (s *Server) Handler() http.Handler {
 			ar.Get("/accounts/{id}", accountHandler.Get)
 			ar.Get("/accounts/{id}/balance", transactionHandler.AccountBalance)
 			ar.Put("/accounts/{id}", accountHandler.Update)
-			ar.Post("/accounts/{id}/archive", accountHandler.Archive)
+			ar.Post("/accounts/{id}/archive", accountArchiveHandler.archiveAccount)
 			ar.Post("/accounts/{id}/unarchive", accountHandler.Unarchive)
 			ar.Post("/accounts/{id}/primary", accountHandler.SetPrimary)
-			ar.Delete("/accounts/{id}", accountHandler.Delete)
+			ar.Delete("/accounts/{id}", accountDeleteHandler.deleteAccount)
 
 			ar.Get("/transactions", transactionHandler.List)
 			ar.Post("/transactions", transactionHandler.Create)
@@ -138,6 +149,15 @@ func (s *Server) Handler() http.Handler {
 			ar.Post("/recurring-operations", recurringHandler.Create)
 			ar.Put("/recurring-operations/{id}", recurringHandler.Update)
 			ar.Delete("/recurring-operations/{id}", recurringHandler.Delete)
+
+			ar.Get("/budgets/summary", budgetHandler.Summary)
+			ar.Get("/budgets", budgetHandler.List)
+			ar.Post("/budgets/copy-from-previous", budgetHandler.CopyFromPrevious)
+			ar.Post("/budgets", budgetHandler.Create)
+			ar.Post("/budgets/{id}/copy-next", budgetHandler.CopyNext)
+			ar.Patch("/budgets/{id}", budgetHandler.Update)
+			ar.Delete("/budgets/{id}", budgetHandler.Delete)
+
 			if os.Getenv("BUHGALTER_E2E") == "1" {
 				ar.Post("/test/recurring-operations/{id}/run-now", recurringHandler.E2ERunNow)
 				ar.Post("/test/credits/{id}/apply-due", creditHandler.E2EApplyDue)
@@ -201,6 +221,14 @@ func (s *Server) Handler() http.Handler {
 			ar.Get("/stats/search", statsHandler.Search)
 			ar.Get("/stats/context", statsHandler.Context)
 
+			ar.Get("/budgets/summary", budgetHandler.Summary)
+			ar.Get("/budgets", budgetHandler.List)
+			ar.Post("/budgets/copy-from-previous", budgetHandler.CopyFromPrevious)
+			ar.Post("/budgets", budgetHandler.Create)
+			ar.Post("/budgets/{id}/copy-next", budgetHandler.CopyNext)
+			ar.Patch("/budgets/{id}", budgetHandler.Update)
+			ar.Delete("/budgets/{id}", budgetHandler.Delete)
+
 			ar.Get("/ui/meta", uiHandler.Meta)
 		})
 
@@ -229,6 +257,7 @@ func (s *Server) Handler() http.Handler {
 			ad.Put("/settings/notification-secret", adminHandler.PutNotificationSecretKey)
 			ad.Get("/users", adminHandler.ListUsers)
 			ad.Post("/users", adminHandler.CreateUser)
+			ad.Put("/users/{id}/status", adminHandler.UpdateUserStatus)
 			ad.Put("/users/{id}/password", adminHandler.ResetUserPassword)
 			ad.Delete("/users/{id}", adminHandler.DeleteUser)
 			ad.Get("/password-reset-requests", adminHandler.ListPasswordResetRequests)

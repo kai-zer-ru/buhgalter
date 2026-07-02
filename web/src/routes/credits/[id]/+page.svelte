@@ -20,7 +20,7 @@
 	import BackLink from '$lib/components/BackLink.svelte';
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
-	import { dateOnlyPicker } from '$lib/datetime-picker-standards';
+	import { dateOnlyPicker, defaultAutoDebitTimeLocal } from '$lib/datetime-picker-standards';
 	import FieldHint from '$lib/components/FieldHint.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
 	import Select from '$lib/components/Select.svelte';
@@ -39,7 +39,9 @@
 		todayDateLocal,
 		toDatetimeLocalValue
 	} from '$lib/dates';
-	import { bankIconUrl, formatBalance } from '$lib/finance';
+	import { bankIconUrl } from '$lib/finance';
+	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
+	import { formatMoneyForDisplay } from '$lib/money-display';
 	import { toAPIAmount, fromCents, formatMoneyForInput } from '$lib/money';
 	import { user } from '$lib/stores/auth';
 
@@ -320,7 +322,9 @@
 	async function submitDebitTime() {
 		if (!credit) return;
 		try {
-			const nextDebitTime = autoDebitEnabled ? debitTimeLocal.trim() || '00:00' : null;
+			const nextDebitTime = autoDebitEnabled
+				? debitTimeLocal.trim() || defaultAutoDebitTimeLocal
+				: null;
 			await updateCredit(credit.id, { debit_time_local: nextDebitTime });
 			setDebitTimeOpen = false;
 			toast($_('common.saved'));
@@ -643,23 +647,29 @@
 		<div class="card grid gap-3 p-4 text-sm md:grid-cols-3">
 			<div>
 				<span style:color="var(--text-muted)">{$_('credits.field.principal')}</span>
-				<p class="font-medium">{formatBalance(credit.principal_amount_display, currency)}</p>
+				<p class="font-medium">
+					<MoneyDisplay value={credit.principal_amount_display} {currency} class="" />
+				</p>
 			</div>
 			{#if credit.credit_kind === 'mortgage'}
 				<div>
 					<span style:color="var(--text-muted)">{$_('credits.field.propertyPrice')}</span>
 					<p class="font-medium">
-						{credit.property_price_display
-							? formatBalance(credit.property_price_display, currency)
-							: '—'}
+						{#if credit.property_price_display}
+							<MoneyDisplay value={credit.property_price_display} {currency} class="" />
+						{:else}
+							—
+						{/if}
 					</p>
 				</div>
 				<div>
 					<span style:color="var(--text-muted)">{$_('credits.field.downPayment')}</span>
 					<p class="font-medium">
-						{credit.down_payment_display
-							? formatBalance(credit.down_payment_display, currency)
-							: '—'}
+						{#if credit.down_payment_display}
+							<MoneyDisplay value={credit.down_payment_display} {currency} class="" />
+						{:else}
+							—
+						{/if}
 					</p>
 				</div>
 			{/if}
@@ -667,13 +677,15 @@
 				<div>
 					<span style:color="var(--text-muted)">{$_('credits.field.totalInterest')}</span>
 					<p class="font-medium">
-						{formatBalance(fromCents(totalInterestCents(credit)), currency)}
+						<MoneyDisplay cents={totalInterestCents(credit)} {currency} class="" />
 					</p>
 				</div>
 			{/if}
 			<div>
 				<span style:color="var(--text-muted)">{$_('credits.field.payment')}</span>
-				<p class="font-medium">{formatBalance(credit.monthly_payment_display, currency)}</p>
+				<p class="font-medium">
+					<MoneyDisplay value={credit.monthly_payment_display} {currency} class="" />
+				</p>
 			</div>
 			{#if !credit.is_installment}
 				<div>
@@ -760,7 +772,7 @@
 													<MoneyInput bind:value={scheduleEditRows[editIdx].amount} />
 												{/if}
 											{:else}
-												{formatBalance(p.amount_display, currency)}
+												<MoneyDisplay value={p.amount_display} {currency} class="" />
 											{/if}
 										</td>
 										<td class="p-3">
@@ -797,7 +809,7 @@
 													<MoneyInput bind:value={scheduleEditRows[editIdx].amount} />
 												{/if}
 											{:else}
-												{formatBalance(p.amount_display, currency)}
+												<MoneyDisplay value={p.amount_display} {currency} class="" />
 											{/if}
 										</dd>
 									</div>
@@ -956,7 +968,8 @@
 			/>
 			{#if payRemaining() !== null}
 				<p class="text-sm" style:color="var(--text-muted)">
-					{$_('credits.pay.preview')}: {formatBalance(fromCents(payRemaining()!), currency)}
+					{$_('credits.pay.preview')}:
+					<MoneyDisplay cents={payRemaining()!} {currency} class="" />
 				</p>
 			{/if}
 		</div>
@@ -992,7 +1005,10 @@
 						<span class="text-sm">
 							{$_('credits.complete.payFromAccount', {
 								values: {
-									amount: formatBalance(activeCredit.remaining_amount_display, currency),
+									amount: formatMoneyForDisplay({
+										value: activeCredit.remaining_amount_display,
+										currency
+									}),
 									account: activeCredit.debit_account_name
 								}
 							})}
@@ -1068,7 +1084,8 @@
 					label={$_('credits.field.autoDebit')}
 					onchange={() => {
 						autoDebitEnabled = !autoDebitEnabled;
-						if (autoDebitEnabled && !debitTimeLocal.trim()) debitTimeLocal = '00:00';
+						if (autoDebitEnabled && !debitTimeLocal.trim())
+							debitTimeLocal = defaultAutoDebitTimeLocal;
 					}}
 				/>
 			</div>

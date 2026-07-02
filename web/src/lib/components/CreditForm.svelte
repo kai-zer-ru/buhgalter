@@ -13,7 +13,7 @@
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
-	import { dateOnlyPicker } from '$lib/datetime-picker-standards';
+	import { dateOnlyPicker, defaultAutoDebitTimeLocal } from '$lib/datetime-picker-standards';
 	import FieldHint from '$lib/components/FieldHint.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
 	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
@@ -61,6 +61,7 @@
 	let createTransactions = $state(true);
 	let retroactive = $state(false);
 	let retroactiveDebitCount = $state(0);
+	let principalAffectsBalance = $state(false);
 	let accounts = $state<Account[]>([]);
 	let banks = $state<Bank[]>([]);
 	let bankId = $state('');
@@ -75,6 +76,14 @@
 	const schedulePageSize = 10;
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
+	const principalIncomeBlocked = $derived.by(() => {
+		if (scheduleRows.length === 0) return false;
+		const todayDay = todayDateLocal(tz).slice(0, 10);
+		return scheduleRows.some((row) => {
+			if (!row.date.trim()) return false;
+			return dateOnlyLocalValue(row.date).slice(0, 10) < todayDay;
+		});
+	});
 	const isManualInterval = $derived(interval === 'manual');
 	const hasDownPayment = $derived.by(() => {
 		if (!downPayment.trim()) return false;
@@ -202,6 +211,7 @@
 		paymentDraft = '';
 		retroactive = false;
 		retroactiveDebitCount = 0;
+		principalAffectsBalance = false;
 		downPaymentAccountId = '';
 		bankId = '';
 		debitTimeLocal = '';
@@ -212,6 +222,14 @@
 		scheduleError = '';
 		schedulePage = 1;
 	}
+
+	$effect(() => {
+		if (principalIncomeBlocked) principalAffectsBalance = false;
+	});
+
+	$effect(() => {
+		if (productType !== 'credit') principalAffectsBalance = false;
+	});
 
 	let formWasOpen = $state(false);
 
@@ -434,7 +452,7 @@
 
 	$effect(() => {
 		if (showDebitTimeField && !debitTimeLocal.trim()) {
-			debitTimeLocal = '00:00';
+			debitTimeLocal = defaultAutoDebitTimeLocal;
 		}
 	});
 
@@ -482,10 +500,13 @@
 				paid_amount: '0',
 				monthly_payment: !isManualInterval && paymentOverride ? toAPIAmount(paymentOverride) : null,
 				debit_account_id: debitAccountId,
-				debit_time_local: showDebitTimeField ? debitTimeLocal.trim() || null : null,
+				debit_time_local: showDebitTimeField
+					? debitTimeLocal.trim() || defaultAutoDebitTimeLocal
+					: null,
 				bank_id: bankId || null,
 				added_retroactively: retroactive,
 				retroactive_debit_count: retroactive ? retroactiveDebitCount : 0,
+				principal_affects_balance: productType === 'credit' ? principalAffectsBalance : false,
 				create_transactions: createTransactions,
 				schedule_seed: seed
 			});
@@ -650,6 +671,26 @@
 				{/if}
 			{/if}
 		</div>
+
+		{#if productType === 'credit'}
+			<div class="space-y-1">
+				<div class="flex items-center justify-between gap-4">
+					<div>
+						<p class="text-sm">{$_('credits.field.principalAffectsBalance')}</p>
+						<FieldHint text={$_('credits.field.principalAffectsBalanceHint')} />
+					</div>
+					<ToggleSwitch
+						checked={principalAffectsBalance}
+						disabled={principalIncomeBlocked}
+						label={$_('credits.field.principalAffectsBalance')}
+						onchange={() => (principalAffectsBalance = !principalAffectsBalance)}
+					/>
+				</div>
+				{#if principalIncomeBlocked}
+					<FieldHint text={$_('credits.field.principalAffectsBalancePastPaymentBlocked')} />
+				{/if}
+			</div>
+		{/if}
 
 		<div class="space-y-1">
 			<div class="flex items-center justify-between gap-4">

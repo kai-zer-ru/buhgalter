@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { waitAppReady } from './helpers/auth';
 import { createCashAccount, createTransfer } from './helpers/setup-data';
-import { confirmDialog, rowMenuAction } from './helpers/ui';
+import { confirmDialog, openRowActions, rowMenuAction } from './helpers/ui';
 
 test('accounts list: edit name inline', async ({ page }) => {
 	const unique = Date.now();
@@ -37,6 +37,7 @@ test('accounts list: make primary account', async ({ page }) => {
 });
 
 test('accounts list: archive removes card', async ({ page }) => {
+	const target = await createCashAccount(page, `E2E Archive Target ${Date.now()}`);
 	const account = await createCashAccount(page, `E2E Archive Me ${Date.now()}`);
 
 	await page.goto('/accounts');
@@ -44,7 +45,14 @@ test('accounts list: archive removes card', async ({ page }) => {
 
 	const card = page.locator('.card').filter({ hasText: account.name });
 	await rowMenuAction(page, card, 'Архивировать');
+
+	const { selectLabeledCombobox } = await import('./helpers/combobox');
+	await selectLabeledCombobox(page, 'Перевести на счёт', { label: target.name });
+	await confirmDialog(page, 'Архивировать');
+
 	await expect(page.getByText(account.name)).toHaveCount(0, { timeout: 10_000 });
+	const targetCard = page.locator('.card').filter({ hasText: target.name });
+	await expect(targetCard.getByText(/2[\s\u00a0]000/)).toBeVisible({ timeout: 10_000 });
 });
 
 test('account detail: edit via header menu', async ({ page }) => {
@@ -64,7 +72,8 @@ test('account detail: edit via header menu', async ({ page }) => {
 	await expect(page.getByRole('heading', { name: newName })).toBeVisible({ timeout: 10_000 });
 });
 
-test('account detail: delete account redirects to list', async ({ page }) => {
+test('account detail: delete account redirects to deleted tab', async ({ page }) => {
+	const target = await createCashAccount(page, `E2E Delete Target ${Date.now()}`);
 	const account = await createCashAccount(page, `E2E Delete Me ${Date.now()}`);
 
 	await page.goto(`/accounts/${account.id}`);
@@ -73,10 +82,24 @@ test('account detail: delete account redirects to list', async ({ page }) => {
 	const header = page.locator('.card').first();
 	await header.getByRole('button', { name: 'Действия' }).click();
 	await page.getByRole('menuitem', { name: 'Удалить' }).click();
+
+	const { selectLabeledCombobox } = await import('./helpers/combobox');
+	await selectLabeledCombobox(page, 'Перевести на счёт', { label: target.name });
 	await confirmDialog(page);
 
-	await expect(page).toHaveURL(/\/accounts\/?$/, { timeout: 15_000 });
-	await expect(page.getByText(account.name)).toHaveCount(0);
+	await expect(page).toHaveURL(/\/accounts\?status=deleted/, { timeout: 15_000 });
+	await expect(page.getByRole('tab', { name: 'Удалённые', selected: true })).toBeVisible();
+	await expect(page.getByText(account.name)).toBeVisible();
+
+	await page.getByRole('link', { name: account.name }).click();
+	await waitAppReady(page);
+
+	const txRow = page.locator('tbody tr').first();
+	await expect(txRow).toBeVisible({ timeout: 10_000 });
+	await openRowActions(txRow);
+	await expect(page.getByRole('menuitem', { name: 'Повторить' })).toBeVisible();
+	await expect(page.getByRole('menuitem', { name: 'Изменить' })).toHaveCount(0);
+	await expect(page.getByRole('menuitem', { name: 'Удалить' })).toHaveCount(0);
 });
 
 test('dashboard: click account card opens account page', async ({ page }) => {

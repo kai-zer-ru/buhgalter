@@ -21,6 +21,7 @@
 - [ ] `make ci` проходит локально (или релевантные `make test`, `make lint-go`, `make lint-web`)
 - [ ] Миграции БД добавлены, если менялась схема (`server/internal/db/migrations/`)
 - [ ] `make sqlc` / `make sqlc-check`, если менялись `server/queries/`
+- [ ] `make inline-sql-check` проходит (нет нового inline SQL в production; правило: [docs/sql-access.md](../docs/sql-access.md))
 - [ ] OpenAPI обновлён, если менялся API (`docs/api/openapi.yaml`, затем `make copy-openapi`)
 - [ ] i18n обновлён, если менялись строки UI (`web/src/lib/i18n/`, `server/locales/`)
 

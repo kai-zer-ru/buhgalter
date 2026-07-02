@@ -262,7 +262,9 @@ SELECT
     c.is_system AS category_is_system,
     s.name AS subcategory_name,
     a.name AS account_name,
+    a.status AS account_status,
     ta.name AS transfer_account_name,
+    ta.status AS transfer_account_status,
     CASE
         WHEN t.transfer_group_id IS NULL THEN 0
         WHEN t.id = (
@@ -289,28 +291,30 @@ type GetTransactionByIDParams struct {
 }
 
 type GetTransactionByIDRow struct {
-	ID                  string  `json:"id"`
-	UserID              string  `json:"user_id"`
-	AccountID           string  `json:"account_id"`
-	Type                string  `json:"type"`
-	Kind                string  `json:"kind"`
-	Amount              int64   `json:"amount"`
-	Description         *string `json:"description"`
-	CategoryID          *string `json:"category_id"`
-	SubcategoryID       *string `json:"subcategory_id"`
-	TransferGroupID     *string `json:"transfer_group_id"`
-	TransferAccountID   *string `json:"transfer_account_id"`
-	TransactionDate     string  `json:"transaction_date"`
-	CreatedAt           string  `json:"created_at"`
-	UpdatedAt           string  `json:"updated_at"`
-	CategoryName        *string `json:"category_name"`
-	CategoryIcon        *string `json:"category_icon"`
-	CategoryIsSystem    *int64  `json:"category_is_system"`
-	SubcategoryName     *string `json:"subcategory_name"`
-	AccountName         *string `json:"account_name"`
-	TransferAccountName *string `json:"transfer_account_name"`
-	TransferIsOut       int64   `json:"transfer_is_out"`
-	CreditPaymentLinked int64   `json:"credit_payment_linked"`
+	ID                    string  `json:"id"`
+	UserID                string  `json:"user_id"`
+	AccountID             string  `json:"account_id"`
+	Type                  string  `json:"type"`
+	Kind                  string  `json:"kind"`
+	Amount                int64   `json:"amount"`
+	Description           *string `json:"description"`
+	CategoryID            *string `json:"category_id"`
+	SubcategoryID         *string `json:"subcategory_id"`
+	TransferGroupID       *string `json:"transfer_group_id"`
+	TransferAccountID     *string `json:"transfer_account_id"`
+	TransactionDate       string  `json:"transaction_date"`
+	CreatedAt             string  `json:"created_at"`
+	UpdatedAt             string  `json:"updated_at"`
+	CategoryName          *string `json:"category_name"`
+	CategoryIcon          *string `json:"category_icon"`
+	CategoryIsSystem      *int64  `json:"category_is_system"`
+	SubcategoryName       *string `json:"subcategory_name"`
+	AccountName           *string `json:"account_name"`
+	AccountStatus         *string `json:"account_status"`
+	TransferAccountName   *string `json:"transfer_account_name"`
+	TransferAccountStatus *string `json:"transfer_account_status"`
+	TransferIsOut         int64   `json:"transfer_is_out"`
+	CreditPaymentLinked   int64   `json:"credit_payment_linked"`
 }
 
 func (q *Queries) GetTransactionByID(ctx context.Context, arg GetTransactionByIDParams) (GetTransactionByIDRow, error) {
@@ -336,7 +340,9 @@ func (q *Queries) GetTransactionByID(ctx context.Context, arg GetTransactionByID
 		&i.CategoryIsSystem,
 		&i.SubcategoryName,
 		&i.AccountName,
+		&i.AccountStatus,
 		&i.TransferAccountName,
+		&i.TransferAccountStatus,
 		&i.TransferIsOut,
 		&i.CreditPaymentLinked,
 	)
@@ -516,7 +522,9 @@ SELECT
     c.is_system AS category_is_system,
     s.name AS subcategory_name,
     a.name AS account_name,
+    a.status AS account_status,
     ta.name AS transfer_account_name,
+    ta.status AS transfer_account_status,
     CASE
         WHEN t.transfer_group_id IS NULL THEN 0
         WHEN t.id = (
@@ -545,28 +553,30 @@ type ListRecentTransactionsParams struct {
 }
 
 type ListRecentTransactionsRow struct {
-	ID                  string  `json:"id"`
-	UserID              string  `json:"user_id"`
-	AccountID           string  `json:"account_id"`
-	Type                string  `json:"type"`
-	Kind                string  `json:"kind"`
-	Amount              int64   `json:"amount"`
-	Description         *string `json:"description"`
-	CategoryID          *string `json:"category_id"`
-	SubcategoryID       *string `json:"subcategory_id"`
-	TransferGroupID     *string `json:"transfer_group_id"`
-	TransferAccountID   *string `json:"transfer_account_id"`
-	TransactionDate     string  `json:"transaction_date"`
-	CreatedAt           string  `json:"created_at"`
-	UpdatedAt           string  `json:"updated_at"`
-	CategoryName        *string `json:"category_name"`
-	CategoryIcon        *string `json:"category_icon"`
-	CategoryIsSystem    *int64  `json:"category_is_system"`
-	SubcategoryName     *string `json:"subcategory_name"`
-	AccountName         *string `json:"account_name"`
-	TransferAccountName *string `json:"transfer_account_name"`
-	TransferIsOut       int64   `json:"transfer_is_out"`
-	CreditPaymentLinked int64   `json:"credit_payment_linked"`
+	ID                    string  `json:"id"`
+	UserID                string  `json:"user_id"`
+	AccountID             string  `json:"account_id"`
+	Type                  string  `json:"type"`
+	Kind                  string  `json:"kind"`
+	Amount                int64   `json:"amount"`
+	Description           *string `json:"description"`
+	CategoryID            *string `json:"category_id"`
+	SubcategoryID         *string `json:"subcategory_id"`
+	TransferGroupID       *string `json:"transfer_group_id"`
+	TransferAccountID     *string `json:"transfer_account_id"`
+	TransactionDate       string  `json:"transaction_date"`
+	CreatedAt             string  `json:"created_at"`
+	UpdatedAt             string  `json:"updated_at"`
+	CategoryName          *string `json:"category_name"`
+	CategoryIcon          *string `json:"category_icon"`
+	CategoryIsSystem      *int64  `json:"category_is_system"`
+	SubcategoryName       *string `json:"subcategory_name"`
+	AccountName           *string `json:"account_name"`
+	AccountStatus         *string `json:"account_status"`
+	TransferAccountName   *string `json:"transfer_account_name"`
+	TransferAccountStatus *string `json:"transfer_account_status"`
+	TransferIsOut         int64   `json:"transfer_is_out"`
+	CreditPaymentLinked   int64   `json:"credit_payment_linked"`
 }
 
 func (q *Queries) ListRecentTransactions(ctx context.Context, arg ListRecentTransactionsParams) ([]ListRecentTransactionsRow, error) {
@@ -598,7 +608,9 @@ func (q *Queries) ListRecentTransactions(ctx context.Context, arg ListRecentTran
 			&i.CategoryIsSystem,
 			&i.SubcategoryName,
 			&i.AccountName,
+			&i.AccountStatus,
 			&i.TransferAccountName,
+			&i.TransferAccountStatus,
 			&i.TransferIsOut,
 			&i.CreditPaymentLinked,
 		); err != nil {
@@ -636,7 +648,9 @@ SELECT
     c.is_system AS category_is_system,
     s.name AS subcategory_name,
     a.name AS account_name,
+    a.status AS account_status,
     ta.name AS transfer_account_name,
+    ta.status AS transfer_account_status,
     CASE
         WHEN t.transfer_group_id IS NULL THEN 0
         WHEN t.id = (
@@ -662,27 +676,29 @@ type ListTransactionsByTransferGroupParams struct {
 }
 
 type ListTransactionsByTransferGroupRow struct {
-	ID                  string  `json:"id"`
-	UserID              string  `json:"user_id"`
-	AccountID           string  `json:"account_id"`
-	Type                string  `json:"type"`
-	Kind                string  `json:"kind"`
-	Amount              int64   `json:"amount"`
-	Description         *string `json:"description"`
-	CategoryID          *string `json:"category_id"`
-	SubcategoryID       *string `json:"subcategory_id"`
-	TransferGroupID     *string `json:"transfer_group_id"`
-	TransferAccountID   *string `json:"transfer_account_id"`
-	TransactionDate     string  `json:"transaction_date"`
-	CreatedAt           string  `json:"created_at"`
-	UpdatedAt           string  `json:"updated_at"`
-	CategoryName        *string `json:"category_name"`
-	CategoryIcon        *string `json:"category_icon"`
-	CategoryIsSystem    *int64  `json:"category_is_system"`
-	SubcategoryName     *string `json:"subcategory_name"`
-	AccountName         *string `json:"account_name"`
-	TransferAccountName *string `json:"transfer_account_name"`
-	TransferIsOut       int64   `json:"transfer_is_out"`
+	ID                    string  `json:"id"`
+	UserID                string  `json:"user_id"`
+	AccountID             string  `json:"account_id"`
+	Type                  string  `json:"type"`
+	Kind                  string  `json:"kind"`
+	Amount                int64   `json:"amount"`
+	Description           *string `json:"description"`
+	CategoryID            *string `json:"category_id"`
+	SubcategoryID         *string `json:"subcategory_id"`
+	TransferGroupID       *string `json:"transfer_group_id"`
+	TransferAccountID     *string `json:"transfer_account_id"`
+	TransactionDate       string  `json:"transaction_date"`
+	CreatedAt             string  `json:"created_at"`
+	UpdatedAt             string  `json:"updated_at"`
+	CategoryName          *string `json:"category_name"`
+	CategoryIcon          *string `json:"category_icon"`
+	CategoryIsSystem      *int64  `json:"category_is_system"`
+	SubcategoryName       *string `json:"subcategory_name"`
+	AccountName           *string `json:"account_name"`
+	AccountStatus         *string `json:"account_status"`
+	TransferAccountName   *string `json:"transfer_account_name"`
+	TransferAccountStatus *string `json:"transfer_account_status"`
+	TransferIsOut         int64   `json:"transfer_is_out"`
 }
 
 func (q *Queries) ListTransactionsByTransferGroup(ctx context.Context, arg ListTransactionsByTransferGroupParams) ([]ListTransactionsByTransferGroupRow, error) {
@@ -714,7 +730,9 @@ func (q *Queries) ListTransactionsByTransferGroup(ctx context.Context, arg ListT
 			&i.CategoryIsSystem,
 			&i.SubcategoryName,
 			&i.AccountName,
+			&i.AccountStatus,
 			&i.TransferAccountName,
+			&i.TransferAccountStatus,
 			&i.TransferIsOut,
 		); err != nil {
 			return nil, err
@@ -751,7 +769,9 @@ SELECT
     c.is_system AS category_is_system,
     s.name AS subcategory_name,
     a.name AS account_name,
+    a.status AS account_status,
     ta.name AS transfer_account_name,
+    ta.status AS transfer_account_status,
     CASE
         WHEN t.transfer_group_id IS NULL THEN 0
         WHEN t.id = (
@@ -802,28 +822,30 @@ type ListTransactionsFilteredDateAscParams struct {
 }
 
 type ListTransactionsFilteredDateAscRow struct {
-	ID                  string  `json:"id"`
-	UserID              string  `json:"user_id"`
-	AccountID           string  `json:"account_id"`
-	Type                string  `json:"type"`
-	Kind                string  `json:"kind"`
-	Amount              int64   `json:"amount"`
-	Description         *string `json:"description"`
-	CategoryID          *string `json:"category_id"`
-	SubcategoryID       *string `json:"subcategory_id"`
-	TransferGroupID     *string `json:"transfer_group_id"`
-	TransferAccountID   *string `json:"transfer_account_id"`
-	TransactionDate     string  `json:"transaction_date"`
-	CreatedAt           string  `json:"created_at"`
-	UpdatedAt           string  `json:"updated_at"`
-	CategoryName        *string `json:"category_name"`
-	CategoryIcon        *string `json:"category_icon"`
-	CategoryIsSystem    *int64  `json:"category_is_system"`
-	SubcategoryName     *string `json:"subcategory_name"`
-	AccountName         *string `json:"account_name"`
-	TransferAccountName *string `json:"transfer_account_name"`
-	TransferIsOut       int64   `json:"transfer_is_out"`
-	CreditPaymentLinked int64   `json:"credit_payment_linked"`
+	ID                    string  `json:"id"`
+	UserID                string  `json:"user_id"`
+	AccountID             string  `json:"account_id"`
+	Type                  string  `json:"type"`
+	Kind                  string  `json:"kind"`
+	Amount                int64   `json:"amount"`
+	Description           *string `json:"description"`
+	CategoryID            *string `json:"category_id"`
+	SubcategoryID         *string `json:"subcategory_id"`
+	TransferGroupID       *string `json:"transfer_group_id"`
+	TransferAccountID     *string `json:"transfer_account_id"`
+	TransactionDate       string  `json:"transaction_date"`
+	CreatedAt             string  `json:"created_at"`
+	UpdatedAt             string  `json:"updated_at"`
+	CategoryName          *string `json:"category_name"`
+	CategoryIcon          *string `json:"category_icon"`
+	CategoryIsSystem      *int64  `json:"category_is_system"`
+	SubcategoryName       *string `json:"subcategory_name"`
+	AccountName           *string `json:"account_name"`
+	AccountStatus         *string `json:"account_status"`
+	TransferAccountName   *string `json:"transfer_account_name"`
+	TransferAccountStatus *string `json:"transfer_account_status"`
+	TransferIsOut         int64   `json:"transfer_is_out"`
+	CreditPaymentLinked   int64   `json:"credit_payment_linked"`
 }
 
 func (q *Queries) ListTransactionsFilteredDateAsc(ctx context.Context, arg ListTransactionsFilteredDateAscParams) ([]ListTransactionsFilteredDateAscRow, error) {
@@ -873,7 +895,9 @@ func (q *Queries) ListTransactionsFilteredDateAsc(ctx context.Context, arg ListT
 			&i.CategoryIsSystem,
 			&i.SubcategoryName,
 			&i.AccountName,
+			&i.AccountStatus,
 			&i.TransferAccountName,
+			&i.TransferAccountStatus,
 			&i.TransferIsOut,
 			&i.CreditPaymentLinked,
 		); err != nil {
@@ -911,7 +935,9 @@ SELECT
     c.is_system AS category_is_system,
     s.name AS subcategory_name,
     a.name AS account_name,
+    a.status AS account_status,
     ta.name AS transfer_account_name,
+    ta.status AS transfer_account_status,
     CASE
         WHEN t.transfer_group_id IS NULL THEN 0
         WHEN t.id = (
@@ -962,28 +988,30 @@ type ListTransactionsFilteredDateDescParams struct {
 }
 
 type ListTransactionsFilteredDateDescRow struct {
-	ID                  string  `json:"id"`
-	UserID              string  `json:"user_id"`
-	AccountID           string  `json:"account_id"`
-	Type                string  `json:"type"`
-	Kind                string  `json:"kind"`
-	Amount              int64   `json:"amount"`
-	Description         *string `json:"description"`
-	CategoryID          *string `json:"category_id"`
-	SubcategoryID       *string `json:"subcategory_id"`
-	TransferGroupID     *string `json:"transfer_group_id"`
-	TransferAccountID   *string `json:"transfer_account_id"`
-	TransactionDate     string  `json:"transaction_date"`
-	CreatedAt           string  `json:"created_at"`
-	UpdatedAt           string  `json:"updated_at"`
-	CategoryName        *string `json:"category_name"`
-	CategoryIcon        *string `json:"category_icon"`
-	CategoryIsSystem    *int64  `json:"category_is_system"`
-	SubcategoryName     *string `json:"subcategory_name"`
-	AccountName         *string `json:"account_name"`
-	TransferAccountName *string `json:"transfer_account_name"`
-	TransferIsOut       int64   `json:"transfer_is_out"`
-	CreditPaymentLinked int64   `json:"credit_payment_linked"`
+	ID                    string  `json:"id"`
+	UserID                string  `json:"user_id"`
+	AccountID             string  `json:"account_id"`
+	Type                  string  `json:"type"`
+	Kind                  string  `json:"kind"`
+	Amount                int64   `json:"amount"`
+	Description           *string `json:"description"`
+	CategoryID            *string `json:"category_id"`
+	SubcategoryID         *string `json:"subcategory_id"`
+	TransferGroupID       *string `json:"transfer_group_id"`
+	TransferAccountID     *string `json:"transfer_account_id"`
+	TransactionDate       string  `json:"transaction_date"`
+	CreatedAt             string  `json:"created_at"`
+	UpdatedAt             string  `json:"updated_at"`
+	CategoryName          *string `json:"category_name"`
+	CategoryIcon          *string `json:"category_icon"`
+	CategoryIsSystem      *int64  `json:"category_is_system"`
+	SubcategoryName       *string `json:"subcategory_name"`
+	AccountName           *string `json:"account_name"`
+	AccountStatus         *string `json:"account_status"`
+	TransferAccountName   *string `json:"transfer_account_name"`
+	TransferAccountStatus *string `json:"transfer_account_status"`
+	TransferIsOut         int64   `json:"transfer_is_out"`
+	CreditPaymentLinked   int64   `json:"credit_payment_linked"`
 }
 
 func (q *Queries) ListTransactionsFilteredDateDesc(ctx context.Context, arg ListTransactionsFilteredDateDescParams) ([]ListTransactionsFilteredDateDescRow, error) {
@@ -1033,7 +1061,9 @@ func (q *Queries) ListTransactionsFilteredDateDesc(ctx context.Context, arg List
 			&i.CategoryIsSystem,
 			&i.SubcategoryName,
 			&i.AccountName,
+			&i.AccountStatus,
 			&i.TransferAccountName,
+			&i.TransferAccountStatus,
 			&i.TransferIsOut,
 			&i.CreditPaymentLinked,
 		); err != nil {

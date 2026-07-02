@@ -19,7 +19,7 @@ func TestSeedDefaults(t *testing.T) {
 	defer mgr.Close()
 
 	ctx := context.Background()
-	userID, err := auth.CreateUser(ctx, mgr.DB(), "u1", "hash", "User", false)
+	userID, err := auth.CreateUser(ctx, mgr.DB(), "u1", "hash", "User", false, auth.UserStatusActive)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,13 +36,13 @@ func TestSeedDefaults(t *testing.T) {
 	var expense, income int
 	_ = mgr.DB().QueryRow(`SELECT COUNT(*) FROM categories WHERE user_id = ? AND type = 'expense'`, userID).Scan(&expense)
 	_ = mgr.DB().QueryRow(`SELECT COUNT(*) FROM categories WHERE user_id = ? AND type = 'income'`, userID).Scan(&income)
-	if expense != 8 || income != 3 {
-		t.Fatalf("expected 8 expense and 3 income, got %d/%d", expense, income)
+	if expense != 8 || income != 4 {
+		t.Fatalf("expected 8 expense and 4 income, got %d/%d", expense, income)
 	}
 
 	var systemCount int
 	_ = mgr.DB().QueryRow(`SELECT COUNT(*) FROM categories WHERE user_id = ? AND is_system = 1`, userID).Scan(&systemCount)
-	if systemCount != 4 {
-		t.Fatalf("expected 4 system categories, got %d", systemCount)
+	if systemCount != 5 {
+		t.Fatalf("expected 5 system categories, got %d", systemCount)
 	}
 }

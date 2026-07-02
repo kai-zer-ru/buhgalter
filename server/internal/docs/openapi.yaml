@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: Бухгалтер API
   description: |
-    API приложения «Бухгалтер» (этапы 0–8).
+    API приложения «Бухгалтер» для учёта личных финансов.
 
     Ответы с ошибками (`4xx`, `5xx`) используют объект `error` с полями `code`, `message` и опционально
     **`field`** — имя поля тела запроса для подсветки в форме UI (например `monthly_payment`, `term_months`).
@@ -16,7 +16,7 @@ info:
     `POST /accounts/{id}/primary`, `POST /accounts/{id}/archive`, `DELETE /accounts/{id}`.
     На `/accounts/{id}` — та же форма редактирования в шапке. Поля: название, банк, начальный баланс.
     Подробнее — [ui-row-actions.md](../ui-row-actions.md).
-  version: 1.2.5
+  version: 1.3.0
 servers:
   - url: /api/v1
 paths:
@@ -104,7 +104,7 @@ paths:
           description: Настройка уже выполнена
   /setup/restore:
     post:
-      summary: Восстановить БД на этапе setup
+      summary: Восстановить БД до завершения настройки
       description: |
         Доступно до завершения первичной настройки.
         Multipart: поле `file` (`.db`) и `confirm=RESTORE`.
@@ -186,6 +186,8 @@ paths:
           description: Успешный вход
         '401':
           description: Неверные учётные данные
+        '403':
+          description: Учётная запись на модерации или заблокирована (USER_PENDING_MODERATION, USER_BANNED)
         '429':
           description: Превышен лимит попыток
   /auth/logout:
@@ -227,7 +229,15 @@ paths:
                   description: Опционально; по умолчанию — login
       responses:
         '201':
-          description: Пользователь создан
+          description: Пользователь создан (статус pending, сессия не выдаётся)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                properties:
+                  user:
+                    $ref: '#/components/schemas/User'
         '400':
           description: Ошибка валидации (пароли не совпадают и т.д.)
         '403':
@@ -634,6 +644,42 @@ paths:
       responses:
         '204':
           description: Пользователь удалён
+  /admin/users/{id}/status:
+    put:
+      summary: Изменить статус пользователя
+      description: |
+        Допустимые переходы: pending→active|banned, active→banned, banned→active.
+        Нельзя менять свой статус. При бане сессии пользователя инвалидируются.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [active, banned]
+      responses:
+        '200':
+          description: Обновлённый пользователь
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUser'
+        '400':
+          description: Недопустимый статус или переход
+        '404':
+          description: Пользователь не найден
   /admin/diagnostics:
     get:
       summary: Диагностика системы
@@ -774,7 +820,7 @@ paths:
           in: query
           schema:
             type: string
-            enum: [active, archived]
+            enum: [active, archived, deleted]
       responses:
         '200':
           description: Список счетов
@@ -782,9 +828,19 @@ paths:
       summary: Создать счёт
       security:
         - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountCreate'
       responses:
         '201':
           description: Счёт создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
   /accounts/{id}:
     get:
       summary: Получить счёт
@@ -799,11 +855,15 @@ paths:
       responses:
         '200':
           description: Счёт
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
     put:
       summary: Обновить счёт
       description: |
-        Имя, банк (для `type=bank`), начальный баланс. В UI — inline-форма на `/accounts` или форма на
-        `/accounts/{id}`; поля с подписями (`accounts.field.name`, `accounts.field.bank`, `accounts.field.balance`).
+        Имя, банк (для `type=bank` / `credit_card`), лимит и счёт для переводов (для `credit_card`),
+        начальный баланс. В UI — inline-форма на `/accounts` или форма на `/accounts/{id}`.
       security:
         - sessionCookie: []
       parameters:
@@ -812,14 +872,33 @@ paths:
           required: true
           schema:
             type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountUpdate'
       responses:
         '200':
           description: Счёт обновлён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
     delete:
       summary: Удалить счёт
       description: |
-        Безвозвратно удаляет счёт и связанные данные. В UI — пункт «Удалить» в меню «⋯» на списке
-        `/accounts` и на странице счёта (с подтверждением).
+        Помечает счёт статусом `deleted` (мягкое удаление): операции и история сохраняются, счёт
+        доступен для просмотра на вкладке «Удалённые» и по прямой ссылке `/accounts/{id}`.
+
+        Для счетов `cash` / `bank` с `balance > 0` обязателен `transfer_to_account_id` (query или JSON body):
+        перед удалением создаётся перевод всей суммы на указанный активный счёт (категория «Перевод»,
+        комментарий `Удаление счёта "{name}"`).
+
+        Для `credit_card` перевод не выполняется. Удаление возможно только при полном погашении
+        (`balance >= credit_limit`); иначе `ERR_CREDIT_CARD_ARCHIVE_NOT_FULLY_PAID`.
+
+        В UI — пункт «Удалить» в меню «⋯» на списке `/accounts` и на странице счёта (с подтверждением).
       security:
         - sessionCookie: []
       parameters:
@@ -828,15 +907,43 @@ paths:
           required: true
           schema:
             type: string
+        - name: transfer_to_account_id
+          in: query
+          schema:
+            type: string
+          description: |
+            Счёт-приёмник остатка. Обязателен при `balance > 0` у удаляемого счёта `cash` / `bank` (не для `credit_card`).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                transfer_to_account_id:
+                  type: string
+                  description: |
+                    Альтернатива query-параметру. Счёт-приёмник остатка.
       responses:
         '204':
           description: Счёт удалён
+        '400':
+          description: |
+            Нет счёта-приёмника при положительном балансе `cash` / `bank` (`ERR_ACCOUNT_TRANSFER_REQUIRED`),
+            кредитная карта не погашена (`ERR_CREDIT_CARD_ARCHIVE_NOT_FULLY_PAID`) и др.
   /accounts/{id}/archive:
     post:
       summary: Архивировать счёт
       description: |
         Переводит счёт в `status=archived`. Если счёт был основным — флаг снимается, основным назначается
         следующий активный. В UI — пункт «Архивировать» в меню «⋯» на `/accounts` и на странице счёта.
+
+        Для счетов `cash` / `bank` с `balance > 0` обязателен `transfer_to_account_id` (query или JSON body):
+        перед архивацией создаётся перевод всей суммы на указанный активный счёт (категория «Перевод»,
+        комментарий `Архивация счёта "{name}"`).
+
+        Для `credit_card` перевод не выполняется. Архивация возможна только при полном погашении
+        (`balance >= credit_limit`); иначе `ERR_CREDIT_CARD_ARCHIVE_NOT_FULLY_PAID`.
       security:
         - sessionCookie: []
       parameters:
@@ -845,9 +952,30 @@ paths:
           required: true
           schema:
             type: string
+        - name: transfer_to_account_id
+          in: query
+          schema:
+            type: string
+          description: |
+            Счёт-приёмник остатка. Обязателен при `balance > 0` у архивируемого счёта `cash` / `bank`.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                transfer_to_account_id:
+                  type: string
+                  description: |
+                    Альтернатива query-параметру. Счёт-приёмник остатка.
       responses:
         '200':
           description: Счёт архивирован
+        '400':
+          description: |
+            Нет счёта-приёмника при положительном балансе (`ERR_ACCOUNT_TRANSFER_REQUIRED`),
+            кредитная карта не погашена (`ERR_CREDIT_CARD_ARCHIVE_NOT_FULLY_PAID`) и др.
   /accounts/{id}/unarchive:
     post:
       summary: Восстановить счёт из архива
@@ -1018,7 +1146,7 @@ paths:
       summary: Статистика по подкатегориям
       description: |
         Агрегация по подкатегориям с привязкой к родительской категории.
-        В веб-интерфейсе `/stats` не отображается (с v1.2.1); endpoint сохранён для API-клиентов.
+        В веб-интерфейсе `/stats` не отображается; endpoint доступен для API-клиентов.
       security:
         - sessionCookie: []
         - bearerAuth: []
@@ -1610,7 +1738,7 @@ paths:
         - для `manual` — только переданные `seed_payments` (ровно `term` строк; сумма подгоняется последним платежом).
 
         **Ипотека** (`credit_kind=mortgage`):
-        - периодичность в MVP — только `month`;
+        - для ипотеки поддерживается только периодичность `month`;
         - автоматический платёж: ежедневное начисление процентов, бинарный поиск равного платежа;
           платежи 1…N−1 равны `calculated_monthly_payment`, последний — остаток + проценты;
         - ручной `monthly_payment` (например из договора банка): платежи 1…N−1 равны введённой сумме,
@@ -1903,6 +2031,164 @@ paths:
           description: Удалена
         '404':
           description: Не найдена
+  /budgets/summary:
+    get:
+      summary: Сводка бюджетов за месяц (план vs факт)
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: month
+          in: query
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}$'
+          description: Календарный месяц (YYYY-MM) в timezone пользователя
+      responses:
+        '200':
+          description: Сводка бюджетов за месяц
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BudgetSummaryResponse'
+  /budgets/copy-from-previous:
+    post:
+      summary: Скопировать все бюджеты с прошлого месяца
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: month
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}$'
+          description: Целевой месяц (YYYY-MM)
+      responses:
+        '201':
+          description: Скопированные бюджеты
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BudgetItem'
+        '400':
+          description: Нечего копировать (ERR_BUDGET_NOTHING_TO_COPY)
+  /budgets:
+    get:
+      summary: Список шаблонов бюджетов
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: month
+          in: query
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}$'
+      responses:
+        '200':
+          description: Список бюджетов
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BudgetItem'
+    post:
+      summary: Создать бюджет
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BudgetUpsertRequest'
+      responses:
+        '201':
+          description: Бюджет создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BudgetItem'
+  /budgets/{id}:
+    patch:
+      summary: Обновить бюджет
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BudgetUpsertRequest'
+      responses:
+        '200':
+          description: Бюджет обновлён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BudgetItem'
+        '404':
+          description: Не найден
+        '409':
+          description: Дубликат активного бюджета
+    delete:
+      summary: Удалить бюджет
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Удалён
+        '404':
+          description: Не найден
+  /budgets/{id}/copy-next:
+    post:
+      summary: Копировать бюджет на следующий месяц
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Новый бюджет в следующем месяце (copy_forward = false)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BudgetItem'
+        '404':
+          description: Не найден
+        '409':
+          description: В следующем месяце уже есть бюджет с тем же scope (ERR_BUDGET_COPY_EXISTS)
   /transactions/{id}:
     get:
       summary: Получить операцию
@@ -1965,8 +2251,9 @@ paths:
       summary: Удалить операцию
       description: |
         Удаляет операцию; баланс счёта меняется на противоположную сумму (расход → плюс, доход → минус).
-        Операции долга после любого погашения удалить нельзя — `409 Conflict`.
-        До погашения можно удалить только начальную (`open`) операцию долга.
+        Начальную (`open`) операцию долга нельзя удалить, если есть другие операции по этому долгу — `409 Conflict`.
+        Единственную начальную операцию можно удалить — долг удаляется вместе с ней.
+        Операцию погашения (`settle`) можно удалить — остаток долга пересчитывается.
         Операция кредита — откат платежа (`scheduled`/`auto` → «Ожидает») или удаление legacy `early`; уменьшается `paid_amount`.
       security:
         - sessionCookie: []
@@ -1983,7 +2270,7 @@ paths:
         '404':
           description: Не найдена
         '409':
-          description: Операция долга после погашения — удалите долг целиком
+          description: Начальную операцию долга нельзя удалить при наличии других операций по долгу
   /transactions/{id}/activate:
     post:
       summary: Активировать плановую операцию
@@ -2463,6 +2750,7 @@ components:
               type: string
               description: |
                 Код ошибки: UNAUTHORIZED, FORBIDDEN, INVALID_CREDENTIALS, REGISTRATION_DISABLED,
+                USER_PENDING_MODERATION, USER_BANNED, USER_STATUS_INVALID, USER_STATUS_TRANSITION,
                 RATE_LIMITED, VALIDATION_ERROR, INTERNAL_ERROR, NOT_FOUND, CONFLICT,
                 ALREADY_CONFIGURED, SERVICE_UNAVAILABLE.
                 Для смены пароля и большинства 400 — `VALIDATION_ERROR`; текст в `message`
@@ -2482,6 +2770,46 @@ components:
           code: VALIDATION_ERROR
           message: Некорректные параметры запроса
           field: monthly_payment
+    User:
+      type: object
+      required: [id, login, display_name, is_admin, status, language, currency, timezone, theme]
+      properties:
+        id:
+          type: string
+        login:
+          type: string
+        display_name:
+          type: string
+        is_admin:
+          type: boolean
+        status:
+          type: string
+          enum: [active, pending, banned]
+        language:
+          type: string
+        currency:
+          type: string
+        timezone:
+          type: string
+        theme:
+          type: string
+    AdminUser:
+      type: object
+      required: [id, login, display_name, is_admin, status, created_at]
+      properties:
+        id:
+          type: string
+        login:
+          type: string
+        display_name:
+          type: string
+        is_admin:
+          type: boolean
+        status:
+          type: string
+          enum: [active, pending, banned]
+        created_at:
+          type: string
     AdminSettings:
       type: object
       required: [registration_enabled, external_url, secret_key_set]
@@ -2587,7 +2915,7 @@ components:
       properties:
         trigger_type:
           type: string
-          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, password_reset, test]
+          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, balance_shortfall, budget_threshold, user_registration, password_reset, test]
         template:
           type: string
           description: Текст шаблона
@@ -2597,8 +2925,11 @@ components:
             type: string
           description: |
             Разрешённые placeholder-ы для trigger_type.
-            Для password_reset дополнительно доступен reset_url — прямая ссылка на /admin/users?reset={user_id}
-            при настроенном external_url, иначе текст-подсказка настроить внешний URL в админке.
+            Для balance_shortfall — только {amount} (недостающая сумма); шаблон добавляется к исходящим уведомлениям при включённом trigger_negative_balance.
+            URL-плейсхолдеры формируются из system_settings.external_url; при пустом external_url — текст-подсказка настроить внешний URL в админке:
+            debt_url → /debts; credit_url → /credits/{credit_id}; transaction_url → /transactions;
+            settings_url → /settings?tab=notifications; reset_url → /admin/users?reset={user_id};
+            moderation_url → /admin/users?moderate={user_id}.
         is_custom:
           type: boolean
           description: true, если шаблон задан пользователем в БД
@@ -2614,6 +2945,9 @@ components:
           trigger_debt,
           trigger_credit,
           trigger_planned,
+          trigger_negative_balance,
+          trigger_budget,
+          trigger_user_registration,
           trigger_password_reset,
           debt_days_before,
           my_debt_overdue_days_limit,
@@ -2655,6 +2989,15 @@ components:
           type: boolean
         trigger_planned:
           type: boolean
+        trigger_negative_balance:
+          type: boolean
+          description: Дописывать к исходящим уведомлениям текст о недостатке средств на счёте
+        trigger_budget:
+          type: boolean
+          description: Уведомления о превышении порога бюджета
+        trigger_user_registration:
+          type: boolean
+          description: Только для администратора — уведомление о новой регистрации
         trigger_password_reset:
           type: boolean
         debt_days_before:
@@ -2691,7 +3034,7 @@ components:
       properties:
         trigger_type:
           type: string
-          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, password_reset, test]
+          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, balance_shortfall, budget_threshold, user_registration, password_reset, test]
         template:
           type: string
           minLength: 1
@@ -2726,6 +3069,15 @@ components:
           type: boolean
         trigger_planned:
           type: boolean
+        trigger_negative_balance:
+          type: boolean
+          description: Дописывать к исходящим уведомлениям текст о недостатке средств на счёте
+        trigger_budget:
+          type: boolean
+          description: Уведомления о превышении порога бюджета
+        trigger_user_registration:
+          type: boolean
+          description: Только для администратора — уведомление о новой регистрации
         trigger_password_reset:
           type: boolean
         debt_days_before:
@@ -2769,7 +3121,7 @@ components:
       properties:
         trigger_type:
           type: string
-          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, password_reset, test]
+          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, balance_shortfall, budget_threshold, user_registration, password_reset, test]
         template:
           type: string
           minLength: 1
@@ -2785,7 +3137,7 @@ components:
       properties:
         trigger_type:
           type: string
-          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, password_reset, test]
+          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, balance_shortfall, budget_threshold, user_registration, password_reset, test]
     Category:
       type: object
       properties:
@@ -2883,8 +3235,8 @@ components:
       type: object
       description: |
         Операция (доход, расход или нога перевода).
-        Поля `account_name`, `transfer_account_name`, `transfer_is_out`, `category_*`, `amount_display`
-        — обогащение в SELECT (не колонки БД).
+        Поля `account_name`, `account_status`, `transfer_account_name`, `transfer_account_status`,
+        `transfer_is_out`, `category_*`, `amount_display` — обогащение в SELECT (не колонки БД).
       properties:
         id:
           type: string
@@ -2893,6 +3245,10 @@ components:
         account_name:
           type: string
           description: Имя счёта ноги
+        account_status:
+          type: string
+          enum: [active, archived, deleted]
+          description: Статус счёта ноги (`accounts.status` по `account_id`)
         type:
           type: string
           enum: [income, expense, transfer]
@@ -2939,6 +3295,11 @@ components:
           type: string
           nullable: true
           description: Имя второго счёта перевода
+        transfer_account_status:
+          type: string
+          enum: [active, archived, deleted]
+          nullable: true
+          description: Статус второго счёта перевода (`accounts.status` по `transfer_account_id`)
         transfer_is_out:
           type: boolean
           description: |
@@ -3051,6 +3412,120 @@ components:
           nullable: true
         transaction_date:
           type: string
+    Account:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          enum: [cash, bank, credit_card]
+        bank_id:
+          type: string
+          nullable: true
+        bank_name:
+          type: string
+          nullable: true
+        bank_icon:
+          type: string
+          nullable: true
+        initial_balance:
+          type: integer
+          description: Копейки
+        balance:
+          type: integer
+        balance_display:
+          type: string
+        credit_limit:
+          type: integer
+          nullable: true
+          description: Лимит кредитной карты, копейки
+        credit_limit_display:
+          type: string
+          nullable: true
+        payment_account_id:
+          type: string
+          nullable: true
+          description: Счёт по умолчанию для переводов на карту
+        auto_topup_enabled:
+          type: boolean
+          description: Автопополнение (только bank)
+        auto_topup_threshold:
+          type: integer
+          nullable: true
+          description: Порог автопополнения, копейки
+        auto_topup_threshold_display:
+          type: string
+          nullable: true
+        auto_topup_target:
+          type: integer
+          nullable: true
+          description: Целевой баланс автопополнения, копейки
+        auto_topup_target_display:
+          type: string
+          nullable: true
+        auto_topup_source_account_id:
+          type: string
+          nullable: true
+          description: Счёт списания (bank)
+        status:
+          type: string
+          enum: [active, archived, deleted]
+        is_primary:
+          type: boolean
+        created_at:
+          type: string
+        updated_at:
+          type: string
+    AccountCreate:
+      type: object
+      required: [name, type]
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [cash, bank, credit_card]
+        bank_id:
+          type: string
+          description: Обязателен для `bank` и `credit_card`
+        credit_limit:
+          type: string
+          description: Лимит карты, рубли (`"65000.00"`); обязателен для `credit_card`
+        payment_account_id:
+          type: string
+          nullable: true
+          description: Счёт `cash`/`bank` для переводов на карту
+        initial_balance:
+          type: string
+          description: Рубли (`"0.00"`)
+    AccountUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        bank_id:
+          type: string
+          description: Для `bank` и `credit_card`
+        credit_limit:
+          type: string
+          description: Лимит карты, рубли
+        payment_account_id:
+          type: string
+          nullable: true
+        auto_topup_enabled:
+          type: boolean
+        auto_topup_threshold:
+          type: string
+          description: Рубли; только bank
+        auto_topup_target:
+          type: string
+        auto_topup_source_account_id:
+          type: string
+        initial_balance:
+          type: string
     AccountBalanceSummary:
       type: object
       properties:
@@ -3060,7 +3535,7 @@ components:
           type: string
         type:
           type: string
-          enum: [cash, bank]
+          enum: [cash, bank, credit_card]
           description: Для иконки на главной (`AccountIcon`)
         bank_icon:
           type: string
@@ -3077,6 +3552,47 @@ components:
           type: string
         has_future_this_month:
           type: boolean
+        credit_limit:
+          type: integer
+          nullable: true
+          description: Лимит кредитной карты, копейки
+        credit_limit_display:
+          type: string
+          nullable: true
+        auto_topup_enabled:
+          type: boolean
+        auto_topup_threshold:
+          type: integer
+          nullable: true
+        auto_topup_threshold_display:
+          type: string
+          nullable: true
+        auto_topup_target:
+          type: integer
+          nullable: true
+        auto_topup_target_display:
+          type: string
+          nullable: true
+        auto_topup_source_account_id:
+          type: string
+          nullable: true
+    CreditCardsSummary:
+      type: object
+      properties:
+        total_balance:
+          type: integer
+        total_forecast:
+          type: integer
+        total_limit:
+          type: integer
+        count:
+          type: integer
+        total_balance_display:
+          type: string
+        total_forecast_display:
+          type: string
+        total_limit_display:
+          type: string
     AccountsSummary:
       type: object
       properties:
@@ -3095,6 +3611,9 @@ components:
           type: integer
         total_forecast:
           type: integer
+        credit_cards_summary:
+          $ref: '#/components/schemas/CreditCardsSummary'
+          nullable: true
         accounts:
           type: array
           items:
@@ -3321,6 +3840,12 @@ components:
         down_payment_transaction_id:
           type: string
           nullable: true
+        principal_affects_balance:
+          type: boolean
+          description: true, если сумма кредита учтена как доход на счёте при создании
+        principal_transaction_id:
+          type: string
+          nullable: true
         issue_date:
           type: string
         term_months:
@@ -3474,7 +3999,7 @@ components:
         payment_interval:
           type: string
           enum: [month, week, two_weeks, manual]
-          description: Для credit_kind=mortgage в MVP используется month
+          description: Для credit_kind=mortgage допустимо только значение month
         paid_amount:
           oneOf:
             - type: string
@@ -3494,7 +4019,7 @@ components:
           type: string
           nullable: true
           pattern: '^([01]\d|2[0-3]):([0-5]\d)$'
-          description: Локальное время автосписания в формате HH:MM; null/пусто отключает автосписание для кредита
+          description: Локальное время автосписания в формате HH:MM; null/пусто отключает автосписание; в UI по умолчанию 08:00
         bank_id:
           type: string
           nullable: true
@@ -3507,6 +4032,12 @@ components:
             Число последних ретроактивных платежей (дата &lt; сегодня), для которых при создании
             списать расход со счёта `debit_account_id`. Только при `added_retroactively=true`.
             Не больше числа прошлых платежей в графике.
+        principal_affects_balance:
+          type: boolean
+          description: >
+            Только для consumer с interest_rate &gt; 0. Если true — доход на сумму кредита
+            на `debit_account_id` в дату выдачи. Недоступно, если в графике есть платёж
+            с датой раньше начала текущих суток (TZ пользователя).
         create_transactions:
           type: boolean
           description: >
@@ -3548,6 +4079,137 @@ components:
           type: string
           nullable: true
           description: ID банка; допускается null для очистки поля
+    BudgetItem:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        scope:
+          type: string
+          enum: [category, subcategory, all_expense]
+        category_id:
+          type: string
+          nullable: true
+        category_name:
+          type: string
+          nullable: true
+        category_icon:
+          type: string
+          nullable: true
+        subcategory_id:
+          type: string
+          nullable: true
+        subcategory_name:
+          type: string
+          nullable: true
+        account_id:
+          type: string
+          nullable: true
+        account_name:
+          type: string
+          nullable: true
+        amount:
+          type: integer
+          description: Лимит в копейках
+        amount_display:
+          type: string
+        period:
+          type: string
+          enum: [month]
+        month:
+          type: string
+          pattern: '^\d{4}-\d{2}$'
+          description: Календарный месяц бюджета (YYYY-MM)
+        copy_forward:
+          type: boolean
+          description: Авто-копирование на следующий месяц при первом открытии
+        alert_at_percent:
+          type: integer
+          description: Порог уведомления; по умолчанию 90
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+        updated_at:
+          type: string
+    BudgetSummaryItem:
+      allOf:
+        - $ref: '#/components/schemas/BudgetItem'
+        - type: object
+          properties:
+            planned:
+              type: integer
+            planned_display:
+              type: string
+            spent:
+              type: integer
+            spent_display:
+              type: string
+            remaining:
+              type: integer
+            remaining_display:
+              type: string
+            percent:
+              type: integer
+            status:
+              type: string
+              enum: [ok, warning, exceeded]
+            period_start:
+              type: string
+            copy_forward:
+              type: boolean
+            children_planned:
+              type: integer
+              description: Сумма planned дочерних бюджетов (только all_expense)
+            children_planned_display:
+              type: string
+            children_spent:
+              type: integer
+            children_spent_display:
+              type: string
+    BudgetSummaryResponse:
+      type: object
+      properties:
+        month:
+          type: string
+          pattern: '^\d{4}-\d{2}$'
+        can_copy_from_previous:
+          type: boolean
+          description: true, если в выбранном месяце нет бюджетов, а в предыдущем есть
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/BudgetSummaryItem'
+    BudgetUpsertRequest:
+      type: object
+      required: [name, scope, amount]
+      properties:
+        name:
+          type: string
+        scope:
+          type: string
+          enum: [category, subcategory, all_expense]
+        category_id:
+          type: string
+        subcategory_id:
+          type: string
+        account_id:
+          type: string
+        amount:
+          type: string
+          description: Сумма в рублях с дробной частью
+        alert_at_percent:
+          type: integer
+          minimum: 0
+          maximum: 100
+          default: 90
+        is_active:
+          type: boolean
+        copy_forward:
+          type: boolean
+          default: false
     RecurringOperation:
       type: object
       properties:
@@ -3684,7 +4346,7 @@ components:
         payment_interval:
           type: string
           enum: [month, week, two_weeks, manual]
-          description: Для credit_kind=mortgage в MVP используется month
+          description: Для credit_kind=mortgage допустимо только значение month
         issue_date:
           type: string
           description: Дата выдачи, UTC `YYYY-MM-DD HH:MM:SS`
@@ -3793,11 +4455,14 @@ components:
                 type: string
               account_type:
                 type: string
-                enum: [cash, bank]
+                enum: [cash, bank, credit_card]
                 description: Предлагаемый тип при mode=create
               bank_id:
                 type: string
-                description: ID банка при account_type=bank
+                description: ID банка при account_type=bank или credit_card
+              credit_limit:
+                type: string
+                description: Лимит карты, рубли; обязателен при account_type=credit_card и mode=create
         categories_to_create:
           type: array
           items:

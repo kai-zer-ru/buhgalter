@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"testing"
+
+	"github.com/kai-zer-ru/buhgalter/internal/bank"
 )
 
 func sampleCSVRows() []byte {
@@ -182,5 +184,44 @@ func TestImportWithExplicitAccountMap(t *testing.T) {
 	}
 	if committed.CreatedTransactions != 4 {
 		t.Fatalf("created %d", committed.CreatedTransactions)
+	}
+}
+
+func TestImportCreateCreditCardAccount(t *testing.T) {
+	ctx, sqlDB, userID := seedImportUser(t)
+	if err := bank.SeedIfEmpty(ctx, sqlDB); err != nil {
+		t.Fatal(err)
+	}
+	banks, err := bank.ListAll(ctx, sqlDB)
+	if err != nil || len(banks) == 0 {
+		t.Fatalf("banks: %v", err)
+	}
+	bankID := banks[0].ID
+
+	accountMap := map[string]AccountMapEntry{
+		"Наличные": {Mode: "create", AccountType: "cash"},
+		"Яндекс":   {Mode: "create", AccountType: "cash"},
+		"Кредитка": {Mode: "create", AccountType: "credit_card", BankID: bankID, CreditLimit: "65000.00"},
+	}
+	data := sampleCSVRows()
+	committed, err := Import(ctx, sqlDB, userID, "sample.csv", data, ImportOptions{
+		Preset: "cubux", Deduplicate: true, Confirm: true, AccountMap: accountMap,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if committed.CreatedTransactions != 4 {
+		t.Fatalf("created %d", committed.CreatedTransactions)
+	}
+	var accType string
+	var creditLimit sql.NullInt64
+	err = sqlDB.QueryRowContext(ctx, `
+		SELECT type, credit_limit FROM accounts WHERE user_id = ? AND name = 'Кредитка'`,
+		userID).Scan(&accType, &creditLimit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if accType != "credit_card" || !creditLimit.Valid || creditLimit.Int64 != 6_500_000 {
+		t.Fatalf("credit card account: type=%s limit=%v", accType, creditLimit)
 	}
 }

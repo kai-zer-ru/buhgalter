@@ -5,6 +5,18 @@ import (
 	"time"
 )
 
+// MonthBoundsForMonthUTC returns UTC datetime strings for [start, endExclusive) of the given
+// calendar month in the IANA timezone. month is 1–12.
+func MonthBoundsForMonthUTC(tz string, year int, month time.Month) (start, endExclusive string, err error) {
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		return "", "", fmt.Errorf("invalid timezone %q: %w", tz, err)
+	}
+	monthStart := time.Date(year, month, 1, 0, 0, 0, 0, loc)
+	monthEndExclusive := monthStart.AddDate(0, 1, 0)
+	return FormatUTC(monthStart.UTC()), FormatUTC(monthEndExclusive.UTC()), nil
+}
+
 // MonthBoundsUTC returns UTC datetime strings for the start and end of the current month
 // in the given IANA timezone.
 func MonthBoundsUTC(tz string, now time.Time) (start, end string, err error) {

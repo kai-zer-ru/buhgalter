@@ -10,7 +10,10 @@
 |------|------------|
 | `$lib/confirm.ts` | `confirm(options): Promise<boolean>` — API как у `window.confirm`, но с кастомным UI |
 | `$lib/components/ConfirmDialog.svelte` | Глобальный диалог подтверждения |
-| `routes/+layout.svelte` | `<ConfirmDialog />` подключён один раз для всего приложения |
+| `$lib/accounts/account-transfer-confirm.ts` | `confirmAccountTransfer()` — архивация/удаление счёта с переводом остатка |
+| `$lib/components/AccountTransferConfirmDialog.svelte` | Диалог архивации/удаления (выбор счёта-приёмника при `balance > 0`) |
+| `$lib/accounts/account-inactive-prompt.ts` | `promptArchiveAccount()`, `promptDeleteAccount()` |
+| `routes/+layout.svelte` | `<ConfirmDialog />` и `<AccountTransferConfirmDialog />` подключены один раз |
 
 Информационные модалки (например, показ созданного API-токена) — отдельные блоки `{#if open}` на странице или будущий `$lib/modal`; принцип тот же: без системных alert.
 
@@ -35,6 +38,16 @@ async function remove() {
 
 Клик по фону, «Отмена» или **Escape** → `false`.  
 Кнопка подтверждения → `true`.
+
+### Архивация и удаление счёта
+
+Полное описание — [accounts-archive-delete.md](accounts-archive-delete.md). Кратко для диалогов:
+
+- `cash` / `bank` с `balance > 0` — `promptArchiveAccount()` / `promptDeleteAccount()` и `AccountTransferConfirmDialog`;
+- `credit_card` — без перевода; только при `balance >= credit_limit`; иначе информационный `confirm({ acknowledgeOnly: true })` с кнопкой «Закрыть`;
+- сумма остатка — `MoneyDisplay`; счёт по умолчанию — основной.
+
+Если других активных счетов нет — кнопка подтверждения неактивна, текст `accounts.confirm.inactiveNoTargets`.
 
 ## Закрытие по Escape
 
@@ -113,13 +126,16 @@ async function remove() {
 | `confirmLabel` | `common.confirm.confirm` |
 | `cancelLabel` | `common.cancel` |
 | `danger` | `false` — при `true` класс `btn-danger` |
+| `acknowledgeOnly` | `false` — одна кнопка «Закрыть» (`common.close`), без подтверждения действия |
 
 ## i18n
 
 Ключи подтверждений в `web/src/lib/i18n/ru.json` и `en.json`:
 
 - `common.confirm.title`, `common.confirm.confirm`
-- `accounts.confirm.delete`
+- `accounts.confirm.creditCardNotFullyPaid`
+- `accounts.confirm.archive`, `accounts.confirm.archiveWithBalance.before`, `accounts.confirm.archiveWithBalance.after`
+- `accounts.confirm.delete`, `accounts.confirm.deleteWithBalance.before`, `accounts.confirm.deleteWithBalance.after`, `accounts.confirm.transferTo`, `accounts.confirm.inactiveNoTargets`
 - `categories.confirm.delete`, `categories.confirm.deleteSub`
 - `settings.tokens.confirm.revoke`
 - `admin.users.confirm.delete` (плейсхолдер `{name}`)
@@ -152,14 +168,14 @@ API: `POST /api/v1/admin/backups/restore` (multipart `file` + `confirm`). См. 
 - Destructive: `btn-danger` в `layout.css` (`var(--danger)`)
 - Прокрутка: одна зона на модалку, кастомные скроллбары — см. [ui-stable-layout.md](ui-stable-layout.md)
 
-## Где уже применено (этапы 1–5)
+## Где уже применено
 
-- Удаление счёта
+- Удаление и архивация счёта (с переводом остатка при `balance > 0`)
 - Удаление категории / подкатегории
 - Удаление / закрытие долга (`/debts`) — удаление долга снимает **все** связанные операции
 - Создание долга — при активном противоположном направлении у того же должника API вернёт **409**; `DebtForm` показывает ошибку до отправки
 - Погашение долга (`SettleDebtForm`) — сумма, дата; переключатель «Не учитывать в балансе» (по умолчанию **выключен**); затем счёт (скрыт при включённом переключателе). Счёт по умолчанию — `account_id` долга или основной. Флаг `affects_balance` при погашении задаётся в форме, а не копируется из долга
-- Удаление операции из списка (`/transactions`, счёт) — для долга после погашения API вернёт ошибку; показать текст от сервера (409)
+- Удаление операции из списка (`/transactions`, счёт) — начальную операцию долга нельзя удалить при наличии погашений (409); операцию погашения можно удалить (остаток пересчитывается); единственную начальную — удаляет долг целиком
 - Отзыв API-токена
 - Удаление пользователя (админка)
 - Восстановление БД из бэкапа — см. [Восстановление БД](#восстановление-бд)
@@ -186,7 +202,7 @@ API: `POST /api/v1/admin/backups/restore` (multipart `file` + `confirm`). См. 
 ## Коды ошибок API (формы)
 
 Ответы `4xx` с телом `{ "error": { "code", "message" } }` — показывать `message` пользователю.  
-Полный список кодов этапа 1 — схема `ApiError` в [api/openapi.yaml](api/openapi.yaml).
+Полный список кодов — схема `ApiError` в [api/openapi.yaml](api/openapi.yaml).
 
 Примеры для настроек → пароль:
 

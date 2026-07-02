@@ -27,7 +27,7 @@ func seedCreditEnv(t *testing.T) (context.Context, *db.Handle, string, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	userID, err := auth.CreateUser(ctx, sqlDB, "credituser", hash, "Credit", false)
+	userID, err := auth.CreateUser(ctx, sqlDB, "credituser", hash, "Credit", false, auth.UserStatusActive)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1039,6 +1039,112 @@ func TestRemovePaymentRejectsNotLatestApplied(t *testing.T) {
 	_, err = RemovePayment(ctx, sqlDB, userID, c.ID, firstAppliedID)
 	if !errors.Is(err, ErrOnlyLatestPaymentDelete) {
 		t.Fatalf("expected ErrOnlyLatestPaymentDelete, got %v", err)
+	}
+}
+
+func TestCreatePrincipalAffectsBalance(t *testing.T) {
+	ctx, handle, userID, accountID := seedCreditEnv(t)
+	sqlDB := handle.DB()
+	issue := timeutil.NowUTC()
+	principal := int64(500_000)
+
+	c, err := Create(ctx, sqlDB, userID, CreateInput{
+		PrincipalAmount:         principal,
+		IssueDate:               issue,
+		TermMonths:              12,
+		InterestRate:            12,
+		PaymentInterval:         IntervalMonth,
+		DebitAccountID:          accountID,
+		PrincipalAffectsBalance: true,
+		CreateTransactions:      false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.PrincipalTransactionID == nil {
+		t.Fatal("expected principal_transaction_id")
+	}
+	if !c.PrincipalAffectsBalance {
+		t.Fatal("expected principal_affects_balance true")
+	}
+	var balance int64
+	if err := sqlDB.QueryRowContext(ctx, `SELECT current_balance FROM accounts WHERE id = ?`, accountID).Scan(&balance); err != nil {
+		t.Fatal(err)
+	}
+	if balance != principal {
+		t.Fatalf("balance %d, want %d", balance, principal)
+	}
+	if err := Delete(ctx, sqlDB, userID, c.ID, "cascade"); err != nil {
+		t.Fatal(err)
+	}
+	if err := sqlDB.QueryRowContext(ctx, `SELECT current_balance FROM accounts WHERE id = ?`, accountID).Scan(&balance); err != nil {
+		t.Fatal(err)
+	}
+	if balance != 0 {
+		t.Fatalf("balance after delete %d, want 0", balance)
+	}
+}
+
+func TestCreatePrincipalIncomePastPaymentRejected(t *testing.T) {
+	ctx, handle, userID, accountID := seedCreditEnv(t)
+	sqlDB := handle.DB()
+	issue := timeutil.NowUTC().AddDate(0, -3, 0)
+
+	_, err := Create(ctx, sqlDB, userID, CreateInput{
+		PrincipalAmount:         300_000,
+		IssueDate:               issue,
+		TermMonths:              6,
+		InterestRate:            10,
+		PaymentInterval:         IntervalMonth,
+		DebitAccountID:          accountID,
+		PrincipalAffectsBalance: true,
+	})
+	if !errors.Is(err, ErrPrincipalIncomePastPayment) {
+		t.Fatalf("expected ErrPrincipalIncomePastPayment, got %v", err)
+	}
+}
+
+func TestCreatePrincipalIncomeAllowedWithRetroactiveFuturePayments(t *testing.T) {
+	ctx, handle, userID, accountID := seedCreditEnv(t)
+	sqlDB := handle.DB()
+	issue := timeutil.NowUTC().AddDate(0, 1, 0)
+	addedRetro := true
+
+	c, err := Create(ctx, sqlDB, userID, CreateInput{
+		PrincipalAmount:         200_000,
+		IssueDate:               issue,
+		TermMonths:              6,
+		InterestRate:            10,
+		PaymentInterval:         IntervalMonth,
+		DebitAccountID:          accountID,
+		AddedRetroactively:      &addedRetro,
+		PrincipalAffectsBalance: true,
+		CreateTransactions:      false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.PrincipalTransactionID == nil {
+		t.Fatal("expected principal income when all payments are in the future")
+	}
+}
+
+func TestCreatePrincipalIncomeNotAllowedForInstallment(t *testing.T) {
+	ctx, handle, userID, accountID := seedCreditEnv(t)
+	sqlDB := handle.DB()
+	issue := timeutil.NowUTC().AddDate(0, 1, 0)
+
+	_, err := Create(ctx, sqlDB, userID, CreateInput{
+		PrincipalAmount:         100_000,
+		IssueDate:               issue,
+		TermMonths:              6,
+		InterestRate:            0,
+		PaymentInterval:         IntervalMonth,
+		DebitAccountID:          accountID,
+		PrincipalAffectsBalance: true,
+	})
+	if !errors.Is(err, ErrInvalidPrincipalIncome) {
+		t.Fatalf("expected ErrInvalidPrincipalIncome, got %v", err)
 	}
 }
 

@@ -13,9 +13,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/kai-zer-ru/buhgalter/internal/account"
 	"github.com/kai-zer-ru/buhgalter/internal/accountbalance"
+	"github.com/kai-zer-ru/buhgalter/internal/balancehooks"
 	"github.com/kai-zer-ru/buhgalter/internal/bank"
 	"github.com/kai-zer-ru/buhgalter/internal/category"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/money"
 	"github.com/kai-zer-ru/buhgalter/internal/transaction"
 )
 
@@ -145,24 +147,41 @@ func (r *resolver) resolveAccount(ctx context.Context, name string) (string, err
 	return r.createAccountByFileName(ctx, name, key, AccountMapEntry{})
 }
 
-func resolveCreateType(name string, entry AccountMapEntry, banks []bank.Bank) (string, *string) {
+func resolveCreateType(name string, entry AccountMapEntry, banks []bank.Bank) (string, *string, *int64, error) {
 	switch entry.AccountType {
 	case "cash":
-		return "cash", nil
+		return "cash", nil, nil, nil
 	case "bank":
 		if entry.BankID != "" {
 			id := entry.BankID
-			return "bank", &id
+			return "bank", &id, nil, nil
 		}
 		if id := MatchBank(name, banks); id != nil {
-			return "bank", id
+			return "bank", id, nil, nil
 		}
-		return "bank", nil
+		return "bank", nil, nil, nil
+	case "credit_card":
+		var bankID *string
+		if entry.BankID != "" {
+			id := entry.BankID
+			bankID = &id
+		} else if id := MatchBank(name, banks); id != nil {
+			bankID = id
+		}
+		var creditLimit *int64
+		if entry.CreditLimit != "" {
+			v, err := money.ParseRubles(entry.CreditLimit)
+			if err != nil {
+				return "", nil, nil, err
+			}
+			creditLimit = &v
+		}
+		return "credit_card", bankID, creditLimit, nil
 	}
 	if id := MatchBank(name, banks); id != nil {
-		return "bank", id
+		return "bank", id, nil, nil
 	}
-	return "cash", nil
+	return "cash", nil, nil, nil
 }
 
 func (r *resolver) createAccountByFileName(ctx context.Context, name, key string, entry AccountMapEntry) (string, error) {
@@ -171,9 +190,13 @@ func (r *resolver) createAccountByFileName(ctx context.Context, name, key string
 		r.fileAccounts[key] = ""
 		return "", nil
 	}
-	accType, bankID := resolveCreateType(name, entry, r.banks)
+	accType, bankID, creditLimit, err := resolveCreateType(name, entry, r.banks)
+	if err != nil {
+		return "", err
+	}
 	created, err := account.Create(ctx, r.db, r.userID, account.CreateInput{
 		Name: name, Type: accType, BankID: bankID, InitialBalance: 0,
+		CreditLimit: creditLimit,
 	})
 	if err != nil {
 		return "", err
@@ -591,6 +614,7 @@ func importWithProgress(
 	}
 	if report.ValidRows > 0 {
 		_ = accountbalance.Refresh(ctx, db, userID)
+		balancehooks.NotifyAllRefresh(ctx, db, userID)
 	}
 	emitProgress(true)
 	warnNonRUB(mapped)

@@ -22,7 +22,8 @@
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import { defaultAccountId } from '$lib/accounts';
-	import { formatMoneyForInput, toAPIAmount } from '$lib/money';
+	import { creditCardExpenseWarning, isCreditCard } from '$lib/credit-card';
+	import { formatMoneyForInput, toAPIAmount, toCents } from '$lib/money';
 	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
 
@@ -89,6 +90,16 @@
 		} catch {
 			return false;
 		}
+	});
+
+	const selectedAccountRow = $derived(accounts.find((a) => a.id === selectedAccount));
+	const creditCardNegativeWarning = $derived.by(() => {
+		if (txType !== 'expense' || !selectedAccountRow || !isCreditCard(selectedAccountRow)) {
+			return false;
+		}
+		const kopecks = toCents(amount);
+		if (!kopecks || kopecks <= 0) return false;
+		return creditCardExpenseWarning(selectedAccountRow.balance, kopecks);
 	});
 
 	$effect(() => {
@@ -268,6 +279,11 @@
 				<p class="text-sm" style:color="var(--primary)">📅 {$_('transactions.planned')}</p>
 				<FieldHint text={$_('transactions.field.plannedHint')} />
 			</div>
+		{/if}
+		{#if creditCardNegativeWarning}
+			<p class="text-sm" style:color="var(--warning)">
+				{$_('accounts.creditCard.negativeBalance')}
+			</p>
 		{/if}
 	</form>
 

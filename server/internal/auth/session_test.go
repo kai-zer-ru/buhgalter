@@ -18,7 +18,7 @@ func TestSessionIdleExpiry(t *testing.T) {
 	defer mgr.Close()
 	sqlDB := mgr.DB()
 
-	userID, err := CreateUser(context.Background(), sqlDB, "testuser", "hash", "Test", false)
+	userID, err := CreateUser(context.Background(), sqlDB, "testuser", "hash", "Test", false, UserStatusActive)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func TestVerifyTokenSessionAndAPI(t *testing.T) {
 	sqlDB := mgr.DB()
 	ctx := context.Background()
 
-	userID, err := CreateUser(ctx, sqlDB, "apiuser", "hash", "API", false)
+	userID, err := CreateUser(ctx, sqlDB, "apiuser", "hash", "API", false, UserStatusActive)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +101,7 @@ func TestAPITokenExpiredRejected(t *testing.T) {
 	sqlDB := mgr.DB()
 	ctx := context.Background()
 
-	userID, err := CreateUser(ctx, sqlDB, "expuser", "hash", "Exp", false)
+	userID, err := CreateUser(ctx, sqlDB, "expuser", "hash", "Exp", false, UserStatusActive)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +132,7 @@ func TestSessionRefreshExtendsExpiry(t *testing.T) {
 	defer mgr.Close()
 	sqlDB := mgr.DB()
 
-	userID, _ := CreateUser(context.Background(), sqlDB, "refresh", "hash", "R", false)
+	userID, _ := CreateUser(context.Background(), sqlDB, "refresh", "hash", "R", false, UserStatusActive)
 	token, _ := CreateSession(context.Background(), sqlDB, userID, "", "")
 
 	s1, err := LookupSession(context.Background(), sqlDB, token)

@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kai-zer-ru/buhgalter/internal/accountbalance"
+	"github.com/kai-zer-ru/buhgalter/internal/balancehooks"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/money"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
@@ -316,6 +317,7 @@ func ApplyDue(ctx context.Context, db *sql.DB, userID string, now time.Time, tz 
 		if err := accountbalance.Refresh(ctx, db, userID, accountIDs...); err != nil {
 			return applied, err
 		}
+		balancehooks.NotifyRefresh(ctx, db, userID, accountIDs...)
 	}
 	return applied, nil
 }

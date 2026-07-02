@@ -1,8 +1,7 @@
 <script lang="ts">
 	import { _ } from 'svelte-i18n';
 	import { getStatsContext, type StatsContext } from '$lib/api/client';
-	import { formatBalance } from '$lib/finance';
-	import { fromCents } from '$lib/money';
+	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
 	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
 
@@ -43,13 +42,13 @@
 			<div>
 				<p class="text-xs" style:color="var(--text-muted)">{$_('stats.context.income')}</p>
 				<p class="tabular-nums font-medium">
-					{formatBalance(fromCents(summary.income_total), currency)}
+					<MoneyDisplay cents={summary.income_total} {currency} class="" />
 				</p>
 			</div>
 			<div>
 				<p class="text-xs" style:color="var(--text-muted)">{$_('stats.context.expense')}</p>
 				<p class="tabular-nums font-medium">
-					{formatBalance(fromCents(summary.expense_total), currency)}
+					<MoneyDisplay cents={summary.expense_total} {currency} class="" />
 				</p>
 			</div>
 			<div>
@@ -60,7 +59,7 @@
 				<div>
 					<p class="text-xs" style:color="var(--text-muted)">{$_('stats.context.lent')}</p>
 					<p class="tabular-nums font-medium">
-						{formatBalance(fromCents(summary.lent_total), currency)}
+						<MoneyDisplay cents={summary.lent_total} {currency} class="" />
 					</p>
 				</div>
 			{/if}
@@ -68,7 +67,7 @@
 				<div>
 					<p class="text-xs" style:color="var(--text-muted)">{$_('stats.context.borrowed')}</p>
 					<p class="tabular-nums font-medium">
-						{formatBalance(fromCents(summary.borrowed_total), currency)}
+						<MoneyDisplay cents={summary.borrowed_total} {currency} class="" />
 					</p>
 				</div>
 			{/if}
@@ -76,7 +75,7 @@
 				<div>
 					<p class="text-xs" style:color="var(--text-muted)">{$_('stats.context.paid')}</p>
 					<p class="tabular-nums font-medium">
-						{formatBalance(fromCents(summary.paid_total), currency)}
+						<MoneyDisplay cents={summary.paid_total} {currency} class="" />
 					</p>
 				</div>
 			{/if}
@@ -84,7 +83,7 @@
 				<div>
 					<p class="text-xs" style:color="var(--text-muted)">{$_('stats.context.remaining')}</p>
 					<p class="tabular-nums font-medium">
-						{formatBalance(fromCents(summary.remaining_amount), currency)}
+						<MoneyDisplay cents={summary.remaining_amount} {currency} class="" />
 					</p>
 				</div>
 			{/if}
