@@ -88,6 +88,8 @@ func (s *Server) Handler() http.Handler {
 	backupHandler := &backup.Handler{Service: s.backup, Audit: s.audit}
 	bankHandler := &bank.Handler{Store: dbHandle}
 	accountHandler := &account.Handler{Store: dbHandle, Audit: s.audit}
+	accountArchiveHandler := &accountArchiveHandler{store: dbHandle, audit: s.audit}
+	accountDeleteHandler := &accountDeleteHandler{store: dbHandle, audit: s.audit}
 	categoryHandler := &category.Handler{Store: dbHandle, Audit: s.audit}
 	transactionHandler := &transaction.Handler{Store: dbHandle, Audit: s.audit}
 	debtHandler := &debt.Handler{Store: dbHandle, Audit: s.audit}
@@ -131,10 +133,10 @@ func (s *Server) Handler() http.Handler {
 			ar.Get("/accounts/{id}", accountHandler.Get)
 			ar.Get("/accounts/{id}/balance", transactionHandler.AccountBalance)
 			ar.Put("/accounts/{id}", accountHandler.Update)
-			ar.Post("/accounts/{id}/archive", accountHandler.Archive)
+			ar.Post("/accounts/{id}/archive", accountArchiveHandler.archiveAccount)
 			ar.Post("/accounts/{id}/unarchive", accountHandler.Unarchive)
 			ar.Post("/accounts/{id}/primary", accountHandler.SetPrimary)
-			ar.Delete("/accounts/{id}", accountHandler.Delete)
+			ar.Delete("/accounts/{id}", accountDeleteHandler.deleteAccount)
 
 			ar.Get("/transactions", transactionHandler.List)
 			ar.Post("/transactions", transactionHandler.Create)

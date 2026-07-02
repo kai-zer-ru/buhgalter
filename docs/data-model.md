@@ -50,7 +50,7 @@ erDiagram
 
     accounts {
         TEXT type "cash|bank|credit_card"
-        TEXT status "active|archived"
+        TEXT status "active|archived|deleted"
         INTEGER is_primary
         INTEGER initial_balance
     }
@@ -285,7 +285,10 @@ erDiagram
 | `accounts.type` | `cash`, `bank`, `credit_card` |
 | `accounts.credit_limit` | лимит кредитной карты, копейки; только для `credit_card` |
 | `accounts.payment_account_id` | счёт по умолчанию для переводов на карту (опционально) |
+| `accounts.status` | `active`, `archived`, `deleted` |
 | `accounts.is_primary` | `1` — основной счёт среди `status = active`; не более одного на пользователя |
+| `POST /accounts/{id}/archive` | см. [accounts-archive-delete.md](accounts-archive-delete.md) |
+| `DELETE /accounts/{id}` | см. [accounts-archive-delete.md](accounts-archive-delete.md) |
 | API | `POST /api/v1/accounts/{id}/primary` |
 
 Подробнее о типе `credit_card`: [ui-credit-cards.md](ui-credit-cards.md).

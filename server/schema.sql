@@ -84,7 +84,7 @@ CREATE TABLE accounts (
     current_balance     INTEGER NOT NULL DEFAULT 0,
     credit_limit        INTEGER,
     payment_account_id  TEXT REFERENCES accounts(id),
-    status              TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'archived')),
+    status              TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'archived', 'deleted')),
     is_primary          INTEGER NOT NULL DEFAULT 0,
     created_at          TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at          TEXT NOT NULL DEFAULT (datetime('now'))
@@ -102,7 +102,7 @@ CREATE TABLE accounts_new (
     current_balance     INTEGER NOT NULL DEFAULT 0,
     credit_limit        INTEGER,
     payment_account_id  TEXT REFERENCES accounts_new(id),
-    status              TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'archived')),
+    status              TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'archived', 'deleted')),
     is_primary          INTEGER NOT NULL DEFAULT 0,
     created_at          TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at          TEXT NOT NULL DEFAULT (datetime('now'))

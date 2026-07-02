@@ -13,6 +13,7 @@
 	import { initTheme, syncThemeFromUser } from '$lib/stores/theme';
 	import { setLocale } from '$lib/i18n';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import AccountTransferConfirmDialog from '$lib/components/AccountTransferConfirmDialog.svelte';
 	import UpdateAvailableModal from '$lib/components/UpdateAvailableModal.svelte';
 	import AppIcon from '$lib/components/AppIcon.svelte';
 	import IconButton from '$lib/components/IconButton.svelte';
@@ -464,6 +465,7 @@
 {/if}
 
 <ConfirmDialog />
+<AccountTransferConfirmDialog />
 {#if pendingUpdate && $user?.is_admin}
 	<UpdateAvailableModal update={pendingUpdate} onclose={() => (pendingUpdate = null)} />
 {/if}

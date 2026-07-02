@@ -29,6 +29,7 @@
 | [categories-and-icons.md](categories-and-icons.md) | Категории, подкатегории, иконки |
 | [budget.md](budget.md) | Бюджет: помесячные лимиты, копирование, план vs факт, API |
 | [transactions-display.md](transactions-display.md) | Отображение операций в UI и API |
+| [accounts-archive-delete.md](accounts-archive-delete.md) | Архивация, мягкое удаление счётов, автоперевод остатка |
 
 ---
 

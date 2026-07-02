@@ -384,8 +384,8 @@
 				</div>
 			</div>
 		{:else}
-			<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-				<div class="card">
+			<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:items-stretch">
+				<div class="card flex h-full flex-col">
 					<p class="text-sm" style:color="var(--text-muted)">{$_('dashboard.total')}</p>
 					<p class="text-3xl font-semibold tabular-nums">
 						<MoneyDisplay cents={dash.total_balance} {currency} class="" />
@@ -397,7 +397,7 @@
 						</p>
 					{/if}
 				</div>
-				<a href={resolve('/debts')} class="card block self-start transition hover:opacity-90">
+				<a href={resolve('/debts')} class="card flex h-full flex-col transition hover:opacity-90">
 					<p class="text-sm" style:color="var(--text-muted)">{$_('debts.title')}</p>
 					<div class="mt-1 space-y-1">
 						{#if hasDebts}

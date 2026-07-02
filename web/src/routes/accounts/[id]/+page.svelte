@@ -4,8 +4,6 @@
 	import { page } from '$app/stores';
 	import { _ } from 'svelte-i18n';
 	import {
-		archiveAccount,
-		deleteAccount,
 		deleteTransaction,
 		getAccount,
 		getAccountBalance,
@@ -36,6 +34,12 @@
 	import TransferForm from '$lib/components/TransferForm.svelte';
 	import CreditCardFeeForm from '$lib/components/CreditCardFeeForm.svelte';
 	import { isCreditCard } from '$lib/credit-card';
+	import {
+		promptArchiveAccount,
+		executeArchiveAccount,
+		promptDeleteAccount,
+		executeDeleteAccount
+	} from '$lib/accounts/account-inactive-prompt';
 	import { confirm } from '$lib/confirm';
 	import { toast } from '$lib/toast';
 	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
@@ -159,7 +163,7 @@
 			creditLimit = account.credit_limit_display ?? '';
 			paymentAccountId = account.payment_account_id ?? '';
 			initialBalance = formatMoneyForInput(account.balance_display);
-			editing = $page.url.searchParams.get('edit') === '1';
+			editing = $page.url.searchParams.get('edit') === '1' && account.status !== 'deleted';
 			await loadTransactions();
 		} catch (err) {
 			toast.fromError(err);
@@ -239,12 +243,22 @@
 
 	async function toggleArchive() {
 		if (!acc) return;
-		try {
-			acc = acc.status === 'active' ? await archiveAccount(acc.id) : await unarchiveAccount(acc.id);
-			accBalance = await getAccountBalance(acc.id);
-			if (acc.status === 'archived') {
+		if (acc.status === 'active') {
+			const activeOnly = allAccounts.filter((a) => a.status === 'active');
+			const confirmed = await promptArchiveAccount({ acc, activeAccounts: activeOnly });
+			if (!confirmed.ok) return;
+			try {
+				acc = await executeArchiveAccount(acc, confirmed.transferToAccountId);
+				accBalance = await getAccountBalance(acc.id);
 				toast($_('common.saved'));
+			} catch (err) {
+				toast.fromError(err);
 			}
+			return;
+		}
+		try {
+			acc = await unarchiveAccount(acc.id);
+			accBalance = await getAccountBalance(acc.id);
 		} catch (err) {
 			toast.fromError(err);
 		}
@@ -262,16 +276,13 @@
 
 	async function remove() {
 		if (!acc) return;
-		const ok = await confirm({
-			message: $_('accounts.confirm.delete'),
-			confirmLabel: $_('common.delete'),
-			danger: true
-		});
-		if (!ok) return;
+		const confirmed = await promptDeleteAccount({ acc, activeAccounts: allAccounts });
+		if (!confirmed.ok) return;
 		try {
-			await deleteAccount(acc.id);
+			await executeDeleteAccount(acc, confirmed.transferToAccountId);
 			toast($_('common.deleted'));
-			await goto(resolve('/accounts'));
+			// eslint-disable-next-line svelte/no-navigation-without-resolve -- query string appended to resolved path
+			await goto(`${resolve('/accounts')}?status=deleted`);
 		} catch (err) {
 			toast.fromError(err);
 		}
@@ -284,10 +295,12 @@
 		txOpen = true;
 	}
 
+	const accountTxReadOnly = $derived(acc?.status === 'deleted');
+
 	function accountActions(includeTransactions = false): RowAction[] {
-		if (!acc) return [];
+		if (!acc || acc.status === 'deleted') return [];
 		const actions: RowAction[] = [];
-		if (includeTransactions) {
+		if (acc.status === 'active' && includeTransactions) {
 			actions.push(
 				{
 					icon: 'income',
@@ -310,7 +323,7 @@
 				}
 			);
 		}
-		if (isCreditCard(acc)) {
+		if (acc.status === 'active' && isCreditCard(acc)) {
 			actions.push(
 				{
 					icon: 'transfer',
@@ -333,7 +346,7 @@
 			label: $_('accounts.action.edit'),
 			onclick: () => (editing = true)
 		});
-		if (!acc.is_primary) {
+		if (acc.status === 'active' && !acc.is_primary) {
 			actions.push({
 				icon: 'save',
 				label: $_('accounts.primary.set'),
@@ -343,7 +356,8 @@
 		actions.push(
 			{
 				icon: 'archive',
-				label: $_('accounts.action.archive'),
+				label:
+					acc.status === 'active' ? $_('accounts.action.archive') : $_('accounts.action.unarchive'),
 				onclick: () => void toggleArchive()
 			},
 			{
@@ -443,7 +457,7 @@
 			<div class="flex items-start gap-4">
 				<AccountIcon type={acc.type} bankIcon={acc.bank_icon} size={56} />
 				<div class="min-w-0 flex-1">
-					{#if editing}
+					{#if editing && acc.status !== 'deleted'}
 						<form class="space-y-3" onsubmit={save}>
 							<div>
 								<label class="mb-1 block text-sm" style:color="var(--text-muted)" for="acc-name">
@@ -513,6 +527,13 @@
 					{:else}
 						<div class="flex items-start justify-between gap-2">
 							<div class="min-w-0">
+								{#if acc.status === 'archived' || acc.status === 'deleted'}
+									<p class="mb-1 text-sm" style:color="var(--text-muted)">
+										{acc.status === 'archived'
+											? $_('accounts.banner.archived')
+											: $_('accounts.banner.deleted')}
+									</p>
+								{/if}
 								<div class="flex items-center gap-2">
 									<h1 class="text-2xl font-semibold">{acc.name}</h1>
 									{#if acc.is_primary}
@@ -627,15 +648,17 @@
 					showDescription
 					showAmountSign
 					singleAccount
-					showEdit
-					showDelete
-					onmakeRecurring={(tx) =>
-						void goto(
-							resolve(`/settings/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`)
-						)}
+					showEdit={!accountTxReadOnly}
+					showDelete={!accountTxReadOnly}
+					onmakeRecurring={accountTxReadOnly
+						? undefined
+						: (tx) =>
+								void goto(
+									resolve(`/settings/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`)
+								)}
 					onrepeat={openRepeat}
-					onedit={openEdit}
-					ondelete={(tx) => void removeTx(tx)}
+					onedit={accountTxReadOnly ? undefined : openEdit}
+					ondelete={accountTxReadOnly ? undefined : (tx) => void removeTx(tx)}
 				/>
 			</div>
 			{#if filterLoading}

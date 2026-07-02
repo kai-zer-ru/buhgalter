@@ -270,7 +270,22 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in UpdateInput) 
 var ErrArchived = errors.New("account is archived")
 var ErrCreditCardArchiveNotFullyPaid = errors.New("credit card must be fully paid before archive")
 
-func validateCreditCardArchive(acc Account) error {
+// RequiresBalanceTransfer reports whether deleting the account must move remaining funds first.
+func RequiresBalanceTransfer(acc Account) bool {
+	return !IsCreditCard(acc.Type) && acc.Balance > 0
+}
+
+// DeleteTransferDescription is the transfer comment when deleting an account with balance.
+func DeleteTransferDescription(accountName string) string {
+	return fmt.Sprintf("Удаление счёта \"%s\"", accountName)
+}
+
+// ArchiveTransferDescription is the transfer comment when archiving an account with balance.
+func ArchiveTransferDescription(accountName string) string {
+	return fmt.Sprintf("Архивация счёта \"%s\"", accountName)
+}
+
+func validateCreditCardFullyPaid(acc Account) error {
 	if !IsCreditCard(acc.Type) {
 		return nil
 	}
@@ -285,18 +300,22 @@ func SetStatus(ctx context.Context, db *sql.DB, userID, id, status string) (Acco
 	if err != nil {
 		return Account{}, err
 	}
+	if existing.Status == "deleted" {
+		return Account{}, ErrArchived
+	}
 	if existing.Status == status {
 		return existing, nil
 	}
-	if status == "archived" {
-		if err := validateCreditCardArchive(existing); err != nil {
+	if status == "archived" || status == "deleted" {
+		if err := validateCreditCardFullyPaid(existing); err != nil {
 			return Account{}, err
 		}
 	}
-	wasPrimary := existing.IsPrimary && status == "archived"
+	inactiveTarget := status == "archived" || status == "deleted"
+	wasPrimary := existing.IsPrimary && existing.Status == "active" && inactiveTarget
 	now := time.Now().UTC().Format(time.RFC3339)
 	q := queries(db)
-	if status == "archived" && existing.IsPrimary {
+	if inactiveTarget && existing.IsPrimary {
 		if err := q.ClearAccountPrimaryFlag(ctx, sqlcdb.ClearAccountPrimaryFlagParams{ID: id, UserID: userID}); err != nil {
 			return Account{}, err
 		}
@@ -365,22 +384,8 @@ func promoteNextPrimary(ctx context.Context, db *sql.DB, userID string) error {
 }
 
 func Delete(ctx context.Context, db *sql.DB, userID, id string) error {
-	existing, err := GetByID(ctx, db, userID, id)
-	if err != nil {
-		return err
-	}
-	wasPrimary := existing.IsPrimary && existing.Status == "active"
-	n, err := queries(db).DeleteAccount(ctx, sqlcdb.DeleteAccountParams{ID: id, UserID: userID})
-	if err != nil {
-		return err
-	}
-	if n == 0 {
-		return ErrNotFound
-	}
-	if wasPrimary {
-		return promoteNextPrimary(ctx, db, userID)
-	}
-	return nil
+	_, err := SetStatus(ctx, db, userID, id, "deleted")
+	return err
 }
 
 // IsCreditCard reports whether the account type is credit_card.

@@ -11,7 +11,9 @@ OpenAPI-схемы: [`Transaction`](api/openapi.yaml#/components/schemas/Transac
 | Поле | Тип | Описание |
 |------|-----|----------|
 | `account_name` | string | Имя счёта ноги (`accounts.name` по `account_id`) |
+| `account_status` | string | Статус счёта ноги: `active` \| `archived` \| `deleted` |
 | `transfer_account_name` | string | Имя второго счёта перевода (`JOIN` по `transfer_account_id`) |
+| `transfer_account_status` | string | Статус второго счёта перевода |
 | `transfer_is_out` | bool | Только для `type=transfer`: `true` — исходящая нога (первая в `transfer_group_id` по `created_at ASC`), `false` — входящая |
 | `category_name`, `category_icon` | | Из `categories` |
 | `amount_display` | string | `"1234.56"` для UI |
@@ -52,6 +54,8 @@ OpenAPI-схемы: [`Transaction`](api/openapi.yaml#/components/schemas/Transac
 | Доход | `на Зарплатная карта` |
 
 Для перевода при **одной ноге** в списке (фильтр `account_id`) направление берётся из `transfer_is_out`, а не из локального `min(created_at)` среди видимых строк.
+
+Для счетов со статусом `archived` или `deleted` компонент `TransactionAccountCell` добавляет суффикс «(архив)» / «(удалён)» по полям `account_status` и `transfer_account_status`.
 
 ## Префикс суммы
 
@@ -140,6 +144,8 @@ OpenAPI: `CreateTransferRequest.commission`, схема `Transfer`.
 ## Действия в списке операций
 
 `TransactionList` — меню «⋯» в каждой строке (повторить, сделать периодической, изменить, удалить). На мобильных меню в шапке карточки рядом с суммой. Используется на **главной** («Последние операции»), `/transactions`, странице счёта.
+
+На странице **удалённого** счёта (`/accounts/[id]`, `status = deleted`) в меню операций доступно только **«Повторить»** — см. [accounts-archive-delete.md](accounts-archive-delete.md).
 
 **Повторить (v1.2.3)** — открывает форму **создания** новой операции с полями из выбранной строки (счёт, категория, сумма, описание; для перевода — счета, сумма, комиссия); дата — текущая. Работает для **дохода**, **расхода** и **перевода**. Доход/расход — `TransactionForm` (`repeatFrom`); перевод — `TransferForm` (`repeatFrom`). Недоступно для операций с `credit_payment_linked` и для дохода/расхода в **системных категориях** (как «Сделать периодической»).
 

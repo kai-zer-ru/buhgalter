@@ -1,10 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { page } from '$app/stores';
 	import { resolve } from '$app/paths';
 	import { _ } from 'svelte-i18n';
 	import {
-		archiveAccount,
-		deleteAccount,
 		listAccounts,
 		listBanks,
 		setPrimaryAccount,
@@ -13,6 +12,12 @@
 		type Account,
 		type Bank
 	} from '$lib/api/client';
+	import {
+		promptArchiveAccount,
+		executeArchiveAccount,
+		promptDeleteAccount,
+		executeDeleteAccount
+	} from '$lib/accounts/account-inactive-prompt';
 	import CreditCardFeeForm from '$lib/components/CreditCardFeeForm.svelte';
 	import TransferForm from '$lib/components/TransferForm.svelte';
 	import { isCreditCard } from '$lib/credit-card';
@@ -23,7 +28,6 @@
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
 	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
 	import Select from '$lib/components/Select.svelte';
-	import { confirm } from '$lib/confirm';
 	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
 	import { formatMoneyForInput, toAPIAmount } from '$lib/money';
 	import { toast } from '$lib/toast';
@@ -32,7 +36,7 @@
 	let accounts = $state<Account[]>([]);
 	let activeAccounts = $state<Account[]>([]);
 	let banks = $state<Bank[]>([]);
-	let filter = $state<'active' | 'archived'>('active');
+	let filter = $state<'active' | 'archived' | 'deleted'>('active');
 	let loading = $state(true);
 	let filterLoading = $state(false);
 	let ready = $state(false);
@@ -52,6 +56,10 @@
 	const bankOptions = $derived(banks.map((bank) => ({ value: bank.id, label: bank.name })));
 
 	onMount(() => {
+		const status = $page.url.searchParams.get('status');
+		if (status === 'archived' || status === 'deleted') {
+			filter = status;
+		}
 		void load();
 	});
 
@@ -79,7 +87,7 @@
 		}
 	}
 
-	function setFilter(next: 'active' | 'archived') {
+	function setFilter(next: 'active' | 'archived' | 'deleted') {
 		if (next === filter) return;
 		filter = next;
 		void load({ filterChange: true });
@@ -148,12 +156,15 @@
 
 	async function archive(id: string) {
 		if (!id || actionSavingId) return;
+		const acc = accounts.find((a) => a.id === id);
+		if (!acc) return;
+		const confirmed = await promptArchiveAccount({ acc, activeAccounts });
+		if (!confirmed.ok) return;
 		actionSavingId = id;
 		try {
-			await archiveAccount(id);
-			accounts = accounts.filter((acc) => acc.id !== id);
-			activeAccounts = activeAccounts.filter((acc) => acc.id !== id);
+			await executeArchiveAccount(acc, confirmed.transferToAccountId);
 			if (editingId === id) editingId = null;
+			await load({ filterChange: true });
 			toast($_('common.saved'));
 		} catch (err) {
 			toast.fromError(err);
@@ -178,19 +189,16 @@
 		}
 	}
 
-	async function remove(id: string) {
-		if (!id || actionSavingId) return;
-		const ok = await confirm({
-			message: $_('accounts.confirm.delete'),
-			confirmLabel: $_('common.delete'),
-			danger: true
-		});
-		if (!ok) return;
-		actionSavingId = id;
+	async function remove(acc: Account) {
+		if (!acc.id || actionSavingId) return;
+		const confirmed = await promptDeleteAccount({ acc, activeAccounts });
+		if (!confirmed.ok) return;
+		actionSavingId = acc.id;
 		try {
-			await deleteAccount(id);
-			accounts = accounts.filter((acc) => acc.id !== id);
-			if (editingId === id) editingId = null;
+			await executeDeleteAccount(acc, confirmed.transferToAccountId);
+			filter = 'deleted';
+			await load({ filterChange: true });
+			if (editingId === acc.id) editingId = null;
 			toast($_('common.deleted'));
 		} catch (err) {
 			toast.fromError(err);
@@ -200,6 +208,7 @@
 	}
 
 	function accountActions(acc: Account): RowAction[] {
+		if (filter === 'deleted') return [];
 		const busy = actionSavingId === acc.id || primarySavingId === acc.id || savingEditId === acc.id;
 		const actions: RowAction[] = [];
 		if (filter === 'active' && isCreditCard(acc)) {
@@ -245,7 +254,7 @@
 				disabled: busy || editingId !== null,
 				onclick: () => void archive(acc.id)
 			});
-		} else {
+		} else if (filter === 'archived') {
 			actions.push({
 				icon: 'archive',
 				label: $_('accounts.action.unarchive'),
@@ -258,7 +267,7 @@
 			label: $_('common.delete'),
 			variant: 'danger',
 			disabled: busy || editingId !== null,
-			onclick: () => void remove(acc.id)
+			onclick: () => void remove(acc)
 		});
 		return actions;
 	}
@@ -287,9 +296,10 @@
 		active={filter}
 		tabs={[
 			{ id: 'active', label: $_('accounts.filter.active') },
-			{ id: 'archived', label: $_('accounts.filter.archived') }
+			{ id: 'archived', label: $_('accounts.filter.archived') },
+			{ id: 'deleted', label: $_('accounts.filter.deleted') }
 		]}
-		onchange={(next) => setFilter(next as 'active' | 'archived')}
+		onchange={(next) => setFilter(next as 'active' | 'archived' | 'deleted')}
 	/>
 
 	{#if loading}
@@ -448,7 +458,9 @@
 									{/if}
 								</div>
 							</a>
-							<RowActionsMenu actions={accountActions(acc)} />
+							{#if filter !== 'deleted'}
+								<RowActionsMenu actions={accountActions(acc)} />
+							{/if}
 						</div>
 					{/if}
 				</div>

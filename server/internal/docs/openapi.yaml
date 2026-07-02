@@ -820,7 +820,7 @@ paths:
           in: query
           schema:
             type: string
-            enum: [active, archived]
+            enum: [active, archived, deleted]
       responses:
         '200':
           description: Список счетов
@@ -888,8 +888,17 @@ paths:
     delete:
       summary: Удалить счёт
       description: |
-        Безвозвратно удаляет счёт и связанные данные. В UI — пункт «Удалить» в меню «⋯» на списке
-        `/accounts` и на странице счёта (с подтверждением).
+        Помечает счёт статусом `deleted` (мягкое удаление): операции и история сохраняются, счёт
+        доступен для просмотра на вкладке «Удалённые» и по прямой ссылке `/accounts/{id}`.
+
+        Для счетов `cash` / `bank` с `balance > 0` обязателен `transfer_to_account_id` (query или JSON body):
+        перед удалением создаётся перевод всей суммы на указанный активный счёт (категория «Перевод»,
+        комментарий `Удаление счёта "{name}"`).
+
+        Для `credit_card` перевод не выполняется. Удаление возможно только при полном погашении
+        (`balance >= credit_limit`); иначе `ERR_CREDIT_CARD_ARCHIVE_NOT_FULLY_PAID`.
+
+        В UI — пункт «Удалить» в меню «⋯» на списке `/accounts` и на странице счёта (с подтверждением).
       security:
         - sessionCookie: []
       parameters:
@@ -898,15 +907,43 @@ paths:
           required: true
           schema:
             type: string
+        - name: transfer_to_account_id
+          in: query
+          schema:
+            type: string
+          description: |
+            Счёт-приёмник остатка. Обязателен при `balance > 0` у удаляемого счёта `cash` / `bank` (не для `credit_card`).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                transfer_to_account_id:
+                  type: string
+                  description: |
+                    Альтернатива query-параметру. Счёт-приёмник остатка.
       responses:
         '204':
           description: Счёт удалён
+        '400':
+          description: |
+            Нет счёта-приёмника при положительном балансе `cash` / `bank` (`ERR_ACCOUNT_TRANSFER_REQUIRED`),
+            кредитная карта не погашена (`ERR_CREDIT_CARD_ARCHIVE_NOT_FULLY_PAID`) и др.
   /accounts/{id}/archive:
     post:
       summary: Архивировать счёт
       description: |
         Переводит счёт в `status=archived`. Если счёт был основным — флаг снимается, основным назначается
         следующий активный. В UI — пункт «Архивировать» в меню «⋯» на `/accounts` и на странице счёта.
+
+        Для счетов `cash` / `bank` с `balance > 0` обязателен `transfer_to_account_id` (query или JSON body):
+        перед архивацией создаётся перевод всей суммы на указанный активный счёт (категория «Перевод»,
+        комментарий `Архивация счёта "{name}"`).
+
+        Для `credit_card` перевод не выполняется. Архивация возможна только при полном погашении
+        (`balance >= credit_limit`); иначе `ERR_CREDIT_CARD_ARCHIVE_NOT_FULLY_PAID`.
       security:
         - sessionCookie: []
       parameters:
@@ -915,9 +952,30 @@ paths:
           required: true
           schema:
             type: string
+        - name: transfer_to_account_id
+          in: query
+          schema:
+            type: string
+          description: |
+            Счёт-приёмник остатка. Обязателен при `balance > 0` у архивируемого счёта `cash` / `bank`.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                transfer_to_account_id:
+                  type: string
+                  description: |
+                    Альтернатива query-параметру. Счёт-приёмник остатка.
       responses:
         '200':
           description: Счёт архивирован
+        '400':
+          description: |
+            Нет счёта-приёмника при положительном балансе (`ERR_ACCOUNT_TRANSFER_REQUIRED`),
+            кредитная карта не погашена (`ERR_CREDIT_CARD_ARCHIVE_NOT_FULLY_PAID`) и др.
   /accounts/{id}/unarchive:
     post:
       summary: Восстановить счёт из архива
@@ -3177,8 +3235,8 @@ components:
       type: object
       description: |
         Операция (доход, расход или нога перевода).
-        Поля `account_name`, `transfer_account_name`, `transfer_is_out`, `category_*`, `amount_display`
-        — обогащение в SELECT (не колонки БД).
+        Поля `account_name`, `account_status`, `transfer_account_name`, `transfer_account_status`,
+        `transfer_is_out`, `category_*`, `amount_display` — обогащение в SELECT (не колонки БД).
       properties:
         id:
           type: string
@@ -3187,6 +3245,10 @@ components:
         account_name:
           type: string
           description: Имя счёта ноги
+        account_status:
+          type: string
+          enum: [active, archived, deleted]
+          description: Статус счёта ноги (`accounts.status` по `account_id`)
         type:
           type: string
           enum: [income, expense, transfer]
@@ -3233,6 +3295,11 @@ components:
           type: string
           nullable: true
           description: Имя второго счёта перевода
+        transfer_account_status:
+          type: string
+          enum: [active, archived, deleted]
+          nullable: true
+          description: Статус второго счёта перевода (`accounts.status` по `transfer_account_id`)
         transfer_is_out:
           type: boolean
           description: |
@@ -3384,7 +3451,7 @@ components:
           description: Счёт по умолчанию для переводов на карту
         status:
           type: string
-          enum: [active, archived]
+          enum: [active, archived, deleted]
         is_primary:
           type: boolean
         created_at:

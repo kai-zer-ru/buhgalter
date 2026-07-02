@@ -76,10 +76,6 @@ UPDATE accounts
 SET status = ?, updated_at = ?
 WHERE id = ? AND user_id = ?;
 
--- name: DeleteAccount :execrows
-DELETE FROM accounts
-WHERE id = ? AND user_id = ?;
-
 -- name: CountActiveAccountsByName :one
 SELECT COUNT(*) AS count
 FROM accounts

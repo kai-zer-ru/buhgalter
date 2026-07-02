@@ -203,7 +203,13 @@ func TestArchiveAccountHiddenFromActiveList(t *testing.T) {
 	_ = json.NewDecoder(createResp.Body).Decode(&acc)
 	createResp.Body.Close()
 
-	archResp, err := env.authedRequest(http.MethodPost, "/api/v1/accounts/"+acc.ID+"/archive", nil)
+	targetID := createTestAccount(t, env, "Приёмник")
+
+	archResp, err := env.authedRequest(
+		http.MethodPost,
+		"/api/v1/accounts/"+acc.ID+"/archive?transfer_to_account_id="+targetID,
+		nil,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -450,5 +456,330 @@ func TestArchiveCreditCardRequiresFullBalance(t *testing.T) {
 	defer archResp2.Body.Close()
 	if archResp2.StatusCode != http.StatusOK {
 		t.Fatalf("archive paid card status %d", archResp2.StatusCode)
+	}
+}
+
+func TestDeleteCreditCardRequiresFullBalance(t *testing.T) {
+	env := setupConfigured(t)
+	seedBanks(t, env)
+	env.login(t, "admin", "secret123")
+
+	bodyCC, _ := json.Marshal(map[string]string{
+		"name":            "Кредитка удаление",
+		"type":            "credit_card",
+		"bank_id":         "tinkoff",
+		"credit_limit":    "1000.00",
+		"initial_balance": "0",
+	})
+	respCC, err := env.authedRequest(http.MethodPost, "/api/v1/accounts", bytes.NewReader(bodyCC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respCC.Body.Close()
+	var created struct {
+		ID string `json:"id"`
+	}
+	_ = json.NewDecoder(respCC.Body).Decode(&created)
+
+	delResp, err := env.authedRequest(http.MethodDelete, "/api/v1/accounts/"+created.ID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer delResp.Body.Close()
+	if delResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("delete unpaid card status %d, want 400", delResp.StatusCode)
+	}
+
+	bodyPaid, _ := json.Marshal(map[string]string{
+		"name":            "Кредитка удалена",
+		"type":            "credit_card",
+		"bank_id":         "tinkoff",
+		"credit_limit":    "1000.00",
+		"initial_balance": "1000.00",
+	})
+	respPaid, err := env.authedRequest(http.MethodPost, "/api/v1/accounts", bytes.NewReader(bodyPaid))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respPaid.Body.Close()
+	var paid struct {
+		ID string `json:"id"`
+	}
+	_ = json.NewDecoder(respPaid.Body).Decode(&paid)
+
+	delResp2, err := env.authedRequest(http.MethodDelete, "/api/v1/accounts/"+paid.ID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer delResp2.Body.Close()
+	if delResp2.StatusCode != http.StatusNoContent {
+		t.Fatalf("delete paid card status %d, want 204", delResp2.StatusCode)
+	}
+}
+
+func TestDeleteAccountSoftDelete(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+
+	targetID := createTestAccount(t, env, "Целевой")
+	accID := createTestAccount(t, env, "На удаление")
+	catID := getExpenseCategory(t, env)
+
+	txBody, _ := json.Marshal(map[string]any{
+		"account_id": accID, "type": "expense", "amount": "50.00",
+		"category_id": catID, "transaction_date": "2020-01-15 12:00:00",
+	})
+	txResp, err := env.authedRequest(http.MethodPost, "/api/v1/transactions", bytes.NewReader(txBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	txResp.Body.Close()
+	if txResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create transaction status %d", txResp.StatusCode)
+	}
+
+	delResp, err := env.authedRequest(http.MethodDelete, "/api/v1/accounts/"+accID+"?transfer_to_account_id="+targetID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer delResp.Body.Close()
+	if delResp.StatusCode != http.StatusNoContent {
+		t.Fatalf("delete account status %d", delResp.StatusCode)
+	}
+
+	getResp, err := env.authedRequest(http.MethodGet, "/api/v1/accounts/"+accID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer getResp.Body.Close()
+	if getResp.StatusCode != http.StatusOK {
+		t.Fatalf("get deleted account status %d", getResp.StatusCode)
+	}
+	var got struct {
+		ID     string `json:"id"`
+		Status string `json:"status"`
+	}
+	_ = json.NewDecoder(getResp.Body).Decode(&got)
+	if got.ID != accID || got.Status != "deleted" {
+		t.Fatalf("expected deleted account, got %+v", got)
+	}
+
+	activeResp, err := env.authedRequest(http.MethodGet, "/api/v1/accounts", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer activeResp.Body.Close()
+	var active []struct {
+		ID string `json:"id"`
+	}
+	_ = json.NewDecoder(activeResp.Body).Decode(&active)
+	for _, a := range active {
+		if a.ID == accID {
+			t.Fatal("deleted account should not appear in active list")
+		}
+	}
+
+	deletedListResp, err := env.authedRequest(http.MethodGet, "/api/v1/accounts?status=deleted", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer deletedListResp.Body.Close()
+	var deleted []struct {
+		ID string `json:"id"`
+	}
+	_ = json.NewDecoder(deletedListResp.Body).Decode(&deleted)
+	found := false
+	for _, a := range deleted {
+		if a.ID == accID {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("deleted account should appear in deleted list")
+	}
+
+	updBody, _ := json.Marshal(map[string]string{"name": "Новое имя"})
+	updResp, err := env.authedRequest(http.MethodPut, "/api/v1/accounts/"+accID, bytes.NewReader(updBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	updResp.Body.Close()
+	if updResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("update deleted account status %d, want 400", updResp.StatusCode)
+	}
+
+	listTxResp, err := env.authedRequest(http.MethodGet, "/api/v1/transactions?account_id="+accID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listTxResp.Body.Close()
+	var txList struct {
+		Data []struct {
+			AccountStatus string `json:"account_status"`
+		} `json:"data"`
+	}
+	_ = json.NewDecoder(listTxResp.Body).Decode(&txList)
+	if len(txList.Data) == 0 {
+		t.Fatal("expected transaction on deleted account")
+	}
+	if txList.Data[0].AccountStatus != "deleted" {
+		t.Fatalf("expected account_status deleted, got %q", txList.Data[0].AccountStatus)
+	}
+
+	transferResp, err := env.authedRequest(http.MethodGet, "/api/v1/transactions?account_id="+targetID+"&type=transfer", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer transferResp.Body.Close()
+	var transferList struct {
+		Data []struct {
+			Description string `json:"description"`
+			Amount      int64  `json:"amount"`
+		} `json:"data"`
+	}
+	_ = json.NewDecoder(transferResp.Body).Decode(&transferList)
+	if len(transferList.Data) == 0 {
+		t.Fatal("expected transfer to target account on delete")
+	}
+	if transferList.Data[0].Description != "Удаление счёта \"На удаление\"" {
+		t.Fatalf("unexpected transfer description %q", transferList.Data[0].Description)
+	}
+}
+
+func TestDeleteAccountRequiresTransferTarget(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+
+	accID := createTestAccount(t, env, "С балансом")
+
+	delResp, err := env.authedRequest(http.MethodDelete, "/api/v1/accounts/"+accID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer delResp.Body.Close()
+	if delResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("delete without transfer target status %d, want 400", delResp.StatusCode)
+	}
+}
+
+func TestArchiveAccountWithBalanceTransfer(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+
+	targetID := createTestAccount(t, env, "Целевой")
+	accID := createTestAccount(t, env, "На архив")
+
+	archResp, err := env.authedRequest(
+		http.MethodPost,
+		"/api/v1/accounts/"+accID+"/archive?transfer_to_account_id="+targetID,
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer archResp.Body.Close()
+	if archResp.StatusCode != http.StatusOK {
+		t.Fatalf("archive account status %d", archResp.StatusCode)
+	}
+	var archived struct {
+		ID     string `json:"id"`
+		Status string `json:"status"`
+	}
+	_ = json.NewDecoder(archResp.Body).Decode(&archived)
+	if archived.ID != accID || archived.Status != "archived" {
+		t.Fatalf("expected archived account, got %+v", archived)
+	}
+
+	transferResp, err := env.authedRequest(http.MethodGet, "/api/v1/transactions?account_id="+targetID+"&type=transfer", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer transferResp.Body.Close()
+	var transferList struct {
+		Data []struct {
+			Description string `json:"description"`
+		} `json:"data"`
+	}
+	_ = json.NewDecoder(transferResp.Body).Decode(&transferList)
+	if len(transferList.Data) == 0 {
+		t.Fatal("expected transfer to target account on archive")
+	}
+	if transferList.Data[0].Description != "Архивация счёта \"На архив\"" {
+		t.Fatalf("unexpected transfer description %q", transferList.Data[0].Description)
+	}
+}
+
+func TestArchiveAccountRequiresTransferTarget(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+
+	accID := createTestAccount(t, env, "С балансом")
+
+	archResp, err := env.authedRequest(http.MethodPost, "/api/v1/accounts/"+accID+"/archive", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer archResp.Body.Close()
+	if archResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("archive without transfer target status %d, want 400", archResp.StatusCode)
+	}
+}
+
+func TestArchiveAccountTransfersStoredBalance(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+
+	targetID := createTestAccount(t, env, "Целевой")
+
+	body, _ := json.Marshal(map[string]string{
+		"name": "Дрейф", "type": "cash", "initial_balance": "0",
+	})
+	createResp, err := env.authedRequest(http.MethodPost, "/api/v1/accounts", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var created struct {
+		ID string `json:"id"`
+	}
+	_ = json.NewDecoder(createResp.Body).Decode(&created)
+	createResp.Body.Close()
+	if created.ID == "" {
+		t.Fatal("expected account id")
+	}
+
+	const driftBalance int64 = 75_000
+	if _, err := env.db.Exec(`UPDATE accounts SET current_balance = ? WHERE id = ?`, driftBalance, created.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	archResp, err := env.authedRequest(
+		http.MethodPost,
+		"/api/v1/accounts/"+created.ID+"/archive?transfer_to_account_id="+targetID,
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer archResp.Body.Close()
+	if archResp.StatusCode != http.StatusOK {
+		t.Fatalf("archive account status %d", archResp.StatusCode)
+	}
+
+	transferResp, err := env.authedRequest(http.MethodGet, "/api/v1/transactions?account_id="+targetID+"&type=transfer", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer transferResp.Body.Close()
+	var transferList struct {
+		Data []struct {
+			Amount int64 `json:"amount"`
+		} `json:"data"`
+	}
+	_ = json.NewDecoder(transferResp.Body).Decode(&transferList)
+	if len(transferList.Data) == 0 {
+		t.Fatal("expected transfer to target account on archive")
+	}
+	if transferList.Data[0].Amount != driftBalance {
+		t.Fatalf("transfer amount %d, want %d", transferList.Data[0].Amount, driftBalance)
 	}
 }
