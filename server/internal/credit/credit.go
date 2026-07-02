@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kai-zer-ru/buhgalter/internal/accountbalance"
+	"github.com/kai-zer-ru/buhgalter/internal/balancehooks"
 	"github.com/kai-zer-ru/buhgalter/internal/categoryseed"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/money"
@@ -1570,6 +1571,7 @@ func syncAccountBalances(ctx context.Context, db *sql.DB, userID string, account
 		return
 	}
 	_ = accountbalance.Refresh(ctx, db, userID, ids...)
+	balancehooks.NotifyRefresh(ctx, db, userID, ids...)
 }
 
 // TodayCutoffUTC returns end-of-today in user TZ as UTC datetime string for due payment queries.

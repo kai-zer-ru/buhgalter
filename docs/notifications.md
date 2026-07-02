@@ -30,6 +30,7 @@ API: `GET` / `PUT` `/api/v1/user/notifications`, preview и reset шаблоно
 | Плановые | `trigger_planned` | `planned_operation` |
 | Отрицательный баланс | `trigger_negative_balance` | `balance_shortfall` (+ проверка баланса в worker) |
 | Бюджет | `trigger_budget` | `budget_threshold` |
+| Автопополнение отключено | `trigger_auto_topup_disabled` | `auto_topup_disabled` |
 | Восстановление пароля | `trigger_password_reset` | `password_reset` (только админ) |
 | Регистрация пользователя | `trigger_user_registration` | `user_registration` (только админ, если регистрация включена) |
 

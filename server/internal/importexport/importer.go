@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kai-zer-ru/buhgalter/internal/account"
 	"github.com/kai-zer-ru/buhgalter/internal/accountbalance"
+	"github.com/kai-zer-ru/buhgalter/internal/balancehooks"
 	"github.com/kai-zer-ru/buhgalter/internal/bank"
 	"github.com/kai-zer-ru/buhgalter/internal/category"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
@@ -613,6 +614,7 @@ func importWithProgress(
 	}
 	if report.ValidRows > 0 {
 		_ = accountbalance.Refresh(ctx, db, userID)
+		balancehooks.NotifyAllRefresh(ctx, db, userID)
 	}
 	emitProgress(true)
 	warnNonRUB(mapped)

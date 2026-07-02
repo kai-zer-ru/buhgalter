@@ -3449,6 +3449,27 @@ components:
           type: string
           nullable: true
           description: Счёт по умолчанию для переводов на карту
+        auto_topup_enabled:
+          type: boolean
+          description: Автопополнение (только bank)
+        auto_topup_threshold:
+          type: integer
+          nullable: true
+          description: Порог автопополнения, копейки
+        auto_topup_threshold_display:
+          type: string
+          nullable: true
+        auto_topup_target:
+          type: integer
+          nullable: true
+          description: Целевой баланс автопополнения, копейки
+        auto_topup_target_display:
+          type: string
+          nullable: true
+        auto_topup_source_account_id:
+          type: string
+          nullable: true
+          description: Счёт списания (bank)
         status:
           type: string
           enum: [active, archived, deleted]
@@ -3494,6 +3515,15 @@ components:
         payment_account_id:
           type: string
           nullable: true
+        auto_topup_enabled:
+          type: boolean
+        auto_topup_threshold:
+          type: string
+          description: Рубли; только bank
+        auto_topup_target:
+          type: string
+        auto_topup_source_account_id:
+          type: string
         initial_balance:
           type: string
     AccountBalanceSummary:
@@ -3527,6 +3557,23 @@ components:
           nullable: true
           description: Лимит кредитной карты, копейки
         credit_limit_display:
+          type: string
+          nullable: true
+        auto_topup_enabled:
+          type: boolean
+        auto_topup_threshold:
+          type: integer
+          nullable: true
+        auto_topup_threshold_display:
+          type: string
+          nullable: true
+        auto_topup_target:
+          type: integer
+          nullable: true
+        auto_topup_target_display:
+          type: string
+          nullable: true
+        auto_topup_source_account_id:
           type: string
           nullable: true
     CreditCardsSummary:

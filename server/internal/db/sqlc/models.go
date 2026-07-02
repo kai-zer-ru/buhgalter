@@ -5,19 +5,23 @@
 package sqlc
 
 type Account struct {
-	ID               string  `json:"id"`
-	UserID           string  `json:"user_id"`
-	Name             string  `json:"name"`
-	Type             string  `json:"type"`
-	BankID           *string `json:"bank_id"`
-	InitialBalance   int64   `json:"initial_balance"`
-	CurrentBalance   int64   `json:"current_balance"`
-	CreditLimit      *int64  `json:"credit_limit"`
-	PaymentAccountID *string `json:"payment_account_id"`
-	Status           string  `json:"status"`
-	IsPrimary        int64   `json:"is_primary"`
-	CreatedAt        string  `json:"created_at"`
-	UpdatedAt        string  `json:"updated_at"`
+	ID                       string  `json:"id"`
+	UserID                   string  `json:"user_id"`
+	Name                     string  `json:"name"`
+	Type                     string  `json:"type"`
+	BankID                   *string `json:"bank_id"`
+	InitialBalance           int64   `json:"initial_balance"`
+	CurrentBalance           int64   `json:"current_balance"`
+	CreditLimit              *int64  `json:"credit_limit"`
+	PaymentAccountID         *string `json:"payment_account_id"`
+	AutoTopupEnabled         int64   `json:"auto_topup_enabled"`
+	AutoTopupThreshold       *int64  `json:"auto_topup_threshold"`
+	AutoTopupTarget          *int64  `json:"auto_topup_target"`
+	AutoTopupSourceAccountID *string `json:"auto_topup_source_account_id"`
+	Status                   string  `json:"status"`
+	IsPrimary                int64   `json:"is_primary"`
+	CreatedAt                string  `json:"created_at"`
+	UpdatedAt                string  `json:"updated_at"`
 }
 
 type AccountsNew struct {
@@ -222,6 +226,7 @@ type NotificationSetting struct {
 	TriggerPlanned                int64   `json:"trigger_planned"`
 	TriggerNegativeBalance        int64   `json:"trigger_negative_balance"`
 	TriggerBudget                 int64   `json:"trigger_budget"`
+	TriggerAutoTopupDisabled      int64   `json:"trigger_auto_topup_disabled"`
 	TriggerUserRegistration       int64   `json:"trigger_user_registration"`
 	TriggerPasswordReset          int64   `json:"trigger_password_reset"`
 	DebtDaysBefore                int64   `json:"debt_days_before"`

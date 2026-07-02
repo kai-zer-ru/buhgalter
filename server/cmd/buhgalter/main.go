@@ -11,9 +11,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/kai-zer-ru/buhgalter/internal/account"
 	_ "github.com/kai-zer-ru/buhgalter/internal/accountbalance"
 	"github.com/kai-zer-ru/buhgalter/internal/audit"
 	"github.com/kai-zer-ru/buhgalter/internal/backup"
+	"github.com/kai-zer-ru/buhgalter/internal/balancehooks"
+	"github.com/kai-zer-ru/buhgalter/internal/balancetopup"
 	"github.com/kai-zer-ru/buhgalter/internal/bank"
 	"github.com/kai-zer-ru/buhgalter/internal/budgetnotify"
 	"github.com/kai-zer-ru/buhgalter/internal/config"
@@ -104,6 +107,11 @@ func main() {
 
 	notifyWorker := notify.NewWorker(manager.DB(), logger)
 	notify.BudgetThresholdChecker = budgetnotify.CheckThresholdsForUser
+	balancehooks.AfterRefresh = balancetopup.CheckAfterRefresh
+	balancehooks.NotifyAll = balancetopup.CheckAllForUser
+	account.AfterAutoTopupConfigured = func(ctx context.Context, db *sql.DB, userID, accountID string) {
+		balancetopup.CheckAfterRefresh(ctx, db, userID, accountID)
+	}
 	notifyWorker.Start()
 	defer notifyWorker.Stop()
 

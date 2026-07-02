@@ -469,6 +469,13 @@
 										<MoneyDisplay value={acc.credit_limit_display} {currency} class="" />
 									</p>
 								{/if}
+								{#if acc.type === 'bank'}
+									<p class="mt-1 text-sm" style:color="var(--text-muted)">
+										{acc.auto_topup_enabled
+											? $_('accounts.autoTopup.statusOn')
+											: $_('accounts.autoTopup.statusOff')}
+									</p>
+								{/if}
 								{#if acc.forecast_balance !== acc.balance}
 									<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
 										{$_('dashboard.withPlans')}:

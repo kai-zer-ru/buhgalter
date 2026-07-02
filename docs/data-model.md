@@ -285,6 +285,7 @@ erDiagram
 | `accounts.type` | `cash`, `bank`, `credit_card` |
 | `accounts.credit_limit` | лимит кредитной карты, копейки; только для `credit_card` |
 | `accounts.payment_account_id` | счёт по умолчанию для переводов на карту (опционально) |
+| `accounts.auto_topup_*` | автопополнение bank-счёта — см. [balance-maintenance.md](balance-maintenance.md) |
 | `accounts.status` | `active`, `archived`, `deleted` |
 | `accounts.is_primary` | `1` — основной счёт среди `status = active`; не более одного на пользователя |
 | `POST /accounts/{id}/archive` | см. [accounts-archive-delete.md](accounts-archive-delete.md) |
