@@ -34,7 +34,7 @@ describe('budget-display', () => {
 				planned: 30_000,
 				percent: 107
 			})
-		).toBe('exceeded:380.00:107');
+		).toBe('exceeded:38.00:107');
 	});
 
 	it('formats remaining line when under budget', () => {
@@ -49,6 +49,6 @@ describe('budget-display', () => {
 				spent: 33_800,
 				percent: 107
 			})
-		).toBe('exceeded:380.00:107');
+		).toBe('exceeded:38.00:107');
 	});
 });

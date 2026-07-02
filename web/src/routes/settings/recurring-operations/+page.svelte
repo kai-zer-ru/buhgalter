@@ -29,7 +29,8 @@
 		toDatetimeLocalValue,
 		formatAPIOperationDateTimeForDisplay
 	} from '$lib/dates';
-	import { formatMoneyDisplay, formatMoneyForInput, toAPIAmount } from '$lib/money';
+	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
+	import { formatMoneyForInput, toAPIAmount } from '$lib/money';
 	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
 
@@ -503,7 +504,7 @@
 										{#if item.subcategory_name}
 											• {item.subcategory_name}
 										{/if}
-										• {formatMoneyDisplay(item.amount_display)}
+										• <MoneyDisplay value={item.amount_display} class="" />
 									</div>
 								</td>
 								<td class="p-3">{periodLabel(item.period)}</td>
@@ -539,7 +540,7 @@
 								</p>
 							</div>
 							<p class="shrink-0 text-sm font-semibold tabular-nums">
-								{formatMoneyDisplay(item.amount_display)}
+								<MoneyDisplay value={item.amount_display} class="" />
 							</p>
 						</div>
 						<dl class="mt-3 grid gap-2 text-sm">

@@ -18,9 +18,8 @@
 	import TransactionList from '$lib/components/TransactionList.svelte';
 	import TransferForm from '$lib/components/TransferForm.svelte';
 	import NewTransactionButtons from '$lib/components/NewTransactionButtons.svelte';
+	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
 	import { confirm } from '$lib/confirm';
-	import { formatBalance } from '$lib/finance';
-	import { fromCents } from '$lib/money';
 	import { dedupeTransferLegs } from '$lib/transaction-display';
 	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
@@ -58,6 +57,7 @@
 		dash != null && (dash.debts_summary.i_owe > 0 || dash.debts_summary.owed_to_me > 0)
 	);
 	const hasCreditCards = $derived(dash != null && dash.credit_cards_summary != null);
+	const currency = $derived($user?.currency ?? 'RUB');
 
 	function budgetProgressClass(status: string) {
 		if (status === 'exceeded') return 'bg-red-500';
@@ -206,8 +206,10 @@
 				<div>
 					<div class="flex items-baseline justify-between gap-2">
 						<span class="truncate text-sm font-medium">{allExpenseBudget.name}</span>
-						<span class="shrink-0 text-xs tabular-nums" style:color="var(--text-muted)">
-							{allExpenseBudget.spent_display} / {allExpenseBudget.planned_display}
+						<span class="shrink-0 text-xs" style:color="var(--text-muted)">
+							<MoneyDisplay value={allExpenseBudget.spent_display} class="" />
+							/
+							<MoneyDisplay value={allExpenseBudget.planned_display} class="" />
 						</span>
 					</div>
 					<div
@@ -294,37 +296,40 @@
 					<div class="card">
 						<p class="text-sm" style:color="var(--text-muted)">{$_('dashboard.total')}</p>
 						<p class="text-3xl font-semibold tabular-nums">
-							{formatBalance(fromCents(dash.total_balance), $user?.currency ?? 'RUB')}
+							<MoneyDisplay cents={dash.total_balance} {currency} class="" />
 						</p>
 						{#if dash.total_forecast !== dash.total_balance}
 							<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
 								{$_('dashboard.withPlans')}:
-								{formatBalance(fromCents(dash.total_forecast), $user?.currency ?? 'RUB')}
+								<MoneyDisplay cents={dash.total_forecast} {currency} class="" />
 							</p>
 						{/if}
 					</div>
 					<div class="card">
 						<p class="text-sm" style:color="var(--text-muted)">{$_('dashboard.creditCards')}</p>
 						<p class="text-3xl font-semibold tabular-nums">
-							{formatBalance(
-								dash.credit_cards_summary!.total_balance_display,
-								$user?.currency ?? 'RUB'
-							)}
+							<MoneyDisplay
+								value={dash.credit_cards_summary!.total_balance_display}
+								{currency}
+								class=""
+							/>
 						</p>
 						<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
 							{$_('accounts.field.creditLimit')}:
-							{formatBalance(
-								dash.credit_cards_summary!.total_limit_display,
-								$user?.currency ?? 'RUB'
-							)}
+							<MoneyDisplay
+								value={dash.credit_cards_summary!.total_limit_display}
+								{currency}
+								class=""
+							/>
 						</p>
 						{#if dash.credit_cards_summary!.total_forecast !== dash.credit_cards_summary!.total_balance}
 							<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
 								{$_('dashboard.withPlans')}:
-								{formatBalance(
-									dash.credit_cards_summary!.total_forecast_display,
-									$user?.currency ?? 'RUB'
-								)}
+								<MoneyDisplay
+									value={dash.credit_cards_summary!.total_forecast_display}
+									{currency}
+									class=""
+								/>
 							</p>
 						{/if}
 					</div>
@@ -337,16 +342,13 @@
 								{#if dash.debts_summary.i_owe > 0}
 									<p class="tabular-nums" style:color="var(--danger)">
 										{$_('debts.summary.iOwe')}:
-										{formatBalance(fromCents(dash.debts_summary.i_owe), $user?.currency ?? 'RUB')}
+										<MoneyDisplay cents={dash.debts_summary.i_owe} {currency} class="" />
 									</p>
 								{/if}
 								{#if dash.debts_summary.owed_to_me > 0}
 									<p class="tabular-nums" style:color="var(--primary)">
 										{$_('debts.summary.owedToMe')}:
-										{formatBalance(
-											fromCents(dash.debts_summary.owed_to_me),
-											$user?.currency ?? 'RUB'
-										)}
+										<MoneyDisplay cents={dash.debts_summary.owed_to_me} {currency} class="" />
 									</p>
 								{/if}
 							{:else}
@@ -363,12 +365,12 @@
 				<div class="card">
 					<p class="text-sm" style:color="var(--text-muted)">{$_('dashboard.total')}</p>
 					<p class="text-3xl font-semibold tabular-nums">
-						{formatBalance(fromCents(dash.total_balance), $user?.currency ?? 'RUB')}
+						<MoneyDisplay cents={dash.total_balance} {currency} class="" />
 					</p>
 					{#if dash.total_forecast !== dash.total_balance}
 						<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
 							{$_('dashboard.withPlans')}:
-							{formatBalance(fromCents(dash.total_forecast), $user?.currency ?? 'RUB')}
+							<MoneyDisplay cents={dash.total_forecast} {currency} class="" />
 						</p>
 					{/if}
 				</div>
@@ -379,16 +381,13 @@
 							{#if dash.debts_summary.i_owe > 0}
 								<p class="tabular-nums" style:color="var(--danger)">
 									{$_('debts.summary.iOwe')}:
-									{formatBalance(fromCents(dash.debts_summary.i_owe), $user?.currency ?? 'RUB')}
+									<MoneyDisplay cents={dash.debts_summary.i_owe} {currency} class="" />
 								</p>
 							{/if}
 							{#if dash.debts_summary.owed_to_me > 0}
 								<p class="tabular-nums" style:color="var(--primary)">
 									{$_('debts.summary.owedToMe')}:
-									{formatBalance(
-										fromCents(dash.debts_summary.owed_to_me),
-										$user?.currency ?? 'RUB'
-									)}
+									<MoneyDisplay cents={dash.debts_summary.owed_to_me} {currency} class="" />
 								</p>
 							{/if}
 						{:else}
@@ -416,18 +415,18 @@
 						<div class="min-w-0 flex-1">
 							<p class="truncate font-medium">{acc.name}</p>
 							<p class="mt-1 text-xl font-semibold tabular-nums">
-								{formatBalance(acc.balance_display, $user?.currency ?? 'RUB')}
+								<MoneyDisplay value={acc.balance_display} {currency} class="" />
 							</p>
 							{#if acc.credit_limit_display}
 								<p class="mt-0.5 text-sm tabular-nums" style:color="var(--text-muted)">
 									{$_('accounts.field.creditLimit')}:
-									{formatBalance(acc.credit_limit_display, $user?.currency ?? 'RUB')}
+									<MoneyDisplay value={acc.credit_limit_display} {currency} class="" />
 								</p>
 							{/if}
 							{#if acc.forecast_balance !== acc.balance}
 								<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
 									{$_('dashboard.withPlans')}:
-									{formatBalance(acc.forecast_display, $user?.currency ?? 'RUB')}
+									<MoneyDisplay value={acc.forecast_display} {currency} class="" />
 								</p>
 							{/if}
 						</div>

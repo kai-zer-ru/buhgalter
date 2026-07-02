@@ -7,7 +7,7 @@
 	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
 	import TransactionAccountCell from '$lib/components/TransactionAccountCell.svelte';
 	import { formatAPIOperationDateTimeForDisplay } from '$lib/dates';
-	import { formatMoneyDisplay } from '$lib/money';
+	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
 	import {
 		transactionAmountSign,
 		canEditTransaction,
@@ -131,8 +131,10 @@
 							{/if}
 						</td>
 						<td class="p-3 align-middle whitespace-nowrap tabular-nums font-medium">
-							{showAmountSign ? transactionAmountSign(tx, { singleAccount }) : ''}
-							{formatMoneyDisplay(tx.amount_display)}
+							{showAmountSign ? transactionAmountSign(tx, { singleAccount }) : ''}<MoneyDisplay
+								value={tx.amount_display}
+								class=""
+							/>
 						</td>
 						{#if showDescription}
 							<td class="p-3 align-middle" style:color="var(--text-muted)">
@@ -170,8 +172,10 @@
 					</div>
 					<div class="flex shrink-0 items-start gap-2">
 						<p class="text-sm font-semibold tabular-nums">
-							{showAmountSign ? transactionAmountSign(tx, { singleAccount }) : ''}
-							{formatMoneyDisplay(tx.amount_display)}
+							{showAmountSign ? transactionAmountSign(tx, { singleAccount }) : ''}<MoneyDisplay
+								value={tx.amount_display}
+								class=""
+							/>
 						</p>
 						{#if showActions}
 							<RowActionsMenu actions={rowActions(tx)} />

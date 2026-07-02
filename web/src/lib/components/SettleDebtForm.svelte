@@ -11,7 +11,8 @@
 	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
 	import { toast } from '$lib/toast';
 	import { fromDatetimeLocalValue, nowDatetimeLocal } from '$lib/dates';
-	import { formatMoneyForInput, formatMoneyDisplay, toAPIAmount } from '$lib/money';
+	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
+	import { formatMoneyForInput, toAPIAmount } from '$lib/money';
 	import { user } from '$lib/stores/auth';
 
 	type Props = {
@@ -89,7 +90,7 @@
 	<ModalShell bind:open title={$_('debts.settle.title')} onclose={close}>
 		<div class="space-y-4">
 			<p class="text-sm" style:color="var(--text-muted)">
-				{settledDebt.debtor_name} · {formatMoneyDisplay(settledDebt.amount_display)}
+				{settledDebt.debtor_name} · <MoneyDisplay value={settledDebt.amount_display} class="" />
 			</p>
 
 			<label class="block space-y-1">

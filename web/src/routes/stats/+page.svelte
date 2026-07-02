@@ -29,7 +29,8 @@
 	import FilterPanel from '$lib/components/FilterPanel.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import TransactionList from '$lib/components/TransactionList.svelte';
-	import { formatBalance } from '$lib/finance';
+	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
+	import { formatMoneyForDisplay } from '$lib/money-display';
 	import {
 		categoryDisplayLabel,
 		categorySelectLabel,
@@ -41,7 +42,6 @@
 		dateOnlyLocalValue,
 		todayDateLocal
 	} from '$lib/dates';
-	import { formatMoneyDisplay, fromCents } from '$lib/money';
 	import { formatStatsPeriod } from '$lib/stats-period';
 	import { user } from '$lib/stores/auth';
 	import { toast } from '$lib/toast';
@@ -420,14 +420,14 @@
 			<div class="grid gap-3 sm:grid-cols-3">
 				<div class="card">
 					<p class="text-xs" style:color="var(--text-muted)">{$_('stats.summary.income')}</p>
-					<p class="tabular-nums text-xl font-semibold">
-						{formatBalance(fromCents(summary?.income_total ?? 0), currency)}
+					<p class="text-xl font-semibold">
+						<MoneyDisplay cents={summary?.income_total ?? 0} {currency} class="" />
 					</p>
 				</div>
 				<div class="card">
 					<p class="text-xs" style:color="var(--text-muted)">{$_('stats.summary.expense')}</p>
-					<p class="tabular-nums text-xl font-semibold">
-						{formatBalance(fromCents(summary?.expense_total ?? 0), currency)}
+					<p class="text-xl font-semibold">
+						<MoneyDisplay cents={summary?.expense_total ?? 0} {currency} class="" />
 					</p>
 				</div>
 				<div class="card">
@@ -452,12 +452,12 @@
 										<div
 											class="h-2 rounded bg-emerald-500"
 											style:width={`${Math.max(2, (Math.abs(row.income) / periodMax) * 100)}%`}
-											title={`${$_('stats.summary.income')}: ${formatMoneyDisplay(fromCents(row.income))}`}
+											title={`${$_('stats.summary.income')}: ${formatMoneyForDisplay({ cents: row.income })}`}
 										></div>
 										<div
 											class="h-2 rounded bg-rose-500"
 											style:width={`${Math.max(2, (Math.abs(row.expense) / periodMax) * 100)}%`}
-											title={`${$_('stats.summary.expense')}: ${formatMoneyDisplay(fromCents(row.expense))}`}
+											title={`${$_('stats.summary.expense')}: ${formatMoneyForDisplay({ cents: row.expense })}`}
 										></div>
 									</div>
 								</div>
@@ -475,8 +475,8 @@
 								{#each byPeriod as row (row.period)}
 									<tr class="border-t" style:border-color="var(--border)">
 										<td class="p-2">{periodLabel(row.period)}</td>
-										<td class="p-2 tabular-nums">{formatMoneyDisplay(fromCents(row.income))}</td>
-										<td class="p-2 tabular-nums">{formatMoneyDisplay(fromCents(row.expense))}</td>
+										<td class="p-2"><MoneyDisplay cents={row.income} class="" /></td>
+										<td class="p-2"><MoneyDisplay cents={row.expense} class="" /></td>
 									</tr>
 								{/each}
 							</tbody>
@@ -554,15 +554,20 @@
 				<dl class="mt-2 grid gap-1 text-sm">
 					<div class="flex justify-between gap-2">
 						<dt style:color="var(--text-muted)">{$_('transactions.col.amount')}</dt>
-						<dd class="tabular-nums">{formatMoneyDisplay(fromCents(row.total))}</dd>
+						<dd><MoneyDisplay cents={row.total} class="" /></dd>
 					</div>
 					{#if showBudget}
 						<div class="flex justify-between gap-2">
 							<dt style:color="var(--text-muted)">{$_('budget.stats.planned')}</dt>
-							<dd class="tabular-nums">
-								{budgetByCategory[row.category_id]
-									? budgetByCategory[row.category_id].planned_display
-									: '—'}
+							<dd>
+								{#if budgetByCategory[row.category_id]}
+									<MoneyDisplay
+										value={budgetByCategory[row.category_id].planned_display}
+										class=""
+									/>
+								{:else}
+									—
+								{/if}
 							</dd>
 						</div>
 						<div class="flex justify-between gap-2">
@@ -611,12 +616,14 @@
 							{statsCategoryLabel(row.category_name, row.type)}
 						</a>
 					</td>
-					<td class="p-2 tabular-nums">{formatMoneyDisplay(fromCents(row.total))}</td>
+					<td class="p-2"><MoneyDisplay cents={row.total} class="" /></td>
 					{#if showBudget}
-						<td class="p-2 tabular-nums">
-							{budgetByCategory[row.category_id]
-								? budgetByCategory[row.category_id].planned_display
-								: '—'}
+						<td class="p-2">
+							{#if budgetByCategory[row.category_id]}
+								<MoneyDisplay value={budgetByCategory[row.category_id].planned_display} class="" />
+							{:else}
+								—
+							{/if}
 						</td>
 						<td class="p-2 tabular-nums">
 							{budgetByCategory[row.category_id]

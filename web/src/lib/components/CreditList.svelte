@@ -3,7 +3,8 @@
 	import { _ } from 'svelte-i18n';
 	import type { Credit } from '$lib/api/client';
 	import { formatCreditPaymentDateForDisplay } from '$lib/dates';
-	import { bankIconUrl, formatBalance } from '$lib/finance';
+	import { bankIconUrl } from '$lib/finance';
+	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
 
 	let {
 		credits,
@@ -61,8 +62,11 @@
 							{/if}
 						</div>
 					</td>
-					<td class="p-3">{formatBalance(c.remaining_amount_display, currency)}</td>
-					<td class="p-3">{formatBalance(c.monthly_payment_display, currency)}</td>
+					<td class="p-3"
+						><MoneyDisplay value={c.remaining_amount_display} {currency} class="" /></td
+					>
+					<td class="p-3"><MoneyDisplay value={c.monthly_payment_display} {currency} class="" /></td
+					>
 					<td class="p-3">
 						{#if c.next_payment_date}
 							{formatCreditPaymentDateForDisplay(c.next_payment_date, tz, c.debit_time_local)}
@@ -109,13 +113,13 @@
 					</div>
 				</div>
 				<p class="shrink-0 text-base font-semibold tabular-nums">
-					{formatBalance(c.remaining_amount_display, currency)}
+					<MoneyDisplay value={c.remaining_amount_display} {currency} class="" />
 				</p>
 			</div>
 			<dl class="mt-3 grid gap-2 text-sm">
 				<div class="flex justify-between gap-2">
 					<dt style:color="var(--text-muted)">{$_('credits.col.payment')}</dt>
-					<dd>{formatBalance(c.monthly_payment_display, currency)}</dd>
+					<dd><MoneyDisplay value={c.monthly_payment_display} {currency} class="" /></dd>
 				</div>
 				<div class="flex justify-between gap-2">
 					<dt style:color="var(--text-muted)">{$_('credits.col.next')}</dt>

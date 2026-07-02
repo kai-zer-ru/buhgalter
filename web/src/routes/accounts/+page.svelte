@@ -24,7 +24,7 @@
 	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import { confirm } from '$lib/confirm';
-	import { formatBalance } from '$lib/finance';
+	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
 	import { formatMoneyForInput, toAPIAmount } from '$lib/money';
 	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
@@ -430,12 +430,20 @@
 										{/if}
 									</div>
 									<p class="mt-1 text-xl font-semibold tabular-nums">
-										{formatBalance(acc.balance_display, $user?.currency ?? 'RUB')}
+										<MoneyDisplay
+											value={acc.balance_display}
+											currency={$user?.currency ?? 'RUB'}
+											class=""
+										/>
 									</p>
 									{#if acc.credit_limit_display}
 										<p class="mt-0.5 text-sm tabular-nums" style:color="var(--text-muted)">
 											{$_('accounts.field.creditLimit')}:
-											{formatBalance(acc.credit_limit_display, $user?.currency ?? 'RUB')}
+											<MoneyDisplay
+												value={acc.credit_limit_display}
+												currency={$user?.currency ?? 'RUB'}
+												class=""
+											/>
 										</p>
 									{/if}
 								</div>

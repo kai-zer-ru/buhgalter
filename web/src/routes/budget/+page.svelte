@@ -25,7 +25,7 @@
 	import Select from '$lib/components/Select.svelte';
 	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
 	import { confirm } from '$lib/confirm';
-	import { formatMoneyForInput, toAPIAmount } from '$lib/money';
+	import { formatMoneyDisplay, formatMoneyForInput, toAPIAmount } from '$lib/money';
 	import { toast } from '$lib/toast';
 	import { tr } from '$lib/i18n';
 	import { budgetStatusLine } from '$lib/budget-display';
@@ -510,8 +510,8 @@
 							<p class="text-sm" style:color="var(--text-muted)">
 								{tr('budget.progress', {
 									values: {
-										spent: item.spent_display,
-										planned: item.planned_display
+										spent: formatMoneyDisplay(item.spent_display),
+										planned: formatMoneyDisplay(item.planned_display)
 									}
 								})}
 							</p>
@@ -543,8 +543,8 @@
 						<p class="text-sm tabular-nums" style:color="var(--text-muted)">
 							{tr('budget.children', {
 								values: {
-									spent: item.children_spent_display ?? '0.00',
-									planned: item.children_planned_display
+									spent: formatMoneyDisplay(item.children_spent_display ?? '0.00'),
+									planned: formatMoneyDisplay(item.children_planned_display)
 								}
 							})}
 						</p>

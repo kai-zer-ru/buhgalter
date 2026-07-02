@@ -149,7 +149,11 @@ OpenAPI: `CreateTransferRequest.commission`, схема `Transfer`.
 
 ## Формат денег
 
-`web/src/lib/money.ts`: отображение и ввод с разделителем тысяч **пробелом** (`10 000.00`). Компонент `MoneyInput.svelte` — при вводе курсор сохраняется при форматировании (`mapMoneyInputCursor`).
+`web/src/lib/money.ts`: отображение и ввод с разделителем тысяч **пробелом** (`10 000.00`).
+
+**Отображение сумм в UI:** компонент `MoneyDisplay.svelte` (`web/src/lib/components/MoneyDisplay.svelte`) — единая точка для read-only сумм. Принимает `value` (строка `_display` из API), `cents` (копейки) и опционально `currency` (добавляет символ валюты, например `₽`). Логика форматирования — в `$lib/money-display.ts` (`formatMoneyForDisplay`); для интерполяции в i18n (`tr(..., { values: { amount } })`) используйте ту же функцию.
+
+**Ввод:** компонент `MoneyInput.svelte` — при вводе курсор сохраняется при форматировании (`mapMoneyInputCursor`).
 
 **Поля ввода суммы (v1.2.3):** пустое значение и ноль не показываются как `0.00` — поле остаётся пустым, подсказка `placeholder="0.00"`. При потере фокуса нулевой ввод очищается (`formatMoneyInput`). Для подстановки значений из API в формы используйте `formatMoneyForInput`, не `formatMoneyDisplay`.
 
@@ -157,6 +161,7 @@ OpenAPI: `CreateTransferRequest.commission`, схема `Transfer`.
 
 - `TestTransferRollbackOnError` — атомарность перевода при сбое второй ноги (SQLite-триггер в интеграционном тесте).
 - `money.test.ts` — стабильность курсора в `MoneyInput`, `formatMoneyForInput` / `formatMoneyInput` (ноль → пусто).
+- `money-display.test.ts` — `formatMoneyForDisplay` (разделитель тысяч, валюта).
 - `accounts.test.ts` — `defaultAccountId` (контекстный счёт vs основной).
 - `e2e/money-input.spec.ts` — пустые поля суммы и placeholder в формах счёта, операций, перевода, периодических операций.
 - `e2e/transaction-filters.spec.ts` — фильтры и пагинация на `/transactions` (20 на страницу).
@@ -170,7 +175,8 @@ OpenAPI: `CreateTransferRequest.commission`, схема `Transfer`.
 2. Для списка одного счёта передавать `{ singleAccount: true }` в `transactionAmountSign`.
 3. Передавать полный массив `siblings` в хелперы маршрута (для случая двух ног в одном ответе).
 4. На общих списках применять `dedupeTransferLegs` перед `{#each}`.
-5. Соблюдать порядок колонок — [ui-table-columns.md](ui-table-columns.md) (дата → счёт → … → сумма).
+5. Суммы в разметке — через `MoneyDisplay`; в строках i18n — `formatMoneyForDisplay` из `$lib/money-display.ts`.
+6. Соблюдать порядок колонок — [ui-table-columns.md](ui-table-columns.md) (дата → счёт → … → сумма).
 
 ## Общий компонент списка
 

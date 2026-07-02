@@ -5,7 +5,7 @@
 	import EntityLink from '$lib/components/EntityLink.svelte';
 	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
 	import { formatAPIDateForDisplay, formatAPIOperationDateTimeForDisplay } from '$lib/dates';
-	import { formatBalance } from '$lib/finance';
+	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
 
 	let {
 		debts,
@@ -93,7 +93,7 @@
 						{/if}
 					</td>
 					<td class="p-3 whitespace-nowrap text-right tabular-nums font-medium">
-						{formatBalance(d.amount_display, currency)}
+						<MoneyDisplay value={d.amount_display} {currency} class="" />
 					</td>
 					<td class="p-3 whitespace-nowrap">
 						{formatAPIOperationDateTimeForDisplay(d.debt_date, tz)}
@@ -144,7 +144,7 @@
 				</div>
 				<div class="flex shrink-0 items-start gap-2">
 					<p class="text-base font-semibold tabular-nums">
-						{formatBalance(d.amount_display, currency)}
+						<MoneyDisplay value={d.amount_display} {currency} class="" />
 					</p>
 					{#if showActions}
 						<RowActionsMenu actions={rowActions(d)} />
