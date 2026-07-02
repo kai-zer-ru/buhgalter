@@ -21,6 +21,8 @@
 
 	type TimeMode = 'hidden' | 'optional' | 'visible';
 
+	const PANEL_HEIGHT_ESTIMATE = 360;
+
 	let {
 		value = $bindable(''),
 		id = 'datetime',
@@ -219,7 +221,15 @@
 
 	function positionPanel() {
 		if (!triggerEl) return;
-		panelStyle = dropdownListStyle(triggerEl, 320, usePortal);
+		const height = panelEl?.offsetHeight ?? PANEL_HEIGHT_ESTIMATE;
+		panelStyle = dropdownListStyle(triggerEl, height, usePortal);
+	}
+
+	function schedulePositionPanel() {
+		requestAnimationFrame(() => {
+			positionPanel();
+			requestAnimationFrame(positionPanel);
+		});
 	}
 
 	function openPanel() {
@@ -228,7 +238,7 @@
 		panelView = 'days';
 		yearPageStart = viewYear - 5;
 		open = true;
-		requestAnimationFrame(positionPanel);
+		schedulePositionPanel();
 	}
 
 	function close() {
@@ -263,6 +273,17 @@
 			window.removeEventListener('resize', positionPanel);
 			window.removeEventListener('scroll', positionPanel, true);
 		};
+	});
+
+	$effect(() => {
+		if (!open) return;
+		switch (panelView) {
+			case 'days':
+			case 'months':
+			case 'years':
+				schedulePositionPanel();
+				break;
+		}
 	});
 
 	function onKeydown(event: KeyboardEvent) {

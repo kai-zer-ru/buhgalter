@@ -1,3 +1,11 @@
+const DROPDOWN_MARGIN = 8;
+
+function shouldOpenUp(spaceBelow: number, spaceAbove: number, listHeight: number): boolean {
+	if (spaceBelow >= listHeight + DROPDOWN_MARGIN) return false;
+	if (spaceAbove >= listHeight + DROPDOWN_MARGIN) return true;
+	return spaceAbove > spaceBelow;
+}
+
 export function actionMenuStyle(
 	trigger: HTMLElement,
 	menuHeight: number,
@@ -5,13 +13,13 @@ export function actionMenuStyle(
 	menuWidth?: number
 ): string {
 	const rect = trigger.getBoundingClientRect();
-	const margin = 8;
+	const margin = DROPDOWN_MARGIN;
 	const viewportWidth = window.innerWidth;
 	const width = Math.min(menuWidth ?? 176, viewportWidth - margin * 2);
 
 	const spaceBelow = window.innerHeight - rect.bottom;
 	const spaceAbove = rect.top;
-	const openUp = spaceBelow < menuHeight + margin && spaceAbove > spaceBelow;
+	const openUp = shouldOpenUp(spaceBelow, spaceAbove, menuHeight);
 
 	let left = align === 'end' ? rect.right - width : rect.left;
 	left = Math.max(margin, Math.min(left, viewportWidth - width - margin));
@@ -33,7 +41,7 @@ export function dropdownListStyle(
 	const rect = trigger.getBoundingClientRect();
 	const spaceBelow = window.innerHeight - rect.bottom;
 	const spaceAbove = rect.top;
-	const openUp = spaceBelow < listHeight + 8 && spaceAbove > spaceBelow;
+	const openUp = shouldOpenUp(spaceBelow, spaceAbove, listHeight);
 
 	if (usePortal) {
 		return [
