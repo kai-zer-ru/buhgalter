@@ -13,6 +13,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/audit"
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
+	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/money"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
 )
@@ -131,26 +132,26 @@ func (h *Handler) E2ERunNow(w http.ResponseWriter, r *http.Request) {
 	}
 	id := chi.URLParam(r, "id")
 	ctx := r.Context()
-	sqlDB := h.Store.DB()
 	past := timeutil.FormatUTC(timeutil.NowUTC().Add(-time.Hour))
-	res, err := sqlDB.ExecContext(ctx, `
-		UPDATE recurring_operations SET next_run_at = ?
-		WHERE id = ? AND user_id = ?`, past, id, info.User.ID)
+	n, err := sqlcdb.New(h.Store.DB()).SetRecurringOperationNextRunAt(ctx, sqlcdb.SetRecurringOperationNextRunAtParams{
+		NextRunAt: past,
+		ID:        id,
+		UserID:    info.User.ID,
+	})
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
-	n, _ := res.RowsAffected()
 	if n == 0 {
 		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
 		return
 	}
-	tz, err := userTimezone(ctx, sqlDB, info.User.ID)
+	tz, err := userTimezone(ctx, h.Store.DB(), info.User.ID)
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
-	applied, err := ApplyDue(ctx, sqlDB, info.User.ID, timeutil.NowUTC(), tz)
+	applied, err := ApplyDue(ctx, h.Store.DB(), info.User.ID, timeutil.NowUTC(), tz)
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return

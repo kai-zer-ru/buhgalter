@@ -63,6 +63,39 @@ func (q *Queries) ApplyScheduledPayment(ctx context.Context, arg ApplyScheduledP
 	return result.RowsAffected()
 }
 
+const backdateFirstUnappliedScheduledPayment = `-- name: BackdateFirstUnappliedScheduledPayment :execrows
+UPDATE credit_payments SET payment_date = datetime('now', '-1 day')
+WHERE id = (
+    SELECT cp2.id FROM credit_payments cp2
+    WHERE cp2.credit_id = ? AND cp2.is_applied = 0 AND cp2.kind = 'scheduled' LIMIT 1
+)
+`
+
+func (q *Queries) BackdateFirstUnappliedScheduledPayment(ctx context.Context, creditID string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, backdateFirstUnappliedScheduledPayment, creditID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const clearCreditLinkedTransactions = `-- name: ClearCreditLinkedTransactions :exec
+UPDATE credits
+SET down_payment_transaction_id = NULL, principal_transaction_id = NULL, updated_at = ?
+WHERE id = ? AND user_id = ?
+`
+
+type ClearCreditLinkedTransactionsParams struct {
+	UpdatedAt string `json:"updated_at"`
+	ID        string `json:"id"`
+	UserID    string `json:"user_id"`
+}
+
+func (q *Queries) ClearCreditLinkedTransactions(ctx context.Context, arg ClearCreditLinkedTransactionsParams) error {
+	_, err := q.db.ExecContext(ctx, clearCreditLinkedTransactions, arg.UpdatedAt, arg.ID, arg.UserID)
+	return err
+}
+
 const closeCredit = `-- name: CloseCredit :execrows
 UPDATE credits
 SET status = 'closed', closed_at = ?, updated_at = ?
@@ -110,6 +143,53 @@ func (q *Queries) CountCreditPayments(ctx context.Context, creditID string) (int
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const creditPaymentsUnappliedByUser = `-- name: CreditPaymentsUnappliedByUser :many
+SELECT cp.id, cp.credit_id, c.name AS credit_name, c.debit_account_id, cp.amount, cp.payment_date
+FROM credit_payments cp
+JOIN credits c ON c.id = cp.credit_id
+WHERE cp.is_applied = 0 AND cp.kind = 'scheduled'
+  AND c.status = 'active' AND c.user_id = ?
+`
+
+type CreditPaymentsUnappliedByUserRow struct {
+	ID             string  `json:"id"`
+	CreditID       string  `json:"credit_id"`
+	CreditName     *string `json:"credit_name"`
+	DebitAccountID string  `json:"debit_account_id"`
+	Amount         int64   `json:"amount"`
+	PaymentDate    string  `json:"payment_date"`
+}
+
+func (q *Queries) CreditPaymentsUnappliedByUser(ctx context.Context, userID string) ([]CreditPaymentsUnappliedByUserRow, error) {
+	rows, err := q.db.QueryContext(ctx, creditPaymentsUnappliedByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CreditPaymentsUnappliedByUserRow{}
+	for rows.Next() {
+		var i CreditPaymentsUnappliedByUserRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.CreditID,
+			&i.CreditName,
+			&i.DebitAccountID,
+			&i.Amount,
+			&i.PaymentDate,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const deleteCredit = `-- name: DeleteCredit :execrows
@@ -201,6 +281,8 @@ SELECT
     c.down_payment,
     c.down_payment_affects_balance,
     c.down_payment_transaction_id,
+    c.principal_affects_balance,
+    c.principal_transaction_id,
     c.issue_date,
     c.term_months,
     c.interest_rate,
@@ -240,6 +322,8 @@ type GetCreditByIDRow struct {
 	DownPayment               int64   `json:"down_payment"`
 	DownPaymentAffectsBalance int64   `json:"down_payment_affects_balance"`
 	DownPaymentTransactionID  *string `json:"down_payment_transaction_id"`
+	PrincipalAffectsBalance   int64   `json:"principal_affects_balance"`
+	PrincipalTransactionID    *string `json:"principal_transaction_id"`
 	IssueDate                 string  `json:"issue_date"`
 	TermMonths                int64   `json:"term_months"`
 	InterestRate              float64 `json:"interest_rate"`
@@ -273,6 +357,8 @@ func (q *Queries) GetCreditByID(ctx context.Context, arg GetCreditByIDParams) (G
 		&i.DownPayment,
 		&i.DownPaymentAffectsBalance,
 		&i.DownPaymentTransactionID,
+		&i.PrincipalAffectsBalance,
+		&i.PrincipalTransactionID,
 		&i.IssueDate,
 		&i.TermMonths,
 		&i.InterestRate,
@@ -443,11 +529,13 @@ func (q *Queries) HasPaymentOnDate(ctx context.Context, arg HasPaymentOnDatePara
 const insertCredit = `-- name: InsertCredit :exec
 INSERT INTO credits (
     id, user_id, name, credit_kind, principal_amount, property_price, down_payment,
-    down_payment_affects_balance, down_payment_transaction_id, issue_date, term_months, interest_rate,
+    down_payment_affects_balance, down_payment_transaction_id,
+    principal_affects_balance, principal_transaction_id,
+    issue_date, term_months, interest_rate,
     payment_interval, paid_amount, monthly_payment, debit_account_id,
     debit_time_local, bank_id, bank_id_locked,
     added_retroactively, recorded_at, status, closed_at, created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type InsertCreditParams struct {
@@ -460,6 +548,8 @@ type InsertCreditParams struct {
 	DownPayment               int64   `json:"down_payment"`
 	DownPaymentAffectsBalance int64   `json:"down_payment_affects_balance"`
 	DownPaymentTransactionID  *string `json:"down_payment_transaction_id"`
+	PrincipalAffectsBalance   int64   `json:"principal_affects_balance"`
+	PrincipalTransactionID    *string `json:"principal_transaction_id"`
 	IssueDate                 string  `json:"issue_date"`
 	TermMonths                int64   `json:"term_months"`
 	InterestRate              float64 `json:"interest_rate"`
@@ -489,6 +579,8 @@ func (q *Queries) InsertCredit(ctx context.Context, arg InsertCreditParams) erro
 		arg.DownPayment,
 		arg.DownPaymentAffectsBalance,
 		arg.DownPaymentTransactionID,
+		arg.PrincipalAffectsBalance,
+		arg.PrincipalTransactionID,
 		arg.IssueDate,
 		arg.TermMonths,
 		arg.InterestRate,
@@ -541,6 +633,58 @@ func (q *Queries) InsertCreditPayment(ctx context.Context, arg InsertCreditPayme
 		arg.CreatedAt,
 	)
 	return err
+}
+
+const listActiveCreditsForScheduleRepair = `-- name: ListActiveCreditsForScheduleRepair :many
+SELECT id, user_id, principal_amount, issue_date, term_months, interest_rate,
+       payment_interval, monthly_payment, added_retroactively
+FROM credits
+WHERE status = 'active' AND payment_interval != 'manual'
+`
+
+type ListActiveCreditsForScheduleRepairRow struct {
+	ID                 string  `json:"id"`
+	UserID             string  `json:"user_id"`
+	PrincipalAmount    int64   `json:"principal_amount"`
+	IssueDate          string  `json:"issue_date"`
+	TermMonths         int64   `json:"term_months"`
+	InterestRate       float64 `json:"interest_rate"`
+	PaymentInterval    string  `json:"payment_interval"`
+	MonthlyPayment     int64   `json:"monthly_payment"`
+	AddedRetroactively int64   `json:"added_retroactively"`
+}
+
+func (q *Queries) ListActiveCreditsForScheduleRepair(ctx context.Context) ([]ListActiveCreditsForScheduleRepairRow, error) {
+	rows, err := q.db.QueryContext(ctx, listActiveCreditsForScheduleRepair)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListActiveCreditsForScheduleRepairRow{}
+	for rows.Next() {
+		var i ListActiveCreditsForScheduleRepairRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.PrincipalAmount,
+			&i.IssueDate,
+			&i.TermMonths,
+			&i.InterestRate,
+			&i.PaymentInterval,
+			&i.MonthlyPayment,
+			&i.AddedRetroactively,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listCreditPaymentTransactionIDs = `-- name: ListCreditPaymentTransactionIDs :many
@@ -647,6 +791,8 @@ SELECT
     c.down_payment,
     c.down_payment_affects_balance,
     c.down_payment_transaction_id,
+    c.principal_affects_balance,
+    c.principal_transaction_id,
     c.issue_date,
     c.term_months,
     c.interest_rate,
@@ -689,6 +835,8 @@ type ListCreditsByUserRow struct {
 	DownPayment               int64   `json:"down_payment"`
 	DownPaymentAffectsBalance int64   `json:"down_payment_affects_balance"`
 	DownPaymentTransactionID  *string `json:"down_payment_transaction_id"`
+	PrincipalAffectsBalance   int64   `json:"principal_affects_balance"`
+	PrincipalTransactionID    *string `json:"principal_transaction_id"`
 	IssueDate                 string  `json:"issue_date"`
 	TermMonths                int64   `json:"term_months"`
 	InterestRate              float64 `json:"interest_rate"`
@@ -728,6 +876,8 @@ func (q *Queries) ListCreditsByUser(ctx context.Context, arg ListCreditsByUserPa
 			&i.DownPayment,
 			&i.DownPaymentAffectsBalance,
 			&i.DownPaymentTransactionID,
+			&i.PrincipalAffectsBalance,
+			&i.PrincipalTransactionID,
 			&i.IssueDate,
 			&i.TermMonths,
 			&i.InterestRate,
@@ -840,38 +990,6 @@ func (q *Queries) ListDueCreditPayments(ctx context.Context, paymentDate string)
 	return items, nil
 }
 
-const listUsersWithTimezone = `-- name: ListUsersWithTimezone :many
-SELECT id, timezone FROM users
-`
-
-type ListUsersWithTimezoneRow struct {
-	ID       string `json:"id"`
-	Timezone string `json:"timezone"`
-}
-
-func (q *Queries) ListUsersWithTimezone(ctx context.Context) ([]ListUsersWithTimezoneRow, error) {
-	rows, err := q.db.QueryContext(ctx, listUsersWithTimezone)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListUsersWithTimezoneRow{}
-	for rows.Next() {
-		var i ListUsersWithTimezoneRow
-		if err := rows.Scan(&i.ID, &i.Timezone); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const markCreditPaymentApplied = `-- name: MarkCreditPaymentApplied :execrows
 UPDATE credit_payments
 SET is_applied = 1
@@ -945,6 +1063,23 @@ type SetCreditDownPaymentTransactionParams struct {
 
 func (q *Queries) SetCreditDownPaymentTransaction(ctx context.Context, arg SetCreditDownPaymentTransactionParams) error {
 	_, err := q.db.ExecContext(ctx, setCreditDownPaymentTransaction, arg.DownPaymentTransactionID, arg.ID, arg.UserID)
+	return err
+}
+
+const setCreditPrincipalTransaction = `-- name: SetCreditPrincipalTransaction :exec
+UPDATE credits
+SET principal_transaction_id = ?
+WHERE id = ? AND user_id = ?
+`
+
+type SetCreditPrincipalTransactionParams struct {
+	PrincipalTransactionID *string `json:"principal_transaction_id"`
+	ID                     string  `json:"id"`
+	UserID                 string  `json:"user_id"`
+}
+
+func (q *Queries) SetCreditPrincipalTransaction(ctx context.Context, arg SetCreditPrincipalTransactionParams) error {
+	_, err := q.db.ExecContext(ctx, setCreditPrincipalTransaction, arg.PrincipalTransactionID, arg.ID, arg.UserID)
 	return err
 }
 

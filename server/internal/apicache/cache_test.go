@@ -107,3 +107,33 @@ func TestMiddlewareInvalidatesSetupStatusOnAdminSettingsWrite(t *testing.T) {
 		t.Fatalf("expected setup status cache miss after admin settings write, calls=%d", calls)
 	}
 }
+
+func TestMiddlewareInvalidatesAdminUsersOnRegister(t *testing.T) {
+	cache := New()
+	calls := 0
+	handler := Middleware(cache)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, `{"n":%d}`, calls)
+	}))
+
+	userID := "admin-1"
+	withUser := func(r *http.Request) *http.Request {
+		ctx := context.WithValue(r.Context(), auth.AuthContextKey, auth.AuthInfo{
+			User: auth.User{ID: userID},
+		})
+		return r.WithContext(ctx)
+	}
+
+	handler.ServeHTTP(httptest.NewRecorder(), withUser(httptest.NewRequest(http.MethodGet, "/api/v1/admin/users", nil)))
+	handler.ServeHTTP(httptest.NewRecorder(), withUser(httptest.NewRequest(http.MethodGet, "/api/v1/admin/users", nil)))
+	if calls != 1 {
+		t.Fatalf("expected admin users cache hit, calls=%d", calls)
+	}
+
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", nil))
+	handler.ServeHTTP(httptest.NewRecorder(), withUser(httptest.NewRequest(http.MethodGet, "/api/v1/admin/users", nil)))
+	if calls != 3 {
+		t.Fatalf("expected admin users cache miss after register, calls=%d", calls)
+	}
+}

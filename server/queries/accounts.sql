@@ -6,6 +6,12 @@ SELECT
     a.bank_id,
     a.initial_balance,
     a.current_balance,
+    a.credit_limit,
+    a.payment_account_id,
+    a.auto_topup_enabled,
+    a.auto_topup_threshold,
+    a.auto_topup_target,
+    a.auto_topup_source_account_id,
     a.status,
     a.is_primary,
     a.created_at,
@@ -24,6 +30,12 @@ SELECT
     a.bank_id,
     a.initial_balance,
     a.current_balance,
+    a.credit_limit,
+    a.payment_account_id,
+    a.auto_topup_enabled,
+    a.auto_topup_threshold,
+    a.auto_topup_target,
+    a.auto_topup_source_account_id,
     a.status,
     a.is_primary,
     a.created_at,
@@ -43,6 +55,12 @@ SELECT
     a.bank_id,
     a.initial_balance,
     a.current_balance,
+    a.credit_limit,
+    a.payment_account_id,
+    a.auto_topup_enabled,
+    a.auto_topup_threshold,
+    a.auto_topup_target,
+    a.auto_topup_source_account_id,
     a.status,
     a.is_primary,
     a.created_at,
@@ -56,21 +74,18 @@ ORDER BY a.name;
 
 -- name: InsertAccount :exec
 INSERT INTO accounts (
-    id, user_id, name, type, bank_id, initial_balance, current_balance, status, is_primary, created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?);
+    id, user_id, name, type, bank_id, initial_balance, current_balance,
+    credit_limit, payment_account_id, status, is_primary, created_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?);
 
 -- name: UpdateAccount :exec
 UPDATE accounts
-SET name = ?, bank_id = ?, initial_balance = ?, updated_at = ?
+SET name = ?, bank_id = ?, initial_balance = ?, credit_limit = ?, payment_account_id = ?, updated_at = ?
 WHERE id = ? AND user_id = ?;
 
 -- name: UpdateAccountStatus :execrows
 UPDATE accounts
 SET status = ?, updated_at = ?
-WHERE id = ? AND user_id = ?;
-
--- name: DeleteAccount :execrows
-DELETE FROM accounts
 WHERE id = ? AND user_id = ?;
 
 -- name: CountActiveAccountsByName :one
@@ -118,6 +133,12 @@ SELECT
     a.bank_id,
     a.initial_balance,
     a.current_balance,
+    a.credit_limit,
+    a.payment_account_id,
+    a.auto_topup_enabled,
+    a.auto_topup_threshold,
+    a.auto_topup_target,
+    a.auto_topup_source_account_id,
     a.status,
     a.is_primary,
     a.created_at,
@@ -149,3 +170,41 @@ WHERE id = ? AND user_id = ?;
 SELECT id, initial_balance
 FROM accounts
 WHERE user_id = ?;
+
+-- name: ListDistinctAccountUserIDs :many
+SELECT DISTINCT user_id FROM accounts;
+
+-- name: ListAutoTopupBeneficiaryAccountIDs :many
+SELECT id
+FROM accounts
+WHERE user_id = ?
+  AND status = 'active'
+  AND type = 'bank'
+  AND auto_topup_enabled = 1;
+
+-- name: UpdateAccountAutoTopup :exec
+UPDATE accounts
+SET
+    auto_topup_enabled = ?,
+    auto_topup_threshold = ?,
+    auto_topup_target = ?,
+    auto_topup_source_account_id = ?,
+    updated_at = ?
+WHERE id = ? AND user_id = ?;
+
+-- name: DisableAutoTopup :exec
+UPDATE accounts
+SET auto_topup_enabled = 0, updated_at = ?
+WHERE id = ? AND user_id = ?;
+
+-- name: DisableAutoTopupUsingSource :exec
+UPDATE accounts
+SET auto_topup_enabled = 0, updated_at = ?
+WHERE user_id = ?
+  AND auto_topup_enabled = 1
+  AND auto_topup_source_account_id = ?;
+
+-- name: DisableAutoTopupForBeneficiary :exec
+UPDATE accounts
+SET auto_topup_enabled = 0, updated_at = ?
+WHERE id = ? AND user_id = ?;

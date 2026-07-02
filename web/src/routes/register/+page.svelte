@@ -3,9 +3,7 @@
 	import { resolve } from '$app/paths';
 	import { _ } from 'svelte-i18n';
 	import { register } from '$lib/api/client';
-	import { user, markSessionHint } from '$lib/stores/auth';
-	import { syncThemeFromUser } from '$lib/stores/theme';
-	import { setLocale } from '$lib/i18n';
+	import { formatAuthUserApiError, authUserApiField } from '$lib/auth/api-errors';
 	import { validatePasswordPolicy } from '$lib/password-policy';
 	import { toast } from '$lib/toast';
 
@@ -13,6 +11,8 @@
 	let displayName = $state('');
 	let password = $state('');
 	let passwordConfirm = $state('');
+	let loginError = $state('');
+	let passwordError = $state('');
 	let loading = $state(false);
 
 	const passwordsMatch = $derived(passwordConfirm.length === 0 || password === passwordConfirm);
@@ -24,25 +24,28 @@
 
 	async function submit(e: Event) {
 		e.preventDefault();
+		loginError = '';
+		passwordError = '';
 		if (!formValid) {
-			toast.error('Пароли не совпадают или слишком короткие');
+			toast.error($_('admin.users.passwordMismatch'));
 			return;
 		}
 		loading = true;
 		try {
-			const res = await register(
+			await register(
 				loginName.trim(),
 				password,
 				passwordConfirm,
 				displayName.trim() || loginName.trim()
 			);
-			user.set(res.user);
-			markSessionHint();
-			setLocale(res.user.language);
-			syncThemeFromUser(res.user.theme);
-			await goto(resolve('/'));
+			toast($_('register.pending'));
+			await goto(resolve('/login'));
 		} catch (err) {
-			toast.fromError(err);
+			const message = formatAuthUserApiError(err, 'common.error', false);
+			const field = authUserApiField(err);
+			if (field === 'login') loginError = message;
+			else if (field === 'password') passwordError = message;
+			else toast.error(message);
 		} finally {
 			loading = false;
 		}
@@ -60,6 +63,9 @@
 			<div>
 				<label class="mb-1.5 block text-sm font-medium" for="login">{$_('login.login')}</label>
 				<input id="login" class="input" bind:value={loginName} minlength="3" required />
+				{#if loginError}
+					<p class="mt-1 text-xs" style:color="var(--danger)">{loginError}</p>
+				{/if}
 			</div>
 			<div>
 				<label class="mb-1.5 block text-sm font-medium" for="display"
@@ -82,10 +88,13 @@
 				<p class="mt-1 text-xs" style:color="var(--text-muted)">
 					{$_('auth.password.requirements')}
 				</p>
+				{#if passwordError}
+					<p class="mt-1 text-xs" style:color="var(--danger)">{passwordError}</p>
+				{/if}
 			</div>
 			<div>
 				<label class="mb-1.5 block text-sm font-medium" for="password-confirm"
-					>Подтверждение пароля</label
+					>{$_('admin.users.passwordConfirm')}</label
 				>
 				<input
 					id="password-confirm"
@@ -97,7 +106,9 @@
 					required
 				/>
 				{#if passwordConfirm.length > 0 && !passwordsMatch}
-					<p class="mt-1 text-xs" style:color="var(--danger)">Пароли не совпадают</p>
+					<p class="mt-1 text-xs" style:color="var(--danger)">
+						{$_('admin.users.passwordMismatch')}
+					</p>
 				{/if}
 			</div>
 			<button type="submit" class="btn-primary w-full" disabled={loading || !formValid}>

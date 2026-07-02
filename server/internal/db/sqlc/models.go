@@ -5,17 +5,39 @@
 package sqlc
 
 type Account struct {
-	ID             string  `json:"id"`
-	UserID         string  `json:"user_id"`
-	Name           string  `json:"name"`
-	Type           string  `json:"type"`
-	BankID         *string `json:"bank_id"`
-	InitialBalance int64   `json:"initial_balance"`
-	CurrentBalance int64   `json:"current_balance"`
-	Status         string  `json:"status"`
-	IsPrimary      int64   `json:"is_primary"`
-	CreatedAt      string  `json:"created_at"`
-	UpdatedAt      string  `json:"updated_at"`
+	ID                       string  `json:"id"`
+	UserID                   string  `json:"user_id"`
+	Name                     string  `json:"name"`
+	Type                     string  `json:"type"`
+	BankID                   *string `json:"bank_id"`
+	InitialBalance           int64   `json:"initial_balance"`
+	CurrentBalance           int64   `json:"current_balance"`
+	CreditLimit              *int64  `json:"credit_limit"`
+	PaymentAccountID         *string `json:"payment_account_id"`
+	AutoTopupEnabled         int64   `json:"auto_topup_enabled"`
+	AutoTopupThreshold       *int64  `json:"auto_topup_threshold"`
+	AutoTopupTarget          *int64  `json:"auto_topup_target"`
+	AutoTopupSourceAccountID *string `json:"auto_topup_source_account_id"`
+	Status                   string  `json:"status"`
+	IsPrimary                int64   `json:"is_primary"`
+	CreatedAt                string  `json:"created_at"`
+	UpdatedAt                string  `json:"updated_at"`
+}
+
+type AccountsNew struct {
+	ID               string  `json:"id"`
+	UserID           string  `json:"user_id"`
+	Name             string  `json:"name"`
+	Type             string  `json:"type"`
+	BankID           *string `json:"bank_id"`
+	InitialBalance   int64   `json:"initial_balance"`
+	CurrentBalance   int64   `json:"current_balance"`
+	CreditLimit      *int64  `json:"credit_limit"`
+	PaymentAccountID *string `json:"payment_account_id"`
+	Status           string  `json:"status"`
+	IsPrimary        int64   `json:"is_primary"`
+	CreatedAt        string  `json:"created_at"`
+	UpdatedAt        string  `json:"updated_at"`
 }
 
 type ApiToken struct {
@@ -35,6 +57,42 @@ type Bank struct {
 	Bic       *string `json:"bic"`
 	IconPath  string  `json:"icon_path"`
 	SortOrder int64   `json:"sort_order"`
+}
+
+type Budget struct {
+	ID             string  `json:"id"`
+	UserID         string  `json:"user_id"`
+	Name           string  `json:"name"`
+	Scope          string  `json:"scope"`
+	CategoryID     *string `json:"category_id"`
+	SubcategoryID  *string `json:"subcategory_id"`
+	Amount         int64   `json:"amount"`
+	Period         string  `json:"period"`
+	AccountID      *string `json:"account_id"`
+	Month          string  `json:"month"`
+	CopyForward    int64   `json:"copy_forward"`
+	Rollover       int64   `json:"rollover"`
+	AlertAtPercent int64   `json:"alert_at_percent"`
+	IsActive       int64   `json:"is_active"`
+	CreatedAt      string  `json:"created_at"`
+	UpdatedAt      string  `json:"updated_at"`
+}
+
+type BudgetAlertSent struct {
+	BudgetID         string `json:"budget_id"`
+	PeriodStart      string `json:"period_start"`
+	ThresholdPercent int64  `json:"threshold_percent"`
+	SentAt           string `json:"sent_at"`
+}
+
+type BudgetPeriod struct {
+	ID             string `json:"id"`
+	BudgetID       string `json:"budget_id"`
+	PeriodStart    string `json:"period_start"`
+	PlannedAmount  int64  `json:"planned_amount"`
+	RolloverAmount int64  `json:"rollover_amount"`
+	CreatedAt      string `json:"created_at"`
+	UpdatedAt      string `json:"updated_at"`
 }
 
 type Category struct {
@@ -59,6 +117,8 @@ type Credit struct {
 	DownPayment               int64   `json:"down_payment"`
 	DownPaymentAffectsBalance int64   `json:"down_payment_affects_balance"`
 	DownPaymentTransactionID  *string `json:"down_payment_transaction_id"`
+	PrincipalAffectsBalance   int64   `json:"principal_affects_balance"`
+	PrincipalTransactionID    *string `json:"principal_transaction_id"`
 	IssueDate                 string  `json:"issue_date"`
 	TermMonths                int64   `json:"term_months"`
 	InterestRate              float64 `json:"interest_rate"`
@@ -164,6 +224,10 @@ type NotificationSetting struct {
 	TriggerDebt                   int64   `json:"trigger_debt"`
 	TriggerCredit                 int64   `json:"trigger_credit"`
 	TriggerPlanned                int64   `json:"trigger_planned"`
+	TriggerNegativeBalance        int64   `json:"trigger_negative_balance"`
+	TriggerBudget                 int64   `json:"trigger_budget"`
+	TriggerAutoTopupDisabled      int64   `json:"trigger_auto_topup_disabled"`
+	TriggerUserRegistration       int64   `json:"trigger_user_registration"`
 	TriggerPasswordReset          int64   `json:"trigger_password_reset"`
 	DebtDaysBefore                int64   `json:"debt_days_before"`
 	MyDebtOverdueDaysLimit        int64   `json:"my_debt_overdue_days_limit"`
@@ -179,6 +243,13 @@ type NotificationTemplate struct {
 	TriggerType string `json:"trigger_type"`
 	Template    string `json:"template"`
 	UpdatedAt   string `json:"updated_at"`
+}
+
+type PasswordResetRequest struct {
+	ID          string  `json:"id"`
+	UserID      string  `json:"user_id"`
+	CreatedAt   string  `json:"created_at"`
+	DismissedAt *string `json:"dismissed_at"`
 }
 
 type RecurringOperation struct {
@@ -211,6 +282,14 @@ type Session struct {
 	IpAddress    *string `json:"ip_address"`
 	UserAgent    *string `json:"user_agent"`
 	CreatedAt    string  `json:"created_at"`
+}
+
+type SqliteMaster struct {
+	Type     *string `json:"type"`
+	Name     *string `json:"name"`
+	TblName  *string `json:"tbl_name"`
+	Rootpage *int64  `json:"rootpage"`
+	Sql      *string `json:"sql"`
 }
 
 type Subcategory struct {
@@ -266,6 +345,7 @@ type User struct {
 	Currency     string  `json:"currency"`
 	Timezone     string  `json:"timezone"`
 	Theme        string  `json:"theme"`
+	Status       string  `json:"status"`
 	CreatedAt    string  `json:"created_at"`
 	UpdatedAt    string  `json:"updated_at"`
 }

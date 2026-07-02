@@ -1,6 +1,15 @@
 -- Snapshot for sqlc (source of truth: internal/db/migrations/*.sql via goose).
 -- After each migration, update this file before `make sqlc`.
 
+-- SQLite catalog (sqlc schema stub; system table at runtime).
+CREATE TABLE sqlite_master (
+    type TEXT,
+    name TEXT,
+    tbl_name TEXT,
+    rootpage INTEGER,
+    sql TEXT
+);
+
 CREATE TABLE system_settings (
     id              INTEGER PRIMARY KEY CHECK (id = 1),
     is_configured   INTEGER NOT NULL DEFAULT 0,
@@ -27,6 +36,7 @@ CREATE TABLE users (
     currency        TEXT NOT NULL DEFAULT 'RUB',
     timezone        TEXT NOT NULL DEFAULT 'Europe/Moscow',
     theme           TEXT NOT NULL DEFAULT 'light',
+    status          TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'pending', 'banned')),
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -65,19 +75,42 @@ CREATE TABLE banks (
 );
 
 CREATE TABLE accounts (
-    id              TEXT PRIMARY KEY,
-    user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    name            TEXT NOT NULL,
-    type            TEXT NOT NULL CHECK (type IN ('cash', 'bank')),
-    bank_id         TEXT REFERENCES banks(id),
-    initial_balance INTEGER NOT NULL DEFAULT 0,
-    current_balance INTEGER NOT NULL DEFAULT 0,
-    status          TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'archived')),
-    is_primary      INTEGER NOT NULL DEFAULT 0,
-    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+    id                  TEXT PRIMARY KEY,
+    user_id             TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name                TEXT NOT NULL,
+    type                TEXT NOT NULL CHECK (type IN ('cash', 'bank', 'credit_card')),
+    bank_id             TEXT REFERENCES banks(id),
+    initial_balance     INTEGER NOT NULL DEFAULT 0,
+    current_balance     INTEGER NOT NULL DEFAULT 0,
+    credit_limit        INTEGER,
+    payment_account_id  TEXT REFERENCES accounts(id),
+    auto_topup_enabled  INTEGER NOT NULL DEFAULT 0,
+    auto_topup_threshold INTEGER,
+    auto_topup_target   INTEGER,
+    auto_topup_source_account_id TEXT REFERENCES accounts(id),
+    status              TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'archived', 'deleted')),
+    is_primary          INTEGER NOT NULL DEFAULT 0,
+    created_at          TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at          TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX idx_accounts_user ON accounts(user_id);
+
+-- Staging table for migration 033 rebuild (sqlc schema; ephemeral at runtime).
+CREATE TABLE accounts_new (
+    id                  TEXT PRIMARY KEY,
+    user_id             TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name                TEXT NOT NULL,
+    type                TEXT NOT NULL CHECK (type IN ('cash', 'bank', 'credit_card')),
+    bank_id             TEXT REFERENCES banks(id),
+    initial_balance     INTEGER NOT NULL DEFAULT 0,
+    current_balance     INTEGER NOT NULL DEFAULT 0,
+    credit_limit        INTEGER,
+    payment_account_id  TEXT REFERENCES accounts_new(id),
+    status              TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'archived', 'deleted')),
+    is_primary          INTEGER NOT NULL DEFAULT 0,
+    created_at          TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at          TEXT NOT NULL DEFAULT (datetime('now'))
+);
 
 CREATE TABLE categories (
     id              TEXT PRIMARY KEY,
@@ -196,6 +229,8 @@ CREATE TABLE credits (
     down_payment        INTEGER NOT NULL DEFAULT 0,
     down_payment_affects_balance INTEGER NOT NULL DEFAULT 0,
     down_payment_transaction_id TEXT REFERENCES transactions(id),
+    principal_affects_balance INTEGER NOT NULL DEFAULT 0,
+    principal_transaction_id TEXT REFERENCES transactions(id),
     issue_date          TEXT NOT NULL,
     term_months         INTEGER NOT NULL,
     interest_rate       REAL NOT NULL DEFAULT 0,
@@ -243,6 +278,15 @@ CREATE TABLE import_idempotency (
 );
 CREATE INDEX idx_import_idempotency_user_key ON import_idempotency (user_id, idempotency_key);
 
+CREATE TABLE password_reset_requests (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL,
+    dismissed_at TEXT
+);
+CREATE INDEX idx_password_reset_requests_pending ON password_reset_requests(user_id)
+WHERE dismissed_at IS NULL;
+
 CREATE TABLE import_jobs (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -270,6 +314,10 @@ CREATE TABLE notification_settings (
     trigger_debt        INTEGER NOT NULL DEFAULT 1,
     trigger_credit      INTEGER NOT NULL DEFAULT 1,
     trigger_planned     INTEGER NOT NULL DEFAULT 1,
+    trigger_negative_balance INTEGER NOT NULL DEFAULT 1,
+    trigger_budget INTEGER NOT NULL DEFAULT 1,
+    trigger_auto_topup_disabled INTEGER NOT NULL DEFAULT 1,
+    trigger_user_registration INTEGER NOT NULL DEFAULT 1,
     trigger_password_reset INTEGER NOT NULL DEFAULT 1,
     debt_days_before    INTEGER NOT NULL DEFAULT 1,
     my_debt_overdue_days_limit INTEGER NOT NULL DEFAULT 7,
@@ -297,10 +345,59 @@ CREATE INDEX idx_notification_log_dedup
 CREATE TABLE notification_templates (
     user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     trigger_type    TEXT NOT NULL CHECK (trigger_type IN (
-                        'debt_overdue', 'debt_due_soon', 'credit_payment', 'planned_operation', 'password_reset', 'test'
+                        'debt_overdue', 'debt_due_soon', 'credit_payment', 'planned_operation',
+                        'balance_shortfall', 'budget_threshold', 'auto_topup_disabled',
+                        'user_registration', 'password_reset', 'test'
                     )),
     template        TEXT NOT NULL,
     updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (user_id, trigger_type)
+);
+
+CREATE TABLE budgets (
+    id              TEXT PRIMARY KEY,
+    user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name            TEXT NOT NULL,
+    scope           TEXT NOT NULL CHECK (scope IN ('category', 'subcategory', 'all_expense', 'all_income')),
+    category_id     TEXT REFERENCES categories(id),
+    subcategory_id  TEXT REFERENCES subcategories(id),
+    amount          INTEGER NOT NULL CHECK (amount > 0),
+    period          TEXT NOT NULL DEFAULT 'month' CHECK (period = 'month'),
+    account_id      TEXT REFERENCES accounts(id),
+    month           TEXT NOT NULL DEFAULT '',
+    copy_forward    INTEGER NOT NULL DEFAULT 0,
+    rollover        INTEGER NOT NULL DEFAULT 0,
+    alert_at_percent INTEGER NOT NULL DEFAULT 90,
+    is_active       INTEGER NOT NULL DEFAULT 1,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_budgets_user ON budgets(user_id);
+CREATE UNIQUE INDEX idx_budgets_active_unique ON budgets(
+    user_id,
+    scope,
+    IFNULL(category_id, ''),
+    IFNULL(subcategory_id, ''),
+    month
+) WHERE is_active = 1;
+
+CREATE TABLE budget_periods (
+    id              TEXT PRIMARY KEY,
+    budget_id       TEXT NOT NULL REFERENCES budgets(id) ON DELETE CASCADE,
+    period_start    TEXT NOT NULL,
+    planned_amount  INTEGER NOT NULL CHECK (planned_amount > 0),
+    rollover_amount INTEGER NOT NULL DEFAULT 0,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (budget_id, period_start)
+);
+CREATE INDEX idx_budget_periods_budget ON budget_periods(budget_id);
+
+CREATE TABLE budget_alert_sent (
+    budget_id           TEXT NOT NULL REFERENCES budgets(id) ON DELETE CASCADE,
+    period_start        TEXT NOT NULL,
+    threshold_percent   INTEGER NOT NULL,
+    sent_at             TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (budget_id, period_start, threshold_percent)
 );
 

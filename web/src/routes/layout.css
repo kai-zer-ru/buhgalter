@@ -2,6 +2,7 @@
 
 @theme {
 	--font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+	--container-5xl: 80rem;
 	--color-brand-50: #ecfdf5;
 	--color-brand-100: #d1fae5;
 	--color-brand-500: #10b981;
@@ -221,6 +222,41 @@ html.dark {
 		@apply block cursor-pointer rounded-lg border border-transparent px-3 py-2 text-sm transition hover:opacity-80;
 	}
 
+	.nav-mobile-panel {
+		position: fixed;
+		top: var(--header-height, 3.5rem);
+		right: 1rem;
+		z-index: 60;
+		min-width: 12rem;
+		max-height: min(85dvh, calc(100dvh - var(--header-height, 3.5rem) - 0.5rem));
+		overflow-y: auto;
+	}
+
+	.nav-mobile-drill {
+		@apply flex w-full items-center justify-between gap-2 text-left;
+	}
+
+	.nav-mobile-back {
+		@apply flex w-full items-center gap-2 text-left;
+		color: var(--text-muted);
+	}
+
+	.nav-mobile-submenu-title {
+		@apply px-3 pb-1 text-xs font-medium tracking-wide uppercase;
+		color: var(--text-muted);
+	}
+
+	.nav-mobile-chevron {
+		@apply h-4 w-4 shrink-0;
+		color: var(--text-muted);
+	}
+
+	@media (min-width: 640px) {
+		.nav-mobile-panel {
+			display: none;
+		}
+	}
+
 	.nav-link-active {
 		color: var(--primary);
 		font-weight: 600;
@@ -258,6 +294,27 @@ html.dark {
 	}
 
 	.filter-panel > summary::-webkit-details-marker {
+		display: none;
+	}
+
+	.dashboard-accounts-panel > summary {
+		@apply cursor-pointer list-none text-sm font-medium;
+	}
+
+	.dashboard-accounts-summary {
+		@apply flex items-center justify-between gap-2;
+	}
+
+	.dashboard-accounts-chevron {
+		@apply h-5 w-5 shrink-0 transition-transform duration-150;
+		color: var(--text-muted);
+	}
+
+	.dashboard-accounts-panel[open] > .dashboard-accounts-summary .dashboard-accounts-chevron {
+		transform: rotate(180deg);
+	}
+
+	.dashboard-accounts-panel > summary::-webkit-details-marker {
 		display: none;
 	}
 
@@ -317,6 +374,12 @@ html.dark {
 		.breadcrumb-current,
 		.input {
 			min-height: 2.75rem;
+		}
+	}
+
+	@media (min-width: 640px) {
+		.dashboard-accounts-panel > summary {
+			display: none;
 		}
 	}
 

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test, expect } from '@playwright/test';
-import { login, apiJSON, waitAppReady } from './helpers/auth';
+import { login, apiJSON, restoreAdminSession, waitAppReady } from './helpers/auth';
 import { advanceImportToPreview, commitImportFromPreview } from './helpers/import';
 import { createCashAccount, createIncome } from './helpers/setup-data';
 import { confirmDialog, expectToast, rowMenuAction } from './helpers/ui';
@@ -29,6 +29,7 @@ test('setup redirects when already configured', async ({ page }) => {
 
 test('register creates account when registration is enabled', async ({ page }) => {
 	const tag = Date.now();
+	await restoreAdminSession(page);
 	await apiJSON(page, 'PUT', '/api/v1/admin/settings', {
 		registration_enabled: true,
 		external_url: ''
@@ -45,6 +46,24 @@ test('register creates account when registration is enabled', async ({ page }) =
 	await page.locator('#password-confirm').fill('Regpass1');
 	await page.getByRole('button', { name: 'Создать аккаунт' }).click();
 
+	await expect(page).toHaveURL(/\/login/, { timeout: 10_000 });
+
+	await restoreAdminSession(page);
+	const users = await apiJSON<{ id: string; login: string; status: string }[]>(
+		page,
+		'GET',
+		'/api/v1/admin/users'
+	);
+	const created = users.find((u) => u.login === loginName);
+	expect(created).toBeTruthy();
+	await apiJSON(page, 'PUT', `/api/v1/admin/users/${created!.id}/status`, { status: 'active' });
+
+	await page.context().clearCookies();
+	await page.goto('/login');
+	await page.locator('#login').fill(loginName);
+	await page.locator('#password').fill('Regpass1');
+	await page.getByRole('button', { name: 'Войти' }).click();
+
 	await waitAppReady(page);
 	await expect(page).toHaveURL(/\/(\?.*)?$/);
 	await expect(page.getByRole('button', { name: 'Выйти' })).toBeVisible({ timeout: 10_000 });
@@ -52,8 +71,7 @@ test('register creates account when registration is enabled', async ({ page }) =
 	await waitAppReady(page);
 	await expect(page.locator('#display')).toHaveValue(`E2E Reg ${tag}`);
 
-	await page.context().clearCookies();
-	await login(page);
+	await restoreAdminSession(page);
 	await apiJSON(page, 'PUT', '/api/v1/admin/settings', {
 		registration_enabled: false,
 		external_url: ''
@@ -232,6 +250,7 @@ test('login page shows register link when registration enabled', async ({ page }
 	});
 
 	await login(page);
+	await restoreAdminSession(page);
 	await apiJSON(page, 'PUT', '/api/v1/admin/settings', {
 		registration_enabled: false,
 		external_url: ''

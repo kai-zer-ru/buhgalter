@@ -106,3 +106,7 @@ ORDER BY next_run_at ASC;
 UPDATE recurring_operations
 SET next_run_at = ?, last_run_at = ?, updated_at = ?
 WHERE id = ? AND user_id = ?;
+
+-- name: SetRecurringOperationNextRunAt :execrows
+UPDATE recurring_operations SET next_run_at = ?
+WHERE id = ? AND user_id = ?;

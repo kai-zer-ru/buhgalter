@@ -12,7 +12,21 @@ export function transferAccountOptions(
 		.map((acc) => ({ value: acc.id, label: acc.name }));
 }
 
-/** First account id other than excludeId, or empty string if none. */
+/** Cash/bank with positive balance must transfer funds before archive or delete. */
+export function needsBalanceTransfer(acc: Account): boolean {
+	return acc.type !== 'credit_card' && acc.balance > 0;
+}
+
+/** Default target for balance transfer: primary account, else first in the list. */
+export function defaultTransferAccountId(accounts: readonly Account[], excludeId: string): string {
+	const options = transferAccountOptions(accounts, excludeId);
+	if (options.length === 0) return '';
+	const primary = accounts.find((acc) => acc.is_primary && acc.id !== excludeId);
+	if (primary) return primary.id;
+	return options[0].value;
+}
+
+/** @deprecated Use defaultTransferAccountId */
 export function pickOtherAccountId(accounts: readonly Account[], excludeId: string): string {
-	return accounts.find((acc) => acc.id !== excludeId)?.id ?? '';
+	return defaultTransferAccountId(accounts, excludeId);
 }

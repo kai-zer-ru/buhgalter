@@ -5,8 +5,10 @@
 	import { _ } from 'svelte-i18n';
 	import {
 		deleteTransaction,
+		getBudgetSummary,
 		getDashboard,
 		listTransactions,
+		type BudgetSummaryItem,
 		type Dashboard,
 		type Transaction
 	} from '$lib/api/client';
@@ -16,12 +18,13 @@
 	import TransactionList from '$lib/components/TransactionList.svelte';
 	import TransferForm from '$lib/components/TransferForm.svelte';
 	import NewTransactionButtons from '$lib/components/NewTransactionButtons.svelte';
+	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
 	import { confirm } from '$lib/confirm';
-	import { formatBalance } from '$lib/finance';
-	import { fromCents } from '$lib/money';
 	import { dedupeTransferLegs } from '$lib/transaction-display';
 	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
+	import { tr } from '$lib/i18n';
+	import { budgetStatusLine } from '$lib/budget-display';
 
 	let dash = $state<Dashboard | null>(null);
 	let loading = $state(true);
@@ -40,14 +43,50 @@
 	let plannedTx = $state<Transaction[]>([]);
 	let plannedTotal = $state(0);
 	let plannedLoading = $state(false);
+	let budgetItems = $state<BudgetSummaryItem[]>([]);
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
+	const categoryBudgets = $derived(
+		[...budgetItems].filter((b) => b.scope !== 'all_expense').sort((a, b) => b.percent - a.percent)
+	);
+	const allExpenseBudget = $derived(budgetItems.find((b) => b.scope === 'all_expense'));
 	const pastVisible = $derived(dedupeTransferLegs(pastTx));
 	const plannedVisible = $derived(dedupeTransferLegs(plannedTx));
 	const txSiblings = $derived([...pastTx, ...plannedTx]);
 	const hasDebts = $derived(
 		dash != null && (dash.debts_summary.i_owe > 0 || dash.debts_summary.owed_to_me > 0)
 	);
+	const hasCreditCards = $derived(dash != null && dash.credit_cards_summary != null);
+	const currency = $derived($user?.currency ?? 'RUB');
+
+	let accountsPanelEl = $state<HTMLDetailsElement | undefined>();
+	let accountsDesktop = $state(false);
+
+	$effect(() => {
+		const el = accountsPanelEl;
+		if (!el) return;
+
+		const mq = window.matchMedia('(min-width: 640px)');
+		accountsDesktop = mq.matches;
+		el.open = mq.matches;
+
+		const onChange = (event: MediaQueryListEvent) => {
+			accountsDesktop = event.matches;
+			if (event.matches) el.open = true;
+		};
+		mq.addEventListener('change', onChange);
+		return () => mq.removeEventListener('change', onChange);
+	});
+
+	function onAccountsPanelToggle() {
+		if (accountsDesktop && accountsPanelEl) accountsPanelEl.open = true;
+	}
+
+	function budgetProgressClass(status: string) {
+		if (status === 'exceeded') return 'bg-red-500';
+		if (status === 'warning') return 'bg-amber-500';
+		return 'bg-emerald-500';
+	}
 
 	onMount(() => {
 		void loadAll();
@@ -100,9 +139,18 @@
 		}
 	}
 
+	async function loadBudget() {
+		try {
+			const res = await getBudgetSummary();
+			budgetItems = res.items;
+		} catch {
+			budgetItems = [];
+		}
+	}
+
 	async function loadAll() {
 		await loadDashboard();
-		await Promise.all([loadPastTx(), loadPlannedTx()]);
+		await Promise.all([loadPastTx(), loadPlannedTx(), loadBudget()]);
 	}
 
 	function openNewTransaction(type: 'expense' | 'income') {
@@ -168,6 +216,76 @@
 	<title>{$_('dashboard.title')} — {$_('app.title')}</title>
 </svelte:head>
 
+{#snippet budgetWidget()}
+	{#if budgetItems.length > 0}
+		<div class="card space-y-2">
+			<div class="flex items-center justify-between gap-2">
+				<p class="text-sm" style:color="var(--text-muted)">{$_('budget.widget.title')}</p>
+				<a href={resolve('/budget')} class="text-xs hover:underline" style:color="var(--primary)">
+					{$_('budget.widget.more')} →
+				</a>
+			</div>
+			{#if allExpenseBudget}
+				<div>
+					<div class="flex items-baseline justify-between gap-2">
+						<span class="truncate text-sm font-medium">{allExpenseBudget.name}</span>
+						<span class="shrink-0 text-xs" style:color="var(--text-muted)">
+							<MoneyDisplay value={allExpenseBudget.spent_display} class="" />
+							/
+							<MoneyDisplay value={allExpenseBudget.planned_display} class="" />
+						</span>
+					</div>
+					<div
+						class="mt-1.5 h-1.5 overflow-hidden rounded-full"
+						style:background-color="color-mix(in srgb, var(--border) 80%, transparent)"
+					>
+						<div
+							class="h-full transition-all {budgetProgressClass(allExpenseBudget.status)}"
+							style="width: {Math.min(allExpenseBudget.percent, 100)}%"
+						></div>
+					</div>
+					<p class="mt-1 text-xs tabular-nums" style:color="var(--text-muted)">
+						{budgetStatusLine(allExpenseBudget)}
+					</p>
+				</div>
+			{/if}
+			{#if categoryBudgets.length > 0}
+				<details class={allExpenseBudget ? 'border-t pt-2' : ''} style:border-color="var(--border)">
+					<summary
+						class="cursor-pointer list-none text-xs font-medium select-none [&::-webkit-details-marker]:hidden"
+						style:color="var(--text-muted)"
+					>
+						{tr('budget.widget.categories', {
+							values: { count: String(categoryBudgets.length) }
+						})}
+					</summary>
+					<ul class="mt-2 space-y-1.5">
+						{#each categoryBudgets as item (item.id)}
+							<li>
+								<div class="flex items-center justify-between gap-2 text-xs">
+									<span class="truncate">{item.name}</span>
+									<span class="shrink-0 tabular-nums" style:color="var(--text-muted)">
+										{item.percent}%
+									</span>
+								</div>
+								<div
+									class="mt-0.5 h-1 overflow-hidden rounded-full"
+									style:background-color="color-mix(in srgb, var(--border) 80%, transparent)"
+								>
+									<div
+										class="h-full {budgetProgressClass(item.status)}"
+										style="width: {Math.min(item.percent, 100)}%"
+									></div>
+								</div>
+							</li>
+						{/each}
+					</ul>
+				</details>
+			{/if}
+		</div>
+	{/if}
+{/snippet}
+
 <div class="space-y-6">
 	<div class="flex flex-wrap items-center justify-between gap-3">
 		<h1 class="text-2xl font-semibold">{$_('dashboard.title')}</h1>
@@ -195,69 +313,180 @@
 	{#if loading}
 		<p style:color="var(--text-muted)">{$_('common.loading')}</p>
 	{:else if dash}
-		<div class="grid gap-4 sm:grid-cols-2">
-			<div class="card">
-				<p class="text-sm" style:color="var(--text-muted)">{$_('dashboard.total')}</p>
-				<p class="text-3xl font-semibold tabular-nums">
-					{formatBalance(fromCents(dash.total_balance), $user?.currency ?? 'RUB')}
-				</p>
-				{#if dash.total_forecast !== dash.total_balance}
-					<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
-						{$_('dashboard.withPlans')}:
-						{formatBalance(fromCents(dash.total_forecast), $user?.currency ?? 'RUB')}
-					</p>
-				{/if}
-			</div>
-			<a href={resolve('/debts')} class="card block transition hover:opacity-90">
-				<p class="text-sm" style:color="var(--text-muted)">{$_('debts.title')}</p>
-				<div class="mt-1 space-y-1">
-					{#if hasDebts}
-						{#if dash.debts_summary.i_owe > 0}
-							<p class="tabular-nums" style:color="var(--danger)">
-								{$_('debts.summary.iOwe')}:
-								{formatBalance(fromCents(dash.debts_summary.i_owe), $user?.currency ?? 'RUB')}
-							</p>
-						{/if}
-						{#if dash.debts_summary.owed_to_me > 0}
-							<p class="tabular-nums" style:color="var(--primary)">
-								{$_('debts.summary.owedToMe')}:
-								{formatBalance(fromCents(dash.debts_summary.owed_to_me), $user?.currency ?? 'RUB')}
-							</p>
-						{/if}
-					{:else}
-						<p class="text-3xl font-semibold tabular-nums" style:color="var(--primary)">
-							{$_('debts.summary.none')}
+		{#if hasCreditCards}
+			<div class="space-y-4">
+				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+					<div class="card">
+						<p class="text-sm" style:color="var(--text-muted)">{$_('dashboard.total')}</p>
+						<p class="text-3xl font-semibold tabular-nums">
+							<MoneyDisplay cents={dash.total_balance} {currency} class="" />
 						</p>
-					{/if}
-				</div>
-			</a>
-		</div>
-
-		{#if dash.accounts.length === 0}
-			<EmptyStateCard message={$_('dashboard.accountsEmpty')} />
-		{:else}
-			<div class="grid gap-4 sm:grid-cols-2">
-				{#each dash.accounts as acc (acc.id)}
-					<a
-						href={resolve(`/accounts/${acc.id}`)}
-						class="card flex items-center gap-4 transition hover:opacity-90"
-					>
-						<AccountIcon type={acc.type} bankIcon={acc.bank_icon} size={48} />
-						<div class="min-w-0 flex-1">
-							<p class="truncate font-medium">{acc.name}</p>
-							<p class="mt-1 text-xl font-semibold tabular-nums">
-								{formatBalance(acc.balance_display, $user?.currency ?? 'RUB')}
+						{#if dash.total_forecast !== dash.total_balance}
+							<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
+								{$_('dashboard.withPlans')}:
+								<MoneyDisplay cents={dash.total_forecast} {currency} class="" />
 							</p>
-							{#if acc.forecast_balance !== acc.balance}
-								<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
-									{$_('dashboard.withPlans')}:
-									{formatBalance(acc.forecast_display, $user?.currency ?? 'RUB')}
+						{/if}
+					</div>
+					<div class="card">
+						<p class="text-sm" style:color="var(--text-muted)">{$_('dashboard.creditCards')}</p>
+						<p class="text-3xl font-semibold tabular-nums">
+							<MoneyDisplay
+								value={dash.credit_cards_summary!.total_balance_display}
+								{currency}
+								class=""
+							/>
+						</p>
+						<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
+							{$_('accounts.field.creditLimit')}:
+							<MoneyDisplay
+								value={dash.credit_cards_summary!.total_limit_display}
+								{currency}
+								class=""
+							/>
+						</p>
+						{#if dash.credit_cards_summary!.total_forecast !== dash.credit_cards_summary!.total_balance}
+							<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
+								{$_('dashboard.withPlans')}:
+								<MoneyDisplay
+									value={dash.credit_cards_summary!.total_forecast_display}
+									{currency}
+									class=""
+								/>
+							</p>
+						{/if}
+					</div>
+				</div>
+				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+					<a href={resolve('/debts')} class="card block self-start transition hover:opacity-90">
+						<p class="text-sm" style:color="var(--text-muted)">{$_('debts.title')}</p>
+						<div class="mt-1 space-y-1">
+							{#if hasDebts}
+								{#if dash.debts_summary.i_owe > 0}
+									<p class="tabular-nums" style:color="var(--danger)">
+										{$_('debts.summary.iOwe')}:
+										<MoneyDisplay cents={dash.debts_summary.i_owe} {currency} class="" />
+									</p>
+								{/if}
+								{#if dash.debts_summary.owed_to_me > 0}
+									<p class="tabular-nums" style:color="var(--primary)">
+										{$_('debts.summary.owedToMe')}:
+										<MoneyDisplay cents={dash.debts_summary.owed_to_me} {currency} class="" />
+									</p>
+								{/if}
+							{:else}
+								<p class="text-3xl font-semibold tabular-nums" style:color="var(--primary)">
+									{$_('debts.summary.none')}
 								</p>
 							{/if}
 						</div>
 					</a>
-				{/each}
+				</div>
 			</div>
+		{:else}
+			<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:items-stretch">
+				<div class="card flex h-full flex-col">
+					<p class="text-sm" style:color="var(--text-muted)">{$_('dashboard.total')}</p>
+					<p class="text-3xl font-semibold tabular-nums">
+						<MoneyDisplay cents={dash.total_balance} {currency} class="" />
+					</p>
+					{#if dash.total_forecast !== dash.total_balance}
+						<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
+							{$_('dashboard.withPlans')}:
+							<MoneyDisplay cents={dash.total_forecast} {currency} class="" />
+						</p>
+					{/if}
+				</div>
+				<a href={resolve('/debts')} class="card flex h-full flex-col transition hover:opacity-90">
+					<p class="text-sm" style:color="var(--text-muted)">{$_('debts.title')}</p>
+					<div class="mt-1 space-y-1">
+						{#if hasDebts}
+							{#if dash.debts_summary.i_owe > 0}
+								<p class="tabular-nums" style:color="var(--danger)">
+									{$_('debts.summary.iOwe')}:
+									<MoneyDisplay cents={dash.debts_summary.i_owe} {currency} class="" />
+								</p>
+							{/if}
+							{#if dash.debts_summary.owed_to_me > 0}
+								<p class="tabular-nums" style:color="var(--primary)">
+									{$_('debts.summary.owedToMe')}:
+									<MoneyDisplay cents={dash.debts_summary.owed_to_me} {currency} class="" />
+								</p>
+							{/if}
+						{:else}
+							<p class="text-3xl font-semibold tabular-nums" style:color="var(--primary)">
+								{$_('debts.summary.none')}
+							</p>
+						{/if}
+					</div>
+				</a>
+			</div>
+		{/if}
+
+		{@render budgetWidget()}
+
+		{#if dash.accounts.length === 0}
+			<EmptyStateCard message={$_('dashboard.accountsEmpty')} />
+		{:else}
+			<details
+				class="dashboard-accounts-panel"
+				bind:this={accountsPanelEl}
+				ontoggle={onAccountsPanelToggle}
+			>
+				<summary class="dashboard-accounts-summary sm:hidden">
+					<span>
+						{$_('dashboard.accountsSection')}
+						<span class="font-normal tabular-nums" style:color="var(--text-muted)">
+							({dash.accounts.length})
+						</span>
+					</span>
+					<svg
+						class="dashboard-accounts-chevron"
+						aria-hidden="true"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+					>
+						<path d="m6 9 6 6 6-6" />
+					</svg>
+				</summary>
+				<div class="grid gap-4 pt-3 sm:grid-cols-2 sm:pt-0">
+					{#each dash.accounts as acc (acc.id)}
+						<a
+							href={resolve(`/accounts/${acc.id}`)}
+							class="card flex items-center gap-4 transition hover:opacity-90"
+						>
+							<AccountIcon type={acc.type} bankIcon={acc.bank_icon} size={48} />
+							<div class="min-w-0 flex-1">
+								<p class="truncate font-medium">{acc.name}</p>
+								<p class="mt-1 text-xl font-semibold tabular-nums">
+									<MoneyDisplay value={acc.balance_display} {currency} class="" />
+								</p>
+								{#if acc.credit_limit_display}
+									<p class="mt-0.5 text-sm tabular-nums" style:color="var(--text-muted)">
+										{$_('accounts.field.creditLimit')}:
+										<MoneyDisplay value={acc.credit_limit_display} {currency} class="" />
+									</p>
+								{/if}
+								{#if acc.type === 'bank'}
+									<p class="mt-1 text-sm" style:color="var(--text-muted)">
+										{acc.auto_topup_enabled
+											? $_('accounts.autoTopup.statusOn')
+											: $_('accounts.autoTopup.statusOff')}
+									</p>
+								{/if}
+								{#if acc.forecast_balance !== acc.balance}
+									<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
+										{$_('dashboard.withPlans')}:
+										<MoneyDisplay value={acc.forecast_display} {currency} class="" />
+									</p>
+								{/if}
+							</div>
+						</a>
+					{/each}
+				</div>
+			</details>
 		{/if}
 
 		<section>

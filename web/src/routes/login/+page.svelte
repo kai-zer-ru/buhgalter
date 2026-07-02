@@ -4,6 +4,7 @@
 	import { resolve } from '$app/paths';
 	import { _ } from 'svelte-i18n';
 	import { getRegistrationEnabled, login, requestPasswordReset } from '$lib/api/client';
+	import { formatAuthUserApiError } from '$lib/auth/api-errors';
 	import { user, markSessionHint } from '$lib/stores/auth';
 	import { syncThemeFromUser } from '$lib/stores/theme';
 	import { setLocale } from '$lib/i18n';
@@ -34,7 +35,7 @@
 			syncThemeFromUser(res.user.theme);
 			await goto(resolve('/'));
 		} catch (err) {
-			toast.fromError(err);
+			toast.error(formatAuthUserApiError(err));
 		} finally {
 			loading = false;
 		}
@@ -58,7 +59,7 @@
 			resetSent = true;
 			toast($_('login.reset.sent'));
 		} catch (err) {
-			toast.fromError(err);
+			toast.error(formatAuthUserApiError(err));
 		} finally {
 			resetLoading = false;
 		}

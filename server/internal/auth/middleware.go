@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"database/sql"
 	"net/http"
 	"strings"
 
@@ -45,6 +44,9 @@ func RequireAuth(store *db.Handle) func(http.Handler) http.Handler {
 			sqlDB := store.DB()
 			session, sessionUser, err := LookupSessionWithUser(r.Context(), sqlDB, token)
 			if err == nil {
+				if RejectIfNotActive(w, r, sessionUser.Status) {
+					return
+				}
 				info := AuthInfo{User: *sessionUser, SessionID: session.ID, Token: token}
 				ctx := context.WithValue(r.Context(), AuthContextKey, info)
 				next.ServeHTTP(w, r.WithContext(ctx))
@@ -59,6 +61,9 @@ func RequireAuth(store *db.Handle) func(http.Handler) http.Handler {
 			user, err := LoadUser(r.Context(), sqlDB, userID)
 			if err != nil {
 				writeUserLoadError(w, r, err)
+				return
+			}
+			if RejectIfNotActive(w, r, user.Status) {
 				return
 			}
 			info := AuthInfo{User: *user, Token: token, APIToken: true}
@@ -94,28 +99,24 @@ func RequireAPIToken(store *db.Handle) func(http.Handler) http.Handler {
 
 			sqlDB := store.DB()
 			hash := HashToken(token)
-			var userID, tokenID string
-			var expiresAt sql.NullString
-			err := sqlDB.QueryRowContext(r.Context(), `
-				SELECT id, user_id, expires_at FROM api_tokens WHERE token_hash = ?`, hash,
-			).Scan(&tokenID, &userID, &expiresAt)
+			row, err := queries(sqlDB).GetAPITokenByHash(r.Context(), hash)
 			if err != nil {
 				apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized, "ERR_API_TOKEN_INVALID")
 				return
 			}
 
-			if expiresAt.Valid && expiresAt.String != "" {
-				if !verifyAPIToken(r.Context(), sqlDB, token) {
-					apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized, "ERR_API_TOKEN_EXPIRED")
-					return
-				}
-			} else {
-				_, _ = sqlDB.ExecContext(r.Context(), `UPDATE api_tokens SET last_used_at = datetime('now') WHERE id = ?`, tokenID)
+			if apiTokenExpired(row.ExpiresAt) {
+				apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized, "ERR_API_TOKEN_EXPIRED")
+				return
 			}
+			_ = queries(sqlDB).TouchAPITokenByID(r.Context(), row.ID)
 
-			user, err := LoadUser(r.Context(), sqlDB, userID)
+			user, err := LoadUser(r.Context(), sqlDB, row.UserID)
 			if err != nil {
 				apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized, "ERR_USER_NOT_FOUND")
+				return
+			}
+			if RejectIfNotActive(w, r, user.Status) {
 				return
 			}
 

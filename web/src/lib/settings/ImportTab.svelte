@@ -16,6 +16,7 @@
 		type Account,
 		type AccountMapEntry,
 		type AccountMappingSuggestion,
+		type AccountType,
 		type Bank,
 		type Category,
 		type CategoryMapEntry,
@@ -353,7 +354,8 @@
 				mode: m.mode,
 				account_id: m.account_id,
 				account_type: m.account_type ?? 'cash',
-				bank_id: m.bank_id
+				bank_id: m.bank_id,
+				credit_limit: m.credit_limit
 			};
 		}
 		accountMap = next;
@@ -381,29 +383,46 @@
 		accountMap = { ...accountMap, [fileName]: { mode: 'existing', account_id: accountId } };
 	}
 
-	function setAccountMapType(fileName: string, accountType: 'cash' | 'bank') {
+	function setAccountMapType(fileName: string, accountType: AccountType) {
 		const prev = accountMap[fileName];
 		const suggestion = report?.account_mappings?.find((m) => m.file_name === fileName);
+		const bankDefault =
+			accountType === 'bank' || accountType === 'credit_card'
+				? (prev?.bank_id ?? suggestion?.bank_id ?? banks[0]?.id ?? '')
+				: undefined;
 		accountMap = {
 			...accountMap,
 			[fileName]: {
 				mode: 'create',
 				account_type: accountType,
-				bank_id:
-					accountType === 'bank'
-						? (prev?.bank_id ?? suggestion?.bank_id ?? banks[0]?.id ?? '')
-						: undefined
+				bank_id: bankDefault,
+				credit_limit: accountType === 'credit_card' ? prev?.credit_limit : undefined
 			}
 		};
 	}
 
 	function setAccountMapBank(fileName: string, bankId: string) {
+		const prev = accountMap[fileName];
 		accountMap = {
 			...accountMap,
 			[fileName]: {
 				mode: 'create',
-				account_type: 'bank',
-				bank_id: bankId
+				account_type: prev?.account_type ?? 'bank',
+				bank_id: bankId,
+				credit_limit: prev?.credit_limit
+			}
+		};
+	}
+
+	function setAccountMapCreditLimit(fileName: string, creditLimit: string) {
+		const prev = accountMap[fileName];
+		accountMap = {
+			...accountMap,
+			[fileName]: {
+				mode: 'create',
+				account_type: 'credit_card',
+				bank_id: prev?.bank_id ?? banks[0]?.id ?? '',
+				credit_limit: creditLimit
 			}
 		};
 	}
@@ -414,7 +433,8 @@
 			mode: (entry?.mode ?? m.mode) as 'create' | 'existing',
 			account_id: entry?.account_id ?? m.account_id ?? '',
 			account_type: entry?.account_type ?? m.account_type ?? 'cash',
-			bank_id: entry?.bank_id ?? m.bank_id ?? ''
+			bank_id: entry?.bank_id ?? m.bank_id ?? '',
+			credit_limit: entry?.credit_limit ?? m.credit_limit ?? ''
 		};
 	}
 
@@ -427,7 +447,11 @@
 					? {
 							mode: 'create',
 							account_type: entry.account_type ?? 'cash',
-							bank_id: entry.account_type === 'bank' ? entry.bank_id : undefined
+							bank_id:
+								entry.account_type === 'bank' || entry.account_type === 'credit_card'
+									? entry.bank_id
+									: undefined,
+							credit_limit: entry.account_type === 'credit_card' ? entry.credit_limit : undefined
 						}
 					: { mode: 'existing', account_id: entry.account_id };
 		}
@@ -441,8 +465,16 @@
 				toast.error($_('import.accounts.pick_existing', { values: { name: m.file_name } }));
 				return false;
 			}
-			if (entry.mode === 'create' && entry.account_type === 'bank' && !entry.bank_id) {
+			if (
+				entry.mode === 'create' &&
+				(entry.account_type === 'bank' || entry.account_type === 'credit_card') &&
+				!entry.bank_id
+			) {
 				toast.error($_('import.accounts.pick_bank', { values: { name: m.file_name } }));
+				return false;
+			}
+			if (entry.mode === 'create' && entry.account_type === 'credit_card' && !entry.credit_limit) {
+				toast.error($_('import.accounts.pick_credit_limit', { values: { name: m.file_name } }));
 				return false;
 			}
 		}
@@ -1033,14 +1065,35 @@
 											>
 												{$_('accounts.type.bank')}
 											</button>
+											<button
+												type="button"
+												class={(entry.account_type ?? 'cash') === 'credit_card'
+													? 'tab tab-active !px-3 !py-1.5 text-xs'
+													: 'tab !px-3 !py-1.5 text-xs'}
+												onclick={() => setAccountMapType(m.file_name, 'credit_card')}
+											>
+												{$_('accounts.type.credit_card')}
+											</button>
 										</div>
-										{#if (entry.account_type ?? 'cash') === 'bank'}
+										{#if (entry.account_type ?? 'cash') === 'bank' || (entry.account_type ?? 'cash') === 'credit_card'}
 											<Select
 												controlled
 												value={entry.bank_id}
 												onchange={(next) => setAccountMapBank(m.file_name, next)}
 												options={bankSelectOptions}
 												usePortal
+											/>
+										{/if}
+										{#if (entry.account_type ?? 'cash') === 'credit_card'}
+											<input
+												class="input w-full tabular-nums"
+												value={entry.credit_limit ?? ''}
+												placeholder={$_('accounts.field.creditLimit')}
+												oninput={(e) =>
+													setAccountMapCreditLimit(
+														m.file_name,
+														(e.currentTarget as HTMLInputElement).value
+													)}
 											/>
 										{/if}
 									</div>

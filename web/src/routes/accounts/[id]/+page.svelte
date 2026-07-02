@@ -4,11 +4,10 @@
 	import { page } from '$app/stores';
 	import { _ } from 'svelte-i18n';
 	import {
-		archiveAccount,
-		deleteAccount,
 		deleteTransaction,
 		getAccount,
 		getAccountBalance,
+		listAccounts,
 		listBanks,
 		listCategories,
 		listTransactions,
@@ -33,9 +32,19 @@
 	import TransactionList from '$lib/components/TransactionList.svelte';
 	import TransactionPagination from '$lib/components/TransactionPagination.svelte';
 	import TransferForm from '$lib/components/TransferForm.svelte';
+	import CreditCardFeeForm from '$lib/components/CreditCardFeeForm.svelte';
+	import { isAutoTopupEligible } from '$lib/accounts/auto-topup';
+	import AccountAutoTopupDialog from '$lib/components/AccountAutoTopupDialog.svelte';
+	import { isCreditCard } from '$lib/credit-card';
+	import {
+		promptArchiveAccount,
+		executeArchiveAccount,
+		promptDeleteAccount,
+		executeDeleteAccount
+	} from '$lib/accounts/account-inactive-prompt';
 	import { confirm } from '$lib/confirm';
 	import { toast } from '$lib/toast';
-	import { formatBalance } from '$lib/finance';
+	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
 	import { formatMoneyForInput, toAPIAmount } from '$lib/money';
 	import { fromDateLocalEnd, fromDateLocalStart } from '$lib/dates';
 	import { dedupeTransferLegs } from '$lib/transaction-display';
@@ -52,12 +61,17 @@
 	let editing = $state(false);
 	let name = $state('');
 	let bankId = $state('');
+	let creditLimit = $state('');
+	let paymentAccountId = $state('');
 	let initialBalance = $state('');
 	let loading = $state(true);
 	let filterLoading = $state(false);
 	let saving = $state(false);
 	let txOpen = $state(false);
 	let transferOpen = $state(false);
+	let payTransferOpen = $state(false);
+	let feeOpen = $state(false);
+	let autoTopupOpen = $state(false);
 	let editTx = $state<Transaction | null>(null);
 	let editTransfer = $state<Transaction | null>(null);
 	let repeatTx = $state<Transaction | null>(null);
@@ -76,6 +90,12 @@
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
 	const visibleTx = $derived(dedupeTransferLegs(transactions));
 	const bankOptions = $derived(banks.map((bank) => ({ value: bank.id, label: bank.name })));
+	let allAccounts = $state<Account[]>([]);
+	const debitPaymentOptions = $derived(
+		allAccounts
+			.filter((a) => a.status === 'active' && a.type !== 'credit_card' && a.id !== id)
+			.map((a) => ({ value: a.id, label: a.name }))
+	);
 
 	let loadedForID = $state('');
 	$effect(() => {
@@ -125,23 +145,28 @@
 		if (!id) return;
 		loading = true;
 		try {
-			const [account, accountBalance, bankList, expenseCats, incomeCats] = await Promise.all([
-				getAccount(id),
-				getAccountBalance(id),
-				listBanks(),
-				listCategories('expense'),
-				listCategories('income')
-			]);
+			const [account, accountBalance, bankList, expenseCats, incomeCats, accountList] =
+				await Promise.all([
+					getAccount(id),
+					getAccountBalance(id),
+					listBanks(),
+					listCategories('expense'),
+					listCategories('income'),
+					listAccounts()
+				]);
 			acc = account;
 			accBalance = accountBalance;
 			banks = bankList;
+			allAccounts = accountList;
 			const uniqueCatsByID: Record<string, Category> = {};
 			for (const cat of [...expenseCats, ...incomeCats]) uniqueCatsByID[cat.id] = cat;
 			categories = Object.values(uniqueCatsByID).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
 			name = account.name;
 			bankId = account.bank_id ?? '';
+			creditLimit = account.credit_limit_display ?? '';
+			paymentAccountId = account.payment_account_id ?? '';
 			initialBalance = formatMoneyForInput(account.balance_display);
-			editing = $page.url.searchParams.get('edit') === '1';
+			editing = $page.url.searchParams.get('edit') === '1' && account.status !== 'deleted';
 			await loadTransactions();
 		} catch (err) {
 			toast.fromError(err);
@@ -193,6 +218,10 @@
 		await loadTransactions();
 	}
 
+	function applyLimitToBalance() {
+		if (creditLimit.trim()) initialBalance = creditLimit;
+	}
+
 	async function save(e: Event) {
 		e.preventDefault();
 		if (!acc) return;
@@ -200,8 +229,10 @@
 		try {
 			acc = await updateAccount(acc.id, {
 				name,
-				bank_id: acc.type === 'bank' ? bankId : undefined,
-				initial_balance: toAPIAmount(initialBalance)
+				bank_id: acc.type === 'bank' || acc.type === 'credit_card' ? bankId : undefined,
+				initial_balance: toAPIAmount(initialBalance),
+				credit_limit: acc.type === 'credit_card' ? toAPIAmount(creditLimit) : undefined,
+				payment_account_id: acc.type === 'credit_card' ? paymentAccountId || null : undefined
 			});
 			accBalance = await getAccountBalance(acc.id);
 			editing = false;
@@ -215,8 +246,21 @@
 
 	async function toggleArchive() {
 		if (!acc) return;
+		if (acc.status === 'active') {
+			const activeOnly = allAccounts.filter((a) => a.status === 'active');
+			const confirmed = await promptArchiveAccount({ acc, activeAccounts: activeOnly });
+			if (!confirmed.ok) return;
+			try {
+				acc = await executeArchiveAccount(acc, confirmed.transferToAccountId);
+				accBalance = await getAccountBalance(acc.id);
+				toast($_('common.saved'));
+			} catch (err) {
+				toast.fromError(err);
+			}
+			return;
+		}
 		try {
-			acc = acc.status === 'active' ? await archiveAccount(acc.id) : await unarchiveAccount(acc.id);
+			acc = await unarchiveAccount(acc.id);
 			accBalance = await getAccountBalance(acc.id);
 		} catch (err) {
 			toast.fromError(err);
@@ -235,16 +279,13 @@
 
 	async function remove() {
 		if (!acc) return;
-		const ok = await confirm({
-			message: $_('accounts.confirm.delete'),
-			confirmLabel: $_('common.delete'),
-			danger: true
-		});
-		if (!ok) return;
+		const confirmed = await promptDeleteAccount({ acc, activeAccounts: allAccounts });
+		if (!confirmed.ok) return;
 		try {
-			await deleteAccount(acc.id);
+			await executeDeleteAccount(acc, confirmed.transferToAccountId);
 			toast($_('common.deleted'));
-			await goto(resolve('/accounts'));
+			// eslint-disable-next-line svelte/no-navigation-without-resolve -- query string appended to resolved path
+			await goto(`${resolve('/accounts')}?status=deleted`);
 		} catch (err) {
 			toast.fromError(err);
 		}
@@ -257,10 +298,12 @@
 		txOpen = true;
 	}
 
+	const accountTxReadOnly = $derived(acc?.status === 'deleted');
+
 	function accountActions(includeTransactions = false): RowAction[] {
-		if (!acc) return [];
+		if (!acc || acc.status === 'deleted') return [];
 		const actions: RowAction[] = [];
-		if (includeTransactions) {
+		if (acc.status === 'active' && includeTransactions) {
 			actions.push(
 				{
 					icon: 'income',
@@ -283,12 +326,37 @@
 				}
 			);
 		}
+		if (acc.status === 'active' && isCreditCard(acc)) {
+			actions.push(
+				{
+					icon: 'transfer',
+					label: $_('accounts.creditCard.pay'),
+					onclick: () => {
+						editTransfer = null;
+						repeatTransfer = null;
+						payTransferOpen = true;
+					}
+				},
+				{
+					icon: 'expense',
+					label: $_('accounts.creditCard.chargeFee'),
+					onclick: () => (feeOpen = true)
+				}
+			);
+		}
 		actions.push({
 			icon: 'edit',
 			label: $_('accounts.action.edit'),
 			onclick: () => (editing = true)
 		});
-		if (!acc.is_primary) {
+		if (acc.status === 'active' && isAutoTopupEligible(acc)) {
+			actions.push({
+				icon: 'transfer',
+				label: $_('accounts.action.autoTopup'),
+				onclick: () => (autoTopupOpen = true)
+			});
+		}
+		if (acc.status === 'active' && !acc.is_primary) {
 			actions.push({
 				icon: 'save',
 				label: $_('accounts.primary.set'),
@@ -298,7 +366,8 @@
 		actions.push(
 			{
 				icon: 'archive',
-				label: $_('accounts.action.archive'),
+				label:
+					acc.status === 'active' ? $_('accounts.action.archive') : $_('accounts.action.unarchive'),
 				onclick: () => void toggleArchive()
 			},
 			{
@@ -398,7 +467,7 @@
 			<div class="flex items-start gap-4">
 				<AccountIcon type={acc.type} bankIcon={acc.bank_icon} size={56} />
 				<div class="min-w-0 flex-1">
-					{#if editing}
+					{#if editing && acc.status !== 'deleted'}
 						<form class="space-y-3" onsubmit={save}>
 							<div>
 								<label class="mb-1 block text-sm" style:color="var(--text-muted)" for="acc-name">
@@ -412,11 +481,32 @@
 									maxlength="64"
 								/>
 							</div>
-							{#if acc.type === 'bank'}
+							{#if acc.type === 'bank' || acc.type === 'credit_card'}
 								<Select
 									label={$_('accounts.field.bank')}
 									bind:value={bankId}
 									options={bankOptions}
+									usePortal
+								/>
+							{/if}
+							{#if acc.type === 'credit_card'}
+								<div>
+									<label
+										class="mb-1 block text-sm"
+										style:color="var(--text-muted)"
+										for="acc-credit-limit"
+									>
+										{$_('accounts.field.creditLimit')}
+									</label>
+									<MoneyInput id="acc-credit-limit" bind:value={creditLimit} />
+								</div>
+								<Select
+									label={$_('accounts.field.paymentAccount')}
+									bind:value={paymentAccountId}
+									options={[
+										{ value: '', label: $_('accounts.creditCard.paymentAccountDefault') },
+										...debitPaymentOptions
+									]}
 									usePortal
 								/>
 							{/if}
@@ -425,6 +515,15 @@
 									{$_('accounts.field.balance')}
 								</label>
 								<MoneyInput id="acc-balance" bind:value={initialBalance} />
+								{#if acc.type === 'credit_card'}
+									<button
+										type="button"
+										class="btn-ghost mt-1 text-sm"
+										onclick={applyLimitToBalance}
+									>
+										{$_('accounts.creditCard.limitButton')}
+									</button>
+								{/if}
 							</div>
 							<div class="flex gap-2">
 								<button type="submit" class="btn-primary" disabled={saving}>
@@ -438,6 +537,13 @@
 					{:else}
 						<div class="flex items-start justify-between gap-2">
 							<div class="min-w-0">
+								{#if acc.status === 'archived' || acc.status === 'deleted'}
+									<p class="mb-1 text-sm" style:color="var(--text-muted)">
+										{acc.status === 'archived'
+											? $_('accounts.banner.archived')
+											: $_('accounts.banner.deleted')}
+									</p>
+								{/if}
 								<div class="flex items-center gap-2">
 									<h1 class="text-2xl font-semibold">{acc.name}</h1>
 									{#if acc.is_primary}
@@ -461,18 +567,37 @@
 									{/if}
 								</div>
 								<p class="mt-1 text-3xl font-semibold tabular-nums">
-									{formatBalance(
-										accBalance?.balance_display ?? acc.balance_display,
-										$user?.currency ?? 'RUB'
-									)}
+									<MoneyDisplay
+										value={accBalance?.balance_display ?? acc.balance_display}
+										currency={$user?.currency ?? 'RUB'}
+										class=""
+									/>
 								</p>
+								{#if acc.credit_limit_display}
+									<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
+										{$_('accounts.field.creditLimit')}:
+										<MoneyDisplay
+											value={acc.credit_limit_display}
+											currency={$user?.currency ?? 'RUB'}
+											class=""
+										/>
+									</p>
+								{/if}
+								{#if acc.type === 'bank'}
+									<p class="mt-1 text-sm" style:color="var(--text-muted)">
+										{acc.auto_topup_enabled
+											? $_('accounts.autoTopup.statusOn')
+											: $_('accounts.autoTopup.statusOff')}
+									</p>
+								{/if}
 								{#if accBalance ? accBalance.forecast_balance !== accBalance.balance : false}
 									<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
 										{$_('dashboard.withPlans')}:
-										{formatBalance(
-											accBalance?.forecast_display ?? acc.balance_display,
-											$user?.currency ?? 'RUB'
-										)}
+										<MoneyDisplay
+											value={accBalance?.forecast_display ?? acc.balance_display}
+											currency={$user?.currency ?? 'RUB'}
+											class=""
+										/>
 									</p>
 								{/if}
 							</div>
@@ -540,15 +665,17 @@
 					showDescription
 					showAmountSign
 					singleAccount
-					showEdit
-					showDelete
-					onmakeRecurring={(tx) =>
-						void goto(
-							resolve(`/settings/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`)
-						)}
+					showEdit={!accountTxReadOnly}
+					showDelete={!accountTxReadOnly}
+					onmakeRecurring={accountTxReadOnly
+						? undefined
+						: (tx) =>
+								void goto(
+									resolve(`/settings/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`)
+								)}
 					onrepeat={openRepeat}
-					onedit={openEdit}
-					ondelete={(tx) => void removeTx(tx)}
+					onedit={accountTxReadOnly ? undefined : openEdit}
+					ondelete={accountTxReadOnly ? undefined : (tx) => void removeTx(tx)}
 				/>
 			</div>
 			{#if filterLoading}
@@ -590,3 +717,27 @@
 	}}
 	onsaved={load}
 />
+<TransferForm
+	bind:open={payTransferOpen}
+	accountId={id}
+	creditCardPay={acc}
+	siblings={transactions}
+	onclose={() => {
+		payTransferOpen = false;
+	}}
+	onsaved={load}
+/>
+{#if acc}
+	<CreditCardFeeForm
+		bind:open={feeOpen}
+		account={acc}
+		onclose={() => (feeOpen = false)}
+		onsaved={load}
+	/>
+	<AccountAutoTopupDialog
+		bind:open={autoTopupOpen}
+		account={acc}
+		onclose={() => (autoTopupOpen = false)}
+		onsaved={load}
+	/>
+{/if}

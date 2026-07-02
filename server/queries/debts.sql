@@ -154,6 +154,16 @@ UPDATE debts
 SET amount = ?
 WHERE id = ? AND user_id = ? AND is_settled = 0;
 
+-- name: UpdateDebtAmount :execrows
+UPDATE debts
+SET amount = ?
+WHERE id = ? AND user_id = ?;
+
+-- name: ReopenDebt :execrows
+UPDATE debts
+SET is_settled = 0, settled_at = NULL
+WHERE id = ? AND user_id = ? AND is_settled = 1;
+
 -- name: UpdateDebtTransactionID :exec
 UPDATE debts SET transaction_id = ? WHERE id = ? AND user_id = ?;
 
@@ -192,6 +202,18 @@ ORDER BY t.transaction_date DESC, t.created_at DESC;
 SELECT COUNT(*)
 FROM debt_transactions
 WHERE debt_id = ? AND role = 'settle';
+
+-- name: CountDebtLinksByDebt :one
+SELECT COUNT(*)
+FROM debt_transactions
+WHERE debt_id = ?;
+
+-- name: SumSettleTxAmountsByDebtExcluding :one
+SELECT CAST(COALESCE(SUM(t.amount), 0) AS INTEGER)
+FROM debt_transactions dtx
+INNER JOIN transactions t ON t.id = dtx.transaction_id AND t.user_id = sqlc.arg(user_id)
+WHERE dtx.debt_id = sqlc.arg(debt_id) AND dtx.role = 'settle'
+  AND dtx.transaction_id != sqlc.arg(exclude_tx_id);
 
 -- name: GetDebtLinkByTransactionID :one
 SELECT debt_id, role

@@ -7,6 +7,8 @@ export type ConfirmOptions = {
 	cancelLabel?: string;
 	/** Destructive action — red accent on confirm button */
 	danger?: boolean;
+	/** Single «Close» button; resolves `false` (informational alert) */
+	acknowledgeOnly?: boolean;
 };
 
 export type ConfirmState = {

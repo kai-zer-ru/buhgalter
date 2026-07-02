@@ -20,7 +20,8 @@
 		| '/transactions'
 		| '/stats'
 		| '/debtors'
-		| '/accounts/new';
+		| '/accounts/new'
+		| '/budget';
 
 	export type BreadcrumbItem = {
 		href: BackLinkHref;

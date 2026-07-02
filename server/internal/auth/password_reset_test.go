@@ -34,7 +34,7 @@ func TestPasswordResetRequestFlow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	userID, err := CreateUser(ctx, sqlDB, "alice", hash, "Alice", false)
+	userID, err := CreateUser(ctx, sqlDB, "alice", hash, "Alice", false, UserStatusActive)
 	if err != nil {
 		t.Fatal(err)
 	}

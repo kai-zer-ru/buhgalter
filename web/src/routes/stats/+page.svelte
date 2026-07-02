@@ -3,10 +3,12 @@
 	import { resolve } from '$app/paths';
 	import { _, locale } from 'svelte-i18n';
 	import { tr } from '$lib/i18n';
+	import { budgetRemainingCell } from '$lib/budget-display';
 	import {
 		getStatsByCategory,
 		getStatsByPeriod,
 		getStatsSummary,
+		getBudgetSummary,
 		getUIMeta,
 		searchStats,
 		type Account,
@@ -16,6 +18,7 @@
 		type StatsCategoryItem,
 		type StatsPeriodItem,
 		type StatsSummary,
+		type BudgetSummaryItem,
 		type Transaction
 	} from '$lib/api/client';
 	import BackLink from '$lib/components/BackLink.svelte';
@@ -26,14 +29,19 @@
 	import FilterPanel from '$lib/components/FilterPanel.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import TransactionList from '$lib/components/TransactionList.svelte';
-	import { formatBalance } from '$lib/finance';
+	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
+	import { formatMoneyForDisplay } from '$lib/money-display';
 	import {
 		categoryDisplayLabel,
 		categorySelectLabel,
 		duplicateCategoryNames
 	} from '$lib/category-label';
-	import { fromDateLocalEnd, fromDateLocalStart, dateOnlyLocalValue } from '$lib/dates';
-	import { formatMoneyDisplay, fromCents } from '$lib/money';
+	import {
+		fromDateLocalEnd,
+		fromDateLocalStart,
+		dateOnlyLocalValue,
+		todayDateLocal
+	} from '$lib/dates';
 	import { formatStatsPeriod } from '$lib/stats-period';
 	import { user } from '$lib/stores/auth';
 	import { toast } from '$lib/toast';
@@ -42,6 +50,7 @@
 	let filterLoading = $state(false);
 	let summary = $state<StatsSummary | null>(null);
 	let byCategory = $state<StatsCategoryItem[]>([]);
+	let budgetByCategory = $state<Record<string, BudgetSummaryItem>>({});
 	let byPeriod = $state<StatsPeriodItem[]>([]);
 	let searchRows = $state<Transaction[]>([]);
 	let accounts = $state<Account[]>([]);
@@ -191,6 +200,12 @@
 		return params;
 	}
 
+	function budgetMonthKey(): string {
+		const raw = (toLocal || fromLocal || todayDateLocal(tz)).split('T')[0];
+		const [y, m] = raw.split('-');
+		return `${y}-${m}`;
+	}
+
 	async function loadStats(initial = false) {
 		if (!metaLoaded && initial) {
 			await loadMeta();
@@ -199,14 +214,27 @@
 		else filterLoading = true;
 		try {
 			const params = statsParams();
-			const [summaryRes, categoryRes, periodRes] = await Promise.all([
+			const month = budgetMonthKey();
+			const [summaryRes, categoryRes, periodRes, budgetRes] = await Promise.all([
 				getStatsSummary(params),
 				getStatsByCategory(params),
-				getStatsByPeriod({ ...params, group_by: groupBy })
+				getStatsByPeriod({ ...params, group_by: groupBy }),
+				getBudgetSummary(month).catch(() => ({
+					items: [] as BudgetSummaryItem[],
+					month,
+					can_copy_from_previous: false
+				}))
 			]);
 			summary = summaryRes;
 			byCategory = categoryRes.items;
 			byPeriod = periodRes.items;
+			const bmap: Record<string, BudgetSummaryItem> = {};
+			for (const b of budgetRes.items) {
+				if (b.scope === 'category' && b.category_id) {
+					bmap[b.category_id] = b;
+				}
+			}
+			budgetByCategory = bmap;
 			if (search.trim()) {
 				const searchRes = await searchStats({
 					...params,
@@ -392,106 +420,19 @@
 			<div class="grid gap-3 sm:grid-cols-3">
 				<div class="card">
 					<p class="text-xs" style:color="var(--text-muted)">{$_('stats.summary.income')}</p>
-					<p class="tabular-nums text-xl font-semibold">
-						{formatBalance(fromCents(summary?.income_total ?? 0), currency)}
+					<p class="text-xl font-semibold">
+						<MoneyDisplay cents={summary?.income_total ?? 0} {currency} class="" />
 					</p>
 				</div>
 				<div class="card">
 					<p class="text-xs" style:color="var(--text-muted)">{$_('stats.summary.expense')}</p>
-					<p class="tabular-nums text-xl font-semibold">
-						{formatBalance(fromCents(summary?.expense_total ?? 0), currency)}
+					<p class="text-xl font-semibold">
+						<MoneyDisplay cents={summary?.expense_total ?? 0} {currency} class="" />
 					</p>
 				</div>
 				<div class="card">
 					<p class="text-xs" style:color="var(--text-muted)">{$_('stats.summary.count')}</p>
 					<p class="tabular-nums text-xl font-semibold">{summary?.transaction_count ?? 0}</p>
-				</div>
-			</div>
-
-			<div class="grid gap-4 lg:grid-cols-2">
-				<div class="card md:overflow-x-auto">
-					<h2 class="mb-2 text-lg font-medium">{$_('stats.section.period')}</h2>
-					{#if byPeriod.length === 0}
-						<EmptyStateCard message={$_('transactions.empty')} />
-					{:else}
-						<div class="mb-3 space-y-2 md:hidden">
-							{#each byPeriod as row (row.period)}
-								<div class="space-y-1">
-									<div class="text-xs" style:color="var(--text-muted)">
-										{periodLabel(row.period)}
-									</div>
-									<div class="flex gap-1">
-										<div
-											class="h-2 rounded bg-emerald-500"
-											style:width={`${Math.max(2, (Math.abs(row.income) / periodMax) * 100)}%`}
-											title={`${$_('stats.summary.income')}: ${formatMoneyDisplay(fromCents(row.income))}`}
-										></div>
-										<div
-											class="h-2 rounded bg-rose-500"
-											style:width={`${Math.max(2, (Math.abs(row.expense) / periodMax) * 100)}%`}
-											title={`${$_('stats.summary.expense')}: ${formatMoneyDisplay(fromCents(row.expense))}`}
-										></div>
-									</div>
-								</div>
-							{/each}
-						</div>
-						<table class="hidden w-full text-left text-sm md:table">
-							<thead>
-								<tr style:color="var(--text-muted)">
-									<th class="p-2">{$_('stats.period')}</th>
-									<th class="p-2">{$_('stats.summary.income')}</th>
-									<th class="p-2">{$_('stats.summary.expense')}</th>
-								</tr>
-							</thead>
-							<tbody>
-								{#each byPeriod as row (row.period)}
-									<tr class="border-t" style:border-color="var(--border)">
-										<td class="p-2">{periodLabel(row.period)}</td>
-										<td class="p-2 tabular-nums">{formatMoneyDisplay(fromCents(row.income))}</td>
-										<td class="p-2 tabular-nums">{formatMoneyDisplay(fromCents(row.expense))}</td>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					{/if}
-				</div>
-
-				<div class="card md:overflow-x-auto">
-					<h2 class="mb-2 text-lg font-medium">{$_('stats.section.categories')}</h2>
-					{#if byCategory.length === 0}
-						<EmptyStateCard message={$_('transactions.empty')} />
-					{:else}
-						<div class="space-y-6">
-							{#if showCategoryIncome}
-								<section>
-									{#if type === ''}
-										<h3 class="mb-2 text-sm font-medium" style:color="var(--text-muted)">
-											{$_('stats.summary.income')}
-										</h3>
-									{/if}
-									{#if byCategoryIncome.length === 0}
-										<EmptyStateCard message={$_('transactions.empty')} />
-									{:else}
-										{@render categorySection(byCategoryIncome)}
-									{/if}
-								</section>
-							{/if}
-							{#if showCategoryExpense}
-								<section>
-									{#if type === ''}
-										<h3 class="mb-2 text-sm font-medium" style:color="var(--text-muted)">
-											{$_('stats.summary.expense')}
-										</h3>
-									{/if}
-									{#if byCategoryExpense.length === 0}
-										<EmptyStateCard message={$_('transactions.empty')} />
-									{:else}
-										{@render categorySection(byCategoryExpense)}
-									{/if}
-								</section>
-							{/if}
-						</div>
-					{/if}
 				</div>
 			</div>
 
@@ -508,11 +449,96 @@
 					/>
 				</div>
 			{/if}
+
+			<div class="card md:overflow-x-auto">
+				<h2 class="mb-2 text-lg font-medium">{$_('stats.section.categories')}</h2>
+				{#if byCategory.length === 0}
+					<EmptyStateCard message={$_('transactions.empty')} />
+				{:else}
+					<div class="space-y-6">
+						{#if showCategoryIncome}
+							<section>
+								{#if type === ''}
+									<h3 class="mb-2 text-sm font-medium" style:color="var(--text-muted)">
+										{$_('stats.summary.income')}
+									</h3>
+								{/if}
+								{#if byCategoryIncome.length === 0}
+									<EmptyStateCard message={$_('transactions.empty')} />
+								{:else}
+									{@render categorySection(byCategoryIncome)}
+								{/if}
+							</section>
+						{/if}
+						{#if showCategoryExpense}
+							<section>
+								{#if type === ''}
+									<h3 class="mb-2 text-sm font-medium" style:color="var(--text-muted)">
+										{$_('stats.summary.expense')}
+									</h3>
+								{/if}
+								{#if byCategoryExpense.length === 0}
+									<EmptyStateCard message={$_('transactions.empty')} />
+								{:else}
+									{@render categorySection(byCategoryExpense, true)}
+								{/if}
+							</section>
+						{/if}
+					</div>
+				{/if}
+			</div>
+
+			<div class="card md:overflow-x-auto">
+				<h2 class="mb-2 text-lg font-medium">{$_('stats.section.period')}</h2>
+				{#if byPeriod.length === 0}
+					<EmptyStateCard message={$_('transactions.empty')} />
+				{:else}
+					<div class="mb-3 space-y-2 md:hidden">
+						{#each byPeriod as row (row.period)}
+							<div class="space-y-1">
+								<div class="text-xs" style:color="var(--text-muted)">
+									{periodLabel(row.period)}
+								</div>
+								<div class="flex gap-1">
+									<div
+										class="h-2 rounded bg-emerald-500"
+										style:width={`${Math.max(2, (Math.abs(row.income) / periodMax) * 100)}%`}
+										title={`${$_('stats.summary.income')}: ${formatMoneyForDisplay({ cents: row.income })}`}
+									></div>
+									<div
+										class="h-2 rounded bg-rose-500"
+										style:width={`${Math.max(2, (Math.abs(row.expense) / periodMax) * 100)}%`}
+										title={`${$_('stats.summary.expense')}: ${formatMoneyForDisplay({ cents: row.expense })}`}
+									></div>
+								</div>
+							</div>
+						{/each}
+					</div>
+					<table class="hidden w-full text-left text-sm md:table">
+						<thead>
+							<tr style:color="var(--text-muted)">
+								<th class="p-2">{$_('stats.period')}</th>
+								<th class="p-2">{$_('stats.summary.income')}</th>
+								<th class="p-2">{$_('stats.summary.expense')}</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each byPeriod as row (row.period)}
+								<tr class="border-t" style:border-color="var(--border)">
+									<td class="p-2">{periodLabel(row.period)}</td>
+									<td class="p-2"><MoneyDisplay cents={row.income} class="" /></td>
+									<td class="p-2"><MoneyDisplay cents={row.expense} class="" /></td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				{/if}
+			</div>
 		</div>
 	{/if}
 </div>
 
-{#snippet categorySection(rows: StatsCategoryItem[])}
+{#snippet categorySection(rows: StatsCategoryItem[], showBudget = false)}
 	<div class="space-y-3 md:hidden">
 		{#each rows as row (row.category_id)}
 			<article class="rounded-xl border p-3" style:border-color="var(--border)">
@@ -526,8 +552,31 @@
 				<dl class="mt-2 grid gap-1 text-sm">
 					<div class="flex justify-between gap-2">
 						<dt style:color="var(--text-muted)">{$_('transactions.col.amount')}</dt>
-						<dd class="tabular-nums">{formatMoneyDisplay(fromCents(row.total))}</dd>
+						<dd><MoneyDisplay cents={row.total} class="" /></dd>
 					</div>
+					{#if showBudget}
+						<div class="flex justify-between gap-2">
+							<dt style:color="var(--text-muted)">{$_('budget.stats.planned')}</dt>
+							<dd>
+								{#if budgetByCategory[row.category_id]}
+									<MoneyDisplay
+										value={budgetByCategory[row.category_id].planned_display}
+										class=""
+									/>
+								{:else}
+									—
+								{/if}
+							</dd>
+						</div>
+						<div class="flex justify-between gap-2">
+							<dt style:color="var(--text-muted)">{$_('budget.stats.remaining')}</dt>
+							<dd class="tabular-nums">
+								{budgetByCategory[row.category_id]
+									? budgetRemainingCell(budgetByCategory[row.category_id])
+									: '—'}
+							</dd>
+						</div>
+					{/if}
 					<div class="flex justify-between gap-2">
 						<dt style:color="var(--text-muted)">%</dt>
 						<dd>{row.percentage.toFixed(1)}</dd>
@@ -545,6 +594,10 @@
 			<tr style:color="var(--text-muted)">
 				<th class="p-2">{$_('transactions.col.category')}</th>
 				<th class="p-2">{$_('transactions.col.amount')}</th>
+				{#if showBudget}
+					<th class="p-2">{$_('budget.stats.planned')}</th>
+					<th class="p-2">{$_('budget.stats.remaining')}</th>
+				{/if}
 				<th class="p-2">%</th>
 				<th class="p-2">{$_('stats.summary.count')}</th>
 			</tr>
@@ -561,7 +614,21 @@
 							{statsCategoryLabel(row.category_name, row.type)}
 						</a>
 					</td>
-					<td class="p-2 tabular-nums">{formatMoneyDisplay(fromCents(row.total))}</td>
+					<td class="p-2"><MoneyDisplay cents={row.total} class="" /></td>
+					{#if showBudget}
+						<td class="p-2">
+							{#if budgetByCategory[row.category_id]}
+								<MoneyDisplay value={budgetByCategory[row.category_id].planned_display} class="" />
+							{:else}
+								—
+							{/if}
+						</td>
+						<td class="p-2 tabular-nums">
+							{budgetByCategory[row.category_id]
+								? budgetRemainingCell(budgetByCategory[row.category_id])
+								: '—'}
+						</td>
+					{/if}
 					<td class="p-2">{row.percentage.toFixed(1)}</td>
 					<td class="p-2">{row.count}</td>
 				</tr>

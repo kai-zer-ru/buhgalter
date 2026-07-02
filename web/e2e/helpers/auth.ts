@@ -1,4 +1,5 @@
 import { expect, type Page } from '@playwright/test';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -12,8 +13,17 @@ export const ADMIN = {
 	displayName: 'E2E Admin'
 };
 
+function isPublicAppPath(pathname: string): boolean {
+	return pathname === '/login' || pathname === '/register' || pathname === '/setup';
+}
+
 export async function waitAppReady(page: Page) {
 	await expect(page.getByText('Загрузка…')).toHaveCount(0, { timeout: 20_000 });
+	const pathname = new URL(page.url()).pathname;
+	if (isPublicAppPath(pathname)) {
+		await expect(page.locator('h1').first()).toBeVisible({ timeout: 20_000 });
+		return;
+	}
 	await expect(page.locator('header')).toBeVisible({ timeout: 20_000 });
 	const { dismissBlockingModals } = await import('./ui');
 	await dismissBlockingModals(page);
@@ -39,7 +49,70 @@ export async function login(page: Page) {
 	await page.locator('#login').fill(ADMIN.login);
 	await page.locator('#password').fill(ADMIN.password);
 	await page.getByRole('button', { name: 'Войти' }).click();
+	await expect(page).toHaveURL(/\/(\?.*)?$/, { timeout: 15_000 });
 	await waitAppReady(page);
+}
+
+type MeResponse = { login: string; is_admin: boolean };
+
+async function currentSession(page: Page): Promise<MeResponse | null> {
+	const me = await page.request.get('/api/v1/auth/me');
+	if (!me.ok()) return null;
+	return (await me.json()) as MeResponse;
+}
+
+function isAdminSession(user: MeResponse | null): boolean {
+	return user?.login === ADMIN.login && user.is_admin === true;
+}
+
+/** Restore admin cookies for page.request (after clearCookies or logout). */
+export async function restoreAdminSession(page: Page) {
+	if (isAdminSession(await currentSession(page))) return;
+
+	await page.request.post('/api/v1/auth/logout').catch(() => {});
+
+	const res = await page.request.post('/api/v1/auth/login', {
+		data: { login: ADMIN.login, password: ADMIN.password }
+	});
+	if (res.ok() && isAdminSession(await currentSession(page))) return;
+
+	if (fs.existsSync(authFile)) {
+		const state = JSON.parse(fs.readFileSync(authFile, 'utf-8')) as {
+			cookies?: Array<{
+				name: string;
+				value: string;
+				domain: string;
+				path: string;
+				expires?: number;
+				httpOnly?: boolean;
+				secure?: boolean;
+				sameSite?: 'Strict' | 'Lax' | 'None';
+			}>;
+		};
+		if (state.cookies?.length) {
+			await page.context().addCookies(state.cookies);
+		}
+		if (isAdminSession(await currentSession(page))) return;
+	}
+
+	await page.goto('/login');
+	await page.locator('#login').fill(ADMIN.login);
+	await page.locator('#password').fill(ADMIN.password);
+	await page.getByRole('button', { name: 'Войти' }).click();
+	await expect(page).toHaveURL(/\/(\?.*)?$/, { timeout: 15_000 });
+	await waitAppReady(page);
+
+	expect(isAdminSession(await currentSession(page)), 'admin session restore failed').toBeTruthy();
+}
+
+export async function deleteAdminUserByLogin(page: Page, login: string) {
+	await restoreAdminSession(page);
+	const usersRes = await page.request.get('/api/v1/admin/users');
+	if (!usersRes.ok()) return;
+	const users = (await usersRes.json()) as { id: string; login: string }[];
+	const target = users.find((u) => u.login === login);
+	if (!target) return;
+	await page.request.delete(`/api/v1/admin/users/${target.id}`);
 }
 
 export function formatUTCDateTime(date: Date): string {
@@ -57,7 +130,13 @@ export async function apiJSON<T>(
 		method,
 		data: body ?? undefined
 	});
-	expect(response.ok(), `API ${method} ${path} failed with ${response.status()}`).toBeTruthy();
+	if (!response.ok()) {
+		const detail = await response.text().catch(() => '');
+		expect(
+			response.ok(),
+			`API ${method} ${path} failed with ${response.status()}${detail ? `: ${detail}` : ''}`
+		).toBeTruthy();
+	}
 	if (response.status() === 204) return undefined as T;
 	return (await response.json()) as T;
 }

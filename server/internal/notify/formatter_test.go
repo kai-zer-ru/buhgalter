@@ -8,19 +8,26 @@ import (
 )
 
 func TestFormatDefaultsForAllTriggers(t *testing.T) {
+	const base = "https://buhgalter.example"
 	data := FormatData{
-		"debtor":       "Денис",
-		"amount":       "10 000.00 ₽",
-		"due_date":     "01.07.2026",
-		"days":         "2",
-		"credit":       "Ипотека",
-		"payment_date": "02.07.2026",
-		"when":         "завтра",
-		"type":         "Расход",
-		"description":  "Подписка",
-		"date":         "01.07.2026 09:00",
-		"requested_at": "01.07.2026 09:00",
-		"channel":      "telegram",
+		"debtor":          "Денис",
+		"amount":          "10 000.00 ₽",
+		"due_date":        "01.07.2026",
+		"days":            "2",
+		"credit":          "Ипотека",
+		"payment_date":    "02.07.2026",
+		"when":            "завтра",
+		"type":            "Расход",
+		"description":     "Подписка",
+		"date":            "01.07.2026 09:00",
+		"requested_at":    "01.07.2026 09:00",
+		"channel":         "telegram",
+		"debt_url":        debtURLPlaceholderValue(base, "ru", previewDebtID),
+		"credit_url":      creditURLPlaceholderValue(base, "ru", previewCreditID),
+		"transaction_url": transactionURLPlaceholderValue(base, "ru", previewTransactionID),
+		"settings_url":    settingsURLPlaceholderValue(base, "ru"),
+		"reset_url":       resetURLPlaceholderValue(base, "ru", previewResetUserID),
+		"moderation_url":  moderationURLPlaceholderValue(base, "ru", previewResetUserID),
 	}
 	for _, trigger := range triggerOrder {
 		text, err := Format(trigger, "ru", nil, data)

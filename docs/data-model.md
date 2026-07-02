@@ -3,7 +3,8 @@
 Схема БД — **SQLite**. Источник правды по миграциям: `server/internal/db/migrations/` (goose).  
 Снимок для [sqlc](https://sqlc.dev): `server/schema.sql` (обновлять после каждой миграции).
 
-Доступ к данным — через sqlc-запросы в `server/queries/`, без ORM.
+Доступ к данным в production-коде — через [sqlc](https://sqlc.dev)-запросы в `server/queries/`, без ORM.  
+Правила размещения SQL: [sql-access.md](sql-access.md).
 
 ## Диаграмма
 
@@ -25,6 +26,7 @@ erDiagram
         TEXT language
         TEXT timezone
         INTEGER is_admin
+        TEXT status
     }
 
     sessions {
@@ -47,8 +49,8 @@ erDiagram
     }
 
     accounts {
-        TEXT type "cash|bank"
-        TEXT status "active|archived"
+        TEXT type "cash|bank|credit_card"
+        TEXT status "active|archived|deleted"
         INTEGER is_primary
         INTEGER initial_balance
     }
@@ -77,6 +79,25 @@ erDiagram
         TEXT period "week|two_weeks|month|year"
         TEXT time_local "HH:MM"
         TEXT next_run_at
+    }
+
+    budgets {
+        TEXT scope "category|subcategory|all_expense|all_income"
+        TEXT month "YYYY-MM"
+        INTEGER copy_forward
+        INTEGER amount
+        INTEGER alert_at_percent "default 90"
+        INTEGER is_active
+    }
+
+    budget_periods {
+        TEXT period_start
+        INTEGER planned_amount
+        INTEGER rollover_amount
+    }
+
+    budget_alert_sent {
+        INTEGER threshold_percent
     }
 
     password_reset_requests {
@@ -141,12 +162,39 @@ erDiagram
         TEXT template
     }
 
+    budgets {
+        TEXT scope "category|subcategory|all_expense|all_income"
+        TEXT month "YYYY-MM"
+        INTEGER copy_forward
+        INTEGER amount
+        INTEGER alert_at_percent "default 90"
+        INTEGER is_active
+    }
+
+    budget_periods {
+        TEXT period_start
+        INTEGER planned_amount
+        INTEGER rollover_amount
+    }
+
+    budget_alert_sent {
+        INTEGER threshold_percent
+    }
+
+    users ||--o{ budgets : owns
+    budgets ||--o{ budget_periods : has
+    budgets ||--o{ budget_alert_sent : alerts
+    categories ||--o{ budgets : category_id
+    subcategories ||--o{ budgets : subcategory_id
+    accounts ||--o{ budgets : account_id
+
     users ||--o{ sessions : has
     users ||--o{ api_tokens : has
     users ||--o{ accounts : owns
     users ||--o{ categories : owns
     users ||--o{ transactions : owns
     users ||--o{ recurring_operations : owns
+    users ||--o{ budgets : owns
     users ||--o| password_reset_requests : "pending reset"
     users ||--o{ debtors : owns
     users ||--o{ debts : owns
@@ -164,6 +212,12 @@ erDiagram
     accounts ||--o{ transactions : account_id
     accounts ||--o{ transactions : transfer_account_id
     accounts ||--o{ credits : debit_account_id
+
+    budgets ||--o{ budget_periods : has
+    budgets ||--o{ budget_alert_sent : alerts
+    categories ||--o{ budgets : category_id
+    subcategories ||--o{ budgets : subcategory_id
+    accounts ||--o{ budgets : account_id
 
     debtors ||--o{ debts : has
     debts ||--o{ debt_transactions : links
@@ -197,12 +251,21 @@ erDiagram
 - `debts.transaction_id` — ссылка на начальную (`open`) операцию; полный список — в `debt_transactions`.
 - `POST /debts/{id}/settle`: `affects_balance` и `account_id` в теле запроса **не зависят** от флага долга при создании. При `affects_balance=true` — обратная операция на указанном счёте; при `false` — долг закрывается (или уменьшается) без операции по счёту.
 - `DELETE /debts/{id}` — каскадно снимает связи и удаляет привязанные `transactions`.
-- `DELETE /transactions/{id}` для связанной операции — запрещено (409), если есть погашения (`role=settle`).
+- `DELETE /transactions/{id}` для начальной (`open`) операции — удаляет долг, если это единственная связанная операция; иначе **409 Conflict**.
+- `DELETE /transactions/{id}` для операции погашения (`settle`) — пересчитывает остаток долга и баланс счёта.
+
+## Уведомления
+
+- `notification_settings.trigger_negative_balance` — дописывать суффикс о недостатке средств к исходящим напоминаниям (кредит, плановый расход/перевод, долг «я должен»).
+- `notification_settings.trigger_budget` — уведомления `budget_threshold` при достижении порога лимита (см. [budget.md](budget.md)).
+- `notification_templates.trigger_type` включает `balance_shortfall` — шаблон суффикса с placeholder `{amount}` (недостающая сумма); редактирование в API/UI только при включённом связанном переключателе в блоке «Настройки» (долги → `debt_*`, кредиты → `credit_payment`, и т.д.).
+- Блокировка периодов и расписания при выключенном toggle — [notifications.md](notifications.md).
+- Подробнее о недостатке средств: [balance-shortfall-notifications.md](../roadmap/balance-shortfall-notifications.md).
 
 ## Кредиты и операции
 
-- `credits.credit_kind`: `consumer` | `mortgage` (ипотека: `property_price`, `down_payment`, сумма кредита = `property_price - down_payment`)
-- `credits.payment_interval`: `month` | `week` | `two_weeks` | `manual` (для ипотеки в MVP — только `month`)
+- `credits.credit_kind`: `consumer` | `mortgage` (ипотека: `property_price`, `down_payment`, сумма кредита = `property_price - down_payment`; потребкредит: опционально `principal_affects_balance` — доход на счёт при создании)
+- `credits.payment_interval`: `month` | `week` | `two_weeks` | `manual` (для ипотеки — только `month`)
 - `credit_payments.kind`: `scheduled`, `auto`, `retroactive`; `early` — legacy
 - График ипотеки: ежедневное начисление процентов; автоплатёж через `MonthlyPaymentMortgage`, ручной — через `monthly_payment` в create/preview (отдельный алгоритм, без отклонения «слишком высокого» платежа)
 - График потребительского кредита: аннуитет с проверкой ручного `monthly_payment` (минимум — покрытие процентов, максимум — укладывание в срок)
@@ -219,8 +282,31 @@ erDiagram
 
 | Поле | Описание |
 |------|----------|
+| `accounts.type` | `cash`, `bank`, `credit_card` |
+| `accounts.credit_limit` | лимит кредитной карты, копейки; только для `credit_card` |
+| `accounts.payment_account_id` | счёт по умолчанию для переводов на карту (опционально) |
+| `accounts.auto_topup_*` | автопополнение bank-счёта — см. [balance-maintenance.md](balance-maintenance.md) |
+| `accounts.status` | `active`, `archived`, `deleted` |
 | `accounts.is_primary` | `1` — основной счёт среди `status = active`; не более одного на пользователя |
+| `POST /accounts/{id}/archive` | см. [accounts-archive-delete.md](accounts-archive-delete.md) |
+| `DELETE /accounts/{id}` | см. [accounts-archive-delete.md](accounts-archive-delete.md) |
 | API | `POST /api/v1/accounts/{id}/primary` |
+
+Подробнее о типе `credit_card`: [ui-credit-cards.md](ui-credit-cards.md).
+
+## Бюджет
+
+| Таблица | Назначение |
+|---------|------------|
+| `budgets` | Лимит на месяц (`month`): scope, сумма, `copy_forward`, порог уведомления, `is_active` |
+| `budget_periods` | Снимок на месяц: `planned_amount`, `rollover_amount` (rollover — post-MVP) |
+| `budget_alert_sent` | Дедупликация уведомлений `budget_threshold` |
+
+- Факт (`spent`) не денормализуется — запрос к `transactions` с теми же предикатами, что `StatsByCategory`.
+- Уникальность: один активный бюджет на `(user_id, scope, category_id, subcategory_id, month)` — без `account_id` (см. `039_budget_scope_unique.sql`).
+- Периоды создаются лениво при `GET summary`.
+
+Подробнее: [budget.md](budget.md).
 
 ## Изоляция данных
 
@@ -235,17 +321,27 @@ erDiagram
 
 ## Пакеты и sqlc-запросы
 
-| Сущность | Go-пакет | sqlc (`server/queries/`) |
-|----------|----------|---------------------------|
-| accounts | `internal/account` | `accounts.sql` |
-| banks | `internal/bank` | `banks.sql` |
-| categories | `internal/category` | `categories.sql` |
-| transactions | `internal/transaction` | `transactions.sql` |
-| debtors, debts | `internal/debt` | `debts.sql` |
-| credits | `internal/credit` | `credits.sql` |
-| stats / search | `internal/stats` | `stats.sql` |
-| recurring | `internal/recurring` | `recurring.sql` |
-| import / export | `internal/importexport` | `import.sql` |
+| Сущность | Go-пакет | sqlc (`server/queries/`) | Статус |
+|----------|----------|---------------------------|--------|
+| accounts | `internal/account` | `accounts.sql` | sqlc |
+| banks | `internal/bank` | `banks.sql` | sqlc |
+| categories | `internal/category` | `categories.sql` | sqlc |
+| transactions | `internal/transaction` | `transactions.sql` | sqlc |
+| debtors, debts | `internal/debt` | `debts.sql` | sqlc |
+| credits | `internal/credit` | `credits.sql` | sqlc |
+| stats / search | `internal/stats` | `stats.sql` | sqlc |
+| budgets | `internal/budget` | `budget.sql` | sqlc |
+| recurring | `internal/recurring` | `recurring_operations.sql` | sqlc |
+| budget | `internal/budget` | `budget.sql` | sqlc |
+| notifications | `internal/notify` | `notifications.sql` | sqlc |
+| import / export | `internal/importexport` | `import.sql` | sqlc |
+| users | `internal/auth`, `internal/user`, `internal/admin`, `internal/setup` | `users.sql` | sqlc |
+| sessions | `internal/auth` | `sessions.sql` | sqlc |
+| api_tokens | `internal/auth`, `internal/user` | `api_tokens.sql` | sqlc |
+| password_reset | `internal/auth` | `password_reset_requests.sql` | sqlc |
+| system_settings | `internal/admin`, `internal/auth`, `internal/settingscache`, `internal/backup`, `internal/notify`, `internal/db`, `cmd/buhgalter`, `internal/setup` | `system_settings.sql` | sqlc |
+
+Колонка «Статус»: **sqlc** — запросы в `server/queries/`; исключения — см. [sql-access.md](sql-access.md).
 
 ## Защита от SQL-инъекций
 
@@ -273,6 +369,7 @@ erDiagram
   - `020_repair_credit_schedules.sql` — repair неполных графиков при старте
   - `023_password_reset_requests.sql` — очередь сброса пароля
   - `026_recurring_operations.sql` — периодические операции
+  - `034_budgets.sql` … `039_budget_scope_unique.sql` — бюджет (см. [budget.md](budget.md))
   - `024_`, `027_`, `028_` — поля кредитов, ипотеки, `accounts.current_balance`
 
 Уже применённые миграции **не переписывать** — только новые файлы в конец цепочки. После каждой миграции обновлять `server/schema.sql` и при необходимости запускать `make sqlc`.

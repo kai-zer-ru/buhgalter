@@ -22,24 +22,45 @@ export async function createBankAccount(page: Page, name?: string) {
 	});
 }
 
+export async function createCreditCardAccount(page: Page, name?: string) {
+	const unique = Date.now();
+	const banks = await apiJSON<{ id: string; name: string }[]>(page, 'GET', '/api/v1/banks');
+	const bank =
+		banks.find((b) => b.name.includes('Тинькофф') || b.name.includes('Т-Банк')) ?? banks[0];
+	const debit = await createCashAccount(page, `E2E Debit for CC ${unique}`);
+	return apiJSON<{ id: string; name: string }>(page, 'POST', '/api/v1/accounts', {
+		name: name ?? `E2E Credit Card ${unique}`,
+		type: 'credit_card',
+		bank_id: bank.id,
+		credit_limit: '65000.00',
+		initial_balance: '1000.00',
+		payment_account_id: debit.id
+	});
+}
+
 export async function createExpense(
 	page: Page,
 	accountId: string,
 	amount: string,
-	description?: string
+	description?: string,
+	categoryId?: string
 ) {
 	const desc = description ?? `E2E expense ${Date.now()}`;
+	const payload: Record<string, string> = {
+		account_id: accountId,
+		type: 'expense',
+		amount,
+		description: desc,
+		transaction_date: formatUTCDateTime(new Date())
+	};
+	if (categoryId) {
+		payload.category_id = categoryId;
+	}
 	return apiJSON<{ id: string; amount_display: string; description?: string }>(
 		page,
 		'POST',
 		'/api/v1/transactions',
-		{
-			account_id: accountId,
-			type: 'expense',
-			amount,
-			description: desc,
-			transaction_date: formatUTCDateTime(new Date())
-		}
+		payload
 	);
 }
 

@@ -35,6 +35,9 @@
 	let triggerDebt = $state(true);
 	let triggerCredit = $state(true);
 	let triggerPlanned = $state(true);
+	let triggerNegativeBalance = $state(true);
+	let triggerBudget = $state(true);
+	let triggerAutoTopupDisabled = $state(true);
 	let triggerPasswordReset = $state(true);
 	let debtDaysBefore = $state(1);
 	let myDebtOverdueDaysLimit = $state(7);
@@ -59,9 +62,92 @@
 		'debt_due_soon',
 		'credit_payment',
 		'planned_operation',
+		'balance_shortfall',
+		'budget_threshold',
+		'auto_topup_disabled',
 		'password_reset',
 		'test'
 	];
+
+	type NotificationTriggerKey =
+		| 'debt'
+		| 'credit'
+		| 'planned'
+		| 'negativeBalance'
+		| 'budget'
+		| 'autoTopupDisabled'
+		| 'passwordReset';
+
+	const templateSettingKey: Partial<Record<string, NotificationTriggerKey>> = {
+		debt_overdue: 'debt',
+		debt_due_soon: 'debt',
+		credit_payment: 'credit',
+		planned_operation: 'planned',
+		balance_shortfall: 'negativeBalance',
+		budget_threshold: 'budget',
+		auto_topup_disabled: 'autoTopupDisabled',
+		password_reset: 'passwordReset'
+	};
+
+	function isNotificationTriggerEnabled(key: NotificationTriggerKey) {
+		switch (key) {
+			case 'debt':
+				return triggerDebt;
+			case 'credit':
+				return triggerCredit;
+			case 'planned':
+				return triggerPlanned;
+			case 'negativeBalance':
+				return triggerNegativeBalance;
+			case 'budget':
+				return triggerBudget;
+			case 'autoTopupDisabled':
+				return triggerAutoTopupDisabled;
+			case 'passwordReset':
+				return triggerPasswordReset;
+		}
+	}
+
+	function toggleNotificationTrigger(key: NotificationTriggerKey) {
+		switch (key) {
+			case 'debt':
+				triggerDebt = !triggerDebt;
+				break;
+			case 'credit':
+				triggerCredit = !triggerCredit;
+				break;
+			case 'planned':
+				triggerPlanned = !triggerPlanned;
+				break;
+			case 'negativeBalance':
+				triggerNegativeBalance = !triggerNegativeBalance;
+				break;
+			case 'budget':
+				triggerBudget = !triggerBudget;
+				break;
+			case 'autoTopupDisabled':
+				triggerAutoTopupDisabled = !triggerAutoTopupDisabled;
+				break;
+			case 'passwordReset':
+				triggerPasswordReset = !triggerPasswordReset;
+				break;
+		}
+	}
+
+	function notificationTriggerRows(): Array<{ key: NotificationTriggerKey; hintKey: string }> {
+		const rows: Array<{ key: NotificationTriggerKey; hintKey: string }> = [
+			{ key: 'debt', hintKey: 'debt_hint' },
+			{ key: 'credit', hintKey: 'credit_hint' },
+			{ key: 'planned', hintKey: 'planned_hint' },
+			{ key: 'negativeBalance', hintKey: 'negativeBalance_hint' },
+			{ key: 'budget', hintKey: 'budget_hint' },
+			{ key: 'autoTopupDisabled', hintKey: 'autoTopupDisabled_hint' }
+		];
+		if ($user?.is_admin) {
+			rows.push({ key: 'passwordReset', hintKey: 'passwordReset_hint' });
+		}
+		return rows;
+	}
 
 	onMount(() => {
 		void (async () => {
@@ -92,6 +178,11 @@
 		triggerDebt = data.trigger_debt;
 		triggerCredit = data.trigger_credit;
 		triggerPlanned = data.trigger_planned;
+		triggerNegativeBalance =
+			'trigger_negative_balance' in data ? data.trigger_negative_balance : true;
+		triggerBudget = 'trigger_budget' in data ? data.trigger_budget : true;
+		triggerAutoTopupDisabled =
+			'trigger_auto_topup_disabled' in data ? data.trigger_auto_topup_disabled : true;
 		triggerPasswordReset = data.trigger_password_reset ?? true;
 		debtDaysBefore = data.debt_days_before;
 		myDebtOverdueDaysLimit = data.my_debt_overdue_days_limit ?? 7;
@@ -139,6 +230,20 @@
 
 	function triggerLabel(triggerType: string) {
 		return $_(`settings.notifications.trigger.${triggerType}`);
+	}
+
+	function templateEditable(triggerType: string) {
+		const settingKey = templateSettingKey[triggerType];
+		if (!settingKey) return true;
+		return isNotificationTriggerEnabled(settingKey);
+	}
+
+	function templateDisabledHint(triggerType: string) {
+		const settingKey = templateSettingKey[triggerType];
+		if (!settingKey) return '';
+		return $_('settings.notifications.templates.disabled_setting', {
+			values: { setting: $_(`settings.notifications.triggers.${settingKey}`) }
+		});
 	}
 
 	function orderedTemplates(list: NotificationTemplate[]) {
@@ -226,6 +331,9 @@
 				trigger_debt: triggerDebt,
 				trigger_credit: triggerCredit,
 				trigger_planned: triggerPlanned,
+				trigger_negative_balance: triggerNegativeBalance,
+				trigger_budget: triggerBudget,
+				trigger_auto_topup_disabled: triggerAutoTopupDisabled,
 				trigger_password_reset: $user?.is_admin ? triggerPasswordReset : undefined,
 				debt_days_before: debtDaysBefore,
 				my_debt_overdue_days_limit: myDebtOverdueDaysLimit,
@@ -310,6 +418,8 @@
 				trigger_debt: triggerDebt,
 				trigger_credit: triggerCredit,
 				trigger_planned: triggerPlanned,
+				trigger_negative_balance: triggerNegativeBalance,
+				trigger_budget: triggerBudget,
 				trigger_password_reset: $user?.is_admin ? triggerPasswordReset : undefined
 			});
 			await loadNotifications();
@@ -358,6 +468,7 @@
 
 	async function saveTemplate(triggerType: string, template: string) {
 		if (!notificationSecretConfigured) return;
+		if (!templateEditable(triggerType)) return;
 		const templateError = validateTemplateText(template);
 		if (templateError) {
 			toast.error(templateError);
@@ -382,6 +493,7 @@
 
 	async function previewTemplate(triggerType: string, template: string) {
 		if (!notificationSecretConfigured) return;
+		if (!templateEditable(triggerType)) return;
 		const templateError = validateTemplateText(template);
 		if (templateError) {
 			toast.error(templateError);
@@ -597,48 +709,64 @@
 					<p class="text-sm" style:color="var(--text-muted)">
 						{$_('settings.notifications.triggers.types_hint')}
 					</p>
-					<div class="grid w-full max-w-md gap-2">
-						<div class="grid grid-cols-[1fr_auto] items-center gap-3">
-							<span class="text-sm leading-tight">{$_('settings.notifications.triggers.debt')}</span
-							>
-							<ToggleSwitch
-								checked={triggerDebt}
-								label={$_('settings.notifications.triggers.debt')}
-								onchange={() => (triggerDebt = !triggerDebt)}
-							/>
-						</div>
-						<div class="grid grid-cols-[1fr_auto] items-center gap-3">
-							<span class="text-sm leading-tight"
-								>{$_('settings.notifications.triggers.credit')}</span
-							>
-							<ToggleSwitch
-								checked={triggerCredit}
-								label={$_('settings.notifications.triggers.credit')}
-								onchange={() => (triggerCredit = !triggerCredit)}
-							/>
-						</div>
-						<div class="grid grid-cols-[1fr_auto] items-center gap-3">
-							<span class="text-sm leading-tight"
-								>{$_('settings.notifications.triggers.planned')}</span
-							>
-							<ToggleSwitch
-								checked={triggerPlanned}
-								label={$_('settings.notifications.triggers.planned')}
-								onchange={() => (triggerPlanned = !triggerPlanned)}
-							/>
-						</div>
-						{#if $user?.is_admin}
-							<div class="grid grid-cols-[1fr_auto] items-center gap-3">
-								<span class="text-sm leading-tight"
-									>{$_('settings.notifications.triggers.passwordReset')}</span
-								>
-								<ToggleSwitch
-									checked={triggerPasswordReset}
-									label={$_('settings.notifications.triggers.passwordReset')}
-									onchange={() => (triggerPasswordReset = !triggerPasswordReset)}
-								/>
-							</div>
-						{/if}
+					<div class="hidden md:block md:overflow-x-auto">
+						<table class="w-full text-left text-sm">
+							<thead>
+								<tr style:color="var(--text-muted)">
+									<th class="pb-3 pr-4 font-medium">
+										{$_('settings.notifications.triggers.col.name')}
+									</th>
+									<th class="pb-3 pr-4 font-medium">
+										{$_('settings.notifications.triggers.col.description')}
+									</th>
+									<th class="pb-3 text-right font-medium">
+										{$_('settings.notifications.triggers.col.state')}
+									</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each notificationTriggerRows() as row (row.key)}
+									<tr class="border-t align-top" style:border-color="var(--border)">
+										<td class="py-3 pr-4 leading-snug">
+											{$_(`settings.notifications.triggers.${row.key}`)}
+										</td>
+										<td class="py-3 pr-4 leading-relaxed" style:color="var(--text-muted)">
+											{$_(`settings.notifications.triggers.${row.hintKey}`)}
+										</td>
+										<td class="py-3 text-right">
+											<div class="flex justify-end">
+												<ToggleSwitch
+													checked={isNotificationTriggerEnabled(row.key)}
+													label={$_(`settings.notifications.triggers.${row.key}`)}
+													onchange={() => toggleNotificationTrigger(row.key)}
+												/>
+											</div>
+										</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+					<div class="space-y-3 md:hidden">
+						{#each notificationTriggerRows() as row (row.key)}
+							<article class="rounded-xl border p-4" style:border-color="var(--border)">
+								<div class="flex items-start justify-between gap-3">
+									<div class="min-w-0">
+										<p class="font-medium leading-snug">
+											{$_(`settings.notifications.triggers.${row.key}`)}
+										</p>
+										<p class="mt-1 text-sm leading-relaxed" style:color="var(--text-muted)">
+											{$_(`settings.notifications.triggers.${row.hintKey}`)}
+										</p>
+									</div>
+									<ToggleSwitch
+										checked={isNotificationTriggerEnabled(row.key)}
+										label={$_(`settings.notifications.triggers.${row.key}`)}
+										onchange={() => toggleNotificationTrigger(row.key)}
+									/>
+								</div>
+							</article>
+						{/each}
 					</div>
 					<div class="flex items-center gap-2">
 						<button
@@ -764,11 +892,24 @@
 				</div>
 
 				{#each orderedTemplates(templates) as tpl (tpl.trigger_type)}
-					<div class="card space-y-4">
+					{@const editable = templateEditable(tpl.trigger_type)}
+					<div
+						class="card space-y-4"
+						class:opacity-50={!editable}
+						class:pointer-events-none={!editable}
+						class:select-none={!editable}
+					>
 						<h3 class="text-lg font-semibold">{triggerLabel(tpl.trigger_type)}</h3>
+						{#if !editable}
+							<p class="text-sm" style:color="var(--text-muted)">
+								{templateDisabledHint(tpl.trigger_type)}
+							</p>
+						{/if}
 						<textarea
 							id={templateTextareaId(tpl.trigger_type)}
 							class="input min-h-[88px]"
+							disabled={!editable}
+							readonly={!editable}
 							value={templateValue(tpl.trigger_type, tpl.template)}
 							oninput={(e) =>
 								updateTemplate(tpl.trigger_type, (e.currentTarget as HTMLTextAreaElement).value)}
@@ -781,6 +922,7 @@
 								<button
 									type="button"
 									class="btn-ghost"
+									disabled={!editable}
 									onclick={() => insertPlaceholder(tpl.trigger_type, placeholder)}
 								>
 									{`{${placeholder}}`}
@@ -791,6 +933,7 @@
 							<button
 								type="button"
 								class="btn-ghost"
+								disabled={!editable}
 								onclick={() =>
 									previewTemplate(tpl.trigger_type, templateValue(tpl.trigger_type, tpl.template))}
 							>
@@ -799,6 +942,7 @@
 							<button
 								type="button"
 								class="btn-ghost"
+								disabled={!editable}
 								onclick={() => resetTemplate(tpl.trigger_type)}
 							>
 								{$_('settings.notifications.templates.reset')}
@@ -806,9 +950,9 @@
 							<button
 								type="button"
 								class="btn-primary"
+								disabled={loading || !editable}
 								onclick={() =>
 									saveTemplate(tpl.trigger_type, templateValue(tpl.trigger_type, tpl.template))}
-								disabled={loading}
 							>
 								{$_('settings.notifications.block_save')}
 							</button>

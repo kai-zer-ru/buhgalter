@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kai-zer-ru/buhgalter/internal/accountbalance"
+	"github.com/kai-zer-ru/buhgalter/internal/balancehooks"
 	"github.com/kai-zer-ru/buhgalter/internal/categoryseed"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/money"
@@ -29,6 +30,8 @@ type Credit struct {
 	DownPaymentDisplay        string          `json:"down_payment_display"`
 	DownPaymentAffectsBalance bool            `json:"down_payment_affects_balance"`
 	DownPaymentTransactionID  *string         `json:"down_payment_transaction_id,omitempty"`
+	PrincipalAffectsBalance   bool            `json:"principal_affects_balance"`
+	PrincipalTransactionID    *string         `json:"principal_transaction_id,omitempty"`
 	IssueDate                 string          `json:"issue_date"`
 	TermMonths                int             `json:"term_months"`
 	InterestRate              float64         `json:"interest_rate"`
@@ -94,6 +97,7 @@ type CreateInput struct {
 	RetroactiveDebitCount     int
 	ScheduleSeed              []ScheduleSeed
 	CreateTransactions        bool
+	PrincipalAffectsBalance   bool
 }
 
 type UpdateInput struct {
@@ -117,26 +121,28 @@ type CompleteInput struct {
 }
 
 var (
-	ErrNotFound                = errors.New("credit not found")
-	ErrInvalidAmount           = errors.New("invalid amount")
-	ErrInvalidTerm             = errors.New("invalid term")
-	ErrInvalidAccount          = errors.New("invalid account")
-	ErrAccountArchived         = errors.New("account is archived")
-	ErrAlreadyClosed           = errors.New("credit already closed")
-	ErrInvalidInterval         = errors.New("invalid payment interval")
-	ErrInvalidPaymentDate      = errors.New("invalid payment date")
-	ErrPaymentApplied          = errors.New("payment already applied")
-	ErrNoPendingPayment        = errors.New("no pending scheduled payment")
-	ErrCannotRemoveRetroactive = errors.New("cannot remove retroactive payment")
-	ErrOnlyLatestPaymentDelete = errors.New("only latest applied payment can be deleted")
-	ErrInvalidRetroactiveDebit = errors.New("invalid retroactive debit count")
-	ErrCompleteParamsRequired  = errors.New("complete parameters required")
-	ErrInvalidDebitTime        = errors.New("invalid debit time")
-	ErrCreditBankLocked        = errors.New("credit bank can be edited only once")
-	ErrInvalidBank             = errors.New("invalid bank")
-	ErrPlannedNotAllowed       = errors.New("planned operation is not allowed for credit payments")
-	ErrInvalidCreditKind       = errors.New("invalid credit kind")
-	ErrInvalidMortgageFields   = errors.New("invalid mortgage fields")
+	ErrNotFound                   = errors.New("credit not found")
+	ErrInvalidAmount              = errors.New("invalid amount")
+	ErrInvalidTerm                = errors.New("invalid term")
+	ErrInvalidAccount             = errors.New("invalid account")
+	ErrAccountArchived            = errors.New("account is archived")
+	ErrAlreadyClosed              = errors.New("credit already closed")
+	ErrInvalidInterval            = errors.New("invalid payment interval")
+	ErrInvalidPaymentDate         = errors.New("invalid payment date")
+	ErrPaymentApplied             = errors.New("payment already applied")
+	ErrNoPendingPayment           = errors.New("no pending scheduled payment")
+	ErrCannotRemoveRetroactive    = errors.New("cannot remove retroactive payment")
+	ErrOnlyLatestPaymentDelete    = errors.New("only latest applied payment can be deleted")
+	ErrInvalidRetroactiveDebit    = errors.New("invalid retroactive debit count")
+	ErrCompleteParamsRequired     = errors.New("complete parameters required")
+	ErrInvalidDebitTime           = errors.New("invalid debit time")
+	ErrCreditBankLocked           = errors.New("credit bank can be edited only once")
+	ErrInvalidBank                = errors.New("invalid bank")
+	ErrPlannedNotAllowed          = errors.New("planned operation is not allowed for credit payments")
+	ErrInvalidCreditKind          = errors.New("invalid credit kind")
+	ErrInvalidMortgageFields      = errors.New("invalid mortgage fields")
+	ErrPrincipalIncomePastPayment = errors.New("principal income not allowed when schedule has past payment")
+	ErrInvalidPrincipalIncome     = errors.New("principal income not allowed for this credit type")
 )
 
 const (
@@ -349,6 +355,15 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Cre
 		addedRetro = true
 	}
 
+	if in.PrincipalAffectsBalance {
+		if creditKind != CreditKindConsumer || in.InterestRate == 0 {
+			return Credit{}, ErrInvalidPrincipalIncome
+		}
+		if scheduleHasPastPayment(entries, todayStart) {
+			return Credit{}, ErrPrincipalIncomePastPayment
+		}
+	}
+
 	id := uuid.NewString()
 	now := time.Now().UTC()
 	nowStr := now.Format(time.RFC3339)
@@ -375,6 +390,8 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Cre
 		PrincipalAmount: principalAmount, PropertyPrice: propertyPrice, DownPayment: downPayment,
 		DownPaymentAffectsBalance: boolToInt64(in.DownPaymentAffectsBalance),
 		DownPaymentTransactionID:  nil,
+		PrincipalAffectsBalance:   boolToInt64(in.PrincipalAffectsBalance),
+		PrincipalTransactionID:    nil,
 		IssueDate:                 issueDate,
 		TermMonths:                int64(in.TermMonths), InterestRate: in.InterestRate,
 		PaymentInterval: string(in.PaymentInterval), PaidAmount: paidAmount,
@@ -393,6 +410,7 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Cre
 
 	var retroPaid int64
 	var downPaymentTxID *string
+	var principalTxID *string
 	if creditKind == CreditKindMortgage && downPayment > 0 && in.DownPaymentAffectsBalance {
 		downPaymentAccountID := in.DebitAccountID
 		if in.DownPaymentAccountID != nil && strings.TrimSpace(*in.DownPaymentAccountID) != "" {
@@ -406,6 +424,13 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Cre
 			return Credit{}, err
 		}
 		downPaymentTxID = &tid
+	}
+	if in.PrincipalAffectsBalance {
+		tid, err := insertCreditIncomeTransaction(ctx, dbTx, userID, in.DebitAccountID, in.Name, principalAmount, in.IssueDate, true)
+		if err != nil {
+			return Credit{}, err
+		}
+		principalTxID = &tid
 	}
 	for i, e := range entries {
 		payDate, err := timeutil.ParseUTC(e.PaymentDate)
@@ -463,6 +488,15 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Cre
 			return Credit{}, err
 		}
 	}
+	if principalTxID != nil {
+		if err := q.SetCreditPrincipalTransaction(ctx, sqlcdb.SetCreditPrincipalTransactionParams{
+			PrincipalTransactionID: principalTxID,
+			ID:                     id,
+			UserID:                 userID,
+		}); err != nil {
+			return Credit{}, err
+		}
+	}
 
 	if err := dbTx.Commit(); err != nil {
 		return Credit{}, err
@@ -478,6 +512,19 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Cre
 		}
 	}
 	return GetByID(ctx, db, userID, id, true)
+}
+
+func scheduleHasPastPayment(entries []ScheduleEntry, todayStart time.Time) bool {
+	for _, e := range entries {
+		payDate, err := timeutil.ParseUTC(e.PaymentDate)
+		if err != nil {
+			continue
+		}
+		if payDate.Before(todayStart) {
+			return true
+		}
+	}
+	return false
 }
 
 func retroactiveDebitEntrySet(entries []ScheduleEntry, addedRetro bool, todayStart time.Time, count int) (map[int]struct{}, error) {
@@ -841,6 +888,9 @@ func Delete(ctx context.Context, db *sql.DB, userID, id, mode string) error {
 	if creditRow.DownPaymentTransactionID != nil {
 		txIDs = append(txIDs, creditRow.DownPaymentTransactionID)
 	}
+	if creditRow.PrincipalTransactionID != nil {
+		txIDs = append(txIDs, creditRow.PrincipalTransactionID)
+	}
 
 	if mode == "keep_transactions" {
 		suffix := " (кредит удалён)"
@@ -878,6 +928,12 @@ func Delete(ctx context.Context, db *sql.DB, userID, id, mode string) error {
 		}
 	} else {
 		if err := q.UnlinkCreditPaymentTransactions(ctx, id); err != nil {
+			return err
+		}
+		nowStr := time.Now().UTC().Format(time.RFC3339)
+		if err := q.ClearCreditLinkedTransactions(ctx, sqlcdb.ClearCreditLinkedTransactionsParams{
+			UpdatedAt: nowStr, ID: id, UserID: userID,
+		}); err != nil {
 			return err
 		}
 		for _, txID := range txIDs {
@@ -1059,6 +1115,18 @@ func insertCreditExpenseTransaction(ctx context.Context, db sqlcdb.DBTX, userID,
 	if err != nil {
 		return "", err
 	}
+	return insertCreditBalanceTransaction(ctx, db, userID, accountID, creditName, amount, payDate, affectsBalance, "expense", catID)
+}
+
+func insertCreditIncomeTransaction(ctx context.Context, db sqlcdb.DBTX, userID, accountID string, creditName *string, amount int64, payDate time.Time, affectsBalance bool) (string, error) {
+	catID, err := categoryseed.CreditIncomeCategoryID(ctx, db, userID)
+	if err != nil {
+		return "", err
+	}
+	return insertCreditBalanceTransaction(ctx, db, userID, accountID, creditName, amount, payDate, affectsBalance, "income", catID)
+}
+
+func insertCreditBalanceTransaction(ctx context.Context, db sqlcdb.DBTX, userID, accountID string, creditName *string, amount int64, payDate time.Time, affectsBalance bool, txType, catID string) (string, error) {
 	kind, err := resolveTransactionKind(ctx, db, userID, payDate)
 	if err != nil {
 		return "", err
@@ -1073,7 +1141,7 @@ func insertCreditExpenseTransaction(ctx context.Context, db sqlcdb.DBTX, userID,
 	}
 	if err := queries(db).InsertTransaction(ctx, sqlcdb.InsertTransactionParams{
 		ID: id, UserID: userID, AccountID: accountID,
-		Type: "expense", Kind: kind, Amount: amount, Description: &desc,
+		Type: txType, Kind: kind, Amount: amount, Description: &desc,
 		CategoryID: &catID, SubcategoryID: nil,
 		TransferGroupID: nil, TransferAccountID: nil,
 		TransactionDate: txDate, AffectsBalance: affects,
@@ -1231,6 +1299,7 @@ func creditFromListRow(ctx context.Context, db *sql.DB, userID string, row sqlcd
 		id: row.ID, name: row.Name, creditKind: row.CreditKind, principal: row.PrincipalAmount,
 		propertyPrice: row.PropertyPrice, downPayment: row.DownPayment,
 		downPaymentAffectsBalance: row.DownPaymentAffectsBalance, downPaymentTransactionID: row.DownPaymentTransactionID,
+		principalAffectsBalance: row.PrincipalAffectsBalance, principalTransactionID: row.PrincipalTransactionID,
 		issueDate:  row.IssueDate,
 		termMonths: int(row.TermMonths), interestRate: row.InterestRate,
 		paymentInterval: row.PaymentInterval, paidAmount: row.PaidAmount,
@@ -1248,6 +1317,7 @@ func creditFromGetRow(ctx context.Context, db *sql.DB, userID string, row sqlcdb
 		id: row.ID, name: row.Name, creditKind: row.CreditKind, principal: row.PrincipalAmount,
 		propertyPrice: row.PropertyPrice, downPayment: row.DownPayment,
 		downPaymentAffectsBalance: row.DownPaymentAffectsBalance, downPaymentTransactionID: row.DownPaymentTransactionID,
+		principalAffectsBalance: row.PrincipalAffectsBalance, principalTransactionID: row.PrincipalTransactionID,
 		issueDate:  row.IssueDate,
 		termMonths: int(row.TermMonths), interestRate: row.InterestRate,
 		paymentInterval: row.PaymentInterval, paidAmount: row.PaidAmount,
@@ -1261,17 +1331,18 @@ func creditFromGetRow(ctx context.Context, db *sql.DB, userID string, row sqlcdb
 }
 
 type creditFields struct {
-	id, issueDate, paymentInterval, debitAccountID, debitAccountName string
-	recordedAt, status, createdAt, updatedAt                         string
-	name, debitTimeLocal, bankID, bankName                           *string
-	closedAt                                                         *string
-	creditKind                                                       string
-	principal, paidAmount, monthlyPayment, downPayment               int64
-	propertyPrice                                                    *int64
-	downPaymentTransactionID                                         *string
-	termMonths                                                       int
-	interestRate                                                     float64
-	addedRetro, bankIDLocked, downPaymentAffectsBalance              int64
+	id, issueDate, paymentInterval, debitAccountID, debitAccountName             string
+	recordedAt, status, createdAt, updatedAt                                     string
+	name, debitTimeLocal, bankID, bankName                                       *string
+	closedAt                                                                     *string
+	creditKind                                                                   string
+	principal, paidAmount, monthlyPayment, downPayment                           int64
+	propertyPrice                                                                *int64
+	downPaymentTransactionID                                                     *string
+	principalTransactionID                                                       *string
+	termMonths                                                                   int
+	interestRate                                                                 float64
+	addedRetro, bankIDLocked, downPaymentAffectsBalance, principalAffectsBalance int64
 }
 
 func enrichCredit(ctx context.Context, db *sql.DB, userID string, f creditFields) (Credit, error) {
@@ -1285,6 +1356,7 @@ func enrichCredit(ctx context.Context, db *sql.DB, userID string, f creditFields
 		PrincipalAmount: f.principal, PrincipalAmountDisplay: money.FormatRubles(f.principal),
 		PropertyPrice: f.propertyPrice, DownPayment: f.downPayment, DownPaymentDisplay: money.FormatRubles(f.downPayment),
 		DownPaymentAffectsBalance: f.downPaymentAffectsBalance == 1, DownPaymentTransactionID: f.downPaymentTransactionID,
+		PrincipalAffectsBalance: f.principalAffectsBalance == 1, PrincipalTransactionID: f.principalTransactionID,
 		IssueDate: f.issueDate, TermMonths: f.termMonths, InterestRate: f.interestRate,
 		PaymentInterval: f.paymentInterval,
 		PaidAmount:      f.paidAmount, PaidAmountDisplay: money.FormatRubles(f.paidAmount),
@@ -1499,6 +1571,7 @@ func syncAccountBalances(ctx context.Context, db *sql.DB, userID string, account
 		return
 	}
 	_ = accountbalance.Refresh(ctx, db, userID, ids...)
+	balancehooks.NotifyRefresh(ctx, db, userID, ids...)
 }
 
 // TodayCutoffUTC returns end-of-today in user TZ as UTC datetime string for due payment queries.

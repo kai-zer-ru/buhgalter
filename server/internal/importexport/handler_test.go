@@ -29,7 +29,7 @@ func seedImportHandle(t *testing.T) (context.Context, *db.Handle, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	userID, err := auth.CreateUser(ctx, sqlDB, "importuser", hash, "Import", false)
+	userID, err := auth.CreateUser(ctx, sqlDB, "importuser", hash, "Import", false, auth.UserStatusActive)
 	if err != nil {
 		t.Fatal(err)
 	}
