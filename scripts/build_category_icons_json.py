@@ -70,6 +70,7 @@ ICONS: list[dict] = [
     {"id": "movie", "emoji": "🍿", "kind": "expense", "tags": ["кино", "фильм"]},
     {"id": "game", "emoji": "🎮", "kind": "expense", "tags": ["игры", "приставка"]},
     {"id": "music", "emoji": "🎵", "kind": "expense", "tags": ["музыка", "концерт"]},
+    {"id": "karaoke", "emoji": "🎤", "kind": "expense", "tags": ["караоке", "микрофон", "пение"]},
     {"id": "ticket", "emoji": "🎫", "kind": "expense", "tags": ["билеты", "мероприятие"]},
     {"id": "sport", "emoji": "⚽", "kind": "expense", "tags": ["спорт", "футбол"]},
     {"id": "tennis", "emoji": "🎾", "kind": "expense", "tags": ["теннис", "спорт"]},

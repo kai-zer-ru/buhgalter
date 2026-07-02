@@ -636,6 +636,17 @@
       "name": "Музыка"
     },
     {
+      "id": "karaoke",
+      "emoji": "🎤",
+      "kind": "expense",
+      "tags": [
+        "караоке",
+        "микрофон",
+        "пение"
+      ],
+      "name": "Караоке"
+    },
+    {
       "id": "ticket",
       "emoji": "🎫",
       "kind": "expense",
