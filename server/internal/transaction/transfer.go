@@ -128,6 +128,96 @@ func CreateTransfer(ctx context.Context, db *sql.DB, userID string, in TransferI
 	return GetTransfer(ctx, db, userID, groupID)
 }
 
+// CreateTransferForAccountDelete moves the full balance when deleting cash/bank accounts.
+// The source account may be active or archived; the target must be active.
+func CreateTransferForAccountDelete(ctx context.Context, db *sql.DB, userID string, in TransferInput) (Transfer, error) {
+	if in.FromAccountID == in.ToAccountID {
+		return Transfer{}, ErrSameAccount
+	}
+	if in.Amount <= 0 {
+		return Transfer{}, ErrInvalidAmount
+	}
+	if in.Commission != 0 {
+		return Transfer{}, ErrInvalidAmount
+	}
+	if err := validateAccountForTransfer(ctx, db, userID, in.FromAccountID, false); err != nil {
+		return Transfer{}, err
+	}
+	if err := validateAccountForTransfer(ctx, db, userID, in.ToAccountID, true); err != nil {
+		return Transfer{}, err
+	}
+	if err := validateCreditCardTransferAmount(ctx, db, userID, in.ToAccountID, in.Amount); err != nil {
+		return Transfer{}, err
+	}
+
+	kind, err := resolveKind(ctx, db, userID, in.TransactionDate)
+	if err != nil {
+		return Transfer{}, err
+	}
+
+	catID, err := ensureTransferCategory(ctx, db, userID)
+	if err != nil {
+		return Transfer{}, err
+	}
+	commissionCatID, err := categoryseed.CommissionCategoryID(ctx, db, userID)
+	if err != nil {
+		return Transfer{}, err
+	}
+	fromType, toType, err := accountTypes(ctx, db, userID, in.FromAccountID, in.ToAccountID)
+	if err != nil {
+		return Transfer{}, err
+	}
+	commissionDesc := transferCommissionDescription(fromType, toType)
+
+	groupID := uuid.NewString()
+	outNow := time.Now().UTC()
+	inNow := outNow.Add(time.Millisecond)
+	commissionNow := inNow.Add(time.Millisecond)
+	outCreated := outNow.Format(time.RFC3339Nano)
+	inCreated := inNow.Format(time.RFC3339Nano)
+	commissionCreated := commissionNow.Format(time.RFC3339Nano)
+	updated := outCreated
+	txDate := timeutil.FormatUTC(in.TransactionDate)
+	outID := uuid.NewString()
+	inID := uuid.NewString()
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return Transfer{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	q := queries(tx)
+	if err := q.InsertTransaction(ctx, sqlcdb.InsertTransactionParams{
+		ID: outID, UserID: userID, AccountID: in.FromAccountID,
+		Type: "transfer", Kind: kind, Amount: in.Amount, Description: in.Description,
+		CategoryID: &catID, SubcategoryID: nil,
+		TransferGroupID: &groupID, TransferAccountID: &in.ToAccountID,
+		TransactionDate: txDate, AffectsBalance: 1, CreatedAt: outCreated, UpdatedAt: updated,
+	}); err != nil {
+		return Transfer{}, fmt.Errorf("insert transfer out: %w", err)
+	}
+	if err := q.InsertTransaction(ctx, sqlcdb.InsertTransactionParams{
+		ID: inID, UserID: userID, AccountID: in.ToAccountID,
+		Type: "transfer", Kind: kind, Amount: in.Amount, Description: in.Description,
+		CategoryID: &catID, SubcategoryID: nil,
+		TransferGroupID: &groupID, TransferAccountID: &in.FromAccountID,
+		TransactionDate: txDate, AffectsBalance: 1, CreatedAt: inCreated, UpdatedAt: updated,
+	}); err != nil {
+		return Transfer{}, fmt.Errorf("insert transfer in: %w", err)
+	}
+	if err := insertTransferCommission(ctx, q, userID, groupID, in.FromAccountID, commissionCatID, 0, commissionDesc, kind, txDate, commissionCreated, updated); err != nil {
+		return Transfer{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return Transfer{}, err
+	}
+	if err := refreshAccountBalances(ctx, db, userID, in.FromAccountID, in.ToAccountID); err != nil {
+		return Transfer{}, err
+	}
+	return Transfer{GroupID: groupID}, nil
+}
+
 func UpdateTransfer(ctx context.Context, db *sql.DB, userID, groupID string, in TransferInput) (Transfer, error) {
 	if in.FromAccountID == in.ToAccountID {
 		return Transfer{}, ErrSameAccount
@@ -155,10 +245,10 @@ func UpdateTransfer(ctx context.Context, db *sql.DB, userID, groupID string, in 
 		return Transfer{}, ErrTransferNotFound
 	}
 
-	if err := validateActiveAccount(ctx, db, userID, in.FromAccountID); err != nil {
+	if err := validateAccountForTransfer(ctx, db, userID, in.FromAccountID, true); err != nil {
 		return Transfer{}, err
 	}
-	if err := validateActiveAccount(ctx, db, userID, in.ToAccountID); err != nil {
+	if err := validateAccountForTransfer(ctx, db, userID, in.ToAccountID, true); err != nil {
 		return Transfer{}, err
 	}
 	if err := validateCreditCardTransferAmount(ctx, db, userID, in.ToAccountID, in.Amount); err != nil {
@@ -432,10 +522,16 @@ func ensureTransferCategory(ctx context.Context, db *sql.DB, userID string) (str
 
 func accountTypes(ctx context.Context, db *sql.DB, userID, fromID, toID string) (string, string, error) {
 	fromRow, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: fromID, UserID: userID})
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", "", ErrInvalidAccount
+	}
 	if err != nil {
 		return "", "", err
 	}
 	toRow, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: toID, UserID: userID})
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", "", ErrInvalidAccount
+	}
 	if err != nil {
 		return "", "", err
 	}
@@ -456,6 +552,9 @@ func transferCommissionDescription(fromType, toType string) *string {
 
 func validateCreditCardTransferAmount(ctx context.Context, db *sql.DB, userID, toAccountID string, amount int64) error {
 	row, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: toAccountID, UserID: userID})
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrInvalidAccount
+	}
 	if err != nil {
 		return err
 	}

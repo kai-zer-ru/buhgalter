@@ -535,7 +535,7 @@ export type Account = {
 	credit_limit?: number | null;
 	credit_limit_display?: string | null;
 	payment_account_id?: string | null;
-	status: 'active' | 'archived';
+	status: 'active' | 'archived' | 'deleted';
 	is_primary: boolean;
 	created_at: string;
 	updated_at: string;
@@ -570,7 +570,7 @@ export type UIMetaAccountRef = {
 	id: string;
 	name: string;
 	type: AccountType;
-	status: 'active' | 'archived';
+	status: 'active' | 'archived' | 'deleted';
 	bank_id?: string;
 };
 
@@ -590,7 +590,7 @@ export async function getUIMeta() {
 	return meta;
 }
 
-export function listAccounts(status?: 'active' | 'archived') {
+export function listAccounts(status?: 'active' | 'archived' | 'deleted') {
 	const q = status ? `?status=${status}` : '';
 	const path = `/api/v1/accounts${q}`;
 	return request<Account[]>(path);
@@ -630,8 +630,11 @@ export function updateAccount(
 	});
 }
 
-export function archiveAccount(id: string) {
-	return request<Account>(`/api/v1/accounts/${id}/archive`, { method: 'POST' });
+export function archiveAccount(id: string, transferToAccountId?: string) {
+	const q = transferToAccountId
+		? `?transfer_to_account_id=${encodeURIComponent(transferToAccountId)}`
+		: '';
+	return request<Account>(`/api/v1/accounts/${id}/archive${q}`, { method: 'POST' });
 }
 
 export function unarchiveAccount(id: string) {
@@ -642,8 +645,11 @@ export function setPrimaryAccount(id: string) {
 	return request<Account>(`/api/v1/accounts/${id}/primary`, { method: 'POST' });
 }
 
-export function deleteAccount(id: string) {
-	return request<void>(`/api/v1/accounts/${id}`, { method: 'DELETE' });
+export function deleteAccount(id: string, transferToAccountId?: string) {
+	const q = transferToAccountId
+		? `?transfer_to_account_id=${encodeURIComponent(transferToAccountId)}`
+		: '';
+	return request<void>(`/api/v1/accounts/${id}${q}`, { method: 'DELETE' });
 }
 
 export function listCategories(type?: 'income' | 'expense') {
@@ -721,7 +727,9 @@ export type Transaction = {
 	id: string;
 	account_id: string;
 	account_name?: string;
+	account_status?: 'active' | 'archived' | 'deleted';
 	transfer_account_name?: string;
+	transfer_account_status?: 'active' | 'archived' | 'deleted';
 	type: 'income' | 'expense' | 'transfer';
 	kind: 'manual' | 'future';
 	amount: number;

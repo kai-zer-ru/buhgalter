@@ -38,6 +38,11 @@
 		void $locale;
 		return state.options.cancelLabel ?? tr('common.cancel');
 	});
+	const closeLabel = $derived.by(() => {
+		void $locale;
+		return state.options.cancelLabel ?? tr('common.close');
+	});
+	const acknowledgeOnly = $derived(Boolean(state.options.acknowledgeOnly));
 </script>
 
 {#if state.open}
@@ -63,20 +68,30 @@
 					{state.options.message}
 				</p>
 				<div class="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
-					<button
-						type="button"
-						class="btn-ghost w-full sm:w-auto"
-						onclick={() => resolveConfirm(false)}
-					>
-						{cancelLabel}
-					</button>
-					<button
-						type="button"
-						class="{state.options.danger ? 'btn-danger' : 'btn-primary'} w-full sm:w-auto"
-						onclick={onConfirm}
-					>
-						{confirmLabel}
-					</button>
+					{#if acknowledgeOnly}
+						<button
+							type="button"
+							class="btn-primary w-full sm:w-auto"
+							onclick={() => resolveConfirm(false)}
+						>
+							{closeLabel}
+						</button>
+					{:else}
+						<button
+							type="button"
+							class="btn-ghost w-full sm:w-auto"
+							onclick={() => resolveConfirm(false)}
+						>
+							{cancelLabel}
+						</button>
+						<button
+							type="button"
+							class="{state.options.danger ? 'btn-danger' : 'btn-primary'} w-full sm:w-auto"
+							onclick={onConfirm}
+						>
+							{confirmLabel}
+						</button>
+					{/if}
 				</div>
 			</div>
 		</div>

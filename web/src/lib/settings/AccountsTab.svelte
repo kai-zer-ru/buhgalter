@@ -12,7 +12,7 @@
 	import { user } from '$lib/stores/auth';
 
 	let accounts = $state<Account[]>([]);
-	let filter = $state<'active' | 'archived'>('active');
+	let filter = $state<'active' | 'archived' | 'deleted'>('active');
 	let loading = $state(true);
 	let filterLoading = $state(false);
 
@@ -36,7 +36,7 @@
 		void load();
 	});
 
-	function setFilter(next: 'active' | 'archived') {
+	function setFilter(next: 'active' | 'archived' | 'deleted') {
 		if (next === filter) return;
 		filter = next;
 		void load({ filterChange: true });
@@ -66,9 +66,10 @@
 		active={filter}
 		tabs={[
 			{ id: 'active', label: $_('accounts.filter.active') },
-			{ id: 'archived', label: $_('accounts.filter.archived') }
+			{ id: 'archived', label: $_('accounts.filter.archived') },
+			{ id: 'deleted', label: $_('accounts.filter.deleted') }
 		]}
-		onchange={(next) => setFilter(next as 'active' | 'archived')}
+		onchange={(next) => setFilter(next as 'active' | 'archived' | 'deleted')}
 	/>
 
 	{#if loading}

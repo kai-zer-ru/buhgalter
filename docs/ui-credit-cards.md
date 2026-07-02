@@ -67,7 +67,7 @@
 
 Иконка счёта (`AccountIcon`): логотип банка + бейдж «КК», чтобы отличать от дебетового счёта того же банка.
 
-**Архивация** — как у остальных счетов (`POST /accounts/{id}/archive`). Кредитную карту можно архивировать только при **полном погашении** (`balance >= credit_limit`); иначе API вернёт `ERR_CREDIT_CARD_ARCHIVE_NOT_FULLY_PAID`.
+**Архивация и удаление** — [accounts-archive-delete.md](accounts-archive-delete.md). Для `credit_card` перевод не нужен; закрытие только при `balance >= credit_limit`.
 
 ---
 

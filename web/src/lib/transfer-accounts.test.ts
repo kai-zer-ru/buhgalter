@@ -1,16 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import type { Account } from '$lib/api/client';
-import { pickOtherAccountId, transferAccountOptions } from './transfer-accounts';
+import {
+	defaultTransferAccountId,
+	pickOtherAccountId,
+	transferAccountOptions
+} from './transfer-accounts';
 
-function account(id: string, name: string): Account {
+function account(id: string, name: string, isPrimary = false): Account {
 	return {
 		id,
 		name,
 		type: 'cash',
+		bank_id: null,
+		initial_balance: 0,
 		balance: 0,
 		balance_display: '0.00',
-		is_primary: false,
-		is_archived: false,
+		status: 'active',
+		is_primary: isPrimary,
 		created_at: '2026-01-01T00:00:00Z',
 		updated_at: '2026-01-01T00:00:00Z'
 	};
@@ -35,6 +41,22 @@ describe('transferAccountOptions', () => {
 			{ value: 'a', label: 'A' },
 			{ value: 'b', label: 'B' }
 		]);
+	});
+});
+
+describe('defaultTransferAccountId', () => {
+	it('prefers primary account when not excluded', () => {
+		const accounts = [account('a', 'A'), account('b', 'B', true), account('c', 'C')];
+		expect(defaultTransferAccountId(accounts, 'a')).toBe('b');
+	});
+
+	it('falls back to first option when primary is excluded', () => {
+		const accounts = [account('a', 'A', true), account('b', 'B')];
+		expect(defaultTransferAccountId(accounts, 'a')).toBe('b');
+	});
+
+	it('returns empty string when no other account exists', () => {
+		expect(defaultTransferAccountId([account('a', 'A')], 'a')).toBe('');
 	});
 });
 

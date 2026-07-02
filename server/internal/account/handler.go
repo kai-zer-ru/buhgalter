@@ -209,26 +209,6 @@ func (h *Handler) setStatus(w http.ResponseWriter, r *http.Request, status, audi
 	writeJSON(w, http.StatusOK, acc)
 }
 
-func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
-	info, ok := auth.FromContext(r.Context())
-	if !ok {
-		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
-		return
-	}
-	id := chi.URLParam(r, "id")
-	err := Delete(r.Context(), h.Store.DB(), info.User.ID, id)
-	if errors.Is(err, ErrNotFound) {
-		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
-		return
-	}
-	if err != nil {
-		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
-		return
-	}
-	_ = h.Audit.Log("account.delete", info.User.ID, info.User.Login, clientIP(r), map[string]any{"account_id": id})
-	w.WriteHeader(http.StatusNoContent)
-}
-
 func writeAccountError(w http.ResponseWriter, r *http.Request, err error) error {
 	if err == nil {
 		return nil

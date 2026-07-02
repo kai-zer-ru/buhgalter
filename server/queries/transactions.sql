@@ -22,7 +22,9 @@ SELECT
     c.is_system AS category_is_system,
     s.name AS subcategory_name,
     a.name AS account_name,
+    a.status AS account_status,
     ta.name AS transfer_account_name,
+    ta.status AS transfer_account_status,
     CASE
         WHEN t.transfer_group_id IS NULL THEN 0
         WHEN t.id = (
@@ -63,7 +65,9 @@ SELECT
     c.is_system AS category_is_system,
     s.name AS subcategory_name,
     a.name AS account_name,
+    a.status AS account_status,
     ta.name AS transfer_account_name,
+    ta.status AS transfer_account_status,
     CASE
         WHEN t.transfer_group_id IS NULL THEN 0
         WHEN t.id = (
@@ -198,7 +202,9 @@ SELECT
     c.is_system AS category_is_system,
     s.name AS subcategory_name,
     a.name AS account_name,
+    a.status AS account_status,
     ta.name AS transfer_account_name,
+    ta.status AS transfer_account_status,
     CASE
         WHEN t.transfer_group_id IS NULL THEN 0
         WHEN t.id = (
@@ -248,7 +254,9 @@ SELECT
     c.is_system AS category_is_system,
     s.name AS subcategory_name,
     a.name AS account_name,
+    a.status AS account_status,
     ta.name AS transfer_account_name,
+    ta.status AS transfer_account_status,
     CASE
         WHEN t.transfer_group_id IS NULL THEN 0
         WHEN t.id = (
@@ -298,7 +306,9 @@ SELECT
     c.is_system AS category_is_system,
     s.name AS subcategory_name,
     a.name AS account_name,
+    a.status AS account_status,
     ta.name AS transfer_account_name,
+    ta.status AS transfer_account_status,
     CASE
         WHEN t.transfer_group_id IS NULL THEN 0
         WHEN t.id = (

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	debitAccounts,
+	isCreditCardFullyPaid,
 	maxCreditCardPaymentKopecks,
 	resolvePaymentAccountId,
 	creditCardExpenseWarning,
@@ -67,5 +68,16 @@ describe('credit-card helpers', () => {
 	it('creditCardExpenseWarning when expense exceeds balance', () => {
 		expect(creditCardExpenseWarning(1_000, 1_500)).toBe(true);
 		expect(creditCardExpenseWarning(1_000, 500)).toBe(false);
+	});
+
+	it('isCreditCardFullyPaid when balance reaches limit', () => {
+		const card = acc({
+			id: 'cc',
+			type: 'credit_card',
+			balance: 6_500_000,
+			credit_limit: 6_500_000
+		});
+		expect(isCreditCardFullyPaid(card)).toBe(true);
+		expect(isCreditCardFullyPaid({ ...card, balance: 1_000_000 })).toBe(false);
 	});
 });

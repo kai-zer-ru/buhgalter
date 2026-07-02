@@ -22,6 +22,14 @@ export function resolvePaymentAccountId(card: Account, accounts: Account[]): str
 	return debitAccounts(accounts)[0]?.id;
 }
 
+export function isCreditCardFullyPaid(
+	acc: Pick<Account, 'type' | 'balance' | 'credit_limit'>
+): boolean {
+	if (!isCreditCard(acc)) return true;
+	if (acc.credit_limit == null) return false;
+	return acc.balance >= acc.credit_limit;
+}
+
 export function maxCreditCardPaymentKopecks(card: Account): number | null {
 	if (!isCreditCard(card) || card.credit_limit == null) return null;
 	return Math.max(0, card.credit_limit - card.balance);
