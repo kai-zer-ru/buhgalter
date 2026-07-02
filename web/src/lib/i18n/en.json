@@ -255,6 +255,7 @@
 	"dashboard.total": "Total balance",
 	"dashboard.withPlans": "Including planned",
 	"dashboard.recent": "Recent transactions",
+	"dashboard.accountsSection": "Accounts",
 	"dashboard.group.past": "Past transactions",
 	"dashboard.group.planned": "Planned",
 	"dashboard.accountsEmpty": "Create your first account to track balances and transactions",
