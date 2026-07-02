@@ -278,6 +278,33 @@ test('dashboard: past transactions in open spoiler, planned collapsed', async ({
 	});
 });
 
+test('transactions page: past in open spoiler, planned collapsed', async ({ page }) => {
+	const account = await createCashAccount(page);
+	const pastDesc = `E2E tx past ${Date.now()}`;
+	const plannedDesc = `E2E tx planned ${Date.now()}`;
+	await createExpense(page, account.id, '42.00', pastDesc);
+	await createPlannedExpense(page, account.id, '51.00', plannedDesc);
+
+	await page.goto('/transactions');
+	await waitAppReady(page);
+
+	const pastGroup = page.locator('details').filter({ hasText: 'Прошлые операции' });
+	const plannedGroup = page.locator('details').filter({ hasText: 'Плановые' });
+	await expect(pastGroup).toHaveAttribute('open', '');
+	await expect(pastGroup.getByRole('row', { name: new RegExp(pastDesc) })).toBeVisible({
+		timeout: 10_000
+	});
+
+	await expect(plannedGroup).not.toHaveAttribute('open');
+	await expect(page.getByRole('row', { name: new RegExp(plannedDesc) })).toHaveCount(0);
+
+	await plannedGroup.locator('summary').click();
+	await expect(plannedGroup).toHaveAttribute('open', '');
+	await expect(plannedGroup.getByRole('row', { name: new RegExp(plannedDesc) })).toBeVisible({
+		timeout: 10_000
+	});
+});
+
 test('dashboard: planned transactions sorted newest first', async ({ page }) => {
 	const account = await createCashAccount(page);
 	const tag = Date.now();

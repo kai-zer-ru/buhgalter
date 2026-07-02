@@ -91,6 +91,11 @@
 			isActive: (p) => p.startsWith('/accounts')
 		},
 		{
+			href: resolve('/transactions'),
+			labelKey: 'nav.transactions',
+			isActive: (p) => p.startsWith('/transactions')
+		},
+		{
 			href: resolve('/debts'),
 			labelKey: 'nav.debts',
 			isActive: (p) => p.startsWith('/debts') || p.startsWith('/debtors')

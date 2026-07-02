@@ -28,6 +28,12 @@
 
 	let transactions = $state<Transaction[]>([]);
 	let total = $state(0);
+	let pastTx = $state<Transaction[]>([]);
+	let pastTotal = $state(0);
+	let pastLoading = $state(false);
+	let plannedTx = $state<Transaction[]>([]);
+	let plannedTotal = $state(0);
+	let plannedLoading = $state(false);
 	let page = $state(1);
 	const limit = 20;
 	let loading = $state(true);
@@ -53,7 +59,12 @@
 	let lastFiltersKey = $state('');
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
+	const splitMode = $derived(!kind);
 	const visibleTx = $derived(dedupeTransferLegs(transactions));
+	const pastVisible = $derived(dedupeTransferLegs(pastTx));
+	const plannedVisible = $derived(dedupeTransferLegs(plannedTx));
+	const txSiblings = $derived(splitMode ? [...pastTx, ...plannedTx] : transactions);
+	const listTransactionCount = $derived(splitMode ? plannedTotal + pastTotal : total);
 
 	onMount(async () => {
 		readURLState();
@@ -83,15 +94,24 @@
 		search = q.get('search') ?? '';
 	}
 
-	function statsContextParams() {
+	function baseFilterParams() {
 		const params: Record<string, string> = {};
 		if (fromLocal) params.from = fromDateLocalStart(fromLocal, tz);
 		if (toLocal) params.to = fromDateLocalEnd(toLocal, tz);
 		if (type) params.type = type;
 		if (categoryId) params.category_id = categoryId;
 		if (accountId) params.account_id = accountId;
-		if (kind) params.kind = kind;
 		if (search.trim()) params.search = search.trim();
+		return params;
+	}
+
+	function statsContextParams() {
+		const params = baseFilterParams();
+		if (kind) {
+			params.kind = kind;
+		} else {
+			params.include_future = 'true';
+		}
 		return params;
 	}
 
@@ -123,15 +143,58 @@
 		categories = Object.values(uniqueByID).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
 	}
 
-	async function load(initial = false) {
-		if (initial) loading = true;
-		else filterLoading = true;
+	async function loadSplit() {
+		const base = baseFilterParams();
+		pastLoading = true;
+		plannedLoading = true;
+		try {
+			const [pastRes, plannedRes] = await Promise.all([
+				listTransactions({
+					...base,
+					kind: 'manual',
+					sort: 'date_desc',
+					page: String(page),
+					limit: String(limit)
+				}),
+				listTransactions({
+					...base,
+					kind: 'future',
+					sort: 'date_desc',
+					page: '1',
+					limit: String(limit)
+				})
+			]);
+			pastTx = pastRes.data;
+			pastTotal = pastRes.meta.total;
+			plannedTx = plannedRes.data;
+			plannedTotal = plannedRes.meta.total;
+		} catch (err) {
+			toast.fromError(err);
+		} finally {
+			pastLoading = false;
+			plannedLoading = false;
+		}
+	}
+
+	async function loadFlat() {
 		try {
 			const result = await listTransactions(requestParams());
 			transactions = result.data;
 			total = result.meta.total;
 		} catch (err) {
 			toast.fromError(err);
+		}
+	}
+
+	async function load(initial = false) {
+		if (initial) loading = true;
+		else filterLoading = true;
+		try {
+			if (splitMode) {
+				await loadSplit();
+			} else {
+				await loadFlat();
+			}
 		} finally {
 			loading = false;
 			filterLoading = false;
@@ -274,10 +337,113 @@
 		onreset={resetFilters}
 	/>
 
-	<TransactionContextStats params={statsContextParams()} />
+	<TransactionContextStats params={statsContextParams()} transactionCount={listTransactionCount} />
 
 	{#if loading}
 		<p style:color="var(--text-muted)">{$_('common.loading')}</p>
+	{:else if splitMode}
+		<div class="relative space-y-3">
+			<div class="card overflow-hidden" class:opacity-60={filterLoading}>
+				{#if !pastLoading && !plannedLoading && pastTotal === 0 && plannedTotal === 0}
+					<p
+						class="flex min-h-[7rem] items-center justify-center px-4 py-6 text-center text-sm"
+						style:color="var(--text-muted)"
+					>
+						{$_('transactions.empty')}
+					</p>
+				{:else}
+					{#if plannedTotal > 0 || plannedLoading}
+						<details
+							class:border-b={pastTotal > 0 || pastLoading}
+							style:border-color="var(--border)"
+						>
+							<summary
+								class="cursor-pointer list-none px-4 py-3 text-sm font-medium select-none [&::-webkit-details-marker]:hidden"
+							>
+								{$_('dashboard.group.planned')}
+								<span class="ml-1 font-normal tabular-nums" style:color="var(--text-muted)">
+									({plannedTotal})
+								</span>
+							</summary>
+							{#if plannedLoading}
+								<p class="px-4 pb-4 text-sm" style:color="var(--text-muted)">
+									{$_('common.loading')}
+								</p>
+							{:else}
+								<div class="md:overflow-x-auto">
+									<TransactionList
+										transactions={plannedVisible}
+										siblings={txSiblings}
+										{tz}
+										emptyMessage={$_('transactions.empty')}
+										showDescription
+										showEdit
+										showDelete
+										onmakeRecurring={(tx) =>
+											void goto(
+												resolve(
+													`/settings/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`
+												)
+											)}
+										onrepeat={openRepeat}
+										onedit={openEdit}
+										ondelete={(tx) => void removeTx(tx)}
+									/>
+								</div>
+							{/if}
+						</details>
+					{/if}
+
+					{#if pastTotal > 0 || pastLoading}
+						<details open>
+							<summary
+								class="cursor-pointer list-none px-4 py-3 text-sm font-medium select-none [&::-webkit-details-marker]:hidden"
+							>
+								{$_('dashboard.group.past')}
+								<span class="ml-1 font-normal tabular-nums" style:color="var(--text-muted)">
+									({pastTotal})
+								</span>
+							</summary>
+							{#if pastLoading}
+								<p class="px-4 pb-4 text-sm" style:color="var(--text-muted)">
+									{$_('common.loading')}
+								</p>
+							{:else}
+								<div class="md:overflow-x-auto">
+									<TransactionList
+										transactions={pastVisible}
+										siblings={txSiblings}
+										{tz}
+										emptyMessage={$_('transactions.empty')}
+										showDescription
+										showEdit
+										showDelete
+										onmakeRecurring={(tx) =>
+											void goto(
+												resolve(
+													`/settings/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`
+												)
+											)}
+										onrepeat={openRepeat}
+										onedit={openEdit}
+										ondelete={(tx) => void removeTx(tx)}
+									/>
+								</div>
+							{/if}
+						</details>
+					{/if}
+				{/if}
+			</div>
+			{#if filterLoading}
+				<p
+					class="absolute inset-0 flex items-center justify-center text-sm"
+					style:color="var(--text-muted)"
+				>
+					{$_('common.loading')}
+				</p>
+			{/if}
+		</div>
+		<TransactionPagination {page} {limit} total={pastTotal} onchange={onPageChange} />
 	{:else}
 		<div class="relative space-y-3">
 			<div class="card md:overflow-x-auto" class:opacity-60={filterLoading}>
@@ -286,6 +452,7 @@
 					siblings={transactions}
 					{tz}
 					emptyMessage={$_('transactions.empty')}
+					showDescription
 					showEdit
 					showDelete
 					onmakeRecurring={(tx) =>
@@ -326,7 +493,7 @@
 	bind:open={transferOpen}
 	editTx={editTransfer}
 	repeatFrom={repeatTransfer}
-	siblings={transactions}
+	siblings={txSiblings}
 	onclose={() => {
 		transferOpen = false;
 		editTransfer = null;

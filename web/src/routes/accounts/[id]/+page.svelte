@@ -130,6 +130,23 @@
 		});
 	}
 
+	function accountStatsContextParams() {
+		const params: Record<string, string> = {
+			account_id: id,
+			from: fromLocal ? fromDateLocalStart(fromLocal, tz) : '',
+			to: toLocal ? fromDateLocalEnd(toLocal, tz) : '',
+			type: typeFilter,
+			category_id: categoryFilter,
+			search: searchFilter
+		};
+		if (kindFilter) {
+			params.kind = kindFilter;
+		} else {
+			params.include_future = 'true';
+		}
+		return params;
+	}
+
 	function readURLFilters() {
 		const q = $page.url.searchParams;
 		txPage = Number(q.get('page') || '1');
@@ -644,17 +661,7 @@
 				bind:search={searchFilter}
 			/>
 
-			<TransactionContextStats
-				params={{
-					account_id: id,
-					from: fromLocal ? fromDateLocalStart(fromLocal, tz) : '',
-					to: toLocal ? fromDateLocalEnd(toLocal, tz) : '',
-					type: typeFilter,
-					category_id: categoryFilter,
-					kind: kindFilter,
-					search: searchFilter
-				}}
-			/>
+			<TransactionContextStats params={accountStatsContextParams()} transactionCount={txTotal} />
 
 			<div class:opacity-60={filterLoading} class="card md:overflow-x-auto">
 				<TransactionList

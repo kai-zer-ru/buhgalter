@@ -7,9 +7,11 @@
 
 	type Props = {
 		params?: Record<string, string>;
+		/** Если задано — число операций из списка (совпадает с пагинацией / спойлерами), не из stats API */
+		transactionCount?: number;
 	};
 
-	let { params = {} }: Props = $props();
+	let { params = {}, transactionCount }: Props = $props();
 	let summary = $state<StatsContext | null>(null);
 	let loading = $state(false);
 
@@ -53,7 +55,7 @@
 			</div>
 			<div>
 				<p class="text-xs" style:color="var(--text-muted)">{$_('stats.context.count')}</p>
-				<p class="tabular-nums font-medium">{summary.transaction_count}</p>
+				<p class="tabular-nums font-medium">{transactionCount ?? summary.transaction_count}</p>
 			</div>
 			{#if summary.lent_total !== undefined}
 				<div>

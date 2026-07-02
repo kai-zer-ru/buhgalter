@@ -36,6 +36,20 @@ test('mobile menu navigates to stats', async ({ page }) => {
 	await expect(page.getByRole('heading', { name: 'Статистика', level: 1 })).toBeVisible();
 });
 
+test('mobile menu navigates to transactions', async ({ page }) => {
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.goto('/');
+	await waitAppReady(page);
+
+	await page.getByRole('button', { name: 'Меню' }).click();
+	await expect(page.locator('.nav-mobile-panel')).toBeVisible();
+	await page.locator('.nav-mobile-panel').getByRole('menuitem', { name: 'Операции' }).click();
+	await waitAppReady(page);
+
+	await expect(page).toHaveURL(/\/transactions/);
+	await expect(page.getByRole('heading', { name: 'Все операции', level: 1 })).toBeVisible();
+});
+
 test('dashboard link opens all transactions', async ({ page }) => {
 	await page.goto('/');
 	await waitAppReady(page);
@@ -99,6 +113,12 @@ test('nav links highlight active section', async ({ page }) => {
 	await waitAppReady(page);
 	await expect(
 		page.locator('header nav.hidden').getByRole('link', { name: 'Долги', exact: true })
+	).toHaveClass(/nav-link-active/);
+
+	await page.goto('/transactions');
+	await waitAppReady(page);
+	await expect(
+		page.locator('header nav.hidden').getByRole('link', { name: 'Операции', exact: true })
 	).toHaveClass(/nav-link-active/);
 });
 
