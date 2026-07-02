@@ -2,6 +2,7 @@
 
 @theme {
 	--font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+	--container-5xl: 80rem;
 	--color-brand-50: #ecfdf5;
 	--color-brand-100: #d1fae5;
 	--color-brand-500: #10b981;
