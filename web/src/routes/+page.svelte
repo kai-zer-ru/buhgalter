@@ -25,6 +25,7 @@
 	import { user } from '$lib/stores/auth';
 	import { tr } from '$lib/i18n';
 	import { budgetStatusLine } from '$lib/budget-display';
+	import { resolveAutoTopupSourceName } from '$lib/accounts/auto-topup';
 
 	let dash = $state<Dashboard | null>(null);
 	let loading = $state(true);
@@ -470,11 +471,12 @@
 									</p>
 								{/if}
 								{#if acc.type === 'bank'}
-									<p class="mt-1 text-sm" style:color="var(--text-muted)">
-										{acc.auto_topup_enabled
-											? $_('accounts.autoTopup.statusOn')
-											: $_('accounts.autoTopup.statusOff')}
-									</p>
+									{@const autoTopupSource = resolveAutoTopupSourceName(acc, dash.accounts)}
+									{#if autoTopupSource}
+										<p class="mt-1 text-sm" style:color="var(--text-muted)">
+											{$_('accounts.autoTopup.status', { values: { source: autoTopupSource } })}
+										</p>
+									{/if}
 								{/if}
 								{#if acc.forecast_balance !== acc.balance}
 									<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">

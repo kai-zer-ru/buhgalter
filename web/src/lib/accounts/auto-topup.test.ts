@@ -3,6 +3,7 @@ import {
 	autoTopupSourceOptions,
 	defaultAutoTopupSourceId,
 	isAutoTopupEligible,
+	resolveAutoTopupSourceName,
 	validateAutoTopupForm
 } from './auto-topup';
 import type { Account } from '$lib/api/client';
@@ -28,6 +29,40 @@ describe('isAutoTopupEligible', () => {
 		expect(isAutoTopupEligible(base({ type: 'cash' }))).toBe(false);
 		expect(isAutoTopupEligible(base({ type: 'credit_card' }))).toBe(false);
 		expect(isAutoTopupEligible(base({ status: 'archived' }))).toBe(false);
+	});
+});
+
+describe('resolveAutoTopupSourceName', () => {
+	it('returns source name when auto top-up is enabled', () => {
+		const accounts = [base({ id: 'b1', name: 'Яндекс' }), base({ id: 'b2', name: 'Сбер' })];
+		expect(
+			resolveAutoTopupSourceName(
+				{ auto_topup_enabled: true, auto_topup_source_account_id: 'b1' },
+				accounts
+			)
+		).toBe('Яндекс');
+	});
+
+	it('returns null when disabled or source is missing', () => {
+		const accounts = [base({ id: 'b1', name: 'Яндекс' })];
+		expect(
+			resolveAutoTopupSourceName(
+				{ auto_topup_enabled: false, auto_topup_source_account_id: 'b1' },
+				accounts
+			)
+		).toBeNull();
+		expect(
+			resolveAutoTopupSourceName(
+				{ auto_topup_enabled: true, auto_topup_source_account_id: null },
+				accounts
+			)
+		).toBeNull();
+		expect(
+			resolveAutoTopupSourceName(
+				{ auto_topup_enabled: true, auto_topup_source_account_id: 'missing' },
+				accounts
+			)
+		).toBeNull();
 	});
 });
 

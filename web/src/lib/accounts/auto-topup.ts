@@ -1,5 +1,18 @@
 import type { Account } from '$lib/api/client';
 
+type AutoTopupStatusAccount = Pick<Account, 'auto_topup_enabled' | 'auto_topup_source_account_id'>;
+type AccountNameLookup = Pick<Account, 'id' | 'name'>;
+
+export function resolveAutoTopupSourceName(
+	acc: AutoTopupStatusAccount,
+	accounts: AccountNameLookup[]
+): string | null {
+	if (!acc.auto_topup_enabled || !acc.auto_topup_source_account_id) {
+		return null;
+	}
+	return accounts.find((a) => a.id === acc.auto_topup_source_account_id)?.name ?? null;
+}
+
 export function isAutoTopupEligible(acc: Pick<Account, 'type' | 'status'>): boolean {
 	return acc.type === 'bank' && acc.status === 'active';
 }

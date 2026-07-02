@@ -33,7 +33,7 @@
 	import TransactionPagination from '$lib/components/TransactionPagination.svelte';
 	import TransferForm from '$lib/components/TransferForm.svelte';
 	import CreditCardFeeForm from '$lib/components/CreditCardFeeForm.svelte';
-	import { isAutoTopupEligible } from '$lib/accounts/auto-topup';
+	import { isAutoTopupEligible, resolveAutoTopupSourceName } from '$lib/accounts/auto-topup';
 	import AccountAutoTopupDialog from '$lib/components/AccountAutoTopupDialog.svelte';
 	import { isCreditCard } from '$lib/credit-card';
 	import {
@@ -601,11 +601,12 @@
 									</p>
 								{/if}
 								{#if acc.type === 'bank'}
-									<p class="mt-1 text-sm" style:color="var(--text-muted)">
-										{acc.auto_topup_enabled
-											? $_('accounts.autoTopup.statusOn')
-											: $_('accounts.autoTopup.statusOff')}
-									</p>
+									{@const autoTopupSource = resolveAutoTopupSourceName(acc, allAccounts)}
+									{#if autoTopupSource}
+										<p class="mt-1 text-sm" style:color="var(--text-muted)">
+											{$_('accounts.autoTopup.status', { values: { source: autoTopupSource } })}
+										</p>
+									{/if}
 								{/if}
 								{#if accBalance ? accBalance.forecast_balance !== accBalance.balance : false}
 									<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
