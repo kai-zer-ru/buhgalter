@@ -20,6 +20,8 @@
 	} from '$lib/accounts/account-inactive-prompt';
 	import CreditCardFeeForm from '$lib/components/CreditCardFeeForm.svelte';
 	import TransferForm from '$lib/components/TransferForm.svelte';
+	import { isAutoTopupEligible } from '$lib/accounts/auto-topup';
+	import AccountAutoTopupDialog from '$lib/components/AccountAutoTopupDialog.svelte';
 	import { isCreditCard } from '$lib/credit-card';
 	import BackLink from '$lib/components/BackLink.svelte';
 	import AccountIcon from '$lib/components/AccountIcon.svelte';
@@ -50,6 +52,7 @@
 	let editInitialBalance = $state('');
 	let payOpen = $state(false);
 	let feeOpen = $state(false);
+	let autoTopupOpen = $state(false);
 	let actionCard = $state<Account | null>(null);
 	let savingEditId = $state('');
 
@@ -239,6 +242,17 @@
 			disabled: busy || (editingId !== null && editingId !== acc.id),
 			onclick: () => startEdit(acc)
 		});
+		if (filter === 'active' && isAutoTopupEligible(acc)) {
+			actions.push({
+				icon: 'transfer',
+				label: $_('accounts.action.autoTopup'),
+				disabled: busy || editingId !== null,
+				onclick: () => {
+					actionCard = acc;
+					autoTopupOpen = true;
+				}
+			});
+		}
 		if (filter === 'active' && !acc.is_primary) {
 			actions.push({
 				icon: 'save',
@@ -485,6 +499,15 @@
 		account={actionCard}
 		onclose={() => {
 			feeOpen = false;
+			actionCard = null;
+		}}
+		onsaved={load}
+	/>
+	<AccountAutoTopupDialog
+		bind:open={autoTopupOpen}
+		account={actionCard}
+		onclose={() => {
+			autoTopupOpen = false;
 			actionCard = null;
 		}}
 		onsaved={load}

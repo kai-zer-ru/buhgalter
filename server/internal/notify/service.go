@@ -37,6 +37,7 @@ type SettingsView struct {
 	TriggerPlanned                bool           `json:"trigger_planned"`
 	TriggerNegativeBalance        bool           `json:"trigger_negative_balance"`
 	TriggerBudget                 bool           `json:"trigger_budget"`
+	TriggerAutoTopupDisabled      bool           `json:"trigger_auto_topup_disabled"`
 	TriggerUserRegistration       bool           `json:"trigger_user_registration"`
 	TriggerPasswordReset          bool           `json:"trigger_password_reset"`
 	DebtDaysBefore                int64          `json:"debt_days_before"`
@@ -67,6 +68,7 @@ type UpdateSettingsInput struct {
 	TriggerPlanned                *bool            `json:"trigger_planned,omitempty"`
 	TriggerNegativeBalance        *bool            `json:"trigger_negative_balance,omitempty"`
 	TriggerBudget                 *bool            `json:"trigger_budget,omitempty"`
+	TriggerAutoTopupDisabled      *bool            `json:"trigger_auto_topup_disabled,omitempty"`
 	TriggerUserRegistration       *bool            `json:"trigger_user_registration,omitempty"`
 	TriggerPasswordReset          *bool            `json:"trigger_password_reset,omitempty"`
 	DebtDaysBefore                *int64           `json:"debt_days_before,omitempty"`
@@ -132,6 +134,7 @@ func getSettingsOnce(ctx context.Context, sqlDB *sql.DB, userID string) (Setting
 		TriggerPlanned:                settings.TriggerPlanned == 1,
 		TriggerNegativeBalance:        settings.TriggerNegativeBalance == 1,
 		TriggerBudget:                 settings.TriggerBudget == 1,
+		TriggerAutoTopupDisabled:      settings.TriggerAutoTopupDisabled == 1,
 		TriggerUserRegistration:       isAdmin && regEnabled && settings.TriggerUserRegistration == 1,
 		TriggerPasswordReset:          isAdmin && settings.TriggerPasswordReset == 1,
 		DebtDaysBefore:                settings.DebtDaysBefore,
@@ -276,6 +279,9 @@ func UpdateSettings(ctx context.Context, db *sql.DB, userID string, in UpdateSet
 	if in.TriggerBudget != nil {
 		settings.TriggerBudget = boolToInt(*in.TriggerBudget)
 	}
+	if in.TriggerAutoTopupDisabled != nil {
+		settings.TriggerAutoTopupDisabled = boolToInt(*in.TriggerAutoTopupDisabled)
+	}
 	if in.TriggerUserRegistration != nil {
 		if !isAdmin {
 			return SettingsView{}, fmt.Errorf("trigger_user_registration is admin-only")
@@ -369,6 +375,7 @@ func UpdateSettings(ctx context.Context, db *sql.DB, userID string, in UpdateSet
 		TriggerPlanned:                settings.TriggerPlanned,
 		TriggerNegativeBalance:        settings.TriggerNegativeBalance,
 		TriggerBudget:                 settings.TriggerBudget,
+		TriggerAutoTopupDisabled:      settings.TriggerAutoTopupDisabled,
 		TriggerUserRegistration:       settings.TriggerUserRegistration,
 		TriggerPasswordReset:          settings.TriggerPasswordReset,
 		DebtDaysBefore:                settings.DebtDaysBefore,
@@ -784,6 +791,12 @@ func applyPreviewURLs(triggerType string, data FormatData, externalURL, localeCo
 		data["planned"] = FormatAmountDisplay(300000, currencyCode)
 		data["percent"] = "80"
 		data["budget_url"] = budgetURLPlaceholderValue(externalURL, localeCode)
+	case TriggerAutoTopupDisabled:
+		data["account"] = choose(normalizeLocale(localeCode) == "ru", "Яндекс", "Yandex")
+		data["source_account"] = choose(normalizeLocale(localeCode) == "ru", "Сбер", "Sber")
+		data["amount"] = FormatAmountDisplay(250000, currencyCode)
+		data["source_balance"] = FormatAmountDisplay(100000, currencyCode)
+		data["account_url"] = accountURLPlaceholderValue(externalURL, localeCode, previewAccountID)
 	case TriggerTest:
 		data["settings_url"] = settingsURLPlaceholderValue(externalURL, localeCode)
 	case TriggerPasswordReset:

@@ -37,6 +37,7 @@
 	let triggerPlanned = $state(true);
 	let triggerNegativeBalance = $state(true);
 	let triggerBudget = $state(true);
+	let triggerAutoTopupDisabled = $state(true);
 	let triggerPasswordReset = $state(true);
 	let debtDaysBefore = $state(1);
 	let myDebtOverdueDaysLimit = $state(7);
@@ -63,6 +64,7 @@
 		'planned_operation',
 		'balance_shortfall',
 		'budget_threshold',
+		'auto_topup_disabled',
 		'password_reset',
 		'test'
 	];
@@ -73,6 +75,7 @@
 		| 'planned'
 		| 'negativeBalance'
 		| 'budget'
+		| 'autoTopupDisabled'
 		| 'passwordReset';
 
 	const templateSettingKey: Partial<Record<string, NotificationTriggerKey>> = {
@@ -82,6 +85,7 @@
 		planned_operation: 'planned',
 		balance_shortfall: 'negativeBalance',
 		budget_threshold: 'budget',
+		auto_topup_disabled: 'autoTopupDisabled',
 		password_reset: 'passwordReset'
 	};
 
@@ -97,6 +101,8 @@
 				return triggerNegativeBalance;
 			case 'budget':
 				return triggerBudget;
+			case 'autoTopupDisabled':
+				return triggerAutoTopupDisabled;
 			case 'passwordReset':
 				return triggerPasswordReset;
 		}
@@ -119,6 +125,9 @@
 			case 'budget':
 				triggerBudget = !triggerBudget;
 				break;
+			case 'autoTopupDisabled':
+				triggerAutoTopupDisabled = !triggerAutoTopupDisabled;
+				break;
 			case 'passwordReset':
 				triggerPasswordReset = !triggerPasswordReset;
 				break;
@@ -131,7 +140,8 @@
 			{ key: 'credit', hintKey: 'credit_hint' },
 			{ key: 'planned', hintKey: 'planned_hint' },
 			{ key: 'negativeBalance', hintKey: 'negativeBalance_hint' },
-			{ key: 'budget', hintKey: 'budget_hint' }
+			{ key: 'budget', hintKey: 'budget_hint' },
+			{ key: 'autoTopupDisabled', hintKey: 'autoTopupDisabled_hint' }
 		];
 		if ($user?.is_admin) {
 			rows.push({ key: 'passwordReset', hintKey: 'passwordReset_hint' });
@@ -171,6 +181,8 @@
 		triggerNegativeBalance =
 			'trigger_negative_balance' in data ? data.trigger_negative_balance : true;
 		triggerBudget = 'trigger_budget' in data ? data.trigger_budget : true;
+		triggerAutoTopupDisabled =
+			'trigger_auto_topup_disabled' in data ? data.trigger_auto_topup_disabled : true;
 		triggerPasswordReset = data.trigger_password_reset ?? true;
 		debtDaysBefore = data.debt_days_before;
 		myDebtOverdueDaysLimit = data.my_debt_overdue_days_limit ?? 7;
@@ -321,6 +333,7 @@
 				trigger_planned: triggerPlanned,
 				trigger_negative_balance: triggerNegativeBalance,
 				trigger_budget: triggerBudget,
+				trigger_auto_topup_disabled: triggerAutoTopupDisabled,
 				trigger_password_reset: $user?.is_admin ? triggerPasswordReset : undefined,
 				debt_days_before: debtDaysBefore,
 				my_debt_overdue_days_limit: myDebtOverdueDaysLimit,

@@ -9,6 +9,7 @@ const (
 	previewDebtID        = "00000000-0000-0000-0000-000000000002"
 	previewCreditID      = "00000000-0000-0000-0000-000000000003"
 	previewTransactionID = "00000000-0000-0000-0000-000000000004"
+	previewAccountID     = "00000000-0000-0000-0000-000000000005"
 )
 
 func trimExternalURL(externalURL string) string {
@@ -65,6 +66,23 @@ func settingsNotificationsPath() string {
 
 func budgetPath() string {
 	return "/budget"
+}
+
+func accountPath(accountID string) string {
+	accountID = strings.TrimSpace(accountID)
+	if accountID == "" {
+		return ""
+	}
+	return "/accounts/" + url.PathEscape(accountID)
+}
+
+func accountURLPlaceholderValue(externalURL, localeCode, accountID string) string {
+	return externalURLPlaceholderValue(externalURL, localeCode, accountPath(accountID))
+}
+
+// AccountURLPlaceholderValue builds a link to the account page for notifications.
+func AccountURLPlaceholderValue(externalURL, localeCode, accountID string) string {
+	return accountURLPlaceholderValue(externalURL, localeCode, accountID)
 }
 
 func budgetURLPlaceholderValue(externalURL, localeCode string) string {

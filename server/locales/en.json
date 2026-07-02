@@ -119,6 +119,7 @@
   "notifications.templates.planned_operation": "Planned transaction: {type} {amount} — {description}\n{transaction_url}",
   "notifications.templates.balance_shortfall": "Insufficient balance: {amount} short!",
   "notifications.templates.budget_threshold": "{name}: spent {spent} of {planned} ({percent}%)\n{budget_url}",
+  "notifications.templates.auto_topup_disabled": "Auto top-up for \"{account}\" disabled: \"{source_account}\" is short by {amount} (balance {source_balance}).\n{account_url}",
   "notifications.templates.password_reset": "Password reset requested by {display_name} (@{login}) at {requested_at}.\n{reset_url}",
   "notifications.templates.user_registration": "New registration: {display_name} (@{login}), {registered_at}. Moderation: {moderation_url}",
   "notifications.templates.test": "Buhgalter test notification. Channel: {channel}.\n{settings_url}"

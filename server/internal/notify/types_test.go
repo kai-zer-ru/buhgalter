@@ -10,13 +10,14 @@ func TestTemplateSettingEnabled(t *testing.T) {
 	t.Parallel()
 
 	allOn := sqlcdb.NotificationSetting{
-		TriggerDebt:             1,
-		TriggerCredit:           1,
-		TriggerPlanned:          1,
-		TriggerNegativeBalance:  1,
-		TriggerBudget:           1,
-		TriggerPasswordReset:    1,
-		TriggerUserRegistration: 1,
+		TriggerDebt:              1,
+		TriggerCredit:            1,
+		TriggerPlanned:           1,
+		TriggerNegativeBalance:   1,
+		TriggerBudget:            1,
+		TriggerAutoTopupDisabled: 1,
+		TriggerPasswordReset:     1,
+		TriggerUserRegistration:  1,
 	}
 	allOff := sqlcdb.NotificationSetting{}
 
@@ -31,6 +32,7 @@ func TestTemplateSettingEnabled(t *testing.T) {
 		{TriggerPlannedOp, true, false},
 		{TriggerBalanceShortfall, true, false},
 		{TriggerBudgetThreshold, true, false},
+		{TriggerAutoTopupDisabled, true, false},
 		{TriggerPasswordReset, true, false},
 		{TriggerUserRegistration, true, false},
 		{TriggerTest, true, true},

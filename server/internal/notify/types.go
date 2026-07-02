@@ -3,15 +3,16 @@ package notify
 import sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 
 const (
-	TriggerDebtOverdue      = "debt_overdue"
-	TriggerDebtDueSoon      = "debt_due_soon"
-	TriggerCreditPayment    = "credit_payment"
-	TriggerPlannedOp        = "planned_operation"
-	TriggerBalanceShortfall = "balance_shortfall"
-	TriggerBudgetThreshold  = "budget_threshold"
-	TriggerUserRegistration = "user_registration"
-	TriggerPasswordReset    = "password_reset"
-	TriggerTest             = "test"
+	TriggerDebtOverdue       = "debt_overdue"
+	TriggerDebtDueSoon       = "debt_due_soon"
+	TriggerCreditPayment     = "credit_payment"
+	TriggerPlannedOp         = "planned_operation"
+	TriggerBalanceShortfall  = "balance_shortfall"
+	TriggerBudgetThreshold   = "budget_threshold"
+	TriggerAutoTopupDisabled = "auto_topup_disabled"
+	TriggerUserRegistration  = "user_registration"
+	TriggerPasswordReset     = "password_reset"
+	TriggerTest              = "test"
 )
 
 const (
@@ -31,21 +32,23 @@ var triggerOrder = []string{
 	TriggerPlannedOp,
 	TriggerBalanceShortfall,
 	TriggerBudgetThreshold,
+	TriggerAutoTopupDisabled,
 	TriggerUserRegistration,
 	TriggerPasswordReset,
 	TriggerTest,
 }
 
 var triggerPlaceholders = map[string][]string{
-	TriggerDebtOverdue:      {"debtor", "amount", "due_date", "debt_url"},
-	TriggerDebtDueSoon:      {"debtor", "amount", "due_date", "days", "debt_url"},
-	TriggerCreditPayment:    {"credit", "amount", "payment_date", "when", "credit_url"},
-	TriggerPlannedOp:        {"type", "amount", "description", "date", "transaction_url"},
-	TriggerBalanceShortfall: {"amount"},
-	TriggerBudgetThreshold:  {"name", "spent", "planned", "percent", "budget_url"},
-	TriggerUserRegistration: {"login", "display_name", "registered_at", "moderation_url"},
-	TriggerPasswordReset:    {"login", "display_name", "requested_at", "reset_url"},
-	TriggerTest:             {"channel", "settings_url"},
+	TriggerDebtOverdue:       {"debtor", "amount", "due_date", "debt_url"},
+	TriggerDebtDueSoon:       {"debtor", "amount", "due_date", "days", "debt_url"},
+	TriggerCreditPayment:     {"credit", "amount", "payment_date", "when", "credit_url"},
+	TriggerPlannedOp:         {"type", "amount", "description", "date", "transaction_url"},
+	TriggerBalanceShortfall:  {"amount"},
+	TriggerBudgetThreshold:   {"name", "spent", "planned", "percent", "budget_url"},
+	TriggerAutoTopupDisabled: {"account", "source_account", "amount", "source_balance", "account_url"},
+	TriggerUserRegistration:  {"login", "display_name", "registered_at", "moderation_url"},
+	TriggerPasswordReset:     {"login", "display_name", "requested_at", "reset_url"},
+	TriggerTest:              {"channel", "settings_url"},
 }
 
 func IsAdminOnlyTrigger(triggerType string) bool {
@@ -68,6 +71,8 @@ func TemplateSettingEnabled(settings sqlcdb.NotificationSetting, triggerType str
 		return settings.TriggerNegativeBalance == 1
 	case TriggerBudgetThreshold:
 		return settings.TriggerBudget == 1
+	case TriggerAutoTopupDisabled:
+		return settings.TriggerAutoTopupDisabled == 1
 	case TriggerPasswordReset:
 		return settings.TriggerPasswordReset == 1
 	case TriggerUserRegistration:

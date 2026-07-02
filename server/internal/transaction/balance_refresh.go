@@ -5,10 +5,18 @@ import (
 	"database/sql"
 
 	"github.com/kai-zer-ru/buhgalter/internal/accountbalance"
+	"github.com/kai-zer-ru/buhgalter/internal/balancehooks"
 )
 
+// AfterBalanceRefresh is deprecated; use balancehooks.AfterRefresh from main.
+var AfterBalanceRefresh = balancehooks.NotifyRefresh
+
 func refreshAccountBalances(ctx context.Context, db *sql.DB, userID string, accountIDs ...string) error {
-	return accountbalance.Refresh(ctx, db, userID, accountIDs...)
+	if err := accountbalance.Refresh(ctx, db, userID, accountIDs...); err != nil {
+		return err
+	}
+	balancehooks.NotifyRefresh(ctx, db, userID, accountIDs...)
+	return nil
 }
 
 func uniqueAccountIDs(ids ...string) []string {

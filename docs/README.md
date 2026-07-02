@@ -30,6 +30,7 @@
 | [budget.md](budget.md) | Бюджет: помесячные лимиты, копирование, план vs факт, API |
 | [transactions-display.md](transactions-display.md) | Отображение операций в UI и API |
 | [accounts-archive-delete.md](accounts-archive-delete.md) | Архивация, мягкое удаление счётов, автоперевод остатка |
+| [balance-maintenance.md](balance-maintenance.md) | Автопополнение банковских счетов по порогу баланса |
 
 ---
 
@@ -52,6 +53,7 @@
 | [ui-budget.md](ui-budget.md) | Страница `/budget`, форма, копирование, виджет на главной (спойлер категорий) |
 | [ui-credits.md](ui-credits.md) | Страницы кредитов |
 | [ui-credit-cards.md](ui-credit-cards.md) | Кредитные карты (тип счёта) |
+| [ui-balance-maintenance.md](ui-balance-maintenance.md) | Автопополнение банковского счёта |
 
 ---
 

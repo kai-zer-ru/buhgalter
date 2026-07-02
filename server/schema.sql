@@ -84,6 +84,10 @@ CREATE TABLE accounts (
     current_balance     INTEGER NOT NULL DEFAULT 0,
     credit_limit        INTEGER,
     payment_account_id  TEXT REFERENCES accounts(id),
+    auto_topup_enabled  INTEGER NOT NULL DEFAULT 0,
+    auto_topup_threshold INTEGER,
+    auto_topup_target   INTEGER,
+    auto_topup_source_account_id TEXT REFERENCES accounts(id),
     status              TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'archived', 'deleted')),
     is_primary          INTEGER NOT NULL DEFAULT 0,
     created_at          TEXT NOT NULL DEFAULT (datetime('now')),
@@ -312,6 +316,7 @@ CREATE TABLE notification_settings (
     trigger_planned     INTEGER NOT NULL DEFAULT 1,
     trigger_negative_balance INTEGER NOT NULL DEFAULT 1,
     trigger_budget INTEGER NOT NULL DEFAULT 1,
+    trigger_auto_topup_disabled INTEGER NOT NULL DEFAULT 1,
     trigger_user_registration INTEGER NOT NULL DEFAULT 1,
     trigger_password_reset INTEGER NOT NULL DEFAULT 1,
     debt_days_before    INTEGER NOT NULL DEFAULT 1,
@@ -341,7 +346,7 @@ CREATE TABLE notification_templates (
     user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     trigger_type    TEXT NOT NULL CHECK (trigger_type IN (
                         'debt_overdue', 'debt_due_soon', 'credit_payment', 'planned_operation',
-                        'balance_shortfall', 'budget_threshold',
+                        'balance_shortfall', 'budget_threshold', 'auto_topup_disabled',
                         'user_registration', 'password_reset', 'test'
                     )),
     template        TEXT NOT NULL,

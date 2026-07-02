@@ -137,6 +137,7 @@ export type NotificationSettings = {
 	trigger_planned: boolean;
 	trigger_negative_balance: boolean;
 	trigger_budget: boolean;
+	trigger_auto_topup_disabled: boolean;
 	trigger_password_reset?: boolean;
 	trigger_user_registration?: boolean;
 	debt_days_before: number;
@@ -162,6 +163,7 @@ export type NotificationSettingsUpdate = {
 	trigger_planned?: boolean;
 	trigger_negative_balance?: boolean;
 	trigger_budget?: boolean;
+	trigger_auto_topup_disabled?: boolean;
 	trigger_password_reset?: boolean;
 	trigger_user_registration?: boolean;
 	debt_days_before?: number;
@@ -535,6 +537,12 @@ export type Account = {
 	credit_limit?: number | null;
 	credit_limit_display?: string | null;
 	payment_account_id?: string | null;
+	auto_topup_enabled?: boolean;
+	auto_topup_threshold?: number | null;
+	auto_topup_threshold_display?: string | null;
+	auto_topup_target?: number | null;
+	auto_topup_target_display?: string | null;
+	auto_topup_source_account_id?: string | null;
 	status: 'active' | 'archived' | 'deleted';
 	is_primary: boolean;
 	created_at: string;
@@ -622,6 +630,10 @@ export function updateAccount(
 		initial_balance?: string;
 		credit_limit?: string;
 		payment_account_id?: string | null;
+		auto_topup_enabled?: boolean;
+		auto_topup_threshold?: string;
+		auto_topup_target?: string;
+		auto_topup_source_account_id?: string;
 	}
 ) {
 	return request<Account>(`/api/v1/accounts/${id}`, {
@@ -834,6 +846,12 @@ export type AccountBalanceSummary = {
 	has_future_this_month: boolean;
 	credit_limit?: number | null;
 	credit_limit_display?: string | null;
+	auto_topup_enabled?: boolean;
+	auto_topup_threshold?: number | null;
+	auto_topup_threshold_display?: string | null;
+	auto_topup_target?: number | null;
+	auto_topup_target_display?: string | null;
+	auto_topup_source_account_id?: string | null;
 };
 
 export type CreditCardsSummary = {

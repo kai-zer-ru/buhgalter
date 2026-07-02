@@ -15,17 +15,23 @@ import (
 )
 
 type AccountBalance struct {
-	ID                 string  `json:"id"`
-	Name               string  `json:"name"`
-	Type               string  `json:"type"`
-	BankIcon           *string `json:"bank_icon,omitempty"`
-	Balance            int64   `json:"balance"`
-	BalanceDisplay     string  `json:"balance_display"`
-	ForecastBalance    int64   `json:"forecast_balance"`
-	ForecastDisplay    string  `json:"forecast_display"`
-	HasFutureThisMonth bool    `json:"has_future_this_month"`
-	CreditLimit        *int64  `json:"credit_limit,omitempty"`
-	CreditLimitDisplay *string `json:"credit_limit_display,omitempty"`
+	ID                        string  `json:"id"`
+	Name                      string  `json:"name"`
+	Type                      string  `json:"type"`
+	BankIcon                  *string `json:"bank_icon,omitempty"`
+	Balance                   int64   `json:"balance"`
+	BalanceDisplay            string  `json:"balance_display"`
+	ForecastBalance           int64   `json:"forecast_balance"`
+	ForecastDisplay           string  `json:"forecast_display"`
+	HasFutureThisMonth        bool    `json:"has_future_this_month"`
+	CreditLimit               *int64  `json:"credit_limit,omitempty"`
+	CreditLimitDisplay        *string `json:"credit_limit_display,omitempty"`
+	AutoTopupEnabled          bool    `json:"auto_topup_enabled"`
+	AutoTopupThreshold        *int64  `json:"auto_topup_threshold,omitempty"`
+	AutoTopupThresholdDisplay *string `json:"auto_topup_threshold_display,omitempty"`
+	AutoTopupTarget           *int64  `json:"auto_topup_target,omitempty"`
+	AutoTopupTargetDisplay    *string `json:"auto_topup_target_display,omitempty"`
+	AutoTopupSourceAccountID  *string `json:"auto_topup_source_account_id,omitempty"`
 }
 
 type CreditCardsSummary struct {
@@ -142,19 +148,34 @@ func accountBalanceFromRow(
 	bankIcon *string,
 	balance int64,
 	creditLimit *int64,
+	autoTopupEnabled int64,
+	autoTopupThreshold, autoTopupTarget *int64,
+	autoTopupSourceAccountID *string,
 ) AccountBalance {
 	ab := AccountBalance{
-		ID:             id,
-		Name:           name,
-		Type:           accType,
-		BankIcon:       bankIcon,
-		Balance:        balance,
-		BalanceDisplay: money.FormatRubles(balance),
-		CreditLimit:    creditLimit,
+		ID:                       id,
+		Name:                     name,
+		Type:                     accType,
+		BankIcon:                 bankIcon,
+		Balance:                  balance,
+		BalanceDisplay:           money.FormatRubles(balance),
+		CreditLimit:              creditLimit,
+		AutoTopupEnabled:         autoTopupEnabled != 0,
+		AutoTopupThreshold:       autoTopupThreshold,
+		AutoTopupTarget:          autoTopupTarget,
+		AutoTopupSourceAccountID: autoTopupSourceAccountID,
 	}
 	if creditLimit != nil {
 		s := money.FormatRubles(*creditLimit)
 		ab.CreditLimitDisplay = &s
+	}
+	if autoTopupThreshold != nil {
+		s := money.FormatRubles(*autoTopupThreshold)
+		ab.AutoTopupThresholdDisplay = &s
+	}
+	if autoTopupTarget != nil {
+		s := money.FormatRubles(*autoTopupTarget)
+		ab.AutoTopupTargetDisplay = &s
 	}
 	return ab
 }
@@ -173,7 +194,14 @@ func EnrichAccountBalance(ctx context.Context, db *sql.DB, userID, accountID, ac
 		return AccountBalance{}, err
 	}
 	fc := forecasts[accountID]
-	ab := accountBalanceFromRow(accountID, accountName, accountType, bankIcon, bal, creditLimit)
+	accRow, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: accountID, UserID: userID})
+	if err != nil {
+		return AccountBalance{}, err
+	}
+	ab := accountBalanceFromRow(
+		accountID, accountName, accountType, bankIcon, bal, creditLimit,
+		accRow.AutoTopupEnabled, accRow.AutoTopupThreshold, accRow.AutoTopupTarget, accRow.AutoTopupSourceAccountID,
+	)
 	ab.ForecastBalance = fc.Balance
 	ab.ForecastDisplay = money.FormatRubles(fc.Balance)
 	ab.HasFutureThisMonth = fc.HasFutureThisMonth
@@ -189,7 +217,10 @@ func AccountsSummaryForUser(ctx context.Context, db *sql.DB, userID string) (Acc
 	out := make([]AccountBalance, 0, len(rows))
 	for _, row := range rows {
 		balances[row.ID] = row.CurrentBalance
-		ab := accountBalanceFromRow(row.ID, row.Name, row.Type, row.BankIcon, row.CurrentBalance, row.CreditLimit)
+		ab := accountBalanceFromRow(
+			row.ID, row.Name, row.Type, row.BankIcon, row.CurrentBalance, row.CreditLimit,
+			row.AutoTopupEnabled, row.AutoTopupThreshold, row.AutoTopupTarget, row.AutoTopupSourceAccountID,
+		)
 		ab.ForecastBalance = row.CurrentBalance
 		ab.ForecastDisplay = money.FormatRubles(row.CurrentBalance)
 		out = append(out, ab)

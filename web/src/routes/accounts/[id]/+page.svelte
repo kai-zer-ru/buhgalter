@@ -33,6 +33,8 @@
 	import TransactionPagination from '$lib/components/TransactionPagination.svelte';
 	import TransferForm from '$lib/components/TransferForm.svelte';
 	import CreditCardFeeForm from '$lib/components/CreditCardFeeForm.svelte';
+	import { isAutoTopupEligible } from '$lib/accounts/auto-topup';
+	import AccountAutoTopupDialog from '$lib/components/AccountAutoTopupDialog.svelte';
 	import { isCreditCard } from '$lib/credit-card';
 	import {
 		promptArchiveAccount,
@@ -69,6 +71,7 @@
 	let transferOpen = $state(false);
 	let payTransferOpen = $state(false);
 	let feeOpen = $state(false);
+	let autoTopupOpen = $state(false);
 	let editTx = $state<Transaction | null>(null);
 	let editTransfer = $state<Transaction | null>(null);
 	let repeatTx = $state<Transaction | null>(null);
@@ -346,6 +349,13 @@
 			label: $_('accounts.action.edit'),
 			onclick: () => (editing = true)
 		});
+		if (acc.status === 'active' && isAutoTopupEligible(acc)) {
+			actions.push({
+				icon: 'transfer',
+				label: $_('accounts.action.autoTopup'),
+				onclick: () => (autoTopupOpen = true)
+			});
+		}
 		if (acc.status === 'active' && !acc.is_primary) {
 			actions.push({
 				icon: 'save',
@@ -573,6 +583,13 @@
 										/>
 									</p>
 								{/if}
+								{#if acc.type === 'bank'}
+									<p class="mt-1 text-sm" style:color="var(--text-muted)">
+										{acc.auto_topup_enabled
+											? $_('accounts.autoTopup.statusOn')
+											: $_('accounts.autoTopup.statusOff')}
+									</p>
+								{/if}
 								{#if accBalance ? accBalance.forecast_balance !== accBalance.balance : false}
 									<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
 										{$_('dashboard.withPlans')}:
@@ -715,6 +732,12 @@
 		bind:open={feeOpen}
 		account={acc}
 		onclose={() => (feeOpen = false)}
+		onsaved={load}
+	/>
+	<AccountAutoTopupDialog
+		bind:open={autoTopupOpen}
+		account={acc}
+		onclose={() => (autoTopupOpen = false)}
 		onsaved={load}
 	/>
 {/if}
