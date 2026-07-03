@@ -1,12 +1,8 @@
 <script lang="ts">
 	import { portal } from '$lib/actions/portal';
 	import { dropdownListStyle } from '$lib/dropdown-position';
-
-	export type SelectOption = {
-		value: string;
-		label: string;
-		disabled?: boolean;
-	};
+	import SelectOptionIcon from '$lib/components/SelectOptionIcon.svelte';
+	import type { SelectOption } from '$lib/select-options';
 
 	let {
 		value = $bindable(''),
@@ -42,9 +38,8 @@
 
 	const listId = $derived(`${id}-list`);
 
-	const selectedLabel = $derived(
-		options.find((option) => option.value === value)?.label ?? placeholder
-	);
+	const selectedOption = $derived(options.find((option) => option.value === value));
+	const selectedLabel = $derived(selectedOption?.label ?? placeholder);
 
 	const visibleOptions = $derived(
 		options.filter((option) => !option.disabled || option.value === value)
@@ -148,9 +143,14 @@
 		onclick={toggle}
 		onkeydown={onTriggerKeydown}
 	>
-		<span class="min-w-0 truncate" style:color={value ? 'var(--text)' : 'var(--text-muted)'}
-			>{selectedLabel}</span
-		>
+		<span class="flex min-w-0 items-center gap-2">
+			{#if selectedOption?.icon}
+				<SelectOptionIcon icon={selectedOption.icon} />
+			{/if}
+			<span class="min-w-0 truncate" style:color={value ? 'var(--text)' : 'var(--text-muted)'}
+				>{selectedLabel}</span
+			>
+		</span>
 		<span class="shrink-0" aria-hidden="true" style:color="var(--text-muted)">▾</span>
 	</button>
 	{#if open}
@@ -169,7 +169,7 @@
 					<li>
 						<button
 							type="button"
-							class="w-full cursor-pointer px-4 py-2 text-left text-sm hover:opacity-90"
+							class="flex w-full cursor-pointer items-center gap-2 px-4 py-2 text-left text-sm hover:opacity-90"
 							class:font-medium={option.value === value}
 							style:background-color={index === highlighted || option.value === value
 								? 'color-mix(in srgb, var(--primary) 12%, transparent)'
@@ -178,7 +178,10 @@
 							onmousedown={(event) => event.preventDefault()}
 							onclick={() => selectOption(option.value)}
 						>
-							{option.label}
+							{#if option.icon}
+								<SelectOptionIcon icon={option.icon} />
+							{/if}
+							<span class="min-w-0 truncate">{option.label}</span>
 						</button>
 					</li>
 				{/each}

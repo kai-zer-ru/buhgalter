@@ -1,15 +1,14 @@
 import type { Account } from '$lib/api/client';
+import { accountSelectOption, type SelectOption } from '$lib/select-options';
 
-export type AccountSelectOption = { value: string; label: string };
+export type AccountSelectOption = SelectOption;
 
 /** Account options for transfer selects; excludes the account chosen in the opposite field. */
 export function transferAccountOptions(
 	accounts: readonly Account[],
 	excludeId: string
 ): AccountSelectOption[] {
-	return accounts
-		.filter((acc) => acc.id !== excludeId)
-		.map((acc) => ({ value: acc.id, label: acc.name }));
+	return accounts.filter((acc) => acc.id !== excludeId).map((acc) => accountSelectOption(acc));
 }
 
 /** Cash/bank with positive balance must transfer funds before archive or delete. */

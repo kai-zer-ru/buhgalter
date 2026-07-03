@@ -12,6 +12,7 @@
 		type Category,
 		type Transaction
 	} from '$lib/api/client';
+	import { accountsFromUIMeta } from '$lib/select-options';
 	import BackLink from '$lib/components/BackLink.svelte';
 	import NewTransactionButtons from '$lib/components/NewTransactionButtons.svelte';
 	import TransactionContextStats from '$lib/components/TransactionContextStats.svelte';
@@ -133,9 +134,10 @@
 
 	async function loadFilterOptions() {
 		const meta = await getUIMeta();
-		accounts = meta.accounts
-			.filter((acc) => acc.status === 'active')
-			.map((acc) => ({ id: acc.id, name: acc.name }) as Account);
+		accounts = accountsFromUIMeta(
+			meta.accounts.filter((acc) => acc.status === 'active'),
+			meta.banks
+		) as Account[];
 		const uniqueByID: Record<string, Category> = {};
 		for (const cat of [...meta.expense_categories, ...meta.income_categories]) {
 			uniqueByID[cat.id] = cat;

@@ -22,24 +22,28 @@ function account(id: string, name: string, isPrimary = false): Account {
 	};
 }
 
+function cashIcon() {
+	return { type: 'account' as const, accountType: 'cash' as const, bankIcon: undefined };
+}
+
 describe('transferAccountOptions', () => {
 	it('excludes the selected account from the opposite select', () => {
 		const accounts = [account('a', 'Yandex'), account('b', 'Cash'), account('c', 'Bank')];
 		expect(transferAccountOptions(accounts, 'a')).toEqual([
-			{ value: 'b', label: 'Cash' },
-			{ value: 'c', label: 'Bank' }
+			{ value: 'b', label: 'Cash', icon: cashIcon() },
+			{ value: 'c', label: 'Bank', icon: cashIcon() }
 		]);
 		expect(transferAccountOptions(accounts, 'b')).toEqual([
-			{ value: 'a', label: 'Yandex' },
-			{ value: 'c', label: 'Bank' }
+			{ value: 'a', label: 'Yandex', icon: cashIcon() },
+			{ value: 'c', label: 'Bank', icon: cashIcon() }
 		]);
 	});
 
 	it('returns all accounts when exclude id is empty', () => {
 		const accounts = [account('a', 'A'), account('b', 'B')];
 		expect(transferAccountOptions(accounts, '')).toEqual([
-			{ value: 'a', label: 'A' },
-			{ value: 'b', label: 'B' }
+			{ value: 'a', label: 'A', icon: cashIcon() },
+			{ value: 'b', label: 'B', icon: cashIcon() }
 		]);
 	});
 });

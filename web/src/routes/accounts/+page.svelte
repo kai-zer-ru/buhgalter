@@ -30,6 +30,7 @@
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
 	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
 	import Select from '$lib/components/Select.svelte';
+	import { accountSelectOptions } from '$lib/select-options';
 	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
 	import { formatMoneyForInput, toAPIAmount } from '$lib/money';
 	import { toast } from '$lib/toast';
@@ -97,9 +98,7 @@
 	}
 
 	const paymentOptions = $derived(
-		activeAccounts
-			.filter((a) => a.type !== 'credit_card')
-			.map((a) => ({ value: a.id, label: a.name }))
+		accountSelectOptions(activeAccounts.filter((a) => a.type !== 'credit_card'))
 	);
 
 	function startEdit(acc: Account) {

@@ -15,6 +15,7 @@
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import { debitAccounts } from '$lib/credit-card';
+	import { accountSelectOptions } from '$lib/select-options';
 	import { toast } from '$lib/toast';
 	import { bankIconUrl } from '$lib/finance';
 	import { toAPIAmount } from '$lib/money';
@@ -34,9 +35,7 @@
 		banks.filter((b) => b.name.toLowerCase().includes(bankSearch.toLowerCase()))
 	);
 	const needsBank = $derived(type === 'bank' || type === 'credit_card');
-	const paymentOptions = $derived(
-		debitAccounts(debitAccountList).map((a) => ({ value: a.id, label: a.name }))
-	);
+	const paymentOptions = $derived(accountSelectOptions(debitAccounts(debitAccountList)));
 
 	onMount(async () => {
 		try {

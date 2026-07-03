@@ -34,6 +34,7 @@
 	import TransferForm from '$lib/components/TransferForm.svelte';
 	import CreditCardFeeForm from '$lib/components/CreditCardFeeForm.svelte';
 	import { isAutoTopupEligible, resolveAutoTopupSourceName } from '$lib/accounts/auto-topup';
+	import { accountSelectOptions } from '$lib/select-options';
 	import AccountAutoTopupDialog from '$lib/components/AccountAutoTopupDialog.svelte';
 	import { isCreditCard } from '$lib/credit-card';
 	import {
@@ -92,9 +93,9 @@
 	const bankOptions = $derived(banks.map((bank) => ({ value: bank.id, label: bank.name })));
 	let allAccounts = $state<Account[]>([]);
 	const debitPaymentOptions = $derived(
-		allAccounts
-			.filter((a) => a.status === 'active' && a.type !== 'credit_card' && a.id !== id)
-			.map((a) => ({ value: a.id, label: a.name }))
+		accountSelectOptions(
+			allAccounts.filter((a) => a.status === 'active' && a.type !== 'credit_card' && a.id !== id)
+		)
 	);
 
 	let loadedForID = $state('');

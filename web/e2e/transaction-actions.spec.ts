@@ -231,8 +231,9 @@ test('transfer form excludes selected account from opposite select', async ({ pa
 });
 
 test('create transfer with commission', async ({ page }) => {
-	const from = await createCashAccount(page, 'E2E Comm From');
-	const to = await createCashAccount(page, 'E2E Comm To');
+	const tag = Date.now();
+	const from = await createCashAccount(page, `E2E Comm From ${tag}`);
+	const to = await createCashAccount(page, `E2E Comm To ${tag}`);
 
 	await page.goto('/');
 	await waitAppReady(page);
@@ -248,7 +249,14 @@ test('create transfer with commission', async ({ page }) => {
 
 	await page.goto('/transactions');
 	await waitAppReady(page);
-	await expect(page.getByText('5.00').first()).toBeVisible({ timeout: 10_000 });
+	await selectCombobox(page, 'tx-filter-account', { label: from.name });
+
+	await expect(
+		page.getByRole('row', { name: new RegExp(`${from.name}.*${to.name}.*100`) })
+	).toBeVisible({ timeout: 10_000 });
+	await expect(page.getByRole('row', { name: new RegExp(`${from.name}.*5\\.00`) })).toBeVisible({
+		timeout: 10_000
+	});
 });
 
 test('dashboard: past transactions in open spoiler, planned collapsed', async ({ page }) => {

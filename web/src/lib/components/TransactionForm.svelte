@@ -24,6 +24,11 @@
 	import { defaultAccountId } from '$lib/accounts';
 	import { creditCardExpenseWarning, isCreditCard } from '$lib/credit-card';
 	import { formatMoneyForInput, toAPIAmount, toCents } from '$lib/money';
+	import {
+		accountSelectOptions,
+		categorySelectOptions,
+		subcategorySelectOptions
+	} from '$lib/select-options';
 	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
 
@@ -63,7 +68,7 @@
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
 	const editing = $derived(!!transaction);
 
-	const accountOptions = $derived(accounts.map((acc) => ({ value: acc.id, label: acc.name })));
+	const accountOptions = $derived(accountSelectOptions(accounts));
 	const pickableCategories = $derived.by(() => {
 		const userCats = categories.filter((cat) => !cat.is_system);
 		if ((!editing && !repeatFrom) || !categoryId) return userCats;
@@ -73,12 +78,10 @@
 		}
 		return userCats;
 	});
-	const categoryOptions = $derived(
-		pickableCategories.map((cat) => ({ value: cat.id, label: cat.name }))
-	);
+	const categoryOptions = $derived(categorySelectOptions(pickableCategories));
 	const subcategoryOptions = $derived([
 		{ value: '', label: '—' },
-		...subcategories.map((sub) => ({ value: sub.id, label: sub.name }))
+		...subcategorySelectOptions(subcategories)
 	]);
 
 	const isFuture = $derived.by(() => {

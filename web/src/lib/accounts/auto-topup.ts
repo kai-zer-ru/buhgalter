@@ -1,4 +1,5 @@
 import type { Account } from '$lib/api/client';
+import { accountSelectOption } from '$lib/select-options';
 
 type AutoTopupStatusAccount = Pick<Account, 'auto_topup_enabled' | 'auto_topup_source_account_id'>;
 type AccountNameLookup = Pick<Account, 'id' | 'name'>;
@@ -20,7 +21,7 @@ export function isAutoTopupEligible(acc: Pick<Account, 'type' | 'status'>): bool
 export function autoTopupSourceOptions(accounts: Account[], beneficiaryId: string) {
 	return accounts
 		.filter((a) => a.status === 'active' && a.type === 'bank' && a.id !== beneficiaryId)
-		.map((a) => ({ value: a.id, label: a.name }));
+		.map((a) => accountSelectOption(a));
 }
 
 export function defaultAutoTopupSourceId(accounts: Account[], beneficiaryId: string): string {

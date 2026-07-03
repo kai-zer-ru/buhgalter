@@ -2,6 +2,7 @@
 	import { _ } from 'svelte-i18n';
 	import { listAccounts, settleDebt, type Account, type Debt } from '$lib/api/client';
 	import { defaultAccountId } from '$lib/accounts';
+	import { accountSelectOptions } from '$lib/select-options';
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
@@ -32,7 +33,7 @@
 	let saving = $state(false);
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
-	const accountOptions = $derived(accounts.map((acc) => ({ value: acc.id, label: acc.name })));
+	const accountOptions = $derived(accountSelectOptions(accounts));
 
 	$effect(() => {
 		if (!open || !debt) return;

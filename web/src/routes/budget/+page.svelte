@@ -16,7 +16,10 @@
 		updateBudget,
 		type BudgetScope,
 		type BudgetSummaryItem,
-		type Category
+		type Category,
+		type Subcategory,
+		type UIMetaAccountRef,
+		type Bank
 	} from '$lib/api/client';
 	import BackLink from '$lib/components/BackLink.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
@@ -29,12 +32,18 @@
 	import { toast } from '$lib/toast';
 	import { tr } from '$lib/i18n';
 	import { budgetStatusLine } from '$lib/budget-display';
+	import {
+		accountRefSelectOption,
+		categorySelectOptions,
+		subcategorySelectOptions
+	} from '$lib/select-options';
 
 	let items = $state<BudgetSummaryItem[]>([]);
 	let canCopyFromPrevious = $state(false);
 	let categories = $state<Category[]>([]);
-	let accounts = $state<{ id: string; name: string }[]>([]);
-	let subcategories = $state<{ id: string; name: string }[]>([]);
+	let accounts = $state<UIMetaAccountRef[]>([]);
+	let banks = $state<Bank[]>([]);
+	let subcategories = $state<Subcategory[]>([]);
 	let loading = $state(true);
 	let saving = $state(false);
 	let error = $state('');
@@ -79,13 +88,11 @@
 		)
 	);
 	const categoryOptions = $derived(
-		expenseCategories
-			.filter((c) => !usedCategoryIds.has(c.id))
-			.map((c) => ({ value: c.id, label: c.name }))
+		categorySelectOptions(expenseCategories.filter((c) => !usedCategoryIds.has(c.id)))
 	);
 	const accountOptions = $derived([
 		{ value: '', label: $_('budget.field.account_all') },
-		...accounts.map((a) => ({ value: a.id, label: a.name }))
+		...accounts.map((a) => accountRefSelectOption(a, banks))
 	]);
 	const scopeOptions = $derived(
 		[
@@ -95,9 +102,7 @@
 		].filter((o) => o.value !== 'all_expense' || !hasAllExpenseBudget)
 	);
 	const subcategoryOptions = $derived(
-		subcategories
-			.filter((s) => !usedSubcategoryIds.has(s.id))
-			.map((s) => ({ value: s.id, label: s.name }))
+		subcategorySelectOptions(subcategories.filter((s) => !usedSubcategoryIds.has(s.id)))
 	);
 
 	function currentMonthKey() {
@@ -171,9 +176,8 @@
 			const [summary, meta] = await Promise.all([getBudgetSummary(month), getUIMeta()]);
 			items = summary.items;
 			canCopyFromPrevious = summary.can_copy_from_previous;
-			accounts = meta.accounts
-				.filter((a) => a.status === 'active')
-				.map((a) => ({ id: a.id, name: a.name }));
+			accounts = meta.accounts.filter((a) => a.status === 'active');
+			banks = meta.banks;
 			categories = meta.expense_categories;
 			if (!categoryId && expenseCategories.length > 0) {
 				categoryId = expenseCategories[0].id;

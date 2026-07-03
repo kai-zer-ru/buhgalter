@@ -6,6 +6,7 @@
 	import { dateOnlyPicker } from '$lib/datetime-picker-standards';
 	import FilterPanel from '$lib/components/FilterPanel.svelte';
 	import Select from '$lib/components/Select.svelte';
+	import { accountSelectOptions, categorySelectOptions } from '$lib/select-options';
 
 	type Props = {
 		fromLocal: string;
@@ -51,7 +52,7 @@
 
 	const accountOptions = $derived([
 		{ value: '', label: $_('import.export.all_accounts') },
-		...accounts.map((acc) => ({ value: acc.id, label: acc.name }))
+		...accountSelectOptions(accounts)
 	]);
 
 	const filteredCategories = $derived(
@@ -62,10 +63,7 @@
 
 	const categoryOptions = $derived([
 		{ value: '', label: $_('import.export.all_categories') },
-		...filteredCategories.map((cat) => ({
-			value: cat.id,
-			label: categorySelectLabel(cat, categories)
-		}))
+		...categorySelectOptions(filteredCategories, (cat) => categorySelectLabel(cat, categories))
 	]);
 
 	$effect(() => {

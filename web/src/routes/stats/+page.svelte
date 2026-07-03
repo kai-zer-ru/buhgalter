@@ -43,6 +43,11 @@
 		todayDateLocal
 	} from '$lib/dates';
 	import { formatStatsPeriod } from '$lib/stats-period';
+	import {
+		accountSelectOptions,
+		accountsFromUIMeta,
+		categorySelectOptions
+	} from '$lib/select-options';
 	import { user } from '$lib/stores/auth';
 	import { toast } from '$lib/toast';
 
@@ -83,7 +88,7 @@
 		void $locale;
 		return [
 			{ value: '', label: tr('import.export.all_accounts') },
-			...accounts.map((acc) => ({ value: acc.id, label: acc.name }))
+			...accountSelectOptions(accounts)
 		];
 	});
 	const categoryOptions = $derived.by(() => {
@@ -94,10 +99,7 @@
 				: categories;
 		return [
 			{ value: '', label: tr('import.export.all_categories') },
-			...filtered.map((cat) => ({
-				value: cat.id,
-				label: categorySelectLabel(cat, categories)
-			}))
+			...categorySelectOptions(filtered, (cat) => categorySelectLabel(cat, categories))
 		];
 	});
 	const duplicateCategoryNameSet = $derived(
@@ -175,9 +177,10 @@
 	async function loadMeta() {
 		try {
 			const meta = await getUIMeta();
-			accounts = meta.accounts
-				.filter((acc) => acc.status === 'active')
-				.map((acc) => ({ id: acc.id, name: acc.name }) as Account);
+			accounts = accountsFromUIMeta(
+				meta.accounts.filter((acc) => acc.status === 'active'),
+				meta.banks
+			) as Account[];
 			const mergedCategories = [...meta.expense_categories, ...meta.income_categories];
 			const uniqueByID: Record<string, Category> = {};
 			for (const cat of mergedCategories) uniqueByID[cat.id] = cat;

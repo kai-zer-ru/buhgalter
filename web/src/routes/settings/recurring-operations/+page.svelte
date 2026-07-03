@@ -32,6 +32,12 @@
 	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
 	import { formatMoneyForInput, toAPIAmount } from '$lib/money';
 	import { toast } from '$lib/toast';
+	import {
+		accountSelectOptions,
+		accountsFromUIMeta,
+		categorySelectOptions,
+		subcategorySelectOptions
+	} from '$lib/select-options';
 	import { user } from '$lib/stores/auth';
 
 	let items = $state<RecurringOperation[]>([]);
@@ -58,14 +64,10 @@
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
 	const categoryOptions = $derived(
-		categories
-			.filter((item) => item.type === type && !item.is_system)
-			.map((item) => ({ value: item.id, label: item.name }))
+		categorySelectOptions(categories.filter((item) => item.type === type && !item.is_system))
 	);
-	const accountOptions = $derived(accounts.map((item) => ({ value: item.id, label: item.name })));
-	const subcategoryOptions = $derived(
-		subcategories.map((item) => ({ value: item.id, label: item.name }))
-	);
+	const accountOptions = $derived(accountSelectOptions(accounts));
+	const subcategoryOptions = $derived(subcategorySelectOptions(subcategories));
 
 	onMount(() => {
 		startDate = todayDateLocal(tz).slice(0, 10);
@@ -97,9 +99,10 @@
 		try {
 			const [ops, meta] = await Promise.all([listRecurringOperations(), getUIMeta()]);
 			items = ops;
-			accounts = meta.accounts
-				.filter((acc) => acc.status === 'active')
-				.map((acc) => ({ id: acc.id, name: acc.name }) as Account);
+			accounts = accountsFromUIMeta(
+				meta.accounts.filter((acc) => acc.status === 'active'),
+				meta.banks
+			) as Account[];
 			const uniqueByID: Record<string, Category> = {};
 			for (const cat of [...meta.expense_categories, ...meta.income_categories]) {
 				uniqueByID[cat.id] = cat;

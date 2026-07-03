@@ -19,6 +19,7 @@
 	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
 	import TransactionPagination from '$lib/components/TransactionPagination.svelte';
 	import { defaultAccountId } from '$lib/accounts';
+	import { accountSelectOptions } from '$lib/select-options';
 	import { toast } from '$lib/toast';
 	import {
 		fromDatetimeLocalValue,
@@ -106,7 +107,7 @@
 		}
 	});
 	const termCount = $derived(Math.max(1, Number(termMonths) || 1));
-	const accountOptions = $derived(accounts.map((acc) => ({ value: acc.id, label: acc.name })));
+	const accountOptions = $derived(accountSelectOptions(accounts));
 	const bankOptions = $derived([
 		{ value: '', label: $_('credits.field.bankNotSelected') },
 		...banks.map((bank) => ({ value: bank.id, label: bank.name }))

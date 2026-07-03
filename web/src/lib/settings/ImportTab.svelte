@@ -39,6 +39,11 @@
 	} from '$lib/import-columns';
 	import { tick } from 'svelte';
 	import Select from '$lib/components/Select.svelte';
+	import {
+		accountSelectOptions,
+		categorySelectOptions,
+		subcategorySelectOptions
+	} from '$lib/select-options';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
 	import { dateOnlyPicker } from '$lib/datetime-picker-standards';
 	import PageTabs from '$lib/components/PageTabs.svelte';
@@ -755,17 +760,18 @@
 		void $locale;
 		return [
 			{ value: '', label: tr('import.export.all_accounts') },
-			...accounts.map((acc) => ({ value: acc.id, label: accountOptionLabel(acc) }))
+			...accountSelectOptions(accounts, accountOptionLabel)
 		];
 	});
 	const exportCategoryOptions = $derived.by(() => {
 		void $locale;
 		return [
 			{ value: '', label: tr('import.export.all_categories') },
-			...categories.map((cat) => ({
-				value: cat.id,
-				label: `${cat.name} (${cat.type === 'income' ? tr('categories.tab.income') : tr('categories.tab.expense')})`
-			}))
+			...categorySelectOptions(
+				categories,
+				(cat) =>
+					`${cat.name} (${cat.type === 'income' ? tr('categories.tab.income') : tr('categories.tab.expense')})`
+			)
 		];
 	});
 	const headerOptions = $derived.by(() => {
@@ -1034,10 +1040,7 @@
 										onchange={(next) => setAccountMapExisting(m.file_name, next)}
 										options={[
 											{ value: '', label: '—' },
-											...accounts.map((acc) => ({
-												value: acc.id,
-												label: accountOptionLabel(acc)
-											}))
+											...accountSelectOptions(accounts, accountOptionLabel)
 										]}
 										usePortal
 									/>
@@ -1174,10 +1177,7 @@
 										onchange={(next) => setCategoryMapExisting(key, next)}
 										options={[
 											{ value: '', label: '—' },
-											...categoriesForType(m.type).map((cat) => ({
-												value: cat.id,
-												label: cat.name
-											}))
+											...categorySelectOptions(categoriesForType(m.type))
 										]}
 										usePortal
 									/>
@@ -1287,10 +1287,7 @@
 											onchange={(next) => setSubcategoryMapExisting(key, next)}
 											options={[
 												{ value: '', label: '—' },
-												...subcategoryOptionsFor(m).map((sub) => ({
-													value: sub.id,
-													label: sub.name
-												}))
+												...subcategorySelectOptions(subcategoryOptionsFor(m))
 											]}
 											usePortal
 										/>

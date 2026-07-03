@@ -18,6 +18,7 @@
 	import ModalShell from '$lib/components/ModalShell.svelte';
 	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
 	import { defaultAccountId } from '$lib/accounts';
+	import { accountSelectOptions } from '$lib/select-options';
 	import { toast } from '$lib/toast';
 	import {
 		fromDateLocalEnd,
@@ -81,7 +82,7 @@
 			...debtors.map((debtor) => ({ value: debtor.id, label: debtor.name }))
 		];
 	});
-	const accountOptions = $derived(accounts.map((acc) => ({ value: acc.id, label: acc.name })));
+	const accountOptions = $derived(accountSelectOptions(accounts));
 
 	const modalTitle = $derived.by(() => {
 		void $locale;

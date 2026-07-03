@@ -40,6 +40,7 @@
 		toDatetimeLocalValue
 	} from '$lib/dates';
 	import { bankIconUrl } from '$lib/finance';
+	import { accountSelectOptions } from '$lib/select-options';
 	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
 	import { formatMoneyForDisplay } from '$lib/money-display';
 	import { toAPIAmount, fromCents, formatMoneyForInput } from '$lib/money';
@@ -81,7 +82,7 @@
 
 	const schedulePageSize = 10;
 
-	const accountOptions = $derived(accounts.map((acc) => ({ value: acc.id, label: acc.name })));
+	const accountOptions = $derived(accountSelectOptions(accounts));
 	const bankOptions = $derived([
 		{ value: '', label: $_('credits.field.bankNotSelected') },
 		...banks.map((bank) => ({ value: bank.id, label: bank.name }))
