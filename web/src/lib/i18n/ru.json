@@ -401,7 +401,7 @@
 	"debts.confirm.settle": "Долг будет отмечен как закрытый.",
 	"debts.confirm.delete": "Долг будет удалён безвозвратно.",
 	"debts.error.noAccount": "Нет активного счёта для проводки",
-	"debts.relatedTransactions": "Связанные операции",
+	"debts.recentTransactions": "Последние операции",
 	"credits.title": "Кредиты",
 	"credits.new": "Новый кредит",
 	"credits.empty": "Кредитов пока нет",

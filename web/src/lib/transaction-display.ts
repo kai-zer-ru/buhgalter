@@ -102,6 +102,11 @@ export function canRepeatTransaction(tx: Transaction): boolean {
 	return true;
 }
 
+/** Delete from list — debt-linked opening tx may be protected via API `deletable` flag. */
+export function canDeleteTransaction(tx: Transaction): boolean {
+	return tx.deletable !== false;
+}
+
 export function transferGroupLegs(tx: Transaction, siblings: Transaction[]): Transaction[] {
 	if (!tx.transfer_group_id) return [tx];
 	return siblings.filter((item) => item.transfer_group_id === tx.transfer_group_id);

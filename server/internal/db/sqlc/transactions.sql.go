@@ -278,6 +278,7 @@ SELECT
     c.icon AS category_icon,
     c.is_system AS category_is_system,
     s.name AS subcategory_name,
+    s.icon AS subcategory_icon,
     a.name AS account_name,
     a.status AS account_status,
     ta.name AS transfer_account_name,
@@ -326,6 +327,7 @@ type GetTransactionByIDRow struct {
 	CategoryIcon          *string `json:"category_icon"`
 	CategoryIsSystem      *int64  `json:"category_is_system"`
 	SubcategoryName       *string `json:"subcategory_name"`
+	SubcategoryIcon       *string `json:"subcategory_icon"`
 	AccountName           *string `json:"account_name"`
 	AccountStatus         *string `json:"account_status"`
 	TransferAccountName   *string `json:"transfer_account_name"`
@@ -356,6 +358,7 @@ func (q *Queries) GetTransactionByID(ctx context.Context, arg GetTransactionByID
 		&i.CategoryIcon,
 		&i.CategoryIsSystem,
 		&i.SubcategoryName,
+		&i.SubcategoryIcon,
 		&i.AccountName,
 		&i.AccountStatus,
 		&i.TransferAccountName,
@@ -538,6 +541,7 @@ SELECT
     c.icon AS category_icon,
     c.is_system AS category_is_system,
     s.name AS subcategory_name,
+    s.icon AS subcategory_icon,
     a.name AS account_name,
     a.status AS account_status,
     ta.name AS transfer_account_name,
@@ -588,6 +592,7 @@ type ListRecentTransactionsRow struct {
 	CategoryIcon          *string `json:"category_icon"`
 	CategoryIsSystem      *int64  `json:"category_is_system"`
 	SubcategoryName       *string `json:"subcategory_name"`
+	SubcategoryIcon       *string `json:"subcategory_icon"`
 	AccountName           *string `json:"account_name"`
 	AccountStatus         *string `json:"account_status"`
 	TransferAccountName   *string `json:"transfer_account_name"`
@@ -624,6 +629,7 @@ func (q *Queries) ListRecentTransactions(ctx context.Context, arg ListRecentTran
 			&i.CategoryIcon,
 			&i.CategoryIsSystem,
 			&i.SubcategoryName,
+			&i.SubcategoryIcon,
 			&i.AccountName,
 			&i.AccountStatus,
 			&i.TransferAccountName,
@@ -664,6 +670,7 @@ SELECT
     c.icon AS category_icon,
     c.is_system AS category_is_system,
     s.name AS subcategory_name,
+    s.icon AS subcategory_icon,
     a.name AS account_name,
     a.status AS account_status,
     ta.name AS transfer_account_name,
@@ -711,6 +718,7 @@ type ListTransactionsByTransferGroupRow struct {
 	CategoryIcon          *string `json:"category_icon"`
 	CategoryIsSystem      *int64  `json:"category_is_system"`
 	SubcategoryName       *string `json:"subcategory_name"`
+	SubcategoryIcon       *string `json:"subcategory_icon"`
 	AccountName           *string `json:"account_name"`
 	AccountStatus         *string `json:"account_status"`
 	TransferAccountName   *string `json:"transfer_account_name"`
@@ -746,6 +754,7 @@ func (q *Queries) ListTransactionsByTransferGroup(ctx context.Context, arg ListT
 			&i.CategoryIcon,
 			&i.CategoryIsSystem,
 			&i.SubcategoryName,
+			&i.SubcategoryIcon,
 			&i.AccountName,
 			&i.AccountStatus,
 			&i.TransferAccountName,
@@ -785,6 +794,7 @@ SELECT
     c.icon AS category_icon,
     c.is_system AS category_is_system,
     s.name AS subcategory_name,
+    s.icon AS subcategory_icon,
     a.name AS account_name,
     a.status AS account_status,
     ta.name AS transfer_account_name,
@@ -857,6 +867,7 @@ type ListTransactionsFilteredDateAscRow struct {
 	CategoryIcon          *string `json:"category_icon"`
 	CategoryIsSystem      *int64  `json:"category_is_system"`
 	SubcategoryName       *string `json:"subcategory_name"`
+	SubcategoryIcon       *string `json:"subcategory_icon"`
 	AccountName           *string `json:"account_name"`
 	AccountStatus         *string `json:"account_status"`
 	TransferAccountName   *string `json:"transfer_account_name"`
@@ -911,6 +922,7 @@ func (q *Queries) ListTransactionsFilteredDateAsc(ctx context.Context, arg ListT
 			&i.CategoryIcon,
 			&i.CategoryIsSystem,
 			&i.SubcategoryName,
+			&i.SubcategoryIcon,
 			&i.AccountName,
 			&i.AccountStatus,
 			&i.TransferAccountName,
@@ -951,6 +963,7 @@ SELECT
     c.icon AS category_icon,
     c.is_system AS category_is_system,
     s.name AS subcategory_name,
+    s.icon AS subcategory_icon,
     a.name AS account_name,
     a.status AS account_status,
     ta.name AS transfer_account_name,
@@ -1023,6 +1036,7 @@ type ListTransactionsFilteredDateDescRow struct {
 	CategoryIcon          *string `json:"category_icon"`
 	CategoryIsSystem      *int64  `json:"category_is_system"`
 	SubcategoryName       *string `json:"subcategory_name"`
+	SubcategoryIcon       *string `json:"subcategory_icon"`
 	AccountName           *string `json:"account_name"`
 	AccountStatus         *string `json:"account_status"`
 	TransferAccountName   *string `json:"transfer_account_name"`
@@ -1077,6 +1091,7 @@ func (q *Queries) ListTransactionsFilteredDateDesc(ctx context.Context, arg List
 			&i.CategoryIcon,
 			&i.CategoryIsSystem,
 			&i.SubcategoryName,
+			&i.SubcategoryIcon,
 			&i.AccountName,
 			&i.AccountStatus,
 			&i.TransferAccountName,

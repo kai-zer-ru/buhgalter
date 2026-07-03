@@ -4,6 +4,7 @@
 	import { _ } from 'svelte-i18n';
 	import {
 		deleteDebt,
+		deleteTransaction,
 		getDebtor,
 		type Debt,
 		type DebtorDetail,
@@ -79,6 +80,22 @@
 		await deleteDebt(d.id);
 		toast($_('common.deleted'));
 		await load();
+	}
+
+	async function removeTx(tx: Transaction) {
+		const ok = await confirm({
+			message: $_('transactions.confirm.delete'),
+			confirmLabel: $_('common.delete'),
+			danger: true
+		});
+		if (!ok) return;
+		try {
+			await deleteTransaction(tx.id);
+			toast($_('common.deleted'));
+			await load();
+		} catch (err) {
+			toast.fromError(err);
+		}
 	}
 </script>
 
@@ -164,7 +181,7 @@
 
 		{#if detail.transactions.length > 0}
 			<section>
-				<h2 class="mb-3 text-lg font-medium">{$_('debts.relatedTransactions')}</h2>
+				<h2 class="mb-3 text-lg font-medium">{$_('debts.recentTransactions')}</h2>
 				<div class="card md:overflow-x-auto">
 					<TransactionList
 						transactions={relatedTransactions}
@@ -172,6 +189,10 @@
 						{tz}
 						emptyMessage={$_('transactions.empty')}
 						showDescription
+						showAmountSign
+						showCategory={false}
+						showDelete
+						ondelete={(tx) => void removeTx(tx)}
 					/>
 				</div>
 			</section>

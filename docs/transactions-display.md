@@ -201,13 +201,18 @@ OpenAPI: `CreateTransferRequest.commission`, схема `Transfer`.
 
 ## Общий компонент списка
 
-Для снижения дублирования разметки таблиц операций допускается вынести общий компонент:
+`TransactionList` — единая таблица строк операций на **главной** («Последние операции»), `/transactions`, странице счёта, `/stats` (поиск), `/debtors/[id]` («Последние операции»).
 
-- `$lib/components/TransactionList.svelte` — единая таблица строк операций;
-- входные данные: `transactions`, `siblings`, режим отображения (`singleAccount`, скрытие/показ колонки описания и действий);
-- логика отображения берётся только из `$lib/transaction-display.ts` (`dedupeTransferLegs`, `formatTransactionAccount`, `transactionAmountSign`), без копирования в страницах.
+- `$lib/components/TransactionList.svelte` — разметка desktop-таблицы и mobile-карточек;
+- `$lib/components/TransactionCategoryCell.svelte` — колонка «Категория»: `иконка Категория → иконка Подкатегория` (если есть подкатегория); иконка подкатегории — `subcategory_icon` из API, fallback — `category_icon`;
+- входные данные: `transactions`, `siblings`, `showCategory` (на странице должника — `false`), `showAmountSign`, скрытие/показ колонки описания и действий;
+- логика отображения — `$lib/transaction-display.ts` (`dedupeTransferLegs`, `formatTransactionAccount`, `transactionAmountSign`, `canDeleteTransaction`).
 
-Статус: реализовано в `$lib/components/TransactionList.svelte` (см. раздел выше).
+### Страница должника
+
+Блок «Последние операции» (`debts.recentTransactions`): без колонки «Категория», с префиксом `+/−` у суммы. В меню «⋯» — только **Удалить** (где API вернул `deletable: true`). Начальную операцию долга нельзя удалить при наличии погашений — пункт скрыт; при прямом DELETE — `409` / `ERR_LINKED_TX_DELETE`. См. [ui-dialogs.md](ui-dialogs.md).
+
+Статус: реализовано в `$lib/components/TransactionList.svelte`.
 
 ## Связанные документы
 

@@ -21,6 +21,7 @@ type DebtTransaction struct {
 	Description     *string `json:"description"`
 	CategoryName    *string `json:"category_name,omitempty"`
 	TransactionDate string  `json:"transaction_date"`
+	Deletable       bool    `json:"deletable"`
 }
 
 type DebtorDetail struct {
@@ -117,6 +118,23 @@ func loadDebtTransaction(ctx context.Context, q *sqlcdb.Queries, userID, id stri
 	if row.CategoryName != nil {
 		t.CategoryName = row.CategoryName
 	}
+	link, err := q.GetDebtLinkByTransactionID(ctx, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		t.Deletable = true
+		return t, nil
+	}
+	if err != nil {
+		return DebtTransaction{}, err
+	}
+	if link.Role != "open" {
+		t.Deletable = true
+		return t, nil
+	}
+	n, err := q.CountDebtLinksByDebt(ctx, link.DebtID)
+	if err != nil {
+		return DebtTransaction{}, err
+	}
+	t.Deletable = n <= 1
 	return t, nil
 }
 

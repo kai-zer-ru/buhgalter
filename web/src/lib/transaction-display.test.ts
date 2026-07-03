@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { Transaction } from '$lib/api/client';
-import { canEditTransaction, canRepeatTransaction } from './transaction-display';
+import {
+	canDeleteTransaction,
+	canEditTransaction,
+	canRepeatTransaction
+} from './transaction-display';
 
 function tx(overrides: Partial<Transaction> = {}): Transaction {
 	return {
@@ -42,5 +46,16 @@ describe('canRepeatTransaction', () => {
 	it('blocks income and expense with system category', () => {
 		expect(canRepeatTransaction(tx({ type: 'expense', category_is_system: true }))).toBe(false);
 		expect(canRepeatTransaction(tx({ type: 'income', category_is_system: true }))).toBe(false);
+	});
+});
+
+describe('canDeleteTransaction', () => {
+	it('allows delete when deletable is omitted or true', () => {
+		expect(canDeleteTransaction(tx())).toBe(true);
+		expect(canDeleteTransaction(tx({ deletable: true }))).toBe(true);
+	});
+
+	it('blocks delete when deletable is false', () => {
+		expect(canDeleteTransaction(tx({ deletable: false }))).toBe(false);
 	});
 });

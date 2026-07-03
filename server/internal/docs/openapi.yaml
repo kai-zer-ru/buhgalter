@@ -3284,6 +3284,10 @@ components:
         subcategory_name:
           type: string
           nullable: true
+        subcategory_icon:
+          type: string
+          nullable: true
+          description: ID из data/category_icons.json; fallback — category_icon
         transfer_group_id:
           type: string
           nullable: true

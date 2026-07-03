@@ -2,7 +2,6 @@
 	import type { Snippet } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import type { Transaction } from '$lib/api/client';
-	import CategoryIcon from '$lib/components/CategoryIcon.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
 	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
 	import TransactionAccountCell from '$lib/components/TransactionAccountCell.svelte';
@@ -11,8 +10,10 @@
 	import {
 		transactionAmountSign,
 		canEditTransaction,
-		canRepeatTransaction
+		canRepeatTransaction,
+		canDeleteTransaction
 	} from '$lib/transaction-display';
+	import TransactionCategoryCell from '$lib/components/TransactionCategoryCell.svelte';
 
 	let {
 		transactions,
@@ -23,6 +24,7 @@
 		showEdit = false,
 		showDescription = false,
 		showAmountSign = false,
+		showCategory = true,
 		singleAccount = false,
 		ondelete,
 		onedit,
@@ -38,6 +40,7 @@
 		showEdit?: boolean;
 		showDescription?: boolean;
 		showAmountSign?: boolean;
+		showCategory?: boolean;
 		singleAccount?: boolean;
 		ondelete?: (tx: Transaction) => void;
 		onedit?: (tx: Transaction) => void;
@@ -77,7 +80,7 @@
 				onclick: () => onedit(tx)
 			});
 		}
-		if (showDelete && ondelete) {
+		if (showDelete && ondelete && canDeleteTransaction(tx)) {
 			actions.push({
 				icon: 'delete',
 				label: $_('common.delete'),
@@ -98,7 +101,9 @@
 				<tr style:color="var(--text-muted)">
 					<th class="p-3">{$_('transactions.col.date')}</th>
 					<th class="p-3">{$_('transactions.col.account')}</th>
-					<th class="p-3">{$_('transactions.col.category')}</th>
+					{#if showCategory}
+						<th class="p-3">{$_('transactions.col.category')}</th>
+					{/if}
 					<th class="p-3">{$_('transactions.col.amount')}</th>
 					{#if showDescription}
 						<th class="p-3">{$_('transactions.col.description')}</th>
@@ -120,16 +125,17 @@
 						<td class="p-3 align-middle whitespace-nowrap">
 							<TransactionAccountCell {tx} {siblings} mode="prefix" />
 						</td>
-						<td class="p-3 align-middle whitespace-nowrap">
-							{#if tx.category_icon}
-								<span class="inline-flex items-center gap-1 align-middle">
-									<CategoryIcon icon={tx.category_icon} size={24} />
-									<span class="leading-none">{tx.category_name ?? tx.type}</span>
-								</span>
-							{:else}
-								{tx.category_name ?? tx.type}
-							{/if}
-						</td>
+						{#if showCategory}
+							<td class="p-3 align-middle whitespace-nowrap">
+								<TransactionCategoryCell
+									categoryName={tx.category_name}
+									categoryIcon={tx.category_icon}
+									subcategoryName={tx.subcategory_name}
+									subcategoryIcon={tx.subcategory_icon}
+									typeFallback={tx.type}
+								/>
+							</td>
+						{/if}
 						<td class="p-3 align-middle whitespace-nowrap tabular-nums font-medium">
 							{showAmountSign ? transactionAmountSign(tx, { singleAccount }) : ''}<MoneyDisplay
 								value={tx.amount_display}
@@ -182,16 +188,17 @@
 						{/if}
 					</div>
 				</div>
-				<p class="mt-2 text-sm">
-					{#if tx.category_icon}
-						<span class="inline-flex items-center gap-1 align-middle">
-							<CategoryIcon icon={tx.category_icon} size={24} />
-							<span class="leading-none">{tx.category_name ?? tx.type}</span>
-						</span>
-					{:else}
-						{tx.category_name ?? tx.type}
-					{/if}
-				</p>
+				{#if showCategory}
+					<p class="mt-2 text-sm">
+						<TransactionCategoryCell
+							categoryName={tx.category_name}
+							categoryIcon={tx.category_icon}
+							subcategoryName={tx.subcategory_name}
+							subcategoryIcon={tx.subcategory_icon}
+							typeFallback={tx.type}
+						/>
+					</p>
+				{/if}
 				{#if showDescription && (tx.description || descriptionExtra)}
 					<p class="mt-2 text-sm" style:color="var(--text-muted)">
 						{tx.description ?? ''}

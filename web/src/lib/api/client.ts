@@ -753,6 +753,8 @@ export type Transaction = {
 	category_is_system?: boolean;
 	subcategory_id: string | null;
 	subcategory_name?: string | null;
+	subcategory_icon?: string | null;
+	deletable?: boolean;
 	transfer_group_id?: string | null;
 	transfer_account_id?: string | null;
 	transfer_is_out?: boolean;
@@ -898,6 +900,7 @@ export type DebtTransaction = {
 	description: string | null;
 	category_name?: string;
 	transaction_date: string;
+	deletable: boolean;
 };
 
 export type Debtor = {

@@ -448,6 +448,7 @@
 						{tz}
 						emptyMessage={$_('transactions.empty')}
 						showDescription
+						showAmountSign
 						descriptionExtra={searchDescriptionLinks}
 					/>
 				</div>

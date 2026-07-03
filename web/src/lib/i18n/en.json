@@ -401,7 +401,7 @@
 	"debts.confirm.settle": "The debt will be marked as settled.",
 	"debts.confirm.delete": "The debt will be permanently deleted.",
 	"debts.error.noAccount": "No active account for the transaction",
-	"debts.relatedTransactions": "Related transactions",
+	"debts.recentTransactions": "Recent transactions",
 	"credits.title": "Credits",
 	"credits.new": "New credit",
 	"credits.empty": "No credits yet",

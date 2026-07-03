@@ -675,6 +675,7 @@ func TestGetDebtorDetail(t *testing.T) {
 		} `json:"debts"`
 		Transactions []struct {
 			AccountID string `json:"account_id"`
+			Deletable bool   `json:"deletable"`
 		} `json:"transactions"`
 	}
 	_ = json.NewDecoder(resp.Body).Decode(&detail)
@@ -689,6 +690,61 @@ func TestGetDebtorDetail(t *testing.T) {
 	}
 	if detail.Transactions[0].AccountID != accID {
 		t.Fatalf("tx account_id: want %q, got %q", accID, detail.Transactions[0].AccountID)
+	}
+	if !detail.Transactions[0].Deletable {
+		t.Fatalf("single opening tx should be deletable")
+	}
+}
+
+func TestGetDebtorDetailOpeningTxNotDeletableAfterSettle(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+	accID := createTestAccount(t, env, "Кошелёк")
+
+	debt := createDebt(t, env, map[string]any{
+		"debtor_name": "Анна", "direction": "lent", "amount": "300.00",
+		"due_date": "2025-12-31 00:00:00", "affects_balance": true, "account_id": accID,
+	})
+	debtorID := debt["debtor_id"].(string)
+	debtID := debt["id"].(string)
+
+	body, _ := json.Marshal(map[string]any{
+		"amount": "100.00", "settled_at": "2020-01-15 12:00:00",
+		"affects_balance": true, "account_id": accID,
+	})
+	settleResp, err := env.authedRequest(http.MethodPost, "/api/v1/debts/"+debtID+"/settle", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer settleResp.Body.Close()
+	if settleResp.StatusCode != http.StatusOK {
+		t.Fatalf("settle status %d", settleResp.StatusCode)
+	}
+
+	resp, err := env.authedRequest(http.MethodGet, "/api/v1/debtors/"+debtorID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var detail struct {
+		Transactions []struct {
+			Deletable bool `json:"deletable"`
+		} `json:"transactions"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&detail)
+	if len(detail.Transactions) != 2 {
+		t.Fatalf("expected 2 txs, got %d", len(detail.Transactions))
+	}
+	var protected, deletable int
+	for _, tx := range detail.Transactions {
+		if tx.Deletable {
+			deletable++
+		} else {
+			protected++
+		}
+	}
+	if protected != 1 || deletable != 1 {
+		t.Fatalf("want 1 protected open tx and 1 deletable settle tx, got protected=%d deletable=%d", protected, deletable)
 	}
 }
 

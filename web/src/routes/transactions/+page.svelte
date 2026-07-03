@@ -379,6 +379,7 @@
 										{tz}
 										emptyMessage={$_('transactions.empty')}
 										showDescription
+										showAmountSign
 										showEdit
 										showDelete
 										onmakeRecurring={(tx) =>
@@ -418,6 +419,7 @@
 										{tz}
 										emptyMessage={$_('transactions.empty')}
 										showDescription
+										showAmountSign
 										showEdit
 										showDelete
 										onmakeRecurring={(tx) =>
@@ -455,6 +457,7 @@
 					{tz}
 					emptyMessage={$_('transactions.empty')}
 					showDescription
+					showAmountSign
 					showEdit
 					showDelete
 					onmakeRecurring={(tx) =>
