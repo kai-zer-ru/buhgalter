@@ -317,24 +317,24 @@ html.dark {
 		display: none;
 	}
 
-	.dashboard-accounts-panel > summary {
-		@apply cursor-pointer list-none text-sm font-medium;
+	.account-group-panel > summary {
+		@apply cursor-pointer list-none select-none;
 	}
 
-	.dashboard-accounts-summary {
+	.account-group-summary {
 		@apply flex items-center justify-between gap-2;
 	}
 
-	.dashboard-accounts-chevron {
+	.account-group-chevron {
 		@apply h-5 w-5 shrink-0 transition-transform duration-150;
 		color: var(--text-muted);
 	}
 
-	.dashboard-accounts-panel[open] > .dashboard-accounts-summary .dashboard-accounts-chevron {
+	.account-group-panel[open] > .account-group-summary .account-group-chevron {
 		transform: rotate(180deg);
 	}
 
-	.dashboard-accounts-panel > summary::-webkit-details-marker {
+	.account-group-panel > summary::-webkit-details-marker {
 		display: none;
 	}
 
@@ -393,12 +393,6 @@ html.dark {
 		.breadcrumb-link,
 		.breadcrumb-current {
 			min-height: 2.75rem;
-		}
-	}
-
-	@media (min-width: 640px) {
-		.dashboard-accounts-panel > summary {
-			display: none;
 		}
 	}
 

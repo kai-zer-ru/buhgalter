@@ -5,7 +5,7 @@ import { test, expect } from '@playwright/test';
 import { login, apiJSON, restoreAdminSession, waitAppReady } from './helpers/auth';
 import { advanceImportToPreview, commitImportFromPreview } from './helpers/import';
 import { createCashAccount, createIncome } from './helpers/setup-data';
-import { confirmDialog, expectToast, rowMenuAction } from './helpers/ui';
+import { confirmDialog, expectToast, expandCollapsibleSection, rowMenuAction } from './helpers/ui';
 import {
 	fillEditTxAmount,
 	fillTransactionForm,
@@ -173,6 +173,7 @@ test('edit expense from dashboard recent list', async ({ page }) => {
 
 	await page.goto('/');
 	await waitAppReady(page);
+	await expandCollapsibleSection(page, 'Последние операции');
 
 	const row = page.getByRole('row', {
 		name: new RegExp(`${description}.*55\\.40|55\\.40.*${description}`)

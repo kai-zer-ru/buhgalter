@@ -178,6 +178,8 @@
 	"accounts.filter.active": "Active",
 	"accounts.filter.archived": "Archived",
 	"accounts.filter.deleted": "Deleted",
+	"accounts.group.myFunds": "My funds",
+	"accounts.group.creditFunds": "Credit funds",
 	"accounts.type.cash": "Cash",
 	"accounts.type.bank": "Bank",
 	"accounts.type.credit_card": "Credit card",

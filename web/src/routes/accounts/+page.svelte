@@ -22,7 +22,11 @@
 	import TransferForm from '$lib/components/TransferForm.svelte';
 	import { isAutoTopupEligible } from '$lib/accounts/auto-topup';
 	import AccountAutoTopupDialog from '$lib/components/AccountAutoTopupDialog.svelte';
-	import { groupAccountsByType } from '$lib/accounts/group-by-type';
+	import {
+		groupAccountsByType,
+		accountGroupKind,
+		accountGroupLabelKey
+	} from '$lib/accounts/group-by-type';
 	import { isCreditCard } from '$lib/credit-card';
 	import BackLink from '$lib/components/BackLink.svelte';
 	import AccountIcon from '$lib/components/AccountIcon.svelte';
@@ -335,12 +339,21 @@
 					{$_('common.loading')}
 				</p>
 			{/if}
-			{#each accountGroups as group (group[0].type)}
-				<div class="grid gap-4 sm:grid-cols-2">
-					{#each group as acc (acc.id)}
-						{@render accountCard(acc)}
-					{/each}
-				</div>
+			{#each accountGroups as group (accountGroupKind(group))}
+				{@const kind = accountGroupKind(group)}
+				<section>
+					<h2 class="mb-3 text-lg font-medium">
+						{$_(accountGroupLabelKey(kind))}
+						<span class="font-normal tabular-nums" style:color="var(--text-muted)">
+							({group.length})
+						</span>
+					</h2>
+					<div class="grid gap-4 sm:grid-cols-2">
+						{#each group as acc (acc.id)}
+							{@render accountCard(acc)}
+						{/each}
+					</div>
+				</section>
 			{/each}
 		</div>
 	{/if}

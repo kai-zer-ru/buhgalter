@@ -7,7 +7,7 @@ import {
 	createPlannedExpense,
 	createTransfer
 } from './helpers/setup-data';
-import { confirmDialog, rowMenuAction } from './helpers/ui';
+import { confirmDialog, expandCollapsibleSection, rowMenuAction } from './helpers/ui';
 import { fillEditTxAmount, selectCombobox } from './helpers/transactions';
 
 test('edit expense on /transactions', async ({ page }) => {
@@ -191,6 +191,7 @@ test('delete expense from dashboard recent list', async ({ page }) => {
 
 	await page.goto('/');
 	await waitAppReady(page);
+	await expandCollapsibleSection(page, 'Последние операции');
 
 	const row = page.getByRole('row', { name: /77\.00/ });
 	await rowMenuAction(page, row, 'Удалить');
@@ -269,8 +270,14 @@ test('dashboard: past transactions in open spoiler, planned collapsed', async ({
 	await page.goto('/');
 	await waitAppReady(page);
 
-	const pastGroup = page.locator('details').filter({ hasText: 'Прошлые операции' });
-	const plannedGroup = page.locator('details').filter({ hasText: 'Плановые' });
+	const recentPanel = page
+		.locator('details.account-group-panel')
+		.filter({ hasText: 'Последние операции' });
+	await expect(recentPanel).not.toHaveAttribute('open');
+	await expandCollapsibleSection(page, 'Последние операции');
+
+	const pastGroup = recentPanel.locator('details').filter({ hasText: 'Прошлые операции' });
+	const plannedGroup = recentPanel.locator('details').filter({ hasText: 'Плановые' });
 	await expect(pastGroup).toHaveAttribute('open', '');
 	await expect(pastGroup.getByRole('row', { name: new RegExp(pastDesc) })).toBeVisible({
 		timeout: 10_000
@@ -338,8 +345,13 @@ test('dashboard: planned transactions sorted newest first', async ({ page }) => 
 
 	await page.goto('/');
 	await waitAppReady(page);
+	await expandCollapsibleSection(page, 'Последние операции');
 
-	const plannedGroup = page.locator('details').filter({ hasText: 'Плановые' });
+	const plannedGroup = page
+		.locator('details.account-group-panel')
+		.filter({ hasText: 'Последние операции' })
+		.locator('details')
+		.filter({ hasText: 'Плановые' });
 	await plannedGroup.locator('summary').click();
 	await expect(plannedGroup).toHaveAttribute('open', '');
 

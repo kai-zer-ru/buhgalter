@@ -1,16 +1,33 @@
 import type { AccountType } from '$lib/api/client';
 
-const accountTypeOrder: AccountType[] = ['cash', 'bank', 'credit_card'];
-
 type WithAccountType = { type: AccountType };
 
+export type AccountGroupKind = 'my_funds' | 'credit_funds';
+
+export function accountGroupKind(group: readonly WithAccountType[]): AccountGroupKind {
+	return group.some((a) => a.type === 'credit_card') ? 'credit_funds' : 'my_funds';
+}
+
+export function accountGroupLabelKey(kind: AccountGroupKind): string {
+	return kind === 'credit_funds' ? 'accounts.group.creditFunds' : 'accounts.group.myFunds';
+}
+
 export function groupAccountsByType<T extends WithAccountType>(accounts: readonly T[]): T[][] {
-	const byType = new Map<AccountType, T[]>();
-	for (const type of accountTypeOrder) {
-		byType.set(type, []);
-	}
+	const cashAndBank: T[] = [];
+	const creditCards: T[] = [];
 	for (const acc of accounts) {
-		byType.get(acc.type)?.push(acc);
+		if (acc.type === 'credit_card') {
+			creditCards.push(acc);
+		} else {
+			cashAndBank.push(acc);
+		}
 	}
-	return accountTypeOrder.map((type) => byType.get(type) ?? []).filter((group) => group.length > 0);
+	cashAndBank.sort((a, b) => {
+		if (a.type === b.type) return 0;
+		return a.type === 'cash' ? -1 : 1;
+	});
+	const groups: T[][] = [];
+	if (cashAndBank.length > 0) groups.push(cashAndBank);
+	if (creditCards.length > 0) groups.push(creditCards);
+	return groups;
 }

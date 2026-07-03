@@ -26,7 +26,9 @@
 	import { tr } from '$lib/i18n';
 	import { budgetStatusLine } from '$lib/budget-display';
 	import { resolveAutoTopupSourceName } from '$lib/accounts/auto-topup';
-	import { groupAccountsByType } from '$lib/accounts/group-by-type';
+	import { groupAccountsByType, accountGroupKind } from '$lib/accounts/group-by-type';
+	import AccountGroupPanel from '$lib/components/AccountGroupPanel.svelte';
+	import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 
 	let dash = $state<Dashboard | null>(null);
 	let loading = $state(true);
@@ -61,29 +63,7 @@
 	const hasCreditCards = $derived(dash != null && dash.credit_cards_summary != null);
 	const currency = $derived($user?.currency ?? 'RUB');
 	const accountGroups = $derived(dash ? groupAccountsByType(dash.accounts) : []);
-
-	let accountsPanelEl = $state<HTMLDetailsElement | undefined>();
-	let accountsDesktop = $state(false);
-
-	$effect(() => {
-		const el = accountsPanelEl;
-		if (!el) return;
-
-		const mq = window.matchMedia('(min-width: 640px)');
-		accountsDesktop = mq.matches;
-		el.open = mq.matches;
-
-		const onChange = (event: MediaQueryListEvent) => {
-			accountsDesktop = event.matches;
-			if (event.matches) el.open = true;
-		};
-		mq.addEventListener('change', onChange);
-		return () => mq.removeEventListener('change', onChange);
-	});
-
-	function onAccountsPanelToggle() {
-		if (accountsDesktop && accountsPanelEl) accountsPanelEl.open = true;
-	}
+	const recentTotal = $derived(pastTotal + plannedTotal);
 
 	function budgetProgressClass(status: string) {
 		if (status === 'exceeded') return 'bg-red-500';
@@ -431,31 +411,10 @@
 		{#if dash.accounts.length === 0}
 			<EmptyStateCard message={$_('dashboard.accountsEmpty')} />
 		{:else}
-			<details
-				class="dashboard-accounts-panel"
-				bind:this={accountsPanelEl}
-				ontoggle={onAccountsPanelToggle}
-			>
-				<summary class="dashboard-accounts-summary sm:hidden">
-					<span>
-						{$_('dashboard.accountsSection')}
-						<span class="font-normal tabular-nums" style:color="var(--text-muted)">
-							({dash.accounts.length})
-						</span>
-					</span>
-					<svg
-						class="dashboard-accounts-chevron"
-						aria-hidden="true"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-					>
-						<path d="m6 9 6 6 6-6" />
-					</svg>
-				</summary>
-				<div class="space-y-6 pt-3 sm:pt-0">
-					{#each accountGroups as group (group[0].type)}
+			<div class="space-y-6">
+				{#each accountGroups as group (accountGroupKind(group))}
+					{@const kind = accountGroupKind(group)}
+					<AccountGroupPanel {kind} count={group.length}>
 						<div class="grid gap-4 sm:grid-cols-2">
 							{#each group as acc (acc.id)}
 								<a
@@ -492,13 +451,15 @@
 								</a>
 							{/each}
 						</div>
-					{/each}
-				</div>
-			</details>
+					</AccountGroupPanel>
+				{/each}
+			</div>
 		{/if}
 
-		<section>
-			<h2 class="mb-3 text-lg font-medium">{$_('dashboard.recent')}</h2>
+		<CollapsibleSection
+			label={$_('dashboard.recent')}
+			count={!pastLoading && !plannedLoading ? recentTotal : null}
+		>
 			{#if pastLoading && plannedLoading && pastTotal === 0 && plannedTotal === 0}
 				<p style:color="var(--text-muted)">{$_('common.loading')}</p>
 			{:else}
@@ -601,7 +562,7 @@
 					</div>
 				</div>
 			{/if}
-		</section>
+		</CollapsibleSection>
 	{/if}
 </div>
 

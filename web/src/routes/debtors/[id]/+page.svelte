@@ -18,6 +18,7 @@
 	import PageTabs from '$lib/components/PageTabs.svelte';
 	import TransactionList from '$lib/components/TransactionList.svelte';
 	import SettleDebtForm from '$lib/components/SettleDebtForm.svelte';
+	import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 	import TransactionContextStats from '$lib/components/TransactionContextStats.svelte';
 	import { confirm } from '$lib/confirm';
 	import { toast } from '$lib/toast';
@@ -180,8 +181,7 @@
 		</section>
 
 		{#if detail.transactions.length > 0}
-			<section>
-				<h2 class="mb-3 text-lg font-medium">{$_('debts.recentTransactions')}</h2>
+			<CollapsibleSection label={$_('debts.recentTransactions')} count={detail.transactions.length}>
 				<div class="card md:overflow-x-auto">
 					<TransactionList
 						transactions={relatedTransactions}
@@ -195,7 +195,7 @@
 						ondelete={(tx) => void removeTx(tx)}
 					/>
 				</div>
-			</section>
+			</CollapsibleSection>
 		{/if}
 	{/if}
 </div>

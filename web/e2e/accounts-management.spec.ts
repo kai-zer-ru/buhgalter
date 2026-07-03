@@ -1,7 +1,19 @@
 import { test, expect } from '@playwright/test';
 import { waitAppReady } from './helpers/auth';
-import { createCashAccount, createTransfer } from './helpers/setup-data';
+import { createCashAccount, createCreditCardAccount, createTransfer } from './helpers/setup-data';
 import { confirmDialog, openRowActions, rowMenuAction } from './helpers/ui';
+
+test('accounts list: section headings for account groups', async ({ page }) => {
+	const unique = Date.now();
+	await createCashAccount(page, `E2E My Funds ${unique}`);
+	await createCreditCardAccount(page, `E2E Credit Funds ${unique}`);
+
+	await page.goto('/accounts');
+	await waitAppReady(page);
+
+	await expect(page.getByRole('heading', { name: /Мои средства/ })).toBeVisible();
+	await expect(page.getByRole('heading', { name: /Кредитные средства/ })).toBeVisible();
+});
 
 test('accounts list: edit name inline', async ({ page }) => {
 	const unique = Date.now();

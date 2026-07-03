@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Account } from '$lib/api/client';
-import { groupAccountsByType } from './group-by-type';
+import { accountGroupKind, accountGroupLabelKey, groupAccountsByType } from './group-by-type';
 
 function account(id: string, type: Account['type']): Account {
 	return {
@@ -28,8 +28,7 @@ describe('groupAccountsByType', () => {
 		]);
 
 		expect(groups.map((g) => g.map((a) => a.id))).toEqual([
-			['cash-1'],
-			['bank-2', 'bank-1'],
+			['cash-1', 'bank-2', 'bank-1'],
 			['card-1']
 		]);
 	});
@@ -37,6 +36,23 @@ describe('groupAccountsByType', () => {
 	it('omits empty groups', () => {
 		const groups = groupAccountsByType([account('cash-1', 'cash'), account('bank-1', 'bank')]);
 
-		expect(groups.map((g) => g.map((a) => a.type))).toEqual([['cash'], ['bank']]);
+		expect(groups.map((g) => g.map((a) => a.type))).toEqual([['cash', 'bank']]);
+	});
+});
+
+describe('accountGroupKind', () => {
+	it('detects my funds and credit funds groups', () => {
+		const groups = groupAccountsByType([
+			account('cash-1', 'cash'),
+			account('card-1', 'credit_card')
+		]);
+
+		expect(accountGroupKind(groups[0])).toBe('my_funds');
+		expect(accountGroupKind(groups[1])).toBe('credit_funds');
+	});
+
+	it('maps kinds to i18n keys', () => {
+		expect(accountGroupLabelKey('my_funds')).toBe('accounts.group.myFunds');
+		expect(accountGroupLabelKey('credit_funds')).toBe('accounts.group.creditFunds');
 	});
 });

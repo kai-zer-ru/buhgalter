@@ -178,6 +178,8 @@
 	"accounts.filter.active": "Активные",
 	"accounts.filter.archived": "Архивные",
 	"accounts.filter.deleted": "Удалённые",
+	"accounts.group.myFunds": "Мои средства",
+	"accounts.group.creditFunds": "Кредитные средства",
 	"accounts.type.cash": "Наличные",
 	"accounts.type.bank": "Банковский",
 	"accounts.type.credit_card": "Кредитная карта",

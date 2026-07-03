@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { waitAppReady } from './helpers/auth';
+import { expandCollapsibleSection } from './helpers/ui';
 
 test('mobile menu drill-down opens settings submenu', async ({ page }) => {
 	await page.setViewportSize({ width: 390, height: 844 });
@@ -53,6 +54,7 @@ test('mobile menu navigates to transactions', async ({ page }) => {
 test('dashboard link opens all transactions', async ({ page }) => {
 	await page.goto('/');
 	await waitAppReady(page);
+	await expandCollapsibleSection(page, 'Последние операции');
 	await page.getByRole('link', { name: 'Все операции', exact: true }).click();
 	await waitAppReady(page);
 

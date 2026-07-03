@@ -167,7 +167,7 @@ Touch-targets и карточки таблиц — [ui-stable-layout.md](ui-stab
 
 | Раздел | Что |
 |------|-----|
-| Счета | список `/accounts`: клик по карточке → `/accounts/{id}`; меню «⋯» на карточке — [ui-row-actions.md](ui-row-actions.md) |
+| Счета | список `/accounts`: два блока с заголовками (без спойлеров) — [ui-credit-cards.md](ui-credit-cards.md); клик по карточке → `/accounts/{id}`; меню «⋯» на карточке — [ui-row-actions.md](ui-row-actions.md) |
 | Долги | должник → `/debtors/{id}`, страница `/debtors/[id]`, порядок колонок — [ui-table-columns.md](ui-table-columns.md); дата операции — optional (время свёрнуто), плановый возврат — только дата — [date-time-display.md](date-time-display.md) |
 | Кредиты | кредит → `/credits/{id}` |
 | Статистика | счёт, кредит, должник в поиске и drill-down |
