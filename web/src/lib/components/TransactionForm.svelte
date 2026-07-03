@@ -254,12 +254,17 @@
 				bind:value={subcategoryId}
 				options={subcategoryOptions}
 				usePortal
+				onchange={() => {
+					if (subcategoryId) newSubcategory = '';
+				}}
 			/>
-			<input
-				class="input mt-2 w-full"
-				placeholder={$_('transactions.field.newSubcategory')}
-				bind:value={newSubcategory}
-			/>
+			{#if !subcategoryId}
+				<input
+					class="input mt-2 w-full"
+					placeholder={$_('transactions.field.newSubcategory')}
+					bind:value={newSubcategory}
+				/>
+			{/if}
 		</div>
 
 		<div>
