@@ -84,6 +84,16 @@ WHERE id = ? AND user_id = ?;
 DELETE FROM budgets
 WHERE id = ? AND user_id = ?;
 
+-- name: ReassignBudgetsCategory :exec
+UPDATE budgets
+SET category_id = ?, updated_at = ?
+WHERE user_id = ? AND category_id = ?;
+
+-- name: ReassignBudgetSubcategory :exec
+UPDATE budgets
+SET subcategory_id = ?, updated_at = ?
+WHERE user_id = ? AND subcategory_id = ?;
+
 -- name: CountActiveBudgetConflict :one
 SELECT COUNT(*) AS cnt
 FROM budgets

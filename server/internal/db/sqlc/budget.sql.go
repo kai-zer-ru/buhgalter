@@ -545,6 +545,52 @@ func (q *Queries) ListBudgetsByUser(ctx context.Context, arg ListBudgetsByUserPa
 	return items, nil
 }
 
+const reassignBudgetSubcategory = `-- name: ReassignBudgetSubcategory :exec
+UPDATE budgets
+SET subcategory_id = ?, updated_at = ?
+WHERE user_id = ? AND subcategory_id = ?
+`
+
+type ReassignBudgetSubcategoryParams struct {
+	SubcategoryID   *string `json:"subcategory_id"`
+	UpdatedAt       string  `json:"updated_at"`
+	UserID          string  `json:"user_id"`
+	SubcategoryID_2 *string `json:"subcategory_id_2"`
+}
+
+func (q *Queries) ReassignBudgetSubcategory(ctx context.Context, arg ReassignBudgetSubcategoryParams) error {
+	_, err := q.db.ExecContext(ctx, reassignBudgetSubcategory,
+		arg.SubcategoryID,
+		arg.UpdatedAt,
+		arg.UserID,
+		arg.SubcategoryID_2,
+	)
+	return err
+}
+
+const reassignBudgetsCategory = `-- name: ReassignBudgetsCategory :exec
+UPDATE budgets
+SET category_id = ?, updated_at = ?
+WHERE user_id = ? AND category_id = ?
+`
+
+type ReassignBudgetsCategoryParams struct {
+	CategoryID   *string `json:"category_id"`
+	UpdatedAt    string  `json:"updated_at"`
+	UserID       string  `json:"user_id"`
+	CategoryID_2 *string `json:"category_id_2"`
+}
+
+func (q *Queries) ReassignBudgetsCategory(ctx context.Context, arg ReassignBudgetsCategoryParams) error {
+	_, err := q.db.ExecContext(ctx, reassignBudgetsCategory,
+		arg.CategoryID,
+		arg.UpdatedAt,
+		arg.UserID,
+		arg.CategoryID_2,
+	)
+	return err
+}
+
 const updateBudget = `-- name: UpdateBudget :execrows
 UPDATE budgets
 SET name = ?, scope = ?,

@@ -9,6 +9,22 @@ import (
 	"context"
 )
 
+const clearCategoryPrimary = `-- name: ClearCategoryPrimary :exec
+UPDATE categories
+SET is_primary = 0
+WHERE id = ? AND user_id = ?
+`
+
+type ClearCategoryPrimaryParams struct {
+	ID     string `json:"id"`
+	UserID string `json:"user_id"`
+}
+
+func (q *Queries) ClearCategoryPrimary(ctx context.Context, arg ClearCategoryPrimaryParams) error {
+	_, err := q.db.ExecContext(ctx, clearCategoryPrimary, arg.ID, arg.UserID)
+	return err
+}
+
 const clearPrimaryCategories = `-- name: ClearPrimaryCategories :exec
 UPDATE categories
 SET is_primary = 0
@@ -444,6 +460,22 @@ func (q *Queries) MaxSubcategorySortOrder(ctx context.Context, categoryID string
 	var coalesce interface{}
 	err := row.Scan(&coalesce)
 	return coalesce, err
+}
+
+const moveSubcategoryToCategory = `-- name: MoveSubcategoryToCategory :exec
+UPDATE subcategories
+SET category_id = ?
+WHERE id = ?
+`
+
+type MoveSubcategoryToCategoryParams struct {
+	CategoryID string `json:"category_id"`
+	ID         string `json:"id"`
+}
+
+func (q *Queries) MoveSubcategoryToCategory(ctx context.Context, arg MoveSubcategoryToCategoryParams) error {
+	_, err := q.db.ExecContext(ctx, moveSubcategoryToCategory, arg.CategoryID, arg.ID)
+	return err
 }
 
 const setCategoryPrimary = `-- name: SetCategoryPrimary :exec

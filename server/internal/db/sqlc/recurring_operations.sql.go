@@ -370,6 +370,52 @@ func (q *Queries) MarkRecurringOperationRan(ctx context.Context, arg MarkRecurri
 	return result.RowsAffected()
 }
 
+const reassignRecurringOperationsCategory = `-- name: ReassignRecurringOperationsCategory :exec
+UPDATE recurring_operations
+SET category_id = ?, updated_at = ?
+WHERE user_id = ? AND category_id = ?
+`
+
+type ReassignRecurringOperationsCategoryParams struct {
+	CategoryID   string `json:"category_id"`
+	UpdatedAt    string `json:"updated_at"`
+	UserID       string `json:"user_id"`
+	CategoryID_2 string `json:"category_id_2"`
+}
+
+func (q *Queries) ReassignRecurringOperationsCategory(ctx context.Context, arg ReassignRecurringOperationsCategoryParams) error {
+	_, err := q.db.ExecContext(ctx, reassignRecurringOperationsCategory,
+		arg.CategoryID,
+		arg.UpdatedAt,
+		arg.UserID,
+		arg.CategoryID_2,
+	)
+	return err
+}
+
+const reassignRecurringSubcategory = `-- name: ReassignRecurringSubcategory :exec
+UPDATE recurring_operations
+SET subcategory_id = ?, updated_at = ?
+WHERE user_id = ? AND subcategory_id = ?
+`
+
+type ReassignRecurringSubcategoryParams struct {
+	SubcategoryID   *string `json:"subcategory_id"`
+	UpdatedAt       string  `json:"updated_at"`
+	UserID          string  `json:"user_id"`
+	SubcategoryID_2 *string `json:"subcategory_id_2"`
+}
+
+func (q *Queries) ReassignRecurringSubcategory(ctx context.Context, arg ReassignRecurringSubcategoryParams) error {
+	_, err := q.db.ExecContext(ctx, reassignRecurringSubcategory,
+		arg.SubcategoryID,
+		arg.UpdatedAt,
+		arg.UserID,
+		arg.SubcategoryID_2,
+	)
+	return err
+}
+
 const setRecurringOperationNextRunAt = `-- name: SetRecurringOperationNextRunAt :execrows
 UPDATE recurring_operations SET next_run_at = ?
 WHERE id = ? AND user_id = ?

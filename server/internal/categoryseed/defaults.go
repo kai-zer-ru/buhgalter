@@ -25,7 +25,7 @@ type defaultCategory struct {
 }
 
 // DefaultCount is the number of categories seeded for a new user (including system).
-const DefaultCount = 12
+const DefaultCount = 14
 
 var defaultCategories = []defaultCategory{
 	{Type: "expense", Name: "Транспорт", Icon: "transport", Sort: 1, IsPrimary: true},
@@ -33,11 +33,13 @@ var defaultCategories = []defaultCategory{
 	{Type: "expense", Name: "Связь", Icon: "phone", Sort: 3},
 	{Type: "expense", Name: "Здоровье", Icon: "health", Sort: 4},
 	{Type: "expense", Name: "Разное", Icon: "default", Sort: 5},
+	{Type: "expense", Name: TransfersCategoryName, Icon: "default", Sort: 6},
 	{Type: "income", Name: "Зарплата", Icon: "salary", Sort: 1, IsPrimary: true},
 	{Type: "income", Name: "Прочие доходы", Icon: "default", Sort: 2},
 }
 
 var systemCategories = []defaultCategory{
+	{Type: "expense", Name: TransferCategoryName, Icon: "transfer", Sort: 9996, IsSystem: true},
 	{Type: "expense", Name: CommissionCategoryName, Icon: "percent", Sort: 9997, IsSystem: true},
 	{Type: "expense", Name: CreditCategoryName, Icon: "loan", Sort: 9998, IsSystem: true},
 	{Type: "income", Name: CreditCategoryName, Icon: "loan", Sort: 9998, IsSystem: true},
@@ -99,6 +101,12 @@ func BackfillSystemCategories(ctx context.Context, db *sql.DB) error {
 		return err
 	}
 	for _, userID := range userIDs {
+		if err := EnsureTransfersCategory(ctx, db, userID); err != nil {
+			return err
+		}
+		if err := EnsureTransferCategory(ctx, db, userID); err != nil {
+			return err
+		}
 		if err := EnsureSystemCategories(ctx, db, userID); err != nil {
 			return err
 		}

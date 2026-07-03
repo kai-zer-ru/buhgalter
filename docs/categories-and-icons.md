@@ -46,8 +46,11 @@ ER-диаграмма: [data-model.md](data-model.md).
 | Долги | income, expense | `loan` | Операции по долгам |
 | Кредиты | income, expense | `loan` | Доход при выдаче кредита / расход по платежам |
 | Комиссия | expense | `percent` | Комиссия за перевод между счетами (v1.1) |
+| Перевод | expense | `transfer` | Переводы между своими счетами (`POST /transfers`) |
 
-Seed при создании пользователя + backfill при старте БД (`categoryseed.EnsureSystemCategories`). `PUT` / `DELETE` → `403 Forbidden`; `POST /categories/{id}/subcategories` → `403 Forbidden`; `POST /categories/{id}/primary` → `403 Forbidden`. В UI настроек — только просмотр, без раскрытия подкатегорий.
+**Дефолтные пользовательские категории** (expense, seed при регистрации): Транспорт, Магазины, Связь, Здоровье, Разное, **Переводы** (`default`) — для ручных операций, связанных с переводами третьим лицам; не путать с системной «Перевод».
+
+Seed при создании пользователя + backfill при старте БД (`categoryseed.EnsureSystemCategories`, `EnsureTransferCategory`). При backfill операции в старой пользовательской «Перевод» с `type != transfer` переносятся в «Переводы»; подкатегории «Перевод» переносятся в «Переводы» (при коллизии имён — merge). `PUT` / `DELETE` системной категории → `403 Forbidden`; `POST /categories/{id}/subcategories` → `403 Forbidden`; `POST /categories/{id}/primary` → `403 Forbidden`. В UI настроек — только просмотр, без раскрытия подкатегорий.
 
 **Порядок:** список в API — пользовательские категории, затем системные (по `sort_order`, `name`). При `PUT /categories/order` системные всегда остаются в конце списка (клиент передаёт только id пользовательских категорий).
 

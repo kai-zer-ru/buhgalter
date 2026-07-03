@@ -78,6 +78,16 @@ WHERE id = ? AND user_id = ?;
 DELETE FROM recurring_operations
 WHERE id = ? AND user_id = ?;
 
+-- name: ReassignRecurringOperationsCategory :exec
+UPDATE recurring_operations
+SET category_id = ?, updated_at = ?
+WHERE user_id = ? AND category_id = ?;
+
+-- name: ReassignRecurringSubcategory :exec
+UPDATE recurring_operations
+SET subcategory_id = ?, updated_at = ?
+WHERE user_id = ? AND subcategory_id = ?;
+
 -- name: ListDueRecurringOperations :many
 SELECT
     id,

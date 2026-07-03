@@ -114,6 +114,23 @@ func (q *Queries) ActivateTransaction(ctx context.Context, arg ActivateTransacti
 	return result.RowsAffected()
 }
 
+const clearTransactionSubcategoriesByCategory = `-- name: ClearTransactionSubcategoriesByCategory :exec
+UPDATE transactions
+SET subcategory_id = NULL, updated_at = ?
+WHERE user_id = ? AND category_id = ? AND type = 'transfer'
+`
+
+type ClearTransactionSubcategoriesByCategoryParams struct {
+	UpdatedAt  string  `json:"updated_at"`
+	UserID     string  `json:"user_id"`
+	CategoryID *string `json:"category_id"`
+}
+
+func (q *Queries) ClearTransactionSubcategoriesByCategory(ctx context.Context, arg ClearTransactionSubcategoriesByCategoryParams) error {
+	_, err := q.db.ExecContext(ctx, clearTransactionSubcategoriesByCategory, arg.UpdatedAt, arg.UserID, arg.CategoryID)
+	return err
+}
+
 const countTransactionsFiltered = `-- name: CountTransactionsFiltered :one
 SELECT COUNT(*) AS count
 FROM transactions t
@@ -1108,6 +1125,54 @@ func (q *Queries) ListUsersWithDueFutureTransactions(ctx context.Context, transa
 		return nil, err
 	}
 	return items, nil
+}
+
+const reassignTransactionSubcategory = `-- name: ReassignTransactionSubcategory :exec
+UPDATE transactions
+SET subcategory_id = ?, updated_at = ?
+WHERE user_id = ? AND subcategory_id = ?
+`
+
+type ReassignTransactionSubcategoryParams struct {
+	SubcategoryID   *string `json:"subcategory_id"`
+	UpdatedAt       string  `json:"updated_at"`
+	UserID          string  `json:"user_id"`
+	SubcategoryID_2 *string `json:"subcategory_id_2"`
+}
+
+func (q *Queries) ReassignTransactionSubcategory(ctx context.Context, arg ReassignTransactionSubcategoryParams) error {
+	_, err := q.db.ExecContext(ctx, reassignTransactionSubcategory,
+		arg.SubcategoryID,
+		arg.UpdatedAt,
+		arg.UserID,
+		arg.SubcategoryID_2,
+	)
+	return err
+}
+
+const reassignTransactionsCategoryByFilter = `-- name: ReassignTransactionsCategoryByFilter :exec
+UPDATE transactions
+SET category_id = ?, updated_at = ?
+WHERE user_id = ? AND category_id = ? AND type != ?
+`
+
+type ReassignTransactionsCategoryByFilterParams struct {
+	CategoryID   *string `json:"category_id"`
+	UpdatedAt    string  `json:"updated_at"`
+	UserID       string  `json:"user_id"`
+	CategoryID_2 *string `json:"category_id_2"`
+	Type         string  `json:"type"`
+}
+
+func (q *Queries) ReassignTransactionsCategoryByFilter(ctx context.Context, arg ReassignTransactionsCategoryByFilterParams) error {
+	_, err := q.db.ExecContext(ctx, reassignTransactionsCategoryByFilter,
+		arg.CategoryID,
+		arg.UpdatedAt,
+		arg.UserID,
+		arg.CategoryID_2,
+		arg.Type,
+	)
+	return err
 }
 
 const sumExpenseManual = `-- name: SumExpenseManual :one

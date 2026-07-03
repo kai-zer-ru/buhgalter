@@ -423,6 +423,21 @@ SELECT id, name, type, icon, sort_order, is_primary, is_system, created_at
 FROM categories
 WHERE user_id = ? AND name = ? AND type = ?;
 
+-- name: ReassignTransactionsCategoryByFilter :exec
+UPDATE transactions
+SET category_id = ?, updated_at = ?
+WHERE user_id = ? AND category_id = ? AND type != ?;
+
+-- name: ReassignTransactionSubcategory :exec
+UPDATE transactions
+SET subcategory_id = ?, updated_at = ?
+WHERE user_id = ? AND subcategory_id = ?;
+
+-- name: ClearTransactionSubcategoriesByCategory :exec
+UPDATE transactions
+SET subcategory_id = NULL, updated_at = ?
+WHERE user_id = ? AND category_id = ? AND type = 'transfer';
+
 -- name: SumIncomeManualByUser :many
 SELECT account_id, COALESCE(SUM(amount), 0) AS total
 FROM transactions

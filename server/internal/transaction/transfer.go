@@ -15,8 +15,6 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
 )
 
-const transferCategoryName = "Перевод"
-
 type TransferInput struct {
 	FromAccountID   string
 	ToAccountID     string
@@ -65,7 +63,7 @@ func CreateTransfer(ctx context.Context, db *sql.DB, userID string, in TransferI
 		return Transfer{}, err
 	}
 
-	catID, err := ensureTransferCategory(ctx, db, userID)
+	catID, err := categoryseed.TransferCategoryID(ctx, db, userID)
 	if err != nil {
 		return Transfer{}, err
 	}
@@ -155,7 +153,7 @@ func CreateTransferForAccountDelete(ctx context.Context, db *sql.DB, userID stri
 		return Transfer{}, err
 	}
 
-	catID, err := ensureTransferCategory(ctx, db, userID)
+	catID, err := categoryseed.TransferCategoryID(ctx, db, userID)
 	if err != nil {
 		return Transfer{}, err
 	}
@@ -497,27 +495,6 @@ func updateTransferAccountID(ctx context.Context, q *sqlcdb.Queries, id, userID,
 		ID:                id,
 		UserID:            userID,
 	})
-}
-
-func ensureTransferCategory(ctx context.Context, db *sql.DB, userID string) (string, error) {
-	row, err := queries(db).GetCategoryByNameAndType(ctx, sqlcdb.GetCategoryByNameAndTypeParams{
-		UserID: userID, Name: transferCategoryName, Type: "expense",
-	})
-	if err == nil {
-		return row.ID, nil
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return "", err
-	}
-	id := uuid.NewString()
-	now := time.Now().UTC().Format(time.RFC3339)
-	if err := queries(db).InsertCategory(ctx, sqlcdb.InsertCategoryParams{
-		ID: id, UserID: userID, Name: transferCategoryName, Type: "expense",
-		Icon: "default", SortOrder: 9999, IsPrimary: 0, IsSystem: 0, CreatedAt: now,
-	}); err != nil {
-		return "", err
-	}
-	return id, nil
 }
 
 func accountTypes(ctx context.Context, db *sql.DB, userID, fromID, toID string) (string, string, error) {

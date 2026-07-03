@@ -130,3 +130,13 @@ WHERE category_id = ?;
 -- name: DeleteSubcategory :execrows
 DELETE FROM subcategories
 WHERE id = ?;
+
+-- name: MoveSubcategoryToCategory :exec
+UPDATE subcategories
+SET category_id = ?
+WHERE id = ?;
+
+-- name: ClearCategoryPrimary :exec
+UPDATE categories
+SET is_primary = 0
+WHERE id = ? AND user_id = ?;
