@@ -16,6 +16,8 @@ OpenAPI-схемы: [`Transaction`](api/openapi.yaml#/components/schemas/Transac
 | `transfer_account_status` | string | Статус второго счёта перевода |
 | `transfer_is_out` | bool | Только для `type=transfer`: `true` — исходящая нога (первая в `transfer_group_id` по `created_at ASC`), `false` — входящая |
 | `category_name`, `category_icon` | | Из `categories` |
+| `category_is_system` | bool | `categories.is_system` — скрывает «Повторить» для дохода/расхода |
+| `subcategory_name`, `subcategory_icon` | | Из `subcategories`; без подкатегории `subcategory_icon` пустой |
 | `amount_display` | string | `"1234.56"` для UI |
 | `commission` | integer | Только для перевода: комиссия в копейках (v1.1) |
 | `commission_display` | string | Отформатированная комиссия |
@@ -123,7 +125,7 @@ OpenAPI: `CreateTransferRequest.commission`, схема `Transfer`.
 
 Иконки — Font Awesome Solid (`f067` доход, `f068` расход, `f0ec` перевод); видимый текст только в `title` / `aria-label`.
 
-`TransactionForm` при **создании**: без вкладок типа; заголовок модалки — «Доход» или «Расход» (`defaultType` из родителя). При **редактировании** — заголовок «Изменить операцию», тип текстом, смена типа запрещена API.
+`TransactionForm` при **создании**: без вкладок типа; заголовок модалки — «Доход» или «Расход» (`defaultType` из родителя). При **редактировании** — заголовок «Изменить операцию», тип текстом, смена типа запрещена API. Поле **«Новая подкатегория»** под селектом подкатегории показывается **только если** подкатегория в списке не выбрана (`{#if !subcategoryId}`).
 
 `TransferForm` — отдельная модалка по кнопке перевода на тех же экранах. **(v1.2.3)** В селектах «Откуда» и «Куда» выбранный в одном поле счёт **не показывается** в другом (`transferAccountOptions` в `$lib/transfer-accounts.ts`); при совпадении значений (например, один активный счёт) поле «Куда» сбрасывается на другой счёт. При создании перевода со **страницы счёта** (`/accounts/[id]`) в «Откуда» подставляется **текущий счёт** (как счёт в `TransactionForm` для дохода/расхода); на главной и в «Все операции» — **основной** счёт (`defaultAccountId` без явного id).
 
@@ -150,6 +152,17 @@ OpenAPI: `CreateTransferRequest.commission`, схема `Transfer`.
 `TransactionFilters` внутри `FilterPanel`: на мобильных — спойлер «Фильтры» с chevron; на десктопе — всегда открыта. Поля с `dateOnlyPicker`: только дата, границы суток — `fromDateLocalStart` / `toDateLocalEnd` (`$lib/dates.ts`) в часовом поясе пользователя. См. [date-time-display.md](date-time-display.md). Используется на `/transactions`, `/stats`, странице счёта.
 
 Подробнее: [ui-row-actions.md](ui-row-actions.md).
+
+## Иконки в выпадающих списках
+
+`Select` и `Combobox` поддерживают опциональное поле `icon` в элементах списка (`$lib/select-options.ts`, `SelectOptionIcon.svelte`):
+
+| Тип | Отображение |
+|-----|-------------|
+| Счёт | `AccountIcon` (`cash` / `bank` / `credit_card`, логотип банка) |
+| Категория / подкатегория | `CategoryIcon` по slug |
+
+Хелперы: `accountSelectOptions`, `categorySelectOptions`, `subcategorySelectOptions`. Используется в формах операций, переводов, долгов, кредитов, бюджета, фильтрах, импорте, периодических операциях.
 
 ## Пагинация
 
@@ -183,6 +196,7 @@ OpenAPI: `CreateTransferRequest.commission`, схема `Transfer`.
 - `money.test.ts` — стабильность курсора в `MoneyInput`, `formatMoneyForInput` / `formatMoneyInput` (ноль → пусто).
 - `money-display.test.ts` — `formatMoneyForDisplay` (разделитель тысяч, валюта).
 - `accounts.test.ts` — `defaultAccountId` (контекстный счёт vs основной).
+- `select-options.test.ts` — иконки и подписи опций селектов.
 - `e2e/money-input.spec.ts` — пустые поля суммы и placeholder в формах счёта, операций, перевода, периодических операций.
 - `e2e/transaction-filters.spec.ts` — фильтры и пагинация на `/transactions` (20 на страницу).
 - `e2e/transaction-actions.spec.ts` — спойлеры плановых/прошлых на `/transactions` и главной.

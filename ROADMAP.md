@@ -14,6 +14,7 @@
 - [v1.2.4](#v124)
 - [v1.2.5](#v125)
 - [v1.3.0](#v130)
+- [v1.3.1](#v131)
 - [Общие планы](#общие-планы)
 
 ## v1.0.0
@@ -132,7 +133,7 @@
 - [x] основной контейнер на страницах сделать шире на десктопе
 - [x] [Release notes](docs/release-notes-v1.3.0.md) · [budget.md](docs/budget.md) · [ui-credit-cards.md](docs/ui-credit-cards.md) · [accounts-archive-delete.md](docs/accounts-archive-delete.md) · [balance-maintenance.md](docs/balance-maintenance.md) · [api/user-status.md](docs/api/user-status.md) · [sql-access.md](docs/sql-access.md)
 
-### v1.3.1
+## v1.3.1
 
 - [x] Добавить иконку "Караоке (микрофон) в категории
 - [x] Окно "Редактировать операцию" - календпрь уходит за границы экрана вниз. Его надо открывать вверх, сейчас он открывается вниз
@@ -164,6 +165,7 @@
         - 7 строка - Порог впедомлений
         - 8 строка - Переключатель "Активен"
         - 9 строка - Переключатель копирования
+- [x] [Release notes](docs/release-notes-v1.3.1.md) · [transactions-display.md](docs/transactions-display.md) · [categories-and-icons.md](docs/categories-and-icons.md) · [ui-navigation.md](docs/ui-navigation.md) · [ui-budget.md](docs/ui-budget.md) · [ui-balance-maintenance.md](docs/ui-balance-maintenance.md)
 
 ## Общие планы
 

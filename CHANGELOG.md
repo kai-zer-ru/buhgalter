@@ -3,7 +3,49 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 версии — [SemVer](https://semver.org/lang/ru/).
 
-Подробные release notes для пользователей: [docs/release-notes-v1.3.0.md](docs/release-notes-v1.3.0.md).
+Подробные release notes для пользователей: [docs/release-notes-v1.3.1.md](docs/release-notes-v1.3.1.md).
+
+## [v1.3.1] — 2026-07-03
+
+> **ОБЯЗАТЕЛЬНО СДЕЛАЙТЕ БЕКАП!** Перед обновлением сохраните копию базы (`data/buhgalter.db`) и каталога `backups/`.
+
+### Добавлено
+
+**Категории**
+
+- Иконка **«Караоке»** (микрофон) в каталоге расходов ([categories-and-icons.md](docs/categories-and-icons.md))
+- Системная категория **«Перевод»** (`is_system`, иконка `transfer`, без подкатегорий) — только переводы между своими счетами; legacy-данные в пользовательской «Перевод» мигрируются в **«Переводы»** при старте (`categoryseed.EnsureTransferCategory`)
+
+**UI/UX**
+
+- Пункт **«Операции»** в верхнем меню → `/transactions` ([ui-navigation.md](docs/ui-navigation.md))
+- **Иконки в `Select` / `Combobox`:** счета (`AccountIcon`), категории и подкатегории (`CategoryIcon`) — `$lib/select-options.ts`, `SelectOptionIcon.svelte`
+- Универсальный **`TransactionList`** + **`TransactionCategoryCell`**: колонка «Категория» — `иконка Категория → иконка Подкатегория`; единая вёрстка на главной, `/transactions`, странице счёта, `/stats`, `/debtors/[id]` ([transactions-display.md](docs/transactions-display.md))
+
+### Изменено
+
+**UI/UX**
+
+- **`/transactions`:** плановые и прошлые операции — в отдельных спойлерах (как на главной); пагинация только у прошлых
+- **Главная и `/accounts`:** блоки **«Мои средства»** и **«Кредитные средства»** — наличные и банки в одной сетке, кредитные карты отдельно; на главной — спойлеры, на `/accounts` — заголовки без спойлеров ([ui-credit-cards.md](docs/ui-credit-cards.md))
+- **Автопополнение:** индикатор на карточке счёта — `Автопополнение: {имя счёта списания}`; при выключенном автопополнении строка скрыта ([ui-balance-maintenance.md](docs/ui-balance-maintenance.md))
+- **Бюджет:** адаптивная вёрстка формы создания/редактирования по области (`all_expense` / `category` / `subcategory`) — [ui-budget.md](docs/ui-budget.md)
+- **Страница должника:** блок **«Последние операции»** (бывш. «Связанные операции») на общем `TransactionList` без колонки «Категория»
+- **Форма дохода/расхода:** поле «Новая подкатегория» скрыто, если в селекте уже выбрана подкатегория
+
+### Исправлено
+
+**UI/UX**
+
+- **Редактирование операции:** календарь `DateTimePicker` с `usePortal` открывается **вверх**, если снизу не хватает места ([ui-dialogs.md](docs/ui-dialogs.md#datetimepicker-и-всплывающие-панели))
+
+### Техническое
+
+- API: `subcategory_icon`, `category_is_system` в обогащении `Transaction`
+- Unit: `select-options.test.ts`, `categoryseed/transfer_test.go`, `dropdown-position.test.ts`
+- e2e: `z-navigation.spec.ts` (пункт «Операции»), `transaction-actions.spec.ts` (спойлеры плановых/прошлых), `dashboard-accounts.spec.ts`, `accounts-management.spec.ts`, `budget.spec.ts` (вёрстка формы)
+- [docs/release-notes-v1.3.1.md](docs/release-notes-v1.3.1.md)
+- Версия `1.3.1`
 
 ## [v1.3.0] — 2026-07-02
 
