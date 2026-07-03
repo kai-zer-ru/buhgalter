@@ -26,6 +26,7 @@
 	import { tr } from '$lib/i18n';
 	import { budgetStatusLine } from '$lib/budget-display';
 	import { resolveAutoTopupSourceName } from '$lib/accounts/auto-topup';
+	import { groupAccountsByType } from '$lib/accounts/group-by-type';
 
 	let dash = $state<Dashboard | null>(null);
 	let loading = $state(true);
@@ -59,6 +60,7 @@
 	);
 	const hasCreditCards = $derived(dash != null && dash.credit_cards_summary != null);
 	const currency = $derived($user?.currency ?? 'RUB');
+	const accountGroups = $derived(dash ? groupAccountsByType(dash.accounts) : []);
 
 	let accountsPanelEl = $state<HTMLDetailsElement | undefined>();
 	let accountsDesktop = $state(false);
@@ -452,40 +454,44 @@
 						<path d="m6 9 6 6 6-6" />
 					</svg>
 				</summary>
-				<div class="grid gap-4 pt-3 sm:grid-cols-2 sm:pt-0">
-					{#each dash.accounts as acc (acc.id)}
-						<a
-							href={resolve(`/accounts/${acc.id}`)}
-							class="card flex items-center gap-4 transition hover:opacity-90"
-						>
-							<AccountIcon type={acc.type} bankIcon={acc.bank_icon} size={48} />
-							<div class="min-w-0 flex-1">
-								<p class="truncate font-medium">{acc.name}</p>
-								<p class="mt-1 text-xl font-semibold tabular-nums">
-									<MoneyDisplay value={acc.balance_display} {currency} class="" />
-								</p>
-								{#if acc.credit_limit_display}
-									<p class="mt-0.5 text-sm tabular-nums" style:color="var(--text-muted)">
-										{$_('accounts.field.creditLimit')}:
-										<MoneyDisplay value={acc.credit_limit_display} {currency} class="" />
-									</p>
-								{/if}
-								{#if acc.type === 'bank'}
-									{@const autoTopupSource = resolveAutoTopupSourceName(acc, dash.accounts)}
-									{#if autoTopupSource}
-										<p class="mt-1 text-sm" style:color="var(--text-muted)">
-											{$_('accounts.autoTopup.status', { values: { source: autoTopupSource } })}
+				<div class="space-y-6 pt-3 sm:pt-0">
+					{#each accountGroups as group (group[0].type)}
+						<div class="grid gap-4 sm:grid-cols-2">
+							{#each group as acc (acc.id)}
+								<a
+									href={resolve(`/accounts/${acc.id}`)}
+									class="card flex items-center gap-4 transition hover:opacity-90"
+								>
+									<AccountIcon type={acc.type} bankIcon={acc.bank_icon} size={48} />
+									<div class="min-w-0 flex-1">
+										<p class="truncate font-medium">{acc.name}</p>
+										<p class="mt-1 text-xl font-semibold tabular-nums">
+											<MoneyDisplay value={acc.balance_display} {currency} class="" />
 										</p>
-									{/if}
-								{/if}
-								{#if acc.forecast_balance !== acc.balance}
-									<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
-										{$_('dashboard.withPlans')}:
-										<MoneyDisplay value={acc.forecast_display} {currency} class="" />
-									</p>
-								{/if}
-							</div>
-						</a>
+										{#if acc.credit_limit_display}
+											<p class="mt-0.5 text-sm tabular-nums" style:color="var(--text-muted)">
+												{$_('accounts.field.creditLimit')}:
+												<MoneyDisplay value={acc.credit_limit_display} {currency} class="" />
+											</p>
+										{/if}
+										{#if acc.type === 'bank'}
+											{@const autoTopupSource = resolveAutoTopupSourceName(acc, dash.accounts)}
+											{#if autoTopupSource}
+												<p class="mt-1 text-sm" style:color="var(--text-muted)">
+													{$_('accounts.autoTopup.status', { values: { source: autoTopupSource } })}
+												</p>
+											{/if}
+										{/if}
+										{#if acc.forecast_balance !== acc.balance}
+											<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
+												{$_('dashboard.withPlans')}:
+												<MoneyDisplay value={acc.forecast_display} {currency} class="" />
+											</p>
+										{/if}
+									</div>
+								</a>
+							{/each}
+						</div>
 					{/each}
 				</div>
 			</details>

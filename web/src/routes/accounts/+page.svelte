@@ -22,6 +22,7 @@
 	import TransferForm from '$lib/components/TransferForm.svelte';
 	import { isAutoTopupEligible } from '$lib/accounts/auto-topup';
 	import AccountAutoTopupDialog from '$lib/components/AccountAutoTopupDialog.svelte';
+	import { groupAccountsByType } from '$lib/accounts/group-by-type';
 	import { isCreditCard } from '$lib/credit-card';
 	import BackLink from '$lib/components/BackLink.svelte';
 	import AccountIcon from '$lib/components/AccountIcon.svelte';
@@ -58,6 +59,7 @@
 	let savingEditId = $state('');
 
 	const bankOptions = $derived(banks.map((bank) => ({ value: bank.id, label: bank.name })));
+	const accountGroups = $derived(groupAccountsByType(accounts));
 
 	onMount(() => {
 		const status = $page.url.searchParams.get('status');
@@ -324,7 +326,7 @@
 	{:else if accounts.length === 0}
 		<EmptyStateCard message={$_('accounts.empty')} />
 	{:else}
-		<div class="relative grid gap-4 sm:grid-cols-2" class:opacity-60={filterLoading}>
+		<div class="relative space-y-6" class:opacity-60={filterLoading}>
 			{#if filterLoading}
 				<p
 					class="pointer-events-none absolute inset-x-0 top-0 py-2 text-center text-sm"
@@ -333,154 +335,158 @@
 					{$_('common.loading')}
 				</p>
 			{/if}
-			{#each accounts as acc (acc.id)}
-				<div class="card">
-					{#if editingId === acc.id}
-						<form class="space-y-3" onsubmit={(e) => saveEdit(e, acc)}>
-							<div class="flex items-start gap-3">
-								<AccountIcon type={acc.type} bankIcon={acc.bank_icon} size={48} />
-								<div class="min-w-0 flex-1 space-y-3">
-									<div>
-										<label
-											class="mb-1 block text-sm"
-											style:color="var(--text-muted)"
-											for="edit-name-{acc.id}"
-										>
-											{$_('accounts.field.name')}
-										</label>
-										<input
-											id="edit-name-{acc.id}"
-											class="input w-full"
-											bind:value={editName}
-											required
-											maxlength="64"
-											autofocus
-										/>
-									</div>
-									{#if acc.type === 'bank' || acc.type === 'credit_card'}
-										<Select
-											label={$_('accounts.field.bank')}
-											bind:value={editBankId}
-											options={bankOptions}
-											usePortal
-										/>
-									{/if}
-									{#if acc.type === 'credit_card'}
-										<div>
-											<label
-												class="mb-1 block text-sm"
-												style:color="var(--text-muted)"
-												for="edit-limit-{acc.id}"
-											>
-												{$_('accounts.field.creditLimit')}
-											</label>
-											<MoneyInput id="edit-limit-{acc.id}" bind:value={editCreditLimit} />
-										</div>
-										<Select
-											label={$_('accounts.field.paymentAccount')}
-											bind:value={editPaymentAccountId}
-											options={[
-												{ value: '', label: $_('accounts.creditCard.paymentAccountDefault') },
-												...paymentOptions.filter((o) => o.value !== acc.id)
-											]}
-											usePortal
-										/>
-									{/if}
-									<div>
-										<label
-											class="mb-1 block text-sm"
-											style:color="var(--text-muted)"
-											for="edit-balance-{acc.id}"
-										>
-											{$_('accounts.field.balance')}
-										</label>
-										<MoneyInput id="edit-balance-{acc.id}" bind:value={editInitialBalance} />
-										{#if acc.type === 'credit_card'}
-											<button
-												type="button"
-												class="btn-ghost mt-1 text-sm"
-												onclick={applyLimitToBalance}
-											>
-												{$_('accounts.creditCard.limitButton')}
-											</button>
-										{/if}
-									</div>
-									<div class="flex flex-wrap gap-2">
-										<button
-											type="submit"
-											class="btn-primary"
-											disabled={savingEditId === acc.id ||
-												((acc.type === 'bank' || acc.type === 'credit_card') && !editBankId) ||
-												(acc.type === 'credit_card' && !editCreditLimit.trim())}
-										>
-											{savingEditId === acc.id ? $_('common.loading') : $_('common.save')}
-										</button>
-										<button type="button" class="btn-ghost" onclick={cancelEdit}>
-											{$_('common.cancel')}
-										</button>
-									</div>
-								</div>
-							</div>
-						</form>
-					{:else}
-						<div class="flex items-center gap-3">
-							<a
-								href={resolve(`/accounts/${acc.id}`)}
-								class="flex min-w-0 flex-1 items-center gap-4 transition hover:opacity-90"
-							>
-								<AccountIcon type={acc.type} bankIcon={acc.bank_icon} size={48} />
-								<div class="min-w-0 flex-1">
-									<div class="flex items-center gap-1">
-										<p class="truncate font-medium">{acc.name}</p>
-										{#if acc.is_primary}
-											<span
-												class="shrink-0"
-												style:color="var(--primary)"
-												title={$_('accounts.primary.badge')}
-												aria-label={$_('accounts.primary.badge')}
-											>
-												<svg
-													aria-hidden="true"
-													class="h-4 w-4"
-													viewBox="0 0 24 24"
-													fill="none"
-													stroke="currentColor"
-													stroke-width="2"
-												>
-													<path d="M20 6 9 17l-5-5" />
-												</svg>
-											</span>
-										{/if}
-									</div>
-									<p class="mt-1 text-xl font-semibold tabular-nums">
-										<MoneyDisplay
-											value={acc.balance_display}
-											currency={$user?.currency ?? 'RUB'}
-											class=""
-										/>
-									</p>
-									{#if acc.credit_limit_display}
-										<p class="mt-0.5 text-sm tabular-nums" style:color="var(--text-muted)">
-											{$_('accounts.field.creditLimit')}:
-											<MoneyDisplay
-												value={acc.credit_limit_display}
-												currency={$user?.currency ?? 'RUB'}
-												class=""
-											/>
-										</p>
-									{/if}
-								</div>
-							</a>
-							{#if filter !== 'deleted'}
-								<RowActionsMenu actions={accountActions(acc)} />
-							{/if}
-						</div>
-					{/if}
+			{#each accountGroups as group (group[0].type)}
+				<div class="grid gap-4 sm:grid-cols-2">
+					{#each group as acc (acc.id)}
+						{@render accountCard(acc)}
+					{/each}
 				</div>
 			{/each}
 		</div>
 	{/if}
 </div>
+
+{#snippet accountCard(acc: Account)}
+	<div class="card">
+		{#if editingId === acc.id}
+			<form class="space-y-3" onsubmit={(e) => saveEdit(e, acc)}>
+				<div class="flex items-start gap-3">
+					<AccountIcon type={acc.type} bankIcon={acc.bank_icon} size={48} />
+					<div class="min-w-0 flex-1 space-y-3">
+						<div>
+							<label
+								class="mb-1 block text-sm"
+								style:color="var(--text-muted)"
+								for="edit-name-{acc.id}"
+							>
+								{$_('accounts.field.name')}
+							</label>
+							<input
+								id="edit-name-{acc.id}"
+								class="input w-full"
+								bind:value={editName}
+								required
+								maxlength="64"
+								autofocus
+							/>
+						</div>
+						{#if acc.type === 'bank' || acc.type === 'credit_card'}
+							<Select
+								label={$_('accounts.field.bank')}
+								bind:value={editBankId}
+								options={bankOptions}
+								usePortal
+							/>
+						{/if}
+						{#if acc.type === 'credit_card'}
+							<div>
+								<label
+									class="mb-1 block text-sm"
+									style:color="var(--text-muted)"
+									for="edit-limit-{acc.id}"
+								>
+									{$_('accounts.field.creditLimit')}
+								</label>
+								<MoneyInput id="edit-limit-{acc.id}" bind:value={editCreditLimit} />
+							</div>
+							<Select
+								label={$_('accounts.field.paymentAccount')}
+								bind:value={editPaymentAccountId}
+								options={[
+									{ value: '', label: $_('accounts.creditCard.paymentAccountDefault') },
+									...paymentOptions.filter((o) => o.value !== acc.id)
+								]}
+								usePortal
+							/>
+						{/if}
+						<div>
+							<label
+								class="mb-1 block text-sm"
+								style:color="var(--text-muted)"
+								for="edit-balance-{acc.id}"
+							>
+								{$_('accounts.field.balance')}
+							</label>
+							<MoneyInput id="edit-balance-{acc.id}" bind:value={editInitialBalance} />
+							{#if acc.type === 'credit_card'}
+								<button type="button" class="btn-ghost mt-1 text-sm" onclick={applyLimitToBalance}>
+									{$_('accounts.creditCard.limitButton')}
+								</button>
+							{/if}
+						</div>
+						<div class="flex flex-wrap gap-2">
+							<button
+								type="submit"
+								class="btn-primary"
+								disabled={savingEditId === acc.id ||
+									((acc.type === 'bank' || acc.type === 'credit_card') && !editBankId) ||
+									(acc.type === 'credit_card' && !editCreditLimit.trim())}
+							>
+								{savingEditId === acc.id ? $_('common.loading') : $_('common.save')}
+							</button>
+							<button type="button" class="btn-ghost" onclick={cancelEdit}>
+								{$_('common.cancel')}
+							</button>
+						</div>
+					</div>
+				</div>
+			</form>
+		{:else}
+			<div class="flex items-center gap-3">
+				<a
+					href={resolve(`/accounts/${acc.id}`)}
+					class="flex min-w-0 flex-1 items-center gap-4 transition hover:opacity-90"
+				>
+					<AccountIcon type={acc.type} bankIcon={acc.bank_icon} size={48} />
+					<div class="min-w-0 flex-1">
+						<div class="flex items-center gap-1">
+							<p class="truncate font-medium">{acc.name}</p>
+							{#if acc.is_primary}
+								<span
+									class="shrink-0"
+									style:color="var(--primary)"
+									title={$_('accounts.primary.badge')}
+									aria-label={$_('accounts.primary.badge')}
+								>
+									<svg
+										aria-hidden="true"
+										class="h-4 w-4"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+									>
+										<path d="M20 6 9 17l-5-5" />
+									</svg>
+								</span>
+							{/if}
+						</div>
+						<p class="mt-1 text-xl font-semibold tabular-nums">
+							<MoneyDisplay
+								value={acc.balance_display}
+								currency={$user?.currency ?? 'RUB'}
+								class=""
+							/>
+						</p>
+						{#if acc.credit_limit_display}
+							<p class="mt-0.5 text-sm tabular-nums" style:color="var(--text-muted)">
+								{$_('accounts.field.creditLimit')}:
+								<MoneyDisplay
+									value={acc.credit_limit_display}
+									currency={$user?.currency ?? 'RUB'}
+									class=""
+								/>
+							</p>
+						{/if}
+					</div>
+				</a>
+				{#if filter !== 'deleted'}
+					<RowActionsMenu actions={accountActions(acc)} />
+				{/if}
+			</div>
+		{/if}
+	</div>
+{/snippet}
 
 {#if actionCard}
 	<TransferForm
