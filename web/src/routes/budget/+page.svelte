@@ -23,6 +23,7 @@
 	} from '$lib/api/client';
 	import BackLink from '$lib/components/BackLink.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
+	import IntegerInput from '$lib/components/IntegerInput.svelte';
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
 	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
 	import Select from '$lib/components/Select.svelte';
@@ -329,35 +330,41 @@
 
 {#snippet budgetForm(formPrefix: 'create' | 'edit')}
 	<form class="space-y-4" onsubmit={submit}>
-		<div class="grid gap-3 md:grid-cols-2">
-			<div class="md:col-span-2">
-				<label
-					class="mb-1 block text-sm"
-					style:color="var(--text-muted)"
-					for="budget-name-{formPrefix}"
-				>
+		<div class="grid items-end gap-3 md:grid-cols-2">
+			<div>
+				<label class="field-label" for="budget-name-{formPrefix}">
 					{$_('budget.field.name')}
 				</label>
 				<input id="budget-name-{formPrefix}" class="input w-full" bind:value={name} required />
 			</div>
+			<div class="hidden md:block">
+				<Select
+					id="budget-scope-{formPrefix}"
+					label={$_('budget.field.scope')}
+					bind:value={scope}
+					options={scopeOptions}
+					usePortal
+				/>
+			</div>
+		</div>
+		<div class="md:hidden">
 			<Select
-				id="budget-scope-{formPrefix}"
+				id="budget-scope-{formPrefix}-mobile"
 				label={$_('budget.field.scope')}
 				bind:value={scope}
 				options={scopeOptions}
 				usePortal
 			/>
+		</div>
+		{#if scope === 'all_expense'}
 			<div>
-				<label
-					class="mb-1 block text-sm"
-					style:color="var(--text-muted)"
-					for="budget-amount-{formPrefix}"
-				>
+				<label class="field-label" for="budget-amount-{formPrefix}">
 					{$_('budget.field.amount')}
 				</label>
 				<MoneyInput id="budget-amount-{formPrefix}" bind:value={amount} required />
 			</div>
-			{#if scope === 'category' || scope === 'subcategory'}
+		{:else if scope === 'category'}
+			<div class="grid items-end gap-3 md:grid-cols-2">
 				<Select
 					id="budget-category-{formPrefix}"
 					label={$_('budget.field.category')}
@@ -366,8 +373,23 @@
 					onchange={() => void loadSubcategories()}
 					usePortal
 				/>
-			{/if}
-			{#if scope === 'subcategory'}
+				<div>
+					<label class="field-label" for="budget-amount-{formPrefix}">
+						{$_('budget.field.amount')}
+					</label>
+					<MoneyInput id="budget-amount-{formPrefix}" bind:value={amount} required />
+				</div>
+			</div>
+		{:else}
+			<div class="grid items-end gap-3 md:grid-cols-3">
+				<Select
+					id="budget-category-{formPrefix}"
+					label={$_('budget.field.category')}
+					bind:value={categoryId}
+					options={categoryOptions}
+					onchange={() => void loadSubcategories()}
+					usePortal
+				/>
 				<Select
 					id="budget-subcategory-{formPrefix}"
 					label={$_('budget.field.subcategory')}
@@ -376,7 +398,15 @@
 					disabled={subcategoryOptions.length === 0}
 					usePortal
 				/>
-			{/if}
+				<div>
+					<label class="field-label" for="budget-amount-{formPrefix}">
+						{$_('budget.field.amount')}
+					</label>
+					<MoneyInput id="budget-amount-{formPrefix}" bind:value={amount} required />
+				</div>
+			</div>
+		{/if}
+		<div class="grid items-end gap-3 md:grid-cols-3">
 			<Select
 				id="budget-account-{formPrefix}"
 				label={$_('budget.field.account')}
@@ -385,32 +415,34 @@
 				usePortal
 			/>
 			<div>
-				<label
-					class="mb-1 block text-sm"
-					style:color="var(--text-muted)"
-					for="budget-alert-{formPrefix}"
-				>
+				<label class="field-label" for="budget-alert-{formPrefix}">
 					{$_('budget.field.alert')}
 				</label>
-				<input
+				<IntegerInput
 					id="budget-alert-{formPrefix}"
-					class="input w-full"
-					type="number"
-					min="0"
-					max="100"
-					bind:value={alertAtPercent}
+					class="input w-full tabular-nums"
+					value={alertAtPercent === '' ? NaN : Number(alertAtPercent)}
+					min={0}
+					max={100}
+					onchange={(v) => {
+						alertAtPercent = Number.isFinite(v) ? String(v) : '';
+					}}
 				/>
+			</div>
+			<div>
+				<span class="field-label">
+					{$_('budget.field.active')}
+				</span>
+				<div class="flex h-11 items-center">
+					<ToggleSwitch
+						checked={isActive}
+						label={$_('budget.field.active')}
+						onchange={() => (isActive = !isActive)}
+					/>
+				</div>
 			</div>
 		</div>
 		<div class="flex items-center gap-2">
-			<ToggleSwitch
-				checked={isActive}
-				label={$_('budget.field.active')}
-				onchange={() => (isActive = !isActive)}
-			/>
-			<span class="text-sm">{$_('budget.field.active')}</span>
-		</div>
-		<div class="flex items-start gap-2">
 			<ToggleSwitch
 				checked={copyForward}
 				label={$_('budget.field.copy_forward')}
@@ -453,44 +485,48 @@
 		]}
 	/>
 
-	<div class="flex flex-wrap items-center justify-between gap-3">
+	<div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
 		<h1 class="text-2xl font-semibold">{$_('budget.title')}</h1>
-		<div class="flex flex-wrap items-center gap-2">
-			<button
-				type="button"
-				class="btn-primary min-w-[7.25rem] shrink-0 text-center"
-				onclick={toggleForm}
-				disabled={copying}
-			>
-				{formOpen && !editId ? $_('common.cancel') : $_('budget.add')}
-			</button>
-			{#if canCopyFromPrevious}
+		<div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+			<div class="flex flex-wrap items-center gap-2">
 				<button
 					type="button"
-					class="btn-ghost"
+					class="btn-primary min-w-[7.25rem] shrink-0 text-center"
+					onclick={toggleForm}
 					disabled={copying}
-					onclick={() => void copyFromPreviousMonth()}
 				>
-					{$_('budget.action.copy_from_previous')}
+					{formOpen && !editId ? $_('common.cancel') : $_('budget.add')}
 				</button>
-			{/if}
-			<button
-				type="button"
-				class="btn-ghost"
-				onclick={() => shiftMonth(-1)}
-				aria-label={$_('budget.month.prev')}
-			>
-				←
-			</button>
-			<span class="min-w-[10rem] text-center font-medium capitalize">{monthLabel}</span>
-			<button
-				type="button"
-				class="btn-ghost"
-				onclick={() => shiftMonth(1)}
-				aria-label={$_('budget.month.next')}
-			>
-				→
-			</button>
+				{#if canCopyFromPrevious}
+					<button
+						type="button"
+						class="btn-ghost shrink-0"
+						disabled={copying}
+						onclick={() => void copyFromPreviousMonth()}
+					>
+						{$_('budget.action.copy_from_previous')}
+					</button>
+				{/if}
+			</div>
+			<div class="flex shrink-0 items-center justify-center gap-2 sm:justify-end">
+				<button
+					type="button"
+					class="btn-ghost shrink-0"
+					onclick={() => shiftMonth(-1)}
+					aria-label={$_('budget.month.prev')}
+				>
+					←
+				</button>
+				<span class="whitespace-nowrap text-center font-medium capitalize">{monthLabel}</span>
+				<button
+					type="button"
+					class="btn-ghost shrink-0"
+					onclick={() => shiftMonth(1)}
+					aria-label={$_('budget.month.next')}
+				>
+					→
+				</button>
+			</div>
 		</div>
 	</div>
 

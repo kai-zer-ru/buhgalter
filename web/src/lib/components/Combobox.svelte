@@ -167,7 +167,7 @@
 
 <div class="relative">
 	{#if label}
-		<label class="mb-1.5 block text-sm font-medium" for={id}>{label}</label>
+		<label class="field-label" for={id}>{label}</label>
 	{/if}
 	<input
 		{id}

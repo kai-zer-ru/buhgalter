@@ -400,7 +400,7 @@
 			<label class="block min-w-0 sm:col-span-2">
 				<span class="mb-1.5 block text-sm font-medium">{$_('stats.filters.search')}</span>
 				<input
-					class="input h-11 w-full"
+					class="input w-full"
 					bind:value={search}
 					placeholder={$_('stats.filters.searchPlaceholder')}
 				/>

@@ -128,13 +128,13 @@
 
 <div class="relative">
 	{#if label}
-		<label class="mb-1.5 block text-sm font-medium" for={id}>{label}</label>
+		<label class="field-label" for={id}>{label}</label>
 	{/if}
 	<button
 		{id}
 		type="button"
 		bind:this={triggerEl}
-		class="input flex h-11 w-full min-w-0 cursor-pointer items-center justify-between gap-2 text-left"
+		class="input flex w-full min-w-0 cursor-pointer items-center justify-between gap-2 text-left"
 		class:opacity-60={disabled}
 		{disabled}
 		role="combobox"
