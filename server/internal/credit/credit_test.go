@@ -135,7 +135,7 @@ func TestCreateListGetCredit(t *testing.T) {
 func TestPreviewSchedule(t *testing.T) {
 	issue := timeutil.NowUTC().AddDate(0, 1, 0)
 
-	preview, monthly, err := PreviewSchedule(PreviewInput{
+	result, err := PreviewSchedule(PreviewInput{
 		Principal:       600_000,
 		IssueDate:       issue,
 		TermMonths:      6,
@@ -145,11 +145,11 @@ func TestPreviewSchedule(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(preview) != 6 {
-		t.Fatalf("preview len %d", len(preview))
+	if len(result.Schedule) != 6 {
+		t.Fatalf("preview len %d", len(result.Schedule))
 	}
-	if monthly <= 0 {
-		t.Fatalf("monthly %d", monthly)
+	if result.CalculatedMonthly <= 0 {
+		t.Fatalf("monthly %d", result.CalculatedMonthly)
 	}
 }
 
@@ -498,15 +498,15 @@ func TestCreateWithInterestRate(t *testing.T) {
 	if c.MonthlyPayment <= 0 {
 		t.Fatalf("monthly %d", c.MonthlyPayment)
 	}
-	preview, monthly, err := PreviewSchedule(PreviewInput{
+	result, err := PreviewSchedule(PreviewInput{
 		Principal: 1_000_000, IssueDate: issue, TermMonths: 12,
 		InterestRate: 12, PaymentInterval: IntervalMonth,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(preview) != 12 || monthly <= 0 {
-		t.Fatalf("preview len %d monthly %d", len(preview), monthly)
+	if len(result.Schedule) != 12 || result.CalculatedMonthly <= 0 {
+		t.Fatalf("preview len %d monthly %d", len(result.Schedule), result.CalculatedMonthly)
 	}
 }
 

@@ -167,6 +167,12 @@
         - 9 строка - Переключатель копирования
 - [x] [Release notes](docs/release-notes-v1.3.1.md) · [transactions-display.md](docs/transactions-display.md) · [categories-and-icons.md](docs/categories-and-icons.md) · [ui-navigation.md](docs/ui-navigation.md) · [ui-budget.md](docs/ui-budget.md) · [ui-balance-maintenance.md](docs/ui-balance-maintenance.md)
 
+## v1.3.2
+- [x] Фикс добавления кредитов: 
+    - сумма, вводимая вручную
+    - первый платёж сегодня
+- [ ]
+
 ## Общие планы
 
 - [ ] [Командная работа](roadmap/team-collaboration.md) — несколько пользователей на одной базе

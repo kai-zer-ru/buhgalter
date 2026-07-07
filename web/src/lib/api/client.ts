@@ -1432,6 +1432,9 @@ export function previewCreditSchedule(payload: Record<string, unknown>) {
 		schedule_preview: SchedulePreviewEntry[];
 		calculated_monthly_payment: number;
 		calculated_monthly_payment_display: string;
+		effective_monthly_payment: number;
+		effective_monthly_payment_display: string;
+		user_set_monthly_payment: boolean;
 	}>('/api/v1/credits/schedule/preview', {
 		method: 'POST',
 		body: JSON.stringify(payload)

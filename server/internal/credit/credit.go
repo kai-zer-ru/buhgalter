@@ -98,6 +98,7 @@ type CreateInput struct {
 	ScheduleSeed              []ScheduleSeed
 	CreateTransactions        bool
 	PrincipalAffectsBalance   bool
+	FirstPaymentToday         bool
 }
 
 type UpdateInput struct {
@@ -153,14 +154,15 @@ const (
 var localTimePattern = regexp.MustCompile(`^([01]\d|2[0-3]):([0-5]\d)$`)
 
 type PreviewInput struct {
-	Principal       int64
-	TermMonths      int
-	InterestRate    float64
-	PaymentInterval PaymentInterval
-	CreditKind      string
-	IssueDate       time.Time
-	MonthlyPayment  *int64
-	SeedPayments    []ScheduleSeed
+	Principal         int64
+	TermMonths        int
+	InterestRate      float64
+	PaymentInterval   PaymentInterval
+	CreditKind        string
+	IssueDate         time.Time
+	MonthlyPayment    *int64
+	SeedPayments      []ScheduleSeed
+	FirstPaymentToday bool
 }
 
 func queries(db sqlcdb.DBTX) *sqlcdb.Queries {
@@ -207,9 +209,6 @@ func GetByID(ctx context.Context, db *sql.DB, userID, id string, withSchedule bo
 	return c, nil
 }
 
-// monthlyPaymentMatchTolerance allows rounding to whole rubles without treating payment as custom.
-const monthlyPaymentMatchTolerance = int64(100)
-
 func calculatedMonthlyPayment(principal int64, termMonths int, interestRate float64, creditKind string, interval PaymentInterval, issueDate time.Time) int64 {
 	monthly := MonthlyPayment(principal, interestRate, termMonths)
 	if normalizeCreditKind(creditKind) == CreditKindMortgage && interval == IntervalMonth {
@@ -218,16 +217,24 @@ func calculatedMonthlyPayment(principal int64, termMonths int, interestRate floa
 	return monthly
 }
 
+// resolvesToCalculatedPayment reports whether user input should use the auto-calculated payment.
+func resolvesToCalculatedPayment(calculated, userMonthly int64) bool {
+	if userMonthly == calculated {
+		return true
+	}
+	// Whole rubles matching truncated auto payment (mortgage / display rounding).
+	if userMonthly%100 == 0 && userMonthly == (calculated/100)*100 {
+		return true
+	}
+	return false
+}
+
 func resolveScheduleMonthly(principal int64, termMonths int, interestRate float64, creditKind string, interval PaymentInterval, issueDate time.Time, userMonthly *int64) (monthly int64, userSet bool) {
 	monthly = calculatedMonthlyPayment(principal, termMonths, interestRate, creditKind, interval, issueDate)
 	if userMonthly == nil {
 		return monthly, false
 	}
-	diff := *userMonthly - monthly
-	if diff < 0 {
-		diff = -diff
-	}
-	if diff <= monthlyPaymentMatchTolerance {
+	if resolvesToCalculatedPayment(monthly, *userMonthly) {
 		return monthly, false
 	}
 	return *userMonthly, true
@@ -244,34 +251,50 @@ func validateUserMonthlyAboveCalculated(calculated, monthly int64) error {
 	return nil
 }
 
-func PreviewSchedule(in PreviewInput) ([]ScheduleEntry, int64, error) {
+type PreviewResult struct {
+	Schedule          []ScheduleEntry
+	CalculatedMonthly int64
+	EffectiveMonthly  int64
+	UserSetPayment    bool
+}
+
+func PreviewSchedule(in PreviewInput) (PreviewResult, error) {
+	autoMonthly := calculatedMonthlyPayment(
+		in.Principal, in.TermMonths, in.InterestRate, in.CreditKind, in.PaymentInterval, in.IssueDate,
+	)
 	monthly, userSet := resolveScheduleMonthly(
 		in.Principal, in.TermMonths, in.InterestRate, in.CreditKind, in.PaymentInterval, in.IssueDate, in.MonthlyPayment,
 	)
 	if userSet && normalizeCreditKind(in.CreditKind) != CreditKindMortgage {
-		calculated := calculatedMonthlyPayment(in.Principal, in.TermMonths, in.InterestRate, in.CreditKind, in.PaymentInterval, in.IssueDate)
-		if err := validateUserMonthlyAboveCalculated(calculated, monthly); err != nil {
-			return nil, 0, err
+		if err := validateUserMonthlyAboveCalculated(autoMonthly, monthly); err != nil {
+			return PreviewResult{}, err
 		}
 	}
+	firstPaymentToday := in.FirstPaymentToday && normalizeCreditKind(in.CreditKind) != CreditKindMortgage
 	entries, err := GenerateSchedule(ScheduleInput{
-		Principal:       in.Principal,
-		TermMonths:      in.TermMonths,
-		MonthlyPayment:  monthly,
-		UserSetPayment:  userSet,
-		PaymentInterval: in.PaymentInterval,
-		CreditKind:      normalizeCreditKind(in.CreditKind),
-		IssueDate:       in.IssueDate,
-		InterestRate:    in.InterestRate,
-		SeedPayments:    in.SeedPayments,
+		Principal:         in.Principal,
+		TermMonths:        in.TermMonths,
+		MonthlyPayment:    monthly,
+		UserSetPayment:    userSet,
+		PaymentInterval:   in.PaymentInterval,
+		CreditKind:        normalizeCreditKind(in.CreditKind),
+		IssueDate:         in.IssueDate,
+		InterestRate:      in.InterestRate,
+		SeedPayments:      in.SeedPayments,
+		FirstPaymentToday: firstPaymentToday,
 	})
 	if err != nil {
-		return nil, 0, err
+		return PreviewResult{}, err
 	}
 	for i := range entries {
 		entries[i].AmountDisplay = money.FormatRubles(entries[i].Amount)
 	}
-	return entries, monthly, nil
+	return PreviewResult{
+		Schedule:          entries,
+		CalculatedMonthly: autoMonthly,
+		EffectiveMonthly:  monthly,
+		UserSetPayment:    userSet,
+	}, nil
 }
 
 func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Credit, error) {
@@ -324,16 +347,18 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Cre
 		monthly = sum / int64(len(in.ScheduleSeed))
 	}
 
+	firstPaymentToday := in.FirstPaymentToday && normalizeCreditKind(in.CreditKind) != CreditKindMortgage
 	entries, err := GenerateSchedule(ScheduleInput{
-		Principal:       principalAmount,
-		TermMonths:      in.TermMonths,
-		MonthlyPayment:  monthly,
-		UserSetPayment:  userSet,
-		PaymentInterval: in.PaymentInterval,
-		IssueDate:       in.IssueDate,
-		InterestRate:    in.InterestRate,
-		CreditKind:      creditKind,
-		SeedPayments:    in.ScheduleSeed,
+		Principal:         principalAmount,
+		TermMonths:        in.TermMonths,
+		MonthlyPayment:    monthly,
+		UserSetPayment:    userSet,
+		PaymentInterval:   in.PaymentInterval,
+		IssueDate:         in.IssueDate,
+		InterestRate:      in.InterestRate,
+		CreditKind:        creditKind,
+		SeedPayments:      in.ScheduleSeed,
+		FirstPaymentToday: firstPaymentToday,
 	})
 	if err != nil {
 		return Credit{}, err

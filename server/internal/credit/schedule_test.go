@@ -302,7 +302,7 @@ func TestGenerateScheduleMortgageUserSetPaymentSameAsCalculated(t *testing.T) {
 	}
 
 	rounded := (monthly / 100) * 100
-	preview, resolved, err := PreviewSchedule(PreviewInput{
+	result, err := PreviewSchedule(PreviewInput{
 		Principal: principal, TermMonths: term, InterestRate: rate,
 		PaymentInterval: IntervalMonth, IssueDate: issue, CreditKind: CreditKindMortgage,
 		MonthlyPayment: &rounded,
@@ -310,11 +310,11 @@ func TestGenerateScheduleMortgageUserSetPaymentSameAsCalculated(t *testing.T) {
 	if err != nil {
 		t.Fatalf("preview rounded payment: %v", err)
 	}
-	if len(preview) != term {
-		t.Fatalf("preview len %d, want %d", len(preview), term)
+	if len(result.Schedule) != term {
+		t.Fatalf("preview len %d, want %d", len(result.Schedule), term)
 	}
-	if resolved != monthly {
-		t.Fatalf("resolved monthly %d, want calculated %d", resolved, monthly)
+	if result.EffectiveMonthly != monthly {
+		t.Fatalf("resolved monthly %d, want calculated %d", result.EffectiveMonthly, monthly)
 	}
 }
 
@@ -346,5 +346,103 @@ func TestGenerateScheduleMortgageUserSetBankPayment(t *testing.T) {
 	}
 	if entries[term-1].Amount != bankPayment {
 		t.Fatalf("last payment %d want bank payment %d", entries[term-1].Amount, bankPayment)
+	}
+}
+
+func TestGenerateInstallmentFirstPaymentToday(t *testing.T) {
+	issue, _ := timeutil.ParseUTC("2024-01-15 00:00:00")
+	entries, err := GenerateSchedule(ScheduleInput{
+		Principal:         120_000,
+		TermMonths:        12,
+		MonthlyPayment:    10_000,
+		PaymentInterval:   IntervalMonth,
+		IssueDate:         issue,
+		InterestRate:      0,
+		FirstPaymentToday: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 12 {
+		t.Fatalf("expected 12 entries, got %d", len(entries))
+	}
+	first, _ := timeutil.ParseUTC(entries[0].PaymentDate)
+	if !first.Equal(issue) {
+		t.Fatalf("first payment date %v, want %v", first, issue)
+	}
+	second, _ := timeutil.ParseUTC(entries[1].PaymentDate)
+	expectedSecond := issue.AddDate(0, 1, 0)
+	if !second.Equal(expectedSecond) {
+		t.Fatalf("second payment date %v, want %v", second, expectedSecond)
+	}
+}
+
+func TestGenerateCreditFirstPaymentToday(t *testing.T) {
+	issue, _ := timeutil.ParseUTC("2024-01-15 00:00:00")
+	monthly := MonthlyPayment(1_000_000, 12, 12)
+	entries, err := GenerateSchedule(ScheduleInput{
+		Principal:         1_000_000,
+		TermMonths:        12,
+		MonthlyPayment:    monthly,
+		PaymentInterval:   IntervalMonth,
+		IssueDate:         issue,
+		InterestRate:      12,
+		CreditKind:        CreditKindConsumer,
+		FirstPaymentToday: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 12 {
+		t.Fatalf("expected 12 entries, got %d", len(entries))
+	}
+	first, _ := timeutil.ParseUTC(entries[0].PaymentDate)
+	if !first.Equal(issue) {
+		t.Fatalf("first payment date %v, want %v", first, issue)
+	}
+}
+
+func TestResolveScheduleMonthlyWholeRubleOverride(t *testing.T) {
+	calculated := int64(61_737) // 617.37 ₽
+	user := int64(61_800)       // 618.00 ₽
+	if resolvesToCalculatedPayment(calculated, user) {
+		t.Fatal("618 should be treated as custom payment")
+	}
+	_, userSet := resolveScheduleMonthly(493_900, 8, 0, CreditKindConsumer, IntervalWeek, time.Time{}, &user)
+	if !userSet {
+		t.Fatal("expected user-set payment for 618 vs 617.37")
+	}
+}
+
+func TestResolveScheduleMonthlyTruncatedRubles(t *testing.T) {
+	calculated := int64(5_881_347)
+	rounded := (calculated / 100) * 100
+	if !resolvesToCalculatedPayment(calculated, rounded) {
+		t.Fatal("whole-ruble truncation should match calculated")
+	}
+}
+
+func TestPreviewScheduleUserSetMonthly(t *testing.T) {
+	issue, _ := timeutil.ParseUTC("2024-01-15 00:00:00")
+	custom := int64(9_000)
+	result, err := PreviewSchedule(PreviewInput{
+		Principal:       120_000,
+		IssueDate:       issue,
+		TermMonths:      12,
+		InterestRate:    0,
+		PaymentInterval: IntervalMonth,
+		MonthlyPayment:  &custom,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.CalculatedMonthly != 10_000 {
+		t.Fatalf("calculated %d, want 10000", result.CalculatedMonthly)
+	}
+	if result.EffectiveMonthly != custom {
+		t.Fatalf("effective %d, want %d", result.EffectiveMonthly, custom)
+	}
+	if !result.UserSetPayment {
+		t.Fatal("expected user-set payment")
 	}
 }

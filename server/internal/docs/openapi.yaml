@@ -16,7 +16,7 @@ info:
     `POST /accounts/{id}/primary`, `POST /accounts/{id}/archive`, `DELETE /accounts/{id}`.
     На `/accounts/{id}` — та же форма редактирования в шапке. Поля: название, банк, начальный баланс.
     Подробнее — [ui-row-actions.md](../ui-row-actions.md).
-  version: 1.3.1
+  version: 1.3.2
 servers:
   - url: /api/v1
 paths:
@@ -1731,8 +1731,10 @@ paths:
         **Потребительский кредит** (`credit_kind=consumer`, по умолчанию):
         - для `month` / `week` / `two_weeks` — аннуитет от `issue_date`; платежи 1…N−1 равны,
           последний закрывает остаток + проценты за период;
-        - опциональный `monthly_payment` переопределяет расчётный платёж; если сумма совпадает с расчётной
-          в пределах 1 ₽ (копейки), трактуется как автоматическая;
+        - для consumer-кредита и рассрочки (`credit_kind=consumer`) опционально `first_payment_today=true`:
+          первый платёж в дату выдачи, далее с шагом `payment_interval`; для ипотеки игнорируется;
+        - опциональный `monthly_payment` переопределяет расчётный платёж; override не применяется только при точном
+          совпадении с расчётом или при вводе целых рублей, совпадающих с усечённым расчётом;
         - слишком низкий ручной платёж (не покрывает проценты) или слишком высокий (не укладывается в срок)
           → **400** `VALIDATION_ERROR`, ключ `ERR_CREDIT_INVALID_PAYMENT`, поле `error.field=monthly_payment`;
         - для `manual` — только переданные `seed_payments` (ровно `term` строк; сумма подгоняется последним платежом).
@@ -4016,7 +4018,7 @@ components:
           description: |
             Опциональный ежемесячный платёж (копейки). Для consumer — override расчётного с проверкой
             min/max; для mortgage — сумма из договора банка без отклонения «слишком высокий».
-            Совпадение с расчётным в пределах 1 ₽ трактуется как автоматический платёж.
+            Без override — точное совпадение с расчётом или целые рубли, совпадающие с усечённым расчётом.
         debit_account_id:
           type: string
         debit_time_local:
@@ -4042,6 +4044,11 @@ components:
             Только для consumer с interest_rate &gt; 0. Если true — доход на сумму кредита
             на `debit_account_id` в дату выдачи. Недоступно, если в графике есть платёж
             с датой раньше начала текущих суток (TZ пользователя).
+        first_payment_today:
+          type: boolean
+          description: >
+            Для consumer-кредита и рассрочки: первый платёж в дату выдачи. Для ипотеки (`credit_kind=mortgage`)
+            игнорируется.
         create_transactions:
           type: boolean
           description: >
@@ -4362,6 +4369,11 @@ components:
           description: |
             Опциональный override ежемесячного платежа (копейки). Для mortgage — сумма из договора банка;
             для consumer — с проверкой на min/max. Пусто/null — автоматический расчёт.
+        first_payment_today:
+          type: boolean
+          description: |
+            Для consumer-кредита и рассрочки: первый платёж в дату выдачи. Для ипотеки (`credit_kind=mortgage`)
+            игнорируется.
         seed_payments:
           type: array
           description: Обязателен при payment_interval=manual (ровно term элементов)
@@ -4376,7 +4388,7 @@ components:
                   - type: integer
     PreviewScheduleResponse:
       type: object
-      required: [schedule_preview, calculated_monthly_payment, calculated_monthly_payment_display]
+      required: [schedule_preview, calculated_monthly_payment, calculated_monthly_payment_display, effective_monthly_payment, effective_monthly_payment_display, user_set_monthly_payment]
       properties:
         schedule_preview:
           type: array
@@ -4392,10 +4404,19 @@ components:
                 description: Сумма платежа в копейках
         calculated_monthly_payment:
           type: integer
-          description: Расчётный равный платёж в копейках (до override monthly_payment)
+          description: Автоматически рассчитанный платёж в копейках (без учёта override)
         calculated_monthly_payment_display:
           type: string
-          description: Форматированная сумма для UI (например «600 576,47 ₽»)
+          description: Форматированная автоматическая сумма для UI
+        effective_monthly_payment:
+          type: integer
+          description: Платёж, использованный в графике (override или расчётный)
+        effective_monthly_payment_display:
+          type: string
+          description: Форматированная эффективная сумма для UI
+        user_set_monthly_payment:
+          type: boolean
+          description: true, если переданный monthly_payment применён как override (не совпадает с расчётом)
     ImportReport:
       type: object
       properties:
