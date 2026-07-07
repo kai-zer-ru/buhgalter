@@ -22,8 +22,15 @@ OpenAPI-схемы: [`Transaction`](api/openapi.yaml#/components/schemas/Transac
 | `commission` | integer | Только для перевода: комиссия в копейках (v1.1) |
 | `commission_display` | string | Отформатированная комиссия |
 | `credit_payment_linked` | bool | `true` — операция привязана к платежу по кредиту; редактирование через `PUT /transactions/{id}` запрещено |
+| `store_id` | string | nullable; только `expense` — магазин из чека или выбранный вручную |
+| `store_name` | string | nullable; имя из `stores` (обогащение в SELECT) |
+| `receipt_import_id` | string | nullable; если операция создана из чека — для иконки и попапа деталей |
 
 `transfer_is_out` вычисляется в sqlc-запросах (`CASE` + подзапрос по `transfer_group_id`), не хранится в таблице `transactions`.
+
+### Иконка чека в списке
+
+Если `receipt_import_id` задан — рядом с суммой кнопка «Данные чека» (`ReceiptDetailDialog`): все позиции чека, подсветка текущей (`highlight_item_index` из `GET /receipts/{id}?transaction_id=`), ссылка на `fns_check_url`. См. [receipt-scanner.md](receipt-scanner.md).
 
 В ответах **дашборда** и **сводки счетов** (`AccountBalance` / `GET /dashboard`, `/accounts/summary`, `/accounts/{id}/balance`):
 

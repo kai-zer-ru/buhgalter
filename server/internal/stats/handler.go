@@ -76,6 +76,26 @@ func (h *Handler) BySubcategory(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"items": out})
 }
 
+func (h *Handler) ByStore(w http.ResponseWriter, r *http.Request) {
+	info, ok := auth.FromContext(r.Context())
+	if !ok {
+		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
+		return
+	}
+	f := filtersFromQuery(r)
+	svc := New(h.Store.DB())
+	out, err := svc.ByStore(r.Context(), info.User.ID, f)
+	if errors.Is(err, ErrInvalidDate) {
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_PERIOD_DATE")
+		return
+	}
+	if err != nil {
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": out})
+}
+
 func (h *Handler) ByPeriod(w http.ResponseWriter, r *http.Request) {
 	info, ok := auth.FromContext(r.Context())
 	if !ok {
@@ -118,6 +138,7 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 		AccountID:  q.Get("account_id"),
 		Type:       q.Get("type"),
 		CategoryID: q.Get("category_id"),
+		StoreID:    q.Get("store_id"),
 		Kind:       q.Get("kind"),
 		From:       q.Get("from"),
 		To:         q.Get("to"),
@@ -183,6 +204,7 @@ func filtersFromQuery(r *http.Request) Filters {
 		Type:          q.Get("type"),
 		AccountID:     q.Get("account_id"),
 		CategoryID:    q.Get("category_id"),
+		StoreID:       q.Get("store_id"),
 		Kind:          q.Get("kind"),
 		Search:        q.Get("search"),
 		IncludeFuture: includeFuture,

@@ -18,7 +18,8 @@
 		| 'create'
 		| 'archive'
 		| 'repeat'
-		| 'bank';
+		| 'bank'
+		| 'receipt';
 
 	let {
 		icon,

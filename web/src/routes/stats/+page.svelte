@@ -7,9 +7,11 @@
 	import {
 		getStatsByCategory,
 		getStatsByPeriod,
+		getStatsByStore,
 		getStatsSummary,
 		getBudgetSummary,
 		getUIMeta,
+		listStores,
 		searchStats,
 		type Account,
 		type Category,
@@ -17,6 +19,7 @@
 		type Debtor,
 		type StatsCategoryItem,
 		type StatsPeriodItem,
+		type StatsStoreItem,
 		type StatsSummary,
 		type BudgetSummaryItem,
 		type Transaction
@@ -60,6 +63,8 @@
 	let searchRows = $state<Transaction[]>([]);
 	let accounts = $state<Account[]>([]);
 	let categories = $state<Category[]>([]);
+	let stores = $state<import('$lib/api/client').Store[]>([]);
+	let byStore = $state<StatsStoreItem[]>([]);
 	let debtorByName = $state<Record<string, string>>({});
 	let creditByName = $state<Record<string, string>>({});
 
@@ -68,6 +73,7 @@
 	let type = $state('');
 	let accountId = $state('');
 	let categoryId = $state('');
+	let storeId = $state('');
 	let groupBy = $state<'day' | 'week' | 'month'>('month');
 	let search = $state('');
 	let filtersAutoApplyReady = $state(false);
@@ -100,6 +106,13 @@
 		return [
 			{ value: '', label: tr('import.export.all_categories') },
 			...categorySelectOptions(filtered, (cat) => categorySelectLabel(cat, categories))
+		];
+	});
+	const storeOptions = $derived.by(() => {
+		void $locale;
+		return [
+			{ value: '', label: tr('import.export.all_stores') },
+			...stores.map((store) => ({ value: store.id, label: store.name }))
 		];
 	});
 	const duplicateCategoryNameSet = $derived(
@@ -169,6 +182,7 @@
 			type,
 			accountId,
 			categoryId,
+			storeId,
 			groupBy,
 			search: search.trim()
 		});
@@ -187,6 +201,7 @@
 			categories = Object.values(uniqueByID).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
 			debtorByName = toDebtorMap(meta.debtors);
 			creditByName = toCreditMap([...meta.active_credits, ...meta.closed_credits]);
+			stores = await listStores();
 			metaLoaded = true;
 		} catch (err) {
 			toast.fromError(err);
@@ -200,6 +215,7 @@
 		if (type) params.type = type;
 		if (accountId) params.account_id = accountId;
 		if (categoryId) params.category_id = categoryId;
+		if (storeId) params.store_id = storeId;
 		return params;
 	}
 
@@ -218,7 +234,7 @@
 		try {
 			const params = statsParams();
 			const month = budgetMonthKey();
-			const [summaryRes, categoryRes, periodRes, budgetRes] = await Promise.all([
+			const [summaryRes, categoryRes, periodRes, budgetRes, storeRes] = await Promise.all([
 				getStatsSummary(params),
 				getStatsByCategory(params),
 				getStatsByPeriod({ ...params, group_by: groupBy }),
@@ -226,11 +242,13 @@
 					items: [] as BudgetSummaryItem[],
 					month,
 					can_copy_from_previous: false
-				}))
+				})),
+				stores.length > 0 ? getStatsByStore(params) : Promise.resolve({ items: [] as StatsStoreItem[] })
 			]);
 			summary = summaryRes;
 			byCategory = categoryRes.items;
 			byPeriod = periodRes.items;
+			byStore = storeRes.items;
 			const bmap: Record<string, BudgetSummaryItem> = {};
 			for (const b of budgetRes.items) {
 				if (b.scope === 'category' && b.category_id) {
@@ -263,6 +281,7 @@
 		type = '';
 		accountId = '';
 		categoryId = '';
+		storeId = '';
 		groupBy = 'month';
 		search = '';
 		lastFiltersKey = currentFiltersKey();
@@ -390,6 +409,15 @@
 				options={categoryOptions}
 				usePortal
 			/>
+			{#if stores.length > 0}
+				<Select
+					id="stats-store"
+					label={$_('stats.filters.store')}
+					bind:value={storeId}
+					options={storeOptions}
+					usePortal
+				/>
+			{/if}
 			<Select
 				id="stats-group-by"
 				label={$_('stats.filters.groupBy')}
@@ -491,6 +519,34 @@
 					</div>
 				{/if}
 			</div>
+
+			{#if stores.length > 0 && byStore.length > 0 && showCategoryExpense}
+				<div class="card md:overflow-x-auto">
+					<h2 class="mb-2 text-lg font-medium">{$_('stats.byStore')}</h2>
+					<table class="w-full text-left text-sm">
+						<thead>
+							<tr style:color="var(--text-muted)">
+								<th class="p-3">{$_('stores.field')}</th>
+								<th class="p-3 text-right">{$_('stats.col.amount')}</th>
+								<th class="p-3 text-right">{$_('stats.col.share')}</th>
+								<th class="p-3 text-right">{$_('stats.col.count')}</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each byStore as row (row.store_id)}
+								<tr class="border-t" style:border-color="var(--border)">
+									<td class="p-3">{row.store_name}</td>
+									<td class="p-3 text-right tabular-nums">
+										<MoneyDisplay value={formatMoneyForDisplay(row.total)} />
+									</td>
+									<td class="p-3 text-right tabular-nums">{row.percentage}%</td>
+									<td class="p-3 text-right tabular-nums">{row.count}</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			{/if}
 
 			<div class="card md:overflow-x-auto">
 				<h2 class="mb-2 text-lg font-medium">{$_('stats.section.period')}</h2>

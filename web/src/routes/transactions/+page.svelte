@@ -7,9 +7,11 @@
 	import {
 		deleteTransaction,
 		getUIMeta,
+		listStores,
 		listTransactions,
 		type Account,
 		type Category,
+		type Store,
 		type Transaction
 	} from '$lib/api/client';
 	import { accountsFromUIMeta } from '$lib/select-options';
@@ -18,6 +20,7 @@
 	import TransactionContextStats from '$lib/components/TransactionContextStats.svelte';
 	import TransactionFilters from '$lib/components/TransactionFilters.svelte';
 	import TransactionForm from '$lib/components/TransactionForm.svelte';
+	import ReceiptImportForm from '$lib/components/ReceiptImportForm.svelte';
 	import TransactionList from '$lib/components/TransactionList.svelte';
 	import TransferForm from '$lib/components/TransferForm.svelte';
 	import TransactionPagination from '$lib/components/TransactionPagination.svelte';
@@ -40,6 +43,7 @@
 	let loading = $state(true);
 	let filterLoading = $state(false);
 	let txOpen = $state(false);
+	let receiptOpen = $state(false);
 	let transferOpen = $state(false);
 	let editTx = $state<Transaction | null>(null);
 	let editTransfer = $state<Transaction | null>(null);
@@ -48,11 +52,13 @@
 	let newTxType = $state<'expense' | 'income'>('expense');
 	let accounts = $state<Account[]>([]);
 	let categories = $state<Category[]>([]);
+	let stores = $state<Store[]>([]);
 
 	let fromLocal = $state('');
 	let toLocal = $state('');
 	let type = $state('');
 	let categoryId = $state('');
+	let storeId = $state('');
 	let accountId = $state('');
 	let kind = $state('');
 	let search = $state('');
@@ -90,6 +96,7 @@
 		toLocal = q.get('to_local') ?? '';
 		type = q.get('type') ?? '';
 		categoryId = q.get('category_id') ?? '';
+		storeId = q.get('store_id') ?? '';
 		accountId = q.get('account_id') ?? '';
 		kind = q.get('kind') ?? '';
 		search = q.get('search') ?? '';
@@ -101,6 +108,7 @@
 		if (toLocal) params.to = fromDateLocalEnd(toLocal, tz);
 		if (type) params.type = type;
 		if (categoryId) params.category_id = categoryId;
+		if (storeId) params.store_id = storeId;
 		if (accountId) params.account_id = accountId;
 		if (search.trim()) params.search = search.trim();
 		return params;
@@ -126,6 +134,7 @@
 			toLocal,
 			type,
 			categoryId,
+			storeId,
 			accountId,
 			kind,
 			search: search.trim()
@@ -143,6 +152,7 @@
 			uniqueByID[cat.id] = cat;
 		}
 		categories = Object.values(uniqueByID).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+		stores = await listStores();
 	}
 
 	async function loadSplit() {
@@ -210,6 +220,7 @@
 		if (toLocal) queryParts.push(`to_local=${encodeURIComponent(toLocal)}`);
 		if (type) queryParts.push(`type=${encodeURIComponent(type)}`);
 		if (categoryId) queryParts.push(`category_id=${encodeURIComponent(categoryId)}`);
+		if (storeId) queryParts.push(`store_id=${encodeURIComponent(storeId)}`);
 		if (accountId) queryParts.push(`account_id=${encodeURIComponent(accountId)}`);
 		if (kind) queryParts.push(`kind=${encodeURIComponent(kind)}`);
 		if (search.trim()) queryParts.push(`search=${encodeURIComponent(search.trim())}`);
@@ -227,6 +238,7 @@
 		toLocal = '';
 		type = '';
 		categoryId = '';
+		storeId = '';
 		accountId = '';
 		kind = '';
 		search = '';
@@ -317,6 +329,7 @@
 			<NewTransactionButtons
 				onincome={() => openNewTransaction('income')}
 				onexpense={() => openNewTransaction('expense')}
+				onreceipt={() => (receiptOpen = true)}
 				ontransfer={() => {
 					editTransfer = null;
 					repeatTransfer = null;
@@ -331,11 +344,13 @@
 		bind:toLocal
 		bind:type
 		bind:categoryId
+		bind:storeId
 		bind:accountId
 		bind:kind
 		bind:search
 		{accounts}
 		{categories}
+		{stores}
 		onreset={resetFilters}
 	/>
 
@@ -492,6 +507,11 @@
 		editTx = null;
 		repeatTx = null;
 	}}
+	onsaved={load}
+/>
+<ReceiptImportForm
+	bind:open={receiptOpen}
+	onclose={() => (receiptOpen = false)}
 	onsaved={load}
 />
 <TransferForm

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { _ } from 'svelte-i18n';
-	import type { Account, Category } from '$lib/api/client';
+	import type { Account, Category, Store } from '$lib/api/client';
 	import { categorySelectLabel } from '$lib/category-label';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
 	import { dateOnlyPicker } from '$lib/datetime-picker-standards';
@@ -14,10 +14,12 @@
 		type: string;
 		categoryId: string;
 		accountId: string;
+		storeId: string;
 		kind: string;
 		search: string;
 		accounts?: Account[];
 		categories?: Category[];
+		stores?: Store[];
 		showAccount?: boolean;
 		showCategory?: boolean;
 		showType?: boolean;
@@ -32,10 +34,12 @@
 		type = $bindable(),
 		categoryId = $bindable(),
 		accountId = $bindable(),
+		storeId = $bindable(),
 		kind = $bindable(),
 		search = $bindable(),
 		accounts = [],
 		categories = [],
+		stores = [],
 		showAccount = true,
 		showCategory = true,
 		showType = true,
@@ -64,6 +68,11 @@
 	const categoryOptions = $derived([
 		{ value: '', label: $_('import.export.all_categories') },
 		...categorySelectOptions(filteredCategories, (cat) => categorySelectLabel(cat, categories))
+	]);
+
+	const storeOptions = $derived([
+		{ value: '', label: $_('import.export.all_stores') },
+		...stores.map((store) => ({ value: store.id, label: store.name }))
 	]);
 
 	$effect(() => {
@@ -125,6 +134,16 @@
 				label={$_('transactions.filters.category')}
 				bind:value={categoryId}
 				options={categoryOptions}
+				usePortal
+			/>
+		{/if}
+
+		{#if stores.length > 0}
+			<Select
+				id="tx-filter-store"
+				label={$_('transactions.filters.store')}
+				bind:value={storeId}
+				options={storeOptions}
 				usePortal
 			/>
 		{/if}

@@ -15,6 +15,7 @@
 	import AccountIcon from '$lib/components/AccountIcon.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
 	import TransactionForm from '$lib/components/TransactionForm.svelte';
+	import ReceiptImportForm from '$lib/components/ReceiptImportForm.svelte';
 	import TransactionList from '$lib/components/TransactionList.svelte';
 	import TransferForm from '$lib/components/TransferForm.svelte';
 	import NewTransactionButtons from '$lib/components/NewTransactionButtons.svelte';
@@ -33,6 +34,7 @@
 	let dash = $state<Dashboard | null>(null);
 	let loading = $state(true);
 	let txOpen = $state(false);
+	let receiptOpen = $state(false);
 	let transferOpen = $state(false);
 	let editTx = $state<Transaction | null>(null);
 	let editTransfer = $state<Transaction | null>(null);
@@ -284,6 +286,7 @@
 			<NewTransactionButtons
 				onincome={() => openNewTransaction('income')}
 				onexpense={() => openNewTransaction('expense')}
+				onreceipt={() => (receiptOpen = true)}
 				ontransfer={() => {
 					editTransfer = null;
 					repeatTransfer = null;
@@ -576,6 +579,11 @@
 		editTx = null;
 		repeatTx = null;
 	}}
+	onsaved={loadAll}
+/>
+<ReceiptImportForm
+	bind:open={receiptOpen}
+	onclose={() => (receiptOpen = false)}
 	onsaved={loadAll}
 />
 <TransferForm

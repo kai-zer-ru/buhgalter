@@ -37,6 +37,9 @@ type Transaction struct {
 	SubcategoryID         *string `json:"subcategory_id"`
 	SubcategoryName       *string `json:"subcategory_name,omitempty"`
 	SubcategoryIcon       *string `json:"subcategory_icon,omitempty"`
+	StoreID               *string `json:"store_id"`
+	StoreName             *string `json:"store_name,omitempty"`
+	ReceiptImportID       *string `json:"receipt_import_id"`
 	TransferGroupID       *string `json:"transfer_group_id,omitempty"`
 	TransferAccountID     *string `json:"transfer_account_id,omitempty"`
 	TransferIsOut         bool    `json:"transfer_is_out,omitempty"`
@@ -50,6 +53,7 @@ type ListFilters struct {
 	AccountID  string
 	Type       string
 	CategoryID string
+	StoreID    string
 	Kind       string
 	From       string
 	To         string
@@ -95,6 +99,7 @@ func txFromGetRow(row sqlcdb.GetTransactionByIDRow) Transaction {
 	return txFromFields(
 		row.ID, row.AccountID, row.Type, row.Kind, row.Amount, row.Description,
 		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID,
+		row.StoreID, row.ReceiptImportID, row.StoreName,
 		row.TransactionDate, row.CreatedAt, row.UpdatedAt,
 		row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.TransferAccountName, row.TransferAccountStatus,
 		row.TransferIsOut, row.CreditPaymentLinked,
@@ -105,6 +110,7 @@ func txFromListDesc(row sqlcdb.ListTransactionsFilteredDateDescRow) Transaction 
 	return txFromFields(
 		row.ID, row.AccountID, row.Type, row.Kind, row.Amount, row.Description,
 		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID,
+		row.StoreID, row.ReceiptImportID, row.StoreName,
 		row.TransactionDate, row.CreatedAt, row.UpdatedAt,
 		row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.TransferAccountName, row.TransferAccountStatus,
 		row.TransferIsOut, row.CreditPaymentLinked,
@@ -115,6 +121,7 @@ func txFromListAsc(row sqlcdb.ListTransactionsFilteredDateAscRow) Transaction {
 	return txFromFields(
 		row.ID, row.AccountID, row.Type, row.Kind, row.Amount, row.Description,
 		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID,
+		row.StoreID, row.ReceiptImportID, row.StoreName,
 		row.TransactionDate, row.CreatedAt, row.UpdatedAt,
 		row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.TransferAccountName, row.TransferAccountStatus,
 		row.TransferIsOut, row.CreditPaymentLinked,
@@ -125,6 +132,7 @@ func txFromRecent(row sqlcdb.ListRecentTransactionsRow) Transaction {
 	return txFromFields(
 		row.ID, row.AccountID, row.Type, row.Kind, row.Amount, row.Description,
 		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID,
+		row.StoreID, row.ReceiptImportID, row.StoreName,
 		row.TransactionDate, row.CreatedAt, row.UpdatedAt,
 		row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.TransferAccountName, row.TransferAccountStatus,
 		row.TransferIsOut, row.CreditPaymentLinked,
@@ -135,6 +143,7 @@ func txFromGroupRow(row sqlcdb.ListTransactionsByTransferGroupRow) Transaction {
 	return txFromFields(
 		row.ID, row.AccountID, row.Type, row.Kind, row.Amount, row.Description,
 		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID,
+		row.StoreID, row.ReceiptImportID, row.StoreName,
 		row.TransactionDate, row.CreatedAt, row.UpdatedAt,
 		row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.TransferAccountName, row.TransferAccountStatus,
 		row.TransferIsOut, 0,
@@ -144,6 +153,7 @@ func txFromGroupRow(row sqlcdb.ListTransactionsByTransferGroupRow) Transaction {
 func txFromFields(
 	id, accountID, txType, kind string, amount int64, description *string,
 	categoryID, subcategoryID, transferGroupID, transferAccountID *string,
+	storeID, receiptImportID, storeName *string,
 	transactionDate, createdAt, updatedAt string,
 	categoryName, categoryIcon *string, categoryIsSystem *int64, subcategoryName, subcategoryIcon, accountName, accountStatus, transferAccountName, transferAccountStatus *string,
 	transferIsOut, creditPaymentLinked int64,
@@ -158,6 +168,9 @@ func txFromFields(
 		Description:       description,
 		CategoryID:        categoryID,
 		SubcategoryID:     subcategoryID,
+		StoreID:           storeID,
+		ReceiptImportID:   receiptImportID,
+		StoreName:         storeName,
 		TransferGroupID:   transferGroupID,
 		TransferAccountID: transferAccountID,
 		TransactionDate:   transactionDate,
@@ -226,6 +239,7 @@ type CreateInput struct {
 	CategoryID      *string
 	SubcategoryID   *string
 	SubcategoryName *string
+	StoreID         *string
 	TransactionDate time.Time
 }
 
@@ -245,6 +259,14 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Tra
 	}
 	if err := validateCategoryForType(ctx, db, userID, in.CategoryID, in.Type); err != nil {
 		return Transaction{}, err
+	}
+	if err := validateStoreForType(in.Type, in.StoreID); err != nil {
+		return Transaction{}, err
+	}
+	if in.StoreID != nil && *in.StoreID != "" {
+		if err := validateStoreOwner(ctx, db, userID, *in.StoreID); err != nil {
+			return Transaction{}, err
+		}
 	}
 
 	kind, err := resolveKind(ctx, db, userID, in.TransactionDate)
@@ -270,6 +292,9 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Tra
 		SubcategoryID:     subID,
 		TransferGroupID:   nil,
 		TransferAccountID: nil,
+		StoreID:           in.StoreID,
+		ReceiptImportID:   nil,
+		ReceiptItemIndex:  nil,
 		TransactionDate:   txDate,
 		AffectsBalance:    1,
 		CreatedAt:         now,
@@ -292,6 +317,7 @@ type UpdateInput struct {
 	CategoryID      *string
 	SubcategoryID   *string
 	SubcategoryName *string
+	StoreID         *string
 	TransactionDate time.Time
 }
 
@@ -326,6 +352,14 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in UpdateInput) 
 	if err := validateCategoryForType(ctx, db, userID, in.CategoryID, in.Type); err != nil {
 		return Transaction{}, err
 	}
+	if err := validateStoreForType(in.Type, in.StoreID); err != nil {
+		return Transaction{}, err
+	}
+	if in.StoreID != nil && *in.StoreID != "" {
+		if err := validateStoreOwner(ctx, db, userID, *in.StoreID); err != nil {
+			return Transaction{}, err
+		}
+	}
 	kind, err := resolveKind(ctx, db, userID, in.TransactionDate)
 	if err != nil {
 		return Transaction{}, err
@@ -343,6 +377,7 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in UpdateInput) 
 		Description:     in.Description,
 		CategoryID:      in.CategoryID,
 		SubcategoryID:   subID,
+		StoreID:         in.StoreID,
 		TransactionDate: timeutil.FormatUTC(in.TransactionDate),
 		UpdatedAt:       now,
 		ID:              id,
@@ -556,6 +591,7 @@ type filterParams struct {
 	accountID  string
 	txType     string
 	categoryID string
+	storeID    string
 	kind       string
 	from       string
 	to         string
@@ -568,6 +604,7 @@ func buildFilterParams(userID string, f ListFilters) filterParams {
 		accountID:  f.AccountID,
 		txType:     f.Type,
 		categoryID: f.CategoryID,
+		storeID:    f.StoreID,
 		kind:       f.Kind,
 		from:       f.From,
 		to:         f.To,
@@ -578,6 +615,7 @@ func buildFilterParams(userID string, f ListFilters) filterParams {
 func (fp filterParams) count() sqlcdb.CountTransactionsFilteredParams {
 	searchPtr := strPtr(fp.search)
 	catPtr := strPtr(fp.categoryID)
+	storePtr := strPtr(fp.storeID)
 	return sqlcdb.CountTransactionsFilteredParams{
 		UserID:            fp.userID,
 		Column2:           fp.accountID,
@@ -594,6 +632,8 @@ func (fp filterParams) count() sqlcdb.CountTransactionsFilteredParams {
 		TransactionDate_2: fp.to,
 		Column14:          fp.search,
 		Column15:          searchPtr,
+		Column16:          fp.storeID,
+		StoreID:           storePtr,
 	}
 }
 
@@ -615,6 +655,8 @@ func (fp filterParams) listDesc(limit, offset int64) sqlcdb.ListTransactionsFilt
 		TransactionDate_2: p.TransactionDate_2,
 		Column14:          p.Column14,
 		Column15:          p.Column15,
+		Column16:          p.Column16,
+		StoreID:           p.StoreID,
 		Limit:             limit,
 		Offset:            offset,
 	}
@@ -638,6 +680,8 @@ func (fp filterParams) listAsc(limit, offset int64) sqlcdb.ListTransactionsFilte
 		TransactionDate_2: p.TransactionDate_2,
 		Column14:          p.Column14,
 		Column15:          p.Column15,
+		Column16:          p.Column16,
+		StoreID:           p.StoreID,
 		Limit:             limit,
 		Offset:            offset,
 	}

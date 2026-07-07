@@ -136,6 +136,45 @@ CREATE TABLE subcategories (
 );
 CREATE INDEX idx_subcategories_category ON subcategories(category_id);
 
+CREATE TABLE stores (
+    id              TEXT PRIMARY KEY,
+    user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name            TEXT NOT NULL,
+    name_normalized TEXT NOT NULL,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(user_id, name_normalized)
+);
+CREATE INDEX idx_stores_user ON stores(user_id);
+
+CREATE TABLE receipt_imports (
+    id                      TEXT PRIMARY KEY,
+    user_id                 TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    fiscal_drive_number     TEXT NOT NULL,
+    fiscal_document_number  TEXT NOT NULL,
+    fiscal_sign             TEXT NOT NULL,
+    total_sum               INTEGER NOT NULL,
+    store_id                TEXT REFERENCES stores(id),
+    transaction_date        TEXT NOT NULL,
+    payload_json            TEXT NOT NULL,
+    fns_check_url           TEXT NOT NULL,
+    created_at              TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(user_id, fiscal_drive_number, fiscal_document_number, fiscal_sign)
+);
+CREATE INDEX idx_receipt_imports_user ON receipt_imports(user_id);
+
+CREATE TABLE receipt_scan_jobs (
+    id                      TEXT PRIMARY KEY,
+    user_id                 TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status                  TEXT NOT NULL CHECK (status IN ('queued', 'running', 'done', 'failed')),
+    error_message           TEXT,
+    result_json             TEXT,
+    created_at              TEXT NOT NULL DEFAULT (datetime('now')),
+    started_at              TEXT,
+    finished_at             TEXT,
+    updated_at              TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_receipt_scan_jobs_user_created ON receipt_scan_jobs(user_id, created_at DESC);
+
 CREATE TABLE transactions (
     id                  TEXT PRIMARY KEY,
     user_id             TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -148,6 +187,9 @@ CREATE TABLE transactions (
     subcategory_id      TEXT REFERENCES subcategories(id),
     transfer_group_id   TEXT,
     transfer_account_id TEXT REFERENCES accounts(id),
+    store_id            TEXT REFERENCES stores(id),
+    receipt_import_id   TEXT REFERENCES receipt_imports(id),
+    receipt_item_index  INTEGER,
     transaction_date    TEXT NOT NULL,
     affects_balance     INTEGER NOT NULL DEFAULT 1,
     created_at          TEXT NOT NULL DEFAULT (datetime('now')),
@@ -159,6 +201,8 @@ CREATE INDEX idx_tx_date ON transactions(transaction_date);
 CREATE INDEX idx_tx_transfer_group ON transactions(transfer_group_id);
 CREATE INDEX idx_tx_kind ON transactions(kind);
 CREATE INDEX idx_tx_user_account_balance ON transactions(user_id, account_id, kind, type, transaction_date);
+CREATE INDEX idx_tx_store ON transactions(user_id, store_id);
+CREATE INDEX idx_tx_receipt_import ON transactions(receipt_import_id);
 
 CREATE TABLE recurring_operations (
     id              TEXT PRIMARY KEY,

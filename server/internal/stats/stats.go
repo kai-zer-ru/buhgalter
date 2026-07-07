@@ -20,6 +20,7 @@ type Filters struct {
 	Type          string
 	AccountID     string
 	CategoryID    string
+	StoreID       string
 	Kind          string
 	Search        string
 	IncludeFuture bool
@@ -56,6 +57,14 @@ type PeriodItem struct {
 	Period  string `json:"period"`
 	Income  int64  `json:"income"`
 	Expense int64  `json:"expense"`
+}
+
+type StoreItem struct {
+	StoreID    string  `json:"store_id"`
+	StoreName  string  `json:"store_name"`
+	Total      int64   `json:"total"`
+	Percentage float64 `json:"percentage"`
+	Count      int64   `json:"count"`
 }
 
 type ContextSummary struct {
@@ -159,6 +168,33 @@ func (s *Service) BySubcategory(ctx context.Context, userID string, f Filters) (
 			Total:           row.Total,
 			Percentage:      percentage(total, row.Total),
 			Count:           row.TxCount,
+		})
+	}
+	return out, nil
+}
+
+func (s *Service) ByStore(ctx context.Context, userID string, f Filters) ([]StoreItem, error) {
+	f, err := normalizeFilters(f, true)
+	if err != nil {
+		return nil, err
+	}
+	f.Type = "expense"
+	rows, err := queries(s.db).StatsByStore(ctx, toStoreParams(userID, f))
+	if err != nil {
+		return nil, err
+	}
+	var total int64
+	for _, row := range rows {
+		total += row.Total
+	}
+	out := make([]StoreItem, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, StoreItem{
+			StoreID:    row.StoreID,
+			StoreName:  row.StoreName,
+			Total:      row.Total,
+			Percentage: percentage(total, row.Total),
+			Count:      row.TxCount,
 		})
 	}
 	return out, nil
@@ -421,6 +457,8 @@ func toSummaryParams(userID string, f Filters) sqlcdb.StatsSummaryParams {
 		TransactionDate_2: f.To,
 		Column14:          f.Search,
 		Column15:          search,
+		Column16:          f.StoreID,
+		StoreID:           strPtr(f.StoreID),
 	}
 }
 
@@ -442,6 +480,30 @@ func toAccountSummaryParams(userID string, f Filters) sqlcdb.StatsSummaryAccount
 		TransactionDate_2: f.To,
 		Column13:          f.Search,
 		Column14:          search,
+		Column15:          f.StoreID,
+		StoreID:           strPtr(f.StoreID),
+	}
+}
+
+func toStoreParams(userID string, f Filters) sqlcdb.StatsByStoreParams {
+	search := strPtr(f.Search)
+	categoryID := strPtr(f.CategoryID)
+	return sqlcdb.StatsByStoreParams{
+		UserID:            userID,
+		Column2:           f.AccountID,
+		AccountID:         f.AccountID,
+		Column4:           f.CategoryID,
+		CategoryID:        categoryID,
+		Column6:           f.Kind,
+		Kind:              f.Kind,
+		Column8:           f.From,
+		TransactionDate:   f.From,
+		Column10:          f.To,
+		TransactionDate_2: f.To,
+		Column12:          f.Search,
+		Column13:          search,
+		Column14:          f.StoreID,
+		StoreID:           strPtr(f.StoreID),
 	}
 }
 

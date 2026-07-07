@@ -101,6 +101,7 @@ func CreateTransfer(ctx context.Context, db *sql.DB, userID string, in TransferI
 		Type: "transfer", Kind: kind, Amount: in.Amount, Description: in.Description,
 		CategoryID: &catID, SubcategoryID: nil,
 		TransferGroupID: &groupID, TransferAccountID: &in.ToAccountID,
+		StoreID: nil, ReceiptImportID: nil, ReceiptItemIndex: nil,
 		TransactionDate: txDate, AffectsBalance: 1, CreatedAt: outCreated, UpdatedAt: updated,
 	}); err != nil {
 		return Transfer{}, fmt.Errorf("insert transfer out: %w", err)
@@ -110,6 +111,7 @@ func CreateTransfer(ctx context.Context, db *sql.DB, userID string, in TransferI
 		Type: "transfer", Kind: kind, Amount: in.Amount, Description: in.Description,
 		CategoryID: &catID, SubcategoryID: nil,
 		TransferGroupID: &groupID, TransferAccountID: &in.FromAccountID,
+		StoreID: nil, ReceiptImportID: nil, ReceiptItemIndex: nil,
 		TransactionDate: txDate, AffectsBalance: 1, CreatedAt: inCreated, UpdatedAt: updated,
 	}); err != nil {
 		return Transfer{}, fmt.Errorf("insert transfer in: %w", err)
@@ -191,6 +193,7 @@ func CreateTransferForAccountDelete(ctx context.Context, db *sql.DB, userID stri
 		Type: "transfer", Kind: kind, Amount: in.Amount, Description: in.Description,
 		CategoryID: &catID, SubcategoryID: nil,
 		TransferGroupID: &groupID, TransferAccountID: &in.ToAccountID,
+		StoreID: nil, ReceiptImportID: nil, ReceiptItemIndex: nil,
 		TransactionDate: txDate, AffectsBalance: 1, CreatedAt: outCreated, UpdatedAt: updated,
 	}); err != nil {
 		return Transfer{}, fmt.Errorf("insert transfer out: %w", err)
@@ -200,6 +203,7 @@ func CreateTransferForAccountDelete(ctx context.Context, db *sql.DB, userID stri
 		Type: "transfer", Kind: kind, Amount: in.Amount, Description: in.Description,
 		CategoryID: &catID, SubcategoryID: nil,
 		TransferGroupID: &groupID, TransferAccountID: &in.FromAccountID,
+		StoreID: nil, ReceiptImportID: nil, ReceiptItemIndex: nil,
 		TransactionDate: txDate, AffectsBalance: 1, CreatedAt: inCreated, UpdatedAt: updated,
 	}); err != nil {
 		return Transfer{}, fmt.Errorf("insert transfer in: %w", err)
@@ -417,6 +421,7 @@ func insertTransferCommission(
 		Type: "expense", Kind: kind, Amount: commission, Description: description,
 		CategoryID: &commissionCatID, SubcategoryID: nil,
 		TransferGroupID: &groupID, TransferAccountID: nil,
+		StoreID: nil, ReceiptImportID: nil, ReceiptItemIndex: nil,
 		TransactionDate: txDate, AffectsBalance: 1, CreatedAt: createdAt, UpdatedAt: updatedAt,
 	})
 }
@@ -446,7 +451,7 @@ func syncTransferCommission(
 	if existing != nil {
 		return q.UpdateTransaction(ctx, sqlcdb.UpdateTransactionParams{
 			AccountID: fromAccountID, Type: "expense", Kind: kind, Amount: commission, Description: description,
-			CategoryID: &commissionCatID, SubcategoryID: nil, TransactionDate: txDate, UpdatedAt: updatedAt,
+			CategoryID: &commissionCatID, SubcategoryID: nil, StoreID: nil, TransactionDate: txDate, UpdatedAt: updatedAt,
 			ID: existing.ID, UserID: userID,
 		})
 	}
@@ -455,6 +460,7 @@ func syncTransferCommission(
 		Type: "expense", Kind: kind, Amount: commission, Description: description,
 		CategoryID: &commissionCatID, SubcategoryID: nil,
 		TransferGroupID: &groupID, TransferAccountID: nil,
+		StoreID: nil, ReceiptImportID: nil, ReceiptItemIndex: nil,
 		TransactionDate: txDate, AffectsBalance: 1, CreatedAt: createdAt, UpdatedAt: updatedAt,
 	})
 }

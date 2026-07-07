@@ -13,6 +13,7 @@ WHERE t.user_id = ?
   AND (? = '' OR t.transaction_date >= ?)
   AND (? = '' OR t.transaction_date <= ?)
   AND (? = '' OR t.description LIKE '%' || ? || '%')
+  AND (? = '' OR t.store_id = ?)
   AND NOT EXISTS (
     SELECT 1
     FROM credit_payments cp
@@ -58,6 +59,7 @@ WHERE t.user_id = ?
   AND (? = '' OR t.transaction_date >= ?)
   AND (? = '' OR t.transaction_date <= ?)
   AND (? = '' OR t.description LIKE '%' || ? || '%')
+  AND (? = '' OR t.store_id = ?)
   AND NOT EXISTS (
     SELECT 1
     FROM credit_payments cp
@@ -84,6 +86,7 @@ WHERE t.user_id = ?
   AND (? = '' OR t.transaction_date >= ?)
   AND (? = '' OR t.transaction_date <= ?)
   AND (? = '' OR t.description LIKE '%' || ? || '%')
+  AND (? = '' OR t.store_id = ?)
   AND NOT EXISTS (
     SELECT 1
     FROM credit_payments cp
@@ -91,6 +94,32 @@ WHERE t.user_id = ?
       AND cp.exclude_from_stats = 1
   )
 GROUP BY c.id, c.name, c.icon, c.type
+ORDER BY total DESC;
+
+-- name: StatsByStore :many
+SELECT
+    s.id AS store_id,
+    s.name AS store_name,
+    CAST(COALESCE(SUM(t.amount), 0) AS INTEGER) AS total,
+    COUNT(*) AS tx_count
+FROM transactions t
+JOIN stores s ON s.id = t.store_id
+WHERE t.user_id = ?
+  AND t.type = 'expense'
+  AND (? = '' OR t.account_id = ?)
+  AND (? = '' OR t.category_id = ?)
+  AND (? = '' OR t.kind = ?)
+  AND (? = '' OR t.transaction_date >= ?)
+  AND (? = '' OR t.transaction_date <= ?)
+  AND (? = '' OR t.description LIKE '%' || ? || '%')
+  AND (? = '' OR t.store_id = ?)
+  AND NOT EXISTS (
+    SELECT 1
+    FROM credit_payments cp
+    WHERE cp.transaction_id = t.id
+      AND cp.exclude_from_stats = 1
+  )
+GROUP BY s.id, s.name
 ORDER BY total DESC;
 
 -- name: StatsBySubcategory :many
@@ -114,6 +143,7 @@ WHERE t.user_id = ?
   AND (? = '' OR t.transaction_date >= ?)
   AND (? = '' OR t.transaction_date <= ?)
   AND (? = '' OR t.description LIKE '%' || ? || '%')
+  AND (? = '' OR t.store_id = ?)
   AND NOT EXISTS (
     SELECT 1
     FROM credit_payments cp
@@ -138,6 +168,7 @@ WHERE t.user_id = ?
   AND (? = '' OR t.transaction_date >= ?)
   AND (? = '' OR t.transaction_date <= ?)
   AND (? = '' OR t.description LIKE '%' || ? || '%')
+  AND (? = '' OR t.store_id = ?)
   AND NOT EXISTS (
     SELECT 1
     FROM credit_payments cp

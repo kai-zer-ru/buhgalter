@@ -33,6 +33,7 @@ type createRequest struct {
 	CategoryID      *string `json:"category_id"`
 	SubcategoryID   *string `json:"subcategory_id"`
 	SubcategoryName *string `json:"subcategory_name"`
+	StoreID         *string `json:"store_id"`
 	TransactionDate string  `json:"transaction_date"`
 }
 
@@ -58,6 +59,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		AccountID:  q.Get("account_id"),
 		Type:       q.Get("type"),
 		CategoryID: q.Get("category_id"),
+		StoreID:    q.Get("store_id"),
 		Kind:       q.Get("kind"),
 		From:       q.Get("from"),
 		To:         q.Get("to"),
@@ -334,8 +336,17 @@ func parseCreateInput(req createRequest) (CreateInput, error) {
 		CategoryID:      req.CategoryID,
 		SubcategoryID:   req.SubcategoryID,
 		SubcategoryName: req.SubcategoryName,
+		StoreID:         emptyToNil(req.StoreID),
 		TransactionDate: txDate,
 	}, nil
+}
+
+func emptyToNil(s *string) *string {
+	if s == nil || strings.TrimSpace(*s) == "" {
+		return nil
+	}
+	v := strings.TrimSpace(*s)
+	return &v
 }
 
 func parseTransferInput(req transferRequest) (TransferInput, error) {
@@ -393,6 +404,8 @@ func writeTxError(w http.ResponseWriter, r *http.Request, err error) bool {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_TRANSFER_SAME_ACCOUNT")
 	case errors.Is(err, ErrCreditCardPaymentExceedsLimit):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_CARD_PAYMENT_EXCEEDS_LIMIT")
+	case errors.Is(err, ErrStoreExpenseOnly):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_STORE_EXPENSE_ONLY")
 	default:
 		if strings.Contains(err.Error(), "transfer endpoint") {
 			apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_USE_TRANSFERS_ENDPOINT")

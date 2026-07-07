@@ -252,6 +252,32 @@ type PasswordResetRequest struct {
 	DismissedAt *string `json:"dismissed_at"`
 }
 
+type ReceiptImport struct {
+	ID                   string  `json:"id"`
+	UserID               string  `json:"user_id"`
+	FiscalDriveNumber    string  `json:"fiscal_drive_number"`
+	FiscalDocumentNumber string  `json:"fiscal_document_number"`
+	FiscalSign           string  `json:"fiscal_sign"`
+	TotalSum             int64   `json:"total_sum"`
+	StoreID              *string `json:"store_id"`
+	TransactionDate      string  `json:"transaction_date"`
+	PayloadJson          string  `json:"payload_json"`
+	FnsCheckUrl          string  `json:"fns_check_url"`
+	CreatedAt            string  `json:"created_at"`
+}
+
+type ReceiptScanJob struct {
+	ID           string  `json:"id"`
+	UserID       string  `json:"user_id"`
+	Status       string  `json:"status"`
+	ErrorMessage *string `json:"error_message"`
+	ResultJson   *string `json:"result_json"`
+	CreatedAt    string  `json:"created_at"`
+	StartedAt    *string `json:"started_at"`
+	FinishedAt   *string `json:"finished_at"`
+	UpdatedAt    string  `json:"updated_at"`
+}
+
 type RecurringOperation struct {
 	ID            string  `json:"id"`
 	UserID        string  `json:"user_id"`
@@ -292,6 +318,14 @@ type SqliteMaster struct {
 	Sql      *string `json:"sql"`
 }
 
+type Store struct {
+	ID             string `json:"id"`
+	UserID         string `json:"user_id"`
+	Name           string `json:"name"`
+	NameNormalized string `json:"name_normalized"`
+	CreatedAt      string `json:"created_at"`
+}
+
 type Subcategory struct {
 	ID         string `json:"id"`
 	CategoryID string `json:"category_id"`
@@ -329,6 +363,9 @@ type Transaction struct {
 	SubcategoryID     *string `json:"subcategory_id"`
 	TransferGroupID   *string `json:"transfer_group_id"`
 	TransferAccountID *string `json:"transfer_account_id"`
+	StoreID           *string `json:"store_id"`
+	ReceiptImportID   *string `json:"receipt_import_id"`
+	ReceiptItemIndex  *int64  `json:"receipt_item_index"`
 	TransactionDate   string  `json:"transaction_date"`
 	AffectsBalance    int64   `json:"affects_balance"`
 	CreatedAt         string  `json:"created_at"`

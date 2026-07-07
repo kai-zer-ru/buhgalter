@@ -10,6 +10,7 @@
 		listAccounts,
 		listBanks,
 		listCategories,
+		listStores,
 		listTransactions,
 		setPrimaryAccount,
 		unarchiveAccount,
@@ -18,6 +19,7 @@
 		type AccountBalanceSummary,
 		type Bank,
 		type Category,
+		type Store,
 		type Transaction
 	} from '$lib/api/client';
 	import AccountIcon from '$lib/components/AccountIcon.svelte';
@@ -27,6 +29,7 @@
 	import Select from '$lib/components/Select.svelte';
 	import TransactionFilters from '$lib/components/TransactionFilters.svelte';
 	import TransactionForm from '$lib/components/TransactionForm.svelte';
+	import ReceiptImportForm from '$lib/components/ReceiptImportForm.svelte';
 	import NewTransactionButtons from '$lib/components/NewTransactionButtons.svelte';
 	import TransactionContextStats from '$lib/components/TransactionContextStats.svelte';
 	import TransactionList from '$lib/components/TransactionList.svelte';
@@ -55,6 +58,7 @@
 	let accBalance = $state<AccountBalanceSummary | null>(null);
 	let banks = $state<Bank[]>([]);
 	let categories = $state<Category[]>([]);
+	let stores = $state<Store[]>([]);
 	let transactions = $state<Transaction[]>([]);
 	let txTotal = $state(0);
 	let txPage = $state(1);
@@ -69,6 +73,7 @@
 	let filterLoading = $state(false);
 	let saving = $state(false);
 	let txOpen = $state(false);
+	let receiptOpen = $state(false);
 	let transferOpen = $state(false);
 	let payTransferOpen = $state(false);
 	let feeOpen = $state(false);
@@ -82,6 +87,7 @@
 	let toLocal = $state('');
 	let typeFilter = $state('');
 	let categoryFilter = $state('');
+	let storeFilter = $state('');
 	let kindFilter = $state('');
 	let searchFilter = $state('');
 	let filtersAutoApplyReady = $state(false);
@@ -126,6 +132,7 @@
 			toLocal,
 			type: typeFilter,
 			categoryId: categoryFilter,
+			storeId: storeFilter,
 			kind: kindFilter,
 			search: searchFilter.trim()
 		});
@@ -138,6 +145,7 @@
 			to: toLocal ? fromDateLocalEnd(toLocal, tz) : '',
 			type: typeFilter,
 			category_id: categoryFilter,
+			store_id: storeFilter,
 			search: searchFilter
 		};
 		if (kindFilter) {
@@ -155,6 +163,7 @@
 		toLocal = q.get('to_local') ?? '';
 		typeFilter = q.get('type') ?? '';
 		categoryFilter = q.get('category_id') ?? '';
+		storeFilter = q.get('store_id') ?? '';
 		kindFilter = q.get('kind') ?? '';
 		searchFilter = q.get('search') ?? '';
 	}
@@ -163,14 +172,15 @@
 		if (!id) return;
 		loading = true;
 		try {
-			const [account, accountBalance, bankList, expenseCats, incomeCats, accountList] =
+			const [account, accountBalance, bankList, expenseCats, incomeCats, accountList, storeList] =
 				await Promise.all([
 					getAccount(id),
 					getAccountBalance(id),
 					listBanks(),
 					listCategories('expense'),
 					listCategories('income'),
-					listAccounts()
+					listAccounts(),
+					listStores()
 				]);
 			acc = account;
 			accBalance = accountBalance;
@@ -179,6 +189,7 @@
 			const uniqueCatsByID: Record<string, Category> = {};
 			for (const cat of [...expenseCats, ...incomeCats]) uniqueCatsByID[cat.id] = cat;
 			categories = Object.values(uniqueCatsByID).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+			stores = storeList;
 			name = account.name;
 			bankId = account.bank_id ?? '';
 			creditLimit = account.credit_limit_display ?? '';
@@ -206,6 +217,7 @@
 			if (toLocal) params.to = fromDateLocalEnd(toLocal, tz);
 			if (typeFilter) params.type = typeFilter;
 			if (categoryFilter) params.category_id = categoryFilter;
+			if (storeFilter) params.store_id = storeFilter;
 			if (kindFilter) params.kind = kindFilter;
 			if (searchFilter.trim()) params.search = searchFilter.trim();
 			const result = await listTransactions(params);
@@ -225,6 +237,7 @@
 		if (toLocal) queryParts.push(`to_local=${encodeURIComponent(toLocal)}`);
 		if (typeFilter) queryParts.push(`type=${encodeURIComponent(typeFilter)}`);
 		if (categoryFilter) queryParts.push(`category_id=${encodeURIComponent(categoryFilter)}`);
+		if (storeFilter) queryParts.push(`store_id=${encodeURIComponent(storeFilter)}`);
 		if (kindFilter) queryParts.push(`kind=${encodeURIComponent(kindFilter)}`);
 		if (searchFilter.trim()) queryParts.push(`search=${encodeURIComponent(searchFilter.trim())}`);
 		// eslint-disable-next-line svelte/no-navigation-without-resolve -- query string is appended to resolved base path
@@ -454,6 +467,7 @@
 		toLocal = '';
 		typeFilter = '';
 		categoryFilter = '';
+		storeFilter = '';
 		kindFilter = '';
 		searchFilter = '';
 		txPage = 1;
@@ -626,6 +640,7 @@
 										<NewTransactionButtons
 											onincome={() => openNewTransaction('income')}
 											onexpense={() => openNewTransaction('expense')}
+											onreceipt={() => (receiptOpen = true)}
 											ontransfer={() => {
 												editTransfer = null;
 												repeatTransfer = null;
@@ -654,11 +669,13 @@
 				accountId=""
 				accounts={[]}
 				{categories}
+				{stores}
 				showAccount={false}
 				expandSearchToEnd={true}
 				onreset={resetFilters}
 				bind:type={typeFilter}
 				bind:categoryId={categoryFilter}
+				bind:storeId={storeFilter}
 				bind:kind={kindFilter}
 				bind:search={searchFilter}
 			/>
@@ -711,6 +728,12 @@
 		editTx = null;
 		repeatTx = null;
 	}}
+	onsaved={load}
+/>
+<ReceiptImportForm
+	bind:open={receiptOpen}
+	accountId={id}
+	onclose={() => (receiptOpen = false)}
 	onsaved={load}
 />
 <TransferForm

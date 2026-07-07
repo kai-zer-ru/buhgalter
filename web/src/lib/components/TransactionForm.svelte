@@ -6,8 +6,10 @@
 		listAccounts,
 		listCategories,
 		listSubcategories,
+		listStores,
 		type Account,
 		type Category,
+		type Store,
 		type Subcategory,
 		type Transaction
 	} from '$lib/api/client';
@@ -63,6 +65,8 @@
 	let accounts = $state<Account[]>([]);
 	let categories = $state<Category[]>([]);
 	let subcategories = $state<Subcategory[]>([]);
+	let stores = $state<Store[]>([]);
+	let storeId = $state('');
 	let saving = $state(false);
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
@@ -83,6 +87,11 @@
 		{ value: '', label: '—' },
 		...subcategorySelectOptions(subcategories)
 	]);
+	const storeOptions = $derived([
+		{ value: '', label: '—' },
+		...stores.map((store) => ({ value: store.id, label: store.name }))
+	]);
+	const showStore = $derived(txType === 'expense' && stores.length > 0);
 
 	const isFuture = $derived.by(() => {
 		if (!dateTimeValue) return false;
@@ -123,6 +132,7 @@
 			subcategoryId = editSource.subcategory_id ?? '';
 			newSubcategory = '';
 			description = editSource.description ?? '';
+			storeId = editSource.store_id ?? '';
 			dateTimeValue = toDatetimeLocalValue(editSource.transaction_date, tz);
 		} else if (repeatSource) {
 			txType = repeatSource.type === 'income' ? 'income' : 'expense';
@@ -141,9 +151,11 @@
 			subcategoryId = '';
 			newSubcategory = '';
 			description = '';
+			storeId = '';
 			dateTimeValue = nowDatetimeLocal(tz);
 		}
 		accounts = await listAccounts('active');
+		stores = await listStores();
 		if (!editSource && !repeatSource) {
 			selectedAccount = defaultAccountId(accounts, accountId);
 		}
@@ -184,6 +196,7 @@
 				category_id: categoryId || undefined,
 				subcategory_id: newSubcategory ? undefined : subcategoryId || undefined,
 				subcategory_name: newSubcategory || undefined,
+				store_id: storeId || undefined,
 				transaction_date: fromDatetimeLocalValue(dateTimeValue, tz)
 			};
 			if (transaction) {
@@ -246,6 +259,16 @@
 			usePortal
 			onchange={() => void onCategoryChange()}
 		/>
+
+		{#if showStore}
+			<Select
+				id="tx-store"
+				label={$_('stores.field')}
+				bind:value={storeId}
+				options={storeOptions}
+				usePortal
+			/>
+		{/if}
 
 		<div>
 			<Select

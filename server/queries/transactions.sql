@@ -14,6 +14,8 @@ SELECT
     t.subcategory_id,
     t.transfer_group_id,
     t.transfer_account_id,
+    t.store_id,
+    t.receipt_import_id,
     t.transaction_date,
     t.created_at,
     t.updated_at,
@@ -26,6 +28,7 @@ SELECT
     a.status AS account_status,
     ta.name AS transfer_account_name,
     ta.status AS transfer_account_status,
+    st.name AS store_name,
     CASE
         WHEN t.transfer_group_id IS NULL THEN 0
         WHEN t.id = (
@@ -42,6 +45,7 @@ LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
 LEFT JOIN accounts a ON a.id = t.account_id
 LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
+LEFT JOIN stores st ON st.id = t.store_id
 LEFT JOIN credit_payments cp ON cp.transaction_id = t.id
 WHERE t.id = ? AND t.user_id = ?;
 
@@ -58,6 +62,8 @@ SELECT
     t.subcategory_id,
     t.transfer_group_id,
     t.transfer_account_id,
+    t.store_id,
+    t.receipt_import_id,
     t.transaction_date,
     t.created_at,
     t.updated_at,
@@ -70,6 +76,7 @@ SELECT
     a.status AS account_status,
     ta.name AS transfer_account_name,
     ta.status AS transfer_account_status,
+    st.name AS store_name,
     CASE
         WHEN t.transfer_group_id IS NULL THEN 0
         WHEN t.id = (
@@ -85,6 +92,7 @@ LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
 LEFT JOIN accounts a ON a.id = t.account_id
 LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
+LEFT JOIN stores st ON st.id = t.store_id
 WHERE t.transfer_group_id = ? AND t.user_id = ?
 ORDER BY t.created_at ASC, t.id ASC;
 
@@ -92,13 +100,14 @@ ORDER BY t.created_at ASC, t.id ASC;
 INSERT INTO transactions (
     id, user_id, account_id, type, kind, amount, description,
     category_id, subcategory_id, transfer_group_id, transfer_account_id,
+    store_id, receipt_import_id, receipt_item_index,
     transaction_date, affects_balance, created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: UpdateTransaction :exec
 UPDATE transactions
 SET account_id = ?, type = ?, kind = ?, amount = ?, description = ?,
-    category_id = ?, subcategory_id = ?, transaction_date = ?, updated_at = ?
+    category_id = ?, subcategory_id = ?, store_id = ?, transaction_date = ?, updated_at = ?
 WHERE id = ? AND user_id = ?;
 
 -- name: UpdateTransactionAffectsBalance :execrows
@@ -134,6 +143,8 @@ SELECT
     t.subcategory_id,
     t.transfer_group_id,
     t.transfer_account_id,
+    t.store_id,
+    t.receipt_import_id,
     t.transaction_date,
     t.affects_balance,
     t.created_at,
@@ -181,7 +192,8 @@ WHERE t.user_id = ?
   AND (? = '' OR t.kind = ?)
   AND (? = '' OR t.transaction_date >= ?)
   AND (? = '' OR t.transaction_date <= ?)
-  AND (? = '' OR t.description LIKE '%' || ? || '%');
+  AND (? = '' OR t.description LIKE '%' || ? || '%')
+  AND (? = '' OR t.store_id = ?);
 
 -- name: ListTransactionsFilteredDateDesc :many
 SELECT
@@ -196,6 +208,8 @@ SELECT
     t.subcategory_id,
     t.transfer_group_id,
     t.transfer_account_id,
+    t.store_id,
+    t.receipt_import_id,
     t.transaction_date,
     t.created_at,
     t.updated_at,
@@ -208,6 +222,7 @@ SELECT
     a.status AS account_status,
     ta.name AS transfer_account_name,
     ta.status AS transfer_account_status,
+    st.name AS store_name,
     CASE
         WHEN t.transfer_group_id IS NULL THEN 0
         WHEN t.id = (
@@ -224,6 +239,7 @@ LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
 LEFT JOIN accounts a ON a.id = t.account_id
 LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
+LEFT JOIN stores st ON st.id = t.store_id
 LEFT JOIN credit_payments cp ON cp.transaction_id = t.id
 WHERE t.user_id = ?
   AND (? = '' OR t.account_id = ?)
@@ -233,6 +249,7 @@ WHERE t.user_id = ?
   AND (? = '' OR t.transaction_date >= ?)
   AND (? = '' OR t.transaction_date <= ?)
   AND (? = '' OR t.description LIKE '%' || ? || '%')
+  AND (? = '' OR t.store_id = ?)
 ORDER BY t.transaction_date DESC, t.created_at DESC
 LIMIT ? OFFSET ?;
 
@@ -249,6 +266,8 @@ SELECT
     t.subcategory_id,
     t.transfer_group_id,
     t.transfer_account_id,
+    t.store_id,
+    t.receipt_import_id,
     t.transaction_date,
     t.created_at,
     t.updated_at,
@@ -261,6 +280,7 @@ SELECT
     a.status AS account_status,
     ta.name AS transfer_account_name,
     ta.status AS transfer_account_status,
+    st.name AS store_name,
     CASE
         WHEN t.transfer_group_id IS NULL THEN 0
         WHEN t.id = (
@@ -277,6 +297,7 @@ LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
 LEFT JOIN accounts a ON a.id = t.account_id
 LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
+LEFT JOIN stores st ON st.id = t.store_id
 LEFT JOIN credit_payments cp ON cp.transaction_id = t.id
 WHERE t.user_id = ?
   AND (? = '' OR t.account_id = ?)
@@ -286,6 +307,7 @@ WHERE t.user_id = ?
   AND (? = '' OR t.transaction_date >= ?)
   AND (? = '' OR t.transaction_date <= ?)
   AND (? = '' OR t.description LIKE '%' || ? || '%')
+  AND (? = '' OR t.store_id = ?)
 ORDER BY t.transaction_date ASC, t.created_at ASC
 LIMIT ? OFFSET ?;
 
@@ -302,6 +324,8 @@ SELECT
     t.subcategory_id,
     t.transfer_group_id,
     t.transfer_account_id,
+    t.store_id,
+    t.receipt_import_id,
     t.transaction_date,
     t.created_at,
     t.updated_at,
@@ -314,6 +338,7 @@ SELECT
     a.status AS account_status,
     ta.name AS transfer_account_name,
     ta.status AS transfer_account_status,
+    st.name AS store_name,
     CASE
         WHEN t.transfer_group_id IS NULL THEN 0
         WHEN t.id = (
@@ -330,6 +355,7 @@ LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
 LEFT JOIN accounts a ON a.id = t.account_id
 LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
+LEFT JOIN stores st ON st.id = t.store_id
 LEFT JOIN credit_payments cp ON cp.transaction_id = t.id
 WHERE t.user_id = ?
 ORDER BY t.transaction_date DESC, t.created_at DESC

@@ -26,6 +26,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/importexport"
 	"github.com/kai-zer-ru/buhgalter/internal/locale"
 	"github.com/kai-zer-ru/buhgalter/internal/notify"
+	"github.com/kai-zer-ru/buhgalter/internal/receipt"
 	appsched "github.com/kai-zer-ru/buhgalter/internal/scheduler"
 	"github.com/kai-zer-ru/buhgalter/internal/setup"
 )
@@ -78,6 +79,11 @@ func main() {
 		log.Fatalf("recover import jobs: %v", err)
 	} else if affected > 0 {
 		logger.Info("recovered interrupted import jobs", "count", affected)
+	}
+	if affected, err := receipt.RecoverInterruptedScanJobs(context.Background(), manager.DB()); err != nil {
+		log.Fatalf("recover receipt scan jobs: %v", err)
+	} else if affected > 0 {
+		logger.Info("recovered interrupted receipt scan jobs", "count", affected)
 	}
 
 	auditLogger := audit.New(cfg.LogDir + "/audit")

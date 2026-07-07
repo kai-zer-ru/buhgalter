@@ -244,6 +244,13 @@ erDiagram
 - **Комиссия (v1.1):** опциональное поле `commission` при создании/изменении перевода; отдельная нога `expense` на счёте-источнике в системной категории «Комиссия».
 - В API-ответах: `transfer_account_name`, `transfer_is_out`, `commission`, `commission_display` (вычисляемые/агрегированные поля).
 - UI: [transactions-display.md](transactions-display.md).
+- **Чеки (54-ФЗ):** `store_id`, `receipt_import_id`, `receipt_item_index` — для расходов из чека и привязки к магазину; см. [receipt-scanner.md](receipt-scanner.md).
+
+## Магазины и чеки
+
+- `stores` — магазины из чеков (`name`, `name_normalized`); уникальность `(user_id, name_normalized)`; без ручного CRUD.
+- `receipt_imports` — один чек на запись; fiscal-ключ, `payload_json` (снимок ФНС), `fns_check_url`; дедупликация повторного импорта.
+- Несколько `transactions` могут ссылаться на один `receipt_import_id` (позиции чека).
 
 ## Долги и операции
 
@@ -327,6 +334,8 @@ erDiagram
 | banks | `internal/bank` | `banks.sql` | sqlc |
 | categories | `internal/category` | `categories.sql` | sqlc |
 | transactions | `internal/transaction` | `transactions.sql` | sqlc |
+| stores | `internal/store` | `stores.sql` | sqlc |
+| receipt_imports | `internal/receipt` | `receipts.sql` | sqlc |
 | debtors, debts | `internal/debt` | `debts.sql` | sqlc |
 | credits | `internal/credit` | `credits.sql` | sqlc |
 | stats / search | `internal/stats` | `stats.sql` | sqlc |

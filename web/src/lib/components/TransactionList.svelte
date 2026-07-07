@@ -14,6 +14,19 @@
 		canDeleteTransaction
 	} from '$lib/transaction-display';
 	import TransactionCategoryCell from '$lib/components/TransactionCategoryCell.svelte';
+	import IconButton from '$lib/components/IconButton.svelte';
+	import ReceiptDetailDialog from '$lib/components/ReceiptDetailDialog.svelte';
+
+	let receiptOpen = $state(false);
+	let receiptImportId = $state('');
+	let receiptTransactionId = $state('');
+
+	function openReceipt(tx: Transaction) {
+		if (!tx.receipt_import_id) return;
+		receiptImportId = tx.receipt_import_id;
+		receiptTransactionId = tx.id;
+		receiptOpen = true;
+	}
 
 	let {
 		transactions,
@@ -137,10 +150,20 @@
 							</td>
 						{/if}
 						<td class="p-3 align-middle whitespace-nowrap tabular-nums font-medium">
-							{showAmountSign ? transactionAmountSign(tx, { singleAccount }) : ''}<MoneyDisplay
-								value={tx.amount_display}
-								class=""
-							/>
+							<div class="inline-flex items-center gap-1">
+								{showAmountSign ? transactionAmountSign(tx, { singleAccount }) : ''}<MoneyDisplay
+									value={tx.amount_display}
+									class=""
+								/>
+								{#if tx.receipt_import_id}
+									<IconButton
+										icon="receipt"
+										label={$_('receipt.view')}
+										class="!h-8 !w-8"
+										onclick={() => openReceipt(tx)}
+									/>
+								{/if}
+							</div>
 						</td>
 						{#if showDescription}
 							<td class="p-3 align-middle" style:color="var(--text-muted)">
@@ -183,6 +206,14 @@
 								class=""
 							/>
 						</p>
+						{#if tx.receipt_import_id}
+							<IconButton
+								icon="receipt"
+								label={$_('receipt.view')}
+								class="!h-8 !w-8"
+								onclick={() => openReceipt(tx)}
+							/>
+						{/if}
 						{#if showActions}
 							<RowActionsMenu actions={rowActions(tx)} />
 						{/if}
@@ -211,3 +242,10 @@
 		{/each}
 	</div>
 {/if}
+
+<ReceiptDetailDialog
+	bind:open={receiptOpen}
+	{receiptImportId}
+	transactionId={receiptTransactionId}
+	onclose={() => (receiptOpen = false)}
+/>

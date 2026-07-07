@@ -28,9 +28,11 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/importexport"
 	appmw "github.com/kai-zer-ru/buhgalter/internal/middleware"
 	"github.com/kai-zer-ru/buhgalter/internal/recurring"
+	"github.com/kai-zer-ru/buhgalter/internal/receipt"
 	"github.com/kai-zer-ru/buhgalter/internal/setup"
 	"github.com/kai-zer-ru/buhgalter/internal/static"
 	"github.com/kai-zer-ru/buhgalter/internal/stats"
+	"github.com/kai-zer-ru/buhgalter/internal/store"
 	"github.com/kai-zer-ru/buhgalter/internal/transaction"
 	"github.com/kai-zer-ru/buhgalter/internal/ui"
 	"github.com/kai-zer-ru/buhgalter/internal/user"
@@ -98,6 +100,8 @@ func (s *Server) Handler() http.Handler {
 	budgetHandler := &budget.Handler{Store: dbHandle, Audit: s.audit}
 	importHandler := &importexport.Handler{Store: dbHandle, Audit: s.audit, Logger: s.logger}
 	statsHandler := &stats.Handler{Store: dbHandle}
+	storeHandler := &store.Handler{Store: dbHandle}
+	receiptHandler := &receipt.Handler{Store: dbHandle, Audit: s.audit, Logger: s.logger}
 	uiHandler := &ui.Handler{Store: dbHandle}
 	versionHandler := &versioncheck.Handler{Checker: versioncheck.NewChecker(s.cfg.Version)}
 	apiCache := apicache.New()
@@ -214,9 +218,18 @@ func (s *Server) Handler() http.Handler {
 			ar.Post("/import/jobs", importHandler.CreateJob)
 			ar.Get("/import/jobs/{id}", importHandler.GetJob)
 			ar.Get("/export", importHandler.Export)
+
+			ar.Get("/stores", storeHandler.List)
+			ar.Post("/receipts/parse", receiptHandler.Parse)
+			ar.Post("/receipts/scan-jobs", receiptHandler.CreateScanJob)
+			ar.Get("/receipts/scan-jobs/{id}", receiptHandler.GetScanJob)
+			ar.Post("/receipts/import", receiptHandler.Import)
+			ar.Get("/receipts/{id}", receiptHandler.Get)
+
 			ar.Get("/stats/summary", statsHandler.Summary)
 			ar.Get("/stats/by-category", statsHandler.ByCategory)
 			ar.Get("/stats/by-subcategory", statsHandler.BySubcategory)
+			ar.Get("/stats/by-store", statsHandler.ByStore)
 			ar.Get("/stats/by-period", statsHandler.ByPeriod)
 			ar.Get("/stats/search", statsHandler.Search)
 			ar.Get("/stats/context", statsHandler.Context)

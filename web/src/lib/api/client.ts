@@ -754,6 +754,9 @@ export type Transaction = {
 	subcategory_id: string | null;
 	subcategory_name?: string | null;
 	subcategory_icon?: string | null;
+	store_id?: string | null;
+	store_name?: string | null;
+	receipt_import_id?: string | null;
 	deletable?: boolean;
 	transfer_group_id?: string | null;
 	transfer_account_id?: string | null;
@@ -967,6 +970,7 @@ export function createTransaction(payload: {
 	category_id?: string;
 	subcategory_id?: string;
 	subcategory_name?: string;
+	store_id?: string;
 	transaction_date: string;
 }) {
 	return request<Transaction>('/api/v1/transactions', {
@@ -985,6 +989,7 @@ export function updateTransaction(
 		category_id?: string;
 		subcategory_id?: string;
 		subcategory_name?: string;
+		store_id?: string;
 		transaction_date: string;
 	}
 ) {
@@ -1215,6 +1220,156 @@ export function getStatsByCategory(params?: Record<string, string>) {
 export function getStatsBySubcategory(params?: Record<string, string>) {
 	const q = params ? '?' + new URLSearchParams(params).toString() : '';
 	return request<{ items: StatsSubcategoryItem[] }>(`/api/v1/stats/by-subcategory${q}`);
+}
+
+export type Store = {
+	id: string;
+	name: string;
+	created_at?: string;
+};
+
+export type ReceiptItem = {
+	name: string;
+	quantity: number;
+	price: number;
+	sum: number;
+};
+
+export type ParsedReceipt = {
+	fiscal_drive_number: string;
+	fiscal_document_number: string;
+	fiscal_sign: string;
+	date_time: string;
+	total_sum: number;
+	store_name: string;
+	user_inn?: string;
+	retail_place?: string;
+	items: ReceiptItem[];
+	fns_check_url: string;
+};
+
+export type ReceiptDetail = {
+	id: string;
+	store_name?: string;
+	fiscal_document_number: string;
+	fiscal_drive_number: string;
+	fiscal_sign: string;
+	transaction_date: string;
+	total_sum: number;
+	total_sum_display: string;
+	items: ReceiptItem[];
+	fns_check_url: string;
+	highlight_item_index?: number;
+	user_inn?: string;
+	retail_place?: string;
+};
+
+export type StatsStoreItem = {
+	store_id: string;
+	store_name: string;
+	total: number;
+	percentage: number;
+	count: number;
+};
+
+export function listStores() {
+	return request<Store[]>('/api/v1/stores');
+}
+
+export function parseReceipt(qr: string) {
+	return request<ParsedReceipt>('/api/v1/receipts/parse', {
+		method: 'POST',
+		body: JSON.stringify({ qr })
+	});
+}
+
+export type ReceiptScanJob = {
+	id: string;
+	status: 'queued' | 'running' | 'done' | 'failed';
+	error_message?: string;
+	result?: ParsedReceipt;
+	created_at?: string;
+	started_at?: string;
+	finished_at?: string;
+};
+
+export function createReceiptScanJob(file: File) {
+	const form = new FormData();
+	form.append('image', file);
+	return request<ReceiptScanJob>('/api/v1/receipts/scan-jobs', {
+		method: 'POST',
+		body: form
+	});
+}
+
+export function getReceiptScanJob(id: string) {
+	return request<ReceiptScanJob>(`/api/v1/receipts/scan-jobs/${encodeURIComponent(id)}`);
+}
+
+export async function pollReceiptScanJob(
+	id: string,
+	opts?: {
+		intervalMs?: number;
+		timeoutMs?: number;
+		onStatus?: (job: ReceiptScanJob) => void;
+		shouldAbort?: () => boolean;
+	}
+): Promise<ParsedReceipt> {
+	const intervalMs = opts?.intervalMs ?? 800;
+	const deadline = Date.now() + (opts?.timeoutMs ?? 120_000);
+	for (;;) {
+		if (opts?.shouldAbort?.()) {
+			throw new ApiError('ERR_ABORTED', 'Aborted', 0);
+		}
+		if (Date.now() > deadline) {
+			throw new ApiError('ERR_RECEIPT_SCAN', 'ERR_RECEIPT_SCAN', 504);
+		}
+		const job = await getReceiptScanJob(id);
+		opts?.onStatus?.(job);
+		if (job.status === 'done') {
+			if (job.result) {
+				return job.result;
+			}
+			throw new ApiError('ERR_RECEIPT_SCAN', 'ERR_RECEIPT_SCAN', 500);
+		}
+		if (job.status === 'failed') {
+			const code = job.error_message ?? 'ERR_RECEIPT_SCAN';
+			throw new ApiError(code, code, 400);
+		}
+		await new Promise((resolve) => setTimeout(resolve, intervalMs));
+	}
+}
+
+export function importReceipt(payload: {
+	account_id: string;
+	fiscal_drive_number: string;
+	fiscal_document_number: string;
+	fiscal_sign: string;
+	receipt: ParsedReceipt;
+	items: Array<{
+		index: number;
+		category_id?: string;
+		subcategory_id?: string | null;
+		include: boolean;
+	}>;
+}) {
+	return request<{ receipt_import_id: string; transactions: Transaction[] }>(
+		'/api/v1/receipts/import',
+		{
+			method: 'POST',
+			body: JSON.stringify(payload)
+		}
+	);
+}
+
+export function getReceipt(id: string, transactionId?: string) {
+	const q = transactionId ? `?transaction_id=${encodeURIComponent(transactionId)}` : '';
+	return request<ReceiptDetail>(`/api/v1/receipts/${id}${q}`);
+}
+
+export function getStatsByStore(params?: Record<string, string>) {
+	const q = params ? '?' + new URLSearchParams(params).toString() : '';
+	return request<{ items: StatsStoreItem[] }>(`/api/v1/stats/by-store${q}`);
 }
 
 export function getStatsByPeriod(params?: Record<string, string>) {

@@ -448,6 +448,7 @@ func insertDebtTransaction(ctx context.Context, db sqlcdb.DBTX, userID string, i
 		Type: txType, Kind: kind, Amount: in.Amount, Description: &desc,
 		CategoryID: &catID, SubcategoryID: nil,
 		TransferGroupID: nil, TransferAccountID: nil,
+		StoreID: nil, ReceiptImportID: nil, ReceiptItemIndex: nil,
 		TransactionDate: txDate, AffectsBalance: 1, CreatedAt: now, UpdatedAt: now,
 	}); err != nil {
 		return "", err
@@ -480,6 +481,7 @@ func insertSettleTransaction(ctx context.Context, db sqlcdb.DBTX, userID string,
 		Type: txType, Kind: kind, Amount: amount, Description: &desc,
 		CategoryID: &catID, SubcategoryID: nil,
 		TransferGroupID: nil, TransferAccountID: nil,
+		StoreID: nil, ReceiptImportID: nil, ReceiptItemIndex: nil,
 		TransactionDate: txDate, AffectsBalance: 1, CreatedAt: now, UpdatedAt: now,
 	}); err != nil {
 		return "", err

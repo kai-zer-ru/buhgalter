@@ -13,6 +13,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/bank"
 	"github.com/kai-zer-ru/buhgalter/internal/category"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
+	"github.com/kai-zer-ru/buhgalter/internal/store"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
 )
 
@@ -624,5 +625,43 @@ func TestCreditCardPaymentExceedsLimit(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("payment within limit: %v", err)
+	}
+}
+
+func TestCreateExpenseWithStore(t *testing.T) {
+	handle, env := seedEnvFull(t)
+	database := handle.DB()
+	ctx := context.Background()
+	past := timeutil.NowUTC().Add(-time.Hour)
+
+	storeID, err := store.GetOrCreate(ctx, database, env.userID, "Лента")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tx, err := Create(ctx, database, env.userID, CreateInput{
+		AccountID:       env.accountID,
+		Type:            "expense",
+		Amount:          1200,
+		CategoryID:      &env.expenseID,
+		StoreID:         storeID,
+		TransactionDate: past,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tx.StoreID == nil || *tx.StoreID != *storeID {
+		t.Fatalf("expected store_id on tx, got %+v", tx.StoreID)
+	}
+	if tx.StoreName == nil || *tx.StoreName != "Лента" {
+		t.Fatalf("expected store name, got %+v", tx.StoreName)
+	}
+
+	res, err := List(ctx, database, env.userID, ListFilters{StoreID: *storeID, Page: 1, Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Meta.Total != 1 {
+		t.Fatalf("expected 1 tx for store filter, got %d", res.Meta.Total)
 	}
 }

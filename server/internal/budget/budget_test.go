@@ -95,7 +95,8 @@ func TestBudgetCRUDAndSummary(t *testing.T) {
 	txID := "tx-budget-1"
 	if err := sqlcdb.New(sqlDB).InsertTransaction(ctx, sqlcdb.InsertTransactionParams{
 		ID: txID, UserID: userID, AccountID: accountID, Type: "expense", Kind: "manual",
-		Amount: 5_000, CategoryID: &cat, TransactionDate: txDate, AffectsBalance: 1,
+		Amount: 5_000, CategoryID: &cat, StoreID: nil, ReceiptImportID: nil, ReceiptItemIndex: nil,
+		TransactionDate: txDate, AffectsBalance: 1,
 		CreatedAt: txDate, UpdatedAt: txDate,
 	}); err != nil {
 		t.Fatal(err)
@@ -180,7 +181,8 @@ func TestAllExpenseBudget(t *testing.T) {
 	txDate := timeutil.FormatUTC(timeutil.NowUTC())
 	if err := sqlcdb.New(sqlDB).InsertTransaction(ctx, sqlcdb.InsertTransactionParams{
 		ID: "tx-all", UserID: userID, AccountID: "acc-budget", Type: "expense", Kind: "manual",
-		Amount: 2_000, CategoryID: &cat, TransactionDate: txDate, AffectsBalance: 1,
+		Amount: 2_000, CategoryID: &cat, StoreID: nil, ReceiptImportID: nil, ReceiptItemIndex: nil,
+		TransactionDate: txDate, AffectsBalance: 1,
 		CreatedAt: txDate, UpdatedAt: txDate,
 	}); err != nil {
 		t.Fatal(err)
@@ -218,7 +220,8 @@ func TestBudgetExcludesTransferCommission(t *testing.T) {
 	groupID := "tg-budget-test"
 	if err := sqlcdb.New(sqlDB).InsertTransaction(ctx, sqlcdb.InsertTransactionParams{
 		ID: "tx-regular", UserID: userID, AccountID: accountID, Type: "expense", Kind: "manual",
-		Amount: 5_000, CategoryID: &cat, TransactionDate: txDate, AffectsBalance: 1,
+		Amount: 5_000, CategoryID: &cat, StoreID: nil, ReceiptImportID: nil, ReceiptItemIndex: nil,
+		TransactionDate: txDate, AffectsBalance: 1,
 		CreatedAt: txDate, UpdatedAt: txDate,
 	}); err != nil {
 		t.Fatal(err)
@@ -227,6 +230,7 @@ func TestBudgetExcludesTransferCommission(t *testing.T) {
 	if err := sqlcdb.New(sqlDB).InsertTransaction(ctx, sqlcdb.InsertTransactionParams{
 		ID: "tx-commission", UserID: userID, AccountID: accountID, Type: "expense", Kind: "manual",
 		Amount: 500, CategoryID: &commissionCat, TransferGroupID: &groupID,
+		StoreID: nil, ReceiptImportID: nil, ReceiptItemIndex: nil,
 		TransactionDate: txDate, AffectsBalance: 1, CreatedAt: txDate, UpdatedAt: txDate,
 	}); err != nil {
 		t.Fatal(err)
