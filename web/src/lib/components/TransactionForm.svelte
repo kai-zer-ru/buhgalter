@@ -223,13 +223,6 @@
 			</p>
 		{/if}
 
-		<div>
-			<label class="mb-1 block text-sm font-medium" for="tx-amount"
-				>{$_('transactions.field.amount')}</label
-			>
-			<MoneyInput id="tx-amount" bind:value={amount} required />
-		</div>
-
 		<Select
 			id="tx-account"
 			label={$_('transactions.field.account')}
@@ -265,6 +258,13 @@
 					bind:value={newSubcategory}
 				/>
 			{/if}
+		</div>
+
+		<div>
+			<label class="mb-1 block text-sm font-medium" for="tx-amount"
+				>{$_('transactions.field.amount')}</label
+			>
+			<MoneyInput id="tx-amount" bind:value={amount} required />
 		</div>
 
 		<div>
