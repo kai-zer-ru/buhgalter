@@ -3,7 +3,36 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 версии — [SemVer](https://semver.org/lang/ru/).
 
-Подробные release notes для пользователей: [docs/release-notes-v1.3.1.md](docs/release-notes-v1.3.1.md).
+Подробные release notes для пользователей: [docs/release-notes-v1.3.2.md](docs/release-notes-v1.3.2.md).
+
+## [v1.3.2] — 2026-07-08
+
+> **ОБЯЗАТЕЛЬНО СДЕЛАЙТЕ БЕКАП!** Перед обновлением сохраните копию базы (`data/buhgalter.db`) и каталога `backups/`.
+
+### Добавлено
+
+**Кредиты**
+
+- Переключатель **«Первый платёж сегодня»** для потребительского кредита и рассрочки (`first_payment_today` в `POST /api/v1/credits` и preview; не для ипотеки) — первый платёж в дату выдачи, далее по `payment_interval` ([ui-credits.md](docs/ui-credits.md))
+- Ответ `POST /api/v1/credits/schedule/preview`: `effective_monthly_payment`, `effective_monthly_payment_display`, `user_set_monthly_payment` — отдельно от автоматического `calculated_monthly_payment`
+
+### Изменено
+
+**Кредиты**
+
+- **Ручной ежемесячный платёж:** при явном сохранении введённая сумма всегда применяется; без override — только точное совпадение с расчётом (или целые рубли, совпадающие с усечённым расчётом). Убран допуск ±1 ₽, из‑за которого ручной ввод мог сбрасываться
+
+**UI/UX**
+
+- **`TransactionForm`:** порядок полей при создании дохода/расхода — счёт → категория → подкатегория → сумма → описание → дата → время ([transactions-display.md](docs/transactions-display.md))
+- **`/budget`:** компактная шапка на мобильных — кнопки ←/→ 44×44, фиксированная ширина блока месяца, «Скопировать» / «Добавить» / переключатель месяца в одной строке с заголовком ([ui-budget.md](docs/ui-budget.md))
+
+### Техническое
+
+- API/OpenAPI: `first_payment_today`, расширенный `CreditSchedulePreviewResponse`
+- Unit: `schedule_test.go` — `first_payment_today`, разрешение ручного платежа
+- [docs/release-notes-v1.3.2.md](docs/release-notes-v1.3.2.md)
+- Версия `1.3.2`
 
 ## [v1.3.1] — 2026-07-03
 

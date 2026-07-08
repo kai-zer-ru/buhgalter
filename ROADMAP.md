@@ -15,6 +15,7 @@
 - [v1.2.5](#v125)
 - [v1.3.0](#v130)
 - [v1.3.1](#v131)
+- [v1.3.2](#v132)
 - [Общие планы](#общие-планы)
 
 ## v1.0.0
@@ -168,11 +169,13 @@
 - [x] [Release notes](docs/release-notes-v1.3.1.md) · [transactions-display.md](docs/transactions-display.md) · [categories-and-icons.md](docs/categories-and-icons.md) · [ui-navigation.md](docs/ui-navigation.md) · [ui-budget.md](docs/ui-budget.md) · [ui-balance-maintenance.md](docs/ui-balance-maintenance.md)
 
 ## v1.3.2
+
 - [x] Фикс добавления кредитов: 
     - сумма, вводимая вручную
     - первый платёж сегодня
 - [x] Окно "Расход"/"Доход" - порядок ввода
 - [x] Вёрстка в бюджете (мобюилка)
+- [x] [Release notes](docs/release-notes-v1.3.2.md) · [ui-credits.md](docs/ui-credits.md) · [transactions-display.md](docs/transactions-display.md) · [ui-budget.md](docs/ui-budget.md)
 
 ## Общие планы
 
