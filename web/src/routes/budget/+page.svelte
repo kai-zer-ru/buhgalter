@@ -485,47 +485,48 @@
 		]}
 	/>
 
-	<div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+	<div class="flex flex-wrap items-center justify-between gap-3">
 		<h1 class="text-2xl font-semibold">{$_('budget.title')}</h1>
-		<div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-			<div class="flex flex-wrap items-center gap-2">
+
+		<div class="flex flex-wrap items-center gap-2">
+			{#if canCopyFromPrevious}
 				<button
 					type="button"
-					class="btn-primary min-w-[7.25rem] shrink-0 text-center"
-					onclick={toggleForm}
+					class="btn-ghost shrink-0"
 					disabled={copying}
+					onclick={() => void copyFromPreviousMonth()}
 				>
+					{$_('budget.action.copy_from_previous')}
+				</button>
+			{/if}
+			<div class="flex items-center gap-2">
+				<button type="button" class="btn-primary shrink-0" onclick={toggleForm} disabled={copying}>
 					{formOpen && !editId ? $_('common.cancel') : $_('budget.add')}
 				</button>
-				{#if canCopyFromPrevious}
+				<div class="flex shrink-0 items-center gap-1">
 					<button
 						type="button"
-						class="btn-ghost shrink-0"
-						disabled={copying}
-						onclick={() => void copyFromPreviousMonth()}
+						class="btn-ghost shrink-0 max-sm:flex max-sm:h-11 max-sm:w-11 max-sm:items-center max-sm:justify-center max-sm:p-0"
+						onclick={() => shiftMonth(-1)}
+						aria-label={$_('budget.month.prev')}
 					>
-						{$_('budget.action.copy_from_previous')}
+						←
 					</button>
-				{/if}
-			</div>
-			<div class="flex shrink-0 items-center justify-center gap-2 sm:justify-end">
-				<button
-					type="button"
-					class="btn-ghost shrink-0"
-					onclick={() => shiftMonth(-1)}
-					aria-label={$_('budget.month.prev')}
-				>
-					←
-				</button>
-				<span class="whitespace-nowrap text-center font-medium capitalize">{monthLabel}</span>
-				<button
-					type="button"
-					class="btn-ghost shrink-0"
-					onclick={() => shiftMonth(1)}
-					aria-label={$_('budget.month.next')}
-				>
-					→
-				</button>
+					<span
+						class="inline-flex h-11 w-[11rem] shrink-0 items-center justify-center rounded-xl border px-2 text-center text-sm font-medium capitalize sm:h-auto sm:px-3 sm:py-2"
+						style:border-color="var(--border)"
+					>
+						{monthLabel}
+					</span>
+					<button
+						type="button"
+						class="btn-ghost shrink-0 max-sm:flex max-sm:h-11 max-sm:w-11 max-sm:items-center max-sm:justify-center max-sm:p-0"
+						onclick={() => shiftMonth(1)}
+						aria-label={$_('budget.month.next')}
+					>
+						→
+					</button>
+				</div>
 			</div>
 		</div>
 	</div>
