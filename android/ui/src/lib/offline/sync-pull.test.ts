@@ -23,6 +23,9 @@ vi.mock('$lib/api/client', async (importOriginal) => {
 		getBudgetSummary: ok,
 		listAccounts: ok,
 		listCredits: ok,
+		getCredit: ok,
+		listBanks: ok,
+		listRecurringOperations: ok,
 		listDebts: ok,
 		listTransactions: ok
 	};

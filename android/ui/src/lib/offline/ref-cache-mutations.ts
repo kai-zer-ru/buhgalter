@@ -2,8 +2,10 @@ import type {
 	Account,
 	BudgetItem,
 	Category,
+	Credit,
 	Debt,
 	Debtor,
+	RecurringOperation,
 	UIMetaAccountRef
 } from '$lib/api/client';
 import {
@@ -18,6 +20,13 @@ const DEBTORS_PATH = '/api/v1/debtors';
 const ACCOUNTS_ACTIVE = '/api/v1/accounts?status=active';
 const ACCOUNTS_ARCHIVED = '/api/v1/accounts?status=archived';
 const ACCOUNTS_ALL = '/api/v1/accounts';
+const CREDITS_ACTIVE = '/api/v1/credits?status=active';
+const CREDITS_CLOSED = '/api/v1/credits?status=closed';
+const RECURRING_PATH = '/api/v1/recurring-operations';
+
+export function creditDetailPath(id: string): string {
+	return `/api/v1/credits/${id}`;
+}
 
 export function patchRefCacheList<T>(path: string, mutator: (list: T[]) => T[]): boolean {
 	const cached = readRefCache<T[]>(path);
@@ -27,7 +36,13 @@ export function patchRefCacheList<T>(path: string, mutator: (list: T[]) => T[]):
 }
 
 export function prependRefCacheList<T>(path: string, item: T): boolean {
-	return patchRefCacheList<T>(path, (list) => [item, ...list]);
+	const cached = readRefCache<T[]>(path);
+	if (cached === null) {
+		publishRefCachePath(path, [item]);
+		return true;
+	}
+	publishRefCachePath(path, [item, ...cached]);
+	return true;
 }
 
 export function replaceRefCacheListItem<T extends { id: string }>(path: string, item: T): boolean {
@@ -279,4 +294,41 @@ export function onBudgetDeleted(id: string, month?: string): void {
 		invalidateRefCache(`/api/v1/budgets/summary?month=${encodeURIComponent(month)}`);
 	}
 	invalidateRefCache('/api/v1/budgets/summary');
+}
+
+export function onCreditUpdated(credit: Credit): void {
+	publishRefCachePath(creditDetailPath(credit.id), credit);
+	removeRefCacheListItem<Credit>(CREDITS_ACTIVE, credit.id);
+	removeRefCacheListItem<Credit>(CREDITS_CLOSED, credit.id);
+	if (credit.status === 'closed') {
+		prependRefCacheList(CREDITS_CLOSED, credit);
+	} else {
+		prependRefCacheList(CREDITS_ACTIVE, credit);
+	}
+}
+
+export function onCreditDeleted(id: string): void {
+	invalidateRefCache(creditDetailPath(id));
+	removeRefCacheListItem<Credit>(CREDITS_ACTIVE, id);
+	removeRefCacheListItem<Credit>(CREDITS_CLOSED, id);
+}
+
+/** Pay/complete/delete payment may change balances — drop stale snapshots until next warm. */
+export function touchBalancesAfterCreditMutation(): void {
+	invalidateRefCache('/api/v1/dashboard');
+	invalidateRefCache(ACCOUNTS_ACTIVE);
+	invalidateRefCache(ACCOUNTS_ALL);
+	invalidateRefCache(ACCOUNTS_ARCHIVED);
+}
+
+export function onRecurringCreated(item: RecurringOperation): void {
+	prependRefCacheList(RECURRING_PATH, item);
+}
+
+export function onRecurringUpdated(item: RecurringOperation): void {
+	replaceRefCacheListItem(RECURRING_PATH, item);
+}
+
+export function onRecurringDeleted(id: string): void {
+	removeRefCacheListItem<RecurringOperation>(RECURRING_PATH, id);
 }

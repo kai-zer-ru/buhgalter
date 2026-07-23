@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Debt } from '$lib/api/client';
-import { createDebt, deleteDebt } from '$lib/offline/debts-api';
+import { createDebt, deleteDebt, settleDebt } from '$lib/offline/debts-api';
 import {
 	readRefCache,
 	refCacheReady,
@@ -17,6 +17,7 @@ import * as sync from '$lib/offline/sync';
 vi.mock('$lib/api/client', () => ({
 	createDebt: vi.fn(),
 	deleteDebt: vi.fn(),
+	settleDebt: vi.fn(),
 	ApiError: class ApiError extends Error {
 		constructor(
 			public code: string,
@@ -146,5 +147,47 @@ describe('debts-api online', () => {
 		expect(getOutboxEntries()).toHaveLength(1);
 		expect(getOutboxEntries()[0].op).toBe('delete');
 		expect(getOutboxEntries()[0].kind).toBe('debt');
+	});
+});
+
+describe('debts-api settle offline', () => {
+	it('full settle of local debt removes create from outbox', async () => {
+		const debt = await createDebt(debtPayload);
+		await settleDebt(debt.id, {
+			settled_at: '2026-07-10 12:00:00',
+			affects_balance: false
+		});
+
+		expect(getOutboxEntries()).toHaveLength(0);
+		expect(readRefCache<Debt[]>('/api/v1/debts?settled=false')).toEqual([]);
+		expect(readRefCache<Debt[]>('/api/v1/debts?settled=true')?.[0]?.id).toBe(debt.id);
+	});
+
+	it('partial settle of local debt reduces create amount', async () => {
+		const debt = await createDebt(debtPayload);
+		await settleDebt(debt.id, {
+			amount: '400.00',
+			settled_at: '2026-07-10 12:00:00',
+			affects_balance: false
+		});
+
+		expect(getOutboxEntries()).toHaveLength(1);
+		expect(getOutboxEntries()[0].op).toBe('create');
+		const payload = getOutboxEntries()[0].payload as { amount: string };
+		expect(payload.amount).toContain('600');
+		expect(readRefCache<Debt[]>('/api/v1/debts?settled=false')?.[0]?.amount).toBe(60000);
+	});
+
+	it('enqueues settle for server debt when offline', async () => {
+		writeRefCache('/api/v1/debts?settled=false', [serverDebt]);
+		await settleDebt('srv-d1', {
+			settled_at: '2026-07-10 12:00:00',
+			affects_balance: false
+		});
+
+		expect(getOutboxEntries()).toHaveLength(1);
+		expect(getOutboxEntries()[0].op).toBe('update');
+		expect(getOutboxEntries()[0].payload).toMatchObject({ action: 'settle' });
+		expect(readRefCache<Debt[]>('/api/v1/debts?settled=true')?.[0]?.id).toBe('srv-d1');
 	});
 });

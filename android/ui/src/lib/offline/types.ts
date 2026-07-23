@@ -1,4 +1,12 @@
-export type EntityKind = 'transaction' | 'transfer' | 'category' | 'debt' | 'account' | 'budget';
+export type EntityKind =
+	| 'transaction'
+	| 'transfer'
+	| 'category'
+	| 'debt'
+	| 'account'
+	| 'budget'
+	| 'credit'
+	| 'recurring';
 
 export type PendingOp = 'create' | 'update' | 'delete';
 
@@ -47,6 +55,14 @@ export type DebtPayload = {
 	account_id?: string;
 };
 
+export type DebtSettlePayload = {
+	action: 'settle';
+	amount?: string;
+	settled_at: string;
+	affects_balance: boolean;
+	account_id?: string;
+};
+
 export type AccountCreatePayload = {
 	name: string;
 	type: 'cash' | 'bank' | 'credit_card';
@@ -87,16 +103,84 @@ export type BudgetPayload = {
 	month?: string;
 };
 
+export type CreditMetaUpdatePayload = {
+	action: 'update';
+	credit_id: string;
+	name?: string | null;
+	debit_account_id?: string;
+	debit_time_local?: string | null;
+	bank_id?: string | null;
+};
+
+export type CreditPayPayload = {
+	action: 'pay';
+	credit_id: string;
+	amount: string;
+	payment_date: string;
+	account_id?: string;
+};
+
+export type CreditCompletePayload = {
+	action: 'complete';
+	credit_id: string;
+	affects_balance: boolean;
+	payment_date: string;
+};
+
+export type CreditSchedulePayload = {
+	action: 'schedule';
+	credit_id: string;
+	payments: { id: string; amount: string }[];
+};
+
+export type CreditDeletePaymentPayload = {
+	action: 'delete_payment';
+	credit_id: string;
+	payment_id: string;
+};
+
+export type CreditDeletePayload = {
+	action: 'delete';
+	credit_id: string;
+	mode: 'cascade' | 'keep_transactions';
+};
+
+export type CreditActionPayload =
+	| CreditMetaUpdatePayload
+	| CreditPayPayload
+	| CreditCompletePayload
+	| CreditSchedulePayload
+	| CreditDeletePaymentPayload
+	| CreditDeletePayload;
+
+export type RecurringPayload = {
+	type: 'income' | 'expense';
+	amount: string;
+	description?: string;
+	account_id: string;
+	category_id: string;
+	subcategory_id?: string;
+	period: 'week' | 'two_weeks' | 'month' | 'year';
+	weekday?: number;
+	day_of_month?: number;
+	start_date: string;
+	time_local?: string;
+	active?: boolean;
+};
+
 export type OutboxPayload =
 	| TransactionPayload
 	| TransferPayload
 	| CategoryPayload
 	| CategoryUpdatePayload
 	| DebtPayload
+	| DebtSettlePayload
 	| AccountCreatePayload
 	| AccountUpdatePayload
 	| AccountStatusPayload
-	| BudgetPayload;
+	| BudgetPayload
+	| CreditActionPayload
+	| RecurringPayload;
 
 export type OutboxEntry = {
 	entityKey: string;
@@ -135,4 +219,45 @@ export function isAccountStatusPayload(p: unknown): p is AccountStatusPayload {
 		((p as AccountStatusPayload).action === 'archive' ||
 			(p as AccountStatusPayload).action === 'unarchive')
 	);
+}
+
+export function isDebtSettlePayload(p: unknown): p is DebtSettlePayload {
+	return !!p && typeof p === 'object' && (p as DebtSettlePayload).action === 'settle';
+}
+
+export function isCreditActionPayload(p: unknown): p is CreditActionPayload {
+	if (!p || typeof p !== 'object' || !('action' in p) || !('credit_id' in p)) return false;
+	const action = (p as CreditActionPayload).action;
+	return (
+		action === 'update' ||
+		action === 'pay' ||
+		action === 'complete' ||
+		action === 'schedule' ||
+		action === 'delete_payment' ||
+		action === 'delete'
+	);
+}
+
+export function creditMetaEntityKey(creditId: string): string {
+	return `credit:${creditId}`;
+}
+
+export function creditPayEntityKey(creditId: string, payId: string): string {
+	return `credit:${creditId}:pay:${payId}`;
+}
+
+export function creditCompleteEntityKey(creditId: string): string {
+	return `credit:${creditId}:complete`;
+}
+
+export function creditScheduleEntityKey(creditId: string): string {
+	return `credit:${creditId}:schedule`;
+}
+
+export function creditDeletePaymentEntityKey(creditId: string, paymentId: string): string {
+	return `credit:${creditId}:delpay:${paymentId}`;
+}
+
+export function creditDeleteEntityKey(creditId: string): string {
+	return `credit:${creditId}:delete`;
 }

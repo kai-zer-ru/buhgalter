@@ -98,7 +98,7 @@
 
 Не блокер; **не** веб-паритет.
 
-- Outbox: кредиты/платежи, recurring, удаление счёта, settle долга
+- Outbox: удаление счёта насовсем; primary/reorder категорий; подкатегории
 - Share: вложения файла в операцию / OCR ([сканер чеков](receipt-scanner.md)); `SEND_MULTIPLE` / PDF
 - Не путать share со **static shortcuts** (launcher)
 ## Сборка

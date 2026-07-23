@@ -63,9 +63,6 @@ function storageRemove(key: string): void {
 	memoryStore.delete(key);
 }
 
-/** Credit detail embeds full payment schedule — too large for sync localStorage SWR. */
-const CREDIT_DETAIL_PATH = /^\/api\/v1\/credits\/[^/]+$/;
-
 export function shouldPersistRefCache(path: string): boolean {
 	const pathOnly = path.split('?')[0] ?? path;
 	if (REF_CACHE_SKIP.has(pathOnly)) return false;
@@ -74,7 +71,6 @@ export function shouldPersistRefCache(path: string): boolean {
 	if (pathOnly.includes('/import/jobs/')) return false;
 	if (pathOnly.startsWith('/api/v1/export')) return false;
 	if (pathOnly.startsWith('/api/v1/version')) return false;
-	if (CREDIT_DETAIL_PATH.test(pathOnly)) return false;
 	return true;
 }
 

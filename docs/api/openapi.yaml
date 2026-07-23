@@ -10,7 +10,7 @@ info:
 
     **Серверный кеш (in-memory):** успешные ответы `GET` кешируются в процессе сервера (справочники — 5 мин,
     остальное — 1 мин); при любой мутации кеш пользователя сбрасывается.
-    **Клиент (web / Android):** SWR ref-cache в `localStorage` для `GET /api/v1/*` (кроме health, export, preview, version, `GET /credits/{id}`).
+    **Клиент (web / Android):** SWR ref-cache в `localStorage` для `GET /api/v1/*` (кроме health, export, preview, version, `GET /setup/status`).
     Подробнее — [ui-api-cache.md](../ui-api-cache.md).
 
     **Счета (UI):** на `/accounts` меню «⋯» вызывает inline-редактирование (`PUT /accounts/{id}`),

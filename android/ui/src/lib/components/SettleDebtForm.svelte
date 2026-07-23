@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { _ } from 'svelte-i18n';
-	import { listAccounts, settleDebt, type Account, type Debt } from '$lib/api/client';
+	import { listAccounts, type Account, type Debt } from '$lib/api/client';
+	import { settleDebt } from '$lib/offline/debts-api';
 	import { defaultAccountId } from '$lib/accounts';
 	import { accountSelectOptions } from '$lib/select-options';
 	import MoneyInput from '$lib/components/MoneyInput.svelte';

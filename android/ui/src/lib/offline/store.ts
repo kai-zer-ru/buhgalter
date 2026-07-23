@@ -8,12 +8,26 @@ import {
 	type BudgetPayload,
 	type CategoryPayload,
 	type CategoryUpdatePayload,
+	type CreditCompletePayload,
+	type CreditDeletePayload,
+	type CreditDeletePaymentPayload,
+	type CreditMetaUpdatePayload,
+	type CreditPayPayload,
+	type CreditSchedulePayload,
 	type DebtPayload,
+	type DebtSettlePayload,
 	type EntityKind,
 	type OutboxEntry,
 	type OutboxSnapshot,
+	type RecurringPayload,
 	type TransactionPayload,
-	type TransferPayload
+	type TransferPayload,
+	creditCompleteEntityKey,
+	creditDeleteEntityKey,
+	creditDeletePaymentEntityKey,
+	creditMetaEntityKey,
+	creditPayEntityKey,
+	creditScheduleEntityKey
 } from '$lib/offline/types';
 
 const STORAGE_KEY = 'buhgalter.outbox.v1';
@@ -354,6 +368,85 @@ export function enqueueBudgetDelete(entityKey: string) {
 		return;
 	}
 	enqueueServerMutation(entityKey, 'budget', 'delete');
+}
+
+export function enqueueDebtSettle(entityKey: string, payload: DebtSettlePayload) {
+	enqueueServerMutation(entityKey, 'debt', 'update', payload);
+}
+
+/** Patch amount on a pending local debt create (partial settle offline). */
+export function patchLocalDebtCreateAmount(entityKey: string, amount: string): boolean {
+	const existing = findEntry(entityKey);
+	if (!existing?.isLocalOnly || existing.op !== 'create' || existing.kind !== 'debt') {
+		return false;
+	}
+	const base = existing.payload as DebtPayload;
+	existing.payload = { ...base, amount };
+	clearFailed(entityKey);
+	persist();
+	bump();
+	return true;
+}
+
+export function enqueueCreditMetaUpdate(payload: CreditMetaUpdatePayload) {
+	enqueueServerMutation(creditMetaEntityKey(payload.credit_id), 'credit', 'update', payload);
+}
+
+export function enqueueCreditPay(payload: CreditPayPayload, payKey = makeLocalKey()) {
+	const entityKey = creditPayEntityKey(payload.credit_id, payKey.replace(/^local:/, ''));
+	enqueueServerMutation(entityKey, 'credit', 'update', payload);
+	return entityKey;
+}
+
+export function enqueueCreditComplete(payload: CreditCompletePayload) {
+	enqueueServerMutation(creditCompleteEntityKey(payload.credit_id), 'credit', 'update', payload);
+}
+
+export function enqueueCreditSchedule(payload: CreditSchedulePayload) {
+	enqueueServerMutation(creditScheduleEntityKey(payload.credit_id), 'credit', 'update', payload);
+}
+
+export function enqueueCreditDeletePayment(payload: CreditDeletePaymentPayload) {
+	enqueueServerMutation(
+		creditDeletePaymentEntityKey(payload.credit_id, payload.payment_id),
+		'credit',
+		'update',
+		payload
+	);
+}
+
+export function enqueueCreditDelete(payload: CreditDeletePayload) {
+	const key = creditDeleteEntityKey(payload.credit_id);
+	const metaKey = creditMetaEntityKey(payload.credit_id);
+	if (findEntry(metaKey)?.op === 'update') {
+		removeEntry(metaKey);
+	}
+	enqueueServerMutation(key, 'credit', 'update', payload);
+}
+
+export function enqueueRecurringCreate(localKey: string, payload: RecurringPayload): OutboxEntry {
+	enqueueLocalCreate(localKey, 'recurring', payload);
+	return findEntry(localKey)!;
+}
+
+export function enqueueRecurringUpdate(entityKey: string, payload: RecurringPayload) {
+	if (isLocalEntityKey(entityKey)) {
+		enqueueLocalCreate(entityKey, 'recurring', payload);
+		return;
+	}
+	enqueueServerMutation(entityKey, 'recurring', 'update', payload);
+}
+
+export function enqueueRecurringDelete(entityKey: string) {
+	if (isLocalEntityKey(entityKey)) {
+		enqueueLocalDelete(entityKey);
+		return;
+	}
+	enqueueServerMutation(entityKey, 'recurring', 'delete');
+}
+
+export function getOutboxEntry(entityKey: string): OutboxEntry | undefined {
+	return findEntry(entityKey);
 }
 
 export { makeLocalKey, isLocalEntityKey };

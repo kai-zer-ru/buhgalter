@@ -1,30 +1,44 @@
 import { get, writable } from 'svelte/store';
 import { invalidateApiCache } from '$lib/api/cache';
 import {
+	getCredit,
 	getDashboard,
 	getDebtsSummary,
 	getUIMeta,
 	getBudgetSummary,
 	listAccounts,
+	listBanks,
 	listCredits,
 	listDebts,
+	listRecurringOperations,
 	listTransactions,
+	type Credit,
 	createTransaction as apiCreateTransaction,
 	createTransfer as apiCreateTransfer,
 	createCategory as apiCreateCategory,
 	createDebt as apiCreateDebt,
 	createAccount as apiCreateAccount,
 	createBudget as apiCreateBudget,
+	createRecurringOperation as apiCreateRecurring,
 	deleteTransaction as apiDeleteTransaction,
 	deleteTransfer as apiDeleteTransfer,
 	deleteCategory as apiDeleteCategory,
 	deleteDebt as apiDeleteDebt,
 	deleteBudget as apiDeleteBudget,
+	deleteRecurringOperation as apiDeleteRecurring,
+	deleteCredit as apiDeleteCredit,
+	deleteCreditPayment as apiDeleteCreditPayment,
 	updateTransaction as apiUpdateTransaction,
 	updateTransfer as apiUpdateTransfer,
 	updateCategory as apiUpdateCategory,
 	updateAccount as apiUpdateAccount,
 	updateBudget as apiUpdateBudget,
+	updateRecurringOperation as apiUpdateRecurring,
+	updateCredit as apiUpdateCredit,
+	updateCreditSchedule as apiUpdateCreditSchedule,
+	addCreditPayment as apiAddCreditPayment,
+	completeCredit as apiCompleteCredit,
+	settleDebt as apiSettleDebt,
 	archiveAccount as apiArchiveAccount,
 	unarchiveAccount as apiUnarchiveAccount,
 	ApiError,
@@ -45,9 +59,15 @@ import type {
 	DebtPayload,
 	AccountCreatePayload,
 	AccountUpdatePayload,
-	BudgetPayload
+	BudgetPayload,
+	CreditActionPayload,
+	RecurringPayload
 } from '$lib/offline/types';
-import { isAccountStatusPayload } from '$lib/offline/types';
+import {
+	isAccountStatusPayload,
+	isCreditActionPayload,
+	isDebtSettlePayload
+} from '$lib/offline/types';
 import type { OutboxEntry } from '$lib/offline/types';
 import {
 	markServerOffline,
@@ -107,6 +127,39 @@ function isRetryable(err: unknown): boolean {
 	return isTransientHttpError(err.status) || err.status === 0;
 }
 
+async function replayCreditAction(payload: CreditActionPayload): Promise<void> {
+	const id = payload.credit_id;
+	switch (payload.action) {
+		case 'update': {
+			const { action: _a, credit_id: _c, ...fields } = payload;
+			await apiUpdateCredit(id, fields);
+			return;
+		}
+		case 'pay':
+			await apiAddCreditPayment(id, {
+				amount: payload.amount,
+				payment_date: payload.payment_date,
+				account_id: payload.account_id
+			});
+			return;
+		case 'complete':
+			await apiCompleteCredit(id, {
+				affects_balance: payload.affects_balance,
+				payment_date: payload.payment_date
+			});
+			return;
+		case 'schedule':
+			await apiUpdateCreditSchedule(id, { payments: payload.payments });
+			return;
+		case 'delete_payment':
+			await apiDeleteCreditPayment(id, payload.payment_id);
+			return;
+		case 'delete':
+			await apiDeleteCredit(id, payload.mode);
+			return;
+	}
+}
+
 async function replayEntry(entry: OutboxEntry) {
 	const { entityKey, kind, op, payload } = entry;
 	try {
@@ -121,6 +174,8 @@ async function replayEntry(entry: OutboxEntry) {
 				await apiDeleteDebt(entityKey);
 			} else if (kind === 'budget') {
 				await apiDeleteBudget(entityKey);
+			} else if (kind === 'recurring') {
+				await apiDeleteRecurring(entityKey);
 			}
 			removeOutboxEntry(entityKey);
 			return;
@@ -140,6 +195,8 @@ async function replayEntry(entry: OutboxEntry) {
 				const bp = payload as BudgetPayload;
 				const { month, ...body } = bp;
 				await apiCreateBudget(body, month);
+			} else if (kind === 'recurring') {
+				await apiCreateRecurring(payload as RecurringPayload);
 			}
 			removeOutboxEntry(entityKey);
 			return;
@@ -165,6 +222,17 @@ async function replayEntry(entry: OutboxEntry) {
 				const bp = payload as BudgetPayload;
 				const { month, ...body } = bp;
 				await apiUpdateBudget(entityKey, body, month);
+			} else if (kind === 'debt' && isDebtSettlePayload(payload)) {
+				await apiSettleDebt(entityKey, {
+					amount: payload.amount,
+					settled_at: payload.settled_at,
+					affects_balance: payload.affects_balance,
+					account_id: payload.account_id
+				});
+			} else if (kind === 'credit' && isCreditActionPayload(payload)) {
+				await replayCreditAction(payload);
+			} else if (kind === 'recurring') {
+				await apiUpdateRecurring(entityKey, payload as RecurringPayload);
 			}
 			removeOutboxEntry(entityKey);
 		}
@@ -306,6 +374,28 @@ async function warmupTransactionIndex(): Promise<void> {
 	});
 }
 
+async function warmupCreditDetails(): Promise<void> {
+	const settled = await Promise.allSettled([
+		listCredits({ status: 'active' }),
+		listCredits({ status: 'closed' }),
+		listBanks()
+	]);
+	const credits: Credit[] = [];
+	for (const result of settled.slice(0, 2)) {
+		if (result.status === 'fulfilled' && Array.isArray(result.value)) {
+			credits.push(...result.value);
+		}
+	}
+	const seen = new Set<string>();
+	await Promise.allSettled(
+		credits.map((c) => {
+			if (seen.has(c.id)) return Promise.resolve();
+			seen.add(c.id);
+			return getCredit(c.id);
+		})
+	);
+}
+
 /** Prefetch main GET endpoints into ref-cache (startup / manual sync). */
 export async function warmRefCache(): Promise<void> {
 	debugLogInfo('sync', 'warmRefCache started');
@@ -315,8 +405,8 @@ export async function warmRefCache(): Promise<void> {
 		listAccounts(),
 		listAccounts('active'),
 		listAccounts('archived'),
-		listCredits({ status: 'active' }),
-		listCredits({ status: 'closed' }),
+		warmupCreditDetails(),
+		listRecurringOperations(),
 		getDebtsSummary(),
 		listDebts({ settled: 'false' }),
 		listDebts({ settled: 'true' }),

@@ -40,7 +40,7 @@ TTL — страховка; при любой мутации кеш пользо
 | `POST .../preview`, `GET .../preview` | Разовые расчёты (в т.ч. `GET /budgets/spent-preview`) |
 | `GET /import/jobs/{id}` | Статус меняется |
 
-На **клиенте** (ref-cache) дополнительно не кладутся в SWR: `GET /setup/status` (флаг регистрации на /login — иначе pre-mutation snapshot), `GET /credits/{id}` (полный график). Серверный кеш `GET /setup/status` остаётся; сброс при `PUT /admin/settings`.
+На **клиенте** (ref-cache) дополнительно не кладутся в SWR: `GET /setup/status` (флаг регистрации на /login — иначе pre-mutation snapshot). `GET /credits/{id}` (тело с графиком) **кешируется** — нужен офлайн-просмотр карточки кредита в Android. Серверный кеш `GET /setup/status` остаётся; сброс при `PUT /admin/settings`.
 
 ## Инвалидация
 
@@ -55,7 +55,7 @@ TTL — страховка; при любой мутации кеш пользо
 | Слой | Что | TTL / поведение |
 |------|-----|-----------------|
 | In-memory | `GET /api/v1/banks` | 24 ч (`web/src/lib/api/cache.ts`) |
-| **ref-cache (localStorage)** | `GET /api/v1/*` (кроме health, **setup/status**, export, preview, version, **`GET /credits/{id}`**) | **Stale-while-revalidate:** экран сразу из кеша, сеть в фоне. Деталь кредита с полным графиком не кладётся в localStorage — иначе на мобиле возможен долгий freeze главного потока. |
+| **ref-cache (localStorage)** | `GET /api/v1/*` (кроме health, **setup/status**, export, preview, version) | **Stale-while-revalidate:** экран сразу из кеша, сеть в фоне. Включая `GET /credits/{id}` с графиком (офлайн-карточка в Android). |
 
 Ключ ref-cache: `buhgalter.ref_cache.web.v1::{user_id}::{path}` — при смене пользователя старый кеш не читается. Очистка при logout и session expired.
 

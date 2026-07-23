@@ -5,18 +5,24 @@
 	import { page } from '$app/stores';
 	import { _ } from 'svelte-i18n';
 	import {
-		createRecurringOperation,
-		deleteRecurringOperation,
 		getTransaction,
 		getUIMeta,
 		listRecurringOperations,
 		listSubcategories,
-		updateRecurringOperation,
 		type Account,
 		type Category,
 		type RecurringOperation,
 		type Subcategory
 	} from '$lib/api/client';
+	import {
+		createRecurringOperation,
+		deleteRecurringOperation,
+		updateRecurringOperation
+	} from '$lib/offline/recurring-api';
+	import { refCacheReady, refCacheUpdate } from '$lib/offline/ref-cache';
+	import { refCachePathMatches } from '$lib/offline/ref-cache-watch';
+	import { dataRefreshTick } from '$lib/offline/sync';
+	import { assignIfChanged } from '$lib/state-utils';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
 	import { dateOnlyPicker } from '$lib/datetime-picker-standards';
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
@@ -44,15 +50,18 @@
 	} from '$lib/select-options';
 	import { user } from '$lib/stores/auth';
 
+	const RECURRING_PATH = '/api/v1/recurring-operations';
+
 	let items = $state<RecurringOperation[]>([]);
 	let accounts = $state<Account[]>([]);
 	let categories = $state<Category[]>([]);
 	let subcategories = $state<Subcategory[]>([]);
-	let loading = $state(true);
+	let loading = $state(!refCacheReady(RECURRING_PATH));
 	let loadError = $state<string | null>(null);
 	let saving = $state(false);
 	let editId = $state<string | null>(null);
 	let formOpen = $state(false);
+	let ready = $state(false);
 
 	let type = $state<'income' | 'expense'>('expense');
 	let amount = $state('');
@@ -80,6 +89,20 @@
 		void loadAll();
 	});
 
+	$effect(() => {
+		const tick = $dataRefreshTick;
+		if (tick === 0 || !ready) return;
+		void loadAll({ background: true });
+	});
+
+	$effect(() => {
+		const update = $refCacheUpdate;
+		if (!update || !ready) return;
+		if (refCachePathMatches(update.path, RECURRING_PATH)) {
+			void loadAll({ background: true });
+		}
+	});
+
 	function dayFromDate(value: string): string {
 		const day = Number((value || '').split('T')[0]?.split('-')[2] ?? '');
 		if (!Number.isFinite(day) || day < 1 || day > 31) return '1';
@@ -99,11 +122,11 @@
 		return categories.find((item) => item.type === nextType && !item.is_system);
 	}
 
-	async function loadAll() {
-		loading = true;
+	async function loadAll(opts: { background?: boolean } = {}) {
+		if (!opts.background && !refCacheReady(RECURRING_PATH)) loading = true;
 		try {
 			const [ops, meta] = await Promise.all([listRecurringOperations(), getUIMeta()]);
-			items = ops;
+			items = opts.background ? assignIfChanged(items, ops) : ops;
 			accounts = accountsFromUIMeta(
 				meta.accounts.filter((acc) => acc.status === 'active'),
 				meta.banks
@@ -116,10 +139,14 @@
 			if (!accountId && accounts.length > 0) accountId = accounts[0].id;
 			if (!categoryId) categoryId = firstCategoryByType(type)?.id ?? '';
 			await loadSubcategories();
-			await prefillFromQueryTransaction();
+			if (!opts.background) await prefillFromQueryTransaction();
 			loadError = null;
+			ready = true;
 		} catch (err) {
-			const msg = reportPageLoadFailure(err, { hasData: items.length > 0 });
+			const msg = reportPageLoadFailure(err, {
+				background: opts.background,
+				hasData: items.length > 0
+			});
 			if (msg) loadError = msg;
 		} finally {
 			loading = false;

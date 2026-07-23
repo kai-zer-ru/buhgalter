@@ -12,8 +12,8 @@ import {
 } from './ref-cache';
 
 describe('shouldPersistRefCache', () => {
-	it('skips credit detail with full schedule', () => {
-		expect(shouldPersistRefCache('/api/v1/credits/abc-123')).toBe(false);
+	it('caches credit detail and list paths', () => {
+		expect(shouldPersistRefCache('/api/v1/credits/abc-123')).toBe(true);
 		expect(shouldPersistRefCache('/api/v1/credits?status=active')).toBe(true);
 		expect(shouldPersistRefCache('/api/v1/banks')).toBe(true);
 	});

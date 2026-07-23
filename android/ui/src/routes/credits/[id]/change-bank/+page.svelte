@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { _ } from 'svelte-i18n';
-	import { getCredit, listBanks, updateCredit, type Bank, type Credit } from '$lib/api/client';
+	import { getCredit, listBanks, type Bank, type Credit } from '$lib/api/client';
+	import { updateCredit } from '$lib/offline/credits-api';
 	import { parseFormReturnPath } from '$lib/android/form-routes';
 	import { leaveForm } from '$lib/android/form-nav';
 	import FormPageShell from '$lib/components/FormPageShell.svelte';

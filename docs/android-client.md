@@ -35,11 +35,11 @@
 
 **Только веб:** управление пользователями (`/admin/users`). Офлайн outbox — только Android. Создание кредита в APK — пошаговый мастер `/credits/new/*` (см. [android-client-ui.md](android-client-ui.md)).
 
-Опциональный бэклог (кредиты/recurring в outbox, OCR share): [roadmap/android-client.md](../roadmap/android-client.md#опционально-не-начато).
+Опциональный бэклог (hard-delete счёта, OCR share): [roadmap/android-client.md](../roadmap/android-client.md#опционально-не-начато).
 
 **Тема:** светлая / тёмная / «Как на устройстве» (по умолчанию). **SystemBars** и themed icon — [android-client-platform.md](android-client-platform.md).
 
-**Share:** из других приложений «Поделиться» (текст или картинка) открывает форму нового расхода. **Outbox:** операции, переводы, категории, долги, счета, бюджет.
+**Share:** из других приложений «Поделиться» (текст или картинка) открывает форму нового расхода. **Outbox:** операции, переводы, категории, долги (в т.ч. settle), счета, бюджет, мелочи по кредитам (без create), периодические.
 
 **Home-screen виджеты:** быстрые действия, баланс, бюджет, «Скоро», один счёт — см. [android-client-platform.md](android-client-platform.md#home-screen-виджеты).
 

@@ -16,8 +16,8 @@ vi.mock('$lib/platform/server-url', () => ({
 }));
 
 describe('shouldPersistRefCache', () => {
-	it('skips credit detail (full schedule) but keeps list/action paths', () => {
-		expect(shouldPersistRefCache('/api/v1/credits/abc-123')).toBe(false);
+	it('caches credit detail and list paths; skips health and setup/status', () => {
+		expect(shouldPersistRefCache('/api/v1/credits/abc-123')).toBe(true);
 		expect(shouldPersistRefCache('/api/v1/credits?status=active')).toBe(true);
 		expect(shouldPersistRefCache('/api/v1/credits/abc-123/payments')).toBe(true);
 		expect(shouldPersistRefCache('/api/v1/banks')).toBe(true);
@@ -93,6 +93,17 @@ describe('fetchWithRefCache SWR', () => {
 
 		const value = await fetchWithRefCache('/api/v1/credits?status=active', fetcher);
 		expect(value).toEqual([{ id: 'c1' }]);
+		expect(fetcher).not.toHaveBeenCalled();
+	});
+
+	it('serves credit detail from cache when offline', async () => {
+		vi.spyOn(connectivity, 'isServerOfflineMode').mockReturnValue(true);
+		const detail = { id: 'c1', schedule: [{ id: 'p1', amount: 100 }] };
+		writeRefCache('/api/v1/credits/c1', detail);
+		const fetcher = vi.fn();
+
+		const value = await fetchWithRefCache('/api/v1/credits/c1', fetcher);
+		expect(value).toEqual(detail);
 		expect(fetcher).not.toHaveBeenCalled();
 	});
 });

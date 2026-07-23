@@ -5,10 +5,15 @@ import {
 	enqueueCategoryDelete,
 	enqueueDebtCreate,
 	enqueueDebtDelete,
+	enqueueDebtSettle,
 	enqueueAccountCreate,
 	enqueueAccountArchive,
 	enqueueBudgetCreate,
 	enqueueBudgetDelete,
+	enqueueCreditMetaUpdate,
+	enqueueCreditPay,
+	enqueueRecurringCreate,
+	enqueueRecurringDelete,
 	getOutboxEntries,
 	resetOutboxForTests
 } from '$lib/offline/store';
@@ -25,9 +30,11 @@ vi.mock('$lib/api/client', () => ({
 	createDebt: vi.fn().mockResolvedValue({ id: 'srv-d1' }),
 	createAccount: vi.fn().mockResolvedValue({ id: 'srv-a1' }),
 	createBudget: vi.fn().mockResolvedValue({ id: 'srv-b1' }),
+	createRecurringOperation: vi.fn().mockResolvedValue({ id: 'srv-r1' }),
 	deleteCategory: vi.fn().mockResolvedValue(undefined),
 	deleteDebt: vi.fn().mockResolvedValue(undefined),
 	deleteBudget: vi.fn().mockResolvedValue(undefined),
+	deleteRecurringOperation: vi.fn().mockResolvedValue(undefined),
 	createTransaction: vi.fn(),
 	createTransfer: vi.fn(),
 	deleteTransaction: vi.fn(),
@@ -37,6 +44,14 @@ vi.mock('$lib/api/client', () => ({
 	updateCategory: vi.fn(),
 	updateAccount: vi.fn().mockResolvedValue({ id: 'srv-a1' }),
 	updateBudget: vi.fn().mockResolvedValue({ id: 'srv-b1' }),
+	updateRecurringOperation: vi.fn().mockResolvedValue({ id: 'srv-r1' }),
+	updateCredit: vi.fn().mockResolvedValue({ id: 'c1' }),
+	addCreditPayment: vi.fn().mockResolvedValue({ id: 'c1' }),
+	completeCredit: vi.fn(),
+	deleteCredit: vi.fn(),
+	deleteCreditPayment: vi.fn(),
+	updateCreditSchedule: vi.fn(),
+	settleDebt: vi.fn().mockResolvedValue({ id: 'srv-d1', is_settled: true }),
 	archiveAccount: vi.fn().mockResolvedValue({ id: 'srv-a1', status: 'archived' }),
 	unarchiveAccount: vi.fn().mockResolvedValue({ id: 'srv-a1', status: 'active' }),
 	ApiError: class ApiError extends Error {
@@ -159,5 +174,67 @@ describe('syncOutbox replay — category and debt', () => {
 		enqueueBudgetDelete('b1');
 		await syncOutbox();
 		expect(client.deleteBudget).toHaveBeenCalledWith('b1');
+	});
+});
+
+describe('syncOutbox replay — credit, settle, recurring', () => {
+	it('replays debt settle', async () => {
+		enqueueDebtSettle('debt-1', {
+			action: 'settle',
+			settled_at: '2026-07-10 12:00:00',
+			affects_balance: false
+		});
+		await syncOutbox();
+		expect(client.settleDebt).toHaveBeenCalledWith('debt-1', {
+			amount: undefined,
+			settled_at: '2026-07-10 12:00:00',
+			affects_balance: false,
+			account_id: undefined
+		});
+		expect(getOutboxEntries()).toHaveLength(0);
+	});
+
+	it('replays credit meta update and pay as separate keys', async () => {
+		enqueueCreditMetaUpdate({
+			action: 'update',
+			credit_id: 'c1',
+			name: 'Ипотека'
+		});
+		enqueueCreditPay({
+			action: 'pay',
+			credit_id: 'c1',
+			amount: '1000.00',
+			payment_date: '2026-07-10'
+		});
+		expect(getOutboxEntries()).toHaveLength(2);
+
+		await syncOutbox();
+
+		expect(client.updateCredit).toHaveBeenCalledWith('c1', { name: 'Ипотека' });
+		expect(client.addCreditPayment).toHaveBeenCalledWith('c1', {
+			amount: '1000.00',
+			payment_date: '2026-07-10',
+			account_id: undefined
+		});
+		expect(getOutboxEntries()).toHaveLength(0);
+	});
+
+	it('replays recurring create and delete', async () => {
+		const id = makeLocalKey();
+		enqueueRecurringCreate(id, {
+			type: 'expense',
+			amount: '500.00',
+			account_id: 'a1',
+			category_id: 'cat1',
+			period: 'month',
+			start_date: '2026-07-01'
+		});
+		await syncOutbox();
+		expect(client.createRecurringOperation).toHaveBeenCalled();
+		expect(getOutboxEntries()).toHaveLength(0);
+
+		enqueueRecurringDelete('r1');
+		await syncOutbox();
+		expect(client.deleteRecurringOperation).toHaveBeenCalledWith('r1');
 	});
 });

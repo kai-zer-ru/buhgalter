@@ -98,7 +98,7 @@
 | Счета | `/accounts`, `/accounts/new`, `/accounts/[id]` — редактирование: поле «Начальный баланс» из `initial_balance`, не `balance_display` ([data-model.md](data-model.md)) |
 | Операции | `/transactions`, `/transactions/new`, `/transactions/[id]/edit`, `/transfers/new`, `/transfers/[groupId]/edit` |
 | Долги | `/debts`, `/debts/[id]/settle`, `/debtors/[id]` |
-| Кредиты | `/credits`, `/credits/new/*` (мастер), `/credits/[id]` и подмаршруты действий. Деталь кредита **не** слушает `refCacheTick` (ресурс не в SWR): иначе чтение `credit` в `$effect` после каждого `load()` давало бесконечный «Обновляем данные…». Обновление — при открытии маршрута и явном `load()` после правок на странице |
+| Кредиты | `/credits`, `/credits/new/*` (мастер), `/credits/[id]` и подмаршруты действий. Деталь кредита в SWR (`GET /credits/{id}`); слушает **path-aware** `refCacheUpdate` (+ `dataRefreshTick`), **не** `refCacheTick` — иначе без `assignIfChanged` залипал «Обновляем данные…». Фоновый soft-refresh через `assignIfChanged` |
 | Бюджет | `/budget` |
 | Статистика | `/stats` |
 | Настройки | `/settings` — хаб с переходами в разделы |

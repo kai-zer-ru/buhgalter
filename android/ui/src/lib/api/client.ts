@@ -206,7 +206,7 @@ async function request<T>(path: string, init?: RequestInit, opts?: { auth?: bool
 		if (shouldPersistRefCache(path)) {
 			return fetchWithRefCache(path, fetcher);
 		}
-		// Non-cacheable GETs (e.g. credit detail) still must fail fast offline.
+		// Non-cacheable GETs (setup/status, preview, …) must fail fast offline.
 		if (isServerOfflineMode()) {
 			throw new OfflineCacheMissError(path);
 		}

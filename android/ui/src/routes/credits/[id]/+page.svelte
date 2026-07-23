@@ -4,15 +4,17 @@
 	import { resolve } from '$app/paths';
 	import { _ } from 'svelte-i18n';
 	import {
-		deleteCredit,
-		deleteCreditPayment,
 		getCredit,
 		listBanks,
-		updateCreditSchedule,
 		type Bank,
 		type Credit,
 		type CreditPayment
 	} from '$lib/api/client';
+	import {
+		deleteCredit,
+		deleteCreditPayment,
+		updateCreditSchedule
+	} from '$lib/offline/credits-api';
 	import { creditActionPath } from '$lib/android/form-routes';
 	import { nextPendingPayment } from '$lib/credits/pay-helpers';
 	import BackLink from '$lib/components/BackLink.svelte';
@@ -36,9 +38,14 @@
 	import { fromCents, formatMoneyForInput, toAPIAmount } from '$lib/money';
 	import { user } from '$lib/stores/auth';
 	import { reportPageLoadFailure } from '$lib/page-load';
+	import { refCacheReadyAny, refCacheUpdate } from '$lib/offline/ref-cache';
+	import { refCachePathMatches } from '$lib/offline/ref-cache-watch';
+	import { dataRefreshTick } from '$lib/offline/sync';
+	import { assignIfChanged } from '$lib/state-utils';
 
 	const id = $derived($page.params.id ?? '');
 	const creditPath = $derived(`/credits/${id}`);
+	const creditApiPath = $derived(`/api/v1/credits/${id}`);
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
 	const currency = $derived($user?.currency ?? 'RUB');
 
@@ -66,28 +73,44 @@
 		if (loadedForID === id) return;
 		loadedForID = id;
 		credit = null;
+		loading = !refCacheReadyAny([creditApiPath, '/api/v1/banks']);
 		void load();
+	});
+
+	// Path-aware only — do not listen to refCacheTick: assigning credit without
+	// assignIfChanged re-fired the effect and spun "Обновляем данные…".
+	$effect(() => {
+		const update = $refCacheUpdate;
+		if (!update || !credit || loadedForID !== id) return;
+		if (refCachePathMatches(update.path, [creditApiPath, '/api/v1/banks'])) {
+			void load({ background: true });
+		}
+	});
+
+	$effect(() => {
+		const tick = $dataRefreshTick;
+		if (tick === 0 || !id || loadedForID !== id) return;
+		void load({ background: true });
 	});
 
 	async function load(options: { silent?: boolean; background?: boolean } = {}) {
 		const silent = options.silent ?? false;
 		const seq = ++loadSeq;
-		// Credit detail is not ref-cached (full schedule) — always show gate until first payload.
-		// Do not soft-refresh from refCacheTick: reading `credit` in that effect re-fired after
-		// every assign and spun forever with "Обновляем данные…" while tick > 0.
 		if (silent && credit) {
 			refreshing = true;
 		} else if (!options.background && !credit) {
-			loading = true;
+			loading = !refCacheReadyAny([creditApiPath, '/api/v1/banks']);
 		}
 		try {
 			const [c, bankList] = await Promise.all([getCredit(id), listBanks()]);
 			if (seq !== loadSeq) return;
-			credit = c;
-			banks = bankList;
-			pendingPage = 1;
-			appliedPage = 1;
-			retroactivePage = 1;
+			credit = options.background ? assignIfChanged(credit, c) : c;
+			banks = options.background ? assignIfChanged(banks, bankList) : bankList;
+			if (!options.background) {
+				pendingPage = 1;
+				appliedPage = 1;
+				retroactivePage = 1;
+			}
 			loadError = null;
 		} catch (err) {
 			if (seq !== loadSeq) return;

@@ -30,9 +30,6 @@ export const refCacheTick = writable(0);
 /** Path-aware notification after SWR revalidate (preferred over refCacheTick). */
 export const refCacheUpdate = writable<{ path: string; seq: number } | null>(null);
 
-/** Credit detail embeds full payment schedule — too large for sync localStorage SWR. */
-const CREDIT_DETAIL_PATH = /^\/api\/v1\/credits\/[^/]+$/;
-
 function storageKeyForServer(server: string, path: string): string {
 	return `${REF_CACHE_VERSION}::${server || '_no_server'}::${path}`;
 }
@@ -83,9 +80,6 @@ export function shouldPersistRefCache(path: string): boolean {
 	const pathOnly = path.split('?')[0] ?? path;
 	if (REF_CACHE_SKIP.has(pathOnly)) return false;
 	if (pathOnly.includes('/preview')) return false;
-	// Nested actions (/credits/{id}/payments) stay cacheable if listed separately;
-	// only the detail resource itself is skipped (full schedule payload).
-	if (CREDIT_DETAIL_PATH.test(pathOnly)) return false;
 	return true;
 }
 
