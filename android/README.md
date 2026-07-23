@@ -63,6 +63,8 @@ UI — боковое меню слева (~70% ширины экрана): `ui/
 
 Release APKs: `app/build/outputs/apk/release/` — `app-release.apk` (universal), `app-arm64-v8a-release.apk`, `app-armeabi-v7a-release.apk`, `app-x86_64-release.apk`.
 
+`package-lock.json` в `android/` и `android/ui/` **в git** (нужны для `npm ci` / кеша в CI).
+
 ```bash
 adb install -r android/app/build/outputs/apk/debug/app-debug.apk
 # или: make android-install

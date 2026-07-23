@@ -103,7 +103,7 @@ ui/test-results/
 
 # Capacitor npm deps
 node_modules/
-package-lock.json
+# package-lock.json intentionally tracked (android/ + android/ui/) for npm ci in CI
 
 # Generated Config files
 app/src/main/assets/capacitor.config.json
