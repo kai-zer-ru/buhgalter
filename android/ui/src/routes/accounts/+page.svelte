@@ -420,6 +420,7 @@
 							>
 								{$_('accounts.field.name')}
 							</label>
+							<!-- svelte-ignore a11y_autofocus -->
 							<input
 								id="edit-name-{acc.id}"
 								class="input w-full"
