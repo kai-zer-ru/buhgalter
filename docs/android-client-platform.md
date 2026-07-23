@@ -225,7 +225,7 @@ Launcher-виджеты (не карточки на главной в WebView). 
 | `make android-install` | Debug-сборка + `adb install -r` |
 | `make android-install-release` | Release-сборка + `adb install -r` для `app-universal-release.apk` |
 
-Требования: **Android 8.0+** (API 26), JDK 21, Android SDK, Node 20+. Окружение: `scripts/setup-android-dev.sh`, `scripts/android-env.sh`.
+Требования: **Android 8.0+** (API 26), JDK 21, Android SDK, Node 20+, **Pillow** (`pip3 install --user Pillow` — для `make android-icons`). Окружение: `scripts/setup-android-dev.sh`, `scripts/android-env.sh`.
 
 Debug APK: `android/app/build/outputs/apk/debug/app-debug.apk`.  
 Release APK (`make android-apk-release` → `android/app/build/outputs/apk/release/`):

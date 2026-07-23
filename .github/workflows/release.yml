@@ -50,6 +50,8 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: android-actions/setup-android@v3
+      - name: Install Pillow (android-icons.py)
+        run: pip3 install --user Pillow
       - name: Prepare release keystore
         run: |
           if [ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then

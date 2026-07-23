@@ -16,6 +16,7 @@
 - JDK 21+ (для Gradle)
 - Android SDK: platform 36, build-tools 36.0.0
 - **Минимальная версия Android: 8.0 (API 26)**
+- Pillow (`pip3 install --user Pillow`) — для `make android-icons`
 
 ## Установка JDK и SDK (Arch, без sudo)
 

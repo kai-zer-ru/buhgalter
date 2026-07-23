@@ -28,6 +28,12 @@ export JAVA_HOME="${JDK_DIR}"
 export PATH="${JAVA_HOME}/bin:${PATH}"
 java -version
 
+echo "==> Pillow (make android-icons)"
+if python3 -c "from PIL import Image" 2>/dev/null; then
+	echo "    уже установлен"
+else
+	pip3 install --user Pillow
+fi
 echo "==> Android SDK"
 mkdir -p "${SDK_DIR}/cmdline-tools"
 if [[ ! -x "${SDK_DIR}/cmdline-tools/latest/bin/sdkmanager" ]]; then

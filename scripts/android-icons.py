@@ -10,7 +10,16 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from PIL import Image
+try:
+	from PIL import Image
+except ImportError:
+	print(
+		"ERROR: Pillow is required for android-icons.py.\n"
+		"  Install: pip3 install --user Pillow\n"
+		"  CI: release.yml installs Pillow before make android-apk-release.",
+		file=sys.stderr,
+	)
+	sys.exit(1)
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "android" / "ui" / "static" / "icon-512.png"
