@@ -137,12 +137,13 @@ prepare-sql-check: sqlc-check inline-sql-check
 DOCKER_IMAGE_TAG ?= buhgalter:local
 
 docker-build:
-	docker build \
+	docker buildx build \
 		-f docker/Dockerfile \
 		--build-arg VERSION=$(VERSION) \
 		--build-arg INSTALL_METHOD=docker \
 		--build-arg BUILD_COMMIT=$(BUILD_COMMIT) \
 		--build-arg BUILD_TIME=$(BUILD_TIME) \
+		--load \
 		-t $(DOCKER_IMAGE_TAG) \
 		.
 

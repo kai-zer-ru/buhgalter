@@ -1,28 +1,42 @@
-FROM node:22-alpine AS web
+# syntax=docker/dockerfile:1
+# Web UI and Go binary are built on BUILDPLATFORM (native), then the binary is
+# cross-compiled for TARGETOS/TARGETARCH. Avoids slow QEMU for npm/go on arm64.
+# Final stage still targets TARGETPLATFORM (apk packages are arch-specific).
+
+FROM --platform=$BUILDPLATFORM node:22-alpine AS web
 RUN apk add --no-cache python3
 WORKDIR /app
 COPY scripts/build_category_icons_json.py scripts/
 RUN mkdir -p data && python3 scripts/build_category_icons_json.py
 WORKDIR /app/web
 COPY web/package.json web/package-lock.json ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm \
+	npm ci
 COPY web/ ./
 RUN npm run build
 
-FROM golang:1.26-alpine AS server
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS server
 WORKDIR /app
 RUN apk add --no-cache git
-ARG VERSION=1.4.0
-ARG INSTALL_METHOD=docker
-ARG BUILD_COMMIT=unknown
-ARG BUILD_TIME
 COPY server/go.mod server/go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+	go mod download
 COPY docs/api/openapi.yaml ./internal/docs/openapi.yaml
 COPY server/ ./
 COPY server/locales ./locales
 COPY --from=web /app/web/build ./internal/static/dist/
-RUN CGO_ENABLED=0 go build -tags=embedstatic -ldflags "-s -w -X main.version=${VERSION} -X main.installMethod=${INSTALL_METHOD} -X main.buildCommit=${BUILD_COMMIT} -X main.buildTime=${BUILD_TIME}" -o /buhgalter ./cmd/buhgalter
+ARG TARGETOS
+ARG TARGETARCH
+ARG VERSION=1.4.0
+ARG INSTALL_METHOD=docker
+ARG BUILD_COMMIT=unknown
+ARG BUILD_TIME
+RUN --mount=type=cache,target=/go/pkg/mod \
+	--mount=type=cache,target=/root/.cache/go-build \
+	CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+	go build -tags=embedstatic \
+	-ldflags "-s -w -X main.version=${VERSION} -X main.installMethod=${INSTALL_METHOD} -X main.buildCommit=${BUILD_COMMIT} -X main.buildTime=${BUILD_TIME}" \
+	-o /buhgalter ./cmd/buhgalter
 
 FROM alpine:3.21
 # Сертификаты НУЦ Минцифры для MAX API — vendored в docker/certs/ (обновление: scripts/vendor_russian_ca_certs.sh)

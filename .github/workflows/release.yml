@@ -8,6 +8,8 @@ on:
 permissions:
   contents: write
   packages: write
+  # GHA cache for docker/build-push-action (cache-from/cache-to type=gha)
+  actions: write
 
 jobs:
   test:
@@ -175,6 +177,15 @@ jobs:
           push: true
           # BuildKit provenance attestation manifests show as unknown/unknown on GHCR.
           provenance: false
+          # Persist layers across release tags (npm/go downloads + compile caches).
+          # GHA cache is fast but may expire between infrequent releases; registry
+          # cache on GHCR is the durable fallback. Stable scopes/refs so tags share cache.
+          cache-from: |
+            type=gha,scope=buhgalter-docker
+            type=registry,ref=ghcr.io/kai-zer-ru/buhgalter:buildcache
+          cache-to: |
+            type=gha,mode=max,scope=buhgalter-docker
+            type=registry,ref=ghcr.io/kai-zer-ru/buhgalter:buildcache,mode=max
           build-args: |
             VERSION=${{ steps.build.outputs.semver }}
             INSTALL_METHOD=docker

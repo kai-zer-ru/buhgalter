@@ -33,6 +33,8 @@ docker compose up --build -d
 
 Платформы: **linux/amd64**, **linux/arm64** (multi-arch manifest). С v1.2.4 в CI отключены provenance attestation manifests — в GHCR снова корректно отображаются архитектуры (раньше могло показываться `unknown/unknown`).
 
+CI (`.github/workflows/release.yml`): фронт и Go-бинарь собираются нативно на runner’е с кросс-компиляцией под целевую архитектуру (`BUILDPLATFORM` / `GOOS`/`GOARCH`); слои кэшируются через GitHub Actions Cache и тег `ghcr.io/kai-zer-ru/buhgalter:buildcache`. QEMU нужен только для финального `alpine`-слоя (apk). Локально: `make docker-build`.
+
 ## Данные на хосте
 
 | На хосте (по умолчанию) | В контейнере | Назначение |
