@@ -37,17 +37,32 @@
 	import Select from '$lib/components/Select.svelte';
 	import { accountSelectOptions } from '$lib/select-options';
 	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
-	import { formatMoneyForInput, toAPIAmount } from '$lib/money';
+	import { canSetAsPrimary, formatAccountInitialBalanceForEdit } from '$lib/accounts';
+	import { toAPIAmount } from '$lib/money';
 	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
+	import { refCacheReady, refCacheReadyAny, refCacheUpdate } from '$lib/ref-cache';
+	import { refCachePathMatches } from '$lib/ref-cache-watch';
+	import { reportPageLoadFailure } from '$lib/page-load';
+	import { assignIfChanged } from '$lib/state-utils';
+	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
+
+	function accountsPath(status: 'active' | 'archived' | 'deleted' | '' = '') {
+		return status ? `/api/v1/accounts?status=${status}` : '/api/v1/accounts';
+	}
 
 	let accounts = $state<Account[]>([]);
 	let activeAccounts = $state<Account[]>([]);
 	let banks = $state<Bank[]>([]);
 	let filter = $state<'active' | 'archived' | 'deleted'>('active');
-	let loading = $state(true);
+	let loading = $state(
+		!refCacheReady(accountsPath('active')) &&
+			!refCacheReady(accountsPath()) &&
+			!refCacheReady('/api/v1/banks')
+	);
 	let filterLoading = $state(false);
 	let ready = $state(false);
+	let loadError = $state<string | null>(null);
 	let primarySavingId = $state('');
 	let actionSavingId = $state('');
 	let editingId = $state<string | null>(null);
@@ -73,10 +88,23 @@
 		void load();
 	});
 
-	async function load(opts: { filterChange?: boolean } = {}) {
+	$effect(() => {
+		const update = $refCacheUpdate;
+		if (!update || !ready) return;
+		const listPath = accountsPath(filter);
+		if (refCachePathMatches(update.path, [listPath, accountsPath('active'), '/api/v1/banks'])) {
+			void load({ silent: true });
+		}
+	});
+
+	async function load(opts: { filterChange?: boolean; silent?: boolean } = {}) {
+		const listPath = accountsPath(filter);
 		if (opts.filterChange) {
-			filterLoading = true;
-		} else {
+			if (!opts.silent && !refCacheReady(listPath)) filterLoading = true;
+		} else if (
+			!opts.silent &&
+			!refCacheReadyAny([listPath, accountsPath('active'), '/api/v1/banks'])
+		) {
 			loading = true;
 		}
 		try {
@@ -85,12 +113,14 @@
 				listBanks(),
 				listAccounts('active')
 			]);
-			accounts = accountList;
-			banks = bankList;
-			activeAccounts = activeList;
+			accounts = opts.silent ? assignIfChanged(accounts, accountList) : accountList;
+			banks = opts.silent ? assignIfChanged(banks, bankList) : bankList;
+			activeAccounts = opts.silent ? assignIfChanged(activeAccounts, activeList) : activeList;
 			ready = true;
+			loadError = null;
 		} catch (err) {
-			toast.fromError(err);
+			const msg = reportPageLoadFailure(err, { silent: opts.silent, hasData: ready });
+			if (msg) loadError = msg;
 		} finally {
 			loading = false;
 			filterLoading = false;
@@ -113,7 +143,7 @@
 		editBankId = acc.bank_id ?? '';
 		editCreditLimit = acc.credit_limit_display ?? '';
 		editPaymentAccountId = acc.payment_account_id ?? '';
-		editInitialBalance = formatMoneyForInput(acc.balance_display);
+		editInitialBalance = formatAccountInitialBalanceForEdit(acc.initial_balance);
 	}
 
 	function cancelEdit() {
@@ -155,6 +185,7 @@
 				...acc,
 				is_primary: acc.id === updated.id
 			}));
+			void load({ silent: true });
 		} catch (err) {
 			toast.fromError(err);
 		} finally {
@@ -258,7 +289,7 @@
 				}
 			});
 		}
-		if (filter === 'active' && !acc.is_primary) {
+		if (filter === 'active' && canSetAsPrimary(acc)) {
 			actions.push({
 				icon: 'save',
 				label: $_('accounts.primary.set'),
@@ -306,9 +337,14 @@
 
 	<div class="flex flex-wrap items-center justify-between gap-3">
 		<h1 class="text-2xl font-semibold">{$_('accounts.title')}</h1>
-		<a href={resolve('/accounts/new')} class="btn-primary">
+		<!-- eslint-disable svelte/no-navigation-without-resolve -- query after resolved path -->
+		<a
+			href={`${resolve('/accounts/new')}?from=${encodeURIComponent('/accounts')}`}
+			class="btn-primary"
+		>
 			{$_('accounts.new')}
 		</a>
+		<!-- eslint-enable svelte/no-navigation-without-resolve -->
 	</div>
 
 	<PageTabs
@@ -321,42 +357,40 @@
 		onchange={(next) => setFilter(next as 'active' | 'archived' | 'deleted')}
 	/>
 
-	{#if loading}
-		<p style:color="var(--text-muted)">{$_('common.loading')}</p>
-	{:else if !ready}
-		<!-- load failed; toast shown -->
-	{:else if accounts.length === 0 && filterLoading}
-		<EmptyStateCard message={$_('common.loading')} ariaBusy />
-	{:else if accounts.length === 0}
-		<EmptyStateCard message={$_('accounts.empty')} />
-	{:else}
-		<div class="relative space-y-6" class:opacity-60={filterLoading}>
-			{#if filterLoading}
-				<p
-					class="pointer-events-none absolute inset-x-0 top-0 py-2 text-center text-sm"
-					style:color="var(--text-muted)"
-				>
-					{$_('common.loading')}
-				</p>
-			{/if}
-			{#each accountGroups as group (accountGroupKind(group))}
-				{@const kind = accountGroupKind(group)}
-				<section>
-					<h2 class="mb-3 text-lg font-medium">
-						{$_(accountGroupLabelKey(kind))}
-						<span class="font-normal tabular-nums" style:color="var(--text-muted)">
-							({group.length})
-						</span>
-					</h2>
-					<div class="grid gap-4 sm:grid-cols-2">
-						{#each group as acc (acc.id)}
-							{@render accountCard(acc)}
-						{/each}
-					</div>
-				</section>
-			{/each}
-		</div>
-	{/if}
+	<PageLoadGate {loading} error={loadError} onretry={() => void load()} inline>
+		{#if accounts.length === 0 && filterLoading}
+			<EmptyStateCard message={$_('common.loading')} ariaBusy />
+		{:else if accounts.length === 0}
+			<EmptyStateCard message={$_('accounts.empty')} />
+		{:else}
+			<div class="relative space-y-6" class:opacity-60={filterLoading}>
+				{#if filterLoading}
+					<p
+						class="pointer-events-none absolute inset-x-0 top-0 py-2 text-center text-sm"
+						style:color="var(--text-muted)"
+					>
+						{$_('common.loading')}
+					</p>
+				{/if}
+				{#each accountGroups as group (accountGroupKind(group))}
+					{@const kind = accountGroupKind(group)}
+					<section>
+						<h2 class="mb-3 text-lg font-medium">
+							{$_(accountGroupLabelKey(kind))}
+							<span class="font-normal tabular-nums" style:color="var(--text-muted)">
+								({group.length})
+							</span>
+						</h2>
+						<div class="grid gap-4 sm:grid-cols-2">
+							{#each group as acc (acc.id)}
+								{@render accountCard(acc)}
+							{/each}
+						</div>
+					</section>
+				{/each}
+			</div>
+		{/if}
+	</PageLoadGate>
 </div>
 
 {#snippet accountCard(acc: Account)}

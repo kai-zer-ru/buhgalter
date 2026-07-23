@@ -40,7 +40,7 @@ var triggerOrder = []string{
 
 var triggerPlaceholders = map[string][]string{
 	TriggerDebtOverdue:       {"debtor", "amount", "due_date", "debt_url"},
-	TriggerDebtDueSoon:       {"debtor", "amount", "due_date", "days", "debt_url"},
+	TriggerDebtDueSoon:       {"debtor", "amount", "due_date", "days", "when", "action", "debt_url"},
 	TriggerCreditPayment:     {"credit", "amount", "payment_date", "when", "credit_url"},
 	TriggerPlannedOp:         {"type", "amount", "description", "date", "transaction_url"},
 	TriggerBalanceShortfall:  {"amount"},

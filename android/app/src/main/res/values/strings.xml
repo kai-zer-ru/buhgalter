@@ -1,0 +1,41 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Бухгалтер</string>
+    <string name="title_activity_main">Бухгалтер</string>
+    <string name="package_name">ru.kai_zer.buhgalter</string>
+    <string name="custom_url_scheme">ru.kai_zer.buhgalter</string>
+    <string name="shortcut_new_expense_short">+ Расход</string>
+    <string name="shortcut_new_expense_long">Новый расход</string>
+    <string name="shortcut_new_income_short">+ Доход</string>
+    <string name="shortcut_new_income_long">Новый доход</string>
+    <string name="shortcut_new_transfer_short">Перевод</string>
+    <string name="shortcut_new_transfer_long">Новый перевод</string>
+
+    <string name="widget_action_expense">Расход</string>
+    <string name="widget_action_income">Доход</string>
+    <string name="widget_action_transfer">Перевод</string>
+    <string name="widget_quick_actions_description">Быстрые действия: расход, доход, перевод</string>
+
+    <string name="widget_balance_title">Мои средства</string>
+    <string name="widget_balance_description">Общий баланс счетов</string>
+    <string name="widget_with_plans">С планами: %1$s</string>
+    <string name="widget_credit_cards">Карты: %1$s</string>
+
+    <string name="widget_budget_title">Бюджет месяца</string>
+    <string name="widget_budget_description">План и факт бюджета</string>
+    <string name="widget_budget_empty">Бюджет не задан</string>
+
+    <string name="widget_upcoming_title">Скоро</string>
+    <string name="widget_upcoming_description">Ближайшие платежи и сроки</string>
+    <string name="widget_upcoming_empty">Ближайших платежей нет</string>
+
+    <string name="widget_account_title">Счёт</string>
+    <string name="widget_account_description">Баланс выбранного счёта</string>
+    <string name="widget_account_pick">Выберите счёт</string>
+    <string name="widget_account_configure_hint">Выберите счёт для виджета</string>
+    <string name="widget_account_configure_empty">Нет счетов. Откройте приложение и синхронизируйте данные.</string>
+
+    <string name="widget_need_login">Откройте приложение и войдите</string>
+    <string name="widget_locked">Заблокировано</string>
+    <string name="widget_amount_hidden">••••</string>
+</resources>

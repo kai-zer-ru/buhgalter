@@ -7,7 +7,14 @@ bin/
 /build
 /docker_dev
 server/*.db
+/node_modules
 web/node_modules/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+scripts/android-env.sh
+android/.idea/
 web/build/
 web/.svelte-kit/
 web/e2e/.auth/
@@ -35,3 +42,7 @@ for_dev/
 release_prepare.md
 .release-notes.md
 futures.md
+
+# Android release signing (never commit private keys or passwords)
+*.jks
+*.keystore

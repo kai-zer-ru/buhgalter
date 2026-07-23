@@ -6,15 +6,17 @@
 	import CreditForm from '$lib/components/CreditForm.svelte';
 	import CreditList from '$lib/components/CreditList.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
+	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
 	import PageTabs from '$lib/components/PageTabs.svelte';
 	import SectionHeader from '$lib/components/SectionHeader.svelte';
-	import { toast } from '$lib/toast';
+	import { reportPageLoadFailure } from '$lib/page-load';
 	import { user } from '$lib/stores/auth';
 
 	let tab = $state<'active' | 'closed'>('active');
 	let credits = $state<Credit[]>([]);
 	let banks = $state<Bank[]>([]);
 	let loading = $state(true);
+	let loadError = $state<string | null>(null);
 	let filterLoading = $state(false);
 	let formOpen = $state(false);
 
@@ -35,8 +37,10 @@
 				return b.issue_date.localeCompare(a.issue_date);
 			});
 			banks = banksList;
+			loadError = null;
 		} catch (err) {
-			toast.fromError(err);
+			const msg = reportPageLoadFailure(err, { hasData: credits.length > 0 });
+			if (msg) loadError = msg;
 		} finally {
 			loading = false;
 			filterLoading = false;
@@ -88,25 +92,27 @@
 		onchange={(next) => void switchTab(next as 'active' | 'closed')}
 	/>
 
-	{#if loading}
-		<p style:color="var(--text-muted)">{$_('common.loading')}</p>
-	{:else if credits.length === 0 && filterLoading}
-		<EmptyStateCard message={$_('common.loading')} ariaBusy />
-	{:else if credits.length === 0}
-		<EmptyStateCard message={tab === 'closed' ? $_('credits.empty.closed') : $_('credits.empty')} />
-	{:else}
-		<div class="relative card md:overflow-x-auto" class:opacity-60={filterLoading}>
-			{#if filterLoading}
-				<p
-					class="pointer-events-none absolute inset-x-0 top-0 z-10 py-2 text-center text-sm"
-					style:color="var(--text-muted)"
-				>
-					{$_('common.loading')}
-				</p>
-			{/if}
-			<CreditList {credits} {tz} {currency} nameFor={creditName} {bankIconFor} />
-		</div>
-	{/if}
+	<PageLoadGate {loading} error={loadError} onretry={() => void load()} inline>
+		{#if credits.length === 0 && filterLoading}
+			<EmptyStateCard message={$_('common.loading')} ariaBusy />
+		{:else if credits.length === 0}
+			<EmptyStateCard
+				message={tab === 'closed' ? $_('credits.empty.closed') : $_('credits.empty')}
+			/>
+		{:else}
+			<div class="relative card md:overflow-x-auto" class:opacity-60={filterLoading}>
+				{#if filterLoading}
+					<p
+						class="pointer-events-none absolute inset-x-0 top-0 z-10 py-2 text-center text-sm"
+						style:color="var(--text-muted)"
+					>
+						{$_('common.loading')}
+					</p>
+				{/if}
+				<CreditList {credits} {tz} {currency} nameFor={creditName} {bankIconFor} />
+			</div>
+		{/if}
+	</PageLoadGate>
 </div>
 
 <CreditForm bind:open={formOpen} onclose={() => (formOpen = false)} onsaved={() => void load()} />

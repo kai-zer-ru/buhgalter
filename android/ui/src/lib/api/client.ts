@@ -1,0 +1,1809 @@
+import { get } from 'svelte/store';
+import { locale } from 'svelte-i18n';
+import { cachedGet, invalidateApiCache, seedStaticRef } from '$lib/api/cache';
+import { notifySessionExpired, shouldRedirectApi401 } from '$lib/auth/session-expired';
+import {
+	clearRefCache,
+	fetchWithRefCache,
+	isOfflineFetchError,
+	OfflineCacheMissError,
+	readCategoriesFromUIMetaCache,
+	seedCategoriesFromUIMeta,
+	shouldPersistRefCache
+} from '$lib/offline/ref-cache';
+import { indexTransactions } from '$lib/offline/transaction-index';
+import { shouldUseOfflineQueue } from '$lib/offline/network';
+import { isServerOfflineMode } from '$lib/offline/server-connectivity';
+import { authHeaders } from '$lib/platform/auth-token';
+import { getApiBase } from '$lib/platform/server-url';
+import { isNativeApp } from '$lib/platform/native';
+import {
+	isHttpsOrigin,
+	isOriginTrusted,
+	nativeHttpRequest,
+	nativeResultToApiError
+} from '$lib/platform/ssl-trust';
+import { abortTimeout } from '$lib/platform/abort-timeout';
+import { logApiRequest, logApiResponse } from '$lib/platform/debug-log';
+
+function acceptLanguage(): string {
+	const code = get(locale);
+	return code === 'en' ? 'en' : 'ru';
+}
+
+export class ApiError extends Error {
+	constructor(
+		public code: string,
+		message: string,
+		public status: number,
+		public field?: string
+	) {
+		super(message);
+		this.name = 'ApiError';
+	}
+}
+
+/** HTTP statuses that usually mean the server or proxy is temporarily down. */
+export function isTransientHttpError(status: number): boolean {
+	return status === 408 || status === 502 || status === 503 || status === 504;
+}
+
+async function fetchApi<T>(
+	base: string,
+	path: string,
+	init?: RequestInit,
+	opts?: { auth?: boolean }
+): Promise<T> {
+	const useAuth = opts?.auth !== false;
+	const method = (init?.method ?? 'GET').toUpperCase();
+	const headers: Record<string, string> = {
+		Accept: 'application/json',
+		'Accept-Language': acceptLanguage(),
+		...(useAuth ? authHeaders() : {}),
+		...(init?.body && !(init.body instanceof FormData)
+			? { 'Content-Type': 'application/json' }
+			: {}),
+		...(init?.headers as Record<string, string> | undefined)
+	};
+
+	const startedAt = logApiRequest(base, path, method, headers, init?.body);
+
+	if (isNativeApp() && isHttpsOrigin(base) && isOriginTrusted(base)) {
+		const url = `${base}${path}`;
+		const body =
+			typeof init?.body === 'string'
+				? init.body
+				: init?.body && !(init.body instanceof FormData)
+					? String(init.body)
+					: undefined;
+		try {
+			const result = await nativeHttpRequest(url, {
+				method,
+				headers,
+				body,
+				allowUntrusted: true
+			});
+			const apiErr = nativeResultToApiError(result);
+			if (apiErr) {
+				logApiResponse(path, method, startedAt, {
+					status: result.status,
+					error: apiErr
+				});
+				throw apiErr;
+			}
+			if (method === 'GET' && result.status === 204) {
+				logApiResponse(path, method, startedAt, { status: 204 });
+				return undefined as T;
+			}
+			const contentType = 'application/json';
+			if (!result.body || !contentType.includes('json')) {
+				const err = new ApiError('INVALID_RESPONSE', 'Expected JSON from API', result.status ?? 0);
+				logApiResponse(path, method, startedAt, { status: result.status, error: err });
+				throw err;
+			}
+			if (!result.ok) {
+				let code = 'UNKNOWN';
+				let message = 'Request failed';
+				let field: string | undefined;
+				try {
+					const parsed = JSON.parse(result.body) as {
+						error?: { code?: string; message?: string; field?: string };
+					};
+					code = parsed?.error?.code ?? code;
+					message = parsed?.error?.message ?? message;
+					field = parsed?.error?.field || undefined;
+				} catch {
+					// ignore
+				}
+				if ((result.status ?? 0) === 401 && shouldRedirectApi401(path)) {
+					notifySessionExpired();
+				}
+				const err = new ApiError(code, message, result.status ?? 0, field);
+				logApiResponse(path, method, startedAt, { status: result.status, error: err });
+				throw err;
+			}
+			if (result.status === 204) {
+				logApiResponse(path, method, startedAt, { status: 204 });
+				return undefined as T;
+			}
+			const parsed = JSON.parse(result.body) as T;
+			logApiResponse(path, method, startedAt, { status: result.status, ok: true });
+			return parsed;
+		} catch (err) {
+			if (!(err instanceof ApiError)) {
+				logApiResponse(path, method, startedAt, { error: err });
+			}
+			throw err;
+		}
+	}
+
+	try {
+		const timeoutSignal = abortTimeout(12_000);
+		const res = await fetch(`${base}${path}`, {
+			credentials: 'omit',
+			signal: init?.signal ?? timeoutSignal,
+			headers: {
+				Accept: 'application/json',
+				'Accept-Language': acceptLanguage(),
+				...(useAuth ? authHeaders() : {}),
+				...(init?.body && !(init.body instanceof FormData)
+					? { 'Content-Type': 'application/json' }
+					: {}),
+				...init?.headers
+			},
+			...init
+		});
+
+		if (!res.ok) {
+			let code = 'UNKNOWN';
+			let message = res.statusText;
+			let field: string | undefined;
+			try {
+				const body = await res.json();
+				code = body?.error?.code ?? code;
+				message = body?.error?.message ?? message;
+				field = body?.error?.field || undefined;
+			} catch {
+				// ignore
+			}
+			if (res.status === 401 && shouldRedirectApi401(path)) {
+				notifySessionExpired();
+			}
+			const err = new ApiError(code, message, res.status, field);
+			logApiResponse(path, method, startedAt, { status: res.status, error: err });
+			throw err;
+		}
+
+		if (res.status === 204) {
+			logApiResponse(path, method, startedAt, { status: 204 });
+			return undefined as T;
+		}
+		const contentType = res.headers.get('content-type') ?? '';
+		if (!contentType.includes('json')) {
+			const err = new ApiError('INVALID_RESPONSE', 'Expected JSON from API', res.status);
+			logApiResponse(path, method, startedAt, { status: res.status, error: err });
+			throw err;
+		}
+		const json = (await res.json()) as T;
+		logApiResponse(path, method, startedAt, { status: res.status, ok: true });
+		return json;
+	} catch (err) {
+		if (!(err instanceof ApiError)) {
+			logApiResponse(path, method, startedAt, { error: err });
+		}
+		throw err;
+	}
+}
+
+async function request<T>(path: string, init?: RequestInit, opts?: { auth?: boolean }): Promise<T> {
+	const base = getApiBase();
+	if (!base) {
+		throw new ApiError('NO_SERVER', 'Server URL is not configured', 0);
+	}
+	const method = (init?.method ?? 'GET').toUpperCase();
+	const fetcher = () => fetchApi<T>(base, path, init, opts);
+	if (method === 'GET' && shouldUseOfflineQueue()) {
+		if (shouldPersistRefCache(path)) {
+			return fetchWithRefCache(path, fetcher);
+		}
+		// Non-cacheable GETs (e.g. credit detail) still must fail fast offline.
+		if (isServerOfflineMode()) {
+			throw new OfflineCacheMissError(path);
+		}
+	}
+	const result = await fetcher();
+	if (method !== 'GET') {
+		// Match web client / server apicache: writes invalidate SWR so load() hits network.
+		// Keep /auth/me so offline cold start can still show PIN/biometrics.
+		invalidateApiCache();
+		clearRefCache({ preserveAuthMe: true });
+	}
+	return result;
+}
+
+/** Health check against arbitrary origin (before URL is saved). */
+export function pingServer(origin: string) {
+	return fetchApi<{ status: string; version: string; db: string }>(
+		origin,
+		'/api/v1/health',
+		undefined,
+		{ auth: false }
+	);
+}
+
+export type SetupStatus = {
+	configured: boolean;
+	database: string;
+	registration_enabled: boolean;
+	external_url: string;
+};
+
+export type SetupPayload = {
+	admin_login: string;
+	admin_display_name: string;
+	admin_password: string;
+	admin_password_confirm: string;
+	registration_enabled: boolean;
+	external_url: string;
+};
+
+export type SetupRestoreResponse = {
+	message: string;
+	configured: boolean;
+};
+
+export type VersionCheckResult = {
+	current_version: string;
+	latest_version?: string;
+	update_available: boolean;
+	release_url?: string;
+};
+
+export type UserStatus = 'active' | 'pending' | 'banned';
+
+export type User = {
+	id: string;
+	login: string;
+	display_name: string;
+	is_admin: boolean;
+	status: UserStatus;
+	language: string;
+	currency: string;
+	timezone: string;
+	theme: string;
+};
+
+export type UserSettings = {
+	display_name: string;
+	language: string;
+	currency: string;
+	timezone: string;
+	theme: string;
+};
+
+export type NotificationTemplate = {
+	trigger_type: string;
+	template: string;
+	placeholders: string[];
+	is_custom: boolean;
+};
+
+export type NotificationSettings = {
+	secret_key_configured: boolean;
+	telegram_enabled: boolean;
+	telegram_configured: boolean;
+	telegram_chat_id?: string | null;
+	max_enabled: boolean;
+	max_configured: boolean;
+	max_provider?: 'a161' | 'official' | null;
+	max_user_id?: number | null;
+	max_recipient_id?: number | null;
+	trigger_debt: boolean;
+	trigger_credit: boolean;
+	trigger_planned: boolean;
+	trigger_negative_balance: boolean;
+	trigger_budget: boolean;
+	trigger_auto_topup_disabled: boolean;
+	trigger_password_reset?: boolean;
+	trigger_user_registration?: boolean;
+	debt_days_before: number;
+	my_debt_overdue_days_limit: number;
+	owed_debt_overdue_start_after_days: number;
+	owed_debt_overdue_days_limit: number;
+	credit_days_before: number;
+	notification_time_local: string;
+	templates: NotificationTemplate[];
+};
+
+export type NotificationSettingsUpdate = {
+	telegram_enabled?: boolean;
+	telegram_bot_token?: string;
+	telegram_chat_id?: string;
+	max_enabled?: boolean;
+	max_provider?: 'a161' | 'official';
+	max_token?: string;
+	max_user_id?: number | null;
+	max_recipient_id?: number | null;
+	trigger_debt?: boolean;
+	trigger_credit?: boolean;
+	trigger_planned?: boolean;
+	trigger_negative_balance?: boolean;
+	trigger_budget?: boolean;
+	trigger_auto_topup_disabled?: boolean;
+	trigger_password_reset?: boolean;
+	trigger_user_registration?: boolean;
+	debt_days_before?: number;
+	my_debt_overdue_days_limit?: number;
+	owed_debt_overdue_start_after_days?: number;
+	owed_debt_overdue_days_limit?: number;
+	credit_days_before?: number;
+	notification_time_local?: string;
+	templates?: Array<{ trigger_type: string; template: string }>;
+};
+
+export type AdminSettings = {
+	registration_enabled: boolean;
+	external_url: string;
+	secret_key_set: boolean;
+};
+
+export type AdminSettingsUpdate = {
+	registration_enabled: boolean;
+	external_url: string;
+};
+
+export type AdminDiagnostics = {
+	app_version: string;
+	build_commit: string;
+	build_time: string;
+	db_migration_version: number;
+	install_method: string;
+	previous_app_version: string | null;
+	go_version: string;
+	os: string;
+	arch: string;
+	uptime_seconds: number;
+	db_size_bytes: number;
+	users_count: number;
+	data_dir: string;
+	log_dir: string;
+	addr: string;
+	static_embed: boolean;
+	external_url: string;
+	env: Record<string, string>;
+};
+
+export type APIToken = {
+	id: string;
+	name: string;
+	token_prefix: string;
+	expires_at: string | null;
+	last_used_at: string | null;
+	created_at: string;
+};
+
+export type APITokenCreated = APIToken & {
+	token: string;
+	never_expires?: boolean;
+};
+
+export type BackupFile = {
+	filename: string;
+	size: number;
+	created_at: string;
+};
+
+export type BackupSettings = {
+	backup_enabled: boolean;
+	backup_time: string;
+	backup_retention: number;
+};
+
+export function getSetupStatus() {
+	return request<SetupStatus>('/api/v1/setup/status');
+}
+
+export function getVersionCheck() {
+	return request<VersionCheckResult>('/api/v1/version/check');
+}
+
+export function postSetup(payload: SetupPayload) {
+	return request<{ message: string }>('/api/v1/setup', {
+		method: 'POST',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function postSetupRestore(file: File, confirm: string = 'RESTORE') {
+	const form = new FormData();
+	form.append('file', file);
+	form.append('confirm', confirm);
+	return request<SetupRestoreResponse>('/api/v1/setup/restore', {
+		method: 'POST',
+		body: form
+	});
+}
+
+export function getHealth() {
+	return request<{ status: string; version: string; db: string }>('/api/v1/health');
+}
+
+export function login(login: string, password: string) {
+	return request<{ token: string; user: User }>(
+		'/api/v1/auth/login',
+		{
+			method: 'POST',
+			body: JSON.stringify({ login, password })
+		},
+		{ auth: false }
+	);
+}
+
+export function register(
+	login: string,
+	password: string,
+	passwordConfirm: string,
+	displayName: string
+) {
+	return request<{ user: User }>('/api/v1/auth/register', {
+		method: 'POST',
+		body: JSON.stringify({
+			login,
+			password,
+			password_confirm: passwordConfirm,
+			display_name: displayName
+		})
+	});
+}
+
+export function logout() {
+	invalidateApiCache();
+	return request<void>('/api/v1/auth/logout', { method: 'POST' });
+}
+
+export type PasswordResetRequest = {
+	id: string;
+	user_id: string;
+	login: string;
+	display_name: string;
+	created_at: string;
+};
+
+export function requestPasswordReset(login: string) {
+	return request<void>(
+		'/api/v1/auth/request-password-reset',
+		{
+			method: 'POST',
+			body: JSON.stringify({ login })
+		},
+		{ auth: false }
+	);
+}
+
+export function listPasswordResetRequests() {
+	return request<PasswordResetRequest[]>('/api/v1/admin/password-reset-requests');
+}
+
+export function ackPasswordResetRequest(id: string) {
+	return request<void>(`/api/v1/admin/password-reset-requests/${id}/ack`, { method: 'POST' });
+}
+
+export function getMe() {
+	return request<User>('/api/v1/auth/me', { signal: abortTimeout(8_000) });
+}
+
+export function getUserSettings() {
+	return request<UserSettings>('/api/v1/user/settings');
+}
+
+export function putUserSettings(settings: UserSettings) {
+	return request<UserSettings>('/api/v1/user/settings', {
+		method: 'PUT',
+		body: JSON.stringify(settings)
+	});
+}
+
+export function getNotificationSettings() {
+	return request<NotificationSettings>('/api/v1/user/notifications');
+}
+
+export function putNotificationSettings(payload: NotificationSettingsUpdate) {
+	return request<NotificationSettings>('/api/v1/user/notifications', {
+		method: 'PUT',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function sendNotificationTest(channel: 'telegram' | 'max') {
+	return request<{ status: string }>('/api/v1/user/notifications/test', {
+		method: 'POST',
+		body: JSON.stringify({ channel })
+	});
+}
+
+export function previewNotificationTemplate(payload: { trigger_type: string; template: string }) {
+	return request<{ text: string }>('/api/v1/user/notifications/templates/preview', {
+		method: 'POST',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function resetNotificationTemplates(triggerType?: string) {
+	return request<NotificationSettings>('/api/v1/user/notifications/templates/reset', {
+		method: 'POST',
+		body: JSON.stringify(triggerType ? { trigger_type: triggerType } : {})
+	});
+}
+
+export function changePassword(
+	currentPassword: string,
+	newPassword: string,
+	newPasswordConfirm: string
+) {
+	return request<void>('/api/v1/user/password', {
+		method: 'PUT',
+		body: JSON.stringify({
+			current_password: currentPassword,
+			new_password: newPassword,
+			new_password_confirm: newPasswordConfirm
+		})
+	});
+}
+
+export function listTokens() {
+	return request<APIToken[]>('/api/v1/user/tokens');
+}
+
+export function createToken(
+	name: string,
+	opts?: { neverExpires?: boolean; expiresAt?: string | null }
+) {
+	const body: { name: string; never_expires?: boolean; expires_at?: string | null } = { name };
+	if (opts?.neverExpires) {
+		body.never_expires = true;
+	} else if (opts?.expiresAt) {
+		body.expires_at = opts.expiresAt;
+	}
+	return request<APITokenCreated>('/api/v1/user/tokens', {
+		method: 'POST',
+		body: JSON.stringify(body)
+	});
+}
+
+export function deleteToken(id: string) {
+	return request<void>(`/api/v1/user/tokens/${id}`, { method: 'DELETE' });
+}
+
+export function getAdminSettings() {
+	return request<AdminSettings>('/api/v1/admin/settings');
+}
+
+export function putAdminSettings(settings: AdminSettingsUpdate) {
+	return request<AdminSettings>('/api/v1/admin/settings', {
+		method: 'PUT',
+		body: JSON.stringify(settings)
+	});
+}
+
+export function putAdminNotificationSecretKey(notificationSecretKey: string) {
+	return request<AdminSettings>('/api/v1/admin/settings/notification-secret', {
+		method: 'PUT',
+		body: JSON.stringify({ notification_secret_key: notificationSecretKey })
+	});
+}
+
+export function getAdminDiagnostics() {
+	return request<AdminDiagnostics>('/api/v1/admin/diagnostics');
+}
+
+export function listBackups() {
+	return request<BackupFile[]>('/api/v1/admin/backups');
+}
+
+export function getBackupSettings() {
+	return request<BackupSettings>('/api/v1/admin/backups/settings');
+}
+
+export function putBackupSettings(settings: BackupSettings) {
+	return request<BackupSettings>('/api/v1/admin/backups/settings', {
+		method: 'PUT',
+		body: JSON.stringify(settings)
+	});
+}
+
+export function runBackup() {
+	return request<{ filename: string }>('/api/v1/admin/backups/run', { method: 'POST' });
+}
+
+export function restoreBackup(file: File, confirm: string) {
+	const form = new FormData();
+	form.append('file', file);
+	form.append('confirm', confirm);
+	return request<{ message: string }>('/api/v1/admin/backups/restore', {
+		method: 'POST',
+		body: form
+	});
+}
+
+export function backupDownloadUrl(filename?: string) {
+	if (filename) {
+		return `/api/v1/admin/backups/${encodeURIComponent(filename)}/download`;
+	}
+	return '/api/v1/admin/backups/download';
+}
+
+export async function getRegistrationEnabled(): Promise<boolean> {
+	try {
+		const s = await getSetupStatus();
+		return s.registration_enabled;
+	} catch {
+		return false;
+	}
+}
+
+export type Bank = {
+	id: string;
+	name: string;
+	bic: string | null;
+	icon_path: string;
+	sort_order: number;
+};
+
+export type AccountType = 'cash' | 'bank' | 'credit_card';
+
+export type Account = {
+	id: string;
+	name: string;
+	type: AccountType;
+	bank_id: string | null;
+	bank_name?: string | null;
+	bank_icon?: string | null;
+	initial_balance: number;
+	balance: number;
+	balance_display: string;
+	credit_limit?: number | null;
+	credit_limit_display?: string | null;
+	payment_account_id?: string | null;
+	auto_topup_enabled?: boolean;
+	auto_topup_threshold?: number | null;
+	auto_topup_threshold_display?: string | null;
+	auto_topup_target?: number | null;
+	auto_topup_target_display?: string | null;
+	auto_topup_source_account_id?: string | null;
+	status: 'active' | 'archived' | 'deleted';
+	is_primary: boolean;
+	created_at: string;
+	updated_at: string;
+};
+
+export type Category = {
+	id: string;
+	name: string;
+	type: 'income' | 'expense';
+	icon: string;
+	sort_order: number;
+	is_primary: boolean;
+	is_system: boolean;
+	subcategory_count: number;
+	created_at: string;
+};
+
+export type Subcategory = {
+	id: string;
+	category_id: string;
+	name: string;
+	icon: string;
+	sort_order: number;
+	created_at: string;
+};
+
+export function listBanks() {
+	return cachedGet('/api/v1/banks', () => request<Bank[]>('/api/v1/banks'));
+}
+
+export type UIMetaAccountRef = {
+	id: string;
+	name: string;
+	type: AccountType;
+	status: 'active' | 'archived' | 'deleted';
+	bank_id?: string;
+};
+
+export type UIMeta = {
+	accounts: UIMetaAccountRef[];
+	banks: Bank[];
+	expense_categories: Category[];
+	income_categories: Category[];
+	debtors: Debtor[];
+	active_credits: Credit[];
+	closed_credits: Credit[];
+};
+
+export type UIi18nCatalog = {
+	version: string;
+	lang: string;
+	messages: Record<string, string>;
+};
+
+async function warmSubcategoriesCache(categories: Category[]): Promise<void> {
+	const withSubs = categories.filter((c) => c.subcategory_count > 0);
+	if (!withSubs.length) return;
+	const concurrency = 8;
+	let index = 0;
+	async function worker() {
+		while (index < withSubs.length) {
+			const cat = withSubs[index++];
+			try {
+				await listSubcategories(cat.id);
+			} catch {
+				// best-effort cache warm
+			}
+		}
+	}
+	await Promise.all(Array.from({ length: Math.min(concurrency, withSubs.length) }, () => worker()));
+}
+
+export async function getUIMeta() {
+	const meta = await request<UIMeta>('/api/v1/ui/meta');
+	seedStaticRef('/api/v1/banks', meta.banks);
+	seedCategoriesFromUIMeta(meta);
+	void warmSubcategoriesCache([...meta.expense_categories, ...meta.income_categories]);
+	return meta;
+}
+
+/** UI string catalog for remote i18n sync when APK is behind the server. */
+export function getUIi18n(lang: string) {
+	const code = lang === 'en' ? 'en' : 'ru';
+	return request<UIi18nCatalog>(`/api/v1/ui/i18n/${code}`);
+}
+
+export function listAccounts(status?: 'active' | 'archived' | 'deleted') {
+	const q = status ? `?status=${status}` : '';
+	const path = `/api/v1/accounts${q}`;
+	return request<Account[]>(path);
+}
+
+export function getAccount(id: string) {
+	return request<Account>(`/api/v1/accounts/${id}`);
+}
+
+export function createAccount(payload: {
+	name: string;
+	type: AccountType;
+	bank_id?: string;
+	initial_balance: string;
+	credit_limit?: string;
+	payment_account_id?: string;
+}) {
+	return request<Account>('/api/v1/accounts', {
+		method: 'POST',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function updateAccount(
+	id: string,
+	payload: {
+		name: string;
+		bank_id?: string;
+		initial_balance?: string;
+		credit_limit?: string;
+		payment_account_id?: string | null;
+		auto_topup_enabled?: boolean;
+		auto_topup_threshold?: string;
+		auto_topup_target?: string;
+		auto_topup_source_account_id?: string;
+	}
+) {
+	return request<Account>(`/api/v1/accounts/${id}`, {
+		method: 'PUT',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function archiveAccount(id: string, transferToAccountId?: string) {
+	const q = transferToAccountId
+		? `?transfer_to_account_id=${encodeURIComponent(transferToAccountId)}`
+		: '';
+	return request<Account>(`/api/v1/accounts/${id}/archive${q}`, { method: 'POST' });
+}
+
+export function unarchiveAccount(id: string) {
+	return request<Account>(`/api/v1/accounts/${id}/unarchive`, { method: 'POST' });
+}
+
+export function setPrimaryAccount(id: string) {
+	return request<Account>(`/api/v1/accounts/${id}/primary`, { method: 'POST' });
+}
+
+export function deleteAccount(id: string, transferToAccountId?: string) {
+	const q = transferToAccountId
+		? `?transfer_to_account_id=${encodeURIComponent(transferToAccountId)}`
+		: '';
+	return request<void>(`/api/v1/accounts/${id}${q}`, { method: 'DELETE' });
+}
+
+export function listCategories(type?: 'income' | 'expense') {
+	const q = type ? `?type=${type}` : '';
+	const path = `/api/v1/categories${q}`;
+	return request<Category[]>(path).catch((err) => {
+		if (!isOfflineFetchError(err)) throw err;
+		const fromMeta = readCategoriesFromUIMetaCache<Category>(type);
+		if (fromMeta !== null) return fromMeta;
+		throw err;
+	});
+}
+
+export function createCategory(payload: {
+	name: string;
+	type: 'income' | 'expense';
+	icon: string;
+	sort_order?: number;
+}) {
+	return request<Category>('/api/v1/categories', {
+		method: 'POST',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function updateCategory(
+	id: string,
+	payload: { name: string; icon: string; sort_order?: number }
+) {
+	return request<Category>(`/api/v1/categories/${id}`, {
+		method: 'PUT',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function deleteCategory(id: string) {
+	return request<void>(`/api/v1/categories/${id}`, { method: 'DELETE' });
+}
+
+export function reorderCategories(type: 'income' | 'expense', ids: string[]) {
+	return request<Category[]>('/api/v1/categories/order', {
+		method: 'PUT',
+		body: JSON.stringify({ type, ids })
+	});
+}
+
+export function setPrimaryCategory(id: string) {
+	return request<Category>(`/api/v1/categories/${id}/primary`, { method: 'POST' });
+}
+
+export function listSubcategories(categoryId: string) {
+	return request<Subcategory[]>(`/api/v1/categories/${categoryId}/subcategories`);
+}
+
+export function reorderSubcategories(categoryId: string, ids: string[]) {
+	return request<Subcategory[]>(`/api/v1/categories/${categoryId}/subcategories/order`, {
+		method: 'PUT',
+		body: JSON.stringify({ ids })
+	});
+}
+
+export function createSubcategory(categoryId: string, payload: { name: string; icon?: string }) {
+	return request<Subcategory>(`/api/v1/categories/${categoryId}/subcategories`, {
+		method: 'POST',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function updateSubcategory(id: string, payload: { name: string; icon?: string }) {
+	return request<Subcategory>(`/api/v1/subcategories/${id}`, {
+		method: 'PUT',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function deleteSubcategory(id: string) {
+	return request<void>(`/api/v1/subcategories/${id}`, { method: 'DELETE' });
+}
+
+export type Transaction = {
+	id: string;
+	account_id: string;
+	account_name?: string;
+	account_status?: 'active' | 'archived' | 'deleted';
+	transfer_account_name?: string;
+	transfer_account_status?: 'active' | 'archived' | 'deleted';
+	type: 'income' | 'expense' | 'transfer';
+	kind: 'manual' | 'future';
+	amount: number;
+	amount_display: string;
+	description: string | null;
+	category_id: string | null;
+	category_name?: string | null;
+	category_icon?: string | null;
+	category_is_system?: boolean;
+	subcategory_id: string | null;
+	subcategory_name?: string | null;
+	subcategory_icon?: string | null;
+	deletable?: boolean;
+	transfer_group_id?: string | null;
+	transfer_account_id?: string | null;
+	transfer_is_out?: boolean;
+	credit_payment_linked?: boolean;
+	transaction_date: string;
+	created_at: string;
+	updated_at: string;
+};
+
+export type RecurringOperation = {
+	id: string;
+	type: 'income' | 'expense';
+	amount: number;
+	amount_display: string;
+	description: string | null;
+	account_id: string;
+	account_name: string;
+	category_id: string;
+	category_name: string;
+	subcategory_id: string | null;
+	subcategory_name: string | null;
+	period: 'week' | 'two_weeks' | 'month' | 'year';
+	weekday: number | null;
+	day_of_month: number | null;
+	start_date: string;
+	time_local: string;
+	next_run_at: string;
+	last_run_at: string | null;
+	active: boolean;
+	created_at: string;
+	updated_at: string;
+};
+
+export type TransactionList = {
+	data: Transaction[];
+	meta: { page: number; limit: number; total: number };
+};
+
+export type StatsSummary = {
+	income_total: number;
+	expense_total: number;
+	transaction_count: number;
+};
+
+export type StatsCategoryItem = {
+	category_id: string;
+	category_name: string;
+	icon: string;
+	type: 'income' | 'expense';
+	total: number;
+	percentage: number;
+	count: number;
+};
+
+export type StatsSubcategoryItem = {
+	category_id: string;
+	category_name: string;
+	category_icon: string;
+	subcategory_id: string;
+	subcategory_name: string;
+	total: number;
+	percentage: number;
+	count: number;
+};
+
+export type StatsPeriodItem = {
+	period: string;
+	income: number;
+	expense: number;
+};
+
+export type StatsContext = StatsSummary & {
+	scope: 'all' | 'account' | 'debtor' | 'credit' | 'debts';
+	scope_id?: string;
+	lent_total?: number;
+	borrowed_total?: number;
+	paid_total?: number;
+	payment_count?: number;
+	remaining_amount?: number;
+};
+
+export type AccountBalanceSummary = {
+	id: string;
+	name: string;
+	type: AccountType;
+	bank_icon?: string | null;
+	balance: number;
+	balance_display: string;
+	forecast_balance: number;
+	forecast_display: string;
+	has_future_this_month: boolean;
+	is_primary: boolean;
+	credit_limit?: number | null;
+	credit_limit_display?: string | null;
+	auto_topup_enabled?: boolean;
+	auto_topup_threshold?: number | null;
+	auto_topup_threshold_display?: string | null;
+	auto_topup_target?: number | null;
+	auto_topup_target_display?: string | null;
+	auto_topup_source_account_id?: string | null;
+};
+
+export type CreditCardsSummary = {
+	total_balance: number;
+	total_forecast: number;
+	total_limit: number;
+	count: number;
+	total_balance_display: string;
+	total_forecast_display: string;
+	total_limit_display: string;
+};
+
+export type AccountsSummary = {
+	accounts: AccountBalanceSummary[];
+	total_balance: number;
+	total_forecast: number;
+};
+
+export type Dashboard = {
+	total_balance: number;
+	total_forecast: number;
+	credit_cards_summary?: CreditCardsSummary | null;
+	accounts: AccountBalanceSummary[];
+	recent_transactions: Transaction[];
+	debts_summary: DebtsSummary;
+};
+
+export type DebtsSummary = {
+	i_owe: number;
+	owed_to_me: number;
+	overdue_i_owe: number;
+	overdue_owed_to_me: number;
+	active_count: number;
+};
+
+export type DebtTransaction = {
+	id: string;
+	account_id: string;
+	account_name?: string;
+	type: string;
+	kind: string;
+	amount: number;
+	amount_display: string;
+	description: string | null;
+	category_name?: string;
+	transaction_date: string;
+	deletable: boolean;
+};
+
+export type Debtor = {
+	id: string;
+	name: string;
+	created_at: string;
+};
+
+export type DebtorDetail = Debtor & {
+	i_owe: number;
+	owed_to_me: number;
+	debts: Debt[];
+	transactions: DebtTransaction[];
+};
+
+export type Debt = {
+	id: string;
+	debtor_id: string;
+	debtor_name: string;
+	direction: 'lent' | 'borrowed';
+	amount: number;
+	amount_display: string;
+	affects_balance: boolean;
+	debt_date: string;
+	due_date: string;
+	description: string | null;
+	transaction_id: string | null;
+	is_settled: boolean;
+	settled_at: string | null;
+	is_overdue: boolean;
+	created_at: string;
+	account_id?: string | null;
+	account_name?: string | null;
+};
+
+export type Transfer = {
+	group_id: string;
+	from_account_id: string;
+	to_account_id: string;
+	amount: number;
+	amount_display: string;
+	commission: number;
+	commission_display: string;
+	description: string | null;
+	transaction_date: string;
+	kind: string;
+	legs: Transaction[];
+};
+
+export function listTransactions(params?: Record<string, string>) {
+	const q = params ? '?' + new URLSearchParams(params).toString() : '';
+	return request<TransactionList>(`/api/v1/transactions${q}`).then((res) => {
+		indexTransactions(res.data);
+		return res;
+	});
+}
+
+export function getTransaction(id: string) {
+	return request<Transaction>(`/api/v1/transactions/${id}`).then((tx) => {
+		indexTransactions([tx]);
+		return tx;
+	});
+}
+
+export function createTransaction(payload: {
+	account_id: string;
+	type: 'income' | 'expense';
+	amount: string;
+	description?: string;
+	category_id?: string;
+	subcategory_id?: string;
+	subcategory_name?: string;
+	transaction_date: string;
+}) {
+	return request<Transaction>('/api/v1/transactions', {
+		method: 'POST',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function updateTransaction(
+	id: string,
+	payload: {
+		account_id: string;
+		type: 'income' | 'expense';
+		amount: string;
+		description?: string;
+		category_id?: string;
+		subcategory_id?: string;
+		subcategory_name?: string;
+		transaction_date: string;
+	}
+) {
+	return request<Transaction>(`/api/v1/transactions/${id}`, {
+		method: 'PUT',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function deleteTransaction(id: string) {
+	return request<void>(`/api/v1/transactions/${id}`, { method: 'DELETE' });
+}
+
+export function listRecurringOperations() {
+	return request<RecurringOperation[]>('/api/v1/recurring-operations');
+}
+
+export function createRecurringOperation(payload: {
+	type: 'income' | 'expense';
+	amount: string;
+	description?: string;
+	account_id: string;
+	category_id: string;
+	subcategory_id?: string;
+	period: 'week' | 'two_weeks' | 'month' | 'year';
+	weekday?: number;
+	day_of_month?: number;
+	start_date: string;
+	time_local?: string;
+	active?: boolean;
+}) {
+	return request<RecurringOperation>('/api/v1/recurring-operations', {
+		method: 'POST',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function updateRecurringOperation(
+	id: string,
+	payload: {
+		type: 'income' | 'expense';
+		amount: string;
+		description?: string;
+		account_id: string;
+		category_id: string;
+		subcategory_id?: string;
+		period: 'week' | 'two_weeks' | 'month' | 'year';
+		weekday?: number;
+		day_of_month?: number;
+		start_date: string;
+		time_local?: string;
+		active?: boolean;
+	}
+) {
+	return request<RecurringOperation>(`/api/v1/recurring-operations/${id}`, {
+		method: 'PUT',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function deleteRecurringOperation(id: string) {
+	return request<void>(`/api/v1/recurring-operations/${id}`, { method: 'DELETE' });
+}
+
+export type BudgetScope = 'category' | 'subcategory' | 'all_expense';
+
+export type BudgetItem = {
+	id: string;
+	name: string;
+	scope: BudgetScope;
+	category_id?: string;
+	category_name?: string;
+	category_icon?: string;
+	subcategory_id?: string;
+	subcategory_name?: string;
+	account_id?: string;
+	account_name?: string;
+	month?: string;
+	copy_forward?: boolean;
+	amount: number;
+	amount_display: string;
+	period: string;
+	alert_at_percent: number;
+	is_active: boolean;
+	created_at: string;
+	updated_at: string;
+};
+
+export type BudgetSummaryItem = BudgetItem & {
+	planned: number;
+	planned_display: string;
+	spent: number;
+	spent_display: string;
+	remaining: number;
+	remaining_display: string;
+	percent: number;
+	status: 'ok' | 'warning' | 'exceeded';
+	children_planned?: number;
+	children_planned_display?: string;
+	children_spent?: number;
+	children_spent_display?: string;
+	period_start: string;
+};
+
+export type BudgetSummaryResponse = {
+	items: BudgetSummaryItem[];
+	month: string;
+	can_copy_from_previous: boolean;
+};
+
+export function listBudgets(month?: string) {
+	const q = month ? `?month=${encodeURIComponent(month)}` : '';
+	return request<BudgetItem[]>(`/api/v1/budgets${q}`);
+}
+
+export function getBudgetSummary(month?: string) {
+	const q = month ? `?month=${encodeURIComponent(month)}` : '';
+	return request<BudgetSummaryResponse>(`/api/v1/budgets/summary${q}`);
+}
+
+export type BudgetSpentPreview = {
+	spent: number;
+	spent_display: string;
+};
+
+export function getBudgetSpentPreview(params: {
+	month?: string;
+	scope: BudgetScope;
+	category_id?: string;
+	subcategory_id?: string;
+	account_id?: string;
+}) {
+	const q = new URLSearchParams();
+	if (params.month) q.set('month', params.month);
+	q.set('scope', params.scope);
+	if (params.category_id) q.set('category_id', params.category_id);
+	if (params.subcategory_id) q.set('subcategory_id', params.subcategory_id);
+	if (params.account_id) q.set('account_id', params.account_id);
+	return request<BudgetSpentPreview>(`/api/v1/budgets/spent-preview?${q.toString()}`);
+}
+
+export function createBudget(
+	payload: {
+		name: string;
+		scope: BudgetScope;
+		category_id?: string;
+		subcategory_id?: string;
+		account_id?: string;
+		amount: string;
+		alert_at_percent?: number;
+		is_active?: boolean;
+		copy_forward?: boolean;
+	},
+	month?: string
+) {
+	const q = month ? `?month=${encodeURIComponent(month)}` : '';
+	return request<BudgetItem>(`/api/v1/budgets${q}`, {
+		method: 'POST',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function updateBudget(
+	id: string,
+	payload: {
+		name: string;
+		scope: BudgetScope;
+		category_id?: string;
+		subcategory_id?: string;
+		account_id?: string;
+		amount: string;
+		alert_at_percent?: number;
+		is_active?: boolean;
+		copy_forward?: boolean;
+	},
+	month?: string
+) {
+	const q = month ? `?month=${encodeURIComponent(month)}` : '';
+	return request<BudgetItem>(`/api/v1/budgets/${id}${q}`, {
+		method: 'PATCH',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function deleteBudget(id: string) {
+	return request<void>(`/api/v1/budgets/${id}`, { method: 'DELETE' });
+}
+
+export function copyBudgetToNextMonth(id: string) {
+	return request<BudgetItem>(`/api/v1/budgets/${id}/copy-next`, { method: 'POST' });
+}
+
+export function copyBudgetsFromPreviousMonth(month: string) {
+	return request<{ items: BudgetItem[] }>(
+		`/api/v1/budgets/copy-from-previous?month=${encodeURIComponent(month)}`,
+		{ method: 'POST' }
+	);
+}
+
+export function createTransfer(payload: {
+	from_account_id: string;
+	to_account_id: string;
+	amount: string;
+	commission?: string;
+	description?: string;
+	transaction_date: string;
+}) {
+	return request<Transfer>('/api/v1/transfers', {
+		method: 'POST',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function updateTransfer(
+	groupId: string,
+	payload: {
+		from_account_id: string;
+		to_account_id: string;
+		amount: string;
+		commission?: string;
+		description?: string;
+		transaction_date: string;
+	}
+) {
+	return request<Transfer>(`/api/v1/transfers/${groupId}`, {
+		method: 'PUT',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function deleteTransfer(groupId: string) {
+	return request<void>(`/api/v1/transfers/${groupId}`, { method: 'DELETE' });
+}
+
+export function getDashboard() {
+	return request<Dashboard>('/api/v1/dashboard').then((dash) => {
+		indexTransactions(dash.recent_transactions);
+		return dash;
+	});
+}
+
+export function getStatsSummary(params?: Record<string, string>) {
+	const q = params ? '?' + new URLSearchParams(params).toString() : '';
+	return request<StatsSummary>(`/api/v1/stats/summary${q}`);
+}
+
+export function getStatsByCategory(params?: Record<string, string>) {
+	const q = params ? '?' + new URLSearchParams(params).toString() : '';
+	return request<{ items: StatsCategoryItem[] }>(`/api/v1/stats/by-category${q}`);
+}
+
+export function getStatsBySubcategory(params?: Record<string, string>) {
+	const q = params ? '?' + new URLSearchParams(params).toString() : '';
+	return request<{ items: StatsSubcategoryItem[] }>(`/api/v1/stats/by-subcategory${q}`);
+}
+
+export function getStatsByPeriod(params?: Record<string, string>) {
+	const q = params ? '?' + new URLSearchParams(params).toString() : '';
+	return request<{ items: StatsPeriodItem[] }>(`/api/v1/stats/by-period${q}`);
+}
+
+export function searchStats(params?: Record<string, string>) {
+	const q = params ? '?' + new URLSearchParams(params).toString() : '';
+	return request<TransactionList>(`/api/v1/stats/search${q}`);
+}
+
+export function getStatsContext(params?: Record<string, string>) {
+	const q = params ? '?' + new URLSearchParams(params).toString() : '';
+	return request<StatsContext>(`/api/v1/stats/context${q}`);
+}
+
+export function getAccountsSummary() {
+	return request<AccountsSummary>('/api/v1/accounts/summary');
+}
+
+export function getAccountBalance(id: string) {
+	return request<AccountBalanceSummary>(`/api/v1/accounts/${id}/balance`);
+}
+
+export function listDebtors() {
+	return request<Debtor[]>('/api/v1/debtors');
+}
+
+export function getDebtor(id: string) {
+	return request<DebtorDetail>(`/api/v1/debtors/${id}`);
+}
+
+export function createDebtor(name: string) {
+	return request<Debtor>('/api/v1/debtors', {
+		method: 'POST',
+		body: JSON.stringify({ name })
+	});
+}
+
+export function listDebts(params?: { settled?: string }) {
+	const q = params?.settled !== undefined ? `?settled=${params.settled}` : '';
+	return request<Debt[]>(`/api/v1/debts${q}`);
+}
+
+export function getDebt(id: string) {
+	return request<Debt>(`/api/v1/debts/${id}`);
+}
+
+export function createDebt(payload: {
+	debtor_id?: string;
+	debtor_name?: string;
+	direction: 'lent' | 'borrowed';
+	amount: string;
+	debt_date: string;
+	due_date: string;
+	affects_balance: boolean;
+	description?: string;
+	account_id?: string;
+}) {
+	return request<Debt>('/api/v1/debts', {
+		method: 'POST',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function settleDebt(
+	id: string,
+	payload: {
+		amount?: string;
+		settled_at: string;
+		affects_balance: boolean;
+		account_id?: string;
+	}
+) {
+	return request<Debt>(`/api/v1/debts/${id}/settle`, {
+		method: 'POST',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function deleteDebt(id: string) {
+	return request<void>(`/api/v1/debts/${id}`, { method: 'DELETE' });
+}
+
+export function getDebtsSummary() {
+	return request<DebtsSummary>('/api/v1/debts/summary');
+}
+
+export type CreditPayment = {
+	id: string;
+	credit_id: string;
+	transaction_id: string | null;
+	transaction_kind?: string | null;
+	amount: number;
+	amount_display: string;
+	payment_date: string;
+	kind: 'scheduled' | 'early' | 'auto' | 'retroactive';
+	is_applied: boolean;
+	exclude_from_stats: boolean;
+	created_at: string;
+};
+
+export type SchedulePreviewEntry = {
+	payment_date: string;
+	amount: number;
+	amount_display?: string;
+};
+
+export type Credit = {
+	id: string;
+	name: string | null;
+	credit_kind?: 'consumer' | 'mortgage';
+	principal_amount: number;
+	principal_amount_display: string;
+	property_price?: number | null;
+	property_price_display?: string | null;
+	down_payment?: number;
+	down_payment_display?: string;
+	down_payment_affects_balance?: boolean;
+	down_payment_transaction_id?: string | null;
+	principal_affects_balance?: boolean;
+	principal_transaction_id?: string | null;
+	issue_date: string;
+	term_months: number;
+	interest_rate: number;
+	payment_interval: 'month' | 'week' | 'two_weeks' | 'manual';
+	paid_amount: number;
+	paid_amount_display: string;
+	monthly_payment: number;
+	monthly_payment_display: string;
+	remaining_amount: number;
+	remaining_amount_display: string;
+	debit_account_id: string;
+	debit_account_name: string;
+	debit_time_local?: string | null;
+	bank_id?: string | null;
+	bank_name?: string | null;
+	bank_id_locked?: boolean;
+	added_retroactively: boolean;
+	recorded_at: string;
+	status: 'active' | 'closed';
+	closed_at: string | null;
+	is_installment: boolean;
+	next_payment_date?: string | null;
+	next_payment_amount?: number | null;
+	schedule?: CreditPayment[];
+	created_at: string;
+	updated_at: string;
+};
+
+export function listCredits(params?: { status?: string }) {
+	const q = params?.status ? `?status=${params.status}` : '';
+	return request<Credit[]>(`/api/v1/credits${q}`);
+}
+
+export function getCredit(id: string) {
+	return request<Credit>(`/api/v1/credits/${id}`);
+}
+
+export function createCredit(payload: Record<string, unknown>) {
+	return request<Credit>('/api/v1/credits', {
+		method: 'POST',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function updateCredit(id: string, payload: Record<string, unknown>) {
+	return request<Credit>(`/api/v1/credits/${id}`, {
+		method: 'PUT',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function addCreditPayment(
+	id: string,
+	payload: { amount: string; payment_date: string; account_id?: string }
+) {
+	return request<Credit>(`/api/v1/credits/${id}/payments`, {
+		method: 'POST',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function deleteCreditPayment(creditId: string, paymentId: string) {
+	return request<Credit>(`/api/v1/credits/${creditId}/payments/${paymentId}`, { method: 'DELETE' });
+}
+
+export function updateCreditSchedule(
+	creditId: string,
+	payload: { payments: { id: string; amount: string }[] }
+) {
+	return request<Credit>(`/api/v1/credits/${creditId}/schedule`, {
+		method: 'PATCH',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function completeCredit(
+	id: string,
+	payload: { affects_balance: boolean; payment_date: string }
+) {
+	return request<Credit>(`/api/v1/credits/${id}/close`, {
+		method: 'POST',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function deleteCredit(id: string, mode: 'cascade' | 'keep_transactions') {
+	return request<void>(`/api/v1/credits/${id}?mode=${mode}`, { method: 'DELETE' });
+}
+
+export function previewCreditSchedule(payload: Record<string, unknown>) {
+	return request<{
+		schedule_preview: SchedulePreviewEntry[];
+		calculated_monthly_payment: number;
+		calculated_monthly_payment_display: string;
+		effective_monthly_payment: number;
+		effective_monthly_payment_display: string;
+		user_set_monthly_payment: boolean;
+	}>('/api/v1/credits/schedule/preview', {
+		method: 'POST',
+		body: JSON.stringify(payload)
+	});
+}
+
+export type ImportPreviewItem = {
+	row: number;
+	action: 'create_expense' | 'create_income' | 'create_transfer';
+	account?: string;
+	to_account?: string;
+	amount: number;
+	category?: string;
+	subcategory?: string;
+	date: string;
+	description?: string;
+};
+
+export type ImportRowError = {
+	row: number;
+	message: string;
+};
+
+export type AccountMappingSuggestion = {
+	file_name: string;
+	mode: 'create' | 'existing';
+	account_id?: string;
+	account_name?: string;
+	account_type?: AccountType;
+	bank_id?: string;
+	credit_limit?: string;
+};
+
+export type CategoryMappingSuggestion = {
+	file_name: string;
+	type: 'expense' | 'income';
+	mode: 'create' | 'existing';
+	category_id?: string;
+	category_name?: string;
+};
+
+export type CategoryMapEntry = {
+	mode: 'create' | 'existing';
+	category_id?: string;
+};
+
+export type SubcategoryMappingSuggestion = {
+	file_category: string;
+	file_subcategory: string;
+	type: 'expense' | 'income';
+	mode: 'create' | 'existing';
+	subcategory_id?: string;
+	subcategory_name?: string;
+};
+
+export type SubcategoryMapEntry = {
+	mode: 'create' | 'existing';
+	subcategory_id?: string;
+};
+
+export type ImportReport = {
+	total_rows: number;
+	processed_rows?: number;
+	valid_rows: number;
+	skipped_duplicates: number;
+	created_transactions?: number;
+	errors: ImportRowError[];
+	logs?: string[];
+	preview: ImportPreviewItem[];
+	accounts_to_create: string[];
+	account_mappings: AccountMappingSuggestion[];
+	category_mappings: CategoryMappingSuggestion[];
+	subcategory_mappings: SubcategoryMappingSuggestion[];
+	categories_to_create: string[];
+};
+
+export type ImportJob = {
+	id: string;
+	filename: string;
+	status: 'queued' | 'running' | 'done' | 'failed';
+	error_message?: string;
+	report?: ImportReport;
+	created_at: string;
+	started_at?: string;
+	finished_at?: string;
+};
+
+export type AccountMapEntry = {
+	mode: 'create' | 'existing';
+	account_id?: string;
+	account_type?: AccountType;
+	bank_id?: string;
+	credit_limit?: string;
+};
+
+export type ImportOptions = {
+	file: File;
+	preset?: 'cubux' | 'custom';
+	deduplicate?: boolean;
+	confirm?: boolean;
+	column_map?: Record<string, string>;
+	account_map?: Record<string, AccountMapEntry>;
+	category_map?: Record<string, CategoryMapEntry>;
+	subcategory_map?: Record<string, SubcategoryMapEntry>;
+	auto_subcategory?: boolean;
+	idempotencyKey?: string;
+};
+
+function importFormData(opts: ImportOptions): FormData {
+	const form = new FormData();
+	form.append('file', opts.file);
+	form.append('preset', opts.preset ?? 'cubux');
+	form.append('deduplicate', String(opts.deduplicate ?? true));
+	form.append('auto_subcategory', String(opts.auto_subcategory ?? true));
+	if (opts.confirm) form.append('confirm', 'true');
+	if (opts.column_map) form.append('column_map', JSON.stringify(opts.column_map));
+	if (opts.account_map) form.append('account_map', JSON.stringify(opts.account_map));
+	if (opts.category_map) form.append('category_map', JSON.stringify(opts.category_map));
+	if (opts.subcategory_map) form.append('subcategory_map', JSON.stringify(opts.subcategory_map));
+	return form;
+}
+
+export function previewImport(opts: ImportOptions) {
+	return request<ImportReport>('/api/v1/import/preview', {
+		method: 'POST',
+		body: importFormData(opts)
+	});
+}
+
+export function peekImportHeaders(file: File) {
+	const form = new FormData();
+	form.append('file', file);
+	return request<{ headers: string[] }>('/api/v1/import/headers', {
+		method: 'POST',
+		body: form
+	});
+}
+
+export function commitImport(opts: ImportOptions) {
+	const headers: Record<string, string> = {};
+	if (opts.idempotencyKey) headers['Idempotency-Key'] = opts.idempotencyKey;
+	return request<ImportReport>('/api/v1/import', {
+		method: 'POST',
+		headers,
+		body: importFormData({ ...opts, confirm: true })
+	});
+}
+
+export function createImportJob(opts: ImportOptions) {
+	const headers: Record<string, string> = {};
+	if (opts.idempotencyKey) headers['Idempotency-Key'] = opts.idempotencyKey;
+	return request<ImportJob>('/api/v1/import/jobs', {
+		method: 'POST',
+		headers,
+		body: importFormData({ ...opts, confirm: true })
+	});
+}
+
+export function getImportJob(id: string) {
+	return request<ImportJob>(`/api/v1/import/jobs/${encodeURIComponent(id)}`);
+}
+
+export function exportCSVUrl(params: {
+	from?: string;
+	to?: string;
+	account_id?: string;
+	category_id?: string;
+}) {
+	const q = new URLSearchParams();
+	if (params.from) q.set('from', params.from);
+	if (params.to) q.set('to', params.to);
+	if (params.account_id) q.set('account_id', params.account_id);
+	if (params.category_id) q.set('category_id', params.category_id);
+	const qs = q.toString();
+	return `/api/v1/export${qs ? `?${qs}` : ''}`;
+}

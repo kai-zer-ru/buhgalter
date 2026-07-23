@@ -10,6 +10,11 @@ async function createRecurring(page: import('@playwright/test').Page, descriptio
 	const account = await createCashAccount(page);
 	await page.goto('/settings/recurring-operations');
 	await waitAppReady(page);
+	const header = page
+		.locator('div')
+		.filter({ has: page.getByRole('heading', { name: 'Периодические операции', level: 1 }) })
+		.filter({ has: page.getByRole('button', { name: 'Добавить' }) });
+	await expect(header.first()).toBeVisible();
 	await page.getByRole('button', { name: 'Добавить' }).click();
 	await page.locator('#recurring-amount-create').fill('55');
 	await page.locator('#recurring-description-create').fill(description);

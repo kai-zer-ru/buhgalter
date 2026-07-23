@@ -22,6 +22,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/config"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/discovery"
 	"github.com/kai-zer-ru/buhgalter/internal/httpserver"
 	"github.com/kai-zer-ru/buhgalter/internal/importexport"
 	"github.com/kai-zer-ru/buhgalter/internal/locale"
@@ -31,7 +32,7 @@ import (
 )
 
 var (
-	version       = "1.3.2"
+	version       = "1.4.0"
 	installMethod = "dev"
 	buildCommit   = "unknown"
 	buildTime     = ""
@@ -116,6 +117,23 @@ func main() {
 	defer notifyWorker.Stop()
 
 	srv := httpserver.New(cfg, manager, logger, auditLogger, backupSvc)
+
+	var mdnsAdvertiser *discovery.Advertiser
+	if cfg.MDNSEnabled {
+		adv, err := discovery.NewAdvertiser(discovery.AdvertiseConfig{
+			Addr:         cfg.Addr,
+			InstanceName: cfg.MDNSName,
+			Version:      cfg.Version,
+		}, logger)
+		if err != nil {
+			logger.Warn("mdns disabled", "err", err)
+		} else if err := adv.Start(); err != nil {
+			logger.Warn("mdns start failed", "err", err)
+		} else {
+			mdnsAdvertiser = adv
+			defer mdnsAdvertiser.Stop()
+		}
+	}
 
 	httpServer := &http.Server{
 		Addr:         cfg.Addr,

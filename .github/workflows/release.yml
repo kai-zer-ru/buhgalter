@@ -35,13 +35,63 @@ jobs:
       - run: go test ./...
         working-directory: server
 
-  goreleaser:
+  android-apk:
     needs: [test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: android/ui/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+      - name: Prepare release keystore
+        run: |
+          if [ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/buhgalter-release.jks"
+            echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/buhgalter-release.jks" >> "$GITHUB_ENV"
+            echo "ANDROID_KEYSTORE_PASSWORD=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" >> "$GITHUB_ENV"
+            echo "ANDROID_KEY_ALIAS=${{ secrets.ANDROID_KEY_ALIAS }}" >> "$GITHUB_ENV"
+            echo "ANDROID_KEY_PASSWORD=${{ secrets.ANDROID_KEY_PASSWORD }}" >> "$GITHUB_ENV"
+          else
+            mkdir -p "$HOME/.android"
+            if [ ! -f "$HOME/.android/debug.keystore" ]; then
+              keytool -genkey -v -keystore "$HOME/.android/debug.keystore" -storepass android \
+                -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 \
+                -dname "CN=Android Debug,O=Android,C=US"
+            fi
+            echo "::warning::ANDROID_KEYSTORE_BASE64 not set — APK signed with debug keystore"
+          fi
+      - name: Build release APK
+        run: make android-apk-release
+      - name: Verify release APKs
+        run: bash scripts/verify-android-release-apks.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apk-release
+          # Upload the directory (not file paths from repo root) so download
+          # places APKs flat under android/app/build/outputs/apk/release/.
+          path: android/app/build/outputs/apk/release/
+          if-no-files-found: error
+
+  goreleaser:
+    needs: [test, android-apk]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: android-apk-release
+          path: android/app/build/outputs/apk/release/
+      - name: Verify downloaded APKs for goreleaser
+        run: bash scripts/verify-android-release-apks.sh
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26.4'

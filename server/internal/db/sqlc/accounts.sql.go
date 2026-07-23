@@ -86,6 +86,19 @@ func (q *Queries) CountActiveAccountsByUser(ctx context.Context, userID string) 
 	return count, err
 }
 
+const countActivePrimaryEligibleAccountsByUser = `-- name: CountActivePrimaryEligibleAccountsByUser :one
+SELECT COUNT(*) AS count
+FROM accounts
+WHERE user_id = ? AND status = 'active' AND type IN ('cash', 'bank')
+`
+
+func (q *Queries) CountActivePrimaryEligibleAccountsByUser(ctx context.Context, userID string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countActivePrimaryEligibleAccountsByUser, userID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const disableAutoTopup = `-- name: DisableAutoTopup :exec
 UPDATE accounts
 SET auto_topup_enabled = 0, updated_at = ?
@@ -142,7 +155,7 @@ func (q *Queries) DisableAutoTopupUsingSource(ctx context.Context, arg DisableAu
 const firstActiveAccountID = `-- name: FirstActiveAccountID :one
 SELECT id
 FROM accounts
-WHERE user_id = ? AND status = 'active'
+WHERE user_id = ? AND status = 'active' AND type IN ('cash', 'bank')
 ORDER BY created_at, name
 LIMIT 1
 `

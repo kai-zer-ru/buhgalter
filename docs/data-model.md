@@ -25,6 +25,7 @@ erDiagram
         TEXT login UK
         TEXT language
         TEXT timezone
+        TEXT theme "light|dark|system"
         INTEGER is_admin
         TEXT status
     }
@@ -229,6 +230,7 @@ erDiagram
 ```
 
 `system_settings` — глобальная строка `id = 1`, без `user_id`.  
+`users.theme`: `light` | `dark` | `system` («Как на устройстве»); **default `system`** у новых пользователей (`schema.sql`, `InsertUser`). В UI resolved light/dark через `prefers-color-scheme`.  
 Переводы: две ноги в `transactions` с общим `transfer_group_id` (самоссылка, не отдельная таблица).
 
 ## Категории и иконки
@@ -283,14 +285,29 @@ erDiagram
 | Поле | Описание |
 |------|----------|
 | `accounts.type` | `cash`, `bank`, `credit_card` |
+| `accounts.initial_balance` | начальный остаток, копейки; фиксируется при создании и при явном изменении в форме редактирования |
+| `accounts.current_balance` | текущий баланс, копейки; денормализация, пересчитывается пакетом `accountbalance` |
 | `accounts.credit_limit` | лимит кредитной карты, копейки; только для `credit_card` |
 | `accounts.payment_account_id` | счёт по умолчанию для переводов на карту (опционально) |
 | `accounts.auto_topup_*` | автопополнение bank-счёта — см. [balance-maintenance.md](balance-maintenance.md) |
 | `accounts.status` | `active`, `archived`, `deleted` |
-| `accounts.is_primary` | `1` — основной счёт среди `status = active`; не более одного на пользователя |
+| `accounts.is_primary` | `1` — основной счёт среди активных `cash`/`bank`; не более одного на пользователя; **кредитная карта основным быть не может** |
 | `POST /accounts/{id}/archive` | см. [accounts-archive-delete.md](accounts-archive-delete.md) |
 | `DELETE /accounts/{id}` | см. [accounts-archive-delete.md](accounts-archive-delete.md) |
-| API | `POST /api/v1/accounts/{id}/primary` |
+| API | `POST /api/v1/accounts/{id}/primary` (отклоняет `credit_card` — `ERR_ACCOUNT_PRIMARY_CREDIT_CARD`) |
+| Миграция `042` | `042_primary_not_credit_card.sql` — снимает `is_primary` с `credit_card`; если у пользователя не осталось основного — назначает oldest active `cash`/`bank` |
+
+### Начальный и текущий баланс
+
+Два разных значения; путать их в UI нельзя.
+
+| | `initial_balance` | `current_balance` (API: `balance`, `balance_display`) |
+|---|-------------------|--------------------------------------------------------|
+| Смысл | стартовая сумма на счёте | фактический остаток с учётом операций |
+| Когда меняется | создание счёта; `PUT /accounts/{id}` с полем `initial_balance` | любая операция по счёту; после `PUT` с новым `initial_balance` — пересчёт (`accountbalance.Refresh`) |
+| Формула | задаётся пользователем | `initial_balance` + доходы − расходы + входящие переводы − исходящие переводы (ручные операции, `affects_balance = 1`) |
+
+**Форма редактирования** (`/accounts`, `/accounts/{id}`, Android-клиент): поле «Начальный баланс» заполняется из **`initial_balance`** ответа API, **не** из `balance_display`. На карточке и в шапке счёта по-прежнему показывается текущий баланс. Подстановка текущего баланса в поле начального приводит к порче `initial_balance` при сохранении без правок.
 
 Подробнее о типе `credit_card`: [ui-credit-cards.md](ui-credit-cards.md).
 
@@ -369,7 +386,10 @@ erDiagram
   - `020_repair_credit_schedules.sql` — repair неполных графиков при старте
   - `023_password_reset_requests.sql` — очередь сброса пароля
   - `026_recurring_operations.sql` — периодические операции
-  - `034_budgets.sql` … `039_budget_scope_unique.sql` — бюджет (см. [budget.md](budget.md))
   - `024_`, `027_`, `028_` — поля кредитов, ипотеки, `accounts.current_balance`
+  - `033_credit_card_accounts.sql` — тип счёта `credit_card`
+  - `034_budgets.sql` … `039_budget_scope_unique.sql` — бюджет (см. [budget.md](budget.md))
+  - `040_account_deleted_status.sql`, `041_account_auto_topup.sql` — удаление счетов, автопополнение
+  - `042_primary_not_credit_card.sql` — кредитная карта не может быть основным счётом
 
 Уже применённые миграции **не переписывать** — только новые файлы в конец цепочки. После каждой миграции обновлять `server/schema.sql` и при необходимости запускать `make sqlc`.

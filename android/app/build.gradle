@@ -1,0 +1,109 @@
+apply plugin: 'com.android.application'
+
+def uiPackage = new groovy.json.JsonSlurper().parseText(file('../ui/package.json').text)
+def uiVersion = uiPackage.version as String
+def versionParts = uiVersion.tokenize('.')
+def versionMajor = (versionParts.size() > 0 ? versionParts[0] : '1') as int
+def versionMinor = (versionParts.size() > 1 ? versionParts[1] : '0') as int
+def versionPatch = (versionParts.size() > 2 ? versionParts[2] : '0') as int
+
+def enableAbiSplits = gradle.startParameter.taskNames.any { task ->
+    task.toLowerCase().contains('release')
+}
+
+android {
+    namespace = "ru.kai_zer.buhgalter"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "ru.kai_zer.buhgalter"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode versionMajor * 10000 + versionMinor * 100 + versionPatch
+        versionName uiVersion
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    signingConfigs {
+        release {
+            def configured = false
+            def keystorePropsFile = rootProject.file('keystore.properties')
+            if (keystorePropsFile.exists()) {
+                def props = new Properties()
+                props.load(new FileInputStream(keystorePropsFile))
+                storeFile file(props['storeFile'])
+                storePassword props['storePassword']
+                keyAlias props['keyAlias']
+                keyPassword props['keyPassword']
+                configured = true
+            } else if (System.getenv('ANDROID_KEYSTORE_FILE')) {
+                storeFile file(System.getenv('ANDROID_KEYSTORE_FILE'))
+                storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('ANDROID_KEY_ALIAS')
+                keyPassword System.getenv('ANDROID_KEY_PASSWORD')
+                configured = true
+            }
+            if (!configured) {
+                def keystorePath = "${System.getProperty('user.home')}/.android/debug.keystore"
+                if (file(keystorePath).exists()) {
+                    storeFile file(keystorePath)
+                    storePassword 'android'
+                    keyAlias 'androiddebugkey'
+                    keyPassword 'android'
+                    println 'WARNING: signing release APK with debug keystore (set keystore.properties or ANDROID_KEYSTORE_* for production)'
+                }
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
+        }
+    }
+    splits {
+        abi {
+            enable enableAbiSplits
+            reset()
+            include 'arm64-v8a', 'armeabi-v7a', 'x86_64'
+            universalApk true
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    testImplementation 'org.json:json:20240303'
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    implementation 'androidx.security:security-crypto:1.0.0'
+    implementation 'androidx.work:work-runtime:2.10.0'
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

@@ -19,6 +19,8 @@
 | `toast.fromError(err, fallbackKey?)` | error | `catch` с `ApiError` — через `formatApiError` (для `CONFLICT` и др. общих кодов — текст из `error.message` API) |
 | `toast(msg, type?, durationMs?)` | любой | Обратная совместимость |
 
+`type` — только `'success' | 'error' | 'info' | 'warning'` (не `'danger'`). В Android UI — тот же API (`android/ui/src/lib/toast.ts`).
+
 Длительность по умолчанию: success/info — 3,2 с; error/warning — 4,5 с.
 
 ---

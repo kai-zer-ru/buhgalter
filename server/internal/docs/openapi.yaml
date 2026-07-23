@@ -9,14 +9,16 @@ info:
     Схема: `ErrorResponse` → `error.field`.
 
     **Серверный кеш (in-memory):** успешные ответы `GET` кешируются в процессе сервера (справочники — 5 мин,
-    остальное — 1 мин); при любой мутации кеш пользователя сбрасывается. Веб-клиент ответы не хранит.
+    остальное — 1 мин); при любой мутации кеш пользователя сбрасывается.
+    **Клиент (web / Android):** SWR ref-cache в `localStorage` для `GET /api/v1/*` (кроме health, export, preview, version, `GET /credits/{id}`).
     Подробнее — [ui-api-cache.md](../ui-api-cache.md).
 
     **Счета (UI):** на `/accounts` меню «⋯» вызывает inline-редактирование (`PUT /accounts/{id}`),
     `POST /accounts/{id}/primary`, `POST /accounts/{id}/archive`, `DELETE /accounts/{id}`.
     На `/accounts/{id}` — та же форма редактирования в шапке. Поля: название, банк, начальный баланс.
+    В форме «Начальный баланс» — значение `initial_balance`, не текущий `balance_display` (см. [data-model.md](../data-model.md)).
     Подробнее — [ui-row-actions.md](../ui-row-actions.md).
-  version: 1.3.2
+  version: 1.4.0
 servers:
   - url: /api/v1
 paths:
@@ -25,6 +27,7 @@ paths:
       summary: Проверка состояния сервера
       description: |
         Публичный healthcheck без авторизации. Минимальный ответ для Docker и балансировщиков.
+        Опционально `external_url` — из `system_settings` (для подписи домена в Android LAN discovery).
         Расширенная диагностика — `GET /admin/diagnostics` (только admin).
       responses:
         '200':
@@ -242,6 +245,32 @@ paths:
           description: Ошибка валидации (пароли не совпадают и т.д.)
         '403':
           description: Регистрация отключена
+  /auth/request-password-reset:
+    post:
+      summary: Запросить сброс пароля
+      description: |
+        Публичный endpoint (без сессии). При существующем логине создаётся запись в
+        `password_reset_requests` и уходит уведомление администраторам (`password_reset`).
+        При неизвестном логине ответ тот же — без перечисления учёток.
+        Rate limit: 5 запросов/мин с IP (`Retry-After: 60` при `429`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [login]
+              properties:
+                login:
+                  type: string
+                  description: Логин пользователя
+      responses:
+        '204':
+          description: Запрос принят (логин существует или нет — одинаковый ответ)
+        '400':
+          description: Пустой login или невалидный JSON (`VALIDATION_ERROR`)
+        '429':
+          description: Превышен лимит запросов с IP (`RATE_LIMITED`)
   /auth/verify:
     get:
       summary: Проверка токена
@@ -680,6 +709,89 @@ paths:
           description: Недопустимый статус или переход
         '404':
           description: Пользователь не найден
+  /admin/users/{id}/password:
+    put:
+      summary: Сбросить пароль пользователя
+      description: |
+        Только администратор. Задаёт новый пароль; сессии целевого пользователя
+        инвалидируются; ожидающие `password_reset_requests` для пользователя снимаются.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: ID пользователя
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - new_password
+                - new_password_confirm
+              properties:
+                new_password:
+                  type: string
+                  minLength: 8
+                  description: Минимум 8 символов, хотя бы одна буква и одна цифра, не совпадает с login
+                new_password_confirm:
+                  type: string
+                  minLength: 8
+                  description: Должен совпадать с new_password
+      responses:
+        '204':
+          description: Пароль обновлён
+        '400':
+          description: |
+            Ошибка валидации (`VALIDATION_ERROR`): `PASSWORDS_MISMATCH`,
+            `PASSWORD_TOO_SHORT`, `PASSWORD_TOO_WEAK`
+        '404':
+          description: Пользователь не найден
+  /admin/password-reset-requests:
+    get:
+      summary: Ожидающие запросы сброса пароля
+      description: |
+        Только администратор. Список неdismissed записей `password_reset_requests`
+        (для баннера и админки пользователей).
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Список запросов
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PasswordResetRequest'
+        '401':
+          description: Не авторизован
+        '403':
+          description: Не администратор
+  /admin/password-reset-requests/{id}/ack:
+    post:
+      summary: Скрыть запрос сброса пароля из очереди
+      description: |
+        Только администратор. Помечает запрос dismissed (не меняет пароль пользователя).
+        Сам сброс — `PUT /admin/users/{id}/password`.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: ID записи `password_reset_requests`
+      responses:
+        '204':
+          description: Запрос скрыт
+        '404':
+          description: Запрос не найден
   /admin/diagnostics:
     get:
       summary: Диагностика системы
@@ -811,7 +923,7 @@ paths:
       description: |
         В ответе — актуальный баланс. Сервер кеширует ответ in-memory (TTL 1 мин); сбрасывается при мутациях.
 
-        На странице `/accounts` карточки: меню «⋯» — inline-редактирование (название, банк, начальный баланс),
+        На странице `/accounts` карточки: меню «⋯» — inline-редактирование (название, банк, начальный баланс из `initial_balance`, не текущий `balance_display`),
         основной, архив, удаление (см. `PUT`, `POST .../primary`, `POST .../archive`, `DELETE` для `{id}`).
       security:
         - sessionCookie: []
@@ -863,7 +975,9 @@ paths:
       summary: Обновить счёт
       description: |
         Имя, банк (для `type=bank` / `credit_card`), лимит и счёт для переводов (для `credit_card`),
-        начальный баланс. В UI — inline-форма на `/accounts` или форма на `/accounts/{id}`.
+        начальный баланс (`initial_balance` — стартовая сумма, не текущий остаток).
+        После сохранения `current_balance` пересчитывается от нового `initial_balance` и операций.
+        В UI — inline-форма на `/accounts` или форма на `/accounts/{id}`; поле «Начальный баланс» заполняется из `initial_balance` ответа GET, не из `balance_display`.
       security:
         - sessionCookie: []
       parameters:
@@ -993,7 +1107,9 @@ paths:
   /accounts/{id}/primary:
     post:
       summary: Назначить основной счёт
-      description: Снимает флаг с прежнего основного среди активных счетов. Архивный счёт назначить нельзя.
+      description: |
+        Снимает флаг с прежнего основного среди активных счетов.
+        Основным может быть только `cash` или `bank` (не кредитная карта). Архивный счёт назначить нельзя.
       security:
         - sessionCookie: []
       parameters:
@@ -1006,7 +1122,7 @@ paths:
         '200':
           description: "Счёт с `is_primary: true`"
         '400':
-          description: Архивный счёт
+          description: Архивный счёт или кредитная карта (`ERR_ACCOUNT_PRIMARY_ARCHIVED` / `ERR_ACCOUNT_PRIMARY_CREDIT_CARD`)
   /accounts/summary:
     get:
       summary: Сводка по активным счетам
@@ -1082,6 +1198,62 @@ paths:
                 latest_version: 1.2.2
                 update_available: true
                 release_url: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.2.2
+  /ui/meta:
+    get:
+      summary: Агрегированные справочники для старта UI
+      description: |
+        Один запрос вместо нескольких: активные/доступные счета (кратко), банки,
+        категории дохода и расхода, должники, активные и закрытые кредиты.
+        Используется веб- и Android-клиентами для прогрева кеша справочников.
+        Сервер кеширует ответ in-memory (TTL как у прочих GET пользователя).
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Справочники
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UIMetaResponse'
+        '401':
+          description: Не авторизован
+  /ui/i18n/{lang}:
+    get:
+      summary: Каталог строк UI для Android
+      description: |
+        Плоский JSON-каталог UI-строк (`ru` / `en`) из `server/ui_locales/` (копия `android/ui/src/lib/i18n/`).
+        Android-клиент запрашивает endpoint, когда версия APK **старше** `current_version` сервера
+        (`GET /version/check`), и мержит ответ поверх bundled `svelte-i18n`.
+        Источник каталогов синхронизируется через `make copy-ui-i18n` / `ui-i18n-check`.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: lang
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [ru, en]
+          description: Код языка UI
+      responses:
+        '200':
+          description: Каталог строк
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UIi18nCatalog'
+              example:
+                version: 1.5.0
+                lang: ru
+                messages:
+                  app.title: Бухгалтер
+                  nav.home: Главная
+        '400':
+          description: Неизвестный язык (`ERR_LANGUAGE`)
+        '401':
+          description: Не авторизован
   /stats/summary:
     get:
       summary: Сводка статистики
@@ -1734,7 +1906,7 @@ paths:
         - для consumer-кредита и рассрочки (`credit_kind=consumer`) опционально `first_payment_today=true`:
           первый платёж в дату выдачи, далее с шагом `payment_interval`; для ипотеки игнорируется;
         - опциональный `monthly_payment` переопределяет расчётный платёж; override не применяется только при точном
-          совпадении с расчётом или при вводе целых рублей, совпадающих с усечённым расчётом;
+          совпадении с расчётом (целые рубли, отличающиеся от расчёта с копейками — это override);
         - слишком низкий ручной платёж (не покрывает проценты) или слишком высокий (не укладывается в срок)
           → **400** `VALIDATION_ERROR`, ключ `ERR_CREDIT_INVALID_PAYMENT`, поле `error.field=monthly_payment`;
         - для `manual` — только переданные `seed_payments` (ровно `term` строк; сумма подгоняется последним платежом).
@@ -2053,6 +2225,53 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/BudgetSummaryResponse'
+  /budgets/spent-preview:
+    get:
+      summary: Факт расходов по области без существующего бюджета
+      description: |
+        Считает spent теми же фильтрами, что и сводка бюджетов (`BudgetSpent`),
+        для выбранных `scope` / категории / подкатегории / счёта и месяца.
+        Используется в форме создания и редактирования бюджета.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: month
+          in: query
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}$'
+          description: Календарный месяц (YYYY-MM); без параметра — текущий месяц пользователя
+        - name: scope
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [category, subcategory, all_expense]
+        - name: category_id
+          in: query
+          schema:
+            type: string
+          description: Обязателен при scope=category
+        - name: subcategory_id
+          in: query
+          schema:
+            type: string
+          description: Обязателен при scope=subcategory
+        - name: account_id
+          in: query
+          schema:
+            type: string
+          description: Опционально сужает факт до операций по счёту
+      responses:
+        '200':
+          description: Потраченная сумма за месяц
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BudgetSpentPreview'
+        '400':
+          description: Некорректный scope / категория / подкатегория / счёт / месяц
   /budgets/copy-from-previous:
     post:
       summary: Скопировать все бюджеты с прошлого месяца
@@ -2723,6 +2942,11 @@ components:
           type: string
           enum: [connected, error]
           description: Результат ping SQLite
+        external_url:
+          type: string
+          description: |
+            Внешний URL из `system_settings.external_url` (админка), если задан.
+            Для LAN discovery в Android-клиенте; не влияет на проверку доступа.
     VersionCheckResponse:
       type: object
       required: [current_version, update_available]
@@ -2740,6 +2964,111 @@ components:
           type: string
           format: uri
           description: Ссылка на страницу релиза на GitHub
+    UIi18nCatalog:
+      type: object
+      required: [version, lang, messages]
+      properties:
+        version:
+          type: string
+          description: Версия сервера (`-ldflags "-X main.version=…"`)
+        lang:
+          type: string
+          enum: [ru, en]
+          description: Код языка
+        messages:
+          type: object
+          additionalProperties:
+            type: string
+          description: Плоский каталог ключ → строка (как в android/ui i18n JSON)
+    UIMetaAccountRef:
+      type: object
+      required: [id, name, type, status]
+      description: Краткая ссылка на счёт в `GET /ui/meta` (без баланса и настроек)
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          enum: [cash, bank, credit_card]
+        status:
+          type: string
+          enum: [active, archived, deleted]
+        bank_id:
+          type: string
+          nullable: true
+    Bank:
+      type: object
+      required: [id, name, icon_path, sort_order]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        bic:
+          type: string
+          nullable: true
+        icon_path:
+          type: string
+        sort_order:
+          type: integer
+    UIMetaResponse:
+      type: object
+      required:
+        - accounts
+        - banks
+        - expense_categories
+        - income_categories
+        - debtors
+        - active_credits
+        - closed_credits
+      description: Ответ `GET /ui/meta`
+      properties:
+        accounts:
+          type: array
+          items:
+            $ref: '#/components/schemas/UIMetaAccountRef'
+        banks:
+          type: array
+          items:
+            $ref: '#/components/schemas/Bank'
+        expense_categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/Category'
+        income_categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/Category'
+        debtors:
+          type: array
+          items:
+            $ref: '#/components/schemas/Debtor'
+        active_credits:
+          type: array
+          items:
+            $ref: '#/components/schemas/Credit'
+        closed_credits:
+          type: array
+          items:
+            $ref: '#/components/schemas/Credit'
+    PasswordResetRequest:
+      type: object
+      required: [id, user_id, login, display_name, created_at]
+      description: Ожидающий запрос сброса пароля (`GET /admin/password-reset-requests`)
+      properties:
+        id:
+          type: string
+        user_id:
+          type: string
+        login:
+          type: string
+        display_name:
+          type: string
+        created_at:
+          type: string
+          description: RFC3339 UTC
     ApiError:
       type: object
       required: [error]
@@ -2795,6 +3124,10 @@ components:
           type: string
         theme:
           type: string
+          enum: [light, dark, system]
+          description: |
+            Тема оформления UI: light, dark или system (как на устройстве / в ОС).
+            По умолчанию у новых пользователей — system.
     AdminUser:
       type: object
       required: [id, login, display_name, is_admin, status, created_at]
@@ -3439,11 +3772,13 @@ components:
           nullable: true
         initial_balance:
           type: integer
-          description: Копейки
+          description: Начальный остаток, копейки; фиксированная сумма при создании/редактировании счёта (не текущий баланс)
         balance:
           type: integer
+          description: Текущий баланс, копейки (`accounts.current_balance`)
         balance_display:
           type: string
+          description: Текущий баланс для отображения; в форме редактирования счёта не подставлять вместо `initial_balance`
         credit_limit:
           type: integer
           nullable: true
@@ -3481,6 +3816,7 @@ components:
           enum: [active, archived, deleted]
         is_primary:
           type: boolean
+          description: Основной счёт; только `cash`/`bank` (кредитная карта не может быть основной)
         created_at:
           type: string
         updated_at:
@@ -3532,6 +3868,7 @@ components:
           type: string
         initial_balance:
           type: string
+          description: Начальный остаток, рубли (`"1000.00"`); не путать с текущим `balance_display`
     AccountBalanceSummary:
       type: object
       properties:
@@ -3558,6 +3895,9 @@ components:
           type: string
         has_future_this_month:
           type: boolean
+        is_primary:
+          type: boolean
+          description: Основной счёт (`cash`/`bank`); кредитные карты всегда `false`
         credit_limit:
           type: integer
           nullable: true
@@ -4193,6 +4533,16 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/BudgetSummaryItem'
+    BudgetSpentPreview:
+      type: object
+      required: [spent, spent_display]
+      properties:
+        spent:
+          type: integer
+          description: Факт в копейках
+        spent_display:
+          type: string
+          description: Факт в рублях для отображения
     BudgetUpsertRequest:
       type: object
       required: [name, scope, amount]

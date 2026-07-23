@@ -13,6 +13,8 @@
 		path: string;
 		titleKey: string;
 		href: BackLinkHref;
+		/** Page renders its own SectionHeader (e.g. with create CTA). */
+		ownsHeader?: boolean;
 	};
 
 	const pages: SettingsPage[] = [
@@ -33,7 +35,8 @@
 		{
 			path: '/settings/recurring-operations',
 			titleKey: 'nav.recurring',
-			href: '/settings/recurring-operations'
+			href: '/settings/recurring-operations',
+			ownsHeader: true
 		}
 	];
 
@@ -64,6 +67,8 @@
 
 <div class="space-y-6">
 	<BackLink items={breadcrumbItems} />
-	<h1 class="text-2xl font-semibold">{$_(current.titleKey)}</h1>
+	{#if !current.ownsHeader}
+		<h1 class="text-2xl font-semibold">{$_(current.titleKey)}</h1>
+	{/if}
 	{@render children()}
 </div>

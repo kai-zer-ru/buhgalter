@@ -301,6 +301,7 @@ func TestGenerateScheduleMortgageUserSetPaymentSameAsCalculated(t *testing.T) {
 		t.Fatalf("user-set same as calculated: %v", errUser)
 	}
 
+	// Whole-ruble truncation is a real override (same rule as installment), not "same as calculated".
 	rounded := (monthly / 100) * 100
 	result, err := PreviewSchedule(PreviewInput{
 		Principal: principal, TermMonths: term, InterestRate: rate,
@@ -313,8 +314,14 @@ func TestGenerateScheduleMortgageUserSetPaymentSameAsCalculated(t *testing.T) {
 	if len(result.Schedule) != term {
 		t.Fatalf("preview len %d, want %d", len(result.Schedule), term)
 	}
-	if result.EffectiveMonthly != monthly {
-		t.Fatalf("resolved monthly %d, want calculated %d", result.EffectiveMonthly, monthly)
+	if result.CalculatedMonthly != monthly {
+		t.Fatalf("calculated %d, want %d", result.CalculatedMonthly, monthly)
+	}
+	if !result.UserSetPayment {
+		t.Fatal("expected user-set payment for whole-ruble truncation")
+	}
+	if result.EffectiveMonthly != rounded {
+		t.Fatalf("effective monthly %d, want truncated %d", result.EffectiveMonthly, rounded)
 	}
 }
 
@@ -414,11 +421,22 @@ func TestResolveScheduleMonthlyWholeRubleOverride(t *testing.T) {
 	}
 }
 
-func TestResolveScheduleMonthlyTruncatedRubles(t *testing.T) {
-	calculated := int64(5_881_347)
-	rounded := (calculated / 100) * 100
-	if !resolvesToCalculatedPayment(calculated, rounded) {
-		t.Fatal("whole-ruble truncation should match calculated")
+func TestResolveScheduleMonthlyTruncatedRublesIsOverride(t *testing.T) {
+	// Installment: 1943.00 / 6 → 323.83; user sets 323.00 intentionally.
+	calculated := int64(32_383)
+	truncated := (calculated / 100) * 100 // 323.00
+	if resolvesToCalculatedPayment(calculated, truncated) {
+		t.Fatal("whole-ruble truncation must not erase user payment override")
+	}
+	user := truncated
+	monthly, userSet := resolveScheduleMonthly(
+		194_300, 6, 0, CreditKindConsumer, IntervalWeek, time.Time{}, &user,
+	)
+	if !userSet {
+		t.Fatal("expected user-set payment for 323.00 vs 323.83")
+	}
+	if monthly != truncated {
+		t.Fatalf("effective monthly %d, want %d", monthly, truncated)
 	}
 }
 
@@ -444,5 +462,38 @@ func TestPreviewScheduleUserSetMonthly(t *testing.T) {
 	}
 	if !result.UserSetPayment {
 		t.Fatal("expected user-set payment")
+	}
+}
+
+func TestPreviewScheduleTruncatedWholeRublesOverride(t *testing.T) {
+	issue, _ := timeutil.ParseUTC("2026-07-24 00:00:00")
+	// 1943.00 / 6 = 323.83 calculated; user sets 323.00
+	custom := int64(32_300)
+	result, err := PreviewSchedule(PreviewInput{
+		Principal:       194_300,
+		IssueDate:       issue,
+		TermMonths:      6,
+		InterestRate:    0,
+		PaymentInterval: IntervalWeek,
+		MonthlyPayment:  &custom,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.CalculatedMonthly != 32_383 {
+		t.Fatalf("calculated %d, want 32383", result.CalculatedMonthly)
+	}
+	if !result.UserSetPayment {
+		t.Fatal("expected user-set payment")
+	}
+	if result.EffectiveMonthly != custom {
+		t.Fatalf("effective %d, want %d", result.EffectiveMonthly, custom)
+	}
+	if len(result.Schedule) < 2 {
+		t.Fatalf("schedule len %d", len(result.Schedule))
+	}
+	// First payments use override; last is adjusted to sum to principal.
+	if result.Schedule[0].Amount != custom {
+		t.Fatalf("first amount %d, want %d", result.Schedule[0].Amount, custom)
 	}
 }

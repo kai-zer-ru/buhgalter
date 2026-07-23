@@ -19,8 +19,11 @@
 	} from '$lib/api/client';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
 	import { dateOnlyPicker } from '$lib/datetime-picker-standards';
+	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
+	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
 	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
+	import SectionHeader from '$lib/components/SectionHeader.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import { confirm } from '$lib/confirm';
 	import {
@@ -31,6 +34,7 @@
 	} from '$lib/dates';
 	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
 	import { formatMoneyForInput, toAPIAmount } from '$lib/money';
+	import { reportPageLoadFailure } from '$lib/page-load';
 	import { toast } from '$lib/toast';
 	import {
 		accountSelectOptions,
@@ -45,6 +49,7 @@
 	let categories = $state<Category[]>([]);
 	let subcategories = $state<Subcategory[]>([]);
 	let loading = $state(true);
+	let loadError = $state<string | null>(null);
 	let saving = $state(false);
 	let editId = $state<string | null>(null);
 	let formOpen = $state(false);
@@ -112,8 +117,10 @@
 			if (!categoryId) categoryId = firstCategoryByType(type)?.id ?? '';
 			await loadSubcategories();
 			await prefillFromQueryTransaction();
+			loadError = null;
 		} catch (err) {
-			toast.fromError(err);
+			const msg = reportPageLoadFailure(err, { hasData: items.length > 0 });
+			if (msg) loadError = msg;
 		} finally {
 			loading = false;
 		}
@@ -480,111 +487,113 @@
 {/snippet}
 
 <div class="space-y-5">
-	{#if loading}
-		<p style:color="var(--text-muted)">{$_('common.loading')}</p>
-	{:else if items.length === 0}
-		<p style:color="var(--text-muted)">{$_('recurring.empty')}</p>
-	{:else}
-		<div class="card md:overflow-x-auto">
-			<div class="hidden md:block">
-				<table class="w-full text-left text-sm">
-					<thead>
-						<tr style:color="var(--text-muted)">
-							<th class="p-3">{$_('transactions.col.description')}</th>
-							<th class="p-3">{$_('recurring.period')}</th>
-							<th class="p-3">{$_('transactions.field.account')}</th>
-							<th class="p-3">{$_('recurring.nextRun')}</th>
-							<th class="p-3"></th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each items as item (item.id)}
-							<tr class="border-t" style:border-color="var(--border)">
-								<td class="p-3">
-									<div class="font-medium">{item.description || item.category_name}</div>
-									<div class="text-xs" style:color="var(--text-muted)">
-										{item.category_name}
-										{#if item.subcategory_name}
-											• {item.subcategory_name}
-										{/if}
-										• <MoneyDisplay value={item.amount_display} class="" />
-									</div>
-								</td>
-								<td class="p-3">{periodLabel(item.period)}</td>
-								<td class="p-3">{item.account_name}</td>
-								<td class="p-3">{formatAPIOperationDateTimeForDisplay(item.next_run_at, tz)}</td>
-								<td class="p-3 text-right">
-									<RowActionsMenu actions={rowActions(item)} />
-								</td>
-							</tr>
-							{#if editId === item.id}
-								<tr class="border-t" style:border-color="var(--border)">
-									<td colspan="5" class="p-3">
-										{@render operationForm('edit')}
-									</td>
-								</tr>
-							{/if}
-						{/each}
-					</tbody>
-				</table>
-			</div>
-
-			<div class="space-y-3 p-3 md:hidden">
-				{#each items as item (item.id)}
-					<article class="rounded-xl border p-4" style:border-color="var(--border)">
-						<div class="flex items-start justify-between gap-3">
-							<div class="min-w-0">
-								<p class="font-medium">{item.description || item.category_name}</p>
-								<p class="mt-1 text-xs" style:color="var(--text-muted)">
-									{item.category_name}
-									{#if item.subcategory_name}
-										• {item.subcategory_name}
-									{/if}
-								</p>
-							</div>
-							<p class="shrink-0 text-sm font-semibold tabular-nums">
-								<MoneyDisplay value={item.amount_display} class="" />
-							</p>
-						</div>
-						<dl class="mt-3 grid gap-2 text-sm">
-							<div class="flex justify-between gap-2">
-								<dt style:color="var(--text-muted)">{$_('recurring.period')}</dt>
-								<dd>{periodLabel(item.period)}</dd>
-							</div>
-							<div class="flex justify-between gap-2">
-								<dt style:color="var(--text-muted)">{$_('transactions.field.account')}</dt>
-								<dd class="text-right">{item.account_name}</dd>
-							</div>
-							<div class="flex justify-between gap-2">
-								<dt style:color="var(--text-muted)">{$_('recurring.nextRun')}</dt>
-								<dd class="text-right">
-									{formatAPIOperationDateTimeForDisplay(item.next_run_at, tz)}
-								</dd>
-							</div>
-						</dl>
-						<div class="mt-3 flex justify-end">
-							<RowActionsMenu actions={rowActions(item)} />
-						</div>
-					</article>
-					{#if editId === item.id}
-						<div class="rounded-xl border p-4" style:border-color="var(--border)">
-							{@render operationForm('edit-mobile')}
-						</div>
-					{/if}
-				{/each}
-			</div>
-		</div>
-	{/if}
-
-	<div class="pt-1">
-		<button type="button" class="btn-primary" onclick={toggleForm}>
-			{formOpen ? $_('recurring.hideForm') : $_('recurring.add')}
-		</button>
-	</div>
+	<SectionHeader title={$_('nav.recurring')}>
+		{#snippet actions()}
+			<button type="button" class="btn-primary shrink-0" onclick={toggleForm}>
+				{formOpen && !editId ? $_('common.cancel') : $_('recurring.add')}
+			</button>
+		{/snippet}
+	</SectionHeader>
 
 	{#if formOpen && !editId}
 		<div class="card">
 			{@render operationForm('create')}
 		</div>
 	{/if}
+
+	<PageLoadGate {loading} error={loadError} onretry={() => void loadAll()} inline>
+		{#if items.length === 0 && !formOpen}
+			<EmptyStateCard message={$_('recurring.empty')} />
+		{:else if items.length > 0}
+			<div class="card md:overflow-x-auto">
+				<div class="hidden md:block">
+					<table class="w-full text-left text-sm">
+						<thead>
+							<tr style:color="var(--text-muted)">
+								<th class="p-3">{$_('transactions.col.description')}</th>
+								<th class="p-3">{$_('recurring.period')}</th>
+								<th class="p-3">{$_('transactions.field.account')}</th>
+								<th class="p-3">{$_('recurring.nextRun')}</th>
+								<th class="p-3"></th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each items as item (item.id)}
+								<tr class="border-t" style:border-color="var(--border)">
+									<td class="p-3">
+										<div class="font-medium">{item.description || item.category_name}</div>
+										<div class="text-xs" style:color="var(--text-muted)">
+											{item.category_name}
+											{#if item.subcategory_name}
+												• {item.subcategory_name}
+											{/if}
+											• <MoneyDisplay value={item.amount_display} class="" />
+										</div>
+									</td>
+									<td class="p-3">{periodLabel(item.period)}</td>
+									<td class="p-3">{item.account_name}</td>
+									<td class="p-3">{formatAPIOperationDateTimeForDisplay(item.next_run_at, tz)}</td>
+									<td class="p-3 text-right">
+										<RowActionsMenu actions={rowActions(item)} />
+									</td>
+								</tr>
+								{#if editId === item.id}
+									<tr class="border-t" style:border-color="var(--border)">
+										<td colspan="5" class="p-3">
+											{@render operationForm('edit')}
+										</td>
+									</tr>
+								{/if}
+							{/each}
+						</tbody>
+					</table>
+				</div>
+
+				<div class="space-y-3 p-3 md:hidden">
+					{#each items as item (item.id)}
+						<article class="rounded-xl border p-4" style:border-color="var(--border)">
+							<div class="flex items-start justify-between gap-3">
+								<div class="min-w-0">
+									<p class="font-medium">{item.description || item.category_name}</p>
+									<p class="mt-1 text-xs" style:color="var(--text-muted)">
+										{item.category_name}
+										{#if item.subcategory_name}
+											• {item.subcategory_name}
+										{/if}
+									</p>
+								</div>
+								<p class="shrink-0 text-sm font-semibold tabular-nums">
+									<MoneyDisplay value={item.amount_display} class="" />
+								</p>
+							</div>
+							<dl class="mt-3 grid gap-2 text-sm">
+								<div class="flex justify-between gap-2">
+									<dt style:color="var(--text-muted)">{$_('recurring.period')}</dt>
+									<dd>{periodLabel(item.period)}</dd>
+								</div>
+								<div class="flex justify-between gap-2">
+									<dt style:color="var(--text-muted)">{$_('transactions.field.account')}</dt>
+									<dd class="text-right">{item.account_name}</dd>
+								</div>
+								<div class="flex justify-between gap-2">
+									<dt style:color="var(--text-muted)">{$_('recurring.nextRun')}</dt>
+									<dd class="text-right">
+										{formatAPIOperationDateTimeForDisplay(item.next_run_at, tz)}
+									</dd>
+								</div>
+							</dl>
+							<div class="mt-3 flex justify-end">
+								<RowActionsMenu actions={rowActions(item)} />
+							</div>
+						</article>
+						{#if editId === item.id}
+							<div class="rounded-xl border p-4" style:border-color="var(--border)">
+								{@render operationForm('edit-mobile')}
+							</div>
+						{/if}
+					{/each}
+				</div>
+			</div>
+		{/if}
+	</PageLoadGate>
 </div>

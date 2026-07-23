@@ -121,9 +121,14 @@ WHERE id = ? AND user_id = ?;
 -- name: FirstActiveAccountID :one
 SELECT id
 FROM accounts
-WHERE user_id = ? AND status = 'active'
+WHERE user_id = ? AND status = 'active' AND type IN ('cash', 'bank')
 ORDER BY created_at, name
 LIMIT 1;
+
+-- name: CountActivePrimaryEligibleAccountsByUser :one
+SELECT COUNT(*) AS count
+FROM accounts
+WHERE user_id = ? AND status = 'active' AND type IN ('cash', 'bank');
 
 -- name: GetActiveAccountByName :one
 SELECT

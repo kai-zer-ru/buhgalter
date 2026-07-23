@@ -169,6 +169,9 @@ func GetByID(ctx context.Context, db *sql.DB, userID, id string) (Account, error
 }
 
 var ErrNotFound = errors.New("account not found")
+var ErrArchived = errors.New("account is archived")
+var ErrCreditCardPrimary = errors.New("credit card cannot be primary")
+var ErrCreditCardArchiveNotFullyPaid = errors.New("credit card must be fully paid before archive")
 
 type CreateInput struct {
 	Name             string
@@ -191,13 +194,15 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Acc
 	id := uuid.NewString()
 	now := time.Now().UTC().Format(time.RFC3339)
 	q := queries(db)
-	count, err := q.CountActiveAccountsByUser(ctx, userID)
-	if err != nil {
-		return Account{}, err
-	}
 	isPrimary := int64(0)
-	if count == 0 {
-		isPrimary = 1
+	if !IsCreditCard(in.Type) {
+		count, err := q.CountActivePrimaryEligibleAccountsByUser(ctx, userID)
+		if err != nil {
+			return Account{}, err
+		}
+		if count == 0 {
+			isPrimary = 1
+		}
 	}
 	if err := q.InsertAccount(ctx, sqlcdb.InsertAccountParams{
 		ID:               id,
@@ -309,9 +314,6 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in UpdateInput) 
 	return GetByID(ctx, db, userID, id)
 }
 
-var ErrArchived = errors.New("account is archived")
-var ErrCreditCardArchiveNotFullyPaid = errors.New("credit card must be fully paid before archive")
-
 // RequiresBalanceTransfer reports whether deleting the account must move remaining funds first.
 func RequiresBalanceTransfer(acc Account) bool {
 	return !IsCreditCard(acc.Type) && acc.Balance > 0
@@ -394,6 +396,9 @@ func SetPrimary(ctx context.Context, db *sql.DB, userID, id string) (Account, er
 	}
 	if acc.Status != "active" {
 		return Account{}, ErrArchived
+	}
+	if IsCreditCard(acc.Type) {
+		return Account{}, ErrCreditCardPrimary
 	}
 
 	tx, err := db.BeginTx(ctx, nil)

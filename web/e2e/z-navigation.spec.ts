@@ -23,6 +23,38 @@ test('mobile menu drill-down opens settings submenu', async ({ page }) => {
 	).toBeVisible();
 });
 
+test('desktop nav starts with home and opens dashboard', async ({ page }) => {
+	await page.setViewportSize({ width: 1280, height: 720 });
+	await page.goto('/accounts');
+	await waitAppReady(page);
+
+	const desktopNav = page.locator('header nav.hidden');
+	const firstLink = desktopNav.getByRole('link').first();
+	await expect(firstLink).toHaveText('Главная');
+	await firstLink.click();
+	await waitAppReady(page);
+
+	await expect(page).toHaveURL('/');
+	await expect(firstLink).toHaveClass(/nav-link-active/);
+});
+
+test('mobile menu starts with home and opens dashboard', async ({ page }) => {
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.goto('/accounts');
+	await waitAppReady(page);
+
+	await page.getByRole('button', { name: 'Меню' }).click();
+	const panel = page.locator('.nav-mobile-panel');
+	await expect(panel).toBeVisible();
+
+	const firstItem = panel.getByRole('menuitem').first();
+	await expect(firstItem).toHaveText('Главная');
+	await firstItem.click();
+	await waitAppReady(page);
+
+	await expect(page).toHaveURL('/');
+});
+
 test('mobile menu navigates to stats', async ({ page }) => {
 	await page.setViewportSize({ width: 390, height: 844 });
 	await page.goto('/');

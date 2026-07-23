@@ -24,6 +24,7 @@ type AccountBalance struct {
 	ForecastBalance           int64   `json:"forecast_balance"`
 	ForecastDisplay           string  `json:"forecast_display"`
 	HasFutureThisMonth        bool    `json:"has_future_this_month"`
+	IsPrimary                 bool    `json:"is_primary"`
 	CreditLimit               *int64  `json:"credit_limit,omitempty"`
 	CreditLimitDisplay        *string `json:"credit_limit_display,omitempty"`
 	AutoTopupEnabled          bool    `json:"auto_topup_enabled"`
@@ -147,6 +148,7 @@ func accountBalanceFromRow(
 	id, name, accType string,
 	bankIcon *string,
 	balance int64,
+	isPrimary int64,
 	creditLimit *int64,
 	autoTopupEnabled int64,
 	autoTopupThreshold, autoTopupTarget *int64,
@@ -159,6 +161,7 @@ func accountBalanceFromRow(
 		BankIcon:                 bankIcon,
 		Balance:                  balance,
 		BalanceDisplay:           money.FormatRubles(balance),
+		IsPrimary:                isPrimary != 0,
 		CreditLimit:              creditLimit,
 		AutoTopupEnabled:         autoTopupEnabled != 0,
 		AutoTopupThreshold:       autoTopupThreshold,
@@ -199,7 +202,7 @@ func EnrichAccountBalance(ctx context.Context, db *sql.DB, userID, accountID, ac
 		return AccountBalance{}, err
 	}
 	ab := accountBalanceFromRow(
-		accountID, accountName, accountType, bankIcon, bal, creditLimit,
+		accountID, accountName, accountType, bankIcon, bal, accRow.IsPrimary, creditLimit,
 		accRow.AutoTopupEnabled, accRow.AutoTopupThreshold, accRow.AutoTopupTarget, accRow.AutoTopupSourceAccountID,
 	)
 	ab.ForecastBalance = fc.Balance
@@ -218,7 +221,7 @@ func AccountsSummaryForUser(ctx context.Context, db *sql.DB, userID string) (Acc
 	for _, row := range rows {
 		balances[row.ID] = row.CurrentBalance
 		ab := accountBalanceFromRow(
-			row.ID, row.Name, row.Type, row.BankIcon, row.CurrentBalance, row.CreditLimit,
+			row.ID, row.Name, row.Type, row.BankIcon, row.CurrentBalance, row.IsPrimary, row.CreditLimit,
 			row.AutoTopupEnabled, row.AutoTopupThreshold, row.AutoTopupTarget, row.AutoTopupSourceAccountID,
 		)
 		ab.ForecastBalance = row.CurrentBalance

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="new_expense"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher_foreground"
+        android:shortcutShortLabel="@string/shortcut_new_expense_short"
+        android:shortcutLongLabel="@string/shortcut_new_expense_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="ru.kai_zer.buhgalter"
+            android:targetClass="ru.kai_zer.buhgalter.MainActivity"
+            android:data="ru.kai_zer.buhgalter://transactions/new?type=expense" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="new_income"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher_foreground"
+        android:shortcutShortLabel="@string/shortcut_new_income_short"
+        android:shortcutLongLabel="@string/shortcut_new_income_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="ru.kai_zer.buhgalter"
+            android:targetClass="ru.kai_zer.buhgalter.MainActivity"
+            android:data="ru.kai_zer.buhgalter://transactions/new?type=income" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="new_transfer"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher_foreground"
+        android:shortcutShortLabel="@string/shortcut_new_transfer_short"
+        android:shortcutLongLabel="@string/shortcut_new_transfer_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="ru.kai_zer.buhgalter"
+            android:targetClass="ru.kai_zer.buhgalter.MainActivity"
+            android:data="ru.kai_zer.buhgalter://transfers/new" />
+    </shortcut>
+</shortcuts>

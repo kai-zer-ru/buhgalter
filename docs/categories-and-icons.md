@@ -163,6 +163,8 @@ URL в UI: `/icons/categories/{id}.svg` (`categoryIconUrl` в `web/src/lib/finan
 
 Дефолтные категории при регистрации: `server/internal/categoryseed/defaults.go` (без подкатегорий).
 
+Планируется: устойчивые **правила автокатегоризации** и **inbox неразнесённого** — [category-rules-inbox.md](../roadmap/category-rules-inbox.md). Не путать с разовым маппингом при файловом импорте.
+
 ## Файлы (шпаргалка)
 
 | Путь | Назначение |

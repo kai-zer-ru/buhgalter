@@ -12,11 +12,14 @@
 		type NotificationTemplate
 	} from '$lib/api/client';
 	import { user } from '$lib/stores/auth';
+	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
+	import { reportPageLoadFailure } from '$lib/page-load';
 	import { toast } from '$lib/toast';
 
 	let loading = $state(false);
+	let loadError = $state<string | null>(null);
 	let timezone = $state('Europe/Moscow');
 	let notificationsLoaded = $state(false);
 	let notificationSecretConfigured = $state(false);
@@ -150,16 +153,20 @@
 	}
 
 	onMount(() => {
-		void (async () => {
-			try {
-				const s = await getUserSettings();
-				timezone = s.timezone;
-				await loadNotifications();
-			} catch (err) {
-				toast.fromError(err);
-			}
-		})();
+		void reloadPage();
 	});
+
+	async function reloadPage() {
+		try {
+			const s = await getUserSettings();
+			timezone = s.timezone;
+			await loadNotifications();
+			loadError = null;
+		} catch (err) {
+			const msg = reportPageLoadFailure(err, { hasData: notificationsLoaded });
+			if (msg) loadError = msg;
+		}
+	}
 
 	async function loadNotifications() {
 		const data = await getNotificationSettings();
@@ -523,9 +530,11 @@
 	}
 </script>
 
-{#if !notificationsLoaded}
-	<div class="card">{$_('common.loading')}</div>
-{:else}
+<PageLoadGate
+	loading={!notificationsLoaded && !loadError}
+	error={loadError}
+	onretry={() => void reloadPage()}
+>
 	{#if !notificationSecretConfigured}
 		<div
 			class="card mb-4 space-y-3 border-2 p-5"
@@ -979,4 +988,4 @@
 			</div>
 		</form>
 	</div>
-{/if}
+</PageLoadGate>

@@ -52,7 +52,7 @@ test('credit form defaults auto-debit time to 08:00', async ({ page }) => {
 	await expect(modal.locator('input[type="time"]')).toHaveValue('08:00');
 });
 
-test('principal income toggle enabled when retroactive but payments in future', async ({
+test('principal income toggle enabled when schedule payments are in the future', async ({
 	page
 }) => {
 	const account = await createCashAccount(page);
@@ -62,7 +62,8 @@ test('principal income toggle enabled when retroactive but payments in future', 
 	await modal.getByRole('textbox', { name: 'Сумма кредита' }).fill('50000');
 	await selectLabeledCombobox(page, 'Счёт списания', { label: account.name });
 	await expect(modal.getByText(/Сумма:\s*\d/)).toBeVisible({ timeout: 15_000 });
-	await modal.getByRole('switch', { name: 'Уже платил по графику' }).click();
+	// «Уже платил по графику» показывается только при прошлых платежах в графике.
+	await expect(modal.getByRole('switch', { name: 'Уже платил по графику' })).toHaveCount(0);
 	const toggle = modal.getByRole('switch', { name: 'Учитывать доход в балансе' });
 	await expect(toggle).toBeEnabled();
 	await expect(

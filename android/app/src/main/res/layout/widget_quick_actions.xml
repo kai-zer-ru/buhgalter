@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_background"
+    android:gravity="center"
+    android:orientation="horizontal"
+    android:padding="8dp">
+
+    <Button
+        android:id="@+id/widget_action_expense"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_marginEnd="4dp"
+        android:layout_weight="1"
+        android:background="@drawable/widget_button"
+        android:text="@string/widget_action_expense"
+        android:textColor="@color/widget_button_text"
+        android:textSize="12sp" />
+
+    <Button
+        android:id="@+id/widget_action_income"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_marginHorizontal="4dp"
+        android:layout_weight="1"
+        android:background="@drawable/widget_button"
+        android:text="@string/widget_action_income"
+        android:textColor="@color/widget_button_text"
+        android:textSize="12sp" />
+
+    <Button
+        android:id="@+id/widget_action_transfer"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_marginStart="4dp"
+        android:layout_weight="1"
+        android:background="@drawable/widget_button"
+        android:text="@string/widget_action_transfer"
+        android:textColor="@color/widget_button_text"
+        android:textSize="12sp" />
+</LinearLayout>

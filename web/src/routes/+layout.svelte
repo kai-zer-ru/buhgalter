@@ -3,12 +3,14 @@
 	import { get } from 'svelte/store';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import type { Pathname } from '$app/types';
 	import { page } from '$app/stores';
 	import { _ } from 'svelte-i18n';
 	import { ApiError, getSetupStatus } from '$lib/api/client';
 	import { loadUser, logout, user, hasRecentSession, clearSessionHint } from '$lib/stores/auth';
 	import { isPublicAppRoute, sessionExpiredTick } from '$lib/auth/session-expired';
 	import { invalidateApiCache } from '$lib/api/cache';
+	import { clearRefCache, setRefCacheUserId } from '$lib/ref-cache';
 	import { registerServiceWorker } from '$lib/pwa';
 	import { initTheme, syncThemeFromUser } from '$lib/stores/theme';
 	import { setLocale } from '$lib/i18n';
@@ -62,6 +64,8 @@
 	$effect(() => {
 		if ($sessionExpiredTick === 0) return;
 		clearSessionHint();
+		clearRefCache();
+		setRefCacheUserId(null);
 		user.set(null);
 		invalidateApiCache();
 		if (ready && !bootError && !isPublicAppRoute(path)) {
@@ -85,6 +89,11 @@
 	};
 
 	const flatNavItems: NavItem[] = [
+		{
+			href: resolve('/'),
+			labelKey: 'nav.home',
+			isActive: (p) => p === '/'
+		},
 		{
 			href: resolve('/accounts'),
 			labelKey: 'nav.accounts',
@@ -450,7 +459,7 @@
 						</p>
 						{#each mobileNavView === 'settings' ? settingsNavItems : adminNavItems as item (item.path)}
 							<a
-								href={resolve(item.path)}
+								href={resolve(item.path as Pathname)}
 								class={navLinkClass(isDropdownItemActive(item), 'nav-mobile-link')}
 								aria-current={isDropdownItemActive(item) ? 'page' : undefined}
 								role="menuitem"

@@ -186,6 +186,57 @@ func TestAccountPrimary(t *testing.T) {
 	}
 }
 
+func TestAccountPrimaryRejectsCreditCard(t *testing.T) {
+	env := setupConfigured(t)
+	seedBanks(t, env)
+	env.login(t, "admin", "secret123")
+
+	cashBody, _ := json.Marshal(map[string]string{
+		"name": "Наличные", "type": "cash", "initial_balance": "0",
+	})
+	cashResp, err := env.authedRequest(http.MethodPost, "/api/v1/accounts", bytes.NewReader(cashBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cashResp.Body.Close()
+	if cashResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create cash status %d", cashResp.StatusCode)
+	}
+
+	ccBody, _ := json.Marshal(map[string]string{
+		"name":            "Карта",
+		"type":            "credit_card",
+		"bank_id":         "tinkoff",
+		"credit_limit":    "100000.00",
+		"initial_balance": "0",
+	})
+	ccResp, err := env.authedRequest(http.MethodPost, "/api/v1/accounts", bytes.NewReader(ccBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ccResp.Body.Close()
+	var cc struct {
+		ID        string `json:"id"`
+		IsPrimary bool   `json:"is_primary"`
+	}
+	_ = json.NewDecoder(ccResp.Body).Decode(&cc)
+	if ccResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create credit card status %d", ccResp.StatusCode)
+	}
+	if cc.IsPrimary {
+		t.Fatal("credit card must not become primary on create")
+	}
+
+	primResp, err := env.authedRequest(http.MethodPost, "/api/v1/accounts/"+cc.ID+"/primary", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer primResp.Body.Close()
+	if primResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("set primary on credit card status %d, want 400", primResp.StatusCode)
+	}
+}
+
 func TestArchiveAccountHiddenFromActiveList(t *testing.T) {
 	env := setupConfigured(t)
 	env.login(t, "admin", "secret123")

@@ -761,6 +761,7 @@ func previewData(triggerType, localeCode, timezone, currencyCode, channel, exter
 		"amount":        FormatAmountDisplay(1000000, currencyCode),
 		"due_date":      timeutil.FormatDisplayDateInTimezone(now.Add(-24*time.Hour).Format(timeutil.Layout), timezone),
 		"days":          "2",
+		"action":        DebtActionPhrase(localeCode, "borrowed"),
 		"credit":        choose(normalizeLocale(localeCode) == "ru", "Ипотека", "Mortgage"),
 		"payment_date":  timeutil.FormatDisplayDateInTimezone(futureDate, timezone),
 		"when":          RelativeWhen(localeCode, futureDate, now, timezone),

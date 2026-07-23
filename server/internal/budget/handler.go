@@ -59,6 +59,34 @@ func (h *Handler) Summary(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
+func (h *Handler) SpentPreview(w http.ResponseWriter, r *http.Request) {
+	info, ok := auth.FromContext(r.Context())
+	if !ok {
+		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
+		return
+	}
+	q := r.URL.Query()
+	result, err := PreviewSpent(r.Context(), h.Store.DB(), info.User.ID, SpentPreviewInput{
+		Month:         q.Get("month"),
+		Scope:         q.Get("scope"),
+		CategoryID:    optionalQuery(q.Get("category_id")),
+		SubcategoryID: optionalQuery(q.Get("subcategory_id")),
+		AccountID:     optionalQuery(q.Get("account_id")),
+	})
+	if writeBudgetError(w, r, err) {
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+func optionalQuery(v string) *string {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return nil
+	}
+	return &v
+}
+
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	info, ok := auth.FromContext(r.Context())
 	if !ok {

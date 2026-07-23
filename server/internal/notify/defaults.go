@@ -17,7 +17,7 @@ type localeCatalog struct {
 var fallbackTemplates = map[string]map[string]string{
 	"ru": {
 		TriggerDebtOverdue:       "Просрочен долг: {debtor} — {amount}. (Срок: {due_date})\n{debt_url}",
-		TriggerDebtDueSoon:       "Напоминание: вернуть долг {debtor} — {amount}. (Срок: {due_date}, через {days} дн.)\n{debt_url}",
+		TriggerDebtDueSoon:       "Напоминание: {action} {debtor} — {amount}. (Срок: {due_date}, {when})\n{debt_url}",
 		TriggerCreditPayment:     "Платёж по кредиту «{credit}»: {amount}. Дата: {when}\n{credit_url}",
 		TriggerPlannedOp:         "Плановая операция: {type} на {amount} — {description}\n{transaction_url}",
 		TriggerBalanceShortfall:  "На балансе не хватает {amount}!",
@@ -29,7 +29,7 @@ var fallbackTemplates = map[string]map[string]string{
 	},
 	"en": {
 		TriggerDebtOverdue:       "Debt overdue: {debtor} — {amount} (due {due_date})\n{debt_url}",
-		TriggerDebtDueSoon:       "Reminder: repay debt to {debtor} — {amount} (due {due_date}, in {days} days)\n{debt_url}",
+		TriggerDebtDueSoon:       "Reminder: {action} {debtor} — {amount} (due {due_date}, {when})\n{debt_url}",
 		TriggerCreditPayment:     "Credit payment \"{credit}\": {amount} {when}\n{credit_url}",
 		TriggerPlannedOp:         "Planned transaction: {type} {amount} — {description}\n{transaction_url}",
 		TriggerBalanceShortfall:  "Insufficient balance: {amount} short!",

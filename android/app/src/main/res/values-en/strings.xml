@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Buhgalter</string>
+    <string name="title_activity_main">Buhgalter</string>
+    <string name="shortcut_new_expense_short">+ Expense</string>
+    <string name="shortcut_new_expense_long">New expense</string>
+    <string name="shortcut_new_income_short">+ Income</string>
+    <string name="shortcut_new_income_long">New income</string>
+    <string name="shortcut_new_transfer_short">Transfer</string>
+    <string name="shortcut_new_transfer_long">New transfer</string>
+
+    <string name="widget_action_expense">Expense</string>
+    <string name="widget_action_income">Income</string>
+    <string name="widget_action_transfer">Transfer</string>
+    <string name="widget_quick_actions_description">Quick actions: expense, income, transfer</string>
+
+    <string name="widget_balance_title">My funds</string>
+    <string name="widget_balance_description">Total account balance</string>
+    <string name="widget_with_plans">With plans: %1$s</string>
+    <string name="widget_credit_cards">Cards: %1$s</string>
+
+    <string name="widget_budget_title">Monthly budget</string>
+    <string name="widget_budget_description">Budget plan vs spent</string>
+    <string name="widget_budget_empty">No budget set</string>
+
+    <string name="widget_upcoming_title">Upcoming</string>
+    <string name="widget_upcoming_description">Upcoming payments and due dates</string>
+    <string name="widget_upcoming_empty">Nothing upcoming</string>
+
+    <string name="widget_account_title">Account</string>
+    <string name="widget_account_description">Selected account balance</string>
+    <string name="widget_account_pick">Pick an account</string>
+    <string name="widget_account_configure_hint">Choose an account for the widget</string>
+    <string name="widget_account_configure_empty">No accounts. Open the app and sync data.</string>
+
+    <string name="widget_need_login">Open the app and sign in</string>
+    <string name="widget_locked">Locked</string>
+    <string name="widget_amount_hidden">••••</string>
+</resources>

@@ -1,6 +1,7 @@
 package notify
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -14,6 +15,7 @@ func TestFormatDefaultsForAllTriggers(t *testing.T) {
 		"amount":          "10 000.00 ₽",
 		"due_date":        "01.07.2026",
 		"days":            "2",
+		"action":          "вернуть долг",
 		"credit":          "Ипотека",
 		"payment_date":    "02.07.2026",
 		"when":            "завтра",
@@ -68,6 +70,90 @@ func TestRelativeWhen(t *testing.T) {
 	}
 	if got := RelativeWhen("ru", "2026-06-02 13:00:00", now, "Europe/Moscow"); got != "завтра" {
 		t.Fatalf("tomorrow: %q", got)
+	}
+}
+
+func TestRelativeDays(t *testing.T) {
+	if got := RelativeDays("ru", 0); got != "сегодня" {
+		t.Fatalf("ru today: %q", got)
+	}
+	if got := RelativeDays("en", 0); got != "today" {
+		t.Fatalf("en today: %q", got)
+	}
+	if got := RelativeDays("ru", 1); got != "завтра" {
+		t.Fatalf("ru tomorrow: %q", got)
+	}
+	if got := RelativeDays("en", 1); got != "tomorrow" {
+		t.Fatalf("en tomorrow: %q", got)
+	}
+	if got := RelativeDays("ru", 3); got != "через 3 дн." {
+		t.Fatalf("ru in 3: %q", got)
+	}
+	if got := RelativeDays("en", 3); got != "in 3 days" {
+		t.Fatalf("en in 3: %q", got)
+	}
+}
+
+func TestDebtActionPhrase(t *testing.T) {
+	if got := DebtActionPhrase("ru", "borrowed"); got != "вернуть долг" {
+		t.Fatalf("borrowed ru: %q", got)
+	}
+	if got := DebtActionPhrase("ru", "lent"); got != "получить долг от" {
+		t.Fatalf("lent ru: %q", got)
+	}
+	if got := DebtActionPhrase("en", "borrowed"); got != "repay debt to" {
+		t.Fatalf("borrowed en: %q", got)
+	}
+	if got := DebtActionPhrase("en", "lent"); got != "collect debt from" {
+		t.Fatalf("lent en: %q", got)
+	}
+}
+
+func TestDebtDueSoonDefaultWordingByDirection(t *testing.T) {
+	const debtURL = "https://example/debts"
+
+	lentToday, err := Format(TriggerDebtDueSoon, "ru", nil, FormatData{
+		"debtor":   "Настя сестра",
+		"amount":   "100.00 ₽",
+		"due_date": "15.07.2026",
+		"days":     "0",
+		"when":     RelativeDays("ru", 0),
+		"action":   DebtActionPhrase("ru", "lent"),
+		"debt_url": debtURL,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(lentToday, "получить долг от Настя сестра") {
+		t.Fatalf("lent wording missing: %q", lentToday)
+	}
+	if strings.Contains(lentToday, "вернуть") {
+		t.Fatalf("lent must not say вернуть: %q", lentToday)
+	}
+	if !strings.Contains(lentToday, "сегодня") {
+		t.Fatalf("expected сегодня: %q", lentToday)
+	}
+	if strings.Contains(lentToday, "через 0") {
+		t.Fatalf("must not say через 0: %q", lentToday)
+	}
+
+	borrowedSoon, err := Format(TriggerDebtDueSoon, "ru", nil, FormatData{
+		"debtor":   "Денис",
+		"amount":   "1 000.00 ₽",
+		"due_date": "17.07.2026",
+		"days":     "2",
+		"when":     RelativeDays("ru", 2),
+		"action":   DebtActionPhrase("ru", "borrowed"),
+		"debt_url": debtURL,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(borrowedSoon, "вернуть долг Денис") {
+		t.Fatalf("borrowed wording missing: %q", borrowedSoon)
+	}
+	if !strings.Contains(borrowedSoon, "через 2 дн.") {
+		t.Fatalf("expected через 2 дн.: %q", borrowedSoon)
 	}
 }
 

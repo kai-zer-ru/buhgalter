@@ -139,6 +139,20 @@ func TestHandlerGetPutSettings(t *testing.T) {
 	if updated["display_name"] != "Renamed" || updated["language"] != "en" || updated["theme"] != "dark" {
 		t.Fatalf("updated %+v", updated)
 	}
+
+	systemBody, _ := json.Marshal(map[string]string{"theme": "system"})
+	systemRec := httptest.NewRecorder()
+	h.PutSettings(systemRec, withUser(t, user, http.MethodPut, "/user/settings", systemBody))
+	if systemRec.Code != http.StatusOK {
+		t.Fatalf("put system theme status %d: %s", systemRec.Code, systemRec.Body.String())
+	}
+	var systemUpdated map[string]string
+	if err := json.NewDecoder(systemRec.Body).Decode(&systemUpdated); err != nil {
+		t.Fatal(err)
+	}
+	if systemUpdated["theme"] != "system" {
+		t.Fatalf("theme %q", systemUpdated["theme"])
+	}
 }
 
 func TestHandlerPutSettingsValidation(t *testing.T) {
@@ -150,7 +164,7 @@ func TestHandlerPutSettingsValidation(t *testing.T) {
 	}{
 		{"language", `{"language":"de"}`},
 		{"currency", `{"currency":"GBP"}`},
-		{"theme", `{"theme":"system"}`},
+		{"theme", `{"theme":"auto"}`},
 		{"timezone", `{"timezone":"Not/AZone"}`},
 		{"invalid json", `{`},
 	}

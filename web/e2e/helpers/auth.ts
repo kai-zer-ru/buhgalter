@@ -44,13 +44,32 @@ export async function completeSetupIfNeeded(page: Page) {
 	await page.waitForURL('**/login**', { timeout: 15_000 });
 }
 
+async function fillLoginForm(page: Page, loginName: string, password: string) {
+	await waitAppReady(page);
+	const submit = page.getByRole('button', { name: 'Войти' });
+	await expect(submit).toBeVisible({ timeout: 20_000 });
+	await page.locator('#login').fill(loginName);
+	await page.locator('#password').fill(password);
+	await submit.click();
+}
+
 export async function login(page: Page) {
 	await page.goto('/login');
-	await page.locator('#login').fill(ADMIN.login);
-	await page.locator('#password').fill(ADMIN.password);
-	await page.getByRole('button', { name: 'Войти' }).click();
+	await fillLoginForm(page, ADMIN.login, ADMIN.password);
 	await expect(page).toHaveURL(/\/(\?.*)?$/, { timeout: 15_000 });
 	await waitAppReady(page);
+}
+
+/** Cookie session via API — preferred for setup / restore (no UI race). */
+export async function loginViaAPI(page: Page): Promise<void> {
+	const res = await page.request.post('/api/v1/auth/login', {
+		data: { login: ADMIN.login, password: ADMIN.password }
+	});
+	expect(res.ok(), `API login failed: ${res.status()}`).toBeTruthy();
+	expect(
+		isAdminSession(await currentSession(page)),
+		'API login did not yield admin session'
+	).toBeTruthy();
 }
 
 type MeResponse = { login: string; is_admin: boolean };
@@ -96,9 +115,7 @@ export async function restoreAdminSession(page: Page) {
 	}
 
 	await page.goto('/login');
-	await page.locator('#login').fill(ADMIN.login);
-	await page.locator('#password').fill(ADMIN.password);
-	await page.getByRole('button', { name: 'Войти' }).click();
+	await fillLoginForm(page, ADMIN.login, ADMIN.password);
 	await expect(page).toHaveURL(/\/(\?.*)?$/, { timeout: 15_000 });
 	await waitAppReady(page);
 
@@ -120,6 +137,18 @@ export function formatUTCDateTime(date: Date): string {
 	return iso.slice(0, 19).replace('T', ' ');
 }
 
+/** Drop web SWR localStorage after API mutations done outside the UI client. */
+export async function clearBrowserRefCache(page: Page): Promise<void> {
+	await page.evaluate(() => {
+		const keys: string[] = [];
+		for (let i = 0; i < localStorage.length; i++) {
+			const key = localStorage.key(i);
+			if (key?.includes('ref_cache')) keys.push(key);
+		}
+		for (const key of keys) localStorage.removeItem(key);
+	});
+}
+
 export async function apiJSON<T>(
 	page: Page,
 	method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH',
@@ -136,6 +165,11 @@ export async function apiJSON<T>(
 			response.ok(),
 			`API ${method} ${path} failed with ${response.status()}${detail ? `: ${detail}` : ''}`
 		).toBeTruthy();
+	}
+	if (method !== 'GET') {
+		await clearBrowserRefCache(page).catch(() => {
+			// page may not have localStorage yet (about:blank)
+		});
 	}
 	if (response.status() === 204) return undefined as T;
 	return (await response.json()) as T;

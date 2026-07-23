@@ -290,6 +290,104 @@ func TestSummaryAllExpenseFirstWithChildrenTotals(t *testing.T) {
 	}
 }
 
+func TestPreviewSpentMatchesSummary(t *testing.T) {
+	ctx, sqlDB, userID, accountID, categoryID := seedBudgetEnv(t)
+	month, err := budget.CurrentMonthQuery(ctx, sqlDB, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cat := categoryID
+	acc := accountID
+	_, err = budget.Create(ctx, sqlDB, userID, budget.Input{
+		Name: "Продукты", Scope: budget.ScopeCategory, CategoryID: &cat,
+		Amount: 30_000, IsActive: true, Month: month,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	txDate := timeutil.FormatUTC(timeutil.NowUTC())
+	if err := sqlcdb.New(sqlDB).InsertTransaction(ctx, sqlcdb.InsertTransactionParams{
+		ID: "tx-preview-1", UserID: userID, AccountID: accountID, Type: "expense", Kind: "manual",
+		Amount: 7_500, CategoryID: &cat, TransactionDate: txDate, AffectsBalance: 1,
+		CreatedAt: txDate, UpdatedAt: txDate,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	summary, err := budget.Summary(ctx, sqlDB, userID, month)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(summary.Items) != 1 || summary.Items[0].Spent != 7_500 {
+		t.Fatalf("summary spent unexpected: %+v", summary.Items)
+	}
+
+	preview, err := budget.PreviewSpent(ctx, sqlDB, userID, budget.SpentPreviewInput{
+		Month: month, Scope: budget.ScopeCategory, CategoryID: &cat,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview.Spent != summary.Items[0].Spent {
+		t.Fatalf("preview spent %d != summary %d", preview.Spent, summary.Items[0].Spent)
+	}
+	if preview.SpentDisplay != summary.Items[0].SpentDisplay {
+		t.Fatalf("preview display %q != summary %q", preview.SpentDisplay, summary.Items[0].SpentDisplay)
+	}
+
+	previewAcc, err := budget.PreviewSpent(ctx, sqlDB, userID, budget.SpentPreviewInput{
+		Month: month, Scope: budget.ScopeCategory, CategoryID: &cat, AccountID: &acc,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if previewAcc.Spent != 7_500 {
+		t.Fatalf("expected account filter spent 7500, got %d", previewAcc.Spent)
+	}
+
+	otherAcc := "acc-other"
+	_, err = sqlDB.ExecContext(ctx, `
+		INSERT INTO accounts (id, user_id, name, type, initial_balance, current_balance, status, created_at, updated_at)
+		VALUES (?, ?, 'Другой', 'cash', 0, 0, 'active', datetime('now'), datetime('now'))`,
+		otherAcc, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	previewOther, err := budget.PreviewSpent(ctx, sqlDB, userID, budget.SpentPreviewInput{
+		Month: month, Scope: budget.ScopeCategory, CategoryID: &cat, AccountID: &otherAcc,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if previewOther.Spent != 0 {
+		t.Fatalf("expected other account spent 0, got %d", previewOther.Spent)
+	}
+
+	allPreview, err := budget.PreviewSpent(ctx, sqlDB, userID, budget.SpentPreviewInput{
+		Month: month, Scope: budget.ScopeAllExpense,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if allPreview.Spent != 7_500 {
+		t.Fatalf("expected all_expense preview 7500, got %d", allPreview.Spent)
+	}
+
+	_, err = budget.PreviewSpent(ctx, sqlDB, userID, budget.SpentPreviewInput{
+		Month: month, Scope: "nope",
+	})
+	if err != budget.ErrInvalidScope {
+		t.Fatalf("expected invalid scope, got %v", err)
+	}
+
+	_, err = budget.PreviewSpent(ctx, sqlDB, userID, budget.SpentPreviewInput{
+		Month: month, Scope: budget.ScopeCategory,
+	})
+	if err != budget.ErrInvalidCategory {
+		t.Fatalf("expected missing category, got %v", err)
+	}
+}
+
 func TestBudgetCopyForwardOnlyNextMonth(t *testing.T) {
 	ctx, sqlDB, userID, _, categoryID := seedBudgetEnv(t)
 	month, err := budget.CurrentMonthQuery(ctx, sqlDB, userID)

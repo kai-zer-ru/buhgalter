@@ -8,8 +8,7 @@ import { expectToast } from './helpers/ui';
 import { createCashAccount, createExpense } from './helpers/setup-data';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const appVersion = JSON.parse(readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'))
-	.version as string;
+const appVersion = readFileSync(path.join(__dirname, '..', '..', 'VERSION'), 'utf8').trim();
 
 test.describe.configure({ mode: 'serial' });
 
@@ -23,7 +22,8 @@ test('create account → add expense → see balance', async ({ page }) => {
 	await page.getByRole('button', { name: 'Наличные' }).click();
 	await page.getByLabel('Начальный баланс').fill('1000');
 	await page.getByRole('button', { name: 'Создать' }).click();
-	await expect(page).toHaveURL(/\/accounts\//);
+	await expect(page).not.toHaveURL(/\/accounts\/new/, { timeout: 15_000 });
+	await expect(page).toHaveURL(/\/accounts\/?$/);
 
 	await page.goto('/transactions');
 	await waitAppReady(page);
@@ -58,7 +58,8 @@ test('create transfer', async ({ page }) => {
 		.click();
 	await page.getByLabel('Начальный баланс').fill('500');
 	await page.getByRole('button', { name: 'Создать' }).click();
-	await expect(page).toHaveURL(/\/accounts\//);
+	await expect(page).not.toHaveURL(/\/accounts\/new/, { timeout: 15_000 });
+	await expect(page).toHaveURL(/\/accounts\/?$/);
 
 	await page.goto('/');
 	await waitAppReady(page);
@@ -95,8 +96,27 @@ test('settings change theme', async ({ page }) => {
 	await waitAppReady(page);
 	await selectCombobox(page, 'theme', { label: 'Тёмная' });
 	await page.getByRole('button', { name: 'Сохранить' }).click();
+	await expectToast(page, 'success', 'Сохранено');
 
 	await expect(page.locator('html')).toHaveClass(/dark/, { timeout: 10_000 });
+});
+
+test('settings theme system follows color scheme', async ({ page }) => {
+	await page.goto('/settings');
+	await waitAppReady(page);
+	await selectCombobox(page, 'theme', { label: 'Как на устройстве' });
+	await page.getByRole('button', { name: 'Сохранить' }).click();
+	await expectToast(page, 'success', 'Сохранено');
+
+	await page.emulateMedia({ colorScheme: 'dark' });
+	await page.reload();
+	await waitAppReady(page);
+	await expect(page.locator('html')).toHaveClass(/dark/, { timeout: 10_000 });
+
+	await page.emulateMedia({ colorScheme: 'light' });
+	await page.reload();
+	await waitAppReady(page);
+	await expect(page.locator('html')).not.toHaveClass(/dark/, { timeout: 10_000 });
 });
 
 test('create API token', async ({ page }) => {

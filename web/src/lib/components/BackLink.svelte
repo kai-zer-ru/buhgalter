@@ -1,11 +1,13 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import type { Pathname } from '$app/types';
 
 	export type BackLinkHref =
 		| '/'
 		| '/accounts'
 		| '/settings'
 		| '/settings/password'
+		| '/settings/server'
 		| '/settings/tokens'
 		| '/settings/notifications'
 		| '/settings/categories'
@@ -35,7 +37,7 @@
 	} = $props();
 
 	function target(item: BreadcrumbItem): string {
-		return resolve(item.href);
+		return resolve(item.href as Pathname);
 	}
 </script>
 

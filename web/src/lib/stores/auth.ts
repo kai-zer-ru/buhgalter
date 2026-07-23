@@ -2,6 +2,8 @@ import { writable } from 'svelte/store';
 import type { User } from '$lib/api/client';
 import { ApiError, getMe, isTransientHttpError, logout as apiLogout } from '$lib/api/client';
 import { resetSessionExpiredSignal } from '$lib/auth/session-expired';
+import { clearRefCache, setRefCacheUserId } from '$lib/ref-cache';
+import { warmRefCache } from '$lib/ref-cache-warm';
 
 export const user = writable<User | null>(null);
 export const authReady = writable(false);
@@ -51,7 +53,9 @@ export async function loadUser(): Promise<LoadUserResult> {
 		try {
 			const me = await getMe();
 			user.set(me);
+			setRefCacheUserId(me.id);
 			markSessionHint();
+			void warmRefCache();
 			return 'ok';
 		} catch (err) {
 			const retryable =
@@ -66,6 +70,8 @@ export async function loadUser(): Promise<LoadUserResult> {
 
 			if (err instanceof ApiError && err.status === 401) {
 				clearSessionHint();
+				clearRefCache();
+				setRefCacheUserId(null);
 				user.set(null);
 				return 'unauthorized';
 			}
@@ -83,5 +89,7 @@ export async function logout() {
 		// ignore
 	}
 	clearSessionHint();
+	clearRefCache();
+	setRefCacheUserId(null);
 	user.set(null);
 }

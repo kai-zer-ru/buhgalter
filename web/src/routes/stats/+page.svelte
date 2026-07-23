@@ -6,6 +6,7 @@
 	import { budgetRemainingCell } from '$lib/budget-display';
 	import {
 		getStatsByCategory,
+		getStatsBySubcategory,
 		getStatsByPeriod,
 		getStatsSummary,
 		getBudgetSummary,
@@ -16,6 +17,7 @@
 		type Credit,
 		type Debtor,
 		type StatsCategoryItem,
+		type StatsSubcategoryItem,
 		type StatsPeriodItem,
 		type StatsSummary,
 		type BudgetSummaryItem,
@@ -27,6 +29,7 @@
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
 	import EntityLink from '$lib/components/EntityLink.svelte';
 	import FilterPanel from '$lib/components/FilterPanel.svelte';
+	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import TransactionList from '$lib/components/TransactionList.svelte';
 	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
@@ -43,18 +46,22 @@
 		todayDateLocal
 	} from '$lib/dates';
 	import { formatStatsPeriod } from '$lib/stats-period';
+	import { groupSubcategoriesByCategory, subcategoryShareOfParent } from '$lib/stats-subcategory';
 	import {
 		accountSelectOptions,
 		accountsFromUIMeta,
 		categorySelectOptions
 	} from '$lib/select-options';
+	import { reportPageLoadFailure } from '$lib/page-load';
 	import { user } from '$lib/stores/auth';
 	import { toast } from '$lib/toast';
 
 	let loading = $state(true);
+	let loadError = $state<string | null>(null);
 	let filterLoading = $state(false);
 	let summary = $state<StatsSummary | null>(null);
 	let byCategory = $state<StatsCategoryItem[]>([]);
+	let bySubcategory = $state<StatsSubcategoryItem[]>([]);
 	let budgetByCategory = $state<Record<string, BudgetSummaryItem>>({});
 	let byPeriod = $state<StatsPeriodItem[]>([]);
 	let searchRows = $state<Transaction[]>([]);
@@ -115,6 +122,7 @@
 			.filter((row) => row.type === 'expense')
 			.sort((a, b) => b.total - a.total || a.category_name.localeCompare(b.category_name, 'ru'))
 	);
+	const subByCategory = $derived(groupSubcategoriesByCategory(bySubcategory));
 	const showCategoryIncome = $derived(type !== 'expense');
 	const showCategoryExpense = $derived(type !== 'income');
 
@@ -218,9 +226,10 @@
 		try {
 			const params = statsParams();
 			const month = budgetMonthKey();
-			const [summaryRes, categoryRes, periodRes, budgetRes] = await Promise.all([
+			const [summaryRes, categoryRes, subcategoryRes, periodRes, budgetRes] = await Promise.all([
 				getStatsSummary(params),
 				getStatsByCategory(params),
+				getStatsBySubcategory(params),
 				getStatsByPeriod({ ...params, group_by: groupBy }),
 				getBudgetSummary(month).catch(() => ({
 					items: [] as BudgetSummaryItem[],
@@ -230,6 +239,7 @@
 			]);
 			summary = summaryRes;
 			byCategory = categoryRes.items;
+			bySubcategory = subcategoryRes.items;
 			byPeriod = periodRes.items;
 			const bmap: Record<string, BudgetSummaryItem> = {};
 			for (const b of budgetRes.items) {
@@ -249,8 +259,13 @@
 			} else {
 				searchRows = [];
 			}
+			loadError = null;
 		} catch (err) {
-			toast.fromError(err);
+			const msg = reportPageLoadFailure(err, {
+				background: !initial,
+				hasData: summary != null || byCategory.length > 0
+			});
+			if (msg) loadError = msg;
 		} finally {
 			loading = false;
 			filterLoading = false;
@@ -413,9 +428,7 @@
 		</div>
 	</FilterPanel>
 
-	{#if loading}
-		<p style:color="var(--text-muted)">{$_('common.loading')}</p>
-	{:else}
+	<PageLoadGate {loading} error={loadError} onretry={() => void loadStats(true)} inline>
 		<div class="relative space-y-4" class:opacity-60={filterLoading}>
 			{#if filterLoading}
 				<p class="text-sm" style:color="var(--text-muted)">{$_('common.loading')}</p>
@@ -539,12 +552,13 @@
 				{/if}
 			</div>
 		</div>
-	{/if}
+	</PageLoadGate>
 </div>
 
 {#snippet categorySection(rows: StatsCategoryItem[], showBudget = false)}
 	<div class="space-y-3 md:hidden">
 		{#each rows as row (row.category_id)}
+			{@const subs = subByCategory[row.category_id] ?? []}
 			<article class="rounded-xl border p-3" style:border-color="var(--border)">
 				<a
 					href={resolve(`/transactions?${categoryDrilldownQuery(row)}`)}
@@ -590,6 +604,24 @@
 						<dd>{row.count}</dd>
 					</div>
 				</dl>
+				{#if subs.length > 0}
+					<details class="mt-2 border-t pt-2" style:border-color="var(--border)">
+						<summary class="cursor-pointer text-sm" style:color="var(--text-muted)">
+							{$_('stats.subcategories')} ({subs.length})
+						</summary>
+						<ul class="mt-2 space-y-1.5 text-sm">
+							{#each subs as sub (sub.subcategory_id)}
+								<li class="flex items-baseline justify-between gap-2">
+									<span>{sub.subcategory_name}</span>
+									<span class="shrink-0 tabular-nums" style:color="var(--text-muted)">
+										<MoneyDisplay cents={sub.total} class="" />
+										· {subcategoryShareOfParent(sub.total, row.total).toFixed(0)}% · {sub.count}
+									</span>
+								</li>
+							{/each}
+						</ul>
+					</details>
+				{/if}
 			</article>
 		{/each}
 	</div>
@@ -608,8 +640,9 @@
 		</thead>
 		<tbody>
 			{#each rows as row (row.category_id)}
+				{@const subs = subByCategory[row.category_id] ?? []}
 				<tr class="border-t" style:border-color="var(--border)">
-					<td class="p-2">
+					<td class="p-2 align-top">
 						<a
 							href={resolve(`/transactions?${categoryDrilldownQuery(row)}`)}
 							class="hover:underline"
@@ -617,24 +650,42 @@
 						>
 							{statsCategoryLabel(row.category_name, row.type)}
 						</a>
+						{#if subs.length > 0}
+							<details class="mt-1">
+								<summary class="cursor-pointer text-xs" style:color="var(--text-muted)">
+									{$_('stats.subcategories')} ({subs.length})
+								</summary>
+								<ul class="mt-1 space-y-1 text-xs">
+									{#each subs as sub (sub.subcategory_id)}
+										<li class="flex items-baseline justify-between gap-3 pl-1">
+											<span>{sub.subcategory_name}</span>
+											<span class="shrink-0 tabular-nums" style:color="var(--text-muted)">
+												<MoneyDisplay cents={sub.total} class="" />
+												· {subcategoryShareOfParent(sub.total, row.total).toFixed(0)}% · {sub.count}
+											</span>
+										</li>
+									{/each}
+								</ul>
+							</details>
+						{/if}
 					</td>
-					<td class="p-2"><MoneyDisplay cents={row.total} class="" /></td>
+					<td class="p-2 align-top"><MoneyDisplay cents={row.total} class="" /></td>
 					{#if showBudget}
-						<td class="p-2">
+						<td class="p-2 align-top">
 							{#if budgetByCategory[row.category_id]}
 								<MoneyDisplay value={budgetByCategory[row.category_id].planned_display} class="" />
 							{:else}
 								—
 							{/if}
 						</td>
-						<td class="p-2 tabular-nums">
+						<td class="p-2 align-top tabular-nums">
 							{budgetByCategory[row.category_id]
 								? budgetRemainingCell(budgetByCategory[row.category_id])
 								: '—'}
 						</td>
 					{/if}
-					<td class="p-2">{row.percentage.toFixed(1)}</td>
-					<td class="p-2">{row.count}</td>
+					<td class="p-2 align-top">{row.percentage.toFixed(1)}</td>
+					<td class="p-2 align-top">{row.count}</td>
 				</tr>
 			{/each}
 		</tbody>

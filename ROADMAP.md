@@ -16,6 +16,8 @@
 - [v1.3.0](#v130)
 - [v1.3.1](#v131)
 - [v1.3.2](#v132)
+- [v1.4.0](#v140)
+- [На подумать](#на-подумать)
 - [Общие планы](#общие-планы)
 
 ## v1.0.0
@@ -177,14 +179,53 @@
 - [x] Вёрстка в бюджете (мобюилка)
 - [x] [Release notes](docs/release-notes-v1.3.2.md) · [ui-credits.md](docs/ui-credits.md) · [transactions-display.md](docs/transactions-display.md) · [ui-budget.md](docs/ui-budget.md)
 
+## v1.4.0
+
+Фокус релиза — **Android-клиент** и улучшения веб-UI (SWR ref-cache).
+
+- [x] [Android-клиент](docs/android-client.md) — [roadmap](roadmap/android-client.md), [UI](docs/android-client-ui.md), [платформа](docs/android-client-platform.md)
+- [x] Начальный остаток на счёте при редактировании
+- [x] [Точечное обновление UI при refresh](roadmap/android-incremental-ui-updates.md) — assignIfChanged, path-aware refCacheUpdate, SWR на вебе
+- [x] Статистика: подкатегории под спойлером (web + Android)
+- [x] БАГ. Уведомления по долгам: формулировка по направлению («вернуть» / «получить») и «сегодня» вместо «через 0 дн.»
+- [x] БАГ. Select / Combobox / DateTimePicker: выпадающий список «отрывался» от поля (label внутри `.relative`; заметно на Android в профиле) — [ui-dialogs.md](docs/ui-dialogs.md)
+- [x] «Уже платил по графику» — только если в preview есть платежи в прошлом (web + Android)
+- [x] Web e2e Playwright — расширенное покрытие основных экранов
+- [x] Тема «Как на устройстве» (`system`) — default; синхронизация UI с темой ОС (web + Android)
+- [x] Вернуть «Главная» в верхнее меню (в самое начало)
+- [x] Периодические операции - кнопка добавить - перенести наверх (как везде)
+- [x] [Release notes](docs/release-notes-v1.4.0.md) · [ui-api-cache.md](docs/ui-api-cache.md) · [ui-dialogs.md](docs/ui-dialogs.md) · [ui-budget.md](docs/ui-budget.md) · [ui-credit-cards.md](docs/ui-credit-cards.md) · [budget.md](docs/budget.md)
+- [x] Сортировка «Мои средства» на главной и `/accounts`: `cash` → `bank`, внутри типа основной счёт первым ([ui-credit-cards.md](docs/ui-credit-cards.md))
+- [x] Кредитную карту нельзя сделать основным счётом (API + UI web/Android; миграция снимает ошибочный primary)
+- [x] Бюджет. Добавление/редактирование. При выборе категории/подкатегории (в зависимости от типа, включая выбор общего бюджета) выводить уже потраченую сумму, если это текущий или прошлый месяц, согласно фильтру. Веб и Android
+
 ## Общие планы
 
-- [ ] [Командная работа](roadmap/team-collaboration.md) — несколько пользователей на одной базе
+- [ ] [Сканер чеков](roadmap/receipt-scanner.md) — QR ФНС (РФ) и разбор фото через ИИ; в доке — уроки сбитого эксперимента (ветка `1.5.0`, код не мержить вслепую)
+- [ ] [Подписки](roadmap/subscriptions.md) — отдельный экран поверх периодических операций (сводка «в месяц», ближайшие списания)
+- [ ] [Правила категорий + очередь «разобрать»](roadmap/category-rules-inbox.md) — например транспорт → «Автобус» → счёт «Наличные»
+- [ ] [Магазины, теги, комментарий](roadmap/merchants-tags.md) — в т.ч. магазин из чека
+- [ ] [Бюджет: rollover, прогноз, конверты](roadmap/budget-post-mvp.md) — перенос остатка, прогноз из периодических, бюджет «конвертами»
+- [ ] [Валюта счёта](roadmap/multicurrency.md) — отдельно от валюты профиля (`users.currency`)
+- [ ] [Графики /stats и нетто-капитал](roadmap/stats-charts-net-worth.md) — Chart.js на web; нетто API + блок на web и Android
+- [ ] [Семья / команда](roadmap/team-collaboration.md) — несколько пользователей на одном учёте
+- [ ] [Кнопки в Telegram / MAX](roadmap/telegram-max-buttons.md) — inline-кнопки в исходящих уведомлениях
+- [ ] [Улучшение импорта](roadmap/import-improve.md) — универсальный CSV / выгрузки РФ
+- [ ] [Цели накопления](roadmap/savings-goals.md) — копилки, прогресс, напоминания
+- [ ] [Двухфакторная аутентификация](roadmap/two-factor-auth.md) — TOTP
+- [ ] [Синхронизация с выпиской банка](roadmap/bank-sync.md) — ориентир только РФ, не зарубежные агрегаторы
+- [ ] [Перехват уведомлений банка](roadmap/notification-intercept.md) — Android, push/SMS → черновик операции
+- [ ] [Разбивка операции на несколько счетов](roadmap/transaction-split-accounts.md)
+- [ ] [PDF-отчёты](roadmap/savings-reports-import.md) — месячная сводка (цели и импорт вынесены в v1.6.0)
 - [ ] [PostgreSQL](roadmap/postgresql.md) — опциональная БД вместо SQLite
 - [ ] [Webhook](roadmap/webhooks.md) — исходящие события для внешних интеграций
-- [ ] [Синхронизация с банками](roadmap/bank-sync.md) — автоматический импорт операций
-- [ ] [Сканер чеков](roadmap/receipt-scanner.md) — расход из фото или QR чека
 - [ ] [Home Assistant](roadmap/home-assistant.md) — интеграция для умного дома
-- [ ] [Кнопки в Telegram / MAX](roadmap/telegram-max-buttons.md) — inline-кнопки в исходящих уведомлениях
 - [ ] [Эволюция уведомлений](roadmap/notifications-evolution.md) — развитие политик/шаблонов/частоты
-- [ ] [Android-клиент](roadmap/android-client.md) — нативное приложение
+
+## На подумать
+
+- [ ] [Крипта](roadmap/crypto.md) — пока **не вводим**; блок для обсуждения
+- [ ] [Инвестиции](roadmap/investments.md) — акции/ETF/портфель; отдельный большой модуль, не в ближайших релизах
+
+Указатель по обогащению операций (сроки в отдельных файлах): [transaction-enrichment.md](roadmap/transaction-enrichment.md).
+

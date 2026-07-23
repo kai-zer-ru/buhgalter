@@ -221,8 +221,8 @@ func (q *Queries) GetUserLoginAndStatus(ctx context.Context, id string) (GetUser
 }
 
 const insertUser = `-- name: InsertUser :exec
-INSERT INTO users (id, login, password_hash, display_name, is_admin, status)
-VALUES (?, ?, ?, ?, ?, ?)
+INSERT INTO users (id, login, password_hash, display_name, is_admin, status, theme)
+VALUES (?, ?, ?, ?, ?, ?, 'system')
 `
 
 type InsertUserParams struct {

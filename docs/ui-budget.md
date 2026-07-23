@@ -44,6 +44,7 @@ Query: `?month=YYYY-MM` — выбранный месяц; по умолчани
 | Название | `budget.field.name` |
 | Область | `category`, `subcategory`, `all_expense` |
 | Лимит | `MoneyInput` |
+| Уже потрачено | `budget.field.already_spent` — под лимитом; только для **текущего или прошлого** месяца (`?month=`); факт через `GET /budgets/spent-preview` с учётом scope / категории / подкатегории / счёта; на будущий месяц не показывается; на Android при офлайне скрыто |
 | Категория / подкатегория | Только `expense`, без системных |
 | Счёт | «Все счета» или конкретный — сужает факт, не дублирует scope |
 | Порог уведомления | По умолчанию **90** %; `0` — без порога |
@@ -174,7 +175,7 @@ Query: `?month=YYYY-MM` — выбранный месяц; по умолчани
 |------|------------|
 | `budget.title`, `budget.add`, `budget.empty` | Заголовок, кнопка, пустое состояние |
 | `budget.scope.*` | Названия областей |
-| `budget.field.*` | Подписи полей формы |
+| `budget.field.*` | Подписи полей формы (в т.ч. `already_spent`) |
 | `budget.progress`, `budget.remaining`, `budget.children` | Строки в карточке (через `tr(…, { values })`) |
 | `budget.copy_status`, `budget.action.*` | Копирование |
 | `budget.widget.title`, `budget.widget.more`, `budget.widget.categories` | Виджет на главной |

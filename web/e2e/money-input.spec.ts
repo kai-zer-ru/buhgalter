@@ -59,6 +59,8 @@ test('create account with empty balance defaults to zero', async ({ page }) => {
 	await waitAppReady(page);
 	await page.locator('#name').fill(name);
 	await page.getByRole('button', { name: 'Создать' }).click();
-	await expect(page).toHaveURL(/\/accounts\//, { timeout: 15_000 });
+	await expect(page).not.toHaveURL(/\/accounts\/new/, { timeout: 15_000 });
+	await expect(page).toHaveURL(/\/accounts\/?$/);
+	await expect(page.getByText(name).first()).toBeVisible();
 	await expect(page.getByText('0.00').first()).toBeVisible();
 });

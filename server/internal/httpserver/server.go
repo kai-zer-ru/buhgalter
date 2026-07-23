@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -28,6 +29,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/importexport"
 	appmw "github.com/kai-zer-ru/buhgalter/internal/middleware"
 	"github.com/kai-zer-ru/buhgalter/internal/recurring"
+	"github.com/kai-zer-ru/buhgalter/internal/settingscache"
 	"github.com/kai-zer-ru/buhgalter/internal/setup"
 	"github.com/kai-zer-ru/buhgalter/internal/static"
 	"github.com/kai-zer-ru/buhgalter/internal/stats"
@@ -98,7 +100,7 @@ func (s *Server) Handler() http.Handler {
 	budgetHandler := &budget.Handler{Store: dbHandle, Audit: s.audit}
 	importHandler := &importexport.Handler{Store: dbHandle, Audit: s.audit, Logger: s.logger}
 	statsHandler := &stats.Handler{Store: dbHandle}
-	uiHandler := &ui.Handler{Store: dbHandle}
+	uiHandler := &ui.Handler{Store: dbHandle, Version: s.cfg.Version}
 	versionHandler := &versioncheck.Handler{Checker: versioncheck.NewChecker(s.cfg.Version)}
 	apiCache := apicache.New()
 	apiCacheMW := apicache.Middleware(apiCache)
@@ -151,6 +153,7 @@ func (s *Server) Handler() http.Handler {
 			ar.Delete("/recurring-operations/{id}", recurringHandler.Delete)
 
 			ar.Get("/budgets/summary", budgetHandler.Summary)
+			ar.Get("/budgets/spent-preview", budgetHandler.SpentPreview)
 			ar.Get("/budgets", budgetHandler.List)
 			ar.Post("/budgets/copy-from-previous", budgetHandler.CopyFromPrevious)
 			ar.Post("/budgets", budgetHandler.Create)
@@ -222,6 +225,7 @@ func (s *Server) Handler() http.Handler {
 			ar.Get("/stats/context", statsHandler.Context)
 
 			ar.Get("/budgets/summary", budgetHandler.Summary)
+			ar.Get("/budgets/spent-preview", budgetHandler.SpentPreview)
 			ar.Get("/budgets", budgetHandler.List)
 			ar.Post("/budgets/copy-from-previous", budgetHandler.CopyFromPrevious)
 			ar.Post("/budgets", budgetHandler.Create)
@@ -230,6 +234,7 @@ func (s *Server) Handler() http.Handler {
 			ar.Delete("/budgets/{id}", budgetHandler.Delete)
 
 			ar.Get("/ui/meta", uiHandler.Meta)
+			ar.Get("/ui/i18n/{lang}", uiHandler.I18n)
 		})
 
 		api.Route("/user", func(ur chi.Router) {
@@ -286,7 +291,8 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 	dbStatus := "connected"
 	httpStatus := http.StatusOK
 
-	if sqlDB := s.manager.DB(); sqlDB == nil {
+	sqlDB := s.manager.DB()
+	if sqlDB == nil {
 		status = "error"
 		dbStatus = "error"
 		httpStatus = http.StatusServiceUnavailable
@@ -296,11 +302,20 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 		httpStatus = http.StatusServiceUnavailable
 	}
 
-	writeJSON(w, httpStatus, map[string]string{
+	payload := map[string]string{
 		"status":  status,
 		"version": s.cfg.Version,
 		"db":      dbStatus,
-	})
+	}
+	if sqlDB != nil {
+		if externalURL, err := settingscache.ExternalURL(r.Context(), sqlDB); err == nil && externalURL.Valid {
+			if u := strings.TrimSpace(externalURL.String); u != "" {
+				payload["external_url"] = u
+			}
+		}
+	}
+
+	writeJSON(w, httpStatus, payload)
 }
 
 func BackupDir(dataDir string) string {

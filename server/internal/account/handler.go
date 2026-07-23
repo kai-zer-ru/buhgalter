@@ -185,6 +185,10 @@ func (h *Handler) SetPrimary(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_ACCOUNT_PRIMARY_ARCHIVED")
 		return
 	}
+	if errors.Is(err, ErrCreditCardPrimary) {
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_ACCOUNT_PRIMARY_CREDIT_CARD")
+		return
+	}
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return

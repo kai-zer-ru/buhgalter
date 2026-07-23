@@ -3,7 +3,107 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 версии — [SemVer](https://semver.org/lang/ru/).
 
-Подробные release notes для пользователей: [docs/release-notes-v1.3.2.md](docs/release-notes-v1.3.2.md).
+Подробные release notes для пользователей: [docs/release-notes-v1.4.0.md](docs/release-notes-v1.4.0.md).
+
+## [v1.4.0] — 2026-07-23
+
+> **ОБЯЗАТЕЛЬНО СДЕЛАЙТЕ БЕКАП!** Перед обновлением сохраните копию базы (`data/buhgalter.db`) и каталога `backups/`.
+
+### Добавлено
+
+**Android-клиент** (`android/` — отдельный UI, Capacitor, APK в GitHub Releases)
+
+- Мобильное приложение к self-hosted инстансу. Вход: **логин/пароль** (`POST /auth/login` → session Bearer) или **API-токен**; выбор на `/login`
+- Первый запуск: **`/server-setup`** — LAN discovery (mDNS `_buhgalter._tcp` + скан /24 на :8765) + ручной **LAN URL**; затем `/login`
+- Настройки сервера: LAN / внешний URL, до **5** домашних Wi‑Fi (SSID), LAN fallback, HTTPS TOFU (self-signed), смена и отключение сервера
+- Экраны: главная, счета, операции, переводы, долги, **создание кредита** (мастер `/credits/new/{basics,options,schedule}`), действия по кредиту, бюджет, статистика, хабы настроек и админки (без `/admin/users`)
+- Drawer-оболочка (~70% ширины; **«Главная»** первым пунктом), полноэкранные формы (`FormPageShell`), кнопка «Назад» (drawer → модалки → history → выход)
+- **Офлайн outbox** (create/update/delete, coalescing): операции, переводы, категории, долги, **счета** (в т.ч. archive/unarchive), **бюджет**; ref-cache SWR в `localStorage`, прогрев при старте и sync, полоска «Нет соединения»
+- **Блокировка приложения:** PIN 4 цифры + опциональная биометрия (`/settings/security`); токен и PIN-hash в secure storage
+- Сброс блокировки при **выходе**, отключении сервера и **истечении сессии** (`clearAppLock`)
+- Сравнение версии APK с сервером (`GET /version/check`); блокировка UI при отставании **мажор/минор**; при `app < server` — подтягивание UI-строк с `GET /api/v1/ui/i18n/{lang}` (кеш по версии сервера + язык; soft-fail офлайн)
+- **PageLoadGate** — ошибка начальной загрузки экрана с «Повторить» (не пустой экран)
+- **Отладочное логирование** (Настройки → Сервер) + экспорт `buhgalter-debug-*.log` в Загрузки (`DebugExport`)
+- Static shortcuts: «+ Расход» / «+ Доход» / «Перевод»; sync outbox при возврате в приложение; экспорт очереди outbox в буфер
+- **Share-intent** (`ACTION_SEND` text/image) → форма расхода с префиллом описания (`ShareTargetPlugin`)
+- **Home-screen виджеты:** быстрые действия, баланс, бюджет, «Скоро», один счёт (`WidgetBridge` + WorkManager)
+- **SystemBars:** стиль status/navigation bar следует resolved теме SPA (`SystemBars.setStyle`)
+- **Themed icon:** adaptive слой `<monochrome>` (силуэт) для Material You / тематических иконок ОС (`icon-monochrome-512.png` → `make android-icons`)
+- **Навигация после сохранения:** в настройках/админке — toast, остаётесь на экране; формы «Добавить» (операция, перевод, долг, счёт, кредит) — `leaveForm` / `from`; мастер кредита — `gotoReplace` между шагами; inline-редактирование — без перехода
+- Форма редактирования счёта: «Начальный баланс» из `initial_balance`, не из `balance_display`
+- Release APK: universal + per-ABI (`arm64-v8a`, `armeabi-v7a`, `x86_64`); CI + goreleaser `extra_files`
+
+**Сервер**
+
+- **mDNS** — публикация `_buhgalter._tcp` при старте (`BUHGALTER_MDNS_ENABLED`, `BUHGALTER_MDNS_NAME`)
+- `GET /api/v1/health` — опциональное поле **`external_url`** (из `system_settings`) для подписи домена в Android discovery
+- `GET /api/v1/ui/i18n/{lang}` — каталог UI-строк из `server/ui_locales/` (`make copy-ui-i18n` / `ui-i18n-check`)
+- Тема профиля: значение **`system`** («Как на устройстве») в `users.theme`; default у новых пользователей (`schema.sql`, `InsertUser`)
+- `GET /api/v1/budgets/spent-preview` — факт расходов по scope без строки бюджета (подсказка «Уже потрачено» в форме) ([budget.md](docs/budget.md))
+
+**Веб**
+
+- **ref-cache SWR** в `localStorage` для всех `GET /api/v1/*` — мгновенный экран, фоновое обновление ([ui-api-cache.md](docs/ui-api-cache.md))
+- `warmRefCache()` после входа; `assignIfChanged`, path-aware `refCacheUpdate` / `ref-cache-watch`
+- **PageLoadGate** на экранах с начальной загрузкой данных при сбое первой загрузки
+- Тема **`system`** («Как на устройстве») — web + Android; резолв через `prefers-color-scheme`; default до логина и у новых пользователей
+- Пункт **«Главная»** снова первым в верхнем меню (desktop и mobile) ([ui-navigation.md](docs/ui-navigation.md))
+
+**Статистика (web + Android)**
+
+- Подкатегории под спойлером у каждой категории в блоке «По категориям»; данные — `GET /stats/by-subcategory` ([ui-stats.md](docs/ui-stats.md))
+
+**Бюджет (web + Android)**
+
+- В форме создания/редактирования — подсказка **«Уже потрачено»** для текущего и прошлого месяца (`GET /budgets/spent-preview` по scope / категории / подкатегории / счёту); на будущий месяц не показывается; на Android при офлайне скрыто ([ui-budget.md](docs/ui-budget.md))
+
+### Изменено
+
+**Счета**
+
+- Форма редактирования (веб): поле «Начальный баланс» из **`initial_balance`**, не из `balance_display` ([data-model.md](docs/data-model.md))
+- Сортировка блока **«Мои средства»** на главной и `/accounts` (web + Android): сначала `cash`, затем `bank`; внутри типа основной счёт (`is_primary`) первым ([ui-credit-cards.md](docs/ui-credit-cards.md))
+- Кредитную карту **нельзя** сделать основным счётом: UI скрывает действие; `POST /accounts/{id}/primary` → `ERR_ACCOUNT_PRIMARY_CREDIT_CARD`; миграция `042_primary_not_credit_card.sql` снимает ошибочный primary и назначает oldest eligible `cash`/`bank`
+
+**Веб**
+
+- Главная, список счетов, операции — фоновый refresh без лишней перерисовки при неизменившемся JSON
+- **Новый счёт** (`/accounts/new`): после сохранения — возврат на экран-источник (`?from=`), не переход на карточку счёта
+- **Периодические операции** (`/settings/recurring-operations`, web + Android): кнопка «Добавить» в шапке рядом с заголовком; форма создания под шапкой (как бюджет / счета / кредиты) ([ui-navigation.md](docs/ui-navigation.md), [ui-stable-layout.md](docs/ui-stable-layout.md))
+
+**Кредиты**
+
+- Переключатель «Уже платил по графику» (веб; то же правило в Android-мастере) показывается **только если** в preview графика есть платёж с датой в прошлом ([ui-credits.md](docs/ui-credits.md))
+
+**Импорт / тесты**
+
+- Sample CSV и e2e coverage-gaps: суммы как в экспорте (`100.00`), без суффикса `_-₽` (парсер по-прежнему принимает legacy Cubux)
+- Web e2e Playwright: расширено покрытие (`budget` already-spent, навигация «Главная», recurring «Добавить», flows/auth helpers)
+
+### Исправлено
+
+**UI — Select / Combobox / DateTimePicker**
+
+- Выпадающий список без `usePortal` больше не «отрывается» от поля: `.relative` только вокруг контрола, label и hint снаружи (заметно на Android в профиле — тема, часовой пояс) ([ui-dialogs.md](docs/ui-dialogs.md))
+
+**Уведомления — долги**
+
+- Напоминание в день срока для долга «мне должны» больше не звучит как «вернуть долг»: плейсхолдер `{action}` — «получить долг от» / `collect debt from` (для «я должен» — по-прежнему «вернуть долг»)
+- Вместо «через 0 дн.» — «сегодня» (плейсхолдер `{when}`); дефолтный шаблон `debt_due_soon` обновлён ([notifications.md](docs/notifications.md))
+
+### Техническое
+
+- Миграция `042_primary_not_credit_card.sql` — снятие primary с кредитных карт и назначение основного среди `cash`/`bank`
+- Release-сборка APK: базовый цвет `splash_background` в `values/colors.xml` (lint `MissingDefaultResource`)
+- `make android-sync`, `android-apk`, `android-apk-release`, `android-install`, `android-install-release`; `scripts/setup-android-dev.sh`, `android-icons.py` (цвет + monochrome)
+- CI release: job `android-apk` → проверка всех APK (`scripts/verify-android-release-apks.sh`) → артефакт каталога `release/` → goreleaser `extra_files` (universal + 3 ABI); `make copy-ui-i18n` / `ui-i18n-check`
+- Native plugins: `LanDiscovery`, `DebugExport`, `WifiSubnet`, `SslTrust`, `ShareTarget`, `WidgetBridge`; Capacitor `SystemBars`
+- Подпись release APK: `keystore.properties` / GitHub Secrets; `*.jks` в `.gitignore` (не коммитить)
+- OpenAPI 1.4.0: `external_url` в health; `GET /ui/i18n/{lang}`; `GET /budgets/spent-preview`; `User.theme` enum `light|dark|system`; password-reset и `GET /ui/meta`
+- Unit (android/ui vitest): theme, debug-log, lan-discovery, app-lock, ref-cache, state-utils, виджеты, form-nav; приёмка UI на устройстве вручную (Playwright e2e Android не используется)
+- Документация: [android-client.md](docs/android-client.md), [android-client-ui.md](docs/android-client-ui.md), [android-client-platform.md](docs/android-client-platform.md), [ui-api-cache.md](docs/ui-api-cache.md), [ui-budget.md](docs/ui-budget.md), [ui-credit-cards.md](docs/ui-credit-cards.md), [ui-navigation.md](docs/ui-navigation.md), [ui-dialogs.md](docs/ui-dialogs.md), [README.md](README.md)
+- [docs/release-notes-v1.4.0.md](docs/release-notes-v1.4.0.md)
+- Версия `1.4.0`
 
 ## [v1.3.2] — 2026-07-08
 
@@ -679,6 +779,10 @@
 - Стек: Go 1.26+, SQLite, SvelteKit, встроенный статический фронтенд (`embedstatic`)
 - Команда `make version vX.Y.Z` — единая простановка semver во всех артефактах (`VERSION`, OpenAPI, Dockerfile, …)
 
+[v1.4.0]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.4.0
+[v1.3.2]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.3.2
+[v1.3.1]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.3.1
+[v1.3.0]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.3.0
 [v1.2.5]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.2.5
 [v1.2.4]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.2.4
 [v1.1.1]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.1.1

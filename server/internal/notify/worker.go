@@ -212,6 +212,8 @@ func (w *Worker) processDebts(
 			"amount":   FormatAmountDisplay(row.Amount, currencyCode),
 			"due_date": timeutil.FormatDisplayDateInTimezone(row.DueDate, timezone),
 			"days":     int64ToString(int64(max(diff, 0))),
+			"when":     RelativeDays(localeCode, max(diff, 0)),
+			"action":   DebtActionPhrase(localeCode, row.Direction),
 			"debt_url": debtURLPlaceholderValue(externalURL, localeCode, row.ID),
 		})
 		if err != nil {

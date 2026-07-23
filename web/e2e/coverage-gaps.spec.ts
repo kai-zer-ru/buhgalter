@@ -184,7 +184,12 @@ test('edit expense from dashboard recent list', async ({ page }) => {
 	await fillEditTxAmount(dialog, '66.80');
 	await dialog.getByRole('button', { name: 'Сохранить' }).click();
 	await expect(dialog).toHaveCount(0, { timeout: 15_000 });
-	await expect(page.getByText('66.80').first()).toBeVisible({ timeout: 10_000 });
+	await expandCollapsibleSection(page, 'Последние операции');
+	await expect(
+		page.getByRole('row', {
+			name: new RegExp(`${description}.*66\\.80|66\\.80.*${description}`)
+		})
+	).toBeVisible({ timeout: 10_000 });
 });
 
 test('account detail desktop: create income', async ({ page }) => {
@@ -209,7 +214,7 @@ test('import CSV commits transactions', async ({ page }) => {
 	const dateStr = `${String(today.getDate()).padStart(2, '0')}.${String(today.getMonth() + 1).padStart(2, '0')}.${today.getFullYear()}`;
 	const csv = [
 		'Тип,Дата,Сумма списания,Валюта списания,Счет списания,Сумма пополнения,Валюта назначения,Счет пополнения,Категория,Subcategory,Описание,Проект,Пользователь',
-		`Расходы,${dateStr},75.00_-₽,RUB,${accountName},,,,Продукты,Молоко,${description},,Tester`
+		`Расходы,${dateStr},75.00,RUB,${accountName},,,,Продукты,Молоко,${description},,Tester`
 	].join('\n');
 	const csvPath = path.join(os.tmpdir(), `e2e-import-${tag}.csv`);
 	fs.writeFileSync(csvPath, csv, 'utf8');
@@ -246,6 +251,7 @@ test('login page shows register link when registration enabled', async ({ page }
 
 	await page.context().clearCookies();
 	await page.goto('/login');
+	await waitAppReady(page);
 	await expect(page.getByRole('link', { name: 'Зарегистрироваться' })).toBeVisible({
 		timeout: 10_000
 	});

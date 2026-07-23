@@ -113,7 +113,7 @@ func (h *Handler) PutSettings(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CURRENCY")
 		return
 	}
-	if req.Theme != "" && req.Theme != "light" && req.Theme != "dark" {
+	if req.Theme != "" && req.Theme != "light" && req.Theme != "dark" && req.Theme != "system" {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_THEME")
 		return
 	}

@@ -35,7 +35,7 @@ CREATE TABLE users (
     language        TEXT NOT NULL DEFAULT 'ru',
     currency        TEXT NOT NULL DEFAULT 'RUB',
     timezone        TEXT NOT NULL DEFAULT 'Europe/Moscow',
-    theme           TEXT NOT NULL DEFAULT 'light',
+    theme           TEXT NOT NULL DEFAULT 'system',
     status          TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'pending', 'banned')),
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at      TEXT NOT NULL DEFAULT (datetime('now'))

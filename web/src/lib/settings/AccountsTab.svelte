@@ -3,6 +3,7 @@
 	import { resolve } from '$app/paths';
 	import { _ } from 'svelte-i18n';
 	import { listAccounts, setPrimaryAccount, type Account } from '$lib/api/client';
+	import { canSetAsPrimary } from '$lib/accounts';
 	import AccountIcon from '$lib/components/AccountIcon.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
 	import PageTabs from '$lib/components/PageTabs.svelte';
@@ -103,7 +104,7 @@
 							</div>
 						</div>
 					</a>
-					{#if filter === 'active'}
+					{#if filter === 'active' && (acc.is_primary || canSetAsPrimary(acc))}
 						<button
 							type="button"
 							class="btn-icon btn-ghost shrink-0"
@@ -113,6 +114,7 @@
 								? $_('accounts.primary.badge')
 								: $_('accounts.primary.set')}
 							style:color={acc.is_primary ? 'var(--primary)' : 'var(--text-muted)'}
+							disabled={acc.is_primary}
 							onclick={() => void makePrimary(acc.id)}
 						>
 							{acc.is_primary ? '★' : '☆'}

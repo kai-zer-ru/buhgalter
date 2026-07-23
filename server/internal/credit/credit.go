@@ -218,15 +218,10 @@ func calculatedMonthlyPayment(principal int64, termMonths int, interestRate floa
 }
 
 // resolvesToCalculatedPayment reports whether user input should use the auto-calculated payment.
+// Only an exact match counts as "no override": a whole-ruble truncation of the calculated
+// amount (e.g. 323.00 vs 323.83) is a real user edit and must be applied.
 func resolvesToCalculatedPayment(calculated, userMonthly int64) bool {
-	if userMonthly == calculated {
-		return true
-	}
-	// Whole rubles matching truncated auto payment (mortgage / display rounding).
-	if userMonthly%100 == 0 && userMonthly == (calculated/100)*100 {
-		return true
-	}
-	return false
+	return userMonthly == calculated
 }
 
 func resolveScheduleMonthly(principal int64, termMonths int, interestRate float64, creditKind string, interval PaymentInterval, issueDate time.Time, userMonthly *int64) (monthly int64, userSet bool) {

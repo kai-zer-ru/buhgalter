@@ -7,8 +7,8 @@
 ## Механизмы авторизации
 
 - **Session cookie** (`session`) — основной способ для web UI.
-- **Bearer token** — для API-клиентов (`Authorization: Bearer ...`).
-- **API tokens** — отдельные пользовательские токены, создаются в настройках.
+- **Bearer token** — для API-клиентов и Android (`Authorization: Bearer ...`): session token после `POST /auth/login` или долгоживущий API-токен.
+- **API tokens** — отдельные пользовательские токены, создаются в настройках (в т.ч. вход в Android через `/login/token`).
 
 ## Основные endpoints
 
@@ -19,7 +19,11 @@
 | `POST` | `/api/v1/auth/register` | Регистрация (если включена); статус `pending`, без сессии |
 | `GET` | `/api/v1/auth/verify` | Проверка валидности токена |
 | `GET` | `/api/v1/auth/me` | Текущий пользователь |
-| `POST` | `/api/v1/auth/request-password-reset` | Запрос сброса пароля (v1.1; body: `{ "login" }`) |
+| `POST` | `/api/v1/auth/request-password-reset` | Запрос сброса пароля (body: `{ "login" }`; ответ `204`) |
+| `GET` | `/api/v1/admin/password-reset-requests` | Ожидающие запросы (админ) |
+| `POST` | `/api/v1/admin/password-reset-requests/{id}/ack` | Скрыть запрос из очереди (админ) |
+| `PUT` | `/api/v1/admin/users/{id}/password` | Задать новый пароль пользователю (админ) |
+| `GET` | `/api/v1/ui/meta` | Агрегированные справочники для старта UI |
 | `GET` | `/api/v1/user/tokens` | Список API-токенов |
 | `POST` | `/api/v1/user/tokens` | Создать API-токен |
 | `DELETE` | `/api/v1/user/tokens/{id}` | Отозвать API-токен (только свой) |
@@ -49,9 +53,11 @@
 
 Self-service смены пароля по e-mail **нет**. Сценарий для self-hosted:
 
-1. Пользователь: `POST /api/v1/auth/request-password-reset` с логином. Ответ всегда `200` (не раскрывает, существует ли учётка). Rate limit: 5 запросов/мин с IP.
+1. Пользователь: `POST /api/v1/auth/request-password-reset` с логином. Ответ всегда `204` (не раскрывает, существует ли учётка). Rate limit: 5 запросов/мин с IP.
 2. Администратор: `GET /api/v1/admin/password-reset-requests` — список ожидающих; `POST .../ack` — скрыть запрос из очереди.
 3. Администратор: `PUT /api/v1/admin/users/{id}/password` — новый пароль; сессии пользователя инвалидируются.
+
+Схемы в [openapi.yaml](openapi.yaml): `PasswordResetRequest`, пути выше + `GET /ui/meta` (`UIMetaResponse`).
 
 Таблица БД: `password_reset_requests` (миграция `023_password_reset_requests.sql`).
 

@@ -1,6 +1,6 @@
 # API — кеш GET-ответов
 
-На **сервере** — in-memory кеш успешных `GET`. В **браузере** — долгоживущий кеш только статического справочника банков (остальные данные запрашиваются с сервера при каждой навигации).
+На **сервере** — in-memory кеш успешных `GET`. В **браузере** — in-memory TTL для банков + **localStorage SWR ref-cache** для всех `GET /api/v1/*` (мгновенный экран, фоновое обновление).
 
 Связанные документы: [api/openapi.yaml](api/openapi.yaml).
 
@@ -37,8 +37,10 @@ TTL — страховка; при любой мутации кеш пользо
 | `GET /health` | Диагностика |
 | `GET /version/check` | Собственный кеш в `versioncheck` |
 | `GET /export` | Файловая выгрузка |
-| `POST .../preview` | Разовые расчёты |
+| `POST .../preview`, `GET .../preview` | Разовые расчёты (в т.ч. `GET /budgets/spent-preview`) |
 | `GET /import/jobs/{id}` | Статус меняется |
+
+На **клиенте** (ref-cache) дополнительно не кладутся в SWR: `GET /setup/status` (флаг регистрации на /login — иначе pre-mutation snapshot), `GET /credits/{id}` (полный график). Серверный кеш `GET /setup/status` остаётся; сброс при `PUT /admin/settings`.
 
 ## Инвалидация
 
@@ -48,10 +50,21 @@ TTL — страховка; при любой мутации кеш пользо
 
 ## Клиент (браузер)
 
-Кешируется только справочник банков (`GET /api/v1/banks`, TTL 24 ч). При первом `getUIMeta()` список банков из ответа попадает в тот же кеш — повторный `listBanks()` на других страницах без лишнего запроса.
+Два слоя:
 
-Категории, должники, счета и операции **не** кешируются на клиенте — каждый экран запрашивает актуальные данные (ускорение повторных GET даёт серверный кеш выше).
+| Слой | Что | TTL / поведение |
+|------|-----|-----------------|
+| In-memory | `GET /api/v1/banks` | 24 ч (`web/src/lib/api/cache.ts`) |
+| **ref-cache (localStorage)** | `GET /api/v1/*` (кроме health, **setup/status**, export, preview, version, **`GET /credits/{id}`**) | **Stale-while-revalidate:** экран сразу из кеша, сеть в фоне. Деталь кредита с полным графиком не кладётся в localStorage — иначе на мобиле возможен долгий freeze главного потока. |
 
-Реализация: `web/src/lib/api/cache.ts`, `listBanks()` и `getUIMeta()` в `client.ts`.
+Ключ ref-cache: `buhgalter.ref_cache.web.v1::{user_id}::{path}` — при смене пользователя старый кеш не читается. Очистка при logout и session expired.
+
+Фоновое обновление: `refCacheUpdate` (path-aware) → страницы перезагружают только затронутый блок; `assignIfChanged` не триггерит лишний re-render при идентичном JSON.
+
+**Инвалидация на клиенте:** любой успешный `POST` / `PUT` / `PATCH` / `DELETE` через `client.ts` сбрасывает ref-cache и in-memory TTL (`clearRefCache` + `invalidateApiCache`), чтобы последующий `load()` на странице шёл в сеть, а не рисовал pre-mutation snapshot. In-flight SWR revalidate после сброса не записывает устаревший ответ (epoch). То же правило в **Android** (`android/ui/src/lib/api/client.ts`) — с `clearRefCache({ preserveAuthMe: true })`, чтобы офлайн cold start всё ещё находил `/auth/me` для PIN/биометрии. Дополнительно Android хранит профиль в `buhgalter.last_user.v1` (не привязан к URL сервера).
+
+Прогрев при входе: `warmRefCache()` в фоне после `loadUser()`.
+
+Реализация: `web/src/lib/ref-cache.ts`, хук в `client.ts` `request()`, `state-utils.ts` (`assignIfChanged`).
 
 Иконки банков и категорий — статические файлы в `web/static/`, кешируются браузером.

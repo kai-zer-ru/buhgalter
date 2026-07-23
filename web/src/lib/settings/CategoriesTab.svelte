@@ -22,11 +22,14 @@
 	} from '$lib/api/client';
 	import CategoryIcon from '$lib/components/CategoryIcon.svelte';
 	import CategoryIconPicker from '$lib/components/CategoryIconPicker.svelte';
+	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
 	import IconButton from '$lib/components/IconButton.svelte';
+	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
 	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
 	import ReorderDragGhost from '$lib/components/ReorderDragGhost.svelte';
 	import { defaultIconForKind } from '$lib/category-icons';
 	import { confirm } from '$lib/confirm';
+	import { reportPageLoadFailure } from '$lib/page-load';
 	import { toast } from '$lib/toast';
 	import { beginPointerDrag, moveId, type DragGhostView } from '$lib/drag-reorder';
 
@@ -50,6 +53,7 @@
 	let subs = $state<Record<string, Subcategory[]>>({});
 	let expanded = $state<Record<string, boolean>>({});
 	let loading = $state(true);
+	let loadError = $state<string | null>(null);
 
 	let editingId = $state<string | null>(null);
 	let editName = $state('');
@@ -124,8 +128,10 @@
 		loading = true;
 		try {
 			categories = await listCategories(tab);
+			loadError = null;
 		} catch (err) {
-			toast.fromError(err);
+			const msg = reportPageLoadFailure(err, { hasData: categories.length > 0 });
+			if (msg) loadError = msg;
 		} finally {
 			loading = false;
 		}
@@ -399,244 +405,246 @@
 		</div>
 	</div>
 
-	{#if loading}
-		<p style:color="var(--text-muted)">{$_('common.loading')}</p>
-	{:else}
-		<div class="space-y-2">
-			{#each categories as cat (cat.id)}
-				<div
-					class="card transition-opacity"
-					class:opacity-30={draggingId === cat.id}
-					class:border-t-2={overId === cat.id && draggingId !== null && draggingId !== cat.id}
-					data-drag-id={cat.id}
-					data-drag-kind="category"
-					style:border-color={overId === cat.id ? 'var(--primary)' : undefined}
-				>
-					<div class="flex flex-wrap items-center gap-1 sm:flex-nowrap" data-drag-row>
-						{#if editingId !== cat.id}
-							{#if !cat.is_system}
-								<span
-									class="btn-icon btn-ghost cursor-grab touch-none text-lg leading-none select-none active:cursor-grabbing"
-									role="button"
-									tabindex="-1"
-									aria-label={$_('categories.drag.handle')}
-									onpointerdown={(e) =>
-										startCategoryDrag(
-											e,
-											cat,
-											e.currentTarget.closest('[data-drag-id]') as HTMLElement
-										)}
-								>
-									⠿
-								</span>
-							{:else}
-								<span class="btn-icon shrink-0" aria-hidden="true"></span>
-							{/if}
-							<span class="inline-flex shrink-0 items-center justify-center min-h-11 min-w-11">
-								<CategoryIcon icon={cat.icon} size={categoryIconSize} />
-							</span>
-							{#if !cat.is_system}
-								<button
-									type="button"
-									class="min-w-0 flex-1 truncate text-left font-medium inline-flex items-center gap-1.5"
-									aria-expanded={expanded[cat.id] ?? false}
-									onclick={() => toggleExpand(cat)}
-								>
-									<span class="inline-flex min-w-0 items-center gap-1 truncate">
-										<span class="truncate">{cat.name}</span>
-										{#if cat.is_primary}
-											<span
-												class="shrink-0"
-												style:color="var(--primary)"
-												title={$_('categories.primary.badge')}
-												aria-label={$_('categories.primary.badge')}
-											>
-												<svg
-													aria-hidden="true"
-													class="h-4 w-4"
-													viewBox="0 0 24 24"
-													fill="none"
-													stroke="currentColor"
-													stroke-width="2"
-												>
-													<path d="M20 6 9 17l-5-5" />
-												</svg>
-											</span>
-										{/if}
-									</span>
-									<span class="shrink-0 text-xs leading-none" aria-hidden="true">
-										{expanded[cat.id] ? '▼' : '▶'}
-									</span>
-								</button>
-							{:else}
-								<span class="min-w-0 flex-1 truncate font-medium">
-									{cat.name}
-									<span class="ml-1 text-xs" style:color="var(--text-muted)"
-										>({$_('categories.system.badge')})</span
+	<PageLoadGate {loading} error={loadError} onretry={() => void load()} inline>
+		{#if categories.length === 0}
+			<EmptyStateCard message={$_('categories.empty')} />
+		{:else}
+			<div class="space-y-2">
+				{#each categories as cat (cat.id)}
+					<div
+						class="card transition-opacity"
+						class:opacity-30={draggingId === cat.id}
+						class:border-t-2={overId === cat.id && draggingId !== null && draggingId !== cat.id}
+						data-drag-id={cat.id}
+						data-drag-kind="category"
+						style:border-color={overId === cat.id ? 'var(--primary)' : undefined}
+					>
+						<div class="flex flex-wrap items-center gap-1 sm:flex-nowrap" data-drag-row>
+							{#if editingId !== cat.id}
+								{#if !cat.is_system}
+									<span
+										class="btn-icon btn-ghost cursor-grab touch-none text-lg leading-none select-none active:cursor-grabbing"
+										role="button"
+										tabindex="-1"
+										aria-label={$_('categories.drag.handle')}
+										onpointerdown={(e) =>
+											startCategoryDrag(
+												e,
+												cat,
+												e.currentTarget.closest('[data-drag-id]') as HTMLElement
+											)}
 									>
+										⠿
+									</span>
+								{:else}
+									<span class="btn-icon shrink-0" aria-hidden="true"></span>
+								{/if}
+								<span class="inline-flex shrink-0 items-center justify-center min-h-11 min-w-11">
+									<CategoryIcon icon={cat.icon} size={categoryIconSize} />
 								</span>
+								{#if !cat.is_system}
+									<button
+										type="button"
+										class="min-w-0 flex-1 truncate text-left font-medium inline-flex items-center gap-1.5"
+										aria-expanded={expanded[cat.id] ?? false}
+										onclick={() => toggleExpand(cat)}
+									>
+										<span class="inline-flex min-w-0 items-center gap-1 truncate">
+											<span class="truncate">{cat.name}</span>
+											{#if cat.is_primary}
+												<span
+													class="shrink-0"
+													style:color="var(--primary)"
+													title={$_('categories.primary.badge')}
+													aria-label={$_('categories.primary.badge')}
+												>
+													<svg
+														aria-hidden="true"
+														class="h-4 w-4"
+														viewBox="0 0 24 24"
+														fill="none"
+														stroke="currentColor"
+														stroke-width="2"
+													>
+														<path d="M20 6 9 17l-5-5" />
+													</svg>
+												</span>
+											{/if}
+										</span>
+										<span class="shrink-0 text-xs leading-none" aria-hidden="true">
+											{expanded[cat.id] ? '▼' : '▶'}
+										</span>
+									</button>
+								{:else}
+									<span class="min-w-0 flex-1 truncate font-medium">
+										{cat.name}
+										<span class="ml-1 text-xs" style:color="var(--text-muted)"
+											>({$_('categories.system.badge')})</span
+										>
+									</span>
+								{/if}
+								{#if !cat.is_system}
+									<RowActionsMenu actions={categoryActions(cat)} />
+								{/if}
+							{:else}
+								<span class="inline-flex shrink-0 items-center justify-center min-h-11 min-w-11">
+									<CategoryIcon icon={cat.icon} size={categoryIconSize} />
+								</span>
+								<div class="flex min-w-0 flex-1 flex-col gap-3">
+									<input class="input w-full" bind:value={editName} />
+									<CategoryIconPicker
+										bind:value={editIcon}
+										bind:categoryName={editName}
+										categoryType={tab}
+										lockName={true}
+										quickSize={categoryIconSize}
+										iconSize={categoryIconSize}
+									/>
+									<div class="flex flex-wrap gap-2">
+										<IconButton
+											icon="save"
+											label={$_('common.save')}
+											variant="primary"
+											onclick={saveEdit}
+										/>
+										<IconButton
+											icon="cancel"
+											label={$_('common.cancel')}
+											onclick={() => (editingId = null)}
+										/>
+									</div>
+								</div>
 							{/if}
-							{#if !cat.is_system}
-								<RowActionsMenu actions={categoryActions(cat)} />
-							{/if}
-						{:else}
-							<span class="inline-flex shrink-0 items-center justify-center min-h-11 min-w-11">
-								<CategoryIcon icon={cat.icon} size={categoryIconSize} />
-							</span>
-							<div class="flex min-w-0 flex-1 flex-col gap-3">
-								<input class="input w-full" bind:value={editName} />
-								<CategoryIconPicker
-									bind:value={editIcon}
-									bind:categoryName={editName}
-									categoryType={tab}
-									lockName={true}
-									quickSize={categoryIconSize}
-									iconSize={categoryIconSize}
-								/>
-								<div class="flex flex-wrap gap-2">
-									<IconButton
-										icon="save"
-										label={$_('common.save')}
-										variant="primary"
-										onclick={saveEdit}
+						</div>
+
+						{#if expanded[cat.id] && !cat.is_system}
+							<div
+								class="mt-3 space-y-3 border-t pt-3 pl-4 sm:pl-10"
+								style:border-color="var(--border)"
+							>
+								{#each subs[cat.id] ?? [] as sub (sub.id)}
+									<div
+										class="flex flex-wrap items-center gap-2 rounded-lg transition-opacity"
+										class:opacity-30={draggingId === sub.id}
+										class:border-t-2={overId === sub.id &&
+											draggingId !== null &&
+											draggingId !== sub.id}
+										data-drag-id={sub.id}
+										data-drag-kind="sub"
+										style:border-color={overId === sub.id ? 'var(--primary)' : undefined}
+									>
+										{#if editingSubId === sub.id}
+											<div
+												class="flex min-w-0 w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center"
+											>
+												<CategoryIconPicker
+													bind:value={editSubIcon}
+													bind:categoryName={editSubName}
+													categoryType={tab}
+													lockName={true}
+													quickSize={categoryIconSize}
+													iconSize={categoryIconSize}
+												/>
+												<input
+													class="input min-w-[10rem] flex-1"
+													bind:value={editSubName}
+													onkeydown={(e) => {
+														if (e.key === 'Enter') {
+															e.preventDefault();
+															void saveSubEdit(cat.id);
+														}
+													}}
+												/>
+												<div class="flex shrink-0 gap-1">
+													<IconButton
+														icon="save"
+														label={$_('common.save')}
+														variant="primary"
+														onclick={() => saveSubEdit(cat.id)}
+													/>
+													<IconButton
+														icon="cancel"
+														label={$_('common.cancel')}
+														onclick={() => (editingSubId = null)}
+													/>
+												</div>
+											</div>
+										{:else}
+											<div
+												class="flex min-w-0 flex-1 items-center gap-1 overflow-hidden"
+												data-drag-row
+											>
+												<span
+													class="btn-icon btn-ghost cursor-grab touch-none text-base leading-none select-none active:cursor-grabbing"
+													role="button"
+													tabindex="-1"
+													aria-label={$_('categories.drag.handle')}
+													onpointerdown={(e) =>
+														startSubDrag(
+															e,
+															cat.id,
+															sub,
+															e.currentTarget.closest('[data-drag-id]') as HTMLElement
+														)}
+												>
+													⠿
+												</span>
+												<span
+													class="inline-flex shrink-0 items-center justify-center min-h-11 min-w-11"
+												>
+													<CategoryIcon icon={sub.icon || 'default'} size={categoryIconSize} />
+												</span>
+												<span class="min-w-0 flex-1 truncate">{sub.name}</span>
+												<RowActionsMenu
+													actions={[
+														{
+															icon: 'edit',
+															label: $_('accounts.action.edit'),
+															onclick: () => startEditSub(sub)
+														},
+														{
+															icon: 'delete',
+															label: $_('common.delete'),
+															variant: 'danger',
+															onclick: () => removeSub(cat.id, sub.id)
+														}
+													]}
+												/>
+											</div>
+										{/if}
+									</div>
+								{/each}
+								<div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+									<CategoryIconPicker
+										bind:value={newSubIcon[cat.id]}
+										bind:categoryName={newSubName[cat.id]}
+										categoryType={tab}
+										quickSize={categoryIconSize}
+										iconSize={categoryIconSize}
+									/>
+									<input
+										id={subInputId(cat.id)}
+										class="input min-w-[10rem] flex-1"
+										placeholder={$_('categories.sub.add')}
+										bind:value={newSubName[cat.id]}
+										onkeydown={(e) => {
+											if (e.key === 'Enter') {
+												e.preventDefault();
+												void addSub(cat.id);
+											}
+										}}
 									/>
 									<IconButton
-										icon="cancel"
-										label={$_('common.cancel')}
-										onclick={() => (editingId = null)}
+										icon="create"
+										label={$_('common.create')}
+										onclick={() => addSub(cat.id)}
 									/>
 								</div>
 							</div>
 						{/if}
 					</div>
-
-					{#if expanded[cat.id] && !cat.is_system}
-						<div
-							class="mt-3 space-y-3 border-t pt-3 pl-4 sm:pl-10"
-							style:border-color="var(--border)"
-						>
-							{#each subs[cat.id] ?? [] as sub (sub.id)}
-								<div
-									class="flex flex-wrap items-center gap-2 rounded-lg transition-opacity"
-									class:opacity-30={draggingId === sub.id}
-									class:border-t-2={overId === sub.id &&
-										draggingId !== null &&
-										draggingId !== sub.id}
-									data-drag-id={sub.id}
-									data-drag-kind="sub"
-									style:border-color={overId === sub.id ? 'var(--primary)' : undefined}
-								>
-									{#if editingSubId === sub.id}
-										<div
-											class="flex min-w-0 w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center"
-										>
-											<CategoryIconPicker
-												bind:value={editSubIcon}
-												bind:categoryName={editSubName}
-												categoryType={tab}
-												lockName={true}
-												quickSize={categoryIconSize}
-												iconSize={categoryIconSize}
-											/>
-											<input
-												class="input min-w-[10rem] flex-1"
-												bind:value={editSubName}
-												onkeydown={(e) => {
-													if (e.key === 'Enter') {
-														e.preventDefault();
-														void saveSubEdit(cat.id);
-													}
-												}}
-											/>
-											<div class="flex shrink-0 gap-1">
-												<IconButton
-													icon="save"
-													label={$_('common.save')}
-													variant="primary"
-													onclick={() => saveSubEdit(cat.id)}
-												/>
-												<IconButton
-													icon="cancel"
-													label={$_('common.cancel')}
-													onclick={() => (editingSubId = null)}
-												/>
-											</div>
-										</div>
-									{:else}
-										<div
-											class="flex min-w-0 flex-1 items-center gap-1 overflow-hidden"
-											data-drag-row
-										>
-											<span
-												class="btn-icon btn-ghost cursor-grab touch-none text-base leading-none select-none active:cursor-grabbing"
-												role="button"
-												tabindex="-1"
-												aria-label={$_('categories.drag.handle')}
-												onpointerdown={(e) =>
-													startSubDrag(
-														e,
-														cat.id,
-														sub,
-														e.currentTarget.closest('[data-drag-id]') as HTMLElement
-													)}
-											>
-												⠿
-											</span>
-											<span
-												class="inline-flex shrink-0 items-center justify-center min-h-11 min-w-11"
-											>
-												<CategoryIcon icon={sub.icon || 'default'} size={categoryIconSize} />
-											</span>
-											<span class="min-w-0 flex-1 truncate">{sub.name}</span>
-											<RowActionsMenu
-												actions={[
-													{
-														icon: 'edit',
-														label: $_('accounts.action.edit'),
-														onclick: () => startEditSub(sub)
-													},
-													{
-														icon: 'delete',
-														label: $_('common.delete'),
-														variant: 'danger',
-														onclick: () => removeSub(cat.id, sub.id)
-													}
-												]}
-											/>
-										</div>
-									{/if}
-								</div>
-							{/each}
-							<div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-								<CategoryIconPicker
-									bind:value={newSubIcon[cat.id]}
-									bind:categoryName={newSubName[cat.id]}
-									categoryType={tab}
-									quickSize={categoryIconSize}
-									iconSize={categoryIconSize}
-								/>
-								<input
-									id={subInputId(cat.id)}
-									class="input min-w-[10rem] flex-1"
-									placeholder={$_('categories.sub.add')}
-									bind:value={newSubName[cat.id]}
-									onkeydown={(e) => {
-										if (e.key === 'Enter') {
-											e.preventDefault();
-											void addSub(cat.id);
-										}
-									}}
-								/>
-								<IconButton
-									icon="create"
-									label={$_('common.create')}
-									onclick={() => addSub(cat.id)}
-								/>
-							</div>
-						</div>
-					{/if}
-				</div>
-			{/each}
-		</div>
-	{/if}
+				{/each}
+			</div>
+		{/if}
+	</PageLoadGate>
 </div>

@@ -2,6 +2,12 @@ import { get } from 'svelte/store';
 import { locale } from 'svelte-i18n';
 import { cachedGet, invalidateApiCache, seedStaticRef } from '$lib/api/cache';
 import { notifySessionExpired, shouldRedirectApi401 } from '$lib/auth/session-expired';
+import {
+	clearRefCache,
+	fetchWithRefCache,
+	seedCategoriesFromUIMeta,
+	shouldPersistRefCache
+} from '$lib/ref-cache';
 
 const API_BASE = '';
 
@@ -27,7 +33,7 @@ export function isTransientHttpError(status: number): boolean {
 	return status === 408 || status === 502 || status === 503 || status === 504;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function requestNetwork<T>(path: string, init?: RequestInit): Promise<T> {
 	const res = await fetch(`${API_BASE}${path}`, {
 		credentials: 'include',
 		headers: {
@@ -63,6 +69,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 		return undefined as T;
 	}
 	return res.json() as Promise<T>;
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+	const method = (init?.method ?? 'GET').toUpperCase();
+	const fetcher = () => requestNetwork<T>(path, init);
+	if (method === 'GET' && shouldPersistRefCache(path)) {
+		return fetchWithRefCache(path, fetcher);
+	}
+	const result = await fetcher();
+	if (method !== 'GET') {
+		// Match server apicache: any write invalidates client SWR so subsequent load() hits network.
+		invalidateApiCache();
+		clearRefCache();
+	}
+	return result;
 }
 
 export type SetupStatus = {
@@ -297,6 +318,7 @@ export function register(
 
 export function logout() {
 	invalidateApiCache();
+	clearRefCache();
 	return request<void>('/api/v1/auth/logout', { method: 'POST' });
 }
 
@@ -595,6 +617,7 @@ export type UIMeta = {
 export async function getUIMeta() {
 	const meta = await request<UIMeta>('/api/v1/ui/meta');
 	seedStaticRef('/api/v1/banks', meta.banks);
+	seedCategoriesFromUIMeta(meta);
 	return meta;
 }
 
@@ -846,6 +869,7 @@ export type AccountBalanceSummary = {
 	forecast_balance: number;
 	forecast_display: string;
 	has_future_this_month: boolean;
+	is_primary: boolean;
 	credit_limit?: number | null;
 	credit_limit_display?: string | null;
 	auto_topup_enabled?: boolean;
@@ -1103,6 +1127,27 @@ export function listBudgets(month?: string) {
 export function getBudgetSummary(month?: string) {
 	const q = month ? `?month=${encodeURIComponent(month)}` : '';
 	return request<BudgetSummaryResponse>(`/api/v1/budgets/summary${q}`);
+}
+
+export type BudgetSpentPreview = {
+	spent: number;
+	spent_display: string;
+};
+
+export function getBudgetSpentPreview(params: {
+	month?: string;
+	scope: BudgetScope;
+	category_id?: string;
+	subcategory_id?: string;
+	account_id?: string;
+}) {
+	const q = new URLSearchParams();
+	if (params.month) q.set('month', params.month);
+	q.set('scope', params.scope);
+	if (params.category_id) q.set('category_id', params.category_id);
+	if (params.subcategory_id) q.set('subcategory_id', params.subcategory_id);
+	if (params.account_id) q.set('account_id', params.account_id);
+	return request<BudgetSpentPreview>(`/api/v1/budgets/spent-preview?${q.toString()}`);
 }
 
 export function createBudget(

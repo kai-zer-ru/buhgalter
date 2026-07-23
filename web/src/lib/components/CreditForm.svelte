@@ -86,7 +86,7 @@
 	const schedulePageSize = 10;
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
-	const principalIncomeBlocked = $derived.by(() => {
+	const hasPastSchedulePayments = $derived.by(() => {
 		if (scheduleRows.length === 0) return false;
 		const todayDay = todayDateLocal(tz).slice(0, 10);
 		return scheduleRows.some((row) => {
@@ -94,6 +94,7 @@
 			return dateOnlyLocalValue(row.date).slice(0, 10) < todayDay;
 		});
 	});
+	const principalIncomeBlocked = $derived(hasPastSchedulePayments);
 	const isManualInterval = $derived(interval === 'manual');
 	const hasDownPayment = $derived.by(() => {
 		if (!downPayment.trim()) return false;
@@ -454,6 +455,12 @@
 	});
 
 	$effect(() => {
+		if (hasPastSchedulePayments) return;
+		retroactive = false;
+		retroactiveDebitCount = 0;
+	});
+
+	$effect(() => {
 		if (!retroactive) return;
 		const len = retroRowIndices().length;
 		if (retroactiveDebitCount > len) retroactiveDebitCount = len;
@@ -746,19 +753,21 @@
 		{/if}
 
 		<div class="space-y-1">
-			<div class="flex items-center justify-between gap-4">
-				<div>
-					<p class="text-sm">{$_('credits.field.retroactive')}</p>
-					<FieldHint text={$_('credits.field.retroactiveHint')} />
+			{#if hasPastSchedulePayments}
+				<div class="flex items-center justify-between gap-4">
+					<div>
+						<p class="text-sm">{$_('credits.field.retroactive')}</p>
+						<FieldHint text={$_('credits.field.retroactiveHint')} />
+					</div>
+					<ToggleSwitch
+						checked={retroactive}
+						label={$_('credits.field.retroactive')}
+						onchange={() => (retroactive = !retroactive)}
+					/>
 				</div>
-				<ToggleSwitch
-					checked={retroactive}
-					label={$_('credits.field.retroactive')}
-					onchange={() => (retroactive = !retroactive)}
-				/>
-			</div>
-			{#if retroactive && retroRowIndices().length > 0}
-				<FieldHint text={$_('credits.field.retroactiveDebitHint')} />
+				{#if retroactive && retroRowIndices().length > 0}
+					<FieldHint text={$_('credits.field.retroactiveDebitHint')} />
+				{/if}
 			{/if}
 		</div>
 

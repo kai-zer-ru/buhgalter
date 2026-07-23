@@ -221,3 +221,35 @@ func TestExternalAccessAllowedWithConfiguredExternalURL(t *testing.T) {
 		t.Fatalf("configured host status = %d, want 200", resp.StatusCode)
 	}
 }
+
+func TestHealthReturnsConfiguredExternalURL(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+
+	body := []byte(`{"registration_enabled":false,"external_url":"https://buhgalter-demo.example.com"}`)
+	resp, err := env.authedRequest(http.MethodPut, "/api/v1/admin/settings", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("admin settings status = %d", resp.StatusCode)
+	}
+
+	resp, err = http.Get(env.server.URL + "/api/v1/health")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("health status = %d, want 200", resp.StatusCode)
+	}
+
+	var payload map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["external_url"] != "https://buhgalter-demo.example.com" {
+		t.Fatalf("external_url = %q, want https://buhgalter-demo.example.com", payload["external_url"])
+	}
+}

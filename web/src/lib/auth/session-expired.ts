@@ -5,7 +5,12 @@ export const sessionExpiredTick = writable(0);
 let notifyLocked = false;
 
 export function isPublicAppRoute(pathname: string): boolean {
-	return pathname === '/setup' || pathname === '/login' || pathname === '/register';
+	return (
+		pathname === '/setup' ||
+		pathname === '/login' ||
+		pathname === '/register' ||
+		pathname === '/server-setup'
+	);
 }
 
 const API_401_EXEMPT = [

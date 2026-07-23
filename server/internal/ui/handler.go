@@ -15,7 +15,8 @@ import (
 )
 
 type Handler struct {
-	Store *db.Handle
+	Store   *db.Handle
+	Version string
 }
 
 type AccountRef struct {

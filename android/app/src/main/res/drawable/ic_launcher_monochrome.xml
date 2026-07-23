@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Material You themed-icon layer: white silhouette of brand "1" (system uses alpha only). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Geometric bold "1" in adaptive safe zone. -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M48,34L60,26h6v50h8v8H34v-8h8V40zM42,40v8l-8,4V42z" />
+</vector>

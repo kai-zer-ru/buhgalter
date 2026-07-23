@@ -36,21 +36,36 @@
 | [../README.md](../README.md) | Установка, быстрый старт, переменные окружения |
 | [style.md](style.md) | Единый стиль Markdown |
 | [data-model.md](data-model.md) | Схема БД, миграции |
+| [sql-access.md](sql-access.md) | sqlc vs inline SQL |
 | [categories-and-icons.md](categories-and-icons.md) | Категории, подкатегории, иконки |
+| [budget.md](budget.md) | Бюджет: модель и API |
 | [transactions-display.md](transactions-display.md) | Отображение операций |
+| [accounts-archive-delete.md](accounts-archive-delete.md) | Архивация и удаление счетов |
+| [balance-maintenance.md](balance-maintenance.md) | Автопополнение банковского счёта |
+| [notifications.md](notifications.md) | Уведомления Telegram / MAX |
+| [android-client.md](android-client.md) | Android: обзор |
+| [android-client-ui.md](android-client-ui.md) | Android: интерфейс |
+| [android-client-platform.md](android-client-platform.md) | Android: платформа |
 | [date-time-display.md](date-time-display.md) | Форматы даты/времени |
 | [ui-dialogs.md](ui-dialogs.md) | Диалоги, подтверждения, Esc |
 | [ui-navigation.md](ui-navigation.md) | Навигация и кликабельные сущности |
 | [ui-row-actions.md](ui-row-actions.md) | Меню «⋯» в строках и спойлер фильтров |
-| [ui-api-cache.md](ui-api-cache.md) | Кеш GET на сервере и банки в браузере |
+| [ui-api-cache.md](ui-api-cache.md) | Кеш GET на сервере и ref-cache в браузере |
 | [ui-stats.md](ui-stats.md) | Страница `/stats` |
+| [ui-budget.md](ui-budget.md) | Страница `/budget` |
 | [ui-credits.md](ui-credits.md) | UI кредитов |
+| [ui-credit-cards.md](ui-credit-cards.md) | Кредитные карты |
+| [ui-balance-maintenance.md](ui-balance-maintenance.md) | UI автопополнения |
 | [ui-stable-layout.md](ui-stable-layout.md) | Стабильная шапка и вкладки |
 | [ui-empty-states.md](ui-empty-states.md) | Пустые состояния |
 | [ui-table-columns.md](ui-table-columns.md) | Порядок колонок таблиц |
+| [ui-pagination.md](ui-pagination.md) | Пагинация |
+| [ui-toast.md](ui-toast.md) | In-app toast |
+| [ui-sveltekit-checks.md](ui-sveltekit-checks.md) | Typed `resolve`, vitest-моки |
 | [import/cubux.md](import/cubux.md) | Импорт формата Cubux |
 | [api/openapi.yaml](api/openapi.yaml) | OpenAPI v1 |
 | [api/authentication.md](api/authentication.md) | Авторизация, сессии, API-токены |
+| [api/user-status.md](api/user-status.md) | Статус пользователя |
 | [install/manual.md](install/manual.md) | Ручная установка |
 | [install/docker.md](install/docker.md) | Docker-установка |
 | [install/nginx.md](install/nginx.md) | Reverse proxy и HTTPS |
