@@ -140,23 +140,26 @@ URL в UI: `/icons/categories/{id}.svg` (`categoryIconUrl` в `web/src/lib/finan
 
 ## Поведение UI
 
-Страница: `web/src/routes/settings/categories/+page.svelte`  
-Компонент picker: `web/src/lib/components/CategoryIconPicker.svelte`.
+Страница: `web/src/routes/settings/categories/+page.svelte` (Android: `android/ui` → `/settings/categories`).  
+Компонент списка: `CategoriesTab.svelte`.  
+Picker: `CategoryIconPicker.svelte`. Диалог подкатегории: `SubcategoryFormDialog.svelte`.
 
 | Поведение | Описание |
 |-----------|----------|
 | Вкладки | `?type=income` в URL сохраняется при обновлении страницы |
 | Фильтр иконок | Быстрый ряд (7 шт.) и попап «Ещё» — только иконки с подходящим `kind` |
 | Быстрый ряд | Иконка из «Ещё» встаёт **на 1 место**, последняя из дефолтного quick-ряда скрывается; повторный выбор из «Ещё» заменяет первую; клик по иконке в быстром ряду сбрасывает закрепление. Текущее значение вне quick (редактирование) тоже показывается первым |
+| Варианты picker | `variant="quick"` (по умолчанию) — ряд + «Ещё»; `variant="button"` — только текущая иконка, по клику открывает каталог (форма подкатегории) |
 | Авто-имя | Подставляется только пока поле имени **пустое** или совпадает с последним авто-именем. Сначала ввели название вручную — смена иконки **не трогает** текст; очистка поля снова включает автоподстановку |
-| Редактирование | `lockName={true}` — смена иконки не перезаписывает существующее имя (категория / подкатегория) |
+| Редактирование категории | Inline в карточке; `lockName={true}` — смена иконки не перезаписывает имя |
 | Подкатегории — раскрытие | Клик по названию с **▶ / ▼ после текста** (одна кнопка); список подгружается лениво (`GET …/subcategories`) |
+| Подкатегории — список | Строка: ⠿ + иконка + имя + меню; внизу кнопка «Добавить подкатегорию» (без inline quick-add) |
+| Подкатегории — создание / правка | `SubcategoryFormDialog` (`ModalShell`): имя + picker `variant="button"`; дефолт иконки при создании — иконка родителя; Esc / Отмена без сохранения |
 | Иконка категории | Декоративная, не кликабельна (без `btn-icon`) |
-| Подкатегории — иконка | Тот же picker (компактный, 28px); **по умолчанию иконка родителя**; после добавления фокус остаётся в поле ввода без перезагрузки страницы |
 | Подкатегории — состояние | Обновления `subs` и `expanded` через пересоздание объекта (`{ ...obj, [id]: … }`) — требование реактивности Svelte 5 |
 | Сортировка | Перетаскивание за **⠿** (`web/src/lib/drag-reorder.ts`, `ReorderDragGhost.svelte`): ghost **следует за курсором** с **той же шириной**, что у карточки (фиксированные `width`/`height`); атрибут `data-drag-row` на всей строке; линия вставки на целевой карточке |
 | Главная категория | Галочка у названия; «Сделать главной» — в меню «⋯» (`POST /categories/{id}/primary`); одна на вкладку; дефолт в форме операции |
-| Enter | Сохраняет подкатегорию при редактировании; добавляет новую в форме создания |
+| Enter | В диалоге подкатегории — сохранить |
 | Удаление | `$lib/confirm` + i18n (`categories.confirm.delete`, `categories.confirm.deleteSub`) |
 
 Логика авто-имени в picker: внутренние флаги `nameLocked` и `lastAutoName`; отличие текущего имени от `lastAutoName` трактуется как ручной ввод.
@@ -173,6 +176,8 @@ URL в UI: `/icons/categories/{id}.svg` (`categoryIconUrl` в `web/src/lib/finan
 | `web/static/icons/categories/` | SVG для web |
 | `android/ui/static/icons/categories/` | SVG для Android UI |
 | `web/src/lib/category-icons.ts` | фильтрация по kind, quick-ряды |
-| `web/src/lib/components/CategoryIconPicker.svelte` | picker с авто-именем |
+| `web/src/lib/components/CategoryIconPicker.svelte` | picker с авто-именем (`quick` / `button`) |
+| `web/src/lib/components/SubcategoryFormDialog.svelte` | попап создания/правки подкатегории |
+| `web/src/lib/settings/CategoriesTab.svelte` | вкладка настроек категорий |
 | `web/src/routes/settings/categories/+page.svelte` | страница настроек |
 | `server/queries/categories.sql` | sqlc-запросы |

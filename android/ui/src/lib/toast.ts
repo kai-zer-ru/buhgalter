@@ -52,7 +52,8 @@ export const toast = Object.assign(toastFn, {
 	warning: (message: string) => push(message, 'warning'),
 	info: (message: string) => push(message, 'info'),
 	fromError: (err: unknown, fallbackKey = 'common.error') => {
-		if (isSilentClientError(err) || isConnectionError(err) || err instanceof OnlineOnlyError) return;
+		if (isSilentClientError(err) || isConnectionError(err) || err instanceof OnlineOnlyError)
+			return;
 		if (err instanceof Error && !(err instanceof ApiError) && err.message) {
 			push(err.message, 'error');
 			return;

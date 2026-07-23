@@ -34,6 +34,7 @@
 			class="modal-panel card flex max-h-[min(92dvh,44rem)] w-full flex-col overflow-hidden sm:max-h-[min(92vh,44rem)] {maxWidth}"
 			role="dialog"
 			aria-modal="true"
+			aria-label={title}
 			tabindex="-1"
 			onclick={(event) => event.stopPropagation()}
 			onkeydown={(event) => event.stopPropagation()}

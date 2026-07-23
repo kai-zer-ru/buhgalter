@@ -1,9 +1,7 @@
 import { get } from 'svelte/store';
 import { _ } from 'svelte-i18n';
-import type { Account } from '$lib/api/client';
-import { deleteAccount } from '$lib/api/client';
+import { deleteAccount, type Account } from '$lib/api/client';
 import { OnlineOnlyError, requireOnline } from '$lib/offline/require-online';
-import type { Account } from '$lib/api/client';
 import { archiveAccount } from '$lib/offline/accounts-api';
 import { confirmAccountTransfer } from '$lib/accounts/account-transfer-confirm';
 import {

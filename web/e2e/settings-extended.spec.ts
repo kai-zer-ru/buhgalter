@@ -98,3 +98,36 @@ test('categories: make primary shows badge', async ({ page }) => {
 	await page.getByRole('menuitem', { name: 'Сделать главной' }).click();
 	await expect(row.getByLabel('Главная категория')).toBeVisible({ timeout: 10_000 });
 });
+
+test('categories: create and edit subcategory via dialog', async ({ page }) => {
+	const catName = `E2E SubCat Parent ${Date.now()}`;
+	const subName = `E2E Sub ${Date.now()}`;
+	const subRenamed = `${subName} Renamed`;
+
+	await page.goto('/settings/categories');
+	await waitAppReady(page);
+	await page.getByPlaceholder('Название категории').fill(catName);
+	await page.getByRole('button', { name: 'Создать' }).click();
+	await expect(page.getByText(catName)).toBeVisible({ timeout: 10_000 });
+
+	const row = page.locator('.space-y-2 > .card').filter({ hasText: catName }).first();
+	await row.getByRole('button', { name: catName }).click();
+	const addSubBtn = row.getByRole('button', { name: 'Добавить подкатегорию' });
+	await expect(addSubBtn).toBeVisible({ timeout: 10_000 });
+	await addSubBtn.click();
+
+	const dialog = page.getByRole('dialog', { name: 'Новая подкатегория' });
+	await expect(dialog).toBeVisible({ timeout: 10_000 });
+	await expect(dialog.getByLabel('Сменить иконку')).toBeVisible();
+	await dialog.getByPlaceholder('Название подкатегории').fill(subName);
+	await dialog.getByRole('button', { name: 'Сохранить' }).click();
+	await expect(row.getByText(subName)).toBeVisible({ timeout: 10_000 });
+
+	const subRow = row.locator('[data-drag-kind="sub"]').filter({ hasText: subName });
+	await rowMenuAction(page, subRow, 'Редактировать');
+	const editDialog = page.getByRole('dialog', { name: 'Редактировать подкатегорию' });
+	await expect(editDialog).toBeVisible({ timeout: 10_000 });
+	await editDialog.getByPlaceholder('Название подкатегории').fill(subRenamed);
+	await editDialog.getByRole('button', { name: 'Сохранить' }).click();
+	await expect(row.getByText(subRenamed)).toBeVisible({ timeout: 10_000 });
+});

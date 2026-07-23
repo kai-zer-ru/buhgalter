@@ -16,6 +16,7 @@
 		categoryName = $bindable(''),
 		categoryType = 'expense',
 		lockName = false,
+		variant = 'quick',
 		iconSize = 40,
 		quickSize = 40
 	}: {
@@ -24,6 +25,8 @@
 		categoryType?: CategoryKind;
 		/** When true, icon changes never overwrite the name (edit existing category). */
 		lockName?: boolean;
+		/** `quick` — ряд быстрых иконок; `button` — только текущая иконка (открывает каталог). */
+		variant?: 'quick' | 'button';
 		iconSize?: number;
 		quickSize?: number;
 	} = $props();
@@ -106,35 +109,47 @@
 	}
 </script>
 
-<div class="flex flex-wrap items-center gap-1.5">
-	{#each displayQuick as iconId (iconId)}
-		<button
-			type="button"
-			class="btn-icon btn-ghost"
-			style:background-color={value === iconId
-				? 'color-mix(in srgb, var(--primary) 15%, transparent)'
-				: 'transparent'}
-			title={iconId}
-			onclick={() => pickFromQuick(iconId)}
-		>
-			<CategoryIcon icon={iconId} size={quickSize} />
-		</button>
-	{/each}
+{#if variant === 'button'}
 	<button
 		type="button"
 		class="btn-icon btn-ghost"
-		style:background-color="color-mix(in srgb, var(--border) 40%, transparent)"
-		style:color="var(--text-muted)"
-		aria-label={$_('categories.icons.more')}
+		style:background-color="color-mix(in srgb, var(--primary) 15%, transparent)"
+		aria-label={$_('categories.icons.change')}
 		onclick={() => (open = true)}
 	>
-		<svg aria-hidden="true" class="mx-auto h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-			<circle cx="5" cy="12" r="1.75" />
-			<circle cx="12" cy="12" r="1.75" />
-			<circle cx="19" cy="12" r="1.75" />
-		</svg>
+		<CategoryIcon icon={value} size={quickSize} />
 	</button>
-</div>
+{:else}
+	<div class="flex flex-wrap items-center gap-1.5">
+		{#each displayQuick as iconId (iconId)}
+			<button
+				type="button"
+				class="btn-icon btn-ghost"
+				style:background-color={value === iconId
+					? 'color-mix(in srgb, var(--primary) 15%, transparent)'
+					: 'transparent'}
+				title={iconId}
+				onclick={() => pickFromQuick(iconId)}
+			>
+				<CategoryIcon icon={iconId} size={quickSize} />
+			</button>
+		{/each}
+		<button
+			type="button"
+			class="btn-icon btn-ghost"
+			style:background-color="color-mix(in srgb, var(--border) 40%, transparent)"
+			style:color="var(--text-muted)"
+			aria-label={$_('categories.icons.more')}
+			onclick={() => (open = true)}
+		>
+			<svg aria-hidden="true" class="mx-auto h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+				<circle cx="5" cy="12" r="1.75" />
+				<circle cx="12" cy="12" r="1.75" />
+				<circle cx="19" cy="12" r="1.75" />
+			</svg>
+		</button>
+	</div>
+{/if}
 
 <ModalShell bind:open title={modalTitle} maxWidth="max-w-lg" onclose={closeModal}>
 	<div class="space-y-3">

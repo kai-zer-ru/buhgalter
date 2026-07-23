@@ -1,4 +1,5 @@
 import type { Account } from '$lib/api/client';
+import { groupAccountsByType } from '$lib/accounts/group-by-type';
 import { formatMoneyForInput, fromCents } from '$lib/money';
 
 /** Stored initial balance (kopecks) → value for the account edit form. */
@@ -23,15 +24,12 @@ export function canSetAsPrimary(acc: {
 	return acc.type !== 'credit_card';
 }
 
-/** Select lists: primary account first, then keep relative order of the rest. */
-export function sortAccountsForSelect<T extends { is_primary: boolean }>(
+/**
+ * Select lists: same order as home /accounts —
+ * cash → bank (primary first within type), then credit cards.
+ */
+export function sortAccountsForSelect<T extends { type: Account['type']; is_primary?: boolean }>(
 	accounts: readonly T[]
 ): T[] {
-	const primary: T[] = [];
-	const rest: T[] = [];
-	for (const acc of accounts) {
-		if (acc.is_primary) primary.push(acc);
-		else rest.push(acc);
-	}
-	return [...primary, ...rest];
+	return groupAccountsByType(accounts).flat();
 }

@@ -163,7 +163,7 @@ OpenAPI: `CreateTransferRequest.commission`, схема `Transfer`.
 | Счёт | `AccountIcon` (`cash` / `bank` / `credit_card`, логотип банка) |
 | Категория / подкатегория | `CategoryIcon` по slug |
 
-Хелперы: `accountSelectOptions`, `categorySelectOptions`, `subcategorySelectOptions`. В селектах счетов **основной** (`is_primary`) — первым (`sortAccountsForSelect`). Используется в формах операций, переводов, долгов, кредитов, бюджета, фильтрах, импорте, периодических операциях.
+Хелперы: `accountSelectOptions`, `categorySelectOptions`, `subcategorySelectOptions`. В селектах счетов порядок как на главной / `/accounts`: `cash` → `bank` (внутри типа основной первым), затем кредитные карты (`sortAccountsForSelect` → `groupAccountsByType`). Используется в формах операций, переводов, долгов, кредитов, бюджета, фильтрах, импорте, периодических операциях.
 
 ## Пагинация
 

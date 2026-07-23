@@ -7,11 +7,16 @@ import {
 	sortAccountsForSelect
 } from './accounts';
 
-function account(id: string, name: string, isPrimary = false): Account {
+function account(
+	id: string,
+	name: string,
+	isPrimary = false,
+	type: Account['type'] = 'cash'
+): Account {
 	return {
 		id,
 		name,
-		type: 'cash',
+		type,
 		bank_id: null,
 		initial_balance: 0,
 		balance: 0,
@@ -48,13 +53,19 @@ describe('defaultAccountId', () => {
 });
 
 describe('sortAccountsForSelect', () => {
-	it('moves primary account to the front and keeps relative order', () => {
+	it('matches home/accounts order: cash, bank (primary first within type), then credit cards', () => {
 		const list = [
-			account('cash', 'Наличные'),
-			account('bank', 'Яндекс', true),
-			account('card', 'Карта')
+			account('bank-other', 'Другой банк', false, 'bank'),
+			account('card', 'Карта', false, 'credit_card'),
+			account('cash', 'Наличные', false, 'cash'),
+			account('bank', 'Яндекс', true, 'bank')
 		];
-		expect(sortAccountsForSelect(list).map((a) => a.id)).toEqual(['bank', 'cash', 'card']);
+		expect(sortAccountsForSelect(list).map((a) => a.id)).toEqual([
+			'cash',
+			'bank',
+			'bank-other',
+			'card'
+		]);
 	});
 });
 

@@ -64,9 +64,9 @@
 
 ### Селект счетов в формах
 
-В списках счетов форм (`accountSelectOptions`, `transferAccountOptions`) **основной** счёт (`is_primary`) — **первым**; остальной порядок как в API (`ORDER BY name`). Хелпер `sortAccountsForSelect` в `$lib/accounts.ts`.
+В списках счетов форм (`accountSelectOptions`, `transferAccountOptions`) порядок как на главной и `/accounts`: `cash` → `bank` (внутри типа основной первым), затем кредитные карты. Хелпер `sortAccountsForSelect` — через `groupAccountsByType`.flat(). Кредитную карту нельзя сделать основной (`canSetAsPrimary`).
 
-На главной и `/accounts` блок «Мои средства» — `groupAccountsByType`: сначала `cash`, затем `bank`, внутри типа основной первым. Кредитную карту нельзя сделать основной (`canSetAsPrimary`).
+На главной и `/accounts` блок «Мои средства» — `groupAccountsByType`: сначала `cash`, затем `bank`, внутри типа основной первым.
 
 ### Создание кредита (пошаговый мастер)
 
@@ -107,7 +107,7 @@
 
 Формы операций, переводов, долгов, счетов, создания кредита и действий по кредиту — полноэкранные маршруты (`FormPageShell`). Нижние кнопки (`footer`) всегда прилипают к низу viewport: скроллится только середина формы (`form-page-scroll`), а `android-shell-main` в режиме формы (`android-shell-main-flush`) не прокручивается.
 
-Остаются попапами: `UpdateAvailableModal`, `ConfirmDialog`, показ созданного API-токена, `CategoryIconPicker`.
+Остаются попапами: `UpdateAvailableModal`, `ConfirmDialog`, показ созданного API-токена, `CategoryIconPicker`, `SubcategoryFormDialog` (создание/правка подкатегории в настройках категорий).
 
 Скроллбары в UI скрыты (контент прокручивается, полоса не занимает ширину).
 
