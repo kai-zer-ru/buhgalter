@@ -50,6 +50,9 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: android-actions/setup-android@v3
+        with:
+          # compileSdk/targetSdk 36 — without these AGP may fail or hang downloading SDK
+          packages: 'tools platform-tools platforms;android-36 build-tools;36.0.0'
       - name: Install Pillow (android-icons.py)
         run: pip3 install --user Pillow
       - name: Prepare release keystore
@@ -69,6 +72,18 @@ jobs:
             fi
             echo "::warning::ANDROID_KEYSTORE_BASE64 not set — APK signed with debug keystore"
           fi
+      - name: Write android/local.properties
+        run: |
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          if [ -z "$SDK" ] || [ ! -d "$SDK" ]; then
+            echo "ERROR: ANDROID_SDK_ROOT/ANDROID_HOME not set or missing: '$SDK'"
+            exit 1
+          fi
+          # Gradle local.properties needs escaped Windows paths; on Linux plain path is fine.
+          printf 'sdk.dir=%s\n' "$SDK" > android/local.properties
+          echo "sdk.dir=$SDK"
+          ls "$SDK/platforms" || true
+          ls "$SDK/build-tools" || true
       - name: Build release APK
         run: make android-apk-release
       - name: Verify release APKs

@@ -9,7 +9,7 @@ OPENAPI_DST := server/internal/docs/openapi.yaml
 UI_I18N_SRC := android/ui/src/lib/i18n
 UI_I18N_DST := server/ui_locales
 
-.PHONY: dev dev-server dev-web build build-arm web-build category-icons-json copy-static copy-openapi check-openapi-examples openapi-check copy-ui-i18n ui-i18n-check inline-sql-check server-build server-build-arm fix-build-perms test test-unit test-e2e test-e2e-web test-coverage lint lint-go prepare prepare-go prepare-web prepare-android prepare-gen prepare-sql-check docker-build act-push act-release tag-release migrate ci sqlc sqlc-check download-bank-logos download-marketplace-logos clear version android-icons android-ui-build android-sync android-apk android-apk-release android-install android-install-release
+.PHONY: dev dev-server dev-web build build-arm web-build category-icons-json copy-static copy-openapi check-openapi-examples openapi-check copy-ui-i18n ui-i18n-check inline-sql-check server-build server-build-arm fix-build-perms test test-unit test-e2e test-e2e-web test-coverage lint lint-go prepare prepare-go prepare-web prepare-android prepare-gen prepare-sql-check docker-build act-push act-release tag-release migrate ci sqlc sqlc-check download-bank-logos download-marketplace-logos clear version android-icons android-ui-build android-sync android-apk android-apk-release android-install android-install-release android-ensure-sdk
 
 DOCKER_COMPOSE := docker compose -f docker/docker-compose.yml
 
@@ -244,13 +244,15 @@ android-sync: android-ui-build android-icons
 	cd android && npx cap sync android
 
 android-apk: android-sync
+	@$(MAKE) android-ensure-sdk
 	@. ./scripts/android-env.sh 2>/dev/null || true; \
-	cd android && ./gradlew assembleDebug
+	cd android && ./gradlew assembleDebug --stacktrace
 	@echo "APK: $(ANDROID_APK)"
 
 android-apk-release: android-sync
+	@$(MAKE) android-ensure-sdk
 	@. ./scripts/android-env.sh 2>/dev/null || true; \
-	cd android && ./gradlew assembleRelease
+	cd android && ./gradlew assembleRelease --stacktrace
 	@if [ -f "$(ANDROID_APK_RELEASE_UNIVERSAL)" ]; then \
 		cp "$(ANDROID_APK_RELEASE_UNIVERSAL)" "$(ANDROID_APK_RELEASE)"; \
 	fi
@@ -258,6 +260,18 @@ android-apk-release: android-sync
 	@ls -1 $(ANDROID_APK_RELEASE_DIR)/app-*-release.apk 2>/dev/null || true
 	@bash scripts/verify-android-release-apks.sh "$(ANDROID_APK_RELEASE_DIR)"
 
+# Ensure android/local.properties exists (CI checkout has none; sdk.dir from ANDROID_*).
+android-ensure-sdk:
+	@if [ ! -f android/local.properties ]; then \
+		SDK="$${ANDROID_SDK_ROOT:-$${ANDROID_HOME:-}}"; \
+		if [ -z "$$SDK" ] || [ ! -d "$$SDK" ]; then \
+			echo "ERROR: android/local.properties missing and ANDROID_SDK_ROOT/ANDROID_HOME unset."; \
+			echo "  Run scripts/setup-android-dev.sh or set ANDROID_SDK_ROOT."; \
+			exit 1; \
+		fi; \
+		printf 'sdk.dir=%s\n' "$$SDK" > android/local.properties; \
+		echo "Wrote android/local.properties (sdk.dir=$$SDK)"; \
+	fi
 android-install: android-apk
 	@apk="$(ANDROID_APK)"; \
 	if [ ! -f "$$apk" ]; then \

@@ -239,7 +239,7 @@ Release APK (`make android-apk-release` → `android/app/build/outputs/apk/relea
 
 На GitHub Release: `buhgalter-android-{version}.apk` (universal) и `buhgalter-android-{version}-{abi}.apk`.
 
-CI (`.github/workflows/release.yml`): job `android-apk` собирает `make android-apk-release`, проверяет наличие всех четырёх APK (`scripts/verify-android-release-apks.sh`), заливает каталог `release/` артефактом; job `goreleaser` скачивает артефакт в тот же путь и прикрепляет файлы через `release.extra_files` в `.goreleaser.yaml`. Без всех APK релиз падает.
+CI (`.github/workflows/release.yml`): job `android-apk` ставит SDK (`platforms;android-36`, `build-tools;36.0.0`), пишет `android/local.properties`, Pillow, собирает `make android-apk-release`, проверяет все четыре APK (`scripts/verify-android-release-apks.sh`), заливает каталог `release/` артефактом; job `goreleaser` скачивает артефакт в тот же путь и прикрепляет файлы через `release.extra_files` в `.goreleaser.yaml`. Без всех APK релиз падает.
 
 Подпись release APK: `keystore.properties` / GitHub Secrets; `*.jks` в `.gitignore` (см. [android/README.md](../android/README.md)).
 
