@@ -204,6 +204,8 @@
 
 - [x] Docker CI: ускорение multi-arch сборки — кросс-компиляция на `BUILDPLATFORM` (без QEMU для npm/Go), кэш слоёв (`type=gha` + `ghcr.io/...:buildcache`), `.dockerignore` ([install/docker.md](docs/install/docker.md))
 - [x] Android: офлайн — кеш карточки кредита; outbox: мелочи по кредитам (без create), settle долга, CRUD периодических
+- [ ] Сортировка счетов в выпадающих списках
+- [x] Недостающие иконки категорий
 
 ## Общие планы
 

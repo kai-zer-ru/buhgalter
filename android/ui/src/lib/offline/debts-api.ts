@@ -73,8 +73,7 @@ function localDebt(id: string, payload: DebtPayload): Debt {
 }
 
 function settledOptimistic(debt: Debt, payload: DebtSettlePayload): Debt {
-	const settleCents =
-		payload.amount !== undefined ? amountToCents(payload.amount) : debt.amount;
+	const settleCents = payload.amount !== undefined ? amountToCents(payload.amount) : debt.amount;
 	const remaining = Math.max(0, debt.amount - settleCents);
 	if (remaining <= 0) {
 		return {
@@ -166,15 +165,12 @@ export async function settleDebt(
 	if (isLocalEntityKey(id)) {
 		const entry = getOutboxEntry(id);
 		const createPayload =
-			entry?.op === 'create' && entry.kind === 'debt'
-				? (entry.payload as DebtPayload)
-				: null;
+			entry?.op === 'create' && entry.kind === 'debt' ? (entry.payload as DebtPayload) : null;
 		if (!createPayload) {
 			throw new ApiError('OFFLINE', 'Local debt not found in outbox', 0);
 		}
 		const currentCents = amountToCents(createPayload.amount);
-		const settleCents =
-			body.amount !== undefined ? amountToCents(body.amount) : currentCents;
+		const settleCents = body.amount !== undefined ? amountToCents(body.amount) : currentCents;
 		if (settleCents >= currentCents) {
 			removeOutboxEntry(id);
 			const settled = settledOptimistic(localDebt(id, createPayload), payload);
@@ -195,8 +191,8 @@ export async function settleDebt(
 
 	enqueueDebtSettle(id, payload);
 	const cached =
-		readRefCache<Debt>('/api/v1/debts?settled=false')?.find((d) => d.id === id) ??
-		readRefCache<Debt>('/api/v1/debts?settled=true')?.find((d) => d.id === id);
+		readRefCache<Debt[]>('/api/v1/debts?settled=false')?.find((d) => d.id === id) ??
+		readRefCache<Debt[]>('/api/v1/debts?settled=true')?.find((d) => d.id === id);
 	const optimistic = cached
 		? settledOptimistic(cached, payload)
 		: ({

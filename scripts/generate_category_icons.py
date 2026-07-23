@@ -11,7 +11,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 JSON_PATH = ROOT / "data" / "category_icons.json"
 OFFICIAL_DIR = ROOT / "data" / "category_icons"
-OUT_DIR = ROOT / "web" / "static" / "icons" / "categories"
+OUT_DIRS = (
+    ROOT / "web" / "static" / "icons" / "categories",
+    ROOT / "android" / "ui" / "static" / "icons" / "categories",
+)
 
 EMOJI_TEMPLATE = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#3B82F6" opacity="0.15"/><text x="16" y="22" text-anchor="middle" font-size="16">{emoji}</text></svg>
 """
@@ -22,7 +25,8 @@ BRAND_TEMPLATE = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
 
 def main() -> int:
     data = json.loads(JSON_PATH.read_text(encoding="utf-8"))
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    for out_dir in OUT_DIRS:
+        out_dir.mkdir(parents=True, exist_ok=True)
 
     seen: set[str] = set()
     for item in data["icons"]:
@@ -40,7 +44,8 @@ def main() -> int:
                     file=sys.stderr,
                 )
                 return 1
-            shutil.copyfile(src, OUT_DIR / f"{icon_id}.svg")
+            for out_dir in OUT_DIRS:
+                shutil.copyfile(src, out_dir / f"{icon_id}.svg")
         elif "brand" in item:
             b = item["brand"]
             svg = BRAND_TEMPLATE.format(
@@ -49,12 +54,14 @@ def main() -> int:
                 label=b["label"],
                 size=b.get("size", 11),
             )
-            (OUT_DIR / f"{icon_id}.svg").write_text(svg, encoding="utf-8")
+            for out_dir in OUT_DIRS:
+                (out_dir / f"{icon_id}.svg").write_text(svg, encoding="utf-8")
         else:
             svg = EMOJI_TEMPLATE.format(emoji=item["emoji"])
-            (OUT_DIR / f"{icon_id}.svg").write_text(svg, encoding="utf-8")
+            for out_dir in OUT_DIRS:
+                (out_dir / f"{icon_id}.svg").write_text(svg, encoding="utf-8")
 
-    print(f"OK {len(seen)} icons -> {OUT_DIR}")
+    print(f"OK {len(seen)} icons -> {', '.join(str(d) for d in OUT_DIRS)}")
     return 0
 
 

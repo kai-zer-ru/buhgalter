@@ -131,8 +131,8 @@ async function replayCreditAction(payload: CreditActionPayload): Promise<void> {
 	const id = payload.credit_id;
 	switch (payload.action) {
 		case 'update': {
-			const { action: _a, credit_id: _c, ...fields } = payload;
-			await apiUpdateCredit(id, fields);
+			const { name, debit_account_id, debit_time_local, bank_id } = payload;
+			await apiUpdateCredit(id, { name, debit_account_id, debit_time_local, bank_id });
 			return;
 		}
 		case 'pay':
@@ -375,14 +375,14 @@ async function warmupTransactionIndex(): Promise<void> {
 }
 
 async function warmupCreditDetails(): Promise<void> {
-	const settled = await Promise.allSettled([
+	const [activeRes, closedRes] = await Promise.allSettled([
 		listCredits({ status: 'active' }),
 		listCredits({ status: 'closed' }),
 		listBanks()
 	]);
 	const credits: Credit[] = [];
-	for (const result of settled.slice(0, 2)) {
-		if (result.status === 'fulfilled' && Array.isArray(result.value)) {
+	for (const result of [activeRes, closedRes]) {
+		if (result.status === 'fulfilled') {
 			credits.push(...result.value);
 		}
 	}

@@ -6,11 +6,7 @@ import {
 	onRecurringCreated,
 	onRecurringDeleted
 } from '$lib/offline/ref-cache-mutations';
-import {
-	readRefCache,
-	resetRefCacheForTests,
-	writeRefCache
-} from '$lib/offline/ref-cache';
+import { readRefCache, resetRefCacheForTests, writeRefCache } from '$lib/offline/ref-cache';
 import {
 	enqueueCreditMetaUpdate,
 	enqueueCreditPay,
@@ -81,9 +77,7 @@ describe('credit / recurring ref-cache mutations', () => {
 	it('onRecurringCreated / Deleted patch list', () => {
 		const item = { id: 'r1', amount: 100 } as RecurringOperation;
 		onRecurringCreated(item);
-		expect(readRefCache<RecurringOperation[]>('/api/v1/recurring-operations')?.[0]?.id).toBe(
-			'r1'
-		);
+		expect(readRefCache<RecurringOperation[]>('/api/v1/recurring-operations')?.[0]?.id).toBe('r1');
 		onRecurringDeleted('r1');
 		expect(readRefCache<RecurringOperation[]>('/api/v1/recurring-operations')).toEqual([]);
 	});

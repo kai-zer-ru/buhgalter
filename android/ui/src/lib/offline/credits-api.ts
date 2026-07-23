@@ -174,9 +174,7 @@ export async function updateCredit(
 	}
 	enqueueCreditMetaUpdate(payload);
 	const cached = readCachedCredit(id);
-	const optimistic = cached
-		? applyMetaOptimistic(cached, payload)
-		: ({ id, ...fields } as Credit);
+	const optimistic = cached ? applyMetaOptimistic(cached, payload) : ({ id, ...fields } as Credit);
 	onCreditUpdated(optimistic);
 	return optimistic;
 }
@@ -231,7 +229,9 @@ export async function completeCredit(
 	}
 	enqueueCreditComplete(payload);
 	const cached = readCachedCredit(id);
-	const optimistic = cached ? applyCompleteOptimistic(cached) : ({ id, status: 'closed' } as Credit);
+	const optimistic = cached
+		? applyCompleteOptimistic(cached)
+		: ({ id, status: 'closed' } as Credit);
 	onCreditUpdated(optimistic);
 	touchBalancesAfterCreditMutation();
 	return optimistic;

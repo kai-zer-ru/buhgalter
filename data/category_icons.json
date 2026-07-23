@@ -205,6 +205,26 @@
       "name": "Метро"
     },
     {
+      "id": "tram",
+      "emoji": "🚊",
+      "kind": "expense",
+      "tags": [
+        "трамвай",
+        "транспорт"
+      ],
+      "name": "Трамвай"
+    },
+    {
+      "id": "trolleybus",
+      "emoji": "🚎",
+      "kind": "expense",
+      "tags": [
+        "троллейбус",
+        "транспорт"
+      ],
+      "name": "Троллейбус"
+    },
+    {
       "id": "bike",
       "emoji": "🚲",
       "kind": "expense",
@@ -213,6 +233,16 @@
         "транспорт"
       ],
       "name": "Велосипед"
+    },
+    {
+      "id": "motorcycle",
+      "emoji": "🏍️",
+      "kind": "expense",
+      "tags": [
+        "мотоцикл",
+        "транспорт"
+      ],
+      "name": "Мотоцикл"
     },
     {
       "id": "fuel",
@@ -234,6 +264,26 @@
         "стоянка"
       ],
       "name": "Парковка"
+    },
+    {
+      "id": "car-wash",
+      "emoji": "🚿",
+      "kind": "expense",
+      "tags": [
+        "мойка",
+        "авто"
+      ],
+      "name": "Мойка авто"
+    },
+    {
+      "id": "fine",
+      "emoji": "🚨",
+      "kind": "expense",
+      "tags": [
+        "штраф",
+        "гибдд"
+      ],
+      "name": "Штраф"
     },
     {
       "id": "ship",
@@ -278,6 +328,15 @@
       "name": "Кофе"
     },
     {
+      "id": "tea",
+      "emoji": "🍵",
+      "kind": "expense",
+      "tags": [
+        "чай"
+      ],
+      "name": "Чай"
+    },
+    {
       "id": "fastfood",
       "emoji": "🍔",
       "kind": "expense",
@@ -299,6 +358,26 @@
       "name": "Пицца"
     },
     {
+      "id": "sushi",
+      "emoji": "🍣",
+      "kind": "expense",
+      "tags": [
+        "суши",
+        "еда"
+      ],
+      "name": "Суши"
+    },
+    {
+      "id": "sweets",
+      "emoji": "🍬",
+      "kind": "expense",
+      "tags": [
+        "сладости",
+        "конфеты"
+      ],
+      "name": "Сладости"
+    },
+    {
       "id": "grocery",
       "emoji": "🥬",
       "kind": "expense",
@@ -307,6 +386,34 @@
         "продукты"
       ],
       "name": "Овощи"
+    },
+    {
+      "id": "fruit",
+      "emoji": "🍎",
+      "kind": "expense",
+      "tags": [
+        "фрукты"
+      ],
+      "name": "Фрукты"
+    },
+    {
+      "id": "meat",
+      "emoji": "🥩",
+      "kind": "expense",
+      "tags": [
+        "мясо"
+      ],
+      "name": "Мясо"
+    },
+    {
+      "id": "dairy",
+      "emoji": "🥛",
+      "kind": "expense",
+      "tags": [
+        "молоко",
+        "молочка"
+      ],
+      "name": "Молочка"
     },
     {
       "id": "bakery",
@@ -455,6 +562,16 @@
       "name": "Стоматолог"
     },
     {
+      "id": "psychologist",
+      "emoji": "🧠",
+      "kind": "expense",
+      "tags": [
+        "психолог",
+        "терапия"
+      ],
+      "name": "Психолог"
+    },
+    {
       "id": "fitness",
       "emoji": "💪",
       "kind": "expense",
@@ -516,6 +633,27 @@
       "name": "Уборка"
     },
     {
+      "id": "laundry",
+      "emoji": "🧺",
+      "kind": "expense",
+      "tags": [
+        "стирка",
+        "химчистка"
+      ],
+      "name": "Стирка"
+    },
+    {
+      "id": "hygiene",
+      "emoji": "🧴",
+      "kind": "expense",
+      "tags": [
+        "гигиена",
+        "химия",
+        "шампунь"
+      ],
+      "name": "Гигиена"
+    },
+    {
       "id": "garden",
       "emoji": "🌱",
       "kind": "expense",
@@ -535,6 +673,16 @@
         "лампа"
       ],
       "name": "Освещение"
+    },
+    {
+      "id": "sauna",
+      "emoji": "🧖",
+      "kind": "expense",
+      "tags": [
+        "баня",
+        "сауна"
+      ],
+      "name": "Баня"
     },
     {
       "id": "clothes",
@@ -596,6 +744,36 @@
       "name": "Парикмахер"
     },
     {
+      "id": "manicure",
+      "emoji": "💅",
+      "kind": "expense",
+      "tags": [
+        "маникюр",
+        "ногти"
+      ],
+      "name": "Маникюр"
+    },
+    {
+      "id": "massage",
+      "emoji": "💆",
+      "kind": "expense",
+      "tags": [
+        "массаж",
+        "спа"
+      ],
+      "name": "Массаж"
+    },
+    {
+      "id": "glasses",
+      "emoji": "👓",
+      "kind": "expense",
+      "tags": [
+        "очки",
+        "оптика"
+      ],
+      "name": "Очки"
+    },
+    {
       "id": "entertainment",
       "emoji": "🎬",
       "kind": "expense",
@@ -614,6 +792,24 @@
         "фильм"
       ],
       "name": "Кино"
+    },
+    {
+      "id": "theater",
+      "emoji": "🎭",
+      "kind": "expense",
+      "tags": [
+        "театр"
+      ],
+      "name": "Театр"
+    },
+    {
+      "id": "museum",
+      "emoji": "🖼️",
+      "kind": "expense",
+      "tags": [
+        "музей"
+      ],
+      "name": "Музей"
     },
     {
       "id": "game",
@@ -698,6 +894,25 @@
       "name": "Бассейн"
     },
     {
+      "id": "camping",
+      "emoji": "⛺",
+      "kind": "expense",
+      "tags": [
+        "кемпинг",
+        "палатка"
+      ],
+      "name": "Кемпинг"
+    },
+    {
+      "id": "fishing",
+      "emoji": "🎣",
+      "kind": "expense",
+      "tags": [
+        "рыбалка"
+      ],
+      "name": "Рыбалка"
+    },
+    {
       "id": "education",
       "emoji": "📚",
       "kind": "expense",
@@ -726,6 +941,16 @@
         "обучение"
       ],
       "name": "Школа"
+    },
+    {
+      "id": "kindergarten",
+      "emoji": "🎒",
+      "kind": "expense",
+      "tags": [
+        "детский сад",
+        "дети"
+      ],
+      "name": "Детский сад"
     },
     {
       "id": "university",
@@ -804,6 +1029,16 @@
         "кошка"
       ],
       "name": "Кошка"
+    },
+    {
+      "id": "vet",
+      "emoji": "🩺",
+      "kind": "expense",
+      "tags": [
+        "ветеринар",
+        "питомец"
+      ],
+      "name": "Ветеринар"
     },
     {
       "id": "gift",
@@ -933,6 +1168,16 @@
         "посылка"
       ],
       "name": "Доставка"
+    },
+    {
+      "id": "post",
+      "emoji": "📮",
+      "kind": "expense",
+      "tags": [
+        "почта",
+        "письмо"
+      ],
+      "name": "Почта"
     },
     {
       "id": "travel",
@@ -1164,6 +1409,26 @@
         "доход"
       ],
       "name": "Пенсия"
+    },
+    {
+      "id": "scholarship",
+      "emoji": "📜",
+      "kind": "income",
+      "tags": [
+        "стипендия",
+        "доход"
+      ],
+      "name": "Стипендия"
+    },
+    {
+      "id": "benefit",
+      "emoji": "🪪",
+      "kind": "income",
+      "tags": [
+        "пособие",
+        "соцвыплата"
+      ],
+      "name": "Пособие"
     },
     {
       "id": "sale",

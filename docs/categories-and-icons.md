@@ -102,8 +102,8 @@ OpenAPI: [api/openapi.yaml](api/openapi.yaml).
 | `official_logo` | `true` — SVG из `data/category_icons/{id}.svg` |
 | `brand` | Цветная заглушка с текстом (устарело для брендов с `official_logo`) |
 
-Сгенерированные файлы: `web/static/icons/categories/{id}.svg`  
-URL в UI: `/icons/categories/{id}.svg` (`categoryIconUrl` в `web/src/lib/finance.ts`).
+Сгенерированные файлы: `web/static/icons/categories/{id}.svg` и `android/ui/static/icons/categories/{id}.svg`  
+URL в UI: `/icons/categories/{id}.svg` (`categoryIconUrl` в `web/src/lib/finance.ts` / `android/ui/src/lib/finance.ts`).
 
 ### Официальные логотипы (маркетплейсы, Авито)
 
@@ -170,7 +170,8 @@ URL в UI: `/icons/categories/{id}.svg` (`categoryIconUrl` в `web/src/lib/finan
 | Путь | Назначение |
 |------|------------|
 | `data/category_icons.json` | каталог ID, kind, name, tags |
-| `web/static/icons/categories/` | SVG для фронта |
+| `web/static/icons/categories/` | SVG для web |
+| `android/ui/static/icons/categories/` | SVG для Android UI |
 | `web/src/lib/category-icons.ts` | фильтрация по kind, quick-ряды |
 | `web/src/lib/components/CategoryIconPicker.svelte` | picker с авто-именем |
 | `web/src/routes/settings/categories/+page.svelte` | страница настроек |
