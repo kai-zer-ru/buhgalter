@@ -244,20 +244,38 @@ android-sync: android-ui-build android-icons
 	cd android && npx cap sync android
 
 android-apk: android-sync
-	@$(MAKE) android-ensure-sdk
-	@. ./scripts/android-env.sh 2>/dev/null || true; \
-	cd android && ./gradlew assembleDebug --stacktrace
+	@$(MAKE) --no-print-directory android-ensure-sdk
+	set -e; \
+	if [ -f scripts/android-env.sh ]; then . scripts/android-env.sh; fi; \
+	if [ -z "$$JAVA_HOME" ] || [ ! -x "$$JAVA_HOME/bin/java" ]; then \
+		echo "ERROR: JAVA_HOME is unset or invalid: '$$JAVA_HOME'"; \
+		echo "  CI: actions/setup-java; local: source scripts/android-env.sh"; \
+		exit 1; \
+	fi; \
+	export PATH="$$JAVA_HOME/bin:$$PATH"; \
+	echo "Gradle with JAVA_HOME=$$JAVA_HOME"; \
+	cd android && ./gradlew assembleDebug --stacktrace --no-daemon
 	@echo "APK: $(ANDROID_APK)"
 
 android-apk-release: android-sync
-	@$(MAKE) android-ensure-sdk
-	@. ./scripts/android-env.sh 2>/dev/null || true; \
-	cd android && ./gradlew assembleRelease --stacktrace
-	@if [ -f "$(ANDROID_APK_RELEASE_UNIVERSAL)" ]; then \
-		cp "$(ANDROID_APK_RELEASE_UNIVERSAL)" "$(ANDROID_APK_RELEASE)"; \
-	fi
+	@$(MAKE) --no-print-directory android-ensure-sdk
+	set -e; \
+	if [ -f scripts/android-env.sh ]; then . scripts/android-env.sh; fi; \
+	if [ -z "$$JAVA_HOME" ] || [ ! -x "$$JAVA_HOME/bin/java" ]; then \
+		echo "ERROR: JAVA_HOME is unset or invalid: '$$JAVA_HOME'"; \
+		echo "  CI: actions/setup-java; local: source scripts/android-env.sh"; \
+		exit 1; \
+	fi; \
+	export PATH="$$JAVA_HOME/bin:$$PATH"; \
+	echo "Gradle with JAVA_HOME=$$JAVA_HOME"; \
+	cd android && ./gradlew assembleRelease --stacktrace --no-daemon
+	@test -f "$(ANDROID_APK_RELEASE_UNIVERSAL)" || (echo "ERROR: missing $(ANDROID_APK_RELEASE_UNIVERSAL)"; ls -la "$(ANDROID_APK_RELEASE_DIR)" || true; exit 1)
+	cp -f "$(ANDROID_APK_RELEASE_UNIVERSAL)" "$(ANDROID_APK_RELEASE)"
 	@echo "Release APKs:"
-	@ls -1 $(ANDROID_APK_RELEASE_DIR)/app-*-release.apk 2>/dev/null || true
+	@ls -lh "$(ANDROID_APK_RELEASE)" \
+		"$(ANDROID_APK_RELEASE_ARM64)" \
+		"$(ANDROID_APK_RELEASE_ARMV7)" \
+		"$(ANDROID_APK_RELEASE_X86_64)"
 	@bash scripts/verify-android-release-apks.sh "$(ANDROID_APK_RELEASE_DIR)"
 
 # Ensure android/local.properties exists (CI checkout has none; sdk.dir from ANDROID_*).
@@ -271,6 +289,16 @@ android-ensure-sdk:
 		fi; \
 		printf 'sdk.dir=%s\n' "$$SDK" > android/local.properties; \
 		echo "Wrote android/local.properties (sdk.dir=$$SDK)"; \
+	fi
+	@echo "android SDK: $$(grep '^sdk.dir=' android/local.properties)"
+	@echo "JAVA_HOME=$${JAVA_HOME:-<unset>}"
+	@if [ -n "$$JAVA_HOME" ] && [ -x "$$JAVA_HOME/bin/java" ]; then \
+		"$$JAVA_HOME/bin/java" -version; \
+	elif command -v java >/dev/null 2>&1; then \
+		java -version; \
+	else \
+		echo "ERROR: java not found. Set JAVA_HOME (CI: setup-java; local: source scripts/android-env.sh)."; \
+		exit 1; \
 	fi
 android-install: android-apk
 	@apk="$(ANDROID_APK)"; \

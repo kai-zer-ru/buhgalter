@@ -85,7 +85,13 @@ jobs:
           ls "$SDK/platforms" || true
           ls "$SDK/build-tools" || true
       - name: Build release APK
-        run: make android-apk-release
+        run: |
+          set -euxo pipefail
+          echo "JAVA_HOME=${JAVA_HOME:?JAVA_HOME must be set by setup-java}"
+          java -version
+          test -f android/local.properties
+          cat android/local.properties
+          make android-apk-release
       - name: Verify release APKs
         run: bash scripts/verify-android-release-apks.sh
       - uses: actions/upload-artifact@v4
