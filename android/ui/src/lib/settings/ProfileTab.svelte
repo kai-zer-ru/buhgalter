@@ -13,6 +13,7 @@
 	import Select from '$lib/components/Select.svelte';
 	import { reportPageLoadFailure } from '$lib/page-load';
 	import { toast } from '$lib/toast';
+	import { requireOnline } from '$lib/offline/require-online';
 
 	let loading = $state(false);
 	let pageLoading = $state(true);
@@ -47,6 +48,7 @@
 
 	async function saveProfile(e: Event) {
 		e.preventDefault();
+		if (!requireOnline('offline.onlineOnly.settings')) return;
 		loading = true;
 		try {
 			const updated = await putUserSettings({

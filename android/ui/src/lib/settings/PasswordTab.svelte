@@ -4,6 +4,7 @@
 	import { user } from '$lib/stores/auth';
 	import { validatePasswordPolicy } from '$lib/password-policy';
 	import { toast } from '$lib/toast';
+	import { requireOnline } from '$lib/offline/require-online';
 
 	let loading = $state(false);
 	let oldPassword = $state('');
@@ -12,6 +13,7 @@
 
 	async function savePassword(e: Event) {
 		e.preventDefault();
+		if (!requireOnline('offline.onlineOnly.settings')) return;
 		if (newPassword !== confirmPassword) {
 			toast.error($_('errors.PASSWORDS_MISMATCH'));
 			return;

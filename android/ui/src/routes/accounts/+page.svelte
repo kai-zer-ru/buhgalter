@@ -24,6 +24,7 @@
 		promptDeleteAccount,
 		executeDeleteAccount
 	} from '$lib/accounts/account-inactive-prompt';
+	import { requireOnline } from '$lib/offline/require-online';
 	import { isAutoTopupEligible } from '$lib/accounts/auto-topup';
 	import {
 		groupAccountsByType,
@@ -199,6 +200,7 @@
 
 	async function makePrimary(id: string) {
 		if (!id || primarySavingId) return;
+		if (!requireOnline('offline.onlineOnly.primary')) return;
 		primarySavingId = id;
 		try {
 			const updated = await setPrimaryAccount(id);

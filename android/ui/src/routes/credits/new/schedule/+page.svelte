@@ -60,7 +60,7 @@
 	);
 
 	onMount(() => {
-		ensureCreditCreateDraft(tz);
+		if (!ensureCreditCreateDraft(tz, returnTo)) return;
 		let d = get(creditCreateDraft);
 		if (!d) {
 			goCreditCreateStep('basics', fromRaw);

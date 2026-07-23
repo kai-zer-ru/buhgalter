@@ -22,6 +22,7 @@
 	import { dataRefreshTick } from '$lib/offline/sync';
 	import { assignIfChanged } from '$lib/state-utils';
 	import { reportPageLoadFailure } from '$lib/page-load';
+	import { requireOnline } from '$lib/offline/require-online';
 
 	const creditsPath = (status: 'active' | 'closed') => `/api/v1/credits?status=${status}`;
 
@@ -118,7 +119,10 @@
 			<button
 				type="button"
 				class="btn-primary"
-				onclick={() => void goto(resolve(creditNewPath('/credits')))}
+				onclick={() => {
+					if (!requireOnline('offline.onlineOnly.creditCreate')) return;
+					void goto(resolve(creditNewPath('/credits')));
+				}}
 			>
 				{$_('credits.new')}
 			</button>

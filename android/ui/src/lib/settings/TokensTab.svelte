@@ -24,6 +24,7 @@
 	import { futureDateOnlyPicker } from '$lib/datetime-picker-standards';
 	import { reportPageLoadFailure } from '$lib/page-load';
 	import { toast } from '$lib/toast';
+	import { requireOnline } from '$lib/offline/require-online';
 
 	let loading = $state(false);
 	let pageLoading = $state(true);
@@ -78,6 +79,7 @@
 
 	async function handleCreateToken(e: Event) {
 		e.preventDefault();
+		if (!requireOnline('offline.onlineOnly.settings')) return;
 		loading = true;
 		try {
 			const opts = newTokenNeverExpires
@@ -105,6 +107,7 @@
 			danger: true
 		});
 		if (!ok) return;
+		if (!requireOnline('offline.onlineOnly.settings')) return;
 		await deleteToken(id);
 		toast($_('common.deleted'));
 		await loadTokens();

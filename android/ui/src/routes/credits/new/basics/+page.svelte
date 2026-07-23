@@ -68,7 +68,7 @@
 	);
 
 	onMount(() => {
-		ensureCreditCreateDraft(tz);
+		if (!ensureCreditCreateDraft(tz, returnTo)) return;
 		const d = get(creditCreateDraft)!;
 		productType = d.productType;
 		name = d.name;

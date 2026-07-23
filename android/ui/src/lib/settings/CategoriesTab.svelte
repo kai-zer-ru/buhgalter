@@ -18,6 +18,7 @@
 		type Subcategory
 	} from '$lib/api/client';
 	import { createCategory, deleteCategory, updateCategory } from '$lib/offline/categories-api';
+	import { requireOnline } from '$lib/offline/require-online';
 	import CategoryIcon from '$lib/components/CategoryIcon.svelte';
 	import CategoryIconPicker from '$lib/components/CategoryIconPicker.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
@@ -235,6 +236,7 @@
 	async function addSub(categoryId: string) {
 		const name = (newSubName[categoryId] ?? '').trim();
 		if (!name) return;
+		if (!requireOnline('offline.onlineOnly.categoriesStructure')) return;
 		const parent = categories.find((c) => c.id === categoryId);
 		const icon =
 			newSubIcon[categoryId] ?? (parent ? defaultSubIconFor(parent) : defaultIconForKind(tab));
@@ -262,6 +264,7 @@
 
 	async function saveSubEdit(categoryId: string) {
 		if (!editingSubId) return;
+		if (!requireOnline('offline.onlineOnly.categoriesStructure')) return;
 		try {
 			const updated = await updateSubcategory(editingSubId, {
 				name: editSubName,
@@ -285,6 +288,7 @@
 			danger: true
 		});
 		if (!ok) return;
+		if (!requireOnline('offline.onlineOnly.categoriesStructure')) return;
 		try {
 			await deleteSubcategory(subId);
 			toast($_('common.deleted'));
@@ -298,6 +302,7 @@
 	}
 
 	async function dropCategory(fromId: string, toId: string) {
+		if (!requireOnline('offline.onlineOnly.categoriesStructure')) return;
 		const userCategories = categories.filter((c) => !c.is_system);
 		const systemCategories = categories.filter((c) => c.is_system);
 		const reordered = moveId(
@@ -315,6 +320,7 @@
 	}
 
 	async function dropSub(categoryId: string, fromId: string, toId: string) {
+		if (!requireOnline('offline.onlineOnly.categoriesStructure')) return;
 		const list = subs[categoryId] ?? [];
 		const ids = moveId(
 			list.map((s) => s.id),
@@ -331,6 +337,7 @@
 
 	async function makePrimary(id: string) {
 		if (categories.find((c) => c.id === id)?.is_primary) return;
+		if (!requireOnline('offline.onlineOnly.primary')) return;
 		try {
 			await setPrimaryCategory(id);
 			categories = categories.map((c) => ({ ...c, is_primary: c.id === id }));

@@ -5,6 +5,7 @@ import {
 	type CreditCreateStep,
 	parseFormReturnPath
 } from '$lib/android/form-routes';
+import { requireOnline } from '$lib/offline/require-online';
 import { beginCreditCreate, clearCreditCreate, creditCreateDraft } from './create-draft';
 
 const STEPS: CreditCreateStep[] = ['basics', 'options', 'schedule'];
@@ -13,8 +14,14 @@ export function creditCreateReturnTo(fromRaw: string | null): string {
 	return parseFormReturnPath(fromRaw, '/credits');
 }
 
-export function ensureCreditCreateDraft(tz: string) {
+/** Ensures draft exists; if offline, toasts and leaves the wizard. */
+export function ensureCreditCreateDraft(tz: string, returnTo: string): boolean {
+	if (!requireOnline('offline.onlineOnly.creditCreate')) {
+		abandonCreditCreate(returnTo);
+		return false;
+	}
 	if (!get(creditCreateDraft)) beginCreditCreate(tz);
+	return true;
 }
 
 export function abandonCreditCreate(returnTo: string) {

@@ -52,6 +52,7 @@
 		promptDeleteAccount,
 		executeDeleteAccount
 	} from '$lib/accounts/account-inactive-prompt';
+	import { requireOnline } from '$lib/offline/require-online';
 	import { confirm } from '$lib/confirm';
 	import { toast } from '$lib/toast';
 	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
@@ -346,6 +347,7 @@
 
 	async function makePrimary() {
 		if (!acc || !canSetAsPrimary(acc)) return;
+		if (!requireOnline('offline.onlineOnly.primary')) return;
 		try {
 			acc = await setPrimaryAccount(acc.id);
 			toast($_('common.saved'));

@@ -2,6 +2,7 @@ import { writable } from 'svelte/store';
 import { formatApiError, isSilentClientError } from '$lib/api/errors';
 import { ApiError } from '$lib/api/client';
 import { isConnectionError } from '$lib/offline/server-connectivity';
+import { OnlineOnlyError } from '$lib/offline/require-online';
 
 export type ToastType = 'success' | 'error' | 'info' | 'warning';
 
@@ -51,7 +52,7 @@ export const toast = Object.assign(toastFn, {
 	warning: (message: string) => push(message, 'warning'),
 	info: (message: string) => push(message, 'info'),
 	fromError: (err: unknown, fallbackKey = 'common.error') => {
-		if (isSilentClientError(err) || isConnectionError(err)) return;
+		if (isSilentClientError(err) || isConnectionError(err) || err instanceof OnlineOnlyError) return;
 		if (err instanceof Error && !(err instanceof ApiError) && err.message) {
 			push(err.message, 'error');
 			return;

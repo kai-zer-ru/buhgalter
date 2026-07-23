@@ -3,6 +3,7 @@
 	import { resolve } from '$app/paths';
 	import { _ } from 'svelte-i18n';
 	import { listAccounts, setPrimaryAccount, type Account } from '$lib/api/client';
+	import { requireOnline } from '$lib/offline/require-online';
 	import { canSetAsPrimary } from '$lib/accounts';
 	import AccountIcon from '$lib/components/AccountIcon.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
@@ -53,6 +54,7 @@
 
 	async function makePrimary(id: string) {
 		if (accounts.find((a) => a.id === id)?.is_primary) return;
+		if (!requireOnline('offline.onlineOnly.primary')) return;
 		try {
 			await setPrimaryAccount(id);
 			accounts = accounts.map((a) => ({ ...a, is_primary: a.id === id }));

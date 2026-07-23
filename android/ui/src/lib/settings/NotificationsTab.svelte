@@ -17,6 +17,7 @@
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
 	import { toast } from '$lib/toast';
 	import { reportPageLoadFailure } from '$lib/page-load';
+	import { requireOnline } from '$lib/offline/require-online';
 
 	let loading = $state(false);
 	let loadError = $state<string | null>(null);
@@ -309,6 +310,7 @@
 
 	async function saveNotifications(e: Event) {
 		e.preventDefault();
+		if (!requireOnline('offline.onlineOnly.settings')) return;
 		if (!notificationSecretConfigured) return;
 		if (
 			!validateDaysRange(debtDaysBefore) ||
@@ -361,6 +363,7 @@
 	}
 
 	async function runChannelTest(channel: 'telegram' | 'max') {
+		if (!requireOnline('offline.onlineOnly.settings')) return;
 		if (!notificationSecretConfigured) return;
 		if (channelHasUnsavedChanges(channel)) {
 			toast.error($_('settings.notifications.error.save_before_test'));
@@ -378,6 +381,7 @@
 	}
 
 	async function saveTelegramBlock() {
+		if (!requireOnline('offline.onlineOnly.settings')) return;
 		if (!notificationSecretConfigured) return;
 		loading = true;
 		try {
@@ -397,6 +401,7 @@
 	}
 
 	async function saveMaxBlock() {
+		if (!requireOnline('offline.onlineOnly.settings')) return;
 		if (!notificationSecretConfigured) return;
 		loading = true;
 		try {
@@ -418,6 +423,7 @@
 	}
 
 	async function saveTriggerTypesBlock() {
+		if (!requireOnline('offline.onlineOnly.settings')) return;
 		if (!notificationSecretConfigured) return;
 		loading = true;
 		try {
@@ -439,6 +445,7 @@
 	}
 
 	async function saveTriggerPolicyBlock() {
+		if (!requireOnline('offline.onlineOnly.settings')) return;
 		if (!notificationSecretConfigured) return;
 		if (
 			!validateDaysRange(debtDaysBefore) ||
@@ -474,6 +481,7 @@
 	}
 
 	async function saveTemplate(triggerType: string, template: string) {
+		if (!requireOnline('offline.onlineOnly.settings')) return;
 		if (!notificationSecretConfigured) return;
 		if (!templateEditable(triggerType)) return;
 		const templateError = validateTemplateText(template);
@@ -499,6 +507,7 @@
 	}
 
 	async function previewTemplate(triggerType: string, template: string) {
+		if (!requireOnline('offline.onlineOnly.settings')) return;
 		if (!notificationSecretConfigured) return;
 		if (!templateEditable(triggerType)) return;
 		const templateError = validateTemplateText(template);
@@ -515,6 +524,7 @@
 	}
 
 	async function resetTemplate(triggerType: string) {
+		if (!requireOnline('offline.onlineOnly.settings')) return;
 		if (!notificationSecretConfigured) return;
 		try {
 			await resetNotificationTemplates(triggerType);

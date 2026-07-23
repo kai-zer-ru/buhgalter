@@ -56,7 +56,7 @@
 	const showFirstPayment = $derived(productType !== 'mortgage');
 
 	onMount(() => {
-		ensureCreditCreateDraft(tz);
+		if (!ensureCreditCreateDraft(tz, returnTo)) return;
 		const d = get(creditCreateDraft);
 		if (!d) {
 			goCreditCreateStep('basics', fromRaw);

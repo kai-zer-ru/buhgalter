@@ -19,6 +19,8 @@ import {
 	toDatetimeLocalValue
 } from '$lib/dates';
 import { formatMoneyForInput, formatMoneyInput, fromCents, toAPIAmount, toCents } from '$lib/money';
+import { assertOnline, OnlineOnlyError } from '$lib/offline/require-online';
+import { _ } from 'svelte-i18n';
 
 export type ProductType = 'credit' | 'installment' | 'mortgage';
 export type PaymentInterval = 'month' | 'week' | 'two_weeks' | 'manual';
@@ -396,6 +398,7 @@ export async function refreshCreditCreateSchedule(
 				? draft.paymentOverride
 				: null;
 	try {
+		assertOnline('offline.onlineOnly.creditCreate');
 		const res = await previewCreditSchedule({
 			principal: toAPIAmount(principal),
 			term: Number(draft.termMonths),
@@ -430,8 +433,14 @@ export async function refreshCreditCreateSchedule(
 	} catch (e) {
 		const current = get(creditCreateDraft);
 		if (!current || scheduleParamsKey(current) !== expectedKey) return;
+		const scheduleError =
+			e instanceof OnlineOnlyError
+				? get(_)(e.i18nKey)
+				: e instanceof ApiError
+					? e.message
+					: 'Не удалось рассчитать график';
 		patchCreditCreate({
-			scheduleError: e instanceof ApiError ? e.message : 'Не удалось рассчитать график',
+			scheduleError,
 			lastScheduleKey: ''
 		});
 	} finally {
@@ -466,6 +475,7 @@ export async function submitCreditCreate(tz: string): Promise<Credit> {
 	}
 	patchCreditCreate({ saving: true });
 	try {
+		assertOnline('offline.onlineOnly.creditCreate');
 		const created = await createCredit(buildCreatePayload(d, tz));
 		clearCreditCreate();
 		return created;
