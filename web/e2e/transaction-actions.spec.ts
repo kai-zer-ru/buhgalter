@@ -186,8 +186,10 @@ test('make transaction recurring opens prefilled form', async ({ page }) => {
 });
 
 test('delete expense from dashboard recent list', async ({ page }) => {
+	const tag = Date.now();
 	const account = await createCashAccount(page);
-	await createExpense(page, account.id, '77.00', 'E2E dashboard delete');
+	const description = `E2E dashboard delete ${tag}`;
+	await createExpense(page, account.id, '77.00', description);
 
 	await page.goto('/');
 	await waitAppReady(page);
@@ -196,18 +198,22 @@ test('delete expense from dashboard recent list', async ({ page }) => {
 	await expect(accountCard.getByText('923.00 ₽')).toBeVisible({ timeout: 10_000 });
 	await expandCollapsibleSection(page, 'Последние операции');
 
-	const row = page.getByRole('row', { name: /77\.00/ });
+	const row = page.getByRole('row', { name: new RegExp(description) });
 	await rowMenuAction(page, row, 'Удалить');
 	await confirmDialog(page);
 
-	await expect(page.getByRole('row', { name: /77\.00/ })).toHaveCount(0, { timeout: 10_000 });
+	await expect(page.getByRole('row', { name: new RegExp(description) })).toHaveCount(0, {
+		timeout: 10_000
+	});
 	// balance restored without full page reload
 	await expect(accountCard.getByText('1 000.00 ₽')).toBeVisible({ timeout: 10_000 });
 });
 
 test('edit expense from dashboard updates balance', async ({ page }) => {
+	const tag = Date.now();
 	const account = await createCashAccount(page);
-	await createExpense(page, account.id, '50.00', 'E2E dashboard edit bal');
+	const description = `E2E dashboard edit bal ${tag}`;
+	await createExpense(page, account.id, '50.00', description);
 
 	await page.goto('/');
 	await waitAppReady(page);
@@ -216,14 +222,18 @@ test('edit expense from dashboard updates balance', async ({ page }) => {
 	await expect(accountCard.getByText('950.00 ₽')).toBeVisible({ timeout: 10_000 });
 	await expandCollapsibleSection(page, 'Последние операции');
 
-	const row = page.getByRole('row', { name: /50\.00/ });
+	const row = page.getByRole('row', { name: new RegExp(description) });
 	await rowMenuAction(page, row, 'Изменить');
 	const dialog = page.getByRole('dialog');
 	await fillEditTxAmount(dialog, '150', /150(\.00)?/);
 	await dialog.getByRole('button', { name: 'Сохранить' }).click();
 	await expect(dialog).toHaveCount(0, { timeout: 15_000 });
 
-	await expect(page.getByRole('row', { name: /150\.00/ })).toBeVisible({ timeout: 10_000 });
+	await expect(
+		page.getByRole('row', {
+			name: new RegExp(`${description}.*150\\.00|150\\.00.*${description}`)
+		})
+	).toBeVisible({ timeout: 10_000 });
 	// 1000 − 150
 	await expect(accountCard.getByText('850.00 ₽')).toBeVisible({ timeout: 10_000 });
 });
