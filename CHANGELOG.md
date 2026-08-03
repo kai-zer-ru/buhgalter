@@ -23,7 +23,7 @@
 **Ввод суммы (web + Android)**
 
 - В полях суммы можно вводить выражения со сложением/вычитанием (`7899+500`, `100+200-50`); при blur / сохранении подставляется результат ([transactions-display.md](docs/transactions-display.md))
-- Android: своя цифровая клавиатура **`MoneyKeypad`** с `+` / `−` (системная decimal часто без «+») ([android-client-ui.md](docs/android-client-ui.md))
+- Android: своя цифровая клавиатура **`MoneyKeypad`** с `+` / `−` (системная decimal часто без «+»); раскладка `1 2 3 +` / `4 5 6 −` / `7 8 9 ⌫` / `. 0 ✓` ([android-client-ui.md](docs/android-client-ui.md))
 
 **Android**
 

@@ -27,8 +27,8 @@
 		{ id: '7', key: '7', label: '7' },
 		{ id: '8', key: '8', label: '8' },
 		{ id: '9', key: '9', label: '9' },
-		{ id: 'dot', key: '.', label: '.', aria: 'moneyInput.decimal' },
 		{ id: 'back', key: 'backspace', label: '⌫', aria: 'moneyInput.backspace' },
+		{ id: 'dot', key: '.', label: '.', aria: 'moneyInput.decimal' },
 		{ id: '0', key: '0', label: '0' },
 		{ id: 'done', label: '✓', aria: 'moneyInput.done', done: true }
 	];
