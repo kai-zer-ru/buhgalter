@@ -129,14 +129,15 @@
 
 	// Keep page scroll area above the fixed keypad.
 	$effect(() => {
-		if (!keypadOpen || !keypadHostEl) {
+		const host = keypadHostEl;
+		if (!keypadOpen || !host) {
 			clearMoneyKeypadInset();
 			return;
 		}
-		const sync = () => setMoneyKeypadInset(keypadHostEl.getBoundingClientRect().height);
+		const sync = () => setMoneyKeypadInset(host.getBoundingClientRect().height);
 		sync();
 		const ro = new ResizeObserver(sync);
-		ro.observe(keypadHostEl);
+		ro.observe(host);
 		return () => {
 			ro.disconnect();
 			clearMoneyKeypadInset();

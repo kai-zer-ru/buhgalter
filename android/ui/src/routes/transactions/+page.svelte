@@ -436,7 +436,7 @@
 										{$_('common.loading')}
 									</p>
 								{:else}
-									<div class="md:overflow-x-auto">
+									<div class="pb-4 md:overflow-x-auto">
 										<TransactionList
 											transactions={plannedVisible}
 											siblings={txSiblings}
@@ -471,7 +471,7 @@
 										{$_('common.loading')}
 									</p>
 								{:else}
-									<div class="md:overflow-x-auto">
+									<div class="pb-4 md:overflow-x-auto">
 										<TransactionList
 											transactions={pastVisible}
 											siblings={txSiblings}
