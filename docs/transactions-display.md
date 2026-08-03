@@ -193,10 +193,12 @@ OpenAPI: `CreateTransferRequest.commission`, схема `Transfer`.
 
 **Поля ввода суммы (v1.2.3):** пустое значение и ноль не показываются как `0.00` — поле остаётся пустым, подсказка `placeholder="0.00"`. При потере фокуса нулевой ввод очищается (`formatMoneyInput`). Для подстановки значений из API в формы используйте `formatMoneyForInput`, не `formatMoneyDisplay`.
 
+**Калькулятор +/− в поле суммы:** можно ввести выражение вроде `7899+500` или `100+200-50` (разделители тысяч и десятичная точка/запятая допустимы). При blur и при сохранении (`toCents` / `toAPIAmount`) выражение считается в копейках и подставляется результат (`8 399.00`). Во время ввода операторы сохраняются (`formatMoneyLive`). Неполное выражение (`7899+`) результат не подставляет. То же в Android UI (`android/ui` — тот же `money.ts`).
+
 ## Тесты
 
 - `TestTransferRollbackOnError` — атомарность перевода при сбое второй ноги (SQLite-триггер в интеграционном тесте).
-- `money.test.ts` — стабильность курсора в `MoneyInput`, `formatMoneyForInput` / `formatMoneyInput` (ноль → пусто).
+- `money.test.ts` — стабильность курсора в `MoneyInput`, `formatMoneyForInput` / `formatMoneyInput` (ноль → пусто), выражения `+/−`.
 - `money-display.test.ts` — `formatMoneyForDisplay` (разделитель тысяч, валюта).
 - `accounts.test.ts` — `defaultAccountId` (контекстный счёт vs основной).
 - `select-options.test.ts` — иконки и подписи опций селектов.

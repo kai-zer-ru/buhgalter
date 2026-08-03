@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+	evaluateMoneyExpression,
 	formatMoneyForInput,
 	formatMoneyInput,
 	formatMoneyLive,
-	mapMoneyInputCursor
+	mapMoneyInputCursor,
+	toCents
 } from './money';
 
 describe('formatMoneyForInput', () => {
@@ -28,6 +30,40 @@ describe('formatMoneyInput', () => {
 
 	it('normalizes non-zero amounts', () => {
 		expect(formatMoneyInput('1000')).toBe('1 000.00');
+	});
+
+	it('evaluates addition and subtraction on blur', () => {
+		expect(formatMoneyInput('7899+500')).toBe('8 399.00');
+		expect(formatMoneyInput('100+200-50')).toBe('250.00');
+		expect(formatMoneyInput('7 899.50+100')).toBe('7 999.50');
+		expect(formatMoneyInput('-100+50')).toBe('-50.00');
+	});
+
+	it('keeps incomplete expression without inventing a result', () => {
+		expect(formatMoneyInput('7899+')).toBe('7 899+');
+		expect(formatMoneyInput('100+-')).toBe('100+-');
+	});
+});
+
+describe('evaluateMoneyExpression / toCents', () => {
+	it('parses +/− chains in kopecks', () => {
+		expect(toCents('7899+500')).toBe(839900);
+		expect(toCents('100+200-50')).toBe(25000);
+		expect(evaluateMoneyExpression('7899+500')).toBe(839900);
+	});
+
+	it('returns null for incomplete expressions', () => {
+		expect(evaluateMoneyExpression('7899+')).toBeNull();
+		expect(evaluateMoneyExpression('100+-')).toBeNull();
+		expect(() => toCents('7899+')).toThrow();
+	});
+});
+
+describe('formatMoneyLive', () => {
+	it('preserves +/− operators while typing', () => {
+		expect(formatMoneyLive('7899+')).toBe('7 899+');
+		expect(formatMoneyLive('7899+500')).toBe('7 899+500');
+		expect(formatMoneyLive('100+200-50')).toBe('100+200-50');
 	});
 });
 
@@ -54,5 +90,13 @@ describe('mapMoneyInputCursor', () => {
 		expect(formatted).toBe('400');
 		const cursor = mapMoneyInputCursor(raw, 2, formatted);
 		expect(cursor).toBe(1);
+	});
+
+	it('keeps caret after operator while typing expression', () => {
+		const raw = '7899+5';
+		const formatted = formatMoneyLive(raw);
+		expect(formatted).toBe('7 899+5');
+		const cursor = mapMoneyInputCursor(raw, raw.length, formatted);
+		expect(cursor).toBe(formatted.length);
 	});
 });

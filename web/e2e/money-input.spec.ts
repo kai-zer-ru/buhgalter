@@ -53,6 +53,15 @@ test('typing zero in money field clears on blur', async ({ page }) => {
 	await expect(balance).toHaveValue('');
 });
 
+test('amount field evaluates addition on blur', async ({ page }) => {
+	await page.goto('/accounts/new');
+	await waitAppReady(page);
+	const balance = page.locator('#balance');
+	await balance.fill('7899+500');
+	await balance.blur();
+	await expect(balance).toHaveValue('8 399.00');
+});
+
 test('create account with empty balance defaults to zero', async ({ page }) => {
 	const name = `E2E Zero Balance ${Date.now()}`;
 	await page.goto('/accounts/new');
