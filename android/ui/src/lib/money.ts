@@ -367,3 +367,38 @@ export function toAPIAmount(value: string): string {
 	const s = `${rubles}.${kop.toString().padStart(2, '0')}`;
 	return negative ? `-${s}` : s;
 }
+
+/** Keys of the custom Android money keypad (not the system soft keyboard). */
+export type MoneyKeypadKey = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '.' | '+' | '-' | 'backspace';
+
+/**
+ * Apply one keypad key at the caret, then live-format.
+ * Backspace deletes the nearest significant character before the caret (skips spaces).
+ */
+export function applyMoneyKeypadKey(
+	value: string,
+	cursor: number,
+	key: MoneyKeypadKey
+): { value: string; cursor: number } {
+	const clamped = Math.max(0, Math.min(cursor, value.length));
+
+	if (key === 'backspace') {
+		if (clamped <= 0) {
+			const formatted = formatMoneyLive(value);
+			return { value: formatted, cursor: 0 };
+		}
+		let delAt = clamped - 1;
+		while (delAt >= 0 && value[delAt] === ' ') delAt--;
+		if (delAt < 0) {
+			const formatted = formatMoneyLive(value);
+			return { value: formatted, cursor: 0 };
+		}
+		const raw = value.slice(0, delAt) + value.slice(clamped);
+		const formatted = formatMoneyLive(raw);
+		return { value: formatted, cursor: mapMoneyInputCursor(raw, delAt, formatted) };
+	}
+
+	const raw = value.slice(0, clamped) + key + value.slice(clamped);
+	const formatted = formatMoneyLive(raw);
+	return { value: formatted, cursor: mapMoneyInputCursor(raw, clamped + key.length, formatted) };
+}

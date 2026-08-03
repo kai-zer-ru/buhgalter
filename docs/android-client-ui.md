@@ -260,6 +260,19 @@
 - **`/server-setup`** — inline-строка под полем (без toast-каскада)
 - **Ошибки действий** (сохранить, удалить, sync outbox) — toast ([ui-toast.md](ui-toast.md))
 
+## Поле суммы (`MoneyInput`)
+
+Системная decimal-клавиатура на Android часто **не даёт ввести «+»**, хотя в сумме поддерживаются выражения `+/−` (`money.ts`: `100+50-20` → на blur считается итог).
+
+Поэтому `MoneyInput` в Android UI:
+
+- открывает **свою цифровую клавиатуру** (`MoneyKeypad`) при фокусе (`inputmode="none"`, без системной soft keyboard);
+- сетка: цифры, `.`, `+`, `−`, backspace, «Готово» (нормализация через `formatMoneyInput`);
+- клавиатура фиксируется внизу экрана (portal на `body`, `z-index: 55`);
+- логика нажатий — `applyMoneyKeypadKey` в `money.ts` (покрыта vitest).
+
+Код: `MoneyInput.svelte`, `MoneyKeypad.svelte`, `money.ts`.
+
 ## Select / Combobox / DateTimePicker
 
 Те же компоненты, что в веб-UI: без `usePortal` список якорится через `top/bottom: 100%` на обёртку **только поля** (label и hint — снаружи `.relative`). Иначе на узком экране панель открывается вверх и «отрывается» от контрола (раньше — профиль: тема, часовой пояс). Общие правила — [ui-dialogs.md](ui-dialogs.md).

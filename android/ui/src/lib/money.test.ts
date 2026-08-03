@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	applyMoneyKeypadKey,
 	evaluateMoneyExpression,
 	formatMoneyForInput,
 	formatMoneyInput,
@@ -98,5 +99,40 @@ describe('mapMoneyInputCursor', () => {
 		expect(formatted).toBe('7 899+5');
 		const cursor = mapMoneyInputCursor(raw, raw.length, formatted);
 		expect(cursor).toBe(formatted.length);
+	});
+});
+
+describe('applyMoneyKeypadKey', () => {
+	it('appends digits and live-formats thousands', () => {
+		let state = { value: '', cursor: 0 };
+		for (const key of ['1', '2', '3', '4'] as const) {
+			state = applyMoneyKeypadKey(state.value, state.cursor, key);
+		}
+		expect(state.value).toBe('1 234');
+		expect(state.cursor).toBe(state.value.length);
+	});
+
+	it('inserts + and continues the expression', () => {
+		let state = applyMoneyKeypadKey('7 899', 5, '+');
+		expect(state.value).toBe('7 899+');
+		state = applyMoneyKeypadKey(state.value, state.cursor, '5');
+		state = applyMoneyKeypadKey(state.value, state.cursor, '0');
+		state = applyMoneyKeypadKey(state.value, state.cursor, '0');
+		expect(state.value).toBe('7 899+500');
+	});
+
+	it('inserts − between terms', () => {
+		const state = applyMoneyKeypadKey('100+', 4, '-');
+		expect(state.value).toBe('100+-');
+	});
+
+	it('backspace skips thousand spaces', () => {
+		const state = applyMoneyKeypadKey('1 234', 2, 'backspace');
+		expect(state.value).toBe('234');
+	});
+
+	it('inserts decimal point', () => {
+		const state = applyMoneyKeypadKey('10', 2, '.');
+		expect(state.value).toBe('10.');
 	});
 });
