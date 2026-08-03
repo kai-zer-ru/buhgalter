@@ -216,6 +216,7 @@
 - [x] Android: кнопка биометрии на экране PIN — в нижнем левом углу клавиатуры (иконка отпечатка)
 - [x] БАГ. Android: после `adb install -r` сессия слетала — `warmRefCache` до `initAuthToken` слал запросы без Bearer, 401 вызывал `clearAuthToken` и удалял токен из Secure Storage
 - [x] БАГ. Web/Android: после удаления/редактирования операции не обновлялись балансы (Android — и список до sync) — web: silent `load`/`loadAll`; Android: `afterOnlineWrite` → `dataRefreshTick` во всех offline wrappers
+- [x] [Release notes](docs/release-notes-v1.4.1.md) · [ui-credit-cards.md](docs/ui-credit-cards.md) · [transactions-display.md](docs/transactions-display.md) · [android-client-platform.md](docs/android-client-platform.md) · [categories-and-icons.md](docs/categories-and-icons.md) · [balance-maintenance.md](docs/balance-maintenance.md) · [install/docker.md](docs/install/docker.md)
 
 ## Общие планы
 

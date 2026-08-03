@@ -3,7 +3,67 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 версии — [SemVer](https://semver.org/lang/ru/).
 
-Подробные release notes для пользователей: [docs/release-notes-v1.4.0.md](docs/release-notes-v1.4.0.md).
+Подробные release notes для пользователей: [docs/release-notes-v1.4.1.md](docs/release-notes-v1.4.1.md).
+
+## [v1.4.1] — 2026-08-03
+
+> **ОБЯЗАТЕЛЬНО СДЕЛАЙТЕ БЕКАП!** Перед обновлением сохраните копию базы (`data/buhgalter.db`) и каталога `backups/`.
+
+### Добавлено
+
+**Кредитные карты**
+
+- Отдельное действие **«Изменить лимит»** (меню «⋯» и страница карты): `PUT /api/v1/accounts/{id}/credit-limit`. В форме редактирования счёта лимит только для просмотра (`ERR_ACCOUNT_CREDIT_LIMIT_IMMUTABLE`). Увеличение — дельта к `credit_limit` и `initial_balance`; уменьшение — только при полном погашении ([ui-credit-cards.md](docs/ui-credit-cards.md))
+
+**Категории**
+
+- Редактирование подкатегорий (имя и иконка) в Настройках → Категории — `SubcategoryFormDialog`, `PUT /subcategories/{id}` ([categories-and-icons.md](docs/categories-and-icons.md))
+- Недостающие иконки категорий в каталоге (в т.ч. транспорт, продукты, услуги, досуг)
+
+**Ввод суммы (web + Android)**
+
+- В полях суммы можно вводить выражения со сложением/вычитанием (`7899+500`, `100+200-50`); при blur / сохранении подставляется результат ([transactions-display.md](docs/transactions-display.md))
+- Android: своя цифровая клавиатура **`MoneyKeypad`** с `+` / `−` (системная decimal часто без «+») ([android-client-ui.md](docs/android-client-ui.md))
+
+**Android**
+
+- Офлайн outbox: settle долга, CRUD периодических операций, мелочи по кредитам (pay / complete / update / schedule / delete payment / delete; **без** create); кеш карточки кредита `GET /credits/{id}` ([android-client-platform.md](docs/android-client-platform.md))
+- Кнопка биометрии на экране PIN — в нижнем левом углу клавиатуры (иконка отпечатка)
+
+### Изменено
+
+**Автопополнение**
+
+- Перевод автопополнения создаётся с датой/временем **триггерной операции**, а не «сейчас» (если дата неизвестна — текущий момент) ([balance-maintenance.md](docs/balance-maintenance.md))
+
+**Комиссия**
+
+- Любая комиссия (перевод и списание с кредитной карты) привязана к операции: отдельно удалить/отредактировать нельзя (`ERR_COMMISSION_LINKED`); менять комиссию перевода — через `PUT /transfers/{group_id}`, удалять — вместе с переводом ([transactions-display.md](docs/transactions-display.md))
+
+**Счета в выпадающих списках**
+
+- Порядок как на главной и `/accounts`: `cash` → `bank` (основной первым), затем кредитные карты (`sortAccountsForSelect`)
+
+### Исправлено
+
+**Android**
+
+- DELETE через native HTTPS (`SslTrust`): ответ **204** без тела больше не считается ошибкой (удаление переводов/операций)
+- После `adb install -r` сессия больше не слетает: `warmRefCache` не уходит без Bearer до `initAuthToken` (раньше 401 вызывал `clearAuthToken` и удалял токен из Secure Storage)
+- После онлайн delete/update балансы и списки обновляются сразу (`afterOnlineWrite` → `dataRefreshTick` во всех offline wrappers)
+
+**Web**
+
+- После удаления/редактирования операции балансы (и вторая нога перевода) обновляются — silent `load` / `loadAll`, не только перефильтровка списка
+
+### Техническое
+
+- Docker CI: кросс-компиляция на `BUILDPLATFORM` (без QEMU для npm/Go), кэш слоёв (`type=gha` + `ghcr.io/...:buildcache`), `.dockerignore` ([install/docker.md](docs/install/docker.md))
+- OpenAPI `1.4.1`: `PUT /accounts/{id}/credit-limit`, уточнения по комиссии и лимиту кредитной карты
+- Unit/e2e: `money` (+/−), credit-limit, комиссия, Android `MoneyKeypad` / session warm
+- Документация: [ui-credit-cards.md](docs/ui-credit-cards.md), [transactions-display.md](docs/transactions-display.md), [android-client-*.md](docs/android-client.md), [categories-and-icons.md](docs/categories-and-icons.md), [balance-maintenance.md](docs/balance-maintenance.md), [README.md](README.md)
+- [docs/release-notes-v1.4.1.md](docs/release-notes-v1.4.1.md)
+- Версия `1.4.1`
 
 ## [v1.4.0] — 2026-07-23
 
@@ -779,6 +839,7 @@
 - Стек: Go 1.26+, SQLite, SvelteKit, встроенный статический фронтенд (`embedstatic`)
 - Команда `make version vX.Y.Z` — единая простановка semver во всех артефактах (`VERSION`, OpenAPI, Dockerfile, …)
 
+[v1.4.1]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.4.1
 [v1.4.0]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.4.0
 [v1.3.2]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.3.2
 [v1.3.1]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.3.1

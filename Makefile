@@ -95,17 +95,35 @@ lint-go:
 	cd server && golangci-lint run ./...
 
 ACT_PLATFORM := -P ubuntu-latest=catthehacker/ubuntu:full-latest
+# act по умолчанию: concurrent-jobs=CPU и --pull=true (каждый раз тянет образ).
+ACT_CONCURRENT_JOBS ?= 2
+# Общие флаги: не перекачивать/не пересобирать уже локальные образы.
+ACT_FLAGS := --pull=false --rebuild=false --concurrent-jobs
 
+# Usage: make act-push [N]  — N потоков (по умолчанию ACT_CONCURRENT_JOBS=2)
+# Также: make act-push ACT_CONCURRENT_JOBS=4
 act-push:
 	@git rev-parse HEAD >/dev/null 2>&1 || (echo "act-push: нужен хотя бы один git commit (без него checkout в act удаляет исходники)" && exit 1)
-	act push $(ACT_PLATFORM) -W .github/workflows/ci.yml
+	@jobs='$(word 2,$(MAKECMDGOALS))'; \
+	jobs="$${jobs:-$(ACT_CONCURRENT_JOBS)}"; \
+	case "$$jobs" in ''|*[!0-9]*|0*) echo "act-push: concurrent jobs must be a positive integer (got '$$jobs')"; exit 1;; esac; \
+	act push $(ACT_PLATFORM) $(ACT_FLAGS) $$jobs -W .github/workflows/ci.yml
 
 # Локальная проверка release.yml (нужен GITHUB_TOKEN; публикация на GitHub — только с реальным токеном).
 # Пример: GITHUB_TOKEN=ghp_... make act-release
+# Usage: make act-release [N]
 act-release:
 	@git rev-parse HEAD >/dev/null 2>&1 || (echo "act-release: нужен хотя бы один git commit" && exit 1)
 	@test -n "$$GITHUB_TOKEN" || (echo "act-release: задайте GITHUB_TOKEN (Personal Access Token с repo)" && exit 1)
-	act push $(ACT_PLATFORM) -W .github/workflows/release.yml -e .github/act/tag-push.json -s GITHUB_TOKEN=$$GITHUB_TOKEN
+	@jobs='$(word 2,$(MAKECMDGOALS))'; \
+	jobs="$${jobs:-$(ACT_CONCURRENT_JOBS)}"; \
+	case "$$jobs" in ''|*[!0-9]*|0*) echo "act-release: concurrent jobs must be a positive integer (got '$$jobs')"; exit 1;; esac; \
+	act push $(ACT_PLATFORM) $(ACT_FLAGS) $$jobs -W .github/workflows/release.yml -e .github/act/tag-push.json -s GITHUB_TOKEN=$$GITHUB_TOKEN
+
+# Secondary goals for `make act-push 1` / `make act-release 2` (make иначе ищет target с таким именем).
+.PHONY: 1 2 3 4 5 6 7 8 9 10 12 16 32
+1 2 3 4 5 6 7 8 9 10 12 16 32:
+	@:
 
 # Сборка текущей версии из VERSION и публикация аннотированного тега vX.Y.Z на origin.
 tag-release:
