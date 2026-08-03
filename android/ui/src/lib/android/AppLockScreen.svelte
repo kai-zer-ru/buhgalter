@@ -24,7 +24,20 @@
 	let showBiometric = $state(false);
 
 	const filled = $derived(digits.length);
-	const keypad = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'back'];
+	const keypad = $derived([
+		'1',
+		'2',
+		'3',
+		'4',
+		'5',
+		'6',
+		'7',
+		'8',
+		'9',
+		showBiometric ? 'bio' : '',
+		'0',
+		'back'
+	]);
 
 	onMount(() => {
 		void initBiometric();
@@ -111,21 +124,40 @@
 			<p class="mt-4 text-sm" style:color="var(--danger)" role="alert">{error}</p>
 		{/if}
 
-		{#if showBiometric}
-			<button
-				type="button"
-				class="btn-ghost mt-4 text-sm"
-				disabled={busy || retryBlockedMs() > 0}
-				onclick={() => void tryBiometric()}
-			>
-				{$_('appLock.useBiometric')}
-			</button>
-		{/if}
-
 		<div class="mt-8 grid grid-cols-3 gap-3">
 			{#each keypad as key, index (index)}
 				{#if key === ''}
 					<div></div>
+				{:else if key === 'bio'}
+					<button
+						type="button"
+						class="btn-ghost flex h-14 items-center justify-center"
+						disabled={busy || retryBlockedMs() > 0}
+						aria-label={$_('appLock.useBiometric')}
+						onclick={() => void tryBiometric()}
+					>
+						<svg
+							aria-hidden="true"
+							class="h-6 w-6"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4" />
+							<path d="M14 13.12c0 2.38 0 6.38-1 8.88" />
+							<path d="M17.29 21.02c.12-.6.43-2.3.5-3.02" />
+							<path d="M19 13c0 1-.08 3.17-.24 4.5" />
+							<path d="M2 12a10 10 0 0 1 18-6" />
+							<path d="M2 16.5c.64.98 1.5 1.8 2.5 2.4" />
+							<path d="M3.38 17.5c.36.94.97 1.82 1.79 2.5" />
+							<path d="M7 11a5 5 0 0 1 10 0" />
+							<path d="M8 16c0 1.5.02 3.01.06 4" />
+							<path d="M9.5 21c.14-.96.34-2.58.5-4" />
+						</svg>
+					</button>
 				{:else if key === 'back'}
 					<button
 						type="button"

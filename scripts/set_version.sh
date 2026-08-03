@@ -61,19 +61,20 @@ if n != 1:
     raise SystemExit(f"set_version: could not update {main_go}")
 main_go.write_text(new_text, encoding="utf-8")
 
-pkg = Path("web/package.json")
-data = __import__("json").loads(pkg.read_text(encoding="utf-8"))
-data["version"] = ver
-pkg.write_text(__import__("json").dumps(data, ensure_ascii=False, indent="\t") + "\n", encoding="utf-8")
+for pkg_path in ("web/package.json", "android/ui/package.json"):
+    pkg = Path(pkg_path)
+    data = __import__("json").loads(pkg.read_text(encoding="utf-8"))
+    data["version"] = ver
+    pkg.write_text(__import__("json").dumps(data, ensure_ascii=False, indent="\t") + "\n", encoding="utf-8")
 
-lock = Path("web/package-lock.json")
-if lock.exists():
-    lock_data = __import__("json").loads(lock.read_text(encoding="utf-8"))
-    lock_data["version"] = ver
-    root = (lock_data.get("packages") or {}).get("")
-    if isinstance(root, dict):
-        root["version"] = ver
-    lock.write_text(__import__("json").dumps(lock_data, ensure_ascii=False, indent="\t") + "\n", encoding="utf-8")
+    lock = pkg.with_name("package-lock.json")
+    if lock.exists():
+        lock_data = __import__("json").loads(lock.read_text(encoding="utf-8"))
+        lock_data["version"] = ver
+        root = (lock_data.get("packages") or {}).get("")
+        if isinstance(root, dict):
+            root["version"] = ver
+        lock.write_text(__import__("json").dumps(lock_data, ensure_ascii=False, indent="\t") + "\n", encoding="utf-8")
 PY
 
 echo "set_version: ${ver}"
@@ -85,3 +86,5 @@ echo "  server/cmd/buhgalter/main.go"
 echo "  docker/Dockerfile"
 echo "  web/package.json"
 echo "  web/package-lock.json"
+echo "  android/ui/package.json"
+echo "  android/ui/package-lock.json"
