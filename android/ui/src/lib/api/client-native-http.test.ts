@@ -14,10 +14,6 @@ vi.mock('$lib/platform/server-url', () => ({
 	getApiBase: () => 'https://buh.example.com'
 }));
 
-vi.mock('$lib/platform/auth-token', () => ({
-	authHeaders: () => ({ Authorization: 'Bearer test' })
-}));
-
 vi.mock('$lib/platform/ssl-trust', () => ({
 	isHttpsOrigin: () => true,
 	isOriginTrusted: () => true,
@@ -55,7 +51,12 @@ vi.mock('$lib/offline/transaction-index', () => ({
 
 vi.mock('$lib/auth/session-expired', () => ({
 	notifySessionExpired: vi.fn(),
-	shouldRedirectApi401: () => false
+	shouldNotifySessionExpired: () => false
+}));
+
+vi.mock('$lib/platform/auth-token', () => ({
+	authHeaders: () => ({ Authorization: 'Bearer test' }),
+	getAuthToken: () => 'test'
 }));
 
 vi.mock('$lib/platform/debug-log', () => ({

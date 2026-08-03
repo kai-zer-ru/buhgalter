@@ -235,7 +235,6 @@
 
 	onMount(() => {
 		initDebugLogListeners();
-		initNativeOfflineSync();
 		const cleanupAppLock = initAppLockListener();
 		let cleanupDeepLink: (() => void) | undefined;
 		let cleanupShare: (() => void) | undefined;
@@ -252,7 +251,12 @@
 		).then((cleanup) => {
 			cleanupShare = cleanup;
 		});
-		void bootstrap();
+		// Token must be loaded before warmRefCache — otherwise unauthenticated 401s wipe SecureStorage.
+		void (async () => {
+			await initAuthToken();
+			initNativeOfflineSync();
+			await bootstrap();
+		})();
 		return () => {
 			cleanupAppLock();
 			cleanupDeepLink?.();

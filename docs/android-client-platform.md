@@ -90,11 +90,13 @@ BUHGALTER_ALLOWED_HOSTS=192.168.1.176
 
 ### Bootstrap (`+layout.svelte`)
 
-1. Нет URL → `/server-setup`, сброс локального токена
-2. Есть URL, нет пользователя на защищённом маршруте → `/login` (выбор способа входа)
-3. Есть токен → **сразу** экран PIN / биометрии (`unlockWithExistingSession`), даже без кэша `/auth/me`. Профиль берётся из `buhgalter.last_user.v1` (не привязан к URL), затем ref-cache (любой origin LAN/remote), иначе минимальный stub. Офлайн до ответа `/health`; probe + `loadUser` + версии / remote i18n — **только в фоне**. Health **никогда** не блокирует ввод PIN при наличии сессии
-4. Нет токена → `prepareBootstrapConnectivity` (может ждать probe) и дальше login / «Сервер недоступен»
-5. После мутаций ref-cache сбрасывается с **сохранением** `/api/v1/auth/me` (`clearRefCache({ preserveAuthMe: true })`); профиль также пишется в `last_user` при логине и успешном `loadUser`
+1. Сначала `initAuthToken()` (чтение Secure Storage), затем `initNativeOfflineSync` / `bootstrap` — иначе `warmRefCache` может уйти без Bearer
+2. Нет URL → `/server-setup`, сброс локального токена
+3. Есть URL, нет пользователя на защищённом маршруте → `/login` (выбор способа входа)
+4. Есть токен → **сразу** экран PIN / биометрии (`unlockWithExistingSession`), даже без кэша `/auth/me`. Профиль берётся из `buhgalter.last_user.v1` (не привязан к URL), затем ref-cache (любой origin LAN/remote), иначе минимальный stub. Офлайн до ответа `/health`; probe + `loadUser` + версии / remote i18n — **только в фоне**. Health **никогда** не блокирует ввод PIN при наличии сессии
+5. Нет токена → `prepareBootstrapConnectivity` (может ждать probe) и дальше login / «Сервер недоступен»
+6. После мутаций ref-cache сбрасывается с **сохранением** `/api/v1/auth/me` (`clearRefCache({ preserveAuthMe: true })`); профиль также пишется в `last_user` при логине и успешном `loadUser`
+7. **401 → logout** только если в запросе был Bearer (`shouldNotifySessionExpired`); 401 без токена не трогает Secure Storage
 
 ## Офлайн (outbox)
 
@@ -106,7 +108,7 @@ BUHGALTER_ALLOWED_HOSTS=192.168.1.176
 - Синхронизация не стартует без настроенного URL сервера
 - **Справочники (ref-cache):** GET через `request()` кэшируются в `localStorage` (ключ включает URL сервера), **кроме** путей с `/preview` (в т.ч. `GET /budgets/spent-preview`) и **`GET /setup/status`** (флаг регистрации / bootstrap). В том числе кешируется **`GET /credits/{id}`** (тело кредита с графиком) — иначе офлайн нельзя открыть карточку. **Stale-while-revalidate:** при наличии кэша экран рисуется сразу, сеть — в фоне (`ref-cache.ts`, store `refCacheUpdate` по path, legacy `refCacheTick`). При недоступности сервера — только кэш (некэшируемые GET сразу дают miss). `GET /ui/meta` прогревает кэш `GET /categories?type=…`. Кэш очищается при logout и отключении сервера; после успешного write — `clearRefCache({ preserveAuthMe: true })` (профиль `/auth/me` сохраняется для офлайн PIN). **`assignIfChanged`** в `load({ background: true })` — меньше лишних reactive-прогонов при неизменившемся ответе. Native HTTPS (`SslTrust`) выполняется в пуле потоков + JS-таймаут, чтобы не блокировать очередь CapacitorPlugins.
 - **Списки операций:** после merge outbox + server (`mergeTransactionLists`) клиент сортирует `transaction_date DESC`, `created_at DESC` — как API `sort=date_desc`. Иначе pending из outbox (FIFO) оказывались сверху в порядке создания (от старых к новым).
-- **Прогрев кэша:** при старте приложения и ручной синхронизации (`warmRefCache`) — dashboard, ui/meta, счета, списки кредитов **и детали каждого кредита**, recurring, долги, бюджет, банки, типовые списки операций.
+- **Прогрев кэша:** при старте (после `initAuthToken`, только если токен есть) и ручной синхронизации (`warmRefCache`) — dashboard, ui/meta, счета, списки кредитов **и детали каждого кредита**, recurring, долги, бюджет, банки, типовые списки операций.
 - **Ошибка загрузки экрана:** при сбое первой загрузки без кеша — `PageLoadGate` с текстом и «Повторить» (не пустой экран); при фоновом SWR с уже показанными данными — только toast. См. [android-client-ui.md](android-client-ui.md#ошибка-загрузки-страницы).
 - **Локальное состояние:** `balance-overlay.ts` пересчитывает баланс и прогноз по outbox относительно последнего снимка с сервера; `local-state.ts` применяет дельты к dashboard, счетам и формам. Индекс транзакций (`transaction-index.ts`) нужен для корректного update/delete офлайн.
 - **Синхронизация:** ручной pull (`AndroidDrawerSync`) — кнопка всегда активна (кроме момента sync); в офлайне сначала принудительный `/health`, при успехе — прогрев кэша + replay outbox, при неудаче остаётся офлайн. Фоновый `syncOutbox` — только outbox. После успешной отправки страницы обновляются через `dataRefreshTick`; фоновое обновление кэша — через `refCacheTick`. После локального save в outbox — мгновенный re-merge через `localDataTick` / `outboxTick`. Кнопка sync в drawer **не закрывает** меню.

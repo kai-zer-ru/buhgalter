@@ -1,9 +1,15 @@
 import { Network } from '@capacitor/network';
 import { warmRefCache } from '$lib/offline/sync';
+import { getAuthToken } from '$lib/platform/auth-token';
 import { hasServerUrl, refreshActiveServerUrl } from '$lib/platform/server-url';
 import { probeServerReachability, startServerProbeLoop } from '$lib/offline/server-connectivity';
 import { scheduleSyncOutbox } from '$lib/offline/sync';
 import { hasPendingOutbox } from '$lib/offline/store';
+
+function warmIfAuthenticated() {
+	if (!getAuthToken()) return;
+	void warmRefCache().catch(() => undefined);
+}
 
 /** Re-check /health and optionally sync when the device network becomes available. */
 function onDeviceNetworkAvailable() {
@@ -11,7 +17,7 @@ function onDeviceNetworkAvailable() {
 	void refreshActiveServerUrl().then(() => {
 		void probeServerReachability().then((online) => {
 			if (!online) return;
-			void warmRefCache().catch(() => undefined);
+			warmIfAuthenticated();
 			if (hasPendingOutbox()) scheduleSyncOutbox();
 		});
 	});
@@ -25,7 +31,7 @@ export function initNativeOfflineSync() {
 
 		void probeServerReachability().then((online) => {
 			if (online) {
-				void warmRefCache().catch(() => undefined);
+				warmIfAuthenticated();
 				if (hasPendingOutbox()) scheduleSyncOutbox();
 			}
 		});

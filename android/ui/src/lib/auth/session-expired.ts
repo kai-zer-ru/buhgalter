@@ -27,6 +27,11 @@ export function shouldRedirectApi401(apiPath: string): boolean {
 	return !API_401_EXEMPT.some((prefix) => apiPath === prefix || apiPath.startsWith(`${prefix}/`));
 }
 
+/** Only treat 401 as session expiry when a Bearer token was actually sent. */
+export function shouldNotifySessionExpired(apiPath: string, hasAuthToken: boolean): boolean {
+	return hasAuthToken && shouldRedirectApi401(apiPath);
+}
+
 export function notifySessionExpired(): void {
 	if (notifyLocked) return;
 	notifyLocked = true;

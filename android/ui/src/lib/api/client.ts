@@ -1,7 +1,8 @@
 import { get } from 'svelte/store';
 import { locale } from 'svelte-i18n';
 import { cachedGet, invalidateApiCache, seedStaticRef } from '$lib/api/cache';
-import { notifySessionExpired, shouldRedirectApi401 } from '$lib/auth/session-expired';
+import { notifySessionExpired, shouldNotifySessionExpired } from '$lib/auth/session-expired';
+import { authHeaders, getAuthToken } from '$lib/platform/auth-token';
 import {
 	clearRefCache,
 	fetchWithRefCache,
@@ -14,7 +15,6 @@ import {
 import { indexTransactions } from '$lib/offline/transaction-index';
 import { shouldUseOfflineQueue } from '$lib/offline/network';
 import { isServerOfflineMode } from '$lib/offline/server-connectivity';
-import { authHeaders } from '$lib/platform/auth-token';
 import { getApiBase } from '$lib/platform/server-url';
 import { isNativeApp } from '$lib/platform/native';
 import {
@@ -115,7 +115,7 @@ async function fetchApi<T>(
 				} catch {
 					// ignore
 				}
-				if ((result.status ?? 0) === 401 && shouldRedirectApi401(path)) {
+				if ((result.status ?? 0) === 401 && shouldNotifySessionExpired(path, !!getAuthToken())) {
 					notifySessionExpired();
 				}
 				const err = new ApiError(code, message, result.status ?? 0, field);
@@ -162,7 +162,7 @@ async function fetchApi<T>(
 			} catch {
 				// ignore
 			}
-			if (res.status === 401 && shouldRedirectApi401(path)) {
+			if (res.status === 401 && shouldNotifySessionExpired(path, !!getAuthToken())) {
 				notifySessionExpired();
 			}
 			const err = new ApiError(code, message, res.status, field);
