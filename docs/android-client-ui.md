@@ -269,9 +269,11 @@
 - открывает **свою цифровую клавиатуру** (`MoneyKeypad`) при фокусе (`inputmode="none"`, без системной soft keyboard);
 - сетка: цифры, `.`, `+`, `−`, backspace, «Готово» (нормализация через `formatMoneyInput`);
 - клавиатура фиксируется внизу экрана (portal на `body`, `z-index: 55`);
+- системная «Назад» / Escape сначала скрывают клавиатуру (`pushModalEscape`, как у модалок) — не уходят с формы;
+- высота клавиатуры пишется в `--money-keypad-inset`: `FormPageShell` и `android-shell-main` поднимают контент, скролл и footer остаются доступны;
 - логика нажатий — `applyMoneyKeypadKey` в `money.ts` (покрыта vitest).
 
-Код: `MoneyInput.svelte`, `MoneyKeypad.svelte`, `money.ts`.
+Код: `MoneyInput.svelte`, `MoneyKeypad.svelte`, `money-keypad-inset.ts`, `money.ts`.
 
 ## Select / Combobox / DateTimePicker
 

@@ -60,6 +60,8 @@
 		min-height: 0;
 		width: 100%;
 		overflow: hidden;
+		/* MoneyKeypad is fixed; keep scroll + footer above it. */
+		padding-bottom: var(--money-keypad-inset, 0px);
 	}
 
 	.form-page-scroll {

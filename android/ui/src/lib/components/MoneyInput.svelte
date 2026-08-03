@@ -2,6 +2,8 @@
 	import { tick } from 'svelte';
 	import { portal } from '$lib/actions/portal';
 	import MoneyKeypad from '$lib/components/MoneyKeypad.svelte';
+	import { clearMoneyKeypadInset, setMoneyKeypadInset } from '$lib/money-keypad-inset';
+	import { pushModalEscape } from '$lib/modal-escape';
 	import {
 		applyMoneyKeypadKey,
 		formatMoneyInput,
@@ -29,6 +31,7 @@
 	}: Props = $props();
 
 	let inputEl = $state<HTMLInputElement | null>(null);
+	let keypadHostEl = $state<HTMLDivElement | null>(null);
 	let prevAutoFocus = $state(false);
 	let keypadOpen = $state(false);
 	let cursor = $state(0);
@@ -59,15 +62,22 @@
 		keypadOpen = true;
 		syncCursorFromInput();
 		void tick().then(() => {
-			inputEl?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+			inputEl?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 		});
 	}
 
 	function closeKeypad(normalize: boolean) {
 		keypadOpen = false;
+		clearMoneyKeypadInset();
 		if (normalize) {
 			value = formatMoneyInput(value);
 		}
+	}
+
+	function dismissKeypad() {
+		keypadPointerDown = false;
+		closeKeypad(true);
+		inputEl?.blur();
 	}
 
 	function onFocus() {
@@ -108,10 +118,30 @@
 	}
 
 	function onKeypadDone() {
-		keypadPointerDown = false;
-		closeKeypad(true);
-		inputEl?.blur();
+		dismissKeypad();
 	}
+
+	// Hardware back / Escape — dismiss keypad first (same stack as modals).
+	$effect(() => {
+		if (!keypadOpen) return;
+		return pushModalEscape(dismissKeypad);
+	});
+
+	// Keep page scroll area above the fixed keypad.
+	$effect(() => {
+		if (!keypadOpen || !keypadHostEl) {
+			clearMoneyKeypadInset();
+			return;
+		}
+		const sync = () => setMoneyKeypadInset(keypadHostEl.getBoundingClientRect().height);
+		sync();
+		const ro = new ResizeObserver(sync);
+		ro.observe(keypadHostEl);
+		return () => {
+			ro.disconnect();
+			clearMoneyKeypadInset();
+		};
+	});
 
 	$effect(() => {
 		if (!autoFocus || prevAutoFocus) {
@@ -148,6 +178,7 @@
 
 {#if keypadOpen}
 	<div
+		bind:this={keypadHostEl}
 		class="money-keypad-host"
 		use:portal={typeof document !== 'undefined' ? document.body : null}
 		onpointerdown={onKeypadPointerDown}

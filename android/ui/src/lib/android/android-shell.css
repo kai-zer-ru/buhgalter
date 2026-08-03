@@ -170,7 +170,9 @@ html.dark .android-drawer-backdrop {
 	overflow-x: hidden;
 	overflow-y: auto;
 	-webkit-overflow-scrolling: touch;
-	padding: 1rem 1rem 1rem;
+	padding: 1rem;
+	/* MoneyKeypad is fixed; keep non-form pages scrollable above it. */
+	padding-bottom: calc(1rem + var(--money-keypad-inset, 0px));
 }
 
 /* FormPageShell owns scroll + sticky footer; outer main must not scroll. */
