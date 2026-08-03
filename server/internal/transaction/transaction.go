@@ -29,6 +29,8 @@ type Transaction struct {
 	Kind                  string  `json:"kind"`
 	Amount                int64   `json:"amount"`
 	AmountDisplay         string  `json:"amount_display"`
+	Commission            int64   `json:"commission,omitempty"`
+	CommissionDisplay     string  `json:"commission_display,omitempty"`
 	Description           *string `json:"description"`
 	CategoryID            *string `json:"category_id"`
 	CategoryName          *string `json:"category_name,omitempty"`
@@ -85,7 +87,13 @@ var (
 	ErrCreditCardPaymentExceedsLimit = errors.New("credit card payment exceeds limit")
 	ErrSystemCategoryPlanned         = errors.New("system category cannot be planned")
 	ErrTypeChange                    = errors.New("transaction type cannot be changed")
+	ErrUseTransfersEndpoint          = errors.New("use transfer endpoint to update transfers")
+	ErrCommissionLinked              = errors.New("commission is linked to transfer")
 )
+
+func isTransferCommission(tx Transaction) bool {
+	return tx.Type == "expense" && tx.TransferGroupID != nil && *tx.TransferGroupID != ""
+}
 
 func queries(db sqlcdb.DBTX) *sqlcdb.Queries {
 	return sqlcdb.New(db)
@@ -93,7 +101,7 @@ func queries(db sqlcdb.DBTX) *sqlcdb.Queries {
 
 func txFromGetRow(row sqlcdb.GetTransactionByIDRow) Transaction {
 	return txFromFields(
-		row.ID, row.AccountID, row.Type, row.Kind, row.Amount, row.Description,
+		row.ID, row.AccountID, row.Type, row.Kind, row.Amount, row.Commission, row.Description,
 		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID,
 		row.TransactionDate, row.CreatedAt, row.UpdatedAt,
 		row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.TransferAccountName, row.TransferAccountStatus,
@@ -103,7 +111,7 @@ func txFromGetRow(row sqlcdb.GetTransactionByIDRow) Transaction {
 
 func txFromListDesc(row sqlcdb.ListTransactionsFilteredDateDescRow) Transaction {
 	return txFromFields(
-		row.ID, row.AccountID, row.Type, row.Kind, row.Amount, row.Description,
+		row.ID, row.AccountID, row.Type, row.Kind, row.Amount, row.Commission, row.Description,
 		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID,
 		row.TransactionDate, row.CreatedAt, row.UpdatedAt,
 		row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.TransferAccountName, row.TransferAccountStatus,
@@ -113,7 +121,7 @@ func txFromListDesc(row sqlcdb.ListTransactionsFilteredDateDescRow) Transaction 
 
 func txFromListAsc(row sqlcdb.ListTransactionsFilteredDateAscRow) Transaction {
 	return txFromFields(
-		row.ID, row.AccountID, row.Type, row.Kind, row.Amount, row.Description,
+		row.ID, row.AccountID, row.Type, row.Kind, row.Amount, row.Commission, row.Description,
 		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID,
 		row.TransactionDate, row.CreatedAt, row.UpdatedAt,
 		row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.TransferAccountName, row.TransferAccountStatus,
@@ -123,7 +131,7 @@ func txFromListAsc(row sqlcdb.ListTransactionsFilteredDateAscRow) Transaction {
 
 func txFromRecent(row sqlcdb.ListRecentTransactionsRow) Transaction {
 	return txFromFields(
-		row.ID, row.AccountID, row.Type, row.Kind, row.Amount, row.Description,
+		row.ID, row.AccountID, row.Type, row.Kind, row.Amount, row.Commission, row.Description,
 		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID,
 		row.TransactionDate, row.CreatedAt, row.UpdatedAt,
 		row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.TransferAccountName, row.TransferAccountStatus,
@@ -133,7 +141,7 @@ func txFromRecent(row sqlcdb.ListRecentTransactionsRow) Transaction {
 
 func txFromGroupRow(row sqlcdb.ListTransactionsByTransferGroupRow) Transaction {
 	return txFromFields(
-		row.ID, row.AccountID, row.Type, row.Kind, row.Amount, row.Description,
+		row.ID, row.AccountID, row.Type, row.Kind, row.Amount, 0, row.Description,
 		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID,
 		row.TransactionDate, row.CreatedAt, row.UpdatedAt,
 		row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.TransferAccountName, row.TransferAccountStatus,
@@ -142,7 +150,7 @@ func txFromGroupRow(row sqlcdb.ListTransactionsByTransferGroupRow) Transaction {
 }
 
 func txFromFields(
-	id, accountID, txType, kind string, amount int64, description *string,
+	id, accountID, txType, kind string, amount, commission int64, description *string,
 	categoryID, subcategoryID, transferGroupID, transferAccountID *string,
 	transactionDate, createdAt, updatedAt string,
 	categoryName, categoryIcon *string, categoryIsSystem *int64, subcategoryName, subcategoryIcon, accountName, accountStatus, transferAccountName, transferAccountStatus *string,
@@ -185,6 +193,10 @@ func txFromFields(
 	}
 	if txType == "transfer" {
 		t.TransferIsOut = transferIsOut == 1
+		if commission > 0 {
+			t.Commission = commission
+			t.CommissionDisplay = money.FormatRubles(commission)
+		}
 	}
 	if creditPaymentLinked == 1 {
 		t.CreditPaymentLinked = true
@@ -303,8 +315,11 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in UpdateInput) 
 	if err := credit.GuardTransactionUpdate(ctx, db, userID, id); err != nil {
 		return Transaction{}, err
 	}
+	if isTransferCommission(existing) {
+		return Transaction{}, ErrCommissionLinked
+	}
 	if existing.TransferGroupID != nil && *existing.TransferGroupID != "" {
-		return Transaction{}, fmt.Errorf("use transfer endpoint to update transfers")
+		return Transaction{}, ErrUseTransfersEndpoint
 	}
 	if existing.Type != "income" && existing.Type != "expense" {
 		return Transaction{}, ErrInvalidType
@@ -372,6 +387,9 @@ func Delete(ctx context.Context, db *sql.DB, userID, id string) error {
 	existing, err := GetByID(ctx, db, userID, id)
 	if err != nil {
 		return err
+	}
+	if isTransferCommission(existing) {
+		return ErrCommissionLinked
 	}
 	if existing.TransferGroupID != nil && *existing.TransferGroupID != "" {
 		return DeleteTransfer(ctx, db, userID, *existing.TransferGroupID)

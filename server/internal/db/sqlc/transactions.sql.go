@@ -142,6 +142,7 @@ WHERE t.user_id = ?
   AND (? = '' OR t.transaction_date >= ?)
   AND (? = '' OR t.transaction_date <= ?)
   AND (? = '' OR t.description LIKE '%' || ? || '%')
+  AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL)
 `
 
 type CountTransactionsFilteredParams struct {
@@ -288,12 +289,22 @@ SELECT
         WHEN t.id = (
             SELECT x.id FROM transactions x
             WHERE x.transfer_group_id = t.transfer_group_id
+              AND x.type = 'transfer'
             ORDER BY x.created_at ASC, x.id ASC
             LIMIT 1
         ) THEN 1
         ELSE 0
     END AS transfer_is_out,
-    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked
+    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked,
+    CASE
+        WHEN t.type = 'transfer' AND t.transfer_group_id IS NOT NULL THEN (
+            SELECT COALESCE(SUM(x.amount), 0)
+            FROM transactions x
+            WHERE x.transfer_group_id = t.transfer_group_id
+              AND x.type = 'expense'
+        )
+        ELSE 0
+    END AS commission
 FROM transactions t
 LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
@@ -334,6 +345,7 @@ type GetTransactionByIDRow struct {
 	TransferAccountStatus *string `json:"transfer_account_status"`
 	TransferIsOut         int64   `json:"transfer_is_out"`
 	CreditPaymentLinked   int64   `json:"credit_payment_linked"`
+	Commission            int64   `json:"commission"`
 }
 
 func (q *Queries) GetTransactionByID(ctx context.Context, arg GetTransactionByIDParams) (GetTransactionByIDRow, error) {
@@ -365,6 +377,7 @@ func (q *Queries) GetTransactionByID(ctx context.Context, arg GetTransactionByID
 		&i.TransferAccountStatus,
 		&i.TransferIsOut,
 		&i.CreditPaymentLinked,
+		&i.Commission,
 	)
 	return i, err
 }
@@ -551,12 +564,22 @@ SELECT
         WHEN t.id = (
             SELECT x.id FROM transactions x
             WHERE x.transfer_group_id = t.transfer_group_id
+              AND x.type = 'transfer'
             ORDER BY x.created_at ASC, x.id ASC
             LIMIT 1
         ) THEN 1
         ELSE 0
     END AS transfer_is_out,
-    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked
+    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked,
+    CASE
+        WHEN t.type = 'transfer' AND t.transfer_group_id IS NOT NULL THEN (
+            SELECT COALESCE(SUM(x.amount), 0)
+            FROM transactions x
+            WHERE x.transfer_group_id = t.transfer_group_id
+              AND x.type = 'expense'
+        )
+        ELSE 0
+    END AS commission
 FROM transactions t
 LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
@@ -564,6 +587,7 @@ LEFT JOIN accounts a ON a.id = t.account_id
 LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
 LEFT JOIN credit_payments cp ON cp.transaction_id = t.id
 WHERE t.user_id = ?
+  AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL)
 ORDER BY t.transaction_date DESC, t.created_at DESC
 LIMIT ?
 `
@@ -599,6 +623,7 @@ type ListRecentTransactionsRow struct {
 	TransferAccountStatus *string `json:"transfer_account_status"`
 	TransferIsOut         int64   `json:"transfer_is_out"`
 	CreditPaymentLinked   int64   `json:"credit_payment_linked"`
+	Commission            int64   `json:"commission"`
 }
 
 func (q *Queries) ListRecentTransactions(ctx context.Context, arg ListRecentTransactionsParams) ([]ListRecentTransactionsRow, error) {
@@ -636,6 +661,7 @@ func (q *Queries) ListRecentTransactions(ctx context.Context, arg ListRecentTran
 			&i.TransferAccountStatus,
 			&i.TransferIsOut,
 			&i.CreditPaymentLinked,
+			&i.Commission,
 		); err != nil {
 			return nil, err
 		}
@@ -680,6 +706,7 @@ SELECT
         WHEN t.id = (
             SELECT x.id FROM transactions x
             WHERE x.transfer_group_id = t.transfer_group_id
+              AND x.type = 'transfer'
             ORDER BY x.created_at ASC, x.id ASC
             LIMIT 1
         ) THEN 1
@@ -804,12 +831,22 @@ SELECT
         WHEN t.id = (
             SELECT x.id FROM transactions x
             WHERE x.transfer_group_id = t.transfer_group_id
+              AND x.type = 'transfer'
             ORDER BY x.created_at ASC, x.id ASC
             LIMIT 1
         ) THEN 1
         ELSE 0
     END AS transfer_is_out,
-    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked
+    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked,
+    CASE
+        WHEN t.type = 'transfer' AND t.transfer_group_id IS NOT NULL THEN (
+            SELECT COALESCE(SUM(x.amount), 0)
+            FROM transactions x
+            WHERE x.transfer_group_id = t.transfer_group_id
+              AND x.type = 'expense'
+        )
+        ELSE 0
+    END AS commission
 FROM transactions t
 LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
@@ -824,6 +861,7 @@ WHERE t.user_id = ?
   AND (? = '' OR t.transaction_date >= ?)
   AND (? = '' OR t.transaction_date <= ?)
   AND (? = '' OR t.description LIKE '%' || ? || '%')
+  AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL)
 ORDER BY t.transaction_date ASC, t.created_at ASC
 LIMIT ? OFFSET ?
 `
@@ -874,6 +912,7 @@ type ListTransactionsFilteredDateAscRow struct {
 	TransferAccountStatus *string `json:"transfer_account_status"`
 	TransferIsOut         int64   `json:"transfer_is_out"`
 	CreditPaymentLinked   int64   `json:"credit_payment_linked"`
+	Commission            int64   `json:"commission"`
 }
 
 func (q *Queries) ListTransactionsFilteredDateAsc(ctx context.Context, arg ListTransactionsFilteredDateAscParams) ([]ListTransactionsFilteredDateAscRow, error) {
@@ -929,6 +968,7 @@ func (q *Queries) ListTransactionsFilteredDateAsc(ctx context.Context, arg ListT
 			&i.TransferAccountStatus,
 			&i.TransferIsOut,
 			&i.CreditPaymentLinked,
+			&i.Commission,
 		); err != nil {
 			return nil, err
 		}
@@ -973,12 +1013,22 @@ SELECT
         WHEN t.id = (
             SELECT x.id FROM transactions x
             WHERE x.transfer_group_id = t.transfer_group_id
+              AND x.type = 'transfer'
             ORDER BY x.created_at ASC, x.id ASC
             LIMIT 1
         ) THEN 1
         ELSE 0
     END AS transfer_is_out,
-    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked
+    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked,
+    CASE
+        WHEN t.type = 'transfer' AND t.transfer_group_id IS NOT NULL THEN (
+            SELECT COALESCE(SUM(x.amount), 0)
+            FROM transactions x
+            WHERE x.transfer_group_id = t.transfer_group_id
+              AND x.type = 'expense'
+        )
+        ELSE 0
+    END AS commission
 FROM transactions t
 LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
@@ -993,6 +1043,7 @@ WHERE t.user_id = ?
   AND (? = '' OR t.transaction_date >= ?)
   AND (? = '' OR t.transaction_date <= ?)
   AND (? = '' OR t.description LIKE '%' || ? || '%')
+  AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL)
 ORDER BY t.transaction_date DESC, t.created_at DESC
 LIMIT ? OFFSET ?
 `
@@ -1043,6 +1094,7 @@ type ListTransactionsFilteredDateDescRow struct {
 	TransferAccountStatus *string `json:"transfer_account_status"`
 	TransferIsOut         int64   `json:"transfer_is_out"`
 	CreditPaymentLinked   int64   `json:"credit_payment_linked"`
+	Commission            int64   `json:"commission"`
 }
 
 func (q *Queries) ListTransactionsFilteredDateDesc(ctx context.Context, arg ListTransactionsFilteredDateDescParams) ([]ListTransactionsFilteredDateDescRow, error) {
@@ -1098,6 +1150,7 @@ func (q *Queries) ListTransactionsFilteredDateDesc(ctx context.Context, arg List
 			&i.TransferAccountStatus,
 			&i.TransferIsOut,
 			&i.CreditPaymentLinked,
+			&i.Commission,
 		); err != nil {
 			return nil, err
 		}
@@ -1449,6 +1502,7 @@ WHERE t.user_id = ? AND t.account_id = ? AND t.type = 'transfer' AND kind = 'fut
   AND t.id = (
     SELECT x.id FROM transactions x
     WHERE x.transfer_group_id = t.transfer_group_id
+      AND x.type = 'transfer'
     ORDER BY x.created_at ASC, x.id ASC
     LIMIT 1 OFFSET 1
   )
@@ -1535,6 +1589,7 @@ WHERE t.user_id = ? AND t.account_id = ? AND t.type = 'transfer' AND kind = 'fut
   AND t.id = (
     SELECT x.id FROM transactions x
     WHERE x.transfer_group_id = t.transfer_group_id
+      AND x.type = 'transfer'
     ORDER BY x.created_at ASC, x.id ASC
     LIMIT 1
   )
@@ -1629,6 +1684,7 @@ WHERE t.user_id = ? AND t.account_id = ? AND t.type = 'transfer' AND t.kind = 'm
   AND t.id = (
     SELECT x.id FROM transactions x
     WHERE x.transfer_group_id = t.transfer_group_id
+      AND x.type = 'transfer'
     ORDER BY x.created_at ASC, x.id ASC
     LIMIT 1 OFFSET 1
   )
@@ -1708,6 +1764,7 @@ WHERE t.user_id = ? AND t.account_id = ? AND t.type = 'transfer' AND t.kind = 'm
   AND t.id = (
     SELECT x.id FROM transactions x
     WHERE x.transfer_group_id = t.transfer_group_id
+      AND x.type = 'transfer'
     ORDER BY x.created_at ASC, x.id ASC
     LIMIT 1
   )

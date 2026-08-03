@@ -914,6 +914,8 @@ export type Transaction = {
 	kind: 'manual' | 'future';
 	amount: number;
 	amount_display: string;
+	commission?: number;
+	commission_display?: string;
 	description: string | null;
 	category_id: string | null;
 	category_name?: string | null;

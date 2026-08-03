@@ -393,12 +393,12 @@ func writeTxError(w http.ResponseWriter, r *http.Request, err error) bool {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_TRANSFER_SAME_ACCOUNT")
 	case errors.Is(err, ErrCreditCardPaymentExceedsLimit):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_CARD_PAYMENT_EXCEEDS_LIMIT")
+	case errors.Is(err, ErrUseTransfersEndpoint):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_USE_TRANSFERS_ENDPOINT")
+	case errors.Is(err, ErrCommissionLinked):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_COMMISSION_LINKED")
 	default:
-		if strings.Contains(err.Error(), "transfer endpoint") {
-			apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_USE_TRANSFERS_ENDPOINT")
-		} else {
-			apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
-		}
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 	}
 	return true
 }

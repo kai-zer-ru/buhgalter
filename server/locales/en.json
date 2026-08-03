@@ -91,6 +91,7 @@
   "ERR_SUBCATEGORY_NOT_FOUND": "Subcategory not found",
   "ERR_TRANSFER_SAME_ACCOUNT": "Transfer accounts must differ",
   "ERR_USE_TRANSFERS_ENDPOINT": "Use /transfers for transfers",
+  "ERR_COMMISSION_LINKED": "Commission is linked to the transfer — edit or delete the transfer",
   "ERR_CREDIT_INVALID_TERM": "Invalid term",
   "ERR_CREDIT_CLOSED": "Credit is already closed",
   "ERR_CREDIT_INVALID_INTERVAL": "Invalid payment interval",

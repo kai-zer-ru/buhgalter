@@ -31,12 +31,22 @@ SELECT
         WHEN t.id = (
             SELECT x.id FROM transactions x
             WHERE x.transfer_group_id = t.transfer_group_id
+              AND x.type = 'transfer'
             ORDER BY x.created_at ASC, x.id ASC
             LIMIT 1
         ) THEN 1
         ELSE 0
     END AS transfer_is_out,
-    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked
+    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked,
+    CASE
+        WHEN t.type = 'transfer' AND t.transfer_group_id IS NOT NULL THEN (
+            SELECT COALESCE(SUM(x.amount), 0)
+            FROM transactions x
+            WHERE x.transfer_group_id = t.transfer_group_id
+              AND x.type = 'expense'
+        )
+        ELSE 0
+    END AS commission
 FROM transactions t
 LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
@@ -75,6 +85,7 @@ SELECT
         WHEN t.id = (
             SELECT x.id FROM transactions x
             WHERE x.transfer_group_id = t.transfer_group_id
+              AND x.type = 'transfer'
             ORDER BY x.created_at ASC, x.id ASC
             LIMIT 1
         ) THEN 1
@@ -181,7 +192,8 @@ WHERE t.user_id = ?
   AND (? = '' OR t.kind = ?)
   AND (? = '' OR t.transaction_date >= ?)
   AND (? = '' OR t.transaction_date <= ?)
-  AND (? = '' OR t.description LIKE '%' || ? || '%');
+  AND (? = '' OR t.description LIKE '%' || ? || '%')
+  AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL);
 
 -- name: ListTransactionsFilteredDateDesc :many
 SELECT
@@ -213,12 +225,22 @@ SELECT
         WHEN t.id = (
             SELECT x.id FROM transactions x
             WHERE x.transfer_group_id = t.transfer_group_id
+              AND x.type = 'transfer'
             ORDER BY x.created_at ASC, x.id ASC
             LIMIT 1
         ) THEN 1
         ELSE 0
     END AS transfer_is_out,
-    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked
+    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked,
+    CASE
+        WHEN t.type = 'transfer' AND t.transfer_group_id IS NOT NULL THEN (
+            SELECT COALESCE(SUM(x.amount), 0)
+            FROM transactions x
+            WHERE x.transfer_group_id = t.transfer_group_id
+              AND x.type = 'expense'
+        )
+        ELSE 0
+    END AS commission
 FROM transactions t
 LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
@@ -233,6 +255,7 @@ WHERE t.user_id = ?
   AND (? = '' OR t.transaction_date >= ?)
   AND (? = '' OR t.transaction_date <= ?)
   AND (? = '' OR t.description LIKE '%' || ? || '%')
+  AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL)
 ORDER BY t.transaction_date DESC, t.created_at DESC
 LIMIT ? OFFSET ?;
 
@@ -266,12 +289,22 @@ SELECT
         WHEN t.id = (
             SELECT x.id FROM transactions x
             WHERE x.transfer_group_id = t.transfer_group_id
+              AND x.type = 'transfer'
             ORDER BY x.created_at ASC, x.id ASC
             LIMIT 1
         ) THEN 1
         ELSE 0
     END AS transfer_is_out,
-    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked
+    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked,
+    CASE
+        WHEN t.type = 'transfer' AND t.transfer_group_id IS NOT NULL THEN (
+            SELECT COALESCE(SUM(x.amount), 0)
+            FROM transactions x
+            WHERE x.transfer_group_id = t.transfer_group_id
+              AND x.type = 'expense'
+        )
+        ELSE 0
+    END AS commission
 FROM transactions t
 LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
@@ -286,6 +319,7 @@ WHERE t.user_id = ?
   AND (? = '' OR t.transaction_date >= ?)
   AND (? = '' OR t.transaction_date <= ?)
   AND (? = '' OR t.description LIKE '%' || ? || '%')
+  AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL)
 ORDER BY t.transaction_date ASC, t.created_at ASC
 LIMIT ? OFFSET ?;
 
@@ -319,12 +353,22 @@ SELECT
         WHEN t.id = (
             SELECT x.id FROM transactions x
             WHERE x.transfer_group_id = t.transfer_group_id
+              AND x.type = 'transfer'
             ORDER BY x.created_at ASC, x.id ASC
             LIMIT 1
         ) THEN 1
         ELSE 0
     END AS transfer_is_out,
-    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked
+    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked,
+    CASE
+        WHEN t.type = 'transfer' AND t.transfer_group_id IS NOT NULL THEN (
+            SELECT COALESCE(SUM(x.amount), 0)
+            FROM transactions x
+            WHERE x.transfer_group_id = t.transfer_group_id
+              AND x.type = 'expense'
+        )
+        ELSE 0
+    END AS commission
 FROM transactions t
 LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
@@ -332,6 +376,7 @@ LEFT JOIN accounts a ON a.id = t.account_id
 LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
 LEFT JOIN credit_payments cp ON cp.transaction_id = t.id
 WHERE t.user_id = ?
+  AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL)
 ORDER BY t.transaction_date DESC, t.created_at DESC
 LIMIT ?;
 
@@ -356,6 +401,7 @@ WHERE t.user_id = ? AND t.account_id = ? AND t.type = 'transfer' AND t.kind = 'm
   AND t.id = (
     SELECT x.id FROM transactions x
     WHERE x.transfer_group_id = t.transfer_group_id
+      AND x.type = 'transfer'
     ORDER BY x.created_at ASC, x.id ASC
     LIMIT 1
   );
@@ -369,6 +415,7 @@ WHERE t.user_id = ? AND t.account_id = ? AND t.type = 'transfer' AND t.kind = 'm
   AND t.id = (
     SELECT x.id FROM transactions x
     WHERE x.transfer_group_id = t.transfer_group_id
+      AND x.type = 'transfer'
     ORDER BY x.created_at ASC, x.id ASC
     LIMIT 1 OFFSET 1
   );
@@ -394,6 +441,7 @@ WHERE t.user_id = ? AND t.account_id = ? AND t.type = 'transfer' AND kind = 'fut
   AND t.id = (
     SELECT x.id FROM transactions x
     WHERE x.transfer_group_id = t.transfer_group_id
+      AND x.type = 'transfer'
     ORDER BY x.created_at ASC, x.id ASC
     LIMIT 1
   );
@@ -407,6 +455,7 @@ WHERE t.user_id = ? AND t.account_id = ? AND t.type = 'transfer' AND kind = 'fut
   AND t.id = (
     SELECT x.id FROM transactions x
     WHERE x.transfer_group_id = t.transfer_group_id
+      AND x.type = 'transfer'
     ORDER BY x.created_at ASC, x.id ASC
     LIMIT 1 OFFSET 1
   );

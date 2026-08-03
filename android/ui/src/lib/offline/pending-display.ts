@@ -91,6 +91,8 @@ function transferFromCreate(
 		transfer_account_name: accountName(accounts, payload.to_account_id),
 		transfer_account_status: 'active',
 		transfer_is_out: true,
+		commission: amountToCents(payload.commission ?? '0'),
+		commission_display: payload.commission?.trim() ? payload.commission : undefined,
 		transaction_date: payload.transaction_date,
 		created_at: ts,
 		updated_at: ts,

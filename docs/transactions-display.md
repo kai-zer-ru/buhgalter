@@ -19,8 +19,8 @@ OpenAPI-схемы: [`Transaction`](api/openapi.yaml#/components/schemas/Transac
 | `category_is_system` | bool | `categories.is_system` — скрывает «Повторить» для дохода/расхода |
 | `subcategory_name`, `subcategory_icon` | | Из `subcategories`; без подкатегории `subcategory_icon` пустой |
 | `amount_display` | string | `"1234.56"` для UI |
-| `commission` | integer | Только для перевода: комиссия в копейках (v1.1) |
-| `commission_display` | string | Отформатированная комиссия |
+| `commission` | integer | Только для `type=transfer`: комиссия в копейках (сумма ноги `expense` в группе) |
+| `commission_display` | string | Отформатированная комиссия (если `commission > 0`) |
 | `credit_payment_linked` | bool | `true` — операция привязана к платежу по кредиту; редактирование через `PUT /transactions/{id}` запрещено |
 
 `transfer_is_out` вычисляется в sqlc-запросах (`CASE` + подзапрос по `transfer_group_id`), не хранится в таблице `transactions`.
@@ -37,11 +37,14 @@ OpenAPI-схемы: [`Transaction`](api/openapi.yaml#/components/schemas/Transac
 | Функция | Назначение |
 |---------|------------|
 | `transferOutLeg(tx, siblings)` | Исходящая нога пары (min `created_at` в группе) |
-| `dedupeTransferLegs(txs)` | Оставить одну строку на перевод, если в списке обе ноги (главная, `/transactions`) |
+| `dedupeTransferLegs(txs)` | Оставить одну строку на перевод; скрыть ногу комиссии (`expense` с `transfer_group_id`) |
 | `transferRoute(tx, siblings)` | `{ from, to }` — имена счетов **в направлении движения денег** |
 | `transferAccountIds(tx, siblings?)` | `{ fromAccountId, toAccountId }` для формы редактирования перевода (одна видимая нога + `transfer_is_out`) |
-| `canEditTransaction(tx)` | `false` при `credit_payment_linked` — скрыть «Изменить» в списке |
+| `transferCommissionDisplay(tx, siblings?)` | Текст комиссии для строки перевода (`commission_display` или fallback) |
+| `isTransferCommission(tx)` | `expense` с `transfer_group_id` — нога комиссии |
+| `canEditTransaction(tx)` | `false` при `credit_payment_linked` или ноге комиссии — скрыть «Изменить» |
 | `canRepeatTransaction(tx)` | `false` при `credit_payment_linked` или системной категории (доход/расход); переводы — без ограничения по категории |
+| `canDeleteTransaction(tx)` | `false` при ноге комиссии или `deletable === false` |
 | `formatTransactionAccount(tx, siblings, mode)` | Текст колонки «Счёт» |
 | `transactionAmountSign(tx, opts?)` | Префикс суммы: `+`, `−` или пусто |
 
@@ -74,14 +77,17 @@ OpenAPI-схемы: [`Transaction`](api/openapi.yaml#/components/schemas/Transac
 
 На `/accounts/[id]` API отдаёт только ногу выбранного счёта — дедупликация не меняет состав, но `transferRoute` всё равно опирается на `transfer_is_out`.
 
-## Комиссия перевода (v1.1)
+## Комиссия перевода (v1.1 / v1.4.1)
 
 В форме перевода (`TransferForm.svelte`) — опциональное поле **комиссии**. При сохранении:
 
-- Создаётся расход на счёте-источнике в системной категории «Комиссия»
-- В ответе `GET /transactions/{id}` для перевода — поля `commission`, `commission_display` (сумма ноги комиссии в группе)
+- Создаётся расход на счёте-источнике в системной категории «Комиссия» (нога группы с тем же `transfer_group_id`)
+- В списках и `GET /transactions/{id}` нога комиссии **не отдаётся** как отдельная операция
+- На ногах `type=transfer` — поля `commission`, `commission_display`
+- UI: комиссия показывается **в строке перевода** (под суммой), не отдельной строкой
+- Редактирование/удаление комиссии отдельно запрещены (`ERR_COMMISSION_LINKED`); менять — через `PUT /transfers/{group_id}`, удалять — вместе с переводом (`DELETE /transfers/{group_id}` или `DELETE` ноги перевода)
 
-OpenAPI: `CreateTransferRequest.commission`, схема `Transfer`.
+OpenAPI: `CreateTransferRequest.commission`, схемы `Transfer` и `Transaction`.
 
 ## Колонка «Дата» в таблицах операций
 

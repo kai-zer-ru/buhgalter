@@ -97,25 +97,33 @@
 		if (editSource?.transfer_group_id) {
 			const legs = transferGroupLegs(editSource, related);
 			const metaLeg = legs.length >= 2 ? transferOutLeg(editSource, legs) : editSource;
-			const commissionLeg = legs.find((leg) => leg.type === 'expense');
+			const commissionValue =
+				metaLeg.commission_display ??
+				editSource.commission_display ??
+				legs.find((leg) => leg.type === 'expense')?.amount_display ??
+				'';
 			const { fromAccountId, toAccountId } = transferAccountIds(editSource, related);
 			groupId = editSource.transfer_group_id;
 			fromAccount = fromAccountId;
 			toAccount = toAccountId;
 			amount = formatMoneyForInput(metaLeg.amount_display);
-			commission = formatMoneyForInput(commissionLeg?.amount_display ?? '');
+			commission = formatMoneyForInput(commissionValue);
 			description = metaLeg.description ?? '';
 			dateTimeValue = toDatetimeLocalValue(metaLeg.transaction_date, tz);
 		} else if (repeatSource?.transfer_group_id) {
 			const legs = transferGroupLegs(repeatSource, related);
 			const metaLeg = legs.length >= 2 ? transferOutLeg(repeatSource, legs) : repeatSource;
-			const commissionLeg = legs.find((leg) => leg.type === 'expense');
+			const commissionValue =
+				metaLeg.commission_display ??
+				repeatSource.commission_display ??
+				legs.find((leg) => leg.type === 'expense')?.amount_display ??
+				'';
 			const { fromAccountId, toAccountId } = transferAccountIds(repeatSource, related);
 			groupId = '';
 			fromAccount = fromAccountId;
 			toAccount = toAccountId;
 			amount = formatMoneyForInput(metaLeg.amount_display);
-			commission = formatMoneyForInput(commissionLeg?.amount_display ?? '');
+			commission = formatMoneyForInput(commissionValue);
 			description = metaLeg.description ?? '';
 			dateTimeValue = nowDatetimeLocal(tz);
 		} else {

@@ -91,6 +91,7 @@
   "ERR_SUBCATEGORY_NOT_FOUND": "Подкатегория не найдена",
   "ERR_TRANSFER_SAME_ACCOUNT": "Счета перевода должны различаться",
   "ERR_USE_TRANSFERS_ENDPOINT": "Для перевода используйте /transfers",
+  "ERR_COMMISSION_LINKED": "Комиссия привязана к переводу — измените или удалите перевод",
   "ERR_CREDIT_INVALID_TERM": "Некорректный срок",
   "ERR_CREDIT_CLOSED": "Кредит уже закрыт",
   "ERR_CREDIT_INVALID_INTERVAL": "Некорректная периодичность",

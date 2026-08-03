@@ -8,7 +8,12 @@ export function transferOutLeg(tx: Transaction, siblings: Transaction[]): Transa
 	return legs.reduce((best, cur) => (cur.created_at < best.created_at ? cur : best));
 }
 
-/** Hide in-leg rows when both legs appear in the same list (e.g. dashboard). */
+/** Expense leg of a transfer group (commission) — not shown as its own row. */
+export function isTransferCommission(tx: Transaction): boolean {
+	return tx.type === 'expense' && Boolean(tx.transfer_group_id);
+}
+
+/** Hide in-leg rows and transfer-linked commission when they appear in the same list. */
 export function dedupeTransferLegs(transactions: Transaction[]): Transaction[] {
 	const groups = new Map<string, Transaction[]>();
 	for (const tx of transactions) {
@@ -22,6 +27,7 @@ export function dedupeTransferLegs(transactions: Transaction[]): Transaction[] {
 		outIds.add(transferOutLeg(legs[0], legs).id);
 	}
 	return transactions.filter((tx) => {
+		if (isTransferCommission(tx)) return false;
 		if (tx.type !== 'transfer' || !tx.transfer_group_id) return true;
 		return outIds.has(tx.id);
 	});
@@ -90,9 +96,30 @@ export function transactionAmountSign(tx: Transaction, opts?: { singleAccount?: 
 	return '';
 }
 
-/** Income/expense in the transaction form; not credit-linked payments. */
+/** Commission shown on the transfer row (API field or sibling expense fallback). */
+export function transferCommissionDisplay(
+	tx: Transaction,
+	siblings: Transaction[] = []
+): string | null {
+	if (tx.type !== 'transfer') return null;
+	if (tx.commission && tx.commission > 0) {
+		return tx.commission_display ?? (tx.commission / 100).toFixed(2);
+	}
+	if (tx.commission_display && !/^0+(?:\.0+)?$/.test(tx.commission_display.trim())) {
+		return tx.commission_display;
+	}
+	if (!tx.transfer_group_id) return null;
+	const commissionLeg = siblings.find(
+		(t) => t.transfer_group_id === tx.transfer_group_id && t.type === 'expense' && t.amount > 0
+	);
+	return commissionLeg?.amount_display ?? null;
+}
+
+/** Income/expense in the transaction form; not credit-linked payments or transfer commission. */
 export function canEditTransaction(tx: Transaction): boolean {
-	return !tx.credit_payment_linked;
+	if (tx.credit_payment_linked) return false;
+	if (isTransferCommission(tx)) return false;
+	return true;
 }
 
 /** Repeat (duplicate as new) — not credit-linked; not system categories (transfers allowed). */
@@ -104,6 +131,7 @@ export function canRepeatTransaction(tx: Transaction): boolean {
 
 /** Delete from list — debt-linked opening tx may be protected via API `deletable` flag. */
 export function canDeleteTransaction(tx: Transaction): boolean {
+	if (isTransferCommission(tx)) return false;
 	return tx.deletable !== false;
 }
 

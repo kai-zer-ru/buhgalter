@@ -252,12 +252,15 @@ test('create transfer with commission', async ({ page }) => {
 	await waitAppReady(page);
 	await selectCombobox(page, 'tx-filter-account', { label: from.name });
 
-	await expect(
-		page.getByRole('row', { name: new RegExp(`${from.name}.*${to.name}.*100`) })
-	).toBeVisible({ timeout: 10_000 });
-	await expect(page.getByRole('row', { name: new RegExp(`${from.name}.*5\\.00`) })).toBeVisible({
-		timeout: 10_000
+	const transferRow = page.getByRole('row', {
+		name: new RegExp(`${from.name}.*${to.name}.*100`)
 	});
+	await expect(transferRow).toBeVisible({ timeout: 10_000 });
+	await expect(transferRow.getByText(/комиссия/i)).toBeVisible();
+	await expect(transferRow.getByText('5.00')).toBeVisible();
+	await expect(page.getByRole('row', { name: new RegExp(`с ${from.name}.*5\\.00`) })).toHaveCount(
+		0
+	);
 });
 
 test('dashboard: past transactions in open spoiler, planned collapsed', async ({ page }) => {

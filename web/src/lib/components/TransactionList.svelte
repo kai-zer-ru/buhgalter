@@ -9,6 +9,7 @@
 	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
 	import {
 		transactionAmountSign,
+		transferCommissionDisplay,
 		canEditTransaction,
 		canRepeatTransaction,
 		canDeleteTransaction
@@ -115,6 +116,7 @@
 			</thead>
 			<tbody>
 				{#each transactions as tx (tx.id)}
+					{@const commissionDisplay = transferCommissionDisplay(tx, siblings)}
 					<tr class="border-t" style:border-color="var(--border)">
 						<td class="p-3 align-middle whitespace-nowrap">
 							{formatAPIOperationDateTimeForDisplay(tx.transaction_date, tz)}
@@ -137,10 +139,18 @@
 							</td>
 						{/if}
 						<td class="p-3 align-middle whitespace-nowrap tabular-nums font-medium">
-							{showAmountSign ? transactionAmountSign(tx, { singleAccount }) : ''}<MoneyDisplay
-								value={tx.amount_display}
-								class=""
-							/>
+							<div>
+								{showAmountSign ? transactionAmountSign(tx, { singleAccount }) : ''}<MoneyDisplay
+									value={tx.amount_display}
+									class=""
+								/>
+							</div>
+							{#if commissionDisplay}
+								<div class="text-xs font-normal" style:color="var(--text-muted)">
+									{$_('transactions.commission')}:
+									<MoneyDisplay value={commissionDisplay} class="" />
+								</div>
+							{/if}
 						</td>
 						{#if showDescription}
 							<td class="p-3 align-middle" style:color="var(--text-muted)">
@@ -163,6 +173,7 @@
 
 	<div class="space-y-3 md:hidden">
 		{#each transactions as tx (tx.id)}
+			{@const commissionDisplay = transferCommissionDisplay(tx, siblings)}
 			<article class="rounded-xl border p-4" style:border-color="var(--border)">
 				<div class="flex items-start justify-between gap-3">
 					<div class="min-w-0">
@@ -177,12 +188,20 @@
 						</p>
 					</div>
 					<div class="flex shrink-0 items-start gap-2">
-						<p class="text-sm font-semibold tabular-nums">
-							{showAmountSign ? transactionAmountSign(tx, { singleAccount }) : ''}<MoneyDisplay
-								value={tx.amount_display}
-								class=""
-							/>
-						</p>
+						<div class="text-right">
+							<p class="text-sm font-semibold tabular-nums">
+								{showAmountSign ? transactionAmountSign(tx, { singleAccount }) : ''}<MoneyDisplay
+									value={tx.amount_display}
+									class=""
+								/>
+							</p>
+							{#if commissionDisplay}
+								<p class="text-xs tabular-nums" style:color="var(--text-muted)">
+									{$_('transactions.commission')}:
+									<MoneyDisplay value={commissionDisplay} class="" />
+								</p>
+							{/if}
+						</div>
 						{#if showActions}
 							<RowActionsMenu actions={rowActions(tx)} />
 						{/if}

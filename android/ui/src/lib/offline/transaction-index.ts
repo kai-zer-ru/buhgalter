@@ -34,8 +34,12 @@ export function findTransferCommissionKopecks(groupId: string): number {
 	const index = readRefCache<Record<string, Transaction>>(TX_INDEX_KEY);
 	if (!index) return 0;
 	for (const tx of Object.values(index)) {
-		if (tx.transfer_group_id === groupId && tx.type === 'expense' && tx.category_is_system) {
+		if (tx.transfer_group_id !== groupId) continue;
+		if (tx.type === 'expense' && tx.category_is_system) {
 			return tx.amount;
+		}
+		if (tx.type === 'transfer' && tx.commission && tx.commission > 0) {
+			return tx.commission;
 		}
 	}
 	return 0;

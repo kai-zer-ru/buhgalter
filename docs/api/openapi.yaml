@@ -3638,6 +3638,14 @@ components:
         amount_display:
           type: string
           description: Строка для UI, например `"10000.00"` или `"10 000.00"` на клиенте
+        commission:
+          type: integer
+          description: |
+            Только для `type=transfer`: комиссия перевода в копейках (сумма ноги `expense`
+            в группе). В списках и `GET /transactions/{id}` нога комиссии не отдаётся отдельно.
+        commission_display:
+          type: string
+          description: Отформатированная комиссия перевода (если `commission > 0`)
         description:
           type: string
           nullable: true
@@ -3684,7 +3692,7 @@ components:
         transfer_is_out:
           type: boolean
           description: |
-            Только для `type=transfer`. `true` — исходящая нога (первая в группе по `created_at ASC`);
+            Только для `type=transfer`. `true` — исходящая нога (первая нога `type=transfer` в группе по `created_at ASC`);
             `false` — входящая. Для UI знака суммы на странице счёта.
         transaction_date:
           type: string
@@ -3787,7 +3795,10 @@ components:
         commission:
           type: string
           nullable: true
-          description: Комиссия за перевод, рубли (`"15.00"`). Создаёт расход в системной категории «Комиссия» на счёте-источнике.
+          description: |
+            Комиссия за перевод, рубли (`"15.00"`). Создаёт расход в системной категории «Комиссия»
+            на счёте-источнике (нога группы). В списках нога скрыта; изменить/удалить отдельно нельзя
+            (`ERR_COMMISSION_LINKED`) — только через этот перевод.
         description:
           type: string
           nullable: true

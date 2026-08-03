@@ -301,6 +301,70 @@ func TestTransferWithCommission(t *testing.T) {
 	}
 }
 
+func TestTransferCommissionLinkedAndHiddenFromList(t *testing.T) {
+	handle, env := seedEnvFull(t)
+	database := handle.DB()
+	ctx := context.Background()
+	past := timeutil.NowUTC().Add(-time.Hour)
+
+	tr, err := CreateTransfer(ctx, database, env.userID, TransferInput{
+		FromAccountID: env.accountID, ToAccountID: env.account2,
+		Amount: 10000, Commission: 500, TransactionDate: past,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	list, err := List(ctx, database, env.userID, ListFilters{Page: 1, Limit: 50})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var transferOut *Transaction
+	for i := range list.Data {
+		tx := &list.Data[i]
+		if tx.Type == "expense" && tx.TransferGroupID != nil && *tx.TransferGroupID == tr.GroupID {
+			t.Fatalf("commission expense must not appear in list: %+v", tx)
+		}
+		if tx.Type == "transfer" && tx.TransferGroupID != nil && *tx.TransferGroupID == tr.GroupID && tx.TransferIsOut {
+			transferOut = tx
+		}
+	}
+	if transferOut == nil {
+		t.Fatal("expected transfer out leg in list")
+	}
+	if transferOut.Commission != 500 {
+		t.Fatalf("list commission %d, want 500", transferOut.Commission)
+	}
+	if transferOut.CommissionDisplay != "5.00" {
+		t.Fatalf("list commission_display %q, want 5.00", transferOut.CommissionDisplay)
+	}
+
+	got, err := GetByID(ctx, database, env.userID, transferOut.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Commission != 500 {
+		t.Fatalf("get commission %d, want 500", got.Commission)
+	}
+
+	commissionID := commissionLegID(t, ctx, database, env.userID, tr.GroupID)
+	if _, err := Update(ctx, database, env.userID, commissionID, UpdateInput{
+		AccountID: env.accountID, Type: "expense", Amount: 100, TransactionDate: past,
+	}); !errors.Is(err, ErrCommissionLinked) {
+		t.Fatalf("update commission: want ErrCommissionLinked, got %v", err)
+	}
+	if err := Delete(ctx, database, env.userID, commissionID); !errors.Is(err, ErrCommissionLinked) {
+		t.Fatalf("delete commission: want ErrCommissionLinked, got %v", err)
+	}
+
+	if err := Delete(ctx, database, env.userID, transferOut.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := GetTransfer(ctx, database, env.userID, tr.GroupID); !errors.Is(err, ErrTransferNotFound) {
+		t.Fatalf("after deleting transfer, group should be gone, got %v", err)
+	}
+}
+
 func TestActivateFutureTransaction(t *testing.T) {
 	handle, env := seedEnvFull(t)
 	database := handle.DB()
@@ -538,6 +602,20 @@ func commissionDescription(t *testing.T, ctx context.Context, database *sql.DB, 
 		return ""
 	}
 	return desc.String
+}
+
+func commissionLegID(t *testing.T, ctx context.Context, database *sql.DB, userID, groupID string) string {
+	t.Helper()
+	var id string
+	err := database.QueryRowContext(ctx, `
+		SELECT id FROM transactions
+		WHERE user_id = ? AND transfer_group_id = ? AND type = 'expense'
+		LIMIT 1`,
+		userID, groupID).Scan(&id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
 }
 
 func TestDashboardExcludesCreditCards(t *testing.T) {
