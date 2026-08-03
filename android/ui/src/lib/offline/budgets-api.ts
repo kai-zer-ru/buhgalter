@@ -26,7 +26,7 @@ import {
 } from '$lib/offline/store';
 import type { BudgetPayload } from '$lib/offline/types';
 import { isLocalEntityKey } from '$lib/offline/types';
-import { scheduleSyncOutbox } from '$lib/offline/sync';
+import { afterOnlineWrite } from '$lib/offline/after-online-write';
 
 function isOfflineError(err: unknown): boolean {
 	return isConnectionError(err) || (err instanceof ApiError && isTransientHttpError(err.status));
@@ -93,7 +93,7 @@ export async function createBudget(body: BudgetBody, month?: string): Promise<Bu
 		const res = await tryOnline(() => apiCreateBudget(body, month));
 		if (res) {
 			onBudgetCreated(res, month);
-			scheduleSyncOutbox();
+			afterOnlineWrite();
 			return res;
 		}
 	}
@@ -119,7 +119,7 @@ export async function updateBudget(
 		const res = await tryOnline(() => apiUpdateBudget(id, body, month));
 		if (res) {
 			onBudgetUpdated(res, month);
-			scheduleSyncOutbox();
+			afterOnlineWrite();
 			return res;
 		}
 	}
@@ -144,7 +144,7 @@ export async function deleteBudget(id: string, month?: string): Promise<void> {
 		const res = await tryOnline(() => apiDeleteBudget(id));
 		if (res !== null) {
 			onBudgetDeleted(id, month);
-			scheduleSyncOutbox();
+			afterOnlineWrite();
 			return;
 		}
 	}

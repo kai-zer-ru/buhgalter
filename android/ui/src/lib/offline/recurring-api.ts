@@ -25,7 +25,7 @@ import {
 } from '$lib/offline/store';
 import type { RecurringPayload } from '$lib/offline/types';
 import { isLocalEntityKey } from '$lib/offline/types';
-import { scheduleSyncOutbox } from '$lib/offline/sync';
+import { afterOnlineWrite } from '$lib/offline/after-online-write';
 
 function isOfflineError(err: unknown): boolean {
 	return isConnectionError(err) || (err instanceof ApiError && isTransientHttpError(err.status));
@@ -83,7 +83,7 @@ export async function createRecurringOperation(
 		const res = await tryOnline(() => apiCreateRecurring(payload));
 		if (res) {
 			onRecurringCreated(res);
-			scheduleSyncOutbox();
+			afterOnlineWrite();
 			return res;
 		}
 	}
@@ -107,7 +107,7 @@ export async function updateRecurringOperation(
 		const res = await tryOnline(() => apiUpdateRecurring(id, payload));
 		if (res) {
 			onRecurringUpdated(res);
-			scheduleSyncOutbox();
+			afterOnlineWrite();
 			return res;
 		}
 	}
@@ -132,7 +132,7 @@ export async function deleteRecurringOperation(id: string): Promise<void> {
 		const res = await tryOnline(() => apiDeleteRecurring(id));
 		if (res !== null) {
 			onRecurringDeleted(id);
-			scheduleSyncOutbox();
+			afterOnlineWrite();
 			return;
 		}
 	}

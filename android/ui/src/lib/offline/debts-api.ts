@@ -25,7 +25,7 @@ import {
 import type { DebtPayload, DebtSettlePayload } from '$lib/offline/types';
 import { isLocalEntityKey } from '$lib/offline/types';
 import { readRefCache } from '$lib/offline/ref-cache';
-import { scheduleSyncOutbox } from '$lib/offline/sync';
+import { afterOnlineWrite } from '$lib/offline/after-online-write';
 import { formatMoneyForInput, fromCents } from '$lib/money';
 
 function isOfflineError(err: unknown): boolean {
@@ -104,7 +104,7 @@ export async function createDebt(payload: DebtPayload): Promise<Debt> {
 		const res = await tryOnline(() => apiCreateDebt(payload));
 		if (res) {
 			onDebtCreated(res);
-			scheduleSyncOutbox();
+			afterOnlineWrite();
 			return res;
 		}
 	}
@@ -130,7 +130,7 @@ export async function deleteDebt(id: string): Promise<void> {
 		const res = await tryOnline(() => apiDeleteDebt(id));
 		if (res !== null) {
 			onDebtDeleted(id);
-			scheduleSyncOutbox();
+			afterOnlineWrite();
 			return;
 		}
 	}
@@ -157,7 +157,7 @@ export async function settleDebt(
 		const res = await tryOnline(() => apiSettleDebt(id, body));
 		if (res) {
 			onDebtUpdated(res);
-			scheduleSyncOutbox();
+			afterOnlineWrite();
 			return res;
 		}
 	}

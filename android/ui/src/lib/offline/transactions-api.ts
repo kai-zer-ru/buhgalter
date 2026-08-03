@@ -27,7 +27,7 @@ import {
 } from '$lib/offline/store';
 import type { TransactionPayload, TransferPayload } from '$lib/offline/types';
 import { isLocalEntityKey } from '$lib/offline/types';
-import { scheduleSyncOutbox } from '$lib/offline/sync';
+import { afterOnlineWrite } from '$lib/offline/after-online-write';
 
 function isOfflineError(err: unknown): boolean {
 	return isConnectionError(err) || (err instanceof ApiError && isTransientHttpError(err.status));
@@ -52,7 +52,7 @@ export async function createTransaction(payload: TransactionPayload): Promise<Tr
 	if (await shouldTryServer()) {
 		const res = await tryOnline(() => apiCreateTransaction(payload));
 		if (res) {
-			scheduleSyncOutbox();
+			afterOnlineWrite();
 			return res;
 		}
 	}
@@ -95,7 +95,7 @@ export async function updateTransaction(
 	if (await shouldTryServer()) {
 		const res = await tryOnline(() => apiUpdateTransaction(id, payload));
 		if (res) {
-			scheduleSyncOutbox();
+			afterOnlineWrite();
 			return res;
 		}
 	}
@@ -120,7 +120,7 @@ export async function deleteTransaction(id: string): Promise<void> {
 	if (await shouldTryServer()) {
 		const res = await tryOnline(() => apiDeleteTransaction(id));
 		if (res !== null) {
-			scheduleSyncOutbox();
+			afterOnlineWrite();
 			return;
 		}
 	}
@@ -150,7 +150,7 @@ export async function createTransfer(payload: TransferPayload): Promise<Transfer
 	if (await shouldTryServer()) {
 		const res = await tryOnline(() => apiCreateTransfer(payload));
 		if (res) {
-			scheduleSyncOutbox();
+			afterOnlineWrite();
 			return res;
 		}
 	}
@@ -170,7 +170,7 @@ export async function updateTransfer(groupId: string, payload: TransferPayload):
 	if (await shouldTryServer()) {
 		const res = await tryOnline(() => apiUpdateTransfer(groupId, payload));
 		if (res) {
-			scheduleSyncOutbox();
+			afterOnlineWrite();
 			return res;
 		}
 	}
@@ -189,7 +189,7 @@ export async function deleteTransfer(groupId: string): Promise<void> {
 	if (await shouldTryServer()) {
 		const res = await tryOnline(() => apiDeleteTransfer(groupId));
 		if (res !== null) {
-			scheduleSyncOutbox();
+			afterOnlineWrite();
 			return;
 		}
 	}

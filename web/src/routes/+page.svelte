@@ -227,12 +227,8 @@
 		try {
 			await deleteTransaction(tx.id);
 			toast($_('common.deleted'));
-			const groupId =
-				tx.type === 'transfer' && tx.transfer_group_id ? tx.transfer_group_id : undefined;
-			const keep = (row: Transaction) =>
-				row.id !== tx.id && (!groupId || row.transfer_group_id !== groupId);
-			pastTx = pastTx.filter(keep);
-			plannedTx = plannedTx.filter(keep);
+			// Reload dashboard balances + lists (local filter left balances stale).
+			await loadAll({ silent: true });
 		} catch (err) {
 			toast.fromError(err);
 		}

@@ -9,24 +9,29 @@
 
 	let { ondone, onkey }: Props = $props();
 
-	const keys: Array<{ id: string; key?: MoneyKeypadKey; label: string; aria?: string; done?: boolean }> =
-		[
-			{ id: '1', key: '1', label: '1' },
-			{ id: '2', key: '2', label: '2' },
-			{ id: '3', key: '3', label: '3' },
-			{ id: 'plus', key: '+', label: '+', aria: 'moneyInput.plus' },
-			{ id: '4', key: '4', label: '4' },
-			{ id: '5', key: '5', label: '5' },
-			{ id: '6', key: '6', label: '6' },
-			{ id: 'minus', key: '-', label: '−', aria: 'moneyInput.minus' },
-			{ id: '7', key: '7', label: '7' },
-			{ id: '8', key: '8', label: '8' },
-			{ id: '9', key: '9', label: '9' },
-			{ id: 'dot', key: '.', label: '.', aria: 'moneyInput.decimal' },
-			{ id: 'back', key: 'backspace', label: '⌫', aria: 'moneyInput.backspace' },
-			{ id: '0', key: '0', label: '0' },
-			{ id: 'done', label: '✓', aria: 'moneyInput.done', done: true }
-		];
+	const keys: Array<{
+		id: string;
+		key?: MoneyKeypadKey;
+		label: string;
+		aria?: string;
+		done?: boolean;
+	}> = [
+		{ id: '1', key: '1', label: '1' },
+		{ id: '2', key: '2', label: '2' },
+		{ id: '3', key: '3', label: '3' },
+		{ id: 'plus', key: '+', label: '+', aria: 'moneyInput.plus' },
+		{ id: '4', key: '4', label: '4' },
+		{ id: '5', key: '5', label: '5' },
+		{ id: '6', key: '6', label: '6' },
+		{ id: 'minus', key: '-', label: '−', aria: 'moneyInput.minus' },
+		{ id: '7', key: '7', label: '7' },
+		{ id: '8', key: '8', label: '8' },
+		{ id: '9', key: '9', label: '9' },
+		{ id: 'dot', key: '.', label: '.', aria: 'moneyInput.decimal' },
+		{ id: 'back', key: 'backspace', label: '⌫', aria: 'moneyInput.backspace' },
+		{ id: '0', key: '0', label: '0' },
+		{ id: 'done', label: '✓', aria: 'moneyInput.done', done: true }
+	];
 </script>
 
 <div class="money-keypad" role="group" aria-label={$_('moneyInput.keypad')}>

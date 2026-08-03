@@ -440,8 +440,8 @@
 		try {
 			await deleteTransaction(tx.id);
 			toast($_('common.deleted'));
-			transactions = transactions.filter((row) => row.id !== tx.id);
-			txTotal = Math.max(0, txTotal - 1);
+			// Reload account + balance + list (local filter left balance stale).
+			await load({ silent: true });
 		} catch (err) {
 			toast.fromError(err);
 		}
@@ -755,7 +755,7 @@
 		editTx = null;
 		repeatTx = null;
 	}}
-	onsaved={load}
+	onsaved={() => void load({ silent: true })}
 />
 <TransferForm
 	bind:open={transferOpen}
@@ -768,7 +768,7 @@
 		editTransfer = null;
 		repeatTransfer = null;
 	}}
-	onsaved={load}
+	onsaved={() => void load({ silent: true })}
 />
 <TransferForm
 	bind:open={payTransferOpen}
@@ -778,25 +778,25 @@
 	onclose={() => {
 		payTransferOpen = false;
 	}}
-	onsaved={load}
+	onsaved={() => void load({ silent: true })}
 />
 {#if acc}
 	<CreditCardFeeForm
 		bind:open={feeOpen}
 		account={acc}
 		onclose={() => (feeOpen = false)}
-		onsaved={load}
+		onsaved={() => void load({ silent: true })}
 	/>
 	<CreditCardChangeLimitForm
 		bind:open={changeLimitOpen}
 		account={acc}
 		onclose={() => (changeLimitOpen = false)}
-		onsaved={load}
+		onsaved={() => void load({ silent: true })}
 	/>
 	<AccountAutoTopupDialog
 		bind:open={autoTopupOpen}
 		account={acc}
 		onclose={() => (autoTopupOpen = false)}
-		onsaved={load}
+		onsaved={() => void load({ silent: true })}
 	/>
 {/if}

@@ -177,7 +177,7 @@ OpenAPI: `CreateTransferRequest.commission`, схемы `Transfer` и `Transacti
 
 ## Действия в списке операций
 
-`TransactionList` — меню «⋯» в каждой строке (повторить, сделать периодической, изменить, удалить). На мобильных меню в шапке карточки рядом с суммой. Используется на **главной** («Последние операции»), `/transactions`, странице счёта.
+`TransactionList` — меню «⋯» в каждой строке (повторить, сделать периодической, изменить, удалить). На мобильных меню в шапке карточки рядом с суммой. Используется на **главной** («Последние операции»), `/transactions`, странице счёта. После create/edit/delete — silent reload (`loadAll` / `load` / `onsaved`), не только filter списка: иначе балансы (и вторая нога перевода) не обновляются (см. [ui-stable-layout.md](ui-stable-layout.md)). Android: `afterOnlineWrite` в offline wrappers + `dataRefreshTick` в `finish` форм.
 
 На странице **удалённого** счёта (`/accounts/[id]`, `status = deleted`) в меню операций доступно только **«Повторить»** — см. [accounts-archive-delete.md](accounts-archive-delete.md).
 

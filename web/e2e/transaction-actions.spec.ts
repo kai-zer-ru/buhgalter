@@ -191,6 +191,9 @@ test('delete expense from dashboard recent list', async ({ page }) => {
 
 	await page.goto('/');
 	await waitAppReady(page);
+	const accountCard = page.getByRole('link', { name: new RegExp(account.name) });
+	// initial 1000 − expense 77
+	await expect(accountCard.getByText('923.00 ₽')).toBeVisible({ timeout: 10_000 });
 	await expandCollapsibleSection(page, 'Последние операции');
 
 	const row = page.getByRole('row', { name: /77\.00/ });
@@ -198,6 +201,31 @@ test('delete expense from dashboard recent list', async ({ page }) => {
 	await confirmDialog(page);
 
 	await expect(page.getByRole('row', { name: /77\.00/ })).toHaveCount(0, { timeout: 10_000 });
+	// balance restored without full page reload
+	await expect(accountCard.getByText('1 000.00 ₽')).toBeVisible({ timeout: 10_000 });
+});
+
+test('edit expense from dashboard updates balance', async ({ page }) => {
+	const account = await createCashAccount(page);
+	await createExpense(page, account.id, '50.00', 'E2E dashboard edit bal');
+
+	await page.goto('/');
+	await waitAppReady(page);
+	const accountCard = page.getByRole('link', { name: new RegExp(account.name) });
+	// initial 1000 − 50
+	await expect(accountCard.getByText('950.00 ₽')).toBeVisible({ timeout: 10_000 });
+	await expandCollapsibleSection(page, 'Последние операции');
+
+	const row = page.getByRole('row', { name: /50\.00/ });
+	await rowMenuAction(page, row, 'Изменить');
+	const dialog = page.getByRole('dialog');
+	await fillEditTxAmount(dialog, '150', /150(\.00)?/);
+	await dialog.getByRole('button', { name: 'Сохранить' }).click();
+	await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+
+	await expect(page.getByRole('row', { name: /150\.00/ })).toBeVisible({ timeout: 10_000 });
+	// 1000 − 150
+	await expect(accountCard.getByText('850.00 ₽')).toBeVisible({ timeout: 10_000 });
 });
 
 test('transfer form excludes selected account from opposite select', async ({ page }) => {

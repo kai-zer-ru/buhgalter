@@ -61,7 +61,7 @@
 
 ### Баланс счёта после мутаций
 
-На карточке счёта (`/accounts/[id]`) после сохранения операции `dataRefreshTick` перезагружает **счёт + баланс + список** (не только операции). Успешный `POST`/`PUT`/`PATCH`/`DELETE` в Android `client.ts` сбрасывает ref-cache (`clearRefCache` + `invalidateApiCache`), как в веб-клиенте — иначе баланс оставался бы от pre-mutation snapshot до remount.
+На карточке счёта (`/accounts/[id]`) после сохранения операции `dataRefreshTick` перезагружает **счёт + баланс + список** (не только операции). Успешный `POST`/`PUT`/`PATCH`/`DELETE` в Android `client.ts` сбрасывает ref-cache (`clearRefCache` + `invalidateApiCache`), как в веб-клиенте — иначе баланс оставался бы от pre-mutation snapshot до remount. Онлайн-write во всех offline wrappers → `afterOnlineWrite` (`dataRefreshTick`); без этого delete/save на списке (без remount формы) оставлял stale UI до sync.
 
 ### Селект счетов в формах
 

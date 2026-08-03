@@ -215,6 +215,7 @@
 - [x] Android: своя клавиатура суммы (`MoneyKeypad`) с `+` / `−` — системная decimal часто без «+»
 - [x] Android: кнопка биометрии на экране PIN — в нижнем левом углу клавиатуры (иконка отпечатка)
 - [x] БАГ. Android: после `adb install -r` сессия слетала — `warmRefCache` до `initAuthToken` слал запросы без Bearer, 401 вызывал `clearAuthToken` и удалял токен из Secure Storage
+- [x] БАГ. Web/Android: после удаления/редактирования операции не обновлялись балансы (Android — и список до sync) — web: silent `load`/`loadAll`; Android: `afterOnlineWrite` → `dataRefreshTick` во всех offline wrappers
 
 ## Общие планы
 

@@ -96,8 +96,13 @@ export const pullStatus = writable<PullStatus>({
 /** Bumped after local outbox edits — lists re-merge without a server round-trip. */
 export const localDataTick = writable(0);
 
-/** Bumped after manual pull / successful sync — pages reload lists from the server. */
+/** Bumped after manual pull / successful sync / online write — pages reload from the server. */
 export const dataRefreshTick = writable(0);
+
+/** After a successful online mutation (ref-cache already cleared) — reload open pages. */
+export function notifyServerDataChanged() {
+	dataRefreshTick.update((n) => n + 1);
+}
 
 /** Index warmup page size for manual sync (balance overlay / offline edit-delete). */
 export const TX_INDEX_WARMUP_LIMIT = '200';

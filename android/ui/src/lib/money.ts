@@ -369,7 +369,21 @@ export function toAPIAmount(value: string): string {
 }
 
 /** Keys of the custom Android money keypad (not the system soft keyboard). */
-export type MoneyKeypadKey = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '.' | '+' | '-' | 'backspace';
+export type MoneyKeypadKey =
+	| '0'
+	| '1'
+	| '2'
+	| '3'
+	| '4'
+	| '5'
+	| '6'
+	| '7'
+	| '8'
+	| '9'
+	| '.'
+	| '+'
+	| '-'
+	| 'backspace';
 
 /**
  * Apply one keypad key at the caret, then live-format.

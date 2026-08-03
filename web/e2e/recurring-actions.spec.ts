@@ -33,28 +33,25 @@ test('create recurring uses 08:00 local time by default', async ({ page }) => {
 	await page.goto('/settings/recurring-operations');
 	await waitAppReady(page);
 
-	let postedTime = '';
-	await page.route('**/api/v1/recurring-operations', async (route) => {
-		if (route.request().method() !== 'POST') {
-			await route.continue();
-			return;
-		}
-		const body = route.request().postDataJSON() as { time_local?: string };
-		postedTime = body.time_local ?? '';
-		await route.continue();
-	});
-
 	await page.getByRole('button', { name: 'Добавить' }).click();
 	await page.locator('#recurring-amount-create').fill('42');
 	await page.locator('#recurring-description-create').fill(description);
 	await selectLabeledCombobox(page, 'Счёт', { label: account.name });
 	await selectLabeledCombobox(page, 'Категория', { index: 0 });
+
+	// waitForRequest is race-free vs page.route + side-effect flag (flaky empty postedTime).
+	const postPromise = page.waitForRequest((req) => {
+		if (req.method() !== 'POST') return false;
+		const path = new URL(req.url()).pathname.replace(/\/$/, '');
+		return path.endsWith('/api/v1/recurring-operations');
+	});
 	await page.getByRole('button', { name: 'Создать' }).click();
+	const body = (await postPromise).postDataJSON() as { time_local?: string };
+	expect(body.time_local).toBe('08:00');
 
 	await expect(page.getByRole('row', { name: new RegExp(description) })).toBeVisible({
 		timeout: 10_000
 	});
-	expect(postedTime).toBe('08:00');
 });
 
 test('edit recurring operation inline', async ({ page }) => {

@@ -29,7 +29,7 @@ import {
 } from '$lib/offline/store';
 import type { AccountCreatePayload, AccountUpdatePayload } from '$lib/offline/types';
 import { isLocalEntityKey } from '$lib/offline/types';
-import { scheduleSyncOutbox } from '$lib/offline/sync';
+import { afterOnlineWrite } from '$lib/offline/after-online-write';
 
 function isOfflineError(err: unknown): boolean {
 	return isConnectionError(err) || (err instanceof ApiError && isTransientHttpError(err.status));
@@ -79,7 +79,7 @@ export async function createAccount(payload: AccountCreatePayload): Promise<Acco
 		if (res) {
 			onAccountCreated(res);
 			void refreshMergeMeta();
-			scheduleSyncOutbox();
+			afterOnlineWrite();
 			return res;
 		}
 	}
@@ -103,7 +103,7 @@ export async function updateAccount(id: string, payload: AccountUpdatePayload): 
 		if (res) {
 			onAccountUpdated(res);
 			void refreshMergeMeta();
-			scheduleSyncOutbox();
+			afterOnlineWrite();
 			return res;
 		}
 	}
@@ -152,7 +152,7 @@ export async function archiveAccount(id: string, transferToAccountId?: string): 
 		if (res) {
 			onAccountArchived(res);
 			void refreshMergeMeta();
-			scheduleSyncOutbox();
+			afterOnlineWrite();
 			return res;
 		}
 	}
@@ -187,7 +187,7 @@ export async function unarchiveAccount(id: string): Promise<Account> {
 		if (res) {
 			onAccountUnarchived(res);
 			void refreshMergeMeta();
-			scheduleSyncOutbox();
+			afterOnlineWrite();
 			return res;
 		}
 	}

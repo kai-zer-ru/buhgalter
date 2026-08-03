@@ -341,13 +341,7 @@
 		try {
 			await deleteTransaction(tx.id);
 			toast($_('common.deleted'));
-			if (splitMode) {
-				pastTx = pastTx.filter((row) => row.id !== tx.id);
-				plannedTx = plannedTx.filter((row) => row.id !== tx.id);
-			} else {
-				transactions = transactions.filter((row) => row.id !== tx.id);
-				total = Math.max(0, total - 1);
-			}
+			await load(false, { silent: true });
 		} catch (err) {
 			toast.fromError(err);
 		}
@@ -547,7 +541,7 @@
 		editTx = null;
 		repeatTx = null;
 	}}
-	onsaved={load}
+	onsaved={() => void load(false, { silent: true })}
 />
 <TransferForm
 	bind:open={transferOpen}
@@ -559,5 +553,5 @@
 		editTransfer = null;
 		repeatTransfer = null;
 	}}
-	onsaved={load}
+	onsaved={() => void load(false, { silent: true })}
 />

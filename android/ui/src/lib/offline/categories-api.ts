@@ -26,7 +26,7 @@ import {
 } from '$lib/offline/store';
 import type { CategoryPayload, CategoryUpdatePayload } from '$lib/offline/types';
 import { isLocalEntityKey } from '$lib/offline/types';
-import { scheduleSyncOutbox } from '$lib/offline/sync';
+import { afterOnlineWrite } from '$lib/offline/after-online-write';
 
 function isOfflineError(err: unknown): boolean {
 	return isConnectionError(err) || (err instanceof ApiError && isTransientHttpError(err.status));
@@ -71,7 +71,7 @@ export async function createCategory(payload: CategoryPayload): Promise<Category
 		if (res) {
 			onCategoryCreated(res);
 			void refreshMergeMeta();
-			scheduleSyncOutbox();
+			afterOnlineWrite();
 			return res;
 		}
 	}
@@ -98,7 +98,7 @@ export async function updateCategory(
 		if (res) {
 			onCategoryUpdated(res);
 			void refreshMergeMeta();
-			scheduleSyncOutbox();
+			afterOnlineWrite();
 			return res;
 		}
 	}
@@ -137,7 +137,7 @@ export async function deleteCategory(id: string, type: 'income' | 'expense'): Pr
 		if (res !== null) {
 			onCategoryDeleted(id, type);
 			void refreshMergeMeta();
-			scheduleSyncOutbox();
+			afterOnlineWrite();
 			return;
 		}
 	}

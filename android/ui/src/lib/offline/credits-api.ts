@@ -38,7 +38,7 @@ import type {
 	CreditSchedulePayload
 } from '$lib/offline/types';
 import { readRefCache } from '$lib/offline/ref-cache';
-import { scheduleSyncOutbox } from '$lib/offline/sync';
+import { afterOnlineWrite } from '$lib/offline/after-online-write';
 import { fromCents, formatMoneyForInput } from '$lib/money';
 
 function isOfflineError(err: unknown): boolean {
@@ -168,7 +168,7 @@ export async function updateCredit(
 		const res = await tryOnline(() => apiUpdateCredit(id, fields));
 		if (res) {
 			onCreditUpdated(res);
-			scheduleSyncOutbox();
+			afterOnlineWrite();
 			return res;
 		}
 	}
@@ -195,7 +195,7 @@ export async function addCreditPayment(
 		if (res) {
 			onCreditUpdated(res);
 			touchBalancesAfterCreditMutation();
-			scheduleSyncOutbox();
+			afterOnlineWrite();
 			return res;
 		}
 	}
@@ -223,7 +223,7 @@ export async function completeCredit(
 		if (res) {
 			onCreditUpdated(res);
 			touchBalancesAfterCreditMutation();
-			scheduleSyncOutbox();
+			afterOnlineWrite();
 			return res;
 		}
 	}
@@ -255,7 +255,7 @@ export async function updateCreditSchedule(
 		const res = await tryOnline(() => apiUpdateCreditSchedule(creditId, body));
 		if (res) {
 			onCreditUpdated(res);
-			scheduleSyncOutbox();
+			afterOnlineWrite();
 			return res;
 		}
 	}
@@ -285,7 +285,7 @@ export async function deleteCreditPayment(creditId: string, paymentId: string): 
 		if (res) {
 			onCreditUpdated(res);
 			touchBalancesAfterCreditMutation();
-			scheduleSyncOutbox();
+			afterOnlineWrite();
 			return res;
 		}
 	}
@@ -315,7 +315,7 @@ export async function deleteCredit(
 		if (res !== null) {
 			onCreditDeleted(id);
 			touchBalancesAfterCreditMutation();
-			scheduleSyncOutbox();
+			afterOnlineWrite();
 			return;
 		}
 	}
