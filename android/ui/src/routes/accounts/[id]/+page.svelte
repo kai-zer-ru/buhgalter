@@ -37,6 +37,7 @@
 		transferEditPath,
 		transferNewPath,
 		accountChargeFeePath,
+		accountChangeLimitPath,
 		accountAutoTopupPath
 	} from '$lib/android/form-routes';
 	import NewTransactionButtons from '$lib/components/NewTransactionButtons.svelte';
@@ -77,7 +78,6 @@
 	let editing = $state(false);
 	let name = $state('');
 	let bankId = $state('');
-	let creditLimit = $state('');
 	let paymentAccountId = $state('');
 	let initialBalance = $state('');
 	let loading = $state(true);
@@ -236,7 +236,6 @@
 			categories = opts.background ? assignIfChanged(categories, nextCategories) : nextCategories;
 			name = account.name;
 			bankId = account.bank_id ?? '';
-			creditLimit = account.credit_limit_display ?? '';
 			paymentAccountId = account.payment_account_id ?? '';
 			initialBalance = formatAccountInitialBalanceForEdit(account.initial_balance);
 			editing = $page.url.searchParams.get('edit') === '1' && account.status !== 'deleted';
@@ -297,7 +296,7 @@
 	}
 
 	function applyLimitToBalance() {
-		if (creditLimit.trim()) initialBalance = creditLimit;
+		if (acc?.credit_limit_display) initialBalance = acc.credit_limit_display;
 	}
 
 	async function save(e: Event) {
@@ -309,7 +308,10 @@
 				name,
 				bank_id: acc.type === 'bank' || acc.type === 'credit_card' ? bankId : undefined,
 				initial_balance: toAPIAmount(initialBalance),
-				credit_limit: acc.type === 'credit_card' ? toAPIAmount(creditLimit) : undefined,
+				credit_limit:
+					acc.type === 'credit_card' && acc.credit_limit_display
+						? toAPIAmount(acc.credit_limit_display)
+						: undefined,
 				payment_account_id: acc.type === 'credit_card' ? paymentAccountId || null : undefined
 			});
 			accBalanceBase = await getAccountBalance(acc.id);
@@ -418,6 +420,15 @@
 					onclick: () => {
 						if (!acc) return;
 						void goto(resolve(accountChargeFeePath(acc.id, `/accounts/${acc.id}`)));
+					}
+				},
+				{
+					icon: 'bank',
+					label: $_('accounts.creditCard.changeLimit'),
+					onclick: () => {
+						if (!acc) return;
+						if (!requireOnline('offline.onlineOnly.creditLimit')) return;
+						void goto(resolve(accountChangeLimitPath(acc.id, `/accounts/${acc.id}`)));
 					}
 				}
 			);
@@ -567,16 +578,20 @@
 									/>
 								{/if}
 								{#if acc.type === 'credit_card'}
-									<div>
-										<label
-											class="mb-1 block text-sm"
-											style:color="var(--text-muted)"
-											for="acc-credit-limit"
-										>
-											{$_('accounts.field.creditLimit')}
-										</label>
-										<MoneyInput id="acc-credit-limit" bind:value={creditLimit} />
-									</div>
+									{#if acc.credit_limit_display}
+										<div>
+											<p class="mb-1 text-sm" style:color="var(--text-muted)">
+												{$_('accounts.field.creditLimit')}
+											</p>
+											<p class="tabular-nums">
+												<MoneyDisplay
+													value={acc.credit_limit_display}
+													currency={$user?.currency ?? 'RUB'}
+													class=""
+												/>
+											</p>
+										</div>
+									{/if}
 									<Select
 										label={$_('accounts.field.paymentAccount')}
 										bind:value={paymentAccountId}

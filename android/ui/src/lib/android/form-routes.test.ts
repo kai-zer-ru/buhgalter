@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	accountAutoTopupPath,
+	accountChangeLimitPath,
 	accountChargeFeePath,
 	creditActionPath,
 	creditCreateStepPath,
@@ -29,6 +30,9 @@ describe('form-routes', () => {
 		expect(debtSettlePath('d1', '/debts')).toBe('/debts/d1/settle?from=%2Fdebts');
 		expect(accountChargeFeePath('a1', '/accounts')).toBe(
 			'/accounts/a1/charge-fee?from=%2Faccounts'
+		);
+		expect(accountChangeLimitPath('a1', '/accounts')).toBe(
+			'/accounts/a1/change-limit?from=%2Faccounts'
 		);
 		expect(accountAutoTopupPath('a1')).toBe('/accounts/a1/auto-topup');
 	});

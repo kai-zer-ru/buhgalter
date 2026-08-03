@@ -32,6 +32,7 @@
 	import TransactionList from '$lib/components/TransactionList.svelte';
 	import TransactionPagination from '$lib/components/TransactionPagination.svelte';
 	import TransferForm from '$lib/components/TransferForm.svelte';
+	import CreditCardChangeLimitForm from '$lib/components/CreditCardChangeLimitForm.svelte';
 	import CreditCardFeeForm from '$lib/components/CreditCardFeeForm.svelte';
 	import { isAutoTopupEligible, resolveAutoTopupSourceName } from '$lib/accounts/auto-topup';
 	import { accountSelectOptions } from '$lib/select-options';
@@ -68,7 +69,6 @@
 	let editing = $state(false);
 	let name = $state('');
 	let bankId = $state('');
-	let creditLimit = $state('');
 	let paymentAccountId = $state('');
 	let initialBalance = $state('');
 	let loading = $state(true);
@@ -79,6 +79,7 @@
 	let transferOpen = $state(false);
 	let payTransferOpen = $state(false);
 	let feeOpen = $state(false);
+	let changeLimitOpen = $state(false);
 	let autoTopupOpen = $state(false);
 	let editTx = $state<Transaction | null>(null);
 	let editTransfer = $state<Transaction | null>(null);
@@ -206,7 +207,6 @@
 			categories = opts.silent ? assignIfChanged(categories, nextCategories) : nextCategories;
 			name = account.name;
 			bankId = account.bank_id ?? '';
-			creditLimit = account.credit_limit_display ?? '';
 			paymentAccountId = account.payment_account_id ?? '';
 			initialBalance = formatAccountInitialBalanceForEdit(account.initial_balance);
 			editing = $page.url.searchParams.get('edit') === '1' && account.status !== 'deleted';
@@ -265,7 +265,7 @@
 	}
 
 	function applyLimitToBalance() {
-		if (creditLimit.trim()) initialBalance = creditLimit;
+		if (acc?.credit_limit_display) initialBalance = acc.credit_limit_display;
 	}
 
 	async function save(e: Event) {
@@ -277,7 +277,6 @@
 				name,
 				bank_id: acc.type === 'bank' || acc.type === 'credit_card' ? bankId : undefined,
 				initial_balance: toAPIAmount(initialBalance),
-				credit_limit: acc.type === 'credit_card' ? toAPIAmount(creditLimit) : undefined,
 				payment_account_id: acc.type === 'credit_card' ? paymentAccountId || null : undefined
 			});
 			accBalance = await getAccountBalance(acc.id);
@@ -387,6 +386,11 @@
 					icon: 'expense',
 					label: $_('accounts.creditCard.chargeFee'),
 					onclick: () => (feeOpen = true)
+				},
+				{
+					icon: 'bank',
+					label: $_('accounts.creditCard.changeLimit'),
+					onclick: () => (changeLimitOpen = true)
 				}
 			);
 		}
@@ -534,16 +538,20 @@
 									/>
 								{/if}
 								{#if acc.type === 'credit_card'}
-									<div>
-										<label
-											class="mb-1 block text-sm"
-											style:color="var(--text-muted)"
-											for="acc-credit-limit"
-										>
-											{$_('accounts.field.creditLimit')}
-										</label>
-										<MoneyInput id="acc-credit-limit" bind:value={creditLimit} />
-									</div>
+									{#if acc.credit_limit_display}
+										<div>
+											<p class="mb-1 text-sm" style:color="var(--text-muted)">
+												{$_('accounts.field.creditLimit')}
+											</p>
+											<p class="tabular-nums">
+												<MoneyDisplay
+													value={acc.credit_limit_display}
+													currency={$user?.currency ?? 'RUB'}
+													class=""
+												/>
+											</p>
+										</div>
+									{/if}
 									<Select
 										label={$_('accounts.field.paymentAccount')}
 										bind:value={paymentAccountId}
@@ -777,6 +785,12 @@
 		bind:open={feeOpen}
 		account={acc}
 		onclose={() => (feeOpen = false)}
+		onsaved={load}
+	/>
+	<CreditCardChangeLimitForm
+		bind:open={changeLimitOpen}
+		account={acc}
+		onclose={() => (changeLimitOpen = false)}
 		onsaved={load}
 	/>
 	<AccountAutoTopupDialog

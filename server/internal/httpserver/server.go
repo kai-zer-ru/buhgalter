@@ -135,6 +135,7 @@ func (s *Server) Handler() http.Handler {
 			ar.Get("/accounts/{id}", accountHandler.Get)
 			ar.Get("/accounts/{id}/balance", transactionHandler.AccountBalance)
 			ar.Put("/accounts/{id}", accountHandler.Update)
+			ar.Put("/accounts/{id}/credit-limit", accountHandler.ChangeCreditLimit)
 			ar.Post("/accounts/{id}/archive", accountArchiveHandler.archiveAccount)
 			ar.Post("/accounts/{id}/unarchive", accountHandler.Unarchive)
 			ar.Post("/accounts/{id}/primary", accountHandler.SetPrimary)

@@ -834,3 +834,188 @@ func TestArchiveAccountTransfersStoredBalance(t *testing.T) {
 		t.Fatalf("transfer amount %d, want %d", transferList.Data[0].Amount, driftBalance)
 	}
 }
+
+func TestChangeCreditLimitIncreaseAdjustsBalance(t *testing.T) {
+	env := setupConfigured(t)
+	seedBanks(t, env)
+	env.login(t, "admin", "secret123")
+
+	bodyCC, _ := json.Marshal(map[string]string{
+		"name":            "Кредитка лимит up",
+		"type":            "credit_card",
+		"bank_id":         "tinkoff",
+		"credit_limit":    "1000.00",
+		"initial_balance": "700.00",
+	})
+	respCC, err := env.authedRequest(http.MethodPost, "/api/v1/accounts", bytes.NewReader(bodyCC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respCC.Body.Close()
+	if respCC.StatusCode != http.StatusCreated {
+		t.Fatalf("create credit card status %d", respCC.StatusCode)
+	}
+	var created struct {
+		ID string `json:"id"`
+	}
+	_ = json.NewDecoder(respCC.Body).Decode(&created)
+
+	limitBody, _ := json.Marshal(map[string]string{"credit_limit": "1500.00"})
+	resp, err := env.authedRequest(http.MethodPut, "/api/v1/accounts/"+created.ID+"/credit-limit", bytes.NewReader(limitBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("change limit status %d", resp.StatusCode)
+	}
+	var acc struct {
+		CreditLimit    int64 `json:"credit_limit"`
+		InitialBalance int64 `json:"initial_balance"`
+		Balance        int64 `json:"balance"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&acc)
+	if acc.CreditLimit != 150_000 {
+		t.Fatalf("credit_limit %d, want 150000", acc.CreditLimit)
+	}
+	if acc.InitialBalance != 120_000 || acc.Balance != 120_000 {
+		t.Fatalf("initial/balance %d/%d, want 120000/120000", acc.InitialBalance, acc.Balance)
+	}
+	// Debt unchanged: limit − balance = 300.00 both before and after.
+	if acc.CreditLimit-acc.Balance != 30_000 {
+		t.Fatalf("debt %d, want 30000", acc.CreditLimit-acc.Balance)
+	}
+}
+
+func TestChangeCreditLimitDecreaseRequiresFullPayment(t *testing.T) {
+	env := setupConfigured(t)
+	seedBanks(t, env)
+	env.login(t, "admin", "secret123")
+
+	bodyUnpaid, _ := json.Marshal(map[string]string{
+		"name":            "Кредитка лимит down unpaid",
+		"type":            "credit_card",
+		"bank_id":         "tinkoff",
+		"credit_limit":    "1000.00",
+		"initial_balance": "700.00",
+	})
+	respUnpaid, err := env.authedRequest(http.MethodPost, "/api/v1/accounts", bytes.NewReader(bodyUnpaid))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respUnpaid.Body.Close()
+	var unpaid struct {
+		ID string `json:"id"`
+	}
+	_ = json.NewDecoder(respUnpaid.Body).Decode(&unpaid)
+
+	limitBody, _ := json.Marshal(map[string]string{"credit_limit": "800.00"})
+	respDeny, err := env.authedRequest(http.MethodPut, "/api/v1/accounts/"+unpaid.ID+"/credit-limit", bytes.NewReader(limitBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respDeny.Body.Close()
+	if respDeny.StatusCode != http.StatusBadRequest {
+		t.Fatalf("decrease unpaid status %d, want 400", respDeny.StatusCode)
+	}
+	var errBody struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	_ = json.NewDecoder(respDeny.Body).Decode(&errBody)
+	if errBody.Error.Code != "VALIDATION_ERROR" {
+		t.Fatalf("error code %q", errBody.Error.Code)
+	}
+	if errBody.Error.Message != "Уменьшить лимит можно только при полном погашении карты" {
+		t.Fatalf("error message %q", errBody.Error.Message)
+	}
+
+	bodyPaid, _ := json.Marshal(map[string]string{
+		"name":            "Кредитка лимит down paid",
+		"type":            "credit_card",
+		"bank_id":         "tinkoff",
+		"credit_limit":    "1000.00",
+		"initial_balance": "1000.00",
+	})
+	respPaid, err := env.authedRequest(http.MethodPost, "/api/v1/accounts", bytes.NewReader(bodyPaid))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respPaid.Body.Close()
+	var paid struct {
+		ID string `json:"id"`
+	}
+	_ = json.NewDecoder(respPaid.Body).Decode(&paid)
+
+	respOK, err := env.authedRequest(http.MethodPut, "/api/v1/accounts/"+paid.ID+"/credit-limit", bytes.NewReader(limitBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respOK.Body.Close()
+	if respOK.StatusCode != http.StatusOK {
+		t.Fatalf("decrease paid status %d", respOK.StatusCode)
+	}
+	var acc struct {
+		CreditLimit    int64 `json:"credit_limit"`
+		InitialBalance int64 `json:"initial_balance"`
+		Balance        int64 `json:"balance"`
+	}
+	_ = json.NewDecoder(respOK.Body).Decode(&acc)
+	if acc.CreditLimit != 80_000 || acc.Balance != 80_000 || acc.InitialBalance != 80_000 {
+		t.Fatalf("after decrease: %+v", acc)
+	}
+}
+
+func TestUpdateAccountRejectsCreditLimitChange(t *testing.T) {
+	env := setupConfigured(t)
+	seedBanks(t, env)
+	env.login(t, "admin", "secret123")
+
+	bodyCC, _ := json.Marshal(map[string]string{
+		"name":            "Кредитка immutable limit",
+		"type":            "credit_card",
+		"bank_id":         "tinkoff",
+		"credit_limit":    "1000.00",
+		"initial_balance": "1000.00",
+	})
+	respCC, err := env.authedRequest(http.MethodPost, "/api/v1/accounts", bytes.NewReader(bodyCC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respCC.Body.Close()
+	var created struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	}
+	_ = json.NewDecoder(respCC.Body).Decode(&created)
+
+	updateBody, _ := json.Marshal(map[string]string{
+		"name":            created.Name,
+		"bank_id":         "tinkoff",
+		"credit_limit":    "2000.00",
+		"initial_balance": "1000.00",
+	})
+	resp, err := env.authedRequest(http.MethodPut, "/api/v1/accounts/"+created.ID, bytes.NewReader(updateBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("update with new limit status %d, want 400", resp.StatusCode)
+	}
+	var errBody struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&errBody)
+	if errBody.Error.Code != "VALIDATION_ERROR" {
+		t.Fatalf("error code %q", errBody.Error.Code)
+	}
+	if errBody.Error.Message != "Лимит меняется через «Изменить лимит», не в редактировании счёта" {
+		t.Fatalf("error message %q", errBody.Error.Message)
+	}
+}

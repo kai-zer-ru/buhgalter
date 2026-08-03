@@ -287,7 +287,7 @@ erDiagram
 | `accounts.type` | `cash`, `bank`, `credit_card` |
 | `accounts.initial_balance` | начальный остаток, копейки; фиксируется при создании и при явном изменении в форме редактирования |
 | `accounts.current_balance` | текущий баланс, копейки; денормализация, пересчитывается пакетом `accountbalance` |
-| `accounts.credit_limit` | лимит кредитной карты, копейки; только для `credit_card` |
+| `accounts.credit_limit` | лимит кредитной карты, копейки; только для `credit_card`; смена после создания — только `PUT /accounts/{id}/credit-limit` (с корректировкой `initial_balance`, см. [ui-credit-cards.md](ui-credit-cards.md)) |
 | `accounts.payment_account_id` | счёт по умолчанию для переводов на карту (опционально) |
 | `accounts.auto_topup_*` | автопополнение bank-счёта — см. [balance-maintenance.md](balance-maintenance.md) |
 | `accounts.status` | `active`, `archived`, `deleted` |

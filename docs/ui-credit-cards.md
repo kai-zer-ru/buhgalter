@@ -59,7 +59,7 @@
 | Поле | Поведение |
 |------|-----------|
 | Банк | выбор из справочника `GET /api/v1/banks` |
-| Лимит | обязательно (`MoneyInput`) |
+| Лимит | при **создании** обязательно (`MoneyInput`); при **редактировании** — только просмотр (смена через **«Изменить лимит»**) |
 | Начальный баланс | по умолчанию `0`; кнопка **«Лимит»** подставляет значение лимита. При **редактировании** — сохранённый `initial_balance`, не текущий `balance_display` (см. [data-model.md](data-model.md)) |
 | Счёт для переводов | опционально: `cash` / `bank` для погашений по умолчанию |
 
@@ -83,7 +83,7 @@
 На `/accounts/{id}` и в карточке на `/accounts`:
 
 - **баланс** и **лимит** — отдельные строки;
-- в меню «⋯» (только для `credit_card`): **«Оплатить»**, **«Списать комиссию»** — без «Сделать основным».
+- в меню «⋯» (только для `credit_card`): **«Оплатить»**, **«Списать комиссию»**, **«Изменить лимит»** — без «Сделать основным».
 
 На главной в блоке счетов у кредитки рядом с балансом показывается лимит.
 
@@ -133,6 +133,27 @@
 
 ---
 
+## «Изменить лимит»
+
+Лимит **нельзя** менять в форме редактирования счёта (`PUT /accounts/{id}` с другим `credit_limit` → `ERR_ACCOUNT_CREDIT_LIMIT_IMMUTABLE`). Отдельное действие в меню «⋯» и на странице карты.
+
+| Действие | Условие | Эффект |
+|----------|---------|--------|
+| Увеличить | `new > old`, `new > 0` | `credit_limit` и `initial_balance` растут на одну дельту → баланс после пересчёта тоже; долг (`лимит − баланс`) не меняется |
+| Уменьшить | `new < old`, `new > 0`, полное погашение (`balance >=` текущий лимит) | та же дельта вычитается из `credit_limit` и `initial_balance` |
+| То же значение | — | без изменений |
+
+Транзакцию операция не создаёт. UI: текущий лимит (read-only), новый лимит (`MoneyInput`), подсказка про правила; при попытке уменьшить без полного погашения — предупреждение и блокировка submit.
+
+- Web: модалка `CreditCardChangeLimitForm`
+- Android: полноэкранная форма `/accounts/{id}/change-limit` (только онлайн, `requireOnline`)
+
+API: `PUT /api/v1/accounts/{id}/credit-limit` с телом `{ "credit_limit": "100000.00" }`.
+
+Ошибки: `ERR_ACCOUNT_INVALID_CREDIT_LIMIT`, `ERR_ACCOUNT_TYPE`, `ERR_ACCOUNT_ARCHIVED_EDIT`, `ERR_CREDIT_CARD_LIMIT_DECREASE_NOT_FULLY_PAID`.
+
+---
+
 ## Переводы и комиссия
 
 Погашение — обычный `POST /api/v1/transfers` на счёт карты.
@@ -174,10 +195,11 @@
 | Метод | Назначение |
 |-------|------------|
 | `POST /api/v1/accounts` | создание (`type: credit_card`, `bank_id`, `credit_limit`, опционально `payment_account_id`) |
-| `PUT /api/v1/accounts/{id}` | изменение имени, банка, лимита, счёта для переводов, начального баланса |
+| `PUT /api/v1/accounts/{id}` | имя, банк, счёт для переводов, начальный баланс; смена лимита **запрещена** |
+| `PUT /api/v1/accounts/{id}/credit-limit` | изменить лимит (с корректировкой баланса) |
 | `GET /api/v1/dashboard` | `credit_cards_summary`, `accounts[].credit_limit` |
 
-Схемы: `Account`, `AccountCreate`, `AccountUpdate`, `CreditCardsSummary` в [api/openapi.yaml](api/openapi.yaml).
+Схемы: `Account`, `AccountCreate`, `AccountUpdate`, `AccountCreditLimitChange`, `CreditCardsSummary` в [api/openapi.yaml](api/openapi.yaml).
 
 ---
 

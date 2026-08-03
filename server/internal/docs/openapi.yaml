@@ -14,8 +14,10 @@ info:
     Подробнее — [ui-api-cache.md](../ui-api-cache.md).
 
     **Счета (UI):** на `/accounts` меню «⋯» вызывает inline-редактирование (`PUT /accounts/{id}`),
-    `POST /accounts/{id}/primary`, `POST /accounts/{id}/archive`, `DELETE /accounts/{id}`.
+    `PUT /accounts/{id}/credit-limit` (кредитные карты), `POST /accounts/{id}/primary`,
+    `POST /accounts/{id}/archive`, `DELETE /accounts/{id}`.
     На `/accounts/{id}` — та же форма редактирования в шапке. Поля: название, банк, начальный баланс.
+    Лимит кредитной карты меняется только через `PUT /accounts/{id}/credit-limit` (см. [ui-credit-cards.md](../ui-credit-cards.md)).
     В форме «Начальный баланс» — значение `initial_balance`, не текущий `balance_display` (см. [data-model.md](../data-model.md)).
     Подробнее — [ui-row-actions.md](../ui-row-actions.md).
   version: 1.4.0
@@ -974,8 +976,10 @@ paths:
     put:
       summary: Обновить счёт
       description: |
-        Имя, банк (для `type=bank` / `credit_card`), лимит и счёт для переводов (для `credit_card`),
+        Имя, банк (для `type=bank` / `credit_card`), счёт для переводов (для `credit_card`),
         начальный баланс (`initial_balance` — стартовая сумма, не текущий остаток).
+        Смена `credit_limit` через этот метод запрещена (`ERR_ACCOUNT_CREDIT_LIMIT_IMMUTABLE`);
+        используйте `PUT /accounts/{id}/credit-limit`.
         После сохранения `current_balance` пересчитывается от нового `initial_balance` и операций.
         В UI — inline-форма на `/accounts` или форма на `/accounts/{id}`; поле «Начальный баланс» заполняется из `initial_balance` ответа GET, не из `balance_display`.
       security:
@@ -999,6 +1003,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Account'
+        '400':
+          description: |
+            В том числе попытка сменить `credit_limit` (`ERR_ACCOUNT_CREDIT_LIMIT_IMMUTABLE`).
     delete:
       summary: Удалить счёт
       description: |
@@ -1123,6 +1130,41 @@ paths:
           description: "Счёт с `is_primary: true`"
         '400':
           description: Архивный счёт или кредитная карта (`ERR_ACCOUNT_PRIMARY_ARCHIVED` / `ERR_ACCOUNT_PRIMARY_CREDIT_CARD`)
+  /accounts/{id}/credit-limit:
+    put:
+      summary: Изменить кредитный лимит
+      description: |
+        Только для активной кредитной карты (`type=credit_card`).
+        Увеличение: `credit_limit` и `initial_balance` растут на одну и ту же дельту — долг (`лимит − баланс`) не меняется.
+        Уменьшение: только при полном погашении (`balance >=` текущий `credit_limit`); дельта вычитается из `initial_balance` симметрично.
+        Транзакцию не создаёт. Подробнее — [ui-credit-cards.md](../ui-credit-cards.md).
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountCreditLimitChange'
+      responses:
+        '200':
+          description: Счёт с новым лимитом
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '400':
+          description: |
+            Невалидный лимит (`ERR_ACCOUNT_INVALID_CREDIT_LIMIT`), не кредитная карта (`ERR_ACCOUNT_TYPE`),
+            архивный счёт (`ERR_ACCOUNT_ARCHIVED_EDIT`), уменьшение при непогашенном долге
+            (`ERR_CREDIT_CARD_LIMIT_DECREASE_NOT_FULLY_PAID`).
   /accounts/summary:
     get:
       summary: Сводка по активным счетам
@@ -3853,7 +3895,10 @@ components:
           description: Для `bank` и `credit_card`
         credit_limit:
           type: string
-          description: Лимит карты, рубли
+          deprecated: true
+          description: |
+            Устарело. Смена лимита через `PUT /accounts/{id}` запрещена (`ERR_ACCOUNT_CREDIT_LIMIT_IMMUTABLE`).
+            Используйте `PUT /accounts/{id}/credit-limit`. То же значение, что уже на счёте, допускается.
         payment_account_id:
           type: string
           nullable: true
@@ -3869,6 +3914,13 @@ components:
         initial_balance:
           type: string
           description: Начальный остаток, рубли (`"1000.00"`); не путать с текущим `balance_display`
+    AccountCreditLimitChange:
+      type: object
+      required: [credit_limit]
+      properties:
+        credit_limit:
+          type: string
+          description: Новый лимит карты, рубли (`"100000.00"`)
     AccountBalanceSummary:
       type: object
       properties:

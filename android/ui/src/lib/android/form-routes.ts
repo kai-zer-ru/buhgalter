@@ -78,6 +78,10 @@ export function accountChargeFeePath(accountId: string, from?: string): AppHref 
 	return withFromQuery(`/accounts/${accountId}/charge-fee`, from);
 }
 
+export function accountChangeLimitPath(accountId: string, from?: string): AppHref {
+	return withFromQuery(`/accounts/${accountId}/change-limit`, from);
+}
+
 export function accountAutoTopupPath(accountId: string, from?: string): AppHref {
 	return withFromQuery(`/accounts/${accountId}/auto-topup`, from);
 }

@@ -7,6 +7,7 @@
 	import {
 		transferNewPath,
 		accountChargeFeePath,
+		accountChangeLimitPath,
 		accountAutoTopupPath,
 		accountNewPath
 	} from '$lib/android/form-routes';
@@ -75,7 +76,6 @@
 	let editingId = $state<string | null>(null);
 	let editName = $state('');
 	let editBankId = $state('');
-	let editCreditLimit = $state('');
 	let editPaymentAccountId = $state('');
 	let editInitialBalance = $state('');
 	let savingEditId = $state('');
@@ -163,7 +163,6 @@
 		editingId = acc.id;
 		editName = acc.name;
 		editBankId = acc.bank_id ?? '';
-		editCreditLimit = acc.credit_limit_display ?? '';
 		editPaymentAccountId = acc.payment_account_id ?? '';
 		editInitialBalance = formatAccountInitialBalanceForEdit(acc.initial_balance);
 	}
@@ -172,8 +171,8 @@
 		editingId = null;
 	}
 
-	function applyLimitToBalance() {
-		if (editCreditLimit.trim()) editInitialBalance = editCreditLimit;
+	function applyLimitToBalance(acc: Account) {
+		if (acc.credit_limit_display) editInitialBalance = acc.credit_limit_display;
 	}
 
 	async function saveEdit(e: Event, acc: Account) {
@@ -185,7 +184,10 @@
 				name: editName,
 				bank_id: acc.type === 'bank' || acc.type === 'credit_card' ? editBankId : undefined,
 				initial_balance: toAPIAmount(editInitialBalance),
-				credit_limit: acc.type === 'credit_card' ? toAPIAmount(editCreditLimit) : undefined,
+				credit_limit:
+					acc.type === 'credit_card' && acc.credit_limit_display
+						? toAPIAmount(acc.credit_limit_display)
+						: undefined,
 				payment_account_id: acc.type === 'credit_card' ? editPaymentAccountId || null : undefined
 			});
 			accountsBase = accountsBase.map((item) => (item.id === updated.id ? updated : item));
@@ -288,6 +290,15 @@
 					disabled: busy || editingId !== null,
 					onclick: () => {
 						void goto(resolve(accountChargeFeePath(acc.id, '/accounts')));
+					}
+				},
+				{
+					icon: 'bank',
+					label: $_('accounts.creditCard.changeLimit'),
+					disabled: busy || editingId !== null,
+					onclick: () => {
+						if (!requireOnline('offline.onlineOnly.creditLimit')) return;
+						void goto(resolve(accountChangeLimitPath(acc.id, '/accounts')));
 					}
 				}
 			);
@@ -441,16 +452,20 @@
 							/>
 						{/if}
 						{#if acc.type === 'credit_card'}
-							<div>
-								<label
-									class="mb-1 block text-sm"
-									style:color="var(--text-muted)"
-									for="edit-limit-{acc.id}"
-								>
-									{$_('accounts.field.creditLimit')}
-								</label>
-								<MoneyInput id="edit-limit-{acc.id}" bind:value={editCreditLimit} />
-							</div>
+							{#if acc.credit_limit_display}
+								<div>
+									<p class="mb-1 text-sm" style:color="var(--text-muted)">
+										{$_('accounts.field.creditLimit')}
+									</p>
+									<p class="tabular-nums">
+										<MoneyDisplay
+											value={acc.credit_limit_display}
+											currency={$user?.currency ?? 'RUB'}
+											class=""
+										/>
+									</p>
+								</div>
+							{/if}
 							<Select
 								label={$_('accounts.field.paymentAccount')}
 								bind:value={editPaymentAccountId}
@@ -471,7 +486,11 @@
 							</label>
 							<MoneyInput id="edit-balance-{acc.id}" bind:value={editInitialBalance} />
 							{#if acc.type === 'credit_card'}
-								<button type="button" class="btn-ghost mt-1 text-sm" onclick={applyLimitToBalance}>
+								<button
+									type="button"
+									class="btn-ghost mt-1 text-sm"
+									onclick={() => applyLimitToBalance(acc)}
+								>
 									{$_('accounts.creditCard.limitButton')}
 								</button>
 							{/if}
@@ -481,8 +500,7 @@
 								type="submit"
 								class="btn-primary"
 								disabled={savingEditId === acc.id ||
-									((acc.type === 'bank' || acc.type === 'credit_card') && !editBankId) ||
-									(acc.type === 'credit_card' && !editCreditLimit.trim())}
+									((acc.type === 'bank' || acc.type === 'credit_card') && !editBankId)}
 							>
 								{savingEditId === acc.id ? $_('common.loading') : $_('common.save')}
 							</button>

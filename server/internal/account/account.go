@@ -172,6 +172,8 @@ var ErrNotFound = errors.New("account not found")
 var ErrArchived = errors.New("account is archived")
 var ErrCreditCardPrimary = errors.New("credit card cannot be primary")
 var ErrCreditCardArchiveNotFullyPaid = errors.New("credit card must be fully paid before archive")
+var ErrCreditLimitImmutable = errors.New("credit limit cannot be changed via account update")
+var ErrCreditCardLimitDecreaseNotFullyPaid = errors.New("credit card must be fully paid before decreasing limit")
 
 type CreateInput struct {
 	Name             string
@@ -263,9 +265,10 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in UpdateInput) 
 		bankID = in.BankID
 	}
 	if existing.Type == "credit_card" {
-		cl := creditLimit
 		if in.CreditLimit != nil {
-			cl = in.CreditLimit
+			if existing.CreditLimit == nil || *in.CreditLimit != *existing.CreditLimit {
+				return Account{}, ErrCreditLimitImmutable
+			}
 		}
 		pa := paymentAccountID
 		if in.PaymentAccountID != nil {
@@ -277,7 +280,7 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in UpdateInput) 
 		}
 		var validatedCL *int64
 		var validatedPA *string
-		validatedCL, validatedPA, err = validateAccountFields(ctx, db, userID, id, existing.Type, bankID, cl, pa)
+		validatedCL, validatedPA, err = validateAccountFields(ctx, db, userID, id, existing.Type, bankID, creditLimit, pa)
 		if err != nil {
 			return Account{}, err
 		}
@@ -310,6 +313,54 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in UpdateInput) 
 		if err := applyAutoTopupSettings(ctx, db, userID, id, existing.Type, *in.AutoTopup); err != nil {
 			return Account{}, err
 		}
+	}
+	return GetByID(ctx, db, userID, id)
+}
+
+// ChangeCreditLimit sets a new credit_limit and adjusts initial_balance by the same delta
+// so debt (limit − balance) stays unchanged on increase. Decrease is allowed only when
+// the card is fully paid (balance >= current credit_limit).
+func ChangeCreditLimit(ctx context.Context, db *sql.DB, userID, id string, newLimit int64) (Account, error) {
+	existing, err := GetByID(ctx, db, userID, id)
+	if err != nil {
+		return Account{}, err
+	}
+	if existing.Status != "active" {
+		return Account{}, ErrArchived
+	}
+	if !IsCreditCard(existing.Type) {
+		return Account{}, ErrInvalidType
+	}
+	if newLimit <= 0 {
+		return Account{}, ErrInvalidCreditLimit
+	}
+	if existing.CreditLimit == nil {
+		return Account{}, ErrCreditLimitRequired
+	}
+	oldLimit := *existing.CreditLimit
+	if newLimit == oldLimit {
+		return existing, nil
+	}
+	delta := newLimit - oldLimit
+	if delta < 0 && existing.Balance < oldLimit {
+		return Account{}, ErrCreditCardLimitDecreaseNotFullyPaid
+	}
+	newCL := newLimit
+	now := time.Now().UTC().Format(time.RFC3339)
+	if err := queries(db).UpdateAccount(ctx, sqlcdb.UpdateAccountParams{
+		Name:             existing.Name,
+		BankID:           existing.BankID,
+		InitialBalance:   existing.InitialBalance + delta,
+		CreditLimit:      &newCL,
+		PaymentAccountID: existing.PaymentAccountID,
+		UpdatedAt:        now,
+		ID:               id,
+		UserID:           userID,
+	}); err != nil {
+		return Account{}, err
+	}
+	if err := accountbalance.Refresh(ctx, db, userID, id); err != nil {
+		return Account{}, err
 	}
 	return GetByID(ctx, db, userID, id)
 }

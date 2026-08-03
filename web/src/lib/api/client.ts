@@ -665,6 +665,13 @@ export function updateAccount(
 	});
 }
 
+export function changeAccountCreditLimit(id: string, creditLimit: string) {
+	return request<Account>(`/api/v1/accounts/${id}/credit-limit`, {
+		method: 'PUT',
+		body: JSON.stringify({ credit_limit: creditLimit })
+	});
+}
+
 export function archiveAccount(id: string, transferToAccountId?: string) {
 	const q = transferToAccountId
 		? `?transfer_to_account_id=${encodeURIComponent(transferToAccountId)}`

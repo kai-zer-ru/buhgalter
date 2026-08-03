@@ -18,6 +18,7 @@
 		promptDeleteAccount,
 		executeDeleteAccount
 	} from '$lib/accounts/account-inactive-prompt';
+	import CreditCardChangeLimitForm from '$lib/components/CreditCardChangeLimitForm.svelte';
 	import CreditCardFeeForm from '$lib/components/CreditCardFeeForm.svelte';
 	import TransferForm from '$lib/components/TransferForm.svelte';
 	import { isAutoTopupEligible } from '$lib/accounts/auto-topup';
@@ -68,11 +69,11 @@
 	let editingId = $state<string | null>(null);
 	let editName = $state('');
 	let editBankId = $state('');
-	let editCreditLimit = $state('');
 	let editPaymentAccountId = $state('');
 	let editInitialBalance = $state('');
 	let payOpen = $state(false);
 	let feeOpen = $state(false);
+	let changeLimitOpen = $state(false);
 	let autoTopupOpen = $state(false);
 	let actionCard = $state<Account | null>(null);
 	let savingEditId = $state('');
@@ -141,7 +142,6 @@
 		editingId = acc.id;
 		editName = acc.name;
 		editBankId = acc.bank_id ?? '';
-		editCreditLimit = acc.credit_limit_display ?? '';
 		editPaymentAccountId = acc.payment_account_id ?? '';
 		editInitialBalance = formatAccountInitialBalanceForEdit(acc.initial_balance);
 	}
@@ -150,8 +150,8 @@
 		editingId = null;
 	}
 
-	function applyLimitToBalance() {
-		if (editCreditLimit.trim()) editInitialBalance = editCreditLimit;
+	function applyLimitToBalance(acc: Account) {
+		if (acc.credit_limit_display) editInitialBalance = acc.credit_limit_display;
 	}
 
 	async function saveEdit(e: Event, acc: Account) {
@@ -163,7 +163,6 @@
 				name: editName,
 				bank_id: acc.type === 'bank' || acc.type === 'credit_card' ? editBankId : undefined,
 				initial_balance: toAPIAmount(editInitialBalance),
-				credit_limit: acc.type === 'credit_card' ? toAPIAmount(editCreditLimit) : undefined,
 				payment_account_id: acc.type === 'credit_card' ? editPaymentAccountId || null : undefined
 			});
 			accounts = accounts.map((item) => (item.id === updated.id ? updated : item));
@@ -268,6 +267,15 @@
 					onclick: () => {
 						actionCard = acc;
 						feeOpen = true;
+					}
+				},
+				{
+					icon: 'bank',
+					label: $_('accounts.creditCard.changeLimit'),
+					disabled: busy || editingId !== null,
+					onclick: () => {
+						actionCard = acc;
+						changeLimitOpen = true;
 					}
 				}
 			);
@@ -426,16 +434,20 @@
 							/>
 						{/if}
 						{#if acc.type === 'credit_card'}
-							<div>
-								<label
-									class="mb-1 block text-sm"
-									style:color="var(--text-muted)"
-									for="edit-limit-{acc.id}"
-								>
-									{$_('accounts.field.creditLimit')}
-								</label>
-								<MoneyInput id="edit-limit-{acc.id}" bind:value={editCreditLimit} />
-							</div>
+							{#if acc.credit_limit_display}
+								<div>
+									<p class="mb-1 text-sm" style:color="var(--text-muted)">
+										{$_('accounts.field.creditLimit')}
+									</p>
+									<p class="tabular-nums">
+										<MoneyDisplay
+											value={acc.credit_limit_display}
+											currency={$user?.currency ?? 'RUB'}
+											class=""
+										/>
+									</p>
+								</div>
+							{/if}
 							<Select
 								label={$_('accounts.field.paymentAccount')}
 								bind:value={editPaymentAccountId}
@@ -456,7 +468,11 @@
 							</label>
 							<MoneyInput id="edit-balance-{acc.id}" bind:value={editInitialBalance} />
 							{#if acc.type === 'credit_card'}
-								<button type="button" class="btn-ghost mt-1 text-sm" onclick={applyLimitToBalance}>
+								<button
+									type="button"
+									class="btn-ghost mt-1 text-sm"
+									onclick={() => applyLimitToBalance(acc)}
+								>
 									{$_('accounts.creditCard.limitButton')}
 								</button>
 							{/if}
@@ -466,8 +482,7 @@
 								type="submit"
 								class="btn-primary"
 								disabled={savingEditId === acc.id ||
-									((acc.type === 'bank' || acc.type === 'credit_card') && !editBankId) ||
-									(acc.type === 'credit_card' && !editCreditLimit.trim())}
+									((acc.type === 'bank' || acc.type === 'credit_card') && !editBankId)}
 							>
 								{savingEditId === acc.id ? $_('common.loading') : $_('common.save')}
 							</button>
@@ -551,6 +566,15 @@
 		account={actionCard}
 		onclose={() => {
 			feeOpen = false;
+			actionCard = null;
+		}}
+		onsaved={load}
+	/>
+	<CreditCardChangeLimitForm
+		bind:open={changeLimitOpen}
+		account={actionCard}
+		onclose={() => {
+			changeLimitOpen = false;
 			actionCard = null;
 		}}
 		onsaved={load}

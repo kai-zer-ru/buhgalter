@@ -161,6 +161,45 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, acc)
 }
 
+func (h *Handler) ChangeCreditLimit(w http.ResponseWriter, r *http.Request) {
+	info, ok := auth.FromContext(r.Context())
+	if !ok {
+		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
+		return
+	}
+	id := chi.URLParam(r, "id")
+	var req struct {
+		CreditLimit string `json:"credit_limit"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_INVALID_JSON")
+		return
+	}
+	limit, err := money.ParseRubles(req.CreditLimit)
+	if err != nil {
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_ACCOUNT_INVALID_CREDIT_LIMIT")
+		return
+	}
+	acc, err := ChangeCreditLimit(r.Context(), h.Store.DB(), info.User.ID, id, limit)
+	if errors.Is(err, ErrNotFound) {
+		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
+		return
+	}
+	if errors.Is(err, ErrCreditCardLimitDecreaseNotFullyPaid) {
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_CARD_LIMIT_DECREASE_NOT_FULLY_PAID")
+		return
+	}
+	if errors.Is(err, ErrInvalidCreditLimit) {
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_ACCOUNT_INVALID_CREDIT_LIMIT")
+		return
+	}
+	if err := writeAccountError(w, r, err); err != nil {
+		return
+	}
+	_ = h.Audit.Log("account.change_credit_limit", info.User.ID, info.User.Login, clientIP(r), map[string]any{"account_id": id})
+	writeJSON(w, http.StatusOK, acc)
+}
+
 func (h *Handler) Archive(w http.ResponseWriter, r *http.Request) {
 	h.setStatus(w, r, "archived", "account.archive")
 }
@@ -238,10 +277,16 @@ func writeAccountError(w http.ResponseWriter, r *http.Request, err error) error 
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_ACCOUNT_BANK_FORBIDDEN")
 	case errors.Is(err, ErrBankNotFound):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_ACCOUNT_BANK_NOT_FOUND")
-	case errors.Is(err, ErrCreditLimitRequired), errors.Is(err, ErrInvalidCreditLimit):
+	case errors.Is(err, ErrCreditLimitRequired):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_ACCOUNT_CREDIT_LIMIT_REQUIRED")
+	case errors.Is(err, ErrInvalidCreditLimit):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_ACCOUNT_INVALID_CREDIT_LIMIT")
 	case errors.Is(err, ErrCreditLimitForbidden):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_ACCOUNT_CREDIT_LIMIT_FORBIDDEN")
+	case errors.Is(err, ErrCreditLimitImmutable):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_ACCOUNT_CREDIT_LIMIT_IMMUTABLE")
+	case errors.Is(err, ErrCreditCardLimitDecreaseNotFullyPaid):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_CARD_LIMIT_DECREASE_NOT_FULLY_PAID")
 	case errors.Is(err, ErrInvalidPaymentAccount):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_ACCOUNT_INVALID_PAYMENT_ACCOUNT")
 	case errors.Is(err, ErrAutoTopupNotAllowed):

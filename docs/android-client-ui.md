@@ -30,6 +30,7 @@
 | `/debts/new?direction=lent\|borrowed` | Дать в долг / взять в долг |
 | `/debts/[id]/settle` | Погашение долга |
 | `/accounts/[id]/charge-fee` | Комиссия по кредитной карте |
+| `/accounts/[id]/change-limit` | Изменить кредитный лимит (только онлайн) |
 | `/accounts/[id]/auto-topup` | Автопополнение счёта |
 | `/credits/[id]/pay` | Платёж по кредиту |
 | `/credits/[id]/complete` | Досрочное закрытие |
