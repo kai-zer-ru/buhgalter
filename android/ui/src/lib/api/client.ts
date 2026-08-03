@@ -91,12 +91,12 @@ async function fetchApi<T>(
 				});
 				throw apiErr;
 			}
-			if (method === 'GET' && result.status === 204) {
+			// DELETE/logout/etc. return 204 with an empty body — treat as success before JSON checks.
+			if (result.status === 204) {
 				logApiResponse(path, method, startedAt, { status: 204 });
 				return undefined as T;
 			}
-			const contentType = 'application/json';
-			if (!result.body || !contentType.includes('json')) {
+			if (!result.body) {
 				const err = new ApiError('INVALID_RESPONSE', 'Expected JSON from API', result.status ?? 0);
 				logApiResponse(path, method, startedAt, { status: result.status, error: err });
 				throw err;
@@ -121,10 +121,6 @@ async function fetchApi<T>(
 				const err = new ApiError(code, message, result.status ?? 0, field);
 				logApiResponse(path, method, startedAt, { status: result.status, error: err });
 				throw err;
-			}
-			if (result.status === 204) {
-				logApiResponse(path, method, startedAt, { status: 204 });
-				return undefined as T;
 			}
 			const parsed = JSON.parse(result.body) as T;
 			logApiResponse(path, method, startedAt, { status: result.status, ok: true });

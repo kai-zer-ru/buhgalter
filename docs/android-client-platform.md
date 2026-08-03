@@ -84,9 +84,9 @@ BUHGALTER_ALLOWED_HOSTS=192.168.1.176
 
 ### HTTPS и self-signed
 
-Для **внешнего HTTPS** с самоподписанным или иным недоверенным сертификатом при проверке `/api/v1/health` показывается попап: переключатель **«Доверять этому серверу»** и предупреждение «на свой страх и риск». После включения origin попадает в `trustedOrigins` профиля; запросы к API для этого origin идут через native `SslTrust` (OkHttp с отключённой проверкой только для явно доверенных host). HTTP (LAN) — без изменений (`usesCleartextTraffic`).
+Для **внешнего HTTPS** с самоподписанным или иным недоверенным сертификатом при проверке `/api/v1/health` показывается попап: переключатель **«Доверять этому серверу»** и предупреждение «на свой страх и риск». После включения origin попадает в `trustedOrigins` профиля; запросы к API для этого origin идут через native `SslTrust` (OkHttp с отключённой проверкой только для явно доверенных host). HTTP (LAN) — без изменений (`usesCleartextTraffic`). Ответ **204** без тела (DELETE и т.п.) через `SslTrust` считается успехом — иначе клиент ошибочно бросал `INVALID_RESPONSE`.
 
-Код: `SslTrustPlugin.java`, `ssl-trust.ts`, `ServerTrustDialog.svelte`, `server-verify.ts`.
+Код: `SslTrustPlugin.java`, `ssl-trust.ts`, `client.ts` (`fetchApi` native path), `ServerTrustDialog.svelte`, `server-verify.ts`.
 
 ### Bootstrap (`+layout.svelte`)
 
