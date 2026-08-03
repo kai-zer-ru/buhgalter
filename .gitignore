@@ -46,3 +46,5 @@ futures.md
 # Android release signing (never commit private keys or passwords)
 *.jks
 *.keystore
+# nektos/act local artifact server (make act-push / act-release)
+.artifacts/

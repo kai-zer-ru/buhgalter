@@ -229,6 +229,8 @@ test('edit expense from dashboard updates balance', async ({ page }) => {
 	await dialog.getByRole('button', { name: 'Сохранить' }).click();
 	await expect(dialog).toHaveCount(0, { timeout: 15_000 });
 
+	// silent reload after edit can collapse the recent-ops spoiler
+	await expandCollapsibleSection(page, 'Последние операции');
 	await expect(
 		page.getByRole('row', {
 			name: new RegExp(`${description}.*150\\.00|150\\.00.*${description}`)

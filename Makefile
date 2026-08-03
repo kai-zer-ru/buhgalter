@@ -97,13 +97,16 @@ lint-go:
 ACT_PLATFORM := -P ubuntu-latest=catthehacker/ubuntu:full-latest
 # act по умолчанию: concurrent-jobs=CPU и --pull=true (каждый раз тянет образ).
 ACT_CONCURRENT_JOBS ?= 2
-# Общие флаги: не перекачивать/не пересобирать уже локальные образы.
-ACT_FLAGS := --pull=false --rebuild=false --concurrent-jobs
+# Без --artifact-server-path upload/download-artifact падают с ACTIONS_RUNTIME_TOKEN.
+ACT_ARTIFACT_PATH ?= $(CURDIR)/.artifacts
+# Общие флаги: не перекачивать/не пересобирать уже локальные образы; локальный artifact server.
+ACT_FLAGS = --pull=false --rebuild=false --artifact-server-path $(ACT_ARTIFACT_PATH) --concurrent-jobs
 
 # Usage: make act-push [N]  — N потоков (по умолчанию ACT_CONCURRENT_JOBS=2)
 # Также: make act-push ACT_CONCURRENT_JOBS=4
 act-push:
 	@git rev-parse HEAD >/dev/null 2>&1 || (echo "act-push: нужен хотя бы один git commit (без него checkout в act удаляет исходники)" && exit 1)
+	@mkdir -p "$(ACT_ARTIFACT_PATH)"
 	@jobs='$(word 2,$(MAKECMDGOALS))'; \
 	jobs="$${jobs:-$(ACT_CONCURRENT_JOBS)}"; \
 	case "$$jobs" in ''|*[!0-9]*|0*) echo "act-push: concurrent jobs must be a positive integer (got '$$jobs')"; exit 1;; esac; \
@@ -115,6 +118,7 @@ act-push:
 act-release:
 	@git rev-parse HEAD >/dev/null 2>&1 || (echo "act-release: нужен хотя бы один git commit" && exit 1)
 	@test -n "$$GITHUB_TOKEN" || (echo "act-release: задайте GITHUB_TOKEN (Personal Access Token с repo)" && exit 1)
+	@mkdir -p "$(ACT_ARTIFACT_PATH)"
 	@jobs='$(word 2,$(MAKECMDGOALS))'; \
 	jobs="$${jobs:-$(ACT_CONCURRENT_JOBS)}"; \
 	case "$$jobs" in ''|*[!0-9]*|0*) echo "act-release: concurrent jobs must be a positive integer (got '$$jobs')"; exit 1;; esac; \
