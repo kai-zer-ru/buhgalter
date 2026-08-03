@@ -277,7 +277,7 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Tra
 	}); err != nil {
 		return Transaction{}, fmt.Errorf("insert transaction: %w", err)
 	}
-	if err := refreshAccountBalances(ctx, db, userID, in.AccountID); err != nil {
+	if err := refreshAccountBalances(ctx, db, userID, in.TransactionDate, in.AccountID); err != nil {
 		return Transaction{}, err
 	}
 	maybeNotifyBudget(ctx, db, userID, in.Type)
@@ -350,7 +350,7 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in UpdateInput) 
 	}); err != nil {
 		return Transaction{}, err
 	}
-	if err := refreshAccountBalances(ctx, db, userID, uniqueAccountIDs(existing.AccountID, in.AccountID)...); err != nil {
+	if err := refreshAccountBalances(ctx, db, userID, in.TransactionDate, uniqueAccountIDs(existing.AccountID, in.AccountID)...); err != nil {
 		return Transaction{}, err
 	}
 	maybeNotifyBudget(ctx, db, userID, in.Type)
@@ -403,7 +403,8 @@ func Delete(ctx context.Context, db *sql.DB, userID, id string) error {
 	if err := dbTx.Commit(); err != nil {
 		return err
 	}
-	if err := refreshAccountBalances(ctx, db, userID, existing.AccountID); err != nil {
+	asOf, _ := timeutil.ParseUTC(existing.TransactionDate)
+	if err := refreshAccountBalances(ctx, db, userID, asOf, existing.AccountID); err != nil {
 		return err
 	}
 	maybeNotifyBudget(ctx, db, userID, existing.Type)
@@ -427,7 +428,8 @@ func Activate(ctx context.Context, db *sql.DB, userID, id string) (Transaction, 
 	if err != nil {
 		return Transaction{}, err
 	}
-	if err := refreshAccountBalances(ctx, db, userID, tx.AccountID); err != nil {
+	asOf, _ := timeutil.ParseUTC(tx.TransactionDate)
+	if err := refreshAccountBalances(ctx, db, userID, asOf, tx.AccountID); err != nil {
 		return Transaction{}, err
 	}
 	return tx, nil
@@ -436,7 +438,8 @@ func Activate(ctx context.Context, db *sql.DB, userID, id string) (Transaction, 
 // ActivateDueFutureTransactions promotes past-due planned operations to manual (UTC cutoff = now).
 func ActivateDueFutureTransactions(ctx context.Context, db *sql.DB, userID string) (int64, error) {
 	now := time.Now().UTC().Format(time.RFC3339)
-	cutoff := timeutil.FormatUTC(timeutil.NowUTC())
+	asOf := timeutil.NowUTC()
+	cutoff := timeutil.FormatUTC(asOf)
 	q := queries(db)
 	n1, err := q.ActivateAppliedCreditFutureTransactions(ctx, sqlcdb.ActivateAppliedCreditFutureTransactionsParams{
 		UpdatedAt:       now,
@@ -458,7 +461,7 @@ func ActivateDueFutureTransactions(ctx context.Context, db *sql.DB, userID strin
 	if activated == 0 {
 		return 0, nil
 	}
-	return activated, refreshAccountBalances(ctx, db, userID)
+	return activated, refreshAccountBalances(ctx, db, userID, asOf)
 }
 
 // ActivateAllDueFutureTransactions promotes due future operations for all affected users.

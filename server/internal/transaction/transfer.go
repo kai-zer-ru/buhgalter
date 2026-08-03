@@ -120,7 +120,7 @@ func CreateTransfer(ctx context.Context, db *sql.DB, userID string, in TransferI
 	if err := tx.Commit(); err != nil {
 		return Transfer{}, err
 	}
-	if err := refreshAccountBalances(ctx, db, userID, in.FromAccountID, in.ToAccountID); err != nil {
+	if err := refreshAccountBalances(ctx, db, userID, in.TransactionDate, in.FromAccountID, in.ToAccountID); err != nil {
 		return Transfer{}, err
 	}
 	return GetTransfer(ctx, db, userID, groupID)
@@ -210,7 +210,7 @@ func CreateTransferForAccountDelete(ctx context.Context, db *sql.DB, userID stri
 	if err := tx.Commit(); err != nil {
 		return Transfer{}, err
 	}
-	if err := refreshAccountBalances(ctx, db, userID, in.FromAccountID, in.ToAccountID); err != nil {
+	if err := refreshAccountBalances(ctx, db, userID, in.TransactionDate, in.FromAccountID, in.ToAccountID); err != nil {
 		return Transfer{}, err
 	}
 	return Transfer{GroupID: groupID}, nil
@@ -313,7 +313,7 @@ func UpdateTransfer(ctx context.Context, db *sql.DB, userID, groupID string, in 
 	for _, leg := range transferLegs {
 		accountIDs = append(accountIDs, leg.AccountID)
 	}
-	if err := refreshAccountBalances(ctx, db, userID, uniqueAccountIDs(accountIDs...)...); err != nil {
+	if err := refreshAccountBalances(ctx, db, userID, in.TransactionDate, uniqueAccountIDs(accountIDs...)...); err != nil {
 		return Transfer{}, err
 	}
 	return GetTransfer(ctx, db, userID, groupID)
@@ -331,8 +331,12 @@ func DeleteTransfer(ctx context.Context, db *sql.DB, userID, groupID string) err
 		return ErrTransferNotFound
 	}
 	accountIDs := make([]string, 0, len(rows))
-	for _, row := range rows {
+	var asOf time.Time
+	for i, row := range rows {
 		accountIDs = append(accountIDs, row.AccountID)
+		if i == 0 {
+			asOf, _ = timeutil.ParseUTC(row.TransactionDate)
+		}
 	}
 	n, err := queries(db).DeleteTransactionsByGroup(ctx, sqlcdb.DeleteTransactionsByGroupParams{
 		TransferGroupID: &gid, UserID: userID,
@@ -343,7 +347,7 @@ func DeleteTransfer(ctx context.Context, db *sql.DB, userID, groupID string) err
 	if n == 0 {
 		return ErrTransferNotFound
 	}
-	return refreshAccountBalances(ctx, db, userID, uniqueAccountIDs(accountIDs...)...)
+	return refreshAccountBalances(ctx, db, userID, asOf, uniqueAccountIDs(accountIDs...)...)
 }
 
 func GetTransfer(ctx context.Context, db *sql.DB, userID, groupID string) (Transfer, error) {

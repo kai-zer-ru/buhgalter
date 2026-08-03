@@ -614,7 +614,7 @@ func importWithProgress(
 	}
 	if report.ValidRows > 0 {
 		_ = accountbalance.Refresh(ctx, db, userID)
-		balancehooks.NotifyAllRefresh(ctx, db, userID)
+		balancehooks.NotifyAllRefresh(ctx, db, userID, time.Time{})
 	}
 	emitProgress(true)
 	warnNonRUB(mapped)

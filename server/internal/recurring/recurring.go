@@ -256,6 +256,7 @@ func ApplyDue(ctx context.Context, db *sql.DB, userID string, now time.Time, tz 
 	q := queries(db)
 	applied := 0
 	affectedAccounts := make(map[string]struct{}, len(due))
+	var lastAsOf time.Time
 	for _, op := range due {
 		if err := validateDueOperation(ctx, db, userID, op); err != nil {
 			continue
@@ -282,6 +283,9 @@ func ApplyDue(ctx context.Context, db *sql.DB, userID string, now time.Time, tz 
 			continue
 		}
 		affectedAccounts[op.AccountID] = struct{}{}
+		if runAt, err := timeutil.ParseUTC(op.NextRunAt); err == nil {
+			lastAsOf = runAt
+		}
 		nextInput := Input{
 			Type:          op.Type,
 			Amount:        op.Amount,
@@ -317,7 +321,7 @@ func ApplyDue(ctx context.Context, db *sql.DB, userID string, now time.Time, tz 
 		if err := accountbalance.Refresh(ctx, db, userID, accountIDs...); err != nil {
 			return applied, err
 		}
-		balancehooks.NotifyRefresh(ctx, db, userID, accountIDs...)
+		balancehooks.NotifyRefresh(ctx, db, userID, lastAsOf, accountIDs...)
 	}
 	return applied, nil
 }

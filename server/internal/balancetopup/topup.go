@@ -27,27 +27,29 @@ type accountSnap struct {
 }
 
 // CheckAfterRefresh evaluates auto-topup for the given beneficiary account IDs.
-func CheckAfterRefresh(ctx context.Context, db *sql.DB, userID string, accountIDs ...string) {
+// asOf is the trigger operation's transaction_date; zero means "now".
+func CheckAfterRefresh(ctx context.Context, db *sql.DB, userID string, asOf time.Time, accountIDs ...string) {
 	for _, id := range accountIDs {
 		if id == "" {
 			continue
 		}
-		_, _ = ApplyIfNeeded(ctx, db, userID, id)
+		_, _ = ApplyIfNeeded(ctx, db, userID, id, asOf)
 	}
 }
 
 // CheckAllForUser evaluates auto-topup for every enabled bank beneficiary of the user.
-func CheckAllForUser(ctx context.Context, db *sql.DB, userID string) {
+func CheckAllForUser(ctx context.Context, db *sql.DB, userID string, asOf time.Time) {
 	q := sqlcdb.New(db)
 	ids, err := q.ListAutoTopupBeneficiaryAccountIDs(ctx, userID)
 	if err != nil {
 		return
 	}
-	CheckAfterRefresh(ctx, db, userID, ids...)
+	CheckAfterRefresh(ctx, db, userID, asOf, ids...)
 }
 
 // ApplyIfNeeded creates a transfer when the beneficiary balance is below the configured threshold.
-func ApplyIfNeeded(ctx context.Context, db *sql.DB, userID, beneficiaryID string) (bool, error) {
+// asOf stamps the transfer's transaction_date; zero or future falls back to now.
+func ApplyIfNeeded(ctx context.Context, db *sql.DB, userID, beneficiaryID string, asOf time.Time) (bool, error) {
 	beneficiary, err := loadAccount(ctx, db, userID, beneficiaryID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
@@ -81,20 +83,28 @@ func ApplyIfNeeded(ctx context.Context, db *sql.DB, userID, beneficiaryID string
 	}
 
 	desc := Description
-	now := timeutil.NowUTC()
+	txDate := normalizeTopupDate(asOf)
 	_, err = transaction.CreateTransfer(ctx, db, userID, transaction.TransferInput{
 		FromAccountID:   source.id,
 		ToAccountID:     beneficiary.id,
 		Amount:          transferAmount,
 		Commission:      0,
 		Description:     &desc,
-		TransactionDate: now,
+		TransactionDate: txDate,
 	})
 	if err != nil {
 		return false, err
 	}
-	CheckAfterRefresh(ctx, db, userID, source.id)
+	CheckAfterRefresh(ctx, db, userID, asOf, source.id)
 	return true, nil
+}
+
+func normalizeTopupDate(asOf time.Time) time.Time {
+	now := timeutil.NowUTC()
+	if asOf.IsZero() || asOf.After(now) {
+		return now
+	}
+	return asOf
 }
 
 func loadAccount(ctx context.Context, db *sql.DB, userID, accountID string) (accountSnap, error) {

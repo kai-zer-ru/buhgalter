@@ -111,7 +111,7 @@ func main() {
 	balancehooks.AfterRefresh = balancetopup.CheckAfterRefresh
 	balancehooks.NotifyAll = balancetopup.CheckAllForUser
 	account.AfterAutoTopupConfigured = func(ctx context.Context, db *sql.DB, userID, accountID string) {
-		balancetopup.CheckAfterRefresh(ctx, db, userID, accountID)
+		balancetopup.CheckAfterRefresh(ctx, db, userID, time.Time{}, accountID)
 	}
 	notifyWorker.Start()
 	defer notifyWorker.Stop()

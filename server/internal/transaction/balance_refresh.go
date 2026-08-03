@@ -3,6 +3,7 @@ package transaction
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"github.com/kai-zer-ru/buhgalter/internal/accountbalance"
 	"github.com/kai-zer-ru/buhgalter/internal/balancehooks"
@@ -11,11 +12,11 @@ import (
 // AfterBalanceRefresh is deprecated; use balancehooks.AfterRefresh from main.
 var AfterBalanceRefresh = balancehooks.NotifyRefresh
 
-func refreshAccountBalances(ctx context.Context, db *sql.DB, userID string, accountIDs ...string) error {
+func refreshAccountBalances(ctx context.Context, db *sql.DB, userID string, asOf time.Time, accountIDs ...string) error {
 	if err := accountbalance.Refresh(ctx, db, userID, accountIDs...); err != nil {
 		return err
 	}
-	balancehooks.NotifyRefresh(ctx, db, userID, accountIDs...)
+	balancehooks.NotifyRefresh(ctx, db, userID, asOf, accountIDs...)
 	return nil
 }
 
