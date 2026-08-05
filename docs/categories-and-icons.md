@@ -1,6 +1,6 @@
 # Категории, подкатегории и иконки
 
-Справочник доходов и расходов: CRUD в **Настройки → Категории** (`/settings/categories`).  
+Справочник доходов и расходов: CRUD на странице **Категории** (`/categories`, пункт основного меню).  
 Иконки общие для категорий и подкатегорий — один каталог, один picker.
 
 ## Модель данных
@@ -52,7 +52,7 @@ ER-диаграмма: [data-model.md](data-model.md).
 
 **Дефолтные пользовательские категории** (expense, seed при регистрации): Транспорт, Магазины, Связь, Здоровье, Разное, **Переводы** (`default`) — для ручных операций, связанных с переводами третьим лицам; не путать с системной «Перевод».
 
-Seed при создании пользователя + backfill при старте БД (`categoryseed.EnsureSystemCategories`, `EnsureTransferCategory`). При backfill операции в старой пользовательской «Перевод» с `type != transfer` переносятся в «Переводы»; подкатегории «Перевод» переносятся в «Переводы» (при коллизии имён — merge). `PUT` / `DELETE` системной категории → `403 Forbidden`; `POST /categories/{id}/subcategories` → `403 Forbidden`; `POST /categories/{id}/primary` → `403 Forbidden`. В UI настроек — только просмотр, без раскрытия подкатегорий.
+Seed при создании пользователя + backfill при старте БД (`categoryseed.EnsureSystemCategories`, `EnsureTransferCategory`). При backfill операции в старой пользовательской «Перевод» с `type != transfer` переносятся в «Переводы»; подкатегории «Перевод» переносятся в «Переводы» (при коллизии имён — merge). `PUT` / `DELETE` системной категории → `403 Forbidden`; `POST /categories/{id}/subcategories` → `403 Forbidden`; `POST /categories/{id}/primary` → `403 Forbidden`. В UI категорий — только просмотр системных (кроме «Подписки»), без раскрытия чужих системных подкатегорий.
 
 **Порядок:** список в API — пользовательские категории, затем системные (по `sort_order`, `name`). При `PUT /categories/order` системные всегда остаются в конце списка (клиент передаёт только id пользовательских категорий).
 
@@ -147,7 +147,7 @@ URL в UI: `/icons/categories/{id}.svg` (`categoryIconUrl` в `web/src/lib/finan
 
 ## Поведение UI
 
-Страница: `web/src/routes/settings/categories/+page.svelte` (Android: `android/ui` → `/settings/categories`).  
+Страница: `web/src/routes/categories/+page.svelte` (Android: `android/ui` → `/categories`).  
 Компонент списка: `CategoriesTab.svelte`.  
 Picker: `CategoryIconPicker.svelte`. Диалог подкатегории: `SubcategoryFormDialog.svelte`.
 
@@ -186,5 +186,5 @@ Picker: `CategoryIconPicker.svelte`. Диалог подкатегории: `Sub
 | `web/src/lib/components/CategoryIconPicker.svelte` | picker с авто-именем (`quick` / `button`) |
 | `web/src/lib/components/SubcategoryFormDialog.svelte` | попап создания/правки подкатегории |
 | `web/src/lib/settings/CategoriesTab.svelte` | вкладка настроек категорий |
-| `web/src/routes/settings/categories/+page.svelte` | страница настроек |
+| `web/src/routes/categories/+page.svelte` | страница категорий |
 | `server/queries/categories.sql` | sqlc-запросы |

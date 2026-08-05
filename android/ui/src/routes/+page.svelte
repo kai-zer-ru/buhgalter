@@ -240,7 +240,7 @@
 	}
 
 	function openMakeRecurring(tx: Transaction) {
-		void goto(resolve(`/settings/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`));
+		void goto(resolve(`/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`));
 	}
 
 	function openMakeSubscription(tx: Transaction) {

@@ -11,6 +11,8 @@ describe('android nav items', () => {
 			'nav.debts',
 			'nav.credits',
 			'nav.subscriptions',
+			'nav.recurring',
+			'nav.categories',
 			'nav.budget',
 			'nav.stats'
 		]);
@@ -21,7 +23,10 @@ describe('android nav items', () => {
 		expect(paths.some((href) => href.endsWith('/settings/profile'))).toBe(true);
 		expect(paths.some((href) => href.endsWith('/settings/server'))).toBe(true);
 		expect(paths.some((href) => href.endsWith('/settings/import'))).toBe(true);
-		expect(paths.some((href) => href.endsWith('/settings/recurring-operations'))).toBe(true);
+		expect(paths.some((href) => href.endsWith('/settings/categories'))).toBe(false);
+		expect(paths.some((href) => href.endsWith('/settings/recurring-operations'))).toBe(false);
+		expect(paths.some((href) => href.endsWith('/categories'))).toBe(false);
+		expect(paths.some((href) => href.endsWith('/recurring-operations'))).toBe(false);
 	});
 
 	it('includes admin navigation with system route', () => {

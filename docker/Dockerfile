@@ -27,7 +27,7 @@ COPY server/locales ./locales
 COPY --from=web /app/web/build ./internal/static/dist/
 ARG TARGETOS
 ARG TARGETARCH
-ARG VERSION=1.4.1
+ARG VERSION=1.5.0
 ARG INSTALL_METHOD=docker
 ARG BUILD_COMMIT=unknown
 ARG BUILD_TIME
@@ -52,7 +52,7 @@ COPY --from=server /buhgalter /app/buhgalter
 COPY --from=server /app/locales /app/locales
 COPY docker/docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
-ARG VERSION=1.4.1
+ARG VERSION=1.5.0
 ARG BUILD_COMMIT=unknown
 LABEL org.opencontainers.image.source="https://github.com/kai-zer-ru/buhgalter" \
       org.opencontainers.image.version="${VERSION}" \

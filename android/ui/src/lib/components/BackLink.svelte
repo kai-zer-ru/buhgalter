@@ -12,9 +12,7 @@
 		| '/settings/server'
 		| '/settings/tokens'
 		| '/settings/notifications'
-		| '/settings/categories'
 		| '/settings/import'
-		| '/settings/recurring-operations'
 		| '/admin'
 		| '/admin/system'
 		| '/admin/backups'
@@ -23,6 +21,8 @@
 		| '/debtors'
 		| '/credits'
 		| '/subscriptions'
+		| '/categories'
+		| '/recurring-operations'
 		| '/transactions'
 		| '/stats'
 		| '/budget';

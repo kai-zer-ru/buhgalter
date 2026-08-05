@@ -49,7 +49,7 @@
 - `/budget` — нет бюджетов за месяц
 - `/stats` — пустые секции категорий / периодов / поиска (`TransactionList`)
 - `/transactions` — через `TransactionList`
-- `/settings/recurring-operations`, `/settings/categories`, `/settings/tokens`
+- `/recurring-operations`, `/categories`, `/settings/tokens`
 - `/admin/backups` (архив), `/admin/users`
 
 ### PageLoadGate (загрузка / ошибка)

@@ -717,9 +717,7 @@
 						onmakeRecurring={accountTxReadOnly
 							? undefined
 							: (tx) =>
-									void goto(
-										resolve(`/settings/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`)
-									)}
+									void goto(resolve(`/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`))}
 						onmakeSubscription={accountTxReadOnly
 							? undefined
 							: (tx) => void goto(resolve(`/subscriptions?from_tx=${encodeURIComponent(tx.id)}`))}

@@ -9,9 +9,7 @@
 		| '/settings/server'
 		| '/settings/tokens'
 		| '/settings/notifications'
-		| '/settings/categories'
 		| '/settings/import'
-		| '/settings/recurring-operations'
 		| '/admin'
 		| '/admin/users'
 		| '/admin/backups'
@@ -23,7 +21,9 @@
 		| '/debtors'
 		| '/accounts/new'
 		| '/budget'
-		| '/subscriptions';
+		| '/subscriptions'
+		| '/categories'
+		| '/recurring-operations';
 
 	export type BreadcrumbItem = {
 		href: BackLinkHref;

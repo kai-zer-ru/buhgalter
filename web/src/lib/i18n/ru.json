@@ -8,6 +8,8 @@
 	"nav.transactions": "Операции",
 	"nav.stats": "Статистика",
 	"nav.recurring": "Периодические операции",
+	"nav.categories": "Категории",
+	"nav.other": "Прочее",
 	"nav.budget": "Бюджет",
 	"nav.settings": "Настройки",
 	"nav.admin": "Админка",

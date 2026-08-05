@@ -172,7 +172,7 @@ test('stats page shows summary and category sections', async ({ page }) => {
 
 test('add expense category', async ({ page }) => {
 	const name = `E2E Cat ${Date.now()}`;
-	await page.goto('/settings/categories');
+	await page.goto('/categories');
 	await waitAppReady(page);
 	await page.getByPlaceholder('Название категории').fill(name);
 	await page.getByRole('button', { name: 'Создать' }).click();
@@ -228,7 +228,7 @@ test('create debt and settle', async ({ page }) => {
 
 test('create recurring operation', async ({ page }) => {
 	const description = `E2E Recurring ${Date.now()}`;
-	await page.goto('/settings/recurring-operations');
+	await page.goto('/recurring-operations');
 	await waitAppReady(page);
 	await page.getByRole('button', { name: 'Добавить' }).click();
 	await page.locator('#recurring-amount-create').fill('99');

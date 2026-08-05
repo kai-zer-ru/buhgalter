@@ -103,6 +103,8 @@
 | Долги | `/debts`, `/debts/[id]/settle`, `/debtors/[id]` |
 | Кредиты | `/credits`, `/credits/new/*` (мастер), `/credits/[id]` и подмаршруты действий. Деталь кредита в SWR (`GET /credits/{id}`); слушает **path-aware** `refCacheUpdate` (+ `dataRefreshTick`), **не** `refCacheTick` — иначе без `assignIfChanged` залипал «Обновляем данные…». Фоновый soft-refresh через `assignIfChanged` |
 | Подписки | `/subscriptions`, `/subscriptions/new`, `/subscriptions/[id]/edit`, `/subscriptions/[id]/find-transactions` (find/attach — online-only); create/update через offline outbox |
+| Периодические операции | `/recurring-operations` (`?from_tx=` — префилл); крошки `Главная → Периодические операции` |
+| Категории | `/categories` (`?type=income` — фильтр); крошки `Главная → Категории` |
 | Бюджет | `/budget` |
 | Статистика | `/stats` |
 | Настройки | `/settings` — хаб с переходами в разделы |
@@ -111,7 +113,7 @@
 
 Формы операций, переводов, долгов, счетов, подписок, создания кредита и действий по кредиту — полноэкранные маршруты (`FormPageShell`). Нижние кнопки (`footer`) всегда прилипают к низу viewport: скроллится только середина формы (`form-page-scroll`), а `android-shell-main` в режиме формы (`android-shell-main-flush`) не прокручивается.
 
-Остаются попапами: `UpdateAvailableModal`, `ConfirmDialog`, показ созданного API-токена, `CategoryIconPicker`, `SubcategoryFormDialog` (создание/правка подкатегории в настройках категорий).
+Остаются попапами: `UpdateAvailableModal`, `ConfirmDialog`, показ созданного API-токена, `CategoryIconPicker`, `SubcategoryFormDialog` (создание/правка подкатегории на `/categories`).
 
 Скроллбары в UI скрыты (контент прокручивается, полоса не занимает ширину).
 
@@ -127,9 +129,7 @@
 | Сервер | `/settings/server` |
 | API-токены | `/settings/tokens` |
 | Уведомления | `/settings/notifications` |
-| Категории | `/settings/categories` |
 | Импорт / экспорт | `/settings/import` |
-| Периодические операции | `/settings/recurring-operations` |
 
 ### Админка (`/admin`)
 
@@ -189,7 +189,7 @@
 
 - Сводка по счетам (включая кредитные карты), карточка долгов, виджет бюджета месяца — как в веб-дашборде
 - Последние операции (ручные и плановые)
-- Создание дохода / расхода / перевода; из меню операции — повтор, «сделать периодической» (`/settings/recurring-operations?from_tx=`), «сделать подпиской» / «прикрепить к подписке» (`/subscriptions/new?from_tx=` / `/subscriptions?attach_tx=`)
+- Создание дохода / расхода / перевода; из меню операции — повтор, «сделать периодической» (`/recurring-operations?from_tx=`), «сделать подпиской» / «прикрепить к подписке» (`/subscriptions/new?from_tx=` / `/subscriptions?attach_tx=`)
 
 ## Ошибка загрузки страницы
 

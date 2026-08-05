@@ -61,7 +61,7 @@ test('tokens: perpetual token shows risk warning', async ({ page }) => {
 test('categories: delete expense category', async ({ page }) => {
 	const name = `E2E Cat Del ${Date.now()}`;
 
-	await page.goto('/settings/categories');
+	await page.goto('/categories');
 	await waitAppReady(page);
 	await page.getByPlaceholder('Название категории').fill(name);
 	await page.getByRole('button', { name: 'Создать' }).click();
@@ -76,7 +76,7 @@ test('categories: delete expense category', async ({ page }) => {
 test('categories: create income category on Доходы tab', async ({ page }) => {
 	const name = `E2E Income ${Date.now()}`;
 
-	await page.goto('/settings/categories');
+	await page.goto('/categories');
 	await waitAppReady(page);
 	await page.getByRole('button', { name: 'Доходы', exact: true }).click();
 	await page.getByPlaceholder('Название категории').fill(name);
@@ -87,7 +87,7 @@ test('categories: create income category on Доходы tab', async ({ page }) 
 test('categories: make primary shows badge', async ({ page }) => {
 	const name = `E2E Primary Cat ${Date.now()}`;
 
-	await page.goto('/settings/categories');
+	await page.goto('/categories');
 	await waitAppReady(page);
 	await page.getByPlaceholder('Название категории').fill(name);
 	await page.getByRole('button', { name: 'Создать' }).click();
@@ -104,7 +104,7 @@ test('categories: create and edit subcategory via dialog', async ({ page }) => {
 	const subName = `E2E Sub ${Date.now()}`;
 	const subRenamed = `${subName} Renamed`;
 
-	await page.goto('/settings/categories');
+	await page.goto('/categories');
 	await waitAppReady(page);
 	await page.getByPlaceholder('Название категории').fill(catName);
 	await page.getByRole('button', { name: 'Создать' }).click();

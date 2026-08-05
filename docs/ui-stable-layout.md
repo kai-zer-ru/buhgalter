@@ -25,12 +25,12 @@
 | `/accounts` | «Новый счёт» | да |
 | `/debts` | «Дать в долг» / «Взять в долг» | да |
 | `/debtors/[id]` | «Дать…» / «Взять…» (над табами) | нет (клиентский фильтр) |
-| `/settings/categories` | форма создания под табами | нет (мгновенная смена вкладки) |
+| `/categories` | форма создания под табами | нет (мгновенная смена вкладки) |
 | `/transactions` | «+ Операция» | да (перезагрузка по фильтрам/пагинации) |
 | `/accounts/[id]` | «+ Операция», «Перевод» | да (фильтр операций) |
 | `/credits` | «+ Новый кредит» | да; вкладки и badge — [ui-credits.md](ui-credits.md) |
 | `/budget` | «Добавить» | нет |
-| `/settings/recurring-operations` | «Добавить» (`SectionHeader`, `ownsHeader`) | нет |
+| `/recurring-operations` | «Добавить» (`SectionHeader`) | нет |
 
 ## Фильтры (`FilterPanel`)
 

@@ -29,7 +29,7 @@
 	let ready = $state(false);
 	let bootError = $state<string | null>(null);
 	let navOpen = $state(false);
-	let mobileNavView = $state<'root' | 'settings' | 'admin'>('root');
+	let mobileNavView = $state<'root' | 'other' | 'settings' | 'admin'>('root');
 	let pendingUpdate = $state<PendingVersionUpdate | null>(null);
 	let headerEl = $state<HTMLElement | undefined>();
 
@@ -94,29 +94,9 @@
 			isActive: (p) => p === '/'
 		},
 		{
-			href: resolve('/accounts'),
-			labelKey: 'nav.accounts',
-			isActive: (p) => p.startsWith('/accounts')
-		},
-		{
 			href: resolve('/transactions'),
 			labelKey: 'nav.transactions',
 			isActive: (p) => p.startsWith('/transactions')
-		},
-		{
-			href: resolve('/debts'),
-			labelKey: 'nav.debts',
-			isActive: (p) => p.startsWith('/debts') || p.startsWith('/debtors')
-		},
-		{
-			href: resolve('/credits'),
-			labelKey: 'nav.credits',
-			isActive: (p) => p.startsWith('/credits')
-		},
-		{
-			href: resolve('/subscriptions'),
-			labelKey: 'nav.subscriptions',
-			isActive: (p) => p.startsWith('/subscriptions')
 		},
 		{
 			href: resolve('/budget'),
@@ -127,6 +107,39 @@
 			href: resolve('/stats'),
 			labelKey: 'nav.stats',
 			isActive: (p) => p.startsWith('/stats')
+		}
+	];
+
+	const otherNavItems: NavDropdownItem[] = [
+		{
+			path: '/accounts',
+			labelKey: 'nav.accounts',
+			isActive: (p) => p.startsWith('/accounts')
+		},
+		{
+			path: '/debts',
+			labelKey: 'nav.debts',
+			isActive: (p) => p.startsWith('/debts') || p.startsWith('/debtors')
+		},
+		{
+			path: '/credits',
+			labelKey: 'nav.credits',
+			isActive: (p) => p.startsWith('/credits')
+		},
+		{
+			path: '/categories',
+			labelKey: 'nav.categories',
+			isActive: (p) => p.startsWith('/categories')
+		},
+		{
+			path: '/recurring-operations',
+			labelKey: 'nav.recurring',
+			isActive: (p) => p.startsWith('/recurring-operations')
+		},
+		{
+			path: '/subscriptions',
+			labelKey: 'nav.subscriptions',
+			isActive: (p) => p.startsWith('/subscriptions')
 		}
 	];
 
@@ -152,19 +165,9 @@
 			isActive: (p) => p === '/settings/notifications'
 		},
 		{
-			path: '/settings/categories',
-			labelKey: 'settings.tab.categories',
-			isActive: (p) => p === '/settings/categories'
-		},
-		{
 			path: '/settings/import',
 			labelKey: 'settings.tab.import',
 			isActive: (p) => p === '/settings/import'
-		},
-		{
-			path: '/settings/recurring-operations',
-			labelKey: 'nav.recurring',
-			isActive: (p) => p.startsWith('/settings/recurring-operations')
 		}
 	];
 
@@ -191,12 +194,36 @@
 		}
 	];
 
+	function isOtherGroupActive(p: string) {
+		return (
+			p.startsWith('/accounts') ||
+			p.startsWith('/debts') ||
+			p.startsWith('/debtors') ||
+			p.startsWith('/credits') ||
+			p.startsWith('/categories') ||
+			p.startsWith('/recurring-operations') ||
+			p.startsWith('/subscriptions')
+		);
+	}
+
 	function isSettingsGroupActive(p: string) {
 		return p === '/settings' || p.startsWith('/settings/');
 	}
 
 	function isAdminGroupActive(p: string) {
 		return p === '/admin' || p.startsWith('/admin/');
+	}
+
+	function mobileSubmenuTitle() {
+		if (mobileNavView === 'other') return $_('nav.other');
+		if (mobileNavView === 'settings') return $_('nav.settings');
+		return $_('nav.admin');
+	}
+
+	function mobileSubmenuItems(): NavDropdownItem[] {
+		if (mobileNavView === 'other') return otherNavItems;
+		if (mobileNavView === 'settings') return settingsNavItems;
+		return adminNavItems;
 	}
 
 	function navLinkClass(active: boolean, base: string) {
@@ -369,6 +396,11 @@
 								{/if}
 							{/each}
 							<NavDropdown
+								labelKey="nav.other"
+								items={otherNavItems}
+								isGroupActive={isOtherGroupActive}
+							/>
+							<NavDropdown
 								labelKey="nav.settings"
 								items={settingsNavItems}
 								isGroupActive={isSettingsGroupActive}
@@ -402,6 +434,24 @@
 								onclick={closeNav}>{$_(item.labelKey)}</a
 							>
 						{/each}
+						<button
+							type="button"
+							class={navLinkClass(isOtherGroupActive(path), 'nav-mobile-link nav-mobile-drill')}
+							role="menuitem"
+							onclick={() => (mobileNavView = 'other')}
+						>
+							<span>{$_('nav.other')}</span>
+							<svg
+								aria-hidden="true"
+								class="nav-mobile-chevron"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+							>
+								<path d="m9 6 6 6-6 6" />
+							</svg>
+						</button>
 						<button
 							type="button"
 							class={navLinkClass(isSettingsGroupActive(path), 'nav-mobile-link nav-mobile-drill')}
@@ -459,9 +509,9 @@
 							<span>{$_('nav.back')}</span>
 						</button>
 						<p class="nav-mobile-submenu-title">
-							{mobileNavView === 'settings' ? $_('nav.settings') : $_('nav.admin')}
+							{mobileSubmenuTitle()}
 						</p>
-						{#each mobileNavView === 'settings' ? settingsNavItems : adminNavItems as item (item.path)}
+						{#each mobileSubmenuItems() as item (item.path)}
 							<a
 								href={resolve(item.path as '/')}
 								class={navLinkClass(isDropdownItemActive(item), 'nav-mobile-link')}

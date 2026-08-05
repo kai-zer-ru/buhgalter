@@ -149,16 +149,14 @@
 		newIcon = defaultIconForKind(next);
 		expanded = {};
 		const url = new URL(get(page).url);
-		url.searchParams.set('tab', 'categories');
+		url.searchParams.delete('tab');
 		if (next === 'expense') {
 			url.searchParams.delete('type');
 		} else {
 			url.searchParams.set('type', next);
 		}
 		const search = url.searchParams.toString();
-		const categoriesUrl = search
-			? `${resolve('/settings/categories')}?${search}`
-			: resolve('/settings/categories');
+		const categoriesUrl = search ? `${resolve('/categories')}?${search}` : resolve('/categories');
 		// eslint-disable-next-line svelte/no-navigation-without-resolve -- query params after resolved base path
 		replaceState(categoriesUrl, {});
 		void load();

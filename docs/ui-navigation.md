@@ -55,7 +55,7 @@
 | `/accounts` | Главная → Счета |
 | `/accounts/new`, `/accounts/[id]` | Главная → Счета → … |
 | `/transactions` | Главная → Все операции |
-| `/debts`, `/credits`, `/stats`, `/budget`, `/subscriptions` | Главная → раздел |
+| `/debts`, `/credits`, `/stats`, `/budget`, `/subscriptions`, `/categories`, `/recurring-operations` | Главная → раздел |
 | `/debtors/[id]` | Главная → Долги → должник |
 | `/credits/[id]` | Главная → Кредиты → кредит |
 | `/settings` | Главная → Настройки |
@@ -70,13 +70,24 @@ Badge-метки и спойлеры графика на `/credits` — [ui-cred
 
 | Элемент | Поведение |
 |---------|-----------|
-| Плоские пункты | **Главная** (первым), Счета, **Операции**, Долги, Кредиты, **Подписки**, **Бюджет**, Статистика (логотип/название в шапке тоже ведут на `/`) |
-| «Настройки ▼» | Профиль, Пароль, API-токены, Уведомления, Категории, Импорт/экспорт, Периодические операции |
+| Плоские пункты | **Главная** (первым), **Операции**, **Бюджет**, Статистика (логотип/название в шапке тоже ведут на `/`) |
+| «Прочее ▼» | Счета, Долги, Кредиты, Категории, Периодические операции, Подписки — сразу перед «Настройки» |
+| «Настройки ▼» | Профиль, Пароль, API-токены, Уведомления, Импорт/экспорт |
 | «Админка ▼» | Только для `is_admin`: Система, Пользователи, Бэкапы, Диагностика |
 | Десктоп | `NavDropdown` + `.popover-panel` |
-| Мобилка | Гамбургер; панель `.nav-mobile-panel` под шапкой (не на всю высоту экрана); **drill-down** для «Настройки» и «Админка» — отдельный экран подменю с кнопкой «Назад», без длинного accordion |
-| Активный пункт | `.nav-link-active` по pathname; для групп — любой путь внутри `/settings/*` или `/admin/*` |
+| Мобилка | Гамбургер; панель `.nav-mobile-panel` под шапкой (не на всю высоту экрана); **drill-down** для «Прочее», «Настройки» и «Админка» — отдельный экран подменю с кнопкой «Назад», без длинного accordion |
+| Активный пункт | `.nav-link-active` по pathname; для групп — любой путь внутри группы («Прочее»: `/accounts`, `/debts`, `/debtors`, `/credits`, `/categories`, `/recurring-operations`, `/subscriptions`; `/settings/*`; `/admin/*`) |
 | Закрытие | `afterNavigate` сбрасывает меню; backdrop по тапу вне меню |
+
+Канонические URL основных разделов (вне настроек):
+
+| URL | Раздел |
+|-----|--------|
+| `/categories` | Категории (`?type=income` — фильтр доход/расход) |
+| `/recurring-operations` | Периодические операции (`?from_tx=` — префилл из операции) |
+| `/subscriptions` | Подписки |
+
+Старые `/settings/categories` и `/settings/recurring-operations` — редирект `308` на новые пути (с сохранением query).
 
 Канонические URL настроек:
 
@@ -86,11 +97,11 @@ Badge-метки и спойлеры графика на `/credits` — [ui-cred
 | `/settings/password` | Пароль |
 | `/settings/tokens` | API-токены |
 | `/settings/notifications` | Уведомления |
-| `/settings/categories` | Категории (`?type=income` — фильтр доход/расход) |
 | `/settings/import` | Импорт / экспорт |
-| `/settings/recurring-operations` | Периодические операции (`?from_tx=` — префилл из операции) |
 
-Layout настроек: `web/src/routes/settings/+layout.svelte` — крошки и `h1` для подстраниц; `/settings/recurring-operations` рендерит свой `SectionHeader` с CTA (`ownsHeader`).
+Layout настроек: `web/src/routes/settings/+layout.svelte` — крошки и `h1` для подстраниц.
+
+`/recurring-operations` — свой `BackLink` + `SectionHeader` с CTA (как `/subscriptions`).
 
 Layout админки: `web/src/routes/admin/+layout.svelte` — крошки, `h1`, `AdminSupportLinks` внизу на всех `/admin/*`.
 
@@ -122,7 +133,7 @@ Touch-targets и карточки таблиц — [ui-stable-layout.md](ui-stab
 
 | Маршрут | Подвкладки |
 |---------|------------|
-| `/settings/categories` | Расходы / Доходы |
+| `/categories` | Расходы / Доходы |
 | `/settings/import` | Импорт / Экспорт |
 | `/accounts` | Активные / Архивные / Удалённые |
 | `/debts` | Активные / Закрытые |
@@ -131,9 +142,9 @@ Touch-targets и карточки таблиц — [ui-stable-layout.md](ui-stab
 
 `PageTabs` — `$lib/components/PageTabs.svelte`.
 
-### `/settings/recurring-operations` (v1.2)
+### `/recurring-operations` (v1.2)
 
-- Шапка: `SectionHeader` с кнопкой **«Добавить»** (повторное нажатие — **«Отмена»**); layout настроек не дублирует `h1` (`ownsHeader`).
+- Крошки: Главная → Периодические операции; шапка: `SectionHeader` с кнопкой **«Добавить»** (повторное нажатие — **«Отмена»**).
 - Форма создания — карточка под шапкой (как на `/budget`); список ниже.
 - Нажатие «Изменить» открывает inline-форму редактирования внутри блока списка.
 - Одновременно открыта только одна форма редактирования; при открытии другой предыдущая закрывается.

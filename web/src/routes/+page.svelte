@@ -545,9 +545,7 @@
 												showDelete
 												onmakeRecurring={(tx) =>
 													void goto(
-														resolve(
-															`/settings/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`
-														)
+														resolve(`/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`)
 													)}
 												onmakeSubscription={(tx) =>
 													void goto(resolve(`/subscriptions?from_tx=${encodeURIComponent(tx.id)}`))}
@@ -591,9 +589,7 @@
 												showDelete
 												onmakeRecurring={(tx) =>
 													void goto(
-														resolve(
-															`/settings/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`
-														)
+														resolve(`/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`)
 													)}
 												onmakeSubscription={(tx) =>
 													void goto(resolve(`/subscriptions?from_tx=${encodeURIComponent(tx.id)}`))}

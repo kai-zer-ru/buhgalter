@@ -8,6 +8,8 @@
 	"nav.transactions": "Transactions",
 	"nav.stats": "Stats",
 	"nav.recurring": "Recurring operations",
+	"nav.categories": "Categories",
+	"nav.other": "Other",
 	"nav.budget": "Budget",
 	"nav.settings": "Settings",
 	"nav.admin": "Admin",

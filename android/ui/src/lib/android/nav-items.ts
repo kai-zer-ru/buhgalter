@@ -43,6 +43,16 @@ export function androidMainNavItems(): AndroidNavItem[] {
 			isActive: (p) => p.startsWith('/subscriptions')
 		},
 		{
+			href: resolve('/recurring-operations'),
+			labelKey: 'nav.recurring',
+			isActive: (p) => p.startsWith('/recurring-operations')
+		},
+		{
+			href: resolve('/categories'),
+			labelKey: 'nav.categories',
+			isActive: (p) => p.startsWith('/categories')
+		},
+		{
 			href: resolve('/budget'),
 			labelKey: 'nav.budget',
 			isActive: (p) => p.startsWith('/budget')
@@ -88,19 +98,9 @@ export function androidSettingsNavItems(): AndroidNavItem[] {
 			isActive: (p) => p === '/settings/notifications'
 		},
 		{
-			href: resolve('/settings/categories'),
-			labelKey: 'settings.tab.categories',
-			isActive: (p) => p === '/settings/categories'
-		},
-		{
 			href: resolve('/settings/import'),
 			labelKey: 'settings.tab.import',
 			isActive: (p) => p === '/settings/import'
-		},
-		{
-			href: resolve('/settings/recurring-operations'),
-			labelKey: 'nav.recurring',
-			isActive: (p) => p.startsWith('/settings/recurring-operations')
 		}
 	];
 }
