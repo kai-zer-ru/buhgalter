@@ -2,7 +2,6 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import type { Pathname } from '$app/types';
 	import { page } from '$app/stores';
 	import { _ } from 'svelte-i18n';
 	import {
@@ -86,7 +85,7 @@
 				payment_account_id:
 					type === 'credit_card' && paymentAccountId ? paymentAccountId : undefined
 			});
-			await goto(resolve(returnTo as Pathname));
+			await goto(resolve(returnTo as '/'));
 			toast($_('common.saved'));
 		} catch (err) {
 			toast.fromError(err);

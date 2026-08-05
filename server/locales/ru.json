@@ -96,8 +96,8 @@
   "ERR_CREDIT_CLOSED": "Кредит уже закрыт",
   "ERR_CREDIT_INVALID_INTERVAL": "Некорректная периодичность",
   "ERR_CREDIT_NO_PENDING_PAYMENT": "Нет неоплаченных платежей по графику",
-	"ERR_CREDIT_CANNOT_REMOVE_RETRO": "Нельзя удалить платёж, учтённый при добавлении",
-	"ERR_CREDIT_INVALID_RETRO_DEBIT": "Некорректное число ретро-платежей для списания со счёта",
+  "ERR_CREDIT_CANNOT_REMOVE_RETRO": "Нельзя удалить платёж, учтённый при добавлении",
+  "ERR_CREDIT_INVALID_RETRO_DEBIT": "Некорректное число ретро-платежей для списания со счёта",
   "ERR_CREDIT_CANNOT_EDIT_PAYMENT": "Нельзя изменить этот платёж",
   "ERR_CREDIT_COMPLETE_DATE": "Укажите дату завершения",
   "ERR_CREDIT_INVALID_STATUS": "Некорректный status",
@@ -127,5 +127,6 @@
   "notifications.templates.auto_topup_disabled": "Автопополнение счёта «{account}» отключено: на «{source_account}» не хватает {amount} (остаток {source_balance}).\n{account_url}",
   "notifications.templates.password_reset": "Запрос на восстановление пароля: {display_name} (@{login}), время: {requested_at}.\n{reset_url}",
   "notifications.templates.user_registration": "Новая регистрация: {display_name} (@{login}), {registered_at}. Модерация: {moderation_url}",
-  "notifications.templates.test": "Тестовое уведомление «Бухгалтер». Канал: {channel}.\n{settings_url}"
+  "notifications.templates.test": "Тестовое уведомление «Бухгалтер». Канал: {channel}.\n{settings_url}",
+  "notifications.templates.subscription_charge": "Подписка «{name}»: {amount}. Списание {when} со счёта «{account}»\n{subscription_url}"
 }

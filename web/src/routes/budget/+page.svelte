@@ -93,7 +93,7 @@
 	});
 
 	const expenseCategories = $derived(
-		categories.filter((c) => c.type === 'expense' && !c.is_system)
+		categories.filter((c) => c.type === 'expense' && (!c.is_system || c.name === 'Подписки'))
 	);
 	const hasAllExpenseBudget = $derived(
 		items.some((i) => i.scope === 'all_expense' && i.id !== editId)

@@ -11,6 +11,8 @@ import {
 	listCredits,
 	listDebts,
 	listRecurringOperations,
+	listSubscriptions,
+	getSubscriptionsSummary,
 	listTransactions,
 	type Credit,
 	createTransaction as apiCreateTransaction,
@@ -20,12 +22,14 @@ import {
 	createAccount as apiCreateAccount,
 	createBudget as apiCreateBudget,
 	createRecurringOperation as apiCreateRecurring,
+	createSubscription as apiCreateSubscription,
 	deleteTransaction as apiDeleteTransaction,
 	deleteTransfer as apiDeleteTransfer,
 	deleteCategory as apiDeleteCategory,
 	deleteDebt as apiDeleteDebt,
 	deleteBudget as apiDeleteBudget,
 	deleteRecurringOperation as apiDeleteRecurring,
+	deleteSubscription as apiDeleteSubscription,
 	deleteCredit as apiDeleteCredit,
 	deleteCreditPayment as apiDeleteCreditPayment,
 	updateTransaction as apiUpdateTransaction,
@@ -34,6 +38,7 @@ import {
 	updateAccount as apiUpdateAccount,
 	updateBudget as apiUpdateBudget,
 	updateRecurringOperation as apiUpdateRecurring,
+	updateSubscription as apiUpdateSubscription,
 	updateCredit as apiUpdateCredit,
 	updateCreditSchedule as apiUpdateCreditSchedule,
 	addCreditPayment as apiAddCreditPayment,
@@ -61,7 +66,8 @@ import type {
 	AccountUpdatePayload,
 	BudgetPayload,
 	CreditActionPayload,
-	RecurringPayload
+	RecurringPayload,
+	SubscriptionPayload
 } from '$lib/offline/types';
 import {
 	isAccountStatusPayload,
@@ -181,6 +187,8 @@ async function replayEntry(entry: OutboxEntry) {
 				await apiDeleteBudget(entityKey);
 			} else if (kind === 'recurring') {
 				await apiDeleteRecurring(entityKey);
+			} else if (kind === 'subscription') {
+				await apiDeleteSubscription(entityKey);
 			}
 			removeOutboxEntry(entityKey);
 			return;
@@ -202,6 +210,8 @@ async function replayEntry(entry: OutboxEntry) {
 				await apiCreateBudget(body, month);
 			} else if (kind === 'recurring') {
 				await apiCreateRecurring(payload as RecurringPayload);
+			} else if (kind === 'subscription') {
+				await apiCreateSubscription(payload as SubscriptionPayload);
 			}
 			removeOutboxEntry(entityKey);
 			return;
@@ -238,6 +248,8 @@ async function replayEntry(entry: OutboxEntry) {
 				await replayCreditAction(payload);
 			} else if (kind === 'recurring') {
 				await apiUpdateRecurring(entityKey, payload as RecurringPayload);
+			} else if (kind === 'subscription') {
+				await apiUpdateSubscription(entityKey, payload as SubscriptionPayload);
 			}
 			removeOutboxEntry(entityKey);
 		}
@@ -412,6 +424,8 @@ export async function warmRefCache(): Promise<void> {
 		listAccounts('archived'),
 		warmupCreditDetails(),
 		listRecurringOperations(),
+		listSubscriptions(),
+		getSubscriptionsSummary({ upcoming_days: 14 }),
 		getDebtsSummary(),
 		listDebts({ settled: 'false' }),
 		listDebts({ settled: 'true' }),

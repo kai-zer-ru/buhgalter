@@ -37,6 +37,37 @@ const NEW_ICONS = [
 	{ id: 'benefit', kind: 'income' as const, name: 'Пособие', tag: 'пособие' }
 ];
 
+/** Brand icons for subscriptions (official logos). */
+const SUBSCRIPTION_ICONS = [
+	{ id: 'yandex-plus', name: 'Яндекс Плюс', tag: 'яндекс плюс' },
+	{ id: 'yandex-music', name: 'Яндекс Музыка', tag: 'яндекс музыка' },
+	{ id: 'kinopoisk', name: 'Кинопоиск', tag: 'кинопоиск' },
+	{ id: 'spotify', name: 'Spotify', tag: 'spotify' },
+	{ id: 'netflix', name: 'Netflix', tag: 'netflix' },
+	{ id: 'youtube', name: 'YouTube', tag: 'youtube' },
+	{ id: 'telegram', name: 'Telegram', tag: 'телеграм' },
+	{ id: 'chatgpt', name: 'ChatGPT', tag: 'chatgpt' }
+];
+
+/** Brand icons for retail / loyalty. */
+const STORE_ICONS = [
+	{ id: 'gazprom-bonus', name: 'Газпром Бонус', tag: 'газпром бонус' },
+	{ id: 'pyaterochka', name: 'Пятёрочка', tag: 'пятёрочка' },
+	{ id: 'magnit', name: 'Магнит', tag: 'магнит' },
+	{ id: 'perekrestok', name: 'Перекрёсток', tag: 'перекрёсток' },
+	{ id: 'samokat', name: 'Самокат', tag: 'самокат' },
+	{ id: 'mvideo', name: 'М.Видео', tag: 'мвидео' }
+];
+
+/** Bank brand icons (from data/banks/). */
+const BANK_ICONS = [
+	{ id: 'tinkoff', name: 'Т-Банк', tag: 'т-банк' },
+	{ id: 'sberbank', name: 'Сбер', tag: 'сбербанк' },
+	{ id: 'vtb', name: 'ВТБ', tag: 'втб' },
+	{ id: 'alfabank', name: 'Альфа-Банк', tag: 'альфа' },
+	{ id: 'yandex-bank', name: 'Яндекс Банк', tag: 'яндекс банк' }
+];
+
 describe('category icons catalog', () => {
 	it.each(NEW_ICONS)('$id is in catalog with name and kind', ({ id, kind, name }) => {
 		const def = getCategoryIconDef(id);
@@ -48,6 +79,50 @@ describe('category icons catalog', () => {
 
 	it.each(NEW_ICONS)('$id is findable by tag "$tag"', ({ id, kind, tag }) => {
 		const found = searchCategoryIcons(tag, kind);
+		expect(found.some((icon) => icon.id === id)).toBe(true);
+	});
+
+	it.each(SUBSCRIPTION_ICONS)('$id subscription brand is in catalog', ({ id, name }) => {
+		const def = getCategoryIconDef(id);
+		expect(def).toBeDefined();
+		expect(def?.name).toBe(name);
+		expect(iconMatchesKind(id, 'expense')).toBe(true);
+		expect(def?.official_logo).toBe(true);
+	});
+
+	it.each(SUBSCRIPTION_ICONS)('$id is findable by tag "$tag"', ({ id, tag }) => {
+		const found = searchCategoryIcons(tag, 'expense');
+		expect(found.some((icon) => icon.id === id)).toBe(true);
+	});
+
+	it('search matches icon name', () => {
+		const found = searchCategoryIcons('яндекс плюс', 'expense');
+		expect(found.some((icon) => icon.id === 'yandex-plus')).toBe(true);
+	});
+
+	it.each(STORE_ICONS)('$id store brand is in catalog', ({ id, name }) => {
+		const def = getCategoryIconDef(id);
+		expect(def).toBeDefined();
+		expect(def?.name).toBe(name);
+		expect(iconMatchesKind(id, 'expense')).toBe(true);
+		expect(def?.official_logo).toBe(true);
+	});
+
+	it.each(STORE_ICONS)('$id is findable by tag "$tag"', ({ id, tag }) => {
+		const found = searchCategoryIcons(tag, 'expense');
+		expect(found.some((icon) => icon.id === id)).toBe(true);
+	});
+
+	it.each(BANK_ICONS)('$id bank brand is in catalog', ({ id, name }) => {
+		const def = getCategoryIconDef(id);
+		expect(def).toBeDefined();
+		expect(def?.name).toBe(name);
+		expect(iconMatchesKind(id, 'expense')).toBe(true);
+		expect(def?.official_logo).toBe(true);
+	});
+
+	it.each(BANK_ICONS)('$id is findable by tag "$tag"', ({ id, tag }) => {
+		const found = searchCategoryIcons(tag, 'expense');
 		expect(found.some((icon) => icon.id === id)).toBe(true);
 	});
 });

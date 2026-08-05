@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { afterNavigate } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import type { Pathname } from '$app/types';
 	import { page } from '$app/stores';
 	import { _ } from 'svelte-i18n';
 	import { portal } from '$lib/actions/portal';
@@ -138,7 +137,7 @@
 		>
 			{#each items as item (item.path)}
 				<a
-					href={resolve(item.path as Pathname)}
+					href={resolve(item.path as '/')}
 					class="block rounded-lg px-3 py-2 text-sm hover:opacity-90 {itemActive(item)
 						? 'nav-link-active'
 						: ''}"

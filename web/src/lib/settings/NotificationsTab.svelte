@@ -37,6 +37,7 @@
 	let maxRecipientId = $state('');
 	let triggerDebt = $state(true);
 	let triggerCredit = $state(true);
+	let triggerSubscription = $state(true);
 	let triggerPlanned = $state(true);
 	let triggerNegativeBalance = $state(true);
 	let triggerBudget = $state(true);
@@ -47,6 +48,7 @@
 	let owedDebtOverdueStartAfterDays = $state(0);
 	let owedDebtOverdueDaysLimit = $state(7);
 	let creditDaysBefore = $state(1);
+	let subscriptionDaysBefore = $state(1);
 	let notificationTimeLocal = $state('00:00');
 	let templates = $state<NotificationTemplate[]>([]);
 	let templatesDirty = $state<Record<string, string>>({});
@@ -64,6 +66,7 @@
 		'debt_overdue',
 		'debt_due_soon',
 		'credit_payment',
+		'subscription_charge',
 		'planned_operation',
 		'balance_shortfall',
 		'budget_threshold',
@@ -75,6 +78,7 @@
 	type NotificationTriggerKey =
 		| 'debt'
 		| 'credit'
+		| 'subscription'
 		| 'planned'
 		| 'negativeBalance'
 		| 'budget'
@@ -85,6 +89,7 @@
 		debt_overdue: 'debt',
 		debt_due_soon: 'debt',
 		credit_payment: 'credit',
+		subscription_charge: 'subscription',
 		planned_operation: 'planned',
 		balance_shortfall: 'negativeBalance',
 		budget_threshold: 'budget',
@@ -98,6 +103,8 @@
 				return triggerDebt;
 			case 'credit':
 				return triggerCredit;
+			case 'subscription':
+				return triggerSubscription;
 			case 'planned':
 				return triggerPlanned;
 			case 'negativeBalance':
@@ -118,6 +125,9 @@
 				break;
 			case 'credit':
 				triggerCredit = !triggerCredit;
+				break;
+			case 'subscription':
+				triggerSubscription = !triggerSubscription;
 				break;
 			case 'planned':
 				triggerPlanned = !triggerPlanned;
@@ -141,6 +151,7 @@
 		const rows: Array<{ key: NotificationTriggerKey; hintKey: string }> = [
 			{ key: 'debt', hintKey: 'debt_hint' },
 			{ key: 'credit', hintKey: 'credit_hint' },
+			{ key: 'subscription', hintKey: 'subscription_hint' },
 			{ key: 'planned', hintKey: 'planned_hint' },
 			{ key: 'negativeBalance', hintKey: 'negativeBalance_hint' },
 			{ key: 'budget', hintKey: 'budget_hint' },
@@ -184,6 +195,8 @@
 		maxRecipientId = data.max_recipient_id ? String(data.max_recipient_id) : '';
 		triggerDebt = data.trigger_debt;
 		triggerCredit = data.trigger_credit;
+		triggerSubscription =
+			'trigger_subscription' in data ? (data.trigger_subscription ?? true) : true;
 		triggerPlanned = data.trigger_planned;
 		triggerNegativeBalance =
 			'trigger_negative_balance' in data ? data.trigger_negative_balance : true;
@@ -196,6 +209,7 @@
 		owedDebtOverdueStartAfterDays = data.owed_debt_overdue_start_after_days ?? 0;
 		owedDebtOverdueDaysLimit = data.owed_debt_overdue_days_limit ?? 7;
 		creditDaysBefore = data.credit_days_before;
+		subscriptionDaysBefore = data.subscription_days_before ?? 1;
 		notificationTimeLocal = data.notification_time_local ?? '00:00';
 		templates = data.templates;
 		templatesDirty = {};
@@ -313,6 +327,7 @@
 		if (
 			!validateDaysRange(debtDaysBefore) ||
 			!validateDaysRange(creditDaysBefore) ||
+			!validateDaysRange(subscriptionDaysBefore) ||
 			!validateOverdueDaysLimit(myDebtOverdueDaysLimit) ||
 			!validateOverdueDaysLimit(owedDebtOverdueStartAfterDays) ||
 			!validateOverdueDaysLimit(owedDebtOverdueDaysLimit)
@@ -337,6 +352,7 @@
 				max_recipient_id: maxRecipientId.trim() ? Number(maxRecipientId) : null,
 				trigger_debt: triggerDebt,
 				trigger_credit: triggerCredit,
+				trigger_subscription: triggerSubscription,
 				trigger_planned: triggerPlanned,
 				trigger_negative_balance: triggerNegativeBalance,
 				trigger_budget: triggerBudget,
@@ -347,6 +363,7 @@
 				owed_debt_overdue_start_after_days: owedDebtOverdueStartAfterDays,
 				owed_debt_overdue_days_limit: owedDebtOverdueDaysLimit,
 				credit_days_before: creditDaysBefore,
+				subscription_days_before: subscriptionDaysBefore,
 				notification_time_local: notificationTimeLocal.trim()
 			});
 			telegramBotToken = '';
@@ -424,6 +441,7 @@
 			await putNotificationSettings({
 				trigger_debt: triggerDebt,
 				trigger_credit: triggerCredit,
+				trigger_subscription: triggerSubscription,
 				trigger_planned: triggerPlanned,
 				trigger_negative_balance: triggerNegativeBalance,
 				trigger_budget: triggerBudget,
@@ -443,6 +461,7 @@
 		if (
 			!validateDaysRange(debtDaysBefore) ||
 			!validateDaysRange(creditDaysBefore) ||
+			!validateDaysRange(subscriptionDaysBefore) ||
 			!validateOverdueDaysLimit(myDebtOverdueDaysLimit) ||
 			!validateOverdueDaysLimit(owedDebtOverdueStartAfterDays) ||
 			!validateOverdueDaysLimit(owedDebtOverdueDaysLimit)
@@ -462,6 +481,7 @@
 				owed_debt_overdue_start_after_days: owedDebtOverdueStartAfterDays,
 				owed_debt_overdue_days_limit: owedDebtOverdueDaysLimit,
 				credit_days_before: creditDaysBefore,
+				subscription_days_before: subscriptionDaysBefore,
 				notification_time_local: notificationTimeLocal.trim()
 			});
 			await loadNotifications();
@@ -869,6 +889,24 @@
 								min="0"
 								max="30"
 								bind:value={creditDaysBefore}
+							/>
+						</label>
+					</section>
+
+					<section class="space-y-3">
+						<h4 class="text-sm font-medium">
+							{$_('settings.notifications.triggers.subscription_policy_title')}
+						</h4>
+						<label class="block max-w-xs space-y-1.5 text-sm">
+							<span class="block leading-snug"
+								>{$_('settings.notifications.triggers.subscription_days')}</span
+							>
+							<input
+								class="input w-full"
+								type="number"
+								min="0"
+								max="30"
+								bind:value={subscriptionDaysBefore}
 							/>
 						</label>
 					</section>

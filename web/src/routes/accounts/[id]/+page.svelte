@@ -720,6 +720,12 @@
 									void goto(
 										resolve(`/settings/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`)
 									)}
+						onmakeSubscription={accountTxReadOnly
+							? undefined
+							: (tx) => void goto(resolve(`/subscriptions?from_tx=${encodeURIComponent(tx.id)}`))}
+						onattachSubscription={accountTxReadOnly
+							? undefined
+							: (tx) => void goto(resolve(`/subscriptions?attach_tx=${encodeURIComponent(tx.id)}`))}
 						onrepeat={openRepeat}
 						onedit={accountTxReadOnly ? undefined : openEdit}
 						ondelete={accountTxReadOnly ? undefined : (tx) => void removeTx(tx)}

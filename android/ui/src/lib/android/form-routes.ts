@@ -74,6 +74,18 @@ export function debtSettlePath(debtId: string, from?: string): AppHref {
 	return withFromQuery(`/debts/${debtId}/settle`, from);
 }
 
+export function subscriptionNewPath(opts?: { from?: string; fromTxId?: string }): AppHref {
+	const params = new URLSearchParams();
+	if (opts?.from) params.set('from', opts.from);
+	if (opts?.fromTxId) params.set('from_tx', opts.fromTxId);
+	const q = params.toString();
+	return href(q ? `/subscriptions/new?${q}` : '/subscriptions/new');
+}
+
+export function subscriptionEditPath(id: string, from?: string): AppHref {
+	return withFromQuery(`/subscriptions/${id}/edit`, from);
+}
+
 export function accountChargeFeePath(accountId: string, from?: string): AppHref {
 	return withFromQuery(`/accounts/${accountId}/charge-fee`, from);
 }

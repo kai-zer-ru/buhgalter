@@ -101,11 +101,13 @@ SELECT
     trigger_auto_topup_disabled,
     trigger_user_registration,
     trigger_password_reset,
+    trigger_subscription,
     debt_days_before,
     my_debt_overdue_days_limit,
     owed_debt_overdue_start_after_days,
     owed_debt_overdue_days_limit,
     credit_days_before,
+    subscription_days_before,
     notification_time_local,
     updated_at
 FROM notification_settings
@@ -133,11 +135,13 @@ func (q *Queries) GetNotificationSettings(ctx context.Context, userID string) (N
 		&i.TriggerAutoTopupDisabled,
 		&i.TriggerUserRegistration,
 		&i.TriggerPasswordReset,
+		&i.TriggerSubscription,
 		&i.DebtDaysBefore,
 		&i.MyDebtOverdueDaysLimit,
 		&i.OwedDebtOverdueStartAfterDays,
 		&i.OwedDebtOverdueDaysLimit,
 		&i.CreditDaysBefore,
+		&i.SubscriptionDaysBefore,
 		&i.NotificationTimeLocal,
 		&i.UpdatedAt,
 	)
@@ -238,14 +242,16 @@ INSERT INTO notification_settings (
     trigger_auto_topup_disabled,
     trigger_user_registration,
     trigger_password_reset,
+    trigger_subscription,
     debt_days_before,
     my_debt_overdue_days_limit,
     owed_debt_overdue_start_after_days,
     owed_debt_overdue_days_limit,
     credit_days_before,
+    subscription_days_before,
     notification_time_local,
     updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(user_id) DO UPDATE SET
     telegram_enabled = excluded.telegram_enabled,
     telegram_bot_token = excluded.telegram_bot_token,
@@ -263,11 +269,13 @@ ON CONFLICT(user_id) DO UPDATE SET
     trigger_auto_topup_disabled = excluded.trigger_auto_topup_disabled,
     trigger_user_registration = excluded.trigger_user_registration,
     trigger_password_reset = excluded.trigger_password_reset,
+    trigger_subscription = excluded.trigger_subscription,
     debt_days_before = excluded.debt_days_before,
     my_debt_overdue_days_limit = excluded.my_debt_overdue_days_limit,
     owed_debt_overdue_start_after_days = excluded.owed_debt_overdue_start_after_days,
     owed_debt_overdue_days_limit = excluded.owed_debt_overdue_days_limit,
     credit_days_before = excluded.credit_days_before,
+    subscription_days_before = excluded.subscription_days_before,
     notification_time_local = excluded.notification_time_local,
     updated_at = excluded.updated_at
 `
@@ -290,11 +298,13 @@ type UpsertNotificationSettingsParams struct {
 	TriggerAutoTopupDisabled      int64   `json:"trigger_auto_topup_disabled"`
 	TriggerUserRegistration       int64   `json:"trigger_user_registration"`
 	TriggerPasswordReset          int64   `json:"trigger_password_reset"`
+	TriggerSubscription           int64   `json:"trigger_subscription"`
 	DebtDaysBefore                int64   `json:"debt_days_before"`
 	MyDebtOverdueDaysLimit        int64   `json:"my_debt_overdue_days_limit"`
 	OwedDebtOverdueStartAfterDays int64   `json:"owed_debt_overdue_start_after_days"`
 	OwedDebtOverdueDaysLimit      int64   `json:"owed_debt_overdue_days_limit"`
 	CreditDaysBefore              int64   `json:"credit_days_before"`
+	SubscriptionDaysBefore        int64   `json:"subscription_days_before"`
 	NotificationTimeLocal         string  `json:"notification_time_local"`
 	UpdatedAt                     string  `json:"updated_at"`
 }
@@ -318,11 +328,13 @@ func (q *Queries) UpsertNotificationSettings(ctx context.Context, arg UpsertNoti
 		arg.TriggerAutoTopupDisabled,
 		arg.TriggerUserRegistration,
 		arg.TriggerPasswordReset,
+		arg.TriggerSubscription,
 		arg.DebtDaysBefore,
 		arg.MyDebtOverdueDaysLimit,
 		arg.OwedDebtOverdueStartAfterDays,
 		arg.OwedDebtOverdueDaysLimit,
 		arg.CreditDaysBefore,
+		arg.SubscriptionDaysBefore,
 		arg.NotificationTimeLocal,
 		arg.UpdatedAt,
 	)

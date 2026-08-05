@@ -153,7 +153,16 @@
 		void load();
 	}
 
+	function isSubscriptionsSystemCategory(cat: Category): boolean {
+		return cat.is_system && cat.name === 'Подписки';
+	}
+
+	function canExpandCategory(cat: Category): boolean {
+		return !cat.is_system || isSubscriptionsSystemCategory(cat);
+	}
+
 	async function toggleExpand(cat: Category) {
+		if (!canExpandCategory(cat)) return;
 		const opening = !expanded[cat.id];
 		expanded = { ...expanded, [cat.id]: opening };
 		if (!opening) return;
@@ -440,7 +449,7 @@
 								<span class="inline-flex shrink-0 items-center justify-center min-h-11 min-w-11">
 									<CategoryIcon icon={cat.icon} size={categoryIconSize} />
 								</span>
-								{#if !cat.is_system}
+								{#if canExpandCategory(cat)}
 									<button
 										type="button"
 										class="min-w-0 flex-1 truncate text-left font-medium inline-flex items-center gap-1.5"
@@ -449,6 +458,11 @@
 									>
 										<span class="inline-flex min-w-0 items-center gap-1 truncate">
 											<span class="truncate">{cat.name}</span>
+											{#if cat.is_system}
+												<span class="ml-1 shrink-0 text-xs" style:color="var(--text-muted)"
+													>({$_('categories.system.badge')})</span
+												>
+											{/if}
 											{#if cat.is_primary}
 												<span
 													class="shrink-0"
@@ -515,7 +529,8 @@
 							{/if}
 						</div>
 
-						{#if expanded[cat.id] && !cat.is_system}
+						{#if expanded[cat.id] && canExpandCategory(cat)}
+							{@const readOnlySubs = isSubscriptionsSystemCategory(cat)}
 							<div
 								class="mt-3 space-y-3 border-t pt-3 pl-4 sm:pl-10"
 								style:border-color="var(--border)"
@@ -523,64 +538,75 @@
 								{#each subs[cat.id] ?? [] as sub (sub.id)}
 									<div
 										class="flex flex-wrap items-center gap-2 rounded-lg transition-opacity"
-										class:opacity-30={draggingId === sub.id}
-										class:border-t-2={overId === sub.id &&
+										class:opacity-30={!readOnlySubs && draggingId === sub.id}
+										class:border-t-2={!readOnlySubs &&
+											overId === sub.id &&
 											draggingId !== null &&
 											draggingId !== sub.id}
 										data-drag-id={sub.id}
 										data-drag-kind="sub"
-										style:border-color={overId === sub.id ? 'var(--primary)' : undefined}
+										style:border-color={!readOnlySubs && overId === sub.id
+											? 'var(--primary)'
+											: undefined}
 									>
 										<div
 											class="flex min-w-0 flex-1 items-center gap-1 overflow-hidden"
 											data-drag-row
 										>
-											<span
-												class="btn-icon btn-ghost cursor-grab touch-none text-base leading-none select-none active:cursor-grabbing"
-												role="button"
-												tabindex="-1"
-												aria-label={$_('categories.drag.handle')}
-												onpointerdown={(e) =>
-													startSubDrag(
-														e,
-														cat.id,
-														sub,
-														e.currentTarget.closest('[data-drag-id]') as HTMLElement
-													)}
-											>
-												⠿
-											</span>
+											{#if !readOnlySubs}
+												<span
+													class="btn-icon btn-ghost cursor-grab touch-none text-base leading-none select-none active:cursor-grabbing"
+													role="button"
+													tabindex="-1"
+													aria-label={$_('categories.drag.handle')}
+													onpointerdown={(e) =>
+														startSubDrag(
+															e,
+															cat.id,
+															sub,
+															e.currentTarget.closest('[data-drag-id]') as HTMLElement
+														)}
+												>
+													⠿
+												</span>
+											{:else}
+												<span class="btn-icon shrink-0" aria-hidden="true"></span>
+											{/if}
 											<span
 												class="inline-flex shrink-0 items-center justify-center min-h-11 min-w-11"
 											>
 												<CategoryIcon icon={sub.icon || 'default'} size={categoryIconSize} />
 											</span>
 											<span class="min-w-0 flex-1 truncate">{sub.name}</span>
-											<RowActionsMenu
-												actions={[
-													{
-														icon: 'edit',
-														label: $_('accounts.action.edit'),
-														onclick: () => openEditSub(cat.id, sub)
-													},
-													{
-														icon: 'delete',
-														label: $_('common.delete'),
-														variant: 'danger',
-														onclick: () => removeSub(cat.id, sub.id)
-													}
-												]}
-											/>
+											{#if !readOnlySubs}
+												<RowActionsMenu
+													actions={[
+														{
+															icon: 'edit',
+															label: $_('accounts.action.edit'),
+															onclick: () => openEditSub(cat.id, sub)
+														},
+														{
+															icon: 'delete',
+															label: $_('common.delete'),
+															variant: 'danger',
+															onclick: () => removeSub(cat.id, sub.id)
+														}
+													]}
+												/>
+											{/if}
 										</div>
 									</div>
 								{/each}
-								<button
-									type="button"
-									class="btn-ghost w-full sm:w-auto"
-									onclick={() => openCreateSub(cat)}
-								>
-									{$_('categories.sub.addButton')}
-								</button>
+								{#if !readOnlySubs}
+									<button
+										type="button"
+										class="btn-ghost w-full sm:w-auto"
+										onclick={() => openCreateSub(cat)}
+									>
+										{$_('categories.sub.addButton')}
+									</button>
+								{/if}
 							</div>
 						{/if}
 					</div>

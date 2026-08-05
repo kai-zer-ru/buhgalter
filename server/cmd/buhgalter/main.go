@@ -99,6 +99,9 @@ func main() {
 	}, &appsched.RecurringRunner{
 		DB:     manager.DB(),
 		Logger: logger,
+	}, &appsched.SubscriptionRunner{
+		DB:     manager.DB(),
+		Logger: logger,
 	}, &appsched.FutureRunner{
 		DB:     manager.DB(),
 		Logger: logger,

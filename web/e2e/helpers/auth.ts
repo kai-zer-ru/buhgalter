@@ -29,19 +29,26 @@ export async function waitAppReady(page: Page) {
 	await dismissBlockingModals(page);
 }
 
+/** First-run admin via API — avoids UI/i18n races on /setup (flake → login 401). */
 export async function completeSetupIfNeeded(page: Page) {
-	await page.goto('/setup');
-	await expect(page.getByText('Загрузка…')).toHaveCount(0, { timeout: 20_000 });
+	const statusRes = await page.request.get('/api/v1/setup/status');
+	expect(statusRes.ok(), `setup status failed: ${statusRes.status()}`).toBeTruthy();
+	const status = (await statusRes.json()) as { configured?: boolean };
+	if (status.configured) return;
 
-	const displayName = page.locator('#display-name');
-	if (!(await displayName.isVisible())) return;
-
-	await displayName.fill(ADMIN.displayName);
-	await page.locator('#login').fill(ADMIN.login);
-	await page.locator('#password').fill(ADMIN.password);
-	await page.locator('#password-confirm').fill(ADMIN.password);
-	await page.getByRole('button', { name: 'Завершить настройку' }).click();
-	await page.waitForURL('**/login**', { timeout: 15_000 });
+	const res = await page.request.post('/api/v1/setup', {
+		data: {
+			admin_login: ADMIN.login,
+			admin_display_name: ADMIN.displayName,
+			admin_password: ADMIN.password,
+			admin_password_confirm: ADMIN.password,
+			registration_enabled: false,
+			external_url: ''
+		}
+	});
+	// 409: already configured between status check and POST.
+	if (res.status() === 409) return;
+	expect(res.ok(), `API setup failed: ${res.status()} ${await res.text()}`).toBeTruthy();
 }
 
 async function fillLoginForm(page: Page, loginName: string, password: string) {
@@ -62,10 +69,21 @@ export async function login(page: Page) {
 
 /** Cookie session via API — preferred for setup / restore (no UI race). */
 export async function loginViaAPI(page: Page): Promise<void> {
-	const res = await page.request.post('/api/v1/auth/login', {
-		data: { login: ADMIN.login, password: ADMIN.password }
-	});
-	expect(res.ok(), `API login failed: ${res.status()}`).toBeTruthy();
+	let lastStatus = 0;
+	let lastBody = '';
+	for (let attempt = 0; attempt < 5; attempt++) {
+		const res = await page.request.post('/api/v1/auth/login', {
+			data: { login: ADMIN.login, password: ADMIN.password }
+		});
+		lastStatus = res.status();
+		if (res.ok()) {
+			if (isAdminSession(await currentSession(page))) return;
+		} else {
+			lastBody = await res.text().catch(() => '');
+		}
+		await page.waitForTimeout(150 * (attempt + 1));
+	}
+	expect(lastStatus, `API login failed: ${lastStatus}${lastBody ? ` ${lastBody}` : ''}`).toBe(200);
 	expect(
 		isAdminSession(await currentSession(page)),
 		'API login did not yield admin session'

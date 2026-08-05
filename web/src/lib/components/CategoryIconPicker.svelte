@@ -173,7 +173,7 @@
 						style:background-color={value === icon.id
 							? 'color-mix(in srgb, var(--primary) 15%, transparent)'
 							: 'transparent'}
-						title={icon.tags[0] ?? icon.id}
+						title={icon.name || icon.tags[0] || icon.id}
 						onclick={() => select(icon.id)}
 					>
 						<CategoryIcon icon={icon.id} size={iconSize} />

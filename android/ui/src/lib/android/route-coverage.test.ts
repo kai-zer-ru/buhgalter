@@ -52,5 +52,6 @@ describe('android route coverage', () => {
 		expectRouteExists(hrefPath(androidHomeNavItem().href));
 		expectRouteExists('/credits/[id]');
 		expectRouteExists('/debts/new');
+		expectRouteExists('/subscriptions/new');
 	});
 });

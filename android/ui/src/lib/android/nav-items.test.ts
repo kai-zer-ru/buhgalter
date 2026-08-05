@@ -10,6 +10,7 @@ describe('android nav items', () => {
 			'nav.transactions',
 			'nav.debts',
 			'nav.credits',
+			'nav.subscriptions',
 			'nav.budget',
 			'nav.stats'
 		]);

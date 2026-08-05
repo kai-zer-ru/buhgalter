@@ -38,6 +38,11 @@ export function androidMainNavItems(): AndroidNavItem[] {
 			isActive: (p) => p.startsWith('/credits')
 		},
 		{
+			href: resolve('/subscriptions'),
+			labelKey: 'nav.subscriptions',
+			isActive: (p) => p.startsWith('/subscriptions')
+		},
+		{
 			href: resolve('/budget'),
 			labelKey: 'nav.budget',
 			isActive: (p) => p.startsWith('/budget')

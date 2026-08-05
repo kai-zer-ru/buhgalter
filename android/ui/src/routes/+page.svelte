@@ -243,6 +243,18 @@
 		void goto(resolve(`/settings/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`));
 	}
 
+	function openMakeSubscription(tx: Transaction) {
+		void goto(
+			resolve(
+				`/subscriptions/new?from_tx=${encodeURIComponent(tx.id)}&from=${encodeURIComponent('/')}`
+			)
+		);
+	}
+
+	function openAttachSubscription(tx: Transaction) {
+		void goto(resolve(`/subscriptions?attach_tx=${encodeURIComponent(tx.id)}`));
+	}
+
 	async function removeTx(tx: Transaction) {
 		const msg =
 			tx.type === 'transfer' && tx.transfer_group_id
@@ -570,6 +582,8 @@
 												showDelete
 												onrepeat={openRepeat}
 												onmakeRecurring={openMakeRecurring}
+												onmakeSubscription={openMakeSubscription}
+												onattachSubscription={openAttachSubscription}
 												onedit={openEdit}
 												ondelete={(tx) => void removeTx(tx)}
 											/>
@@ -605,6 +619,8 @@
 												showDelete
 												onrepeat={openRepeat}
 												onmakeRecurring={openMakeRecurring}
+												onmakeSubscription={openMakeSubscription}
+												onattachSubscription={openAttachSubscription}
 												onedit={openEdit}
 												ondelete={(tx) => void removeTx(tx)}
 											/>

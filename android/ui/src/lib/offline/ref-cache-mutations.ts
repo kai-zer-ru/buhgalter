@@ -6,11 +6,13 @@ import type {
 	Debt,
 	Debtor,
 	RecurringOperation,
+	Subscription,
 	UIMetaAccountRef
 } from '$lib/api/client';
 import {
 	categoriesRefPath,
 	invalidateRefCache,
+	invalidateRefCachePrefix,
 	publishRefCachePath,
 	readRefCache
 } from '$lib/offline/ref-cache';
@@ -23,6 +25,7 @@ const ACCOUNTS_ALL = '/api/v1/accounts';
 const CREDITS_ACTIVE = '/api/v1/credits?status=active';
 const CREDITS_CLOSED = '/api/v1/credits?status=closed';
 const RECURRING_PATH = '/api/v1/recurring-operations';
+const SUBSCRIPTIONS_PATH = '/api/v1/subscriptions';
 
 export function creditDetailPath(id: string): string {
 	return `/api/v1/credits/${id}`;
@@ -331,4 +334,23 @@ export function onRecurringUpdated(item: RecurringOperation): void {
 
 export function onRecurringDeleted(id: string): void {
 	removeRefCacheListItem<RecurringOperation>(RECURRING_PATH, id);
+}
+
+function touchSubscriptionSummaryCache(): void {
+	invalidateRefCachePrefix('/api/v1/subscriptions/summary');
+}
+
+export function onSubscriptionCreated(item: Subscription): void {
+	prependRefCacheList(SUBSCRIPTIONS_PATH, item);
+	touchSubscriptionSummaryCache();
+}
+
+export function onSubscriptionUpdated(item: Subscription): void {
+	replaceRefCacheListItem(SUBSCRIPTIONS_PATH, item);
+	touchSubscriptionSummaryCache();
+}
+
+export function onSubscriptionDeleted(id: string): void {
+	removeRefCacheListItem<Subscription>(SUBSCRIPTIONS_PATH, id);
+	touchSubscriptionSummaryCache();
 }

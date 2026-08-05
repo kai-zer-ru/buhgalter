@@ -20,6 +20,7 @@ import {
 	type OutboxEntry,
 	type OutboxSnapshot,
 	type RecurringPayload,
+	type SubscriptionPayload,
 	type TransactionPayload,
 	type TransferPayload,
 	creditCompleteEntityKey,
@@ -443,6 +444,30 @@ export function enqueueRecurringDelete(entityKey: string) {
 		return;
 	}
 	enqueueServerMutation(entityKey, 'recurring', 'delete');
+}
+
+export function enqueueSubscriptionCreate(
+	localKey: string,
+	payload: SubscriptionPayload
+): OutboxEntry {
+	enqueueLocalCreate(localKey, 'subscription', payload);
+	return findEntry(localKey)!;
+}
+
+export function enqueueSubscriptionUpdate(entityKey: string, payload: SubscriptionPayload) {
+	if (isLocalEntityKey(entityKey)) {
+		enqueueLocalCreate(entityKey, 'subscription', payload);
+		return;
+	}
+	enqueueServerMutation(entityKey, 'subscription', 'update', payload);
+}
+
+export function enqueueSubscriptionDelete(entityKey: string) {
+	if (isLocalEntityKey(entityKey)) {
+		enqueueLocalDelete(entityKey);
+		return;
+	}
+	enqueueServerMutation(entityKey, 'subscription', 'delete');
 }
 
 export function getOutboxEntry(entityKey: string): OutboxEntry | undefined {

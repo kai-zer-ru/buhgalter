@@ -43,6 +43,7 @@ type Transaction struct {
 	TransferAccountID     *string `json:"transfer_account_id,omitempty"`
 	TransferIsOut         bool    `json:"transfer_is_out,omitempty"`
 	CreditPaymentLinked   bool    `json:"credit_payment_linked,omitempty"`
+	SubscriptionID        *string `json:"subscription_id,omitempty"`
 	TransactionDate       string  `json:"transaction_date"`
 	CreatedAt             string  `json:"created_at"`
 	UpdatedAt             string  `json:"updated_at"`
@@ -102,7 +103,7 @@ func queries(db sqlcdb.DBTX) *sqlcdb.Queries {
 func txFromGetRow(row sqlcdb.GetTransactionByIDRow) Transaction {
 	return txFromFields(
 		row.ID, row.AccountID, row.Type, row.Kind, row.Amount, row.Commission, row.Description,
-		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID,
+		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID, row.SubscriptionID,
 		row.TransactionDate, row.CreatedAt, row.UpdatedAt,
 		row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.TransferAccountName, row.TransferAccountStatus,
 		row.TransferIsOut, row.CreditPaymentLinked,
@@ -112,7 +113,7 @@ func txFromGetRow(row sqlcdb.GetTransactionByIDRow) Transaction {
 func txFromListDesc(row sqlcdb.ListTransactionsFilteredDateDescRow) Transaction {
 	return txFromFields(
 		row.ID, row.AccountID, row.Type, row.Kind, row.Amount, row.Commission, row.Description,
-		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID,
+		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID, row.SubscriptionID,
 		row.TransactionDate, row.CreatedAt, row.UpdatedAt,
 		row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.TransferAccountName, row.TransferAccountStatus,
 		row.TransferIsOut, row.CreditPaymentLinked,
@@ -122,7 +123,7 @@ func txFromListDesc(row sqlcdb.ListTransactionsFilteredDateDescRow) Transaction 
 func txFromListAsc(row sqlcdb.ListTransactionsFilteredDateAscRow) Transaction {
 	return txFromFields(
 		row.ID, row.AccountID, row.Type, row.Kind, row.Amount, row.Commission, row.Description,
-		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID,
+		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID, row.SubscriptionID,
 		row.TransactionDate, row.CreatedAt, row.UpdatedAt,
 		row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.TransferAccountName, row.TransferAccountStatus,
 		row.TransferIsOut, row.CreditPaymentLinked,
@@ -132,7 +133,7 @@ func txFromListAsc(row sqlcdb.ListTransactionsFilteredDateAscRow) Transaction {
 func txFromRecent(row sqlcdb.ListRecentTransactionsRow) Transaction {
 	return txFromFields(
 		row.ID, row.AccountID, row.Type, row.Kind, row.Amount, row.Commission, row.Description,
-		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID,
+		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID, row.SubscriptionID,
 		row.TransactionDate, row.CreatedAt, row.UpdatedAt,
 		row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.TransferAccountName, row.TransferAccountStatus,
 		row.TransferIsOut, row.CreditPaymentLinked,
@@ -142,7 +143,7 @@ func txFromRecent(row sqlcdb.ListRecentTransactionsRow) Transaction {
 func txFromGroupRow(row sqlcdb.ListTransactionsByTransferGroupRow) Transaction {
 	return txFromFields(
 		row.ID, row.AccountID, row.Type, row.Kind, row.Amount, 0, row.Description,
-		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID,
+		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID, row.SubscriptionID,
 		row.TransactionDate, row.CreatedAt, row.UpdatedAt,
 		row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.TransferAccountName, row.TransferAccountStatus,
 		row.TransferIsOut, 0,
@@ -151,7 +152,7 @@ func txFromGroupRow(row sqlcdb.ListTransactionsByTransferGroupRow) Transaction {
 
 func txFromFields(
 	id, accountID, txType, kind string, amount, commission int64, description *string,
-	categoryID, subcategoryID, transferGroupID, transferAccountID *string,
+	categoryID, subcategoryID, transferGroupID, transferAccountID, subscriptionID *string,
 	transactionDate, createdAt, updatedAt string,
 	categoryName, categoryIcon *string, categoryIsSystem *int64, subcategoryName, subcategoryIcon, accountName, accountStatus, transferAccountName, transferAccountStatus *string,
 	transferIsOut, creditPaymentLinked int64,
@@ -168,6 +169,7 @@ func txFromFields(
 		SubcategoryID:     subcategoryID,
 		TransferGroupID:   transferGroupID,
 		TransferAccountID: transferAccountID,
+		SubscriptionID:    subscriptionID,
 		TransactionDate:   transactionDate,
 		CreatedAt:         createdAt,
 		UpdatedAt:         updatedAt,

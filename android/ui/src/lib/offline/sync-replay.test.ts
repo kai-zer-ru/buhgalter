@@ -14,6 +14,8 @@ import {
 	enqueueCreditPay,
 	enqueueRecurringCreate,
 	enqueueRecurringDelete,
+	enqueueSubscriptionCreate,
+	enqueueSubscriptionDelete,
 	getOutboxEntries,
 	resetOutboxForTests
 } from '$lib/offline/store';
@@ -31,10 +33,12 @@ vi.mock('$lib/api/client', () => ({
 	createAccount: vi.fn().mockResolvedValue({ id: 'srv-a1' }),
 	createBudget: vi.fn().mockResolvedValue({ id: 'srv-b1' }),
 	createRecurringOperation: vi.fn().mockResolvedValue({ id: 'srv-r1' }),
+	createSubscription: vi.fn().mockResolvedValue({ id: 'srv-s1' }),
 	deleteCategory: vi.fn().mockResolvedValue(undefined),
 	deleteDebt: vi.fn().mockResolvedValue(undefined),
 	deleteBudget: vi.fn().mockResolvedValue(undefined),
 	deleteRecurringOperation: vi.fn().mockResolvedValue(undefined),
+	deleteSubscription: vi.fn().mockResolvedValue(undefined),
 	createTransaction: vi.fn(),
 	createTransfer: vi.fn(),
 	deleteTransaction: vi.fn(),
@@ -45,6 +49,7 @@ vi.mock('$lib/api/client', () => ({
 	updateAccount: vi.fn().mockResolvedValue({ id: 'srv-a1' }),
 	updateBudget: vi.fn().mockResolvedValue({ id: 'srv-b1' }),
 	updateRecurringOperation: vi.fn().mockResolvedValue({ id: 'srv-r1' }),
+	updateSubscription: vi.fn().mockResolvedValue({ id: 'srv-s1' }),
 	updateCredit: vi.fn().mockResolvedValue({ id: 'c1' }),
 	addCreditPayment: vi.fn().mockResolvedValue({ id: 'c1' }),
 	completeCredit: vi.fn(),
@@ -236,5 +241,23 @@ describe('syncOutbox replay — credit, settle, recurring', () => {
 		enqueueRecurringDelete('r1');
 		await syncOutbox();
 		expect(client.deleteRecurringOperation).toHaveBeenCalledWith('r1');
+	});
+
+	it('replays subscription create and delete', async () => {
+		const id = makeLocalKey();
+		enqueueSubscriptionCreate(id, {
+			name: 'Netflix',
+			amount: '999.00',
+			account_id: 'a1',
+			period: 'month',
+			start_date: '2026-07-01'
+		});
+		await syncOutbox();
+		expect(client.createSubscription).toHaveBeenCalled();
+		expect(getOutboxEntries()).toHaveLength(0);
+
+		enqueueSubscriptionDelete('s1');
+		await syncOutbox();
+		expect(client.deleteSubscription).toHaveBeenCalledWith('s1');
 	});
 });

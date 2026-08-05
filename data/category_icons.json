@@ -152,6 +152,987 @@
       "name": "Авито"
     },
     {
+      "id": "yandex-plus",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "яндекс плюс",
+        "яндекс",
+        "плюс",
+        "подписка",
+        "yandex plus"
+      ],
+      "name": "Яндекс Плюс"
+    },
+    {
+      "id": "yandex-music",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "яндекс музыка",
+        "яндекс",
+        "музыка",
+        "подписка",
+        "yandex music"
+      ],
+      "name": "Яндекс Музыка"
+    },
+    {
+      "id": "kinopoisk",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "кинопоиск",
+        "кино",
+        "подписка",
+        "стриминг"
+      ],
+      "name": "Кинопоиск"
+    },
+    {
+      "id": "ivi",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "ivi",
+        "иви",
+        "кино",
+        "подписка",
+        "стриминг"
+      ],
+      "name": "IVI"
+    },
+    {
+      "id": "okko",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "okko",
+        "окко",
+        "кино",
+        "подписка",
+        "стриминг"
+      ],
+      "name": "Okko"
+    },
+    {
+      "id": "wink",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "wink",
+        "винк",
+        "кино",
+        "подписка",
+        "стриминг"
+      ],
+      "name": "Wink"
+    },
+    {
+      "id": "premier",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "premier",
+        "премьер",
+        "кино",
+        "подписка",
+        "стриминг"
+      ],
+      "name": "Premier"
+    },
+    {
+      "id": "litres",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "litres",
+        "литрес",
+        "книги",
+        "подписка"
+      ],
+      "name": "Литрес"
+    },
+    {
+      "id": "vk",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "vk",
+        "вк",
+        "вконтакте",
+        "музыка",
+        "подписка"
+      ],
+      "name": "VK"
+    },
+    {
+      "id": "spotify",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "spotify",
+        "спотифай",
+        "музыка",
+        "подписка"
+      ],
+      "name": "Spotify"
+    },
+    {
+      "id": "netflix",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "netflix",
+        "нетфликс",
+        "кино",
+        "подписка",
+        "стриминг"
+      ],
+      "name": "Netflix"
+    },
+    {
+      "id": "youtube",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "youtube",
+        "ютуб",
+        "youtube premium",
+        "подписка"
+      ],
+      "name": "YouTube"
+    },
+    {
+      "id": "disney-plus",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "disney",
+        "disney+",
+        "дисней",
+        "подписка",
+        "стриминг"
+      ],
+      "name": "Disney+"
+    },
+    {
+      "id": "apple-music",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "apple music",
+        "эппл музыка",
+        "музыка",
+        "подписка"
+      ],
+      "name": "Apple Music"
+    },
+    {
+      "id": "twitch",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "twitch",
+        "твич",
+        "подписка"
+      ],
+      "name": "Twitch"
+    },
+    {
+      "id": "steam",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "steam",
+        "стим",
+        "игры",
+        "подписка"
+      ],
+      "name": "Steam"
+    },
+    {
+      "id": "telegram",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "telegram",
+        "телеграм",
+        "premium",
+        "подписка"
+      ],
+      "name": "Telegram"
+    },
+    {
+      "id": "discord",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "discord",
+        "дискорд",
+        "nitro",
+        "подписка"
+      ],
+      "name": "Discord"
+    },
+    {
+      "id": "chatgpt",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "chatgpt",
+        "чатгпт",
+        "openai",
+        "подписка",
+        "ии"
+      ],
+      "name": "ChatGPT"
+    },
+    {
+      "id": "github",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "github",
+        "гитхаб",
+        "copilot",
+        "подписка"
+      ],
+      "name": "GitHub"
+    },
+    {
+      "id": "notion",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "notion",
+        "ноушен",
+        "подписка"
+      ],
+      "name": "Notion"
+    },
+    {
+      "id": "adobe",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "adobe",
+        "адоб",
+        "creative cloud",
+        "подписка"
+      ],
+      "name": "Adobe"
+    },
+    {
+      "id": "microsoft-365",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "microsoft 365",
+        "office",
+        "майкрософт",
+        "подписка"
+      ],
+      "name": "Microsoft 365"
+    },
+    {
+      "id": "google-one",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "google one",
+        "гугл",
+        "google",
+        "облако",
+        "подписка"
+      ],
+      "name": "Google One"
+    },
+    {
+      "id": "gazprom-bonus",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "газпром бонус",
+        "газпром",
+        "бонус",
+        "азс",
+        "подписка",
+        "лояльность"
+      ],
+      "name": "Газпром Бонус"
+    },
+    {
+      "id": "pyaterochka",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "пятёрочка",
+        "пятерочка",
+        "5ka",
+        "магазин",
+        "продукты"
+      ],
+      "name": "Пятёрочка"
+    },
+    {
+      "id": "magnit",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "магнит",
+        "магазин",
+        "продукты"
+      ],
+      "name": "Магнит"
+    },
+    {
+      "id": "perekrestok",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "перекрёсток",
+        "перекресток",
+        "магазин",
+        "продукты"
+      ],
+      "name": "Перекрёсток"
+    },
+    {
+      "id": "lenta",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "лента",
+        "магазин",
+        "продукты",
+        "гипермаркет"
+      ],
+      "name": "Лента"
+    },
+    {
+      "id": "auchan",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "ашан",
+        "auchan",
+        "магазин",
+        "продукты"
+      ],
+      "name": "Ашан"
+    },
+    {
+      "id": "vkusvill",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "вкусвилл",
+        "vkusvill",
+        "магазин",
+        "продукты"
+      ],
+      "name": "ВкусВилл"
+    },
+    {
+      "id": "dixy",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "дикси",
+        "dixy",
+        "магазин",
+        "продукты"
+      ],
+      "name": "Дикси"
+    },
+    {
+      "id": "fix-price",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "фикс прайс",
+        "фикспрайс",
+        "fix price",
+        "магазин"
+      ],
+      "name": "Fix Price"
+    },
+    {
+      "id": "chizhik",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "чижик",
+        "магазин",
+        "продукты"
+      ],
+      "name": "Чижик"
+    },
+    {
+      "id": "verny",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "верный",
+        "магазин",
+        "продукты"
+      ],
+      "name": "Верный"
+    },
+    {
+      "id": "spar",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "spar",
+        "спар",
+        "магазин",
+        "продукты"
+      ],
+      "name": "SPAR"
+    },
+    {
+      "id": "globus",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "глобус",
+        "globus",
+        "магазин",
+        "гипермаркет"
+      ],
+      "name": "Глобус"
+    },
+    {
+      "id": "azbuka-vkusa",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "азбука вкуса",
+        "магазин",
+        "продукты"
+      ],
+      "name": "Азбука Вкуса"
+    },
+    {
+      "id": "metro-cc",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "metro",
+        "метро кэш",
+        "гипермаркет",
+        "магазин"
+      ],
+      "name": "METRO"
+    },
+    {
+      "id": "samokat",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "самокат",
+        "доставка",
+        "продукты"
+      ],
+      "name": "Самокат"
+    },
+    {
+      "id": "yandex-lavka",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "яндекс лавка",
+        "лавка",
+        "яндекс",
+        "доставка",
+        "продукты"
+      ],
+      "name": "Яндекс Лавка"
+    },
+    {
+      "id": "yandex-eda",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "яндекс еда",
+        "еда",
+        "яндекс",
+        "доставка"
+      ],
+      "name": "Яндекс Еда"
+    },
+    {
+      "id": "kuper",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "купер",
+        "сбермаркет",
+        "доставка",
+        "продукты"
+      ],
+      "name": "Купер"
+    },
+    {
+      "id": "bristol",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "bristol",
+        "бристоль",
+        "алкоголь",
+        "магазин"
+      ],
+      "name": "Bristol"
+    },
+    {
+      "id": "krasnoe-beloe",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "красное и белое",
+        "красное белое",
+        "алкоголь",
+        "магазин"
+      ],
+      "name": "Красное&Белое"
+    },
+    {
+      "id": "mvideo",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "мвидео",
+        "mvideo",
+        "электроника",
+        "магазин"
+      ],
+      "name": "М.Видео"
+    },
+    {
+      "id": "dns",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "dns",
+        "днс",
+        "электроника",
+        "магазин"
+      ],
+      "name": "DNS"
+    },
+    {
+      "id": "eldorado",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "эльдорадо",
+        "eldorado",
+        "электроника",
+        "магазин"
+      ],
+      "name": "Эльдорадо"
+    },
+    {
+      "id": "citilink",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "ситилинк",
+        "citilink",
+        "электроника",
+        "магазин"
+      ],
+      "name": "Ситилинк"
+    },
+    {
+      "id": "detmir",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "детский мир",
+        "детмир",
+        "дети",
+        "магазин"
+      ],
+      "name": "Детский мир"
+    },
+    {
+      "id": "sportmaster",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "спортмастер",
+        "sportmaster",
+        "спорт",
+        "магазин"
+      ],
+      "name": "Спортмастер"
+    },
+    {
+      "id": "lamoda",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "lamoda",
+        "ламода",
+        "одежда",
+        "магазин"
+      ],
+      "name": "Lamoda"
+    },
+    {
+      "id": "hoff",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "hoff",
+        "хофф",
+        "мебель",
+        "магазин"
+      ],
+      "name": "Hoff"
+    },
+    {
+      "id": "leroy-merlin",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "леруа мерлен",
+        "леруа",
+        "строительство",
+        "магазин"
+      ],
+      "name": "Леруа Мерлен"
+    },
+    {
+      "id": "petrovich",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "петрович",
+        "строительство",
+        "магазин"
+      ],
+      "name": "Петрович"
+    },
+    {
+      "id": "vseinstrumenti",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "все инструменты",
+        "инструменты",
+        "магазин"
+      ],
+      "name": "ВсеИнструменты"
+    },
+    {
+      "id": "goldapple",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "золотое яблоко",
+        "gold apple",
+        "косметика",
+        "магазин"
+      ],
+      "name": "Золотое Яблоко"
+    },
+    {
+      "id": "letu",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "летуаль",
+        "letu",
+        "косметика",
+        "магазин"
+      ],
+      "name": "Л’Этуаль"
+    },
+    {
+      "id": "rive-gauche",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "рив гош",
+        "rive gauche",
+        "косметика",
+        "магазин"
+      ],
+      "name": "Рив Гош"
+    },
+    {
+      "id": "apteka-ru",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "apteka.ru",
+        "аптека",
+        "лекарства",
+        "магазин"
+      ],
+      "name": "Apteka.ru"
+    },
+    {
+      "id": "zdravcity",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "здравсити",
+        "аптека",
+        "лекарства",
+        "магазин"
+      ],
+      "name": "Здравсити"
+    },
+    {
+      "id": "sberprime",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "сберпрайм",
+        "sberprime",
+        "сбер",
+        "подписка"
+      ],
+      "name": "СберПрайм"
+    },
+    {
+      "id": "tinkoff",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "т-банк",
+        "тинькофф",
+        "tbank",
+        "tinkoff",
+        "банк",
+        "подписка"
+      ],
+      "name": "Т-Банк"
+    },
+    {
+      "id": "sberbank",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "сбер",
+        "сбербанк",
+        "sber",
+        "банк",
+        "подписка"
+      ],
+      "name": "Сбер"
+    },
+    {
+      "id": "vtb",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "втб",
+        "vtb",
+        "банк",
+        "подписка"
+      ],
+      "name": "ВТБ"
+    },
+    {
+      "id": "alfabank",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "альфа",
+        "альфа-банк",
+        "alfa",
+        "банк",
+        "подписка"
+      ],
+      "name": "Альфа-Банк"
+    },
+    {
+      "id": "gazprombank",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "газпромбанк",
+        "gpb",
+        "банк",
+        "подписка"
+      ],
+      "name": "Газпромбанк"
+    },
+    {
+      "id": "raiffeisen",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "райффайзен",
+        "raiffeisen",
+        "банк",
+        "подписка"
+      ],
+      "name": "Райффайзен"
+    },
+    {
+      "id": "psb",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "псб",
+        "промсвязьбанк",
+        "банк",
+        "подписка"
+      ],
+      "name": "ПСБ"
+    },
+    {
+      "id": "sovcombank",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "совкомбанк",
+        "совком",
+        "банк",
+        "подписка"
+      ],
+      "name": "Совкомбанк"
+    },
+    {
+      "id": "rosbank",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "росбанк",
+        "rosbank",
+        "банк",
+        "подписка"
+      ],
+      "name": "Росбанк"
+    },
+    {
+      "id": "mkb",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "мкб",
+        "московский кредитный",
+        "банк",
+        "подписка"
+      ],
+      "name": "МКБ"
+    },
+    {
+      "id": "rshb",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "россельхозбанк",
+        "рсхб",
+        "банк",
+        "подписка"
+      ],
+      "name": "Россельхозбанк"
+    },
+    {
+      "id": "open-bank",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "открытие",
+        "банк открытие",
+        "банк",
+        "подписка"
+      ],
+      "name": "Открытие"
+    },
+    {
+      "id": "uralsib",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "уралсиб",
+        "банк",
+        "подписка"
+      ],
+      "name": "Уралсиб"
+    },
+    {
+      "id": "homecredit",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "хоум банк",
+        "хоум кредит",
+        "банк",
+        "подписка"
+      ],
+      "name": "Хоум Банк"
+    },
+    {
+      "id": "ozon-bank",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "озон банк",
+        "ozon банк",
+        "банк",
+        "подписка"
+      ],
+      "name": "Озон Банк"
+    },
+    {
+      "id": "yandex-bank",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "яндекс банк",
+        "yandex bank",
+        "банк",
+        "подписка"
+      ],
+      "name": "Яндекс Банк"
+    },
+    {
+      "id": "wbbank",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "wb банк",
+        "вайлдберриз банк",
+        "банк",
+        "подписка"
+      ],
+      "name": "WB Банк"
+    },
+    {
+      "id": "otpbank",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "отп банк",
+        "otp",
+        "банк",
+        "подписка"
+      ],
+      "name": "ОТП Банк"
+    },
+    {
+      "id": "atb",
+      "official_logo": true,
+      "kind": "expense",
+      "tags": [
+        "атб",
+        "азиатско-тихоокеанский",
+        "банк",
+        "подписка"
+      ],
+      "name": "АТБ"
+    },
+    {
       "id": "car",
       "emoji": "🚗",
       "kind": "expense",

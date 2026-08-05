@@ -3,16 +3,17 @@ package notify
 import sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 
 const (
-	TriggerDebtOverdue       = "debt_overdue"
-	TriggerDebtDueSoon       = "debt_due_soon"
-	TriggerCreditPayment     = "credit_payment"
-	TriggerPlannedOp         = "planned_operation"
-	TriggerBalanceShortfall  = "balance_shortfall"
-	TriggerBudgetThreshold   = "budget_threshold"
-	TriggerAutoTopupDisabled = "auto_topup_disabled"
-	TriggerUserRegistration  = "user_registration"
-	TriggerPasswordReset     = "password_reset"
-	TriggerTest              = "test"
+	TriggerDebtOverdue        = "debt_overdue"
+	TriggerDebtDueSoon        = "debt_due_soon"
+	TriggerCreditPayment      = "credit_payment"
+	TriggerSubscriptionCharge = "subscription_charge"
+	TriggerPlannedOp          = "planned_operation"
+	TriggerBalanceShortfall   = "balance_shortfall"
+	TriggerBudgetThreshold    = "budget_threshold"
+	TriggerAutoTopupDisabled  = "auto_topup_disabled"
+	TriggerUserRegistration   = "user_registration"
+	TriggerPasswordReset      = "password_reset"
+	TriggerTest               = "test"
 )
 
 const (
@@ -29,6 +30,7 @@ var triggerOrder = []string{
 	TriggerDebtOverdue,
 	TriggerDebtDueSoon,
 	TriggerCreditPayment,
+	TriggerSubscriptionCharge,
 	TriggerPlannedOp,
 	TriggerBalanceShortfall,
 	TriggerBudgetThreshold,
@@ -39,16 +41,17 @@ var triggerOrder = []string{
 }
 
 var triggerPlaceholders = map[string][]string{
-	TriggerDebtOverdue:       {"debtor", "amount", "due_date", "debt_url"},
-	TriggerDebtDueSoon:       {"debtor", "amount", "due_date", "days", "when", "action", "debt_url"},
-	TriggerCreditPayment:     {"credit", "amount", "payment_date", "when", "credit_url"},
-	TriggerPlannedOp:         {"type", "amount", "description", "date", "transaction_url"},
-	TriggerBalanceShortfall:  {"amount"},
-	TriggerBudgetThreshold:   {"name", "spent", "planned", "percent", "budget_url"},
-	TriggerAutoTopupDisabled: {"account", "source_account", "amount", "source_balance", "account_url"},
-	TriggerUserRegistration:  {"login", "display_name", "registered_at", "moderation_url"},
-	TriggerPasswordReset:     {"login", "display_name", "requested_at", "reset_url"},
-	TriggerTest:              {"channel", "settings_url"},
+	TriggerDebtOverdue:        {"debtor", "amount", "due_date", "debt_url"},
+	TriggerDebtDueSoon:        {"debtor", "amount", "due_date", "days", "when", "action", "debt_url"},
+	TriggerCreditPayment:      {"credit", "amount", "payment_date", "when", "credit_url"},
+	TriggerSubscriptionCharge: {"name", "amount", "date", "account", "description", "website_url", "subscription_url", "when"},
+	TriggerPlannedOp:          {"type", "amount", "description", "date", "transaction_url"},
+	TriggerBalanceShortfall:   {"amount"},
+	TriggerBudgetThreshold:    {"name", "spent", "planned", "percent", "budget_url"},
+	TriggerAutoTopupDisabled:  {"account", "source_account", "amount", "source_balance", "account_url"},
+	TriggerUserRegistration:   {"login", "display_name", "registered_at", "moderation_url"},
+	TriggerPasswordReset:      {"login", "display_name", "requested_at", "reset_url"},
+	TriggerTest:               {"channel", "settings_url"},
 }
 
 func IsAdminOnlyTrigger(triggerType string) bool {
@@ -65,6 +68,8 @@ func TemplateSettingEnabled(settings sqlcdb.NotificationSetting, triggerType str
 		return settings.TriggerDebt == 1
 	case TriggerCreditPayment:
 		return settings.TriggerCredit == 1
+	case TriggerSubscriptionCharge:
+		return settings.TriggerSubscription == 1
 	case TriggerPlannedOp:
 		return settings.TriggerPlanned == 1
 	case TriggerBalanceShortfall:
@@ -82,14 +87,16 @@ func TemplateSettingEnabled(settings sqlcdb.NotificationSetting, triggerType str
 	}
 }
 
-func PolicySettingEnabled(triggerDebt, triggerCredit, triggerPlanned bool, field string) bool {
+func PolicySettingEnabled(triggerDebt, triggerCredit, triggerPlanned, triggerSubscription bool, field string) bool {
 	switch field {
 	case "debt_days_before", "my_debt_overdue_days_limit", "owed_debt_overdue_start_after_days", "owed_debt_overdue_days_limit":
 		return triggerDebt
 	case "credit_days_before":
 		return triggerCredit
+	case "subscription_days_before":
+		return triggerSubscription
 	case "notification_time_local":
-		return triggerDebt || triggerCredit || triggerPlanned
+		return triggerDebt || triggerCredit || triggerPlanned || triggerSubscription
 	default:
 		return true
 	}

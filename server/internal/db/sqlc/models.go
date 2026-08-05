@@ -229,11 +229,13 @@ type NotificationSetting struct {
 	TriggerAutoTopupDisabled      int64   `json:"trigger_auto_topup_disabled"`
 	TriggerUserRegistration       int64   `json:"trigger_user_registration"`
 	TriggerPasswordReset          int64   `json:"trigger_password_reset"`
+	TriggerSubscription           int64   `json:"trigger_subscription"`
 	DebtDaysBefore                int64   `json:"debt_days_before"`
 	MyDebtOverdueDaysLimit        int64   `json:"my_debt_overdue_days_limit"`
 	OwedDebtOverdueStartAfterDays int64   `json:"owed_debt_overdue_start_after_days"`
 	OwedDebtOverdueDaysLimit      int64   `json:"owed_debt_overdue_days_limit"`
 	CreditDaysBefore              int64   `json:"credit_days_before"`
+	SubscriptionDaysBefore        int64   `json:"subscription_days_before"`
 	NotificationTimeLocal         string  `json:"notification_time_local"`
 	UpdatedAt                     string  `json:"updated_at"`
 }
@@ -301,6 +303,28 @@ type Subcategory struct {
 	CreatedAt  string `json:"created_at"`
 }
 
+type Subscription struct {
+	ID            string  `json:"id"`
+	UserID        string  `json:"user_id"`
+	Name          string  `json:"name"`
+	Description   *string `json:"description"`
+	Icon          *string `json:"icon"`
+	WebsiteUrl    *string `json:"website_url"`
+	Amount        int64   `json:"amount"`
+	AccountID     string  `json:"account_id"`
+	SubcategoryID *string `json:"subcategory_id"`
+	Period        string  `json:"period"`
+	Weekday       *int64  `json:"weekday"`
+	DayOfMonth    *int64  `json:"day_of_month"`
+	StartDate     string  `json:"start_date"`
+	TimeLocal     string  `json:"time_local"`
+	NextRunAt     string  `json:"next_run_at"`
+	LastRunAt     *string `json:"last_run_at"`
+	Active        int64   `json:"active"`
+	CreatedAt     string  `json:"created_at"`
+	UpdatedAt     string  `json:"updated_at"`
+}
+
 type SystemSetting struct {
 	ID                    int64   `json:"id"`
 	IsConfigured          int64   `json:"is_configured"`
@@ -331,6 +355,7 @@ type Transaction struct {
 	TransferAccountID *string `json:"transfer_account_id"`
 	TransactionDate   string  `json:"transaction_date"`
 	AffectsBalance    int64   `json:"affects_balance"`
+	SubscriptionID    *string `json:"subscription_id"`
 	CreatedAt         string  `json:"created_at"`
 	UpdatedAt         string  `json:"updated_at"`
 }

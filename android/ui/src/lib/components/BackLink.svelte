@@ -22,6 +22,7 @@
 		| '/debts'
 		| '/debtors'
 		| '/credits'
+		| '/subscriptions'
 		| '/transactions'
 		| '/stats'
 		| '/budget';

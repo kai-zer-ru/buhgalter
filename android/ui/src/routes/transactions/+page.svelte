@@ -348,6 +348,18 @@
 		void goto(resolve(`/settings/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`));
 	}
 
+	function openMakeSubscription(tx: Transaction) {
+		void goto(
+			resolve(
+				`/subscriptions/new?from_tx=${encodeURIComponent(tx.id)}&from=${encodeURIComponent('/transactions')}`
+			)
+		);
+	}
+
+	function openAttachSubscription(tx: Transaction) {
+		void goto(resolve(`/subscriptions?attach_tx=${encodeURIComponent(tx.id)}`));
+	}
+
 	async function removeTx(tx: Transaction) {
 		const ok = await confirm({
 			message: $_('transactions.confirm.delete'),
@@ -448,6 +460,8 @@
 											showDelete
 											onrepeat={openRepeat}
 											onmakeRecurring={openMakeRecurring}
+											onmakeSubscription={openMakeSubscription}
+											onattachSubscription={openAttachSubscription}
 											onedit={openEdit}
 											ondelete={(tx) => void removeTx(tx)}
 										/>
@@ -483,6 +497,8 @@
 											showDelete
 											onrepeat={openRepeat}
 											onmakeRecurring={openMakeRecurring}
+											onmakeSubscription={openMakeSubscription}
+											onattachSubscription={openAttachSubscription}
 											onedit={openEdit}
 											ondelete={(tx) => void removeTx(tx)}
 										/>
@@ -516,6 +532,8 @@
 						showDelete
 						onrepeat={openRepeat}
 						onmakeRecurring={openMakeRecurring}
+						onmakeSubscription={openMakeSubscription}
+						onattachSubscription={openAttachSubscription}
 						onedit={openEdit}
 						ondelete={(tx) => void removeTx(tx)}
 					/>

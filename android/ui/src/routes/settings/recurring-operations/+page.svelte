@@ -5,6 +5,7 @@
 	import { page } from '$app/stores';
 	import { _ } from 'svelte-i18n';
 	import {
+		createSubscriptionFromRecurring,
 		getTransaction,
 		getUIMeta,
 		listRecurringOperations,
@@ -23,6 +24,8 @@
 	import { refCachePathMatches } from '$lib/offline/ref-cache-watch';
 	import { dataRefreshTick } from '$lib/offline/sync';
 	import { assignIfChanged } from '$lib/state-utils';
+	import { requireOnline } from '$lib/offline/require-online';
+	import { onSubscriptionCreated } from '$lib/offline/ref-cache-mutations';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
 	import { dateOnlyPicker } from '$lib/datetime-picker-standards';
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
@@ -241,7 +244,7 @@
 		dayOfMonth = String(item.day_of_month ?? 1);
 		startDate = toDatetimeLocalValue(item.start_date, tz).slice(0, 10);
 		syncDayOfMonthFromStartDate(item.period, startDate);
-		timeLocal = item.time_local || '00:00';
+		timeLocal = item.time_local || '08:00';
 		active = item.active;
 		void loadSubcategories();
 	}
@@ -329,20 +332,51 @@
 		}
 	}
 
+	async function convertToSubscription(item: RecurringOperation) {
+		if (item.type !== 'expense') {
+			toast.error($_('subscriptions.convertExpenseOnly'));
+			return;
+		}
+		if (!requireOnline()) return;
+		try {
+			const res = await createSubscriptionFromRecurring(item.id, {
+				name: item.description?.trim() || item.category_name,
+				description: item.description ?? undefined
+			});
+			onSubscriptionCreated(res.subscription);
+			toast($_('subscriptions.converted'));
+			await goto(
+				resolve(
+					`/subscriptions/${encodeURIComponent(res.subscription.id)}/find-transactions?mode=auto&next=edit`
+				)
+			);
+		} catch (err) {
+			toast.fromError(err);
+		}
+	}
+
 	function rowActions(item: RecurringOperation): RowAction[] {
-		return [
+		const actions: RowAction[] = [
 			{
 				icon: 'edit',
 				label: $_('common.edit'),
 				onclick: () => beginEdit(item)
-			},
-			{
-				icon: 'delete',
-				label: $_('common.delete'),
-				variant: 'danger',
-				onclick: () => void remove(item)
 			}
 		];
+		if (item.type === 'expense') {
+			actions.push({
+				icon: 'pay',
+				label: $_('subscriptions.fromRecurring'),
+				onclick: () => void convertToSubscription(item)
+			});
+		}
+		actions.push({
+			icon: 'delete',
+			label: $_('common.delete'),
+			variant: 'danger',
+			onclick: () => void remove(item)
+		});
+		return actions;
 	}
 
 	$effect(() => {

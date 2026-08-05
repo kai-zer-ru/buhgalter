@@ -96,8 +96,8 @@
   "ERR_CREDIT_CLOSED": "Credit is already closed",
   "ERR_CREDIT_INVALID_INTERVAL": "Invalid payment interval",
   "ERR_CREDIT_NO_PENDING_PAYMENT": "No pending scheduled payments",
-	"ERR_CREDIT_CANNOT_REMOVE_RETRO": "Cannot remove payment recorded at creation",
-	"ERR_CREDIT_INVALID_RETRO_DEBIT": "Invalid number of retroactive payments to debit from account",
+  "ERR_CREDIT_CANNOT_REMOVE_RETRO": "Cannot remove payment recorded at creation",
+  "ERR_CREDIT_INVALID_RETRO_DEBIT": "Invalid number of retroactive payments to debit from account",
   "ERR_CREDIT_CANNOT_EDIT_PAYMENT": "Cannot edit this payment",
   "ERR_CREDIT_COMPLETE_DATE": "Completion date is required",
   "ERR_CREDIT_INVALID_STATUS": "Invalid status",
@@ -127,5 +127,6 @@
   "notifications.templates.auto_topup_disabled": "Auto top-up for \"{account}\" disabled: \"{source_account}\" is short by {amount} (balance {source_balance}).\n{account_url}",
   "notifications.templates.password_reset": "Password reset requested by {display_name} (@{login}) at {requested_at}.\n{reset_url}",
   "notifications.templates.user_registration": "New registration: {display_name} (@{login}), {registered_at}. Moderation: {moderation_url}",
-  "notifications.templates.test": "Buhgalter test notification. Channel: {channel}.\n{settings_url}"
+  "notifications.templates.test": "Buhgalter test notification. Channel: {channel}.\n{settings_url}",
+  "notifications.templates.subscription_charge": "Subscription \"{name}\": {amount}. Charge {when} from \"{account}\"\n{subscription_url}"
 }

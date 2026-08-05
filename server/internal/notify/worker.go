@@ -117,6 +117,9 @@ func (w *Worker) runForUser(ctx context.Context, userID string, nowUTC, nowLocal
 	if err := w.processCreditPayments(ctx, q, settings, userID, localeCode, timezone, currencyCode, nowUTC, nowLocal, balanceEnabled, lookup, externalURL); err != nil {
 		return err
 	}
+	if err := w.processSubscriptionCharges(ctx, q, settings, userID, localeCode, timezone, currencyCode, nowUTC, nowLocal, externalURL); err != nil {
+		return err
+	}
 	if err := w.processBudgetThresholds(ctx, userID); err != nil {
 		return err
 	}
@@ -332,6 +335,58 @@ func (w *Worker) processCreditPayments(
 		}
 		dateKey := nowLocal.Format("2006-01-02")
 		w.sendByChannels(ctx, q, settings, userID, TriggerCreditPayment, row.ID, dateKey, text)
+	}
+	return nil
+}
+
+func (w *Worker) processSubscriptionCharges(
+	ctx context.Context,
+	q *sqlcdb.Queries,
+	settings sqlcdb.NotificationSetting,
+	userID, localeCode, timezone, currencyCode string,
+	nowUTC, nowLocal time.Time,
+	externalURL string,
+) error {
+	if settings.TriggerSubscription != 1 {
+		return nil
+	}
+	rows, err := q.ListActiveSubscriptionsForNotify(ctx, userID)
+	if err != nil {
+		return err
+	}
+	customTemplates, err := q.ListNotificationTemplates(ctx, userID)
+	if err != nil {
+		return err
+	}
+	customMap := toTemplateMap(customTemplates)
+	for _, row := range rows {
+		diff := localDayDiff(nowLocal, row.NextRunAt, timezone)
+		if diff != 0 && diff != int(settings.SubscriptionDaysBefore) {
+			continue
+		}
+		desc := ""
+		if row.Description != nil {
+			desc = *row.Description
+		}
+		website := ""
+		if row.WebsiteUrl != nil {
+			website = *row.WebsiteUrl
+		}
+		text, err := Format(TriggerSubscriptionCharge, localeCode, customMap[TriggerSubscriptionCharge], FormatData{
+			"name":             row.Name,
+			"amount":           FormatAmountDisplay(row.Amount, currencyCode),
+			"date":             timeutil.FormatDisplayDateInTimezone(row.NextRunAt, timezone),
+			"account":          row.AccountName,
+			"description":      desc,
+			"website_url":      website,
+			"when":             RelativeWhen(localeCode, row.NextRunAt, nowUTC, timezone),
+			"subscription_url": subscriptionURLPlaceholderValue(externalURL, localeCode, row.ID),
+		})
+		if err != nil {
+			continue
+		}
+		dateKey := nowLocal.Format("2006-01-02")
+		w.sendByChannels(ctx, q, settings, userID, TriggerSubscriptionCharge, row.ID, dateKey, text)
 	}
 	return nil
 }

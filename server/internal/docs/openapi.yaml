@@ -2171,6 +2171,202 @@ paths:
       responses:
         '200':
           description: Кредит с обновлённым графиком
+
+  /subscriptions:
+    get:
+      tags: [Subscriptions]
+      summary: Список подписок
+      operationId: listSubscriptions
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Subscription'
+    post:
+      tags: [Subscriptions]
+      summary: Создать подписку
+      operationId: createSubscription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubscriptionUpsertRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subscription'
+  /subscriptions/summary:
+    get:
+      tags: [Subscriptions]
+      summary: Сводка по подпискам
+      operationId: subscriptionsSummary
+      parameters:
+        - name: upcoming_days
+          in: query
+          schema:
+            type: integer
+            default: 14
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionSummary'
+  /subscriptions/from-recurring/{recurring_id}:
+    post:
+      tags: [Subscriptions]
+      summary: Конвертировать периодическую операцию в подписку
+      operationId: convertRecurringToSubscription
+      parameters:
+        - $ref: '#/components/parameters/RecurringID'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                  nullable: true
+                icon:
+                  type: string
+                  nullable: true
+                website_url:
+                  type: string
+                  nullable: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionConvertResult'
+  /subscriptions/{id}:
+    put:
+      tags: [Subscriptions]
+      summary: Обновить подписку
+      operationId: updateSubscription
+      parameters:
+        - $ref: '#/components/parameters/SubscriptionID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubscriptionUpsertRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subscription'
+    delete:
+      tags: [Subscriptions]
+      summary: Удалить подписку
+      operationId: deleteSubscription
+      parameters:
+        - $ref: '#/components/parameters/SubscriptionID'
+      responses:
+        '204':
+          description: No Content
+  /subscriptions/{id}/candidate-transactions:
+    get:
+      tags: [Subscriptions]
+      summary: Кандидаты для привязки операций
+      operationId: listSubscriptionCandidates
+      parameters:
+        - $ref: '#/components/parameters/SubscriptionID'
+        - name: mode
+          in: query
+          schema:
+            type: string
+            enum: [auto, all]
+        - name: q
+          in: query
+          schema:
+            type: string
+        - name: account_id
+          in: query
+          schema:
+            type: string
+        - name: amount_min
+          in: query
+          schema:
+            type: integer
+        - name: amount_max
+          in: query
+          schema:
+            type: integer
+        - name: date_from
+          in: query
+          schema:
+            type: string
+        - name: date_to
+          in: query
+          schema:
+            type: string
+        - name: min_score
+          in: query
+          schema:
+            type: integer
+        - name: ref_description
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: offset
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionCandidateResult'
+  /subscriptions/{id}/attach-transactions:
+    post:
+      tags: [Subscriptions]
+      summary: Привязать операции к подписке
+      operationId: attachSubscriptionTransactions
+      parameters:
+        - $ref: '#/components/parameters/SubscriptionID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids]
+              properties:
+                ids:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionAttachResult'
+
   /recurring-operations:
     get:
       summary: Список периодических операций
@@ -3292,7 +3488,7 @@ components:
       properties:
         trigger_type:
           type: string
-          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, balance_shortfall, budget_threshold, user_registration, password_reset, test]
+          enum: [debt_overdue, debt_due_soon, credit_payment, subscription_charge, planned_operation, balance_shortfall, budget_threshold, user_registration, password_reset, test]
         template:
           type: string
           description: Текст шаблона
@@ -3364,6 +3560,8 @@ components:
           type: boolean
         trigger_credit:
           type: boolean
+        trigger_subscription:
+          type: boolean
         trigger_planned:
           type: boolean
         trigger_negative_balance:
@@ -3397,6 +3595,10 @@ components:
           type: integer
           minimum: 0
           maximum: 30
+        subscription_days_before:
+          type: integer
+          minimum: 0
+          maximum: 30
         notification_time_local:
           type: string
           description: Локальное время пользователя для ежедневного запуска cron (HH:MM)
@@ -3411,7 +3613,7 @@ components:
       properties:
         trigger_type:
           type: string
-          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, balance_shortfall, budget_threshold, user_registration, password_reset, test]
+          enum: [debt_overdue, debt_due_soon, credit_payment, subscription_charge, planned_operation, balance_shortfall, budget_threshold, user_registration, password_reset, test]
         template:
           type: string
           minLength: 1
@@ -3444,6 +3646,8 @@ components:
           type: boolean
         trigger_credit:
           type: boolean
+        trigger_subscription:
+          type: boolean
         trigger_planned:
           type: boolean
         trigger_negative_balance:
@@ -3477,6 +3681,10 @@ components:
           type: integer
           minimum: 0
           maximum: 30
+        subscription_days_before:
+          type: integer
+          minimum: 0
+          maximum: 30
         notification_time_local:
           type: string
           description: Локальное время пользователя для ежедневного запуска cron (HH:MM)
@@ -3498,7 +3706,7 @@ components:
       properties:
         trigger_type:
           type: string
-          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, balance_shortfall, budget_threshold, user_registration, password_reset, test]
+          enum: [debt_overdue, debt_due_soon, credit_payment, subscription_charge, planned_operation, balance_shortfall, budget_threshold, user_registration, password_reset, test]
         template:
           type: string
           minLength: 1
@@ -3514,7 +3722,7 @@ components:
       properties:
         trigger_type:
           type: string
-          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, balance_shortfall, budget_threshold, user_registration, password_reset, test]
+          enum: [debt_overdue, debt_due_soon, credit_payment, subscription_charge, planned_operation, balance_shortfall, budget_threshold, user_registration, password_reset, test]
     Category:
       type: object
       properties:
@@ -4634,6 +4842,106 @@ components:
         copy_forward:
           type: boolean
           default: false
+
+    Subscription:
+      type: object
+      required: [id, name, amount, amount_display, account_id, period, start_date, time_local, next_run_at, active, created_at, updated_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        icon: { type: string, nullable: true }
+        website_url: { type: string, nullable: true }
+        amount: { type: integer }
+        amount_display: { type: string }
+        account_id: { type: string }
+        account_name: { type: string }
+        subcategory_id: { type: string, nullable: true }
+        subcategory_name: { type: string, nullable: true }
+        subcategory_icon: { type: string, nullable: true }
+        period:
+          type: string
+          enum: [week, two_weeks, month, quarter, half_year, year]
+        weekday: { type: integer, nullable: true }
+        day_of_month: { type: integer, nullable: true }
+        start_date: { type: string }
+        time_local: { type: string }
+        next_run_at: { type: string }
+        last_run_at: { type: string, nullable: true }
+        active: { type: boolean }
+        created_at: { type: string }
+        updated_at: { type: string }
+    SubscriptionUpsertRequest:
+      type: object
+      required: [name, amount, account_id, period, start_date]
+      properties:
+        name: { type: string }
+        amount:
+          type: string
+          description: Сумма в рублях
+        description: { type: string, nullable: true }
+        icon: { type: string, nullable: true }
+        website_url: { type: string, nullable: true }
+        account_id: { type: string }
+        period:
+          type: string
+          enum: [week, two_weeks, month, quarter, half_year, year]
+        weekday: { type: integer, nullable: true }
+        day_of_month: { type: integer, nullable: true }
+        start_date: { type: string }
+        time_local: { type: string }
+        active: { type: boolean }
+        attach_transaction_id: { type: string, nullable: true }
+    SubscriptionSummary:
+      type: object
+      properties:
+        monthly_total: { type: integer }
+        monthly_total_display: { type: string }
+        yearly_total: { type: integer }
+        yearly_total_display: { type: string }
+        upcoming:
+          type: array
+          items:
+            $ref: '#/components/schemas/Subscription'
+    SubscriptionCandidateResult:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubscriptionCandidate'
+        total: { type: integer }
+    SubscriptionCandidate:
+      type: object
+      properties:
+        id: { type: string }
+        account_id: { type: string }
+        account_name: { type: string }
+        amount: { type: integer }
+        amount_display: { type: string }
+        description: { type: string, nullable: true }
+        category_id: { type: string, nullable: true }
+        category_name: { type: string, nullable: true }
+        subcategory_id: { type: string, nullable: true }
+        subcategory_name: { type: string, nullable: true }
+        transaction_date: { type: string }
+        score: { type: integer }
+        match_reasons:
+          type: array
+          items: { type: string }
+    SubscriptionAttachResult:
+      type: object
+      properties:
+        attached_count: { type: integer }
+        attached_ids:
+          type: array
+          items: { type: string }
+    SubscriptionConvertResult:
+      type: object
+      properties:
+        subscription:
+          $ref: '#/components/schemas/Subscription'
+
     RecurringOperation:
       type: object
       properties:

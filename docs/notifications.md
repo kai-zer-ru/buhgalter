@@ -27,6 +27,7 @@ API: `GET` / `PUT` `/api/v1/user/notifications`, preview и reset шаблоно
 |---------------|----------|---------|
 | Долги | `trigger_debt` | `debt_overdue`, `debt_due_soon` |
 | Кредиты | `trigger_credit` | `credit_payment` |
+| Подписки | `trigger_subscription` | `subscription_charge` |
 | Плановые | `trigger_planned` | `planned_operation` |
 | Отрицательный баланс | `trigger_negative_balance` | `balance_shortfall` (+ проверка баланса в worker) |
 | Бюджет | `trigger_budget` | `budget_threshold` |
@@ -49,6 +50,7 @@ API: `GET` / `PUT` `/api/v1/user/notifications`, preview и reset шаблоно
 | Мне должны: задержка | `owed_debt_overdue_start_after_days` (0–365) | Долги |
 | Мне должны: лимит | `owed_debt_overdue_days_limit` (0–365) | Долги |
 | Кредиты: заранее | `credit_days_before` (0–30) | Кредиты |
+| Подписки: заранее | `subscription_days_before` (0–30) | Подписки |
 
 Под таблицей — **Расписание**: `notification_time_local` (локальное время `HH:MM`, timezone пользователя). Редактируется, если включён хотя бы один из toggles **Долги**, **Кредиты** или **Плановые**.
 

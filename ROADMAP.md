@@ -218,25 +218,28 @@
 - [x] БАГ. Web/Android: после удаления/редактирования операции не обновлялись балансы (Android — и список до sync) — web: silent `load`/`loadAll`; Android: `afterOnlineWrite` → `dataRefreshTick` во всех offline wrappers
 - [x] [Release notes](docs/release-notes-v1.4.1.md) · [ui-credit-cards.md](docs/ui-credit-cards.md) · [transactions-display.md](docs/transactions-display.md) · [android-client-platform.md](docs/android-client-platform.md) · [categories-and-icons.md](docs/categories-and-icons.md) · [balance-maintenance.md](docs/balance-maintenance.md) · [install/docker.md](docs/install/docker.md)
 
+## v1.5.0
+
+- [x] [Подписки](roadmap/subscriptions.md) — отдельный экран поверх периодических операций (сводка «в месяц», ближайшие списания)
+- [ ] [Валюта счёта](roadmap/multicurrency.md) — отдельно от валюты профиля (`users.currency`)
+- [ ] [Семья / команда](roadmap/team-collaboration.md) — несколько пользователей на одном учёте
+- [ ] [Перехват уведомлений банка](roadmap/notification-intercept.md) — Android, push/SMS → черновик операции
+- [ ] [PostgreSQL](roadmap/postgresql.md) — опциональная БД вместо SQLite
+- [ ] [Разбивка операции на несколько счетов](roadmap/transaction-split-accounts.md)
+- [ ] [Магазины, теги, комментарий](roadmap/merchants-tags.md) — в т.ч. магазин из чека
+- [ ] [Цели накопления](roadmap/savings-goals.md) — копилки, прогресс, напоминания
+
 ## Общие планы
 
-- [ ] [Сканер чеков](roadmap/receipt-scanner.md) — QR ФНС (РФ) и разбор фото через ИИ; в доке — уроки сбитого эксперимента (ветка `1.5.0`, код не мержить вслепую)
-- [ ] [Подписки](roadmap/subscriptions.md) — отдельный экран поверх периодических операций (сводка «в месяц», ближайшие списания)
+- [ ] [Сканер чеков](roadmap/receipt-scanner.md) — QR ФНС (РФ) и разбор фото через ИИ; в доке — уроки сбитого эксперимента (ветка `scan_chek`, код не мержить вслепую)
 - [ ] [Правила категорий + очередь «разобрать»](roadmap/category-rules-inbox.md) — например транспорт → «Автобус» → счёт «Наличные»
-- [ ] [Магазины, теги, комментарий](roadmap/merchants-tags.md) — в т.ч. магазин из чека
 - [ ] [Бюджет: rollover, прогноз, конверты](roadmap/budget-post-mvp.md) — перенос остатка, прогноз из периодических, бюджет «конвертами»
-- [ ] [Валюта счёта](roadmap/multicurrency.md) — отдельно от валюты профиля (`users.currency`)
 - [ ] [Графики /stats и нетто-капитал](roadmap/stats-charts-net-worth.md) — Chart.js на web; нетто API + блок на web и Android
-- [ ] [Семья / команда](roadmap/team-collaboration.md) — несколько пользователей на одном учёте
 - [ ] [Кнопки в Telegram / MAX](roadmap/telegram-max-buttons.md) — inline-кнопки в исходящих уведомлениях
 - [ ] [Улучшение импорта](roadmap/import-improve.md) — универсальный CSV / выгрузки РФ
-- [ ] [Цели накопления](roadmap/savings-goals.md) — копилки, прогресс, напоминания
 - [ ] [Двухфакторная аутентификация](roadmap/two-factor-auth.md) — TOTP
 - [ ] [Синхронизация с выпиской банка](roadmap/bank-sync.md) — ориентир только РФ, не зарубежные агрегаторы
-- [ ] [Перехват уведомлений банка](roadmap/notification-intercept.md) — Android, push/SMS → черновик операции
-- [ ] [Разбивка операции на несколько счетов](roadmap/transaction-split-accounts.md)
 - [ ] [PDF-отчёты](roadmap/savings-reports-import.md) — месячная сводка (цели и импорт вынесены в v1.6.0)
-- [ ] [PostgreSQL](roadmap/postgresql.md) — опциональная БД вместо SQLite
 - [ ] [Webhook](roadmap/webhooks.md) — исходящие события для внешних интеграций
 - [ ] [Home Assistant](roadmap/home-assistant.md) — интеграция для умного дома
 - [ ] [Эволюция уведомлений](roadmap/notifications-evolution.md) — развитие политик/шаблонов/частоты

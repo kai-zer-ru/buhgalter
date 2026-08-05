@@ -15,6 +15,7 @@ const AUTHENTICATED_ROUTES = [
 	'/transactions',
 	'/stats',
 	'/credits',
+	'/subscriptions',
 	'/debts',
 	'/settings/import',
 	'/settings',

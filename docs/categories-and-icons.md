@@ -39,7 +39,8 @@ ER-диаграмма: [data-model.md](data-model.md).
 
 Ответ категории: `id`, `name`, `type`, `icon`, `sort_order`, `is_primary`, `is_system`, `subcategory_count`, `created_at`.
 
-**Системные категории** (`is_system: true`):
+**Системные категории** (`is_system: true`). Исключение: у «Подписки» в БД есть подкатегории, но `POST/PUT/DELETE` подкатегорий через API категорий → 403; управление — только через [подписки](subscriptions.md):
+
 
 | Название | Тип | Иконка | Назначение |
 |----------|-----|--------|------------|
@@ -47,6 +48,7 @@ ER-диаграмма: [data-model.md](data-model.md).
 | Кредиты | income, expense | `loan` | Доход при выдаче кредита / расход по платежам |
 | Комиссия | expense | `percent` | Комиссия за перевод между счетами (v1.1) |
 | Перевод | expense | `transfer` | Переводы между своими счетами (`POST /transfers`) |
+| Подписки | expense | `subscription` | Расходы по подпискам; подкатегории создаёт только движок подписок (не через API категорий). Если у пользователя уже была категория «Подписки», при backfill/ensure она переименовывается в «Подписки (старые)» (при коллизии — «Подписки (старые) 2» …), и создаётся новая системная |
 
 **Дефолтные пользовательские категории** (expense, seed при регистрации): Транспорт, Магазины, Связь, Здоровье, Разное, **Переводы** (`default`) — для ручных операций, связанных с переводами третьим лицам; не путать с системной «Перевод».
 
@@ -100,27 +102,32 @@ OpenAPI: [api/openapi.yaml](api/openapi.yaml).
 | `name` | Подпись по умолчанию для авто-имени; для `default` на расходах — «Разное», на доходах — «Прочие доходы» |
 | `emoji` | Символ для SVG-заглушки |
 | `official_logo` | `true` — SVG из `data/category_icons/{id}.svg` |
+| `bank_logo` | `true` или id файла — SVG из `data/banks/{id}.svg` (запасной путь) |
 | `brand` | Цветная заглушка с текстом (устарело для брендов с `official_logo`) |
 
 Сгенерированные файлы: `web/static/icons/categories/{id}.svg` и `android/ui/static/icons/categories/{id}.svg`  
 URL в UI: `/icons/categories/{id}.svg` (`categoryIconUrl` в `web/src/lib/finance.ts` / `android/ui/src/lib/finance.ts`).
 
-### Официальные логотипы (маркетплейсы, Авито)
+### Официальные логотипы (маркетплейсы, подписки, магазины)
 
-| ID | Источник |
-|----|----------|
-| `wildberries` | `wildberries.ru/apple-touch-icon.png` |
-| `ozon` | favicon `ozon.ru` (через `favicon.yandex.net`) |
-| `yandex-market` | favicon `market.yandex.ru` |
-| `avito` | `avito.ru/apple-touch-icon.png` |
+| Группа | ID (примеры) | Источник |
+|--------|--------------|----------|
+| Маркетплейсы | `wildberries`, `ozon`, `yandex-market`, `avito` | apple-touch / favicon |
+| Подписки / стриминг | `yandex-plus`, `spotify`, `netflix`, `telegram`, `chatgpt`, … | favicon через `favicon.yandex.net` |
+| Магазины / доставка | `pyaterochka`, `magnit`, `perekrestok`, `gazprom-bonus`, `samokat`, `yandex-lavka`, `mvideo`, `dns`, … | favicon через `favicon.yandex.net` |
+| Лояльность | `gazprom-bonus`, `sberprime` | favicon сервиса |
+| Банки | `tinkoff`, `sberbank`, `vtb`, `alfabank`, `yandex-bank`, … | apple-touch / favicon (как у подписок) |
 
-Файлы: `data/category_icons/wildberries.svg`, `ozon.svg`, `yandex-market.svg`, `avito.svg`.
+Полный список URL — [`scripts/download_marketplace_logos.py`](../scripts/download_marketplace_logos.py).  
+Файлы-источники после `make download-marketplace-logos`: `data/category_icons/{id}.svg` (каталог в `.gitignore`; в git — сгенерированные SVG в `web/static` / `android/ui/static`).
+
+Поиск в picker — по `id`, `name` и `tags` (удобны запросы вроде «т-банк», «тинькофф», «альфа», «подписка»).
 
 ### Команды Make
 
 | Команда | Назначение |
 |---------|------------|
-| `make download-marketplace-logos` | Скачать официальные логотипы WB/Ozon/Яндекс Маркет/Авито |
+| `make download-marketplace-logos` | Скачать официальные логотипы маркетплейсов, подписок, магазинов и банков |
 | `make generate-category-icons` | Собрать все SVG в `web/static/icons/categories/` |
 
 Редактирование каталога:

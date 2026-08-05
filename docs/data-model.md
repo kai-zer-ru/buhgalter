@@ -75,6 +75,12 @@ erDiagram
         TEXT transfer_group_id
     }
 
+    subscriptions {
+        TEXT name
+        TEXT period "week|two_weeks|month|quarter|half_year|year"
+        TEXT next_run_at
+    }
+
     recurring_operations {
         TEXT type "income|expense"
         TEXT period "week|two_weeks|month|year"
@@ -194,6 +200,7 @@ erDiagram
     users ||--o{ accounts : owns
     users ||--o{ categories : owns
     users ||--o{ transactions : owns
+    users ||--o{ subscriptions : owns
     users ||--o{ recurring_operations : owns
     users ||--o{ budgets : owns
     users ||--o| password_reset_requests : "pending reset"
@@ -349,6 +356,7 @@ erDiagram
 | stats / search | `internal/stats` | `stats.sql` | sqlc |
 | budgets | `internal/budget` | `budget.sql` | sqlc |
 | recurring | `internal/recurring` | `recurring_operations.sql` | sqlc |
+| subscriptions | `internal/subscription` | `subscriptions.sql` | sqlc |
 | budget | `internal/budget` | `budget.sql` | sqlc |
 | notifications | `internal/notify` | `notifications.sql` | sqlc |
 | import / export | `internal/importexport` | `import.sql` | sqlc |

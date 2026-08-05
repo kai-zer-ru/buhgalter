@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Credit, RecurringOperation } from '$lib/api/client';
+import type { Credit, RecurringOperation, Subscription } from '$lib/api/client';
 import {
 	onCreditDeleted,
 	onCreditUpdated,
 	onRecurringCreated,
-	onRecurringDeleted
+	onRecurringDeleted,
+	onSubscriptionCreated,
+	onSubscriptionDeleted
 } from '$lib/offline/ref-cache-mutations';
 import { readRefCache, resetRefCacheForTests, writeRefCache } from '$lib/offline/ref-cache';
 import {
@@ -80,5 +82,15 @@ describe('credit / recurring ref-cache mutations', () => {
 		expect(readRefCache<RecurringOperation[]>('/api/v1/recurring-operations')?.[0]?.id).toBe('r1');
 		onRecurringDeleted('r1');
 		expect(readRefCache<RecurringOperation[]>('/api/v1/recurring-operations')).toEqual([]);
+	});
+
+	it('onSubscriptionCreated / Deleted patch list', () => {
+		const item = { id: 's1', amount: 100 } as Subscription;
+		writeRefCache('/api/v1/subscriptions/summary?upcoming_days=14', { monthly_total: 1 });
+		onSubscriptionCreated(item);
+		expect(readRefCache<Subscription[]>('/api/v1/subscriptions')?.[0]?.id).toBe('s1');
+		expect(readRefCache('/api/v1/subscriptions/summary?upcoming_days=14')).toBeNull();
+		onSubscriptionDeleted('s1');
+		expect(readRefCache<Subscription[]>('/api/v1/subscriptions')).toEqual([]);
 	});
 });

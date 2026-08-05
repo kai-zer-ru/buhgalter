@@ -522,6 +522,18 @@
 		void goto(resolve(`/settings/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`));
 	}
 
+	function openMakeSubscription(tx: Transaction) {
+		void goto(
+			resolve(
+				`/subscriptions/new?from_tx=${encodeURIComponent(tx.id)}&from=${encodeURIComponent(`/accounts/${tx.account_id}`)}`
+			)
+		);
+	}
+
+	function openAttachSubscription(tx: Transaction) {
+		void goto(resolve(`/subscriptions?attach_tx=${encodeURIComponent(tx.id)}`));
+	}
+
 	async function resetFilters() {
 		fromLocal = '';
 		toLocal = '';
@@ -752,6 +764,8 @@
 						showDelete={!accountTxReadOnly}
 						onrepeat={openRepeat}
 						onmakeRecurring={openMakeRecurring}
+						onmakeSubscription={openMakeSubscription}
+						onattachSubscription={openAttachSubscription}
 						onedit={accountTxReadOnly ? undefined : openEdit}
 						ondelete={accountTxReadOnly ? undefined : (tx) => void removeTx(tx)}
 					/>

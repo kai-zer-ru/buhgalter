@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import type { Pathname } from '$app/types';
 
 	export type BackLinkHref =
 		| '/'
@@ -23,7 +22,8 @@
 		| '/stats'
 		| '/debtors'
 		| '/accounts/new'
-		| '/budget';
+		| '/budget'
+		| '/subscriptions';
 
 	export type BreadcrumbItem = {
 		href: BackLinkHref;
@@ -37,7 +37,9 @@
 	} = $props();
 
 	function target(item: BreadcrumbItem): string {
-		return resolve(item.href as Pathname);
+		// BackLinkHref is a curated set of static routes; casting to full Pathname
+		// pulls in param routes and breaks resolve() overload selection.
+		return resolve(item.href as '/');
 	}
 </script>
 

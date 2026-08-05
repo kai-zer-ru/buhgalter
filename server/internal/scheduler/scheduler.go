@@ -10,6 +10,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/credit"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/recurring"
+	"github.com/kai-zer-ru/buhgalter/internal/subscription"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
 	"github.com/kai-zer-ru/buhgalter/internal/transaction"
 )
@@ -22,17 +23,24 @@ type CreditRunner struct {
 }
 
 type Scheduler struct {
-	Credit           *CreditRunner
-	Recurring        *RecurringRunner
-	Future           *FutureRunner
-	Logger           *slog.Logger
-	stop             chan struct{}
-	mu               sync.Mutex
-	creditLastRun    map[string]string
-	recurringLastRun map[string]string
+	Credit              *CreditRunner
+	Recurring           *RecurringRunner
+	Subscription        *SubscriptionRunner
+	Future              *FutureRunner
+	Logger              *slog.Logger
+	stop                chan struct{}
+	mu                  sync.Mutex
+	creditLastRun       map[string]string
+	recurringLastRun    map[string]string
+	subscriptionLastRun map[string]string
 }
 
 type RecurringRunner struct {
+	DB     *sql.DB
+	Logger *slog.Logger
+}
+
+type SubscriptionRunner struct {
 	DB     *sql.DB
 	Logger *slog.Logger
 }
@@ -42,15 +50,17 @@ type FutureRunner struct {
 	Logger *slog.Logger
 }
 
-func New(creditRunner *CreditRunner, recurringRunner *RecurringRunner, futureRunner *FutureRunner, logger *slog.Logger) *Scheduler {
+func New(creditRunner *CreditRunner, recurringRunner *RecurringRunner, subscriptionRunner *SubscriptionRunner, futureRunner *FutureRunner, logger *slog.Logger) *Scheduler {
 	return &Scheduler{
-		Credit:           creditRunner,
-		Recurring:        recurringRunner,
-		Future:           futureRunner,
-		Logger:           logger,
-		stop:             make(chan struct{}),
-		creditLastRun:    make(map[string]string),
-		recurringLastRun: make(map[string]string),
+		Credit:              creditRunner,
+		Recurring:           recurringRunner,
+		Subscription:        subscriptionRunner,
+		Future:              futureRunner,
+		Logger:              logger,
+		stop:                make(chan struct{}),
+		creditLastRun:       make(map[string]string),
+		recurringLastRun:    make(map[string]string),
+		subscriptionLastRun: make(map[string]string),
 	}
 }
 
@@ -78,6 +88,9 @@ func (s *Scheduler) loop() {
 			}
 			if s.Recurring != nil {
 				s.runRecurring(now)
+			}
+			if s.Subscription != nil {
+				s.runSubscriptions(now)
 			}
 			if s.Future != nil {
 				s.runFutureActivation()
@@ -162,6 +175,42 @@ func (s *Scheduler) runRecurring(now time.Time) {
 		}
 		if applied > 0 {
 			s.Logger.Info("recurring operations applied", "user_id", u.ID, "count", applied)
+		}
+	}
+}
+
+func (s *Scheduler) runSubscriptions(now time.Time) {
+	ctx := context.Background()
+	users, err := sqlcdb.New(s.Subscription.DB).ListUsersWithTimezone(ctx)
+	if err != nil {
+		s.Logger.Error("subscription scheduler: list users", "err", err)
+		return
+	}
+	for _, u := range users {
+		tz := u.Timezone
+		if tz == "" {
+			tz = "Europe/Moscow"
+		}
+		loc, err := time.LoadLocation(tz)
+		if err != nil {
+			continue
+		}
+		local := now.In(loc)
+		dateKey := local.Format("2006-01-02 15:04")
+		s.mu.Lock()
+		if s.subscriptionLastRun[u.ID] == dateKey {
+			s.mu.Unlock()
+			continue
+		}
+		s.subscriptionLastRun[u.ID] = dateKey
+		s.mu.Unlock()
+		applied, err := subscription.ApplyDue(ctx, s.Subscription.DB, u.ID, now.UTC(), tz)
+		if err != nil {
+			s.Logger.Error("subscription scheduler failed", "user_id", u.ID, "err", err)
+			continue
+		}
+		if applied > 0 {
+			s.Logger.Info("subscriptions applied", "user_id", u.ID, "count", applied)
 		}
 	}
 }

@@ -50,19 +50,19 @@ func TestTemplateSettingEnabled(t *testing.T) {
 func TestPolicySettingEnabled(t *testing.T) {
 	t.Parallel()
 
-	if !PolicySettingEnabled(true, true, true, "debt_days_before") {
+	if !PolicySettingEnabled(true, true, true, true, "debt_days_before") {
 		t.Fatal("debt_days_before expected enabled when trigger_debt on")
 	}
-	if PolicySettingEnabled(false, true, true, "debt_days_before") {
+	if PolicySettingEnabled(false, true, true, true, "debt_days_before") {
 		t.Fatal("debt_days_before expected disabled when trigger_debt off")
 	}
-	if !PolicySettingEnabled(false, true, false, "credit_days_before") {
+	if !PolicySettingEnabled(false, true, false, true, "credit_days_before") {
 		t.Fatal("credit_days_before expected enabled when trigger_credit on")
 	}
-	if PolicySettingEnabled(false, false, false, "notification_time_local") {
+	if PolicySettingEnabled(false, false, false, false, "notification_time_local") {
 		t.Fatal("notification_time_local expected disabled when all scheduled triggers off")
 	}
-	if !PolicySettingEnabled(false, false, true, "notification_time_local") {
+	if !PolicySettingEnabled(false, false, true, false, "notification_time_local") {
 		t.Fatal("notification_time_local expected enabled when trigger_planned on")
 	}
 }

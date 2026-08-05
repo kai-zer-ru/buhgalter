@@ -29,6 +29,7 @@
 |----------|----------|
 | [data-model.md](data-model.md) | Схема БД, миграции, связи сущностей |
 | [sql-access.md](sql-access.md) | Где писать SQL: sqlc vs inline, исключения, миграция legacy |
+| [subscriptions.md](subscriptions.md) | Подписки |
 | [categories-and-icons.md](categories-and-icons.md) | Категории, подкатегории, иконки |
 | [budget.md](budget.md) | Бюджет: помесячные лимиты, копирование, план vs факт, API |
 | [../roadmap/budget-post-mvp.md](../roadmap/budget-post-mvp.md) | (план) Бюджет: rollover и прогноз из recurring |

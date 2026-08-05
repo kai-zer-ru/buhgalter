@@ -31,6 +31,8 @@
 		onedit,
 		onrepeat,
 		onmakeRecurring,
+		onmakeSubscription,
+		onattachSubscription,
 		descriptionExtra
 	}: {
 		transactions: Transaction[];
@@ -47,15 +49,32 @@
 		onedit?: (tx: Transaction) => void;
 		onrepeat?: (tx: Transaction) => void;
 		onmakeRecurring?: (tx: Transaction) => void;
+		onmakeSubscription?: (tx: Transaction) => void;
+		onattachSubscription?: (tx: Transaction) => void;
 		descriptionExtra?: Snippet<[Transaction]>;
 	} = $props();
 
 	const showActions = $derived(
-		Boolean((showDelete && ondelete) || (showEdit && onedit) || onrepeat || onmakeRecurring)
+		Boolean(
+			(showDelete && ondelete) ||
+			(showEdit && onedit) ||
+			onrepeat ||
+			onmakeRecurring ||
+			onmakeSubscription ||
+			onattachSubscription
+		)
 	);
 
 	function canMakeRecurring(tx: Transaction): boolean {
 		return Boolean(onmakeRecurring && tx.type !== 'transfer' && !tx.category_is_system);
+	}
+
+	function canMakeSubscription(tx: Transaction): boolean {
+		return Boolean(onmakeSubscription && tx.type === 'expense');
+	}
+
+	function canAttachSubscription(tx: Transaction): boolean {
+		return Boolean(onattachSubscription && tx.type === 'expense');
 	}
 
 	function rowActions(tx: Transaction): RowAction[] {
@@ -72,6 +91,20 @@
 				icon: 'repeat',
 				label: $_('recurring.fromTransaction'),
 				onclick: () => onmakeRecurring?.(tx)
+			});
+		}
+		if (canMakeSubscription(tx)) {
+			actions.push({
+				icon: 'pay',
+				label: $_('subscriptions.fromTransaction'),
+				onclick: () => onmakeSubscription?.(tx)
+			});
+		}
+		if (canAttachSubscription(tx)) {
+			actions.push({
+				icon: 'add',
+				label: $_('subscriptions.attachToSubscription'),
+				onclick: () => onattachSubscription?.(tx)
 			});
 		}
 		if (showEdit && onedit && canEditTransaction(tx)) {

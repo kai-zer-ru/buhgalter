@@ -8,7 +8,9 @@ import {
 	creditNewPath,
 	debtNewPath,
 	debtSettlePath,
-	parseFormReturnPath
+	parseFormReturnPath,
+	subscriptionEditPath,
+	subscriptionNewPath
 } from './form-routes';
 
 describe('form-routes', () => {
@@ -48,5 +50,17 @@ describe('form-routes', () => {
 		expect(creditNewPath('/credits')).toBe('/credits/new?from=%2Fcredits');
 		expect(creditCreateStepPath('basics', '/credits')).toBe('/credits/new/basics?from=%2Fcredits');
 		expect(creditCreateStepPath('schedule')).toBe('/credits/new/schedule');
+	});
+
+	it('builds subscription form paths', () => {
+		expect(subscriptionNewPath({ from: '/subscriptions' })).toBe(
+			'/subscriptions/new?from=%2Fsubscriptions'
+		);
+		expect(subscriptionNewPath({ from: '/subscriptions', fromTxId: 't1' })).toBe(
+			'/subscriptions/new?from=%2Fsubscriptions&from_tx=t1'
+		);
+		expect(subscriptionEditPath('s1', '/subscriptions')).toBe(
+			'/subscriptions/s1/edit?from=%2Fsubscriptions'
+		);
 	});
 });

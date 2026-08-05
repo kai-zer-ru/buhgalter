@@ -155,6 +155,7 @@ export type NotificationSettings = {
 	max_recipient_id?: number | null;
 	trigger_debt: boolean;
 	trigger_credit: boolean;
+	trigger_subscription?: boolean;
 	trigger_planned: boolean;
 	trigger_negative_balance: boolean;
 	trigger_budget: boolean;
@@ -166,6 +167,7 @@ export type NotificationSettings = {
 	owed_debt_overdue_start_after_days: number;
 	owed_debt_overdue_days_limit: number;
 	credit_days_before: number;
+	subscription_days_before?: number;
 	notification_time_local: string;
 	templates: NotificationTemplate[];
 };
@@ -181,6 +183,7 @@ export type NotificationSettingsUpdate = {
 	max_recipient_id?: number | null;
 	trigger_debt?: boolean;
 	trigger_credit?: boolean;
+	trigger_subscription?: boolean;
 	trigger_planned?: boolean;
 	trigger_negative_balance?: boolean;
 	trigger_budget?: boolean;
@@ -192,6 +195,7 @@ export type NotificationSettingsUpdate = {
 	owed_debt_overdue_start_after_days?: number;
 	owed_debt_overdue_days_limit?: number;
 	credit_days_before?: number;
+	subscription_days_before?: number;
 	notification_time_local?: string;
 	templates?: Array<{ trigger_type: string; template: string }>;
 };
@@ -1080,6 +1084,142 @@ export function updateRecurringOperation(
 
 export function deleteRecurringOperation(id: string) {
 	return request<void>(`/api/v1/recurring-operations/${id}`, { method: 'DELETE' });
+}
+
+export type SubscriptionPeriod = 'week' | 'two_weeks' | 'month' | 'quarter' | 'half_year' | 'year';
+
+export type Subscription = {
+	id: string;
+	name: string;
+	description: string | null;
+	icon: string | null;
+	website_url: string | null;
+	amount: number;
+	amount_display: string;
+	account_id: string;
+	account_name: string;
+	subcategory_id: string | null;
+	subcategory_name: string | null;
+	subcategory_icon: string | null;
+	period: SubscriptionPeriod;
+	weekday: number | null;
+	day_of_month: number | null;
+	start_date: string;
+	time_local: string;
+	next_run_at: string;
+	last_run_at: string | null;
+	active: boolean;
+	created_at: string;
+	updated_at: string;
+};
+
+export type SubscriptionSummary = {
+	monthly_total: number;
+	monthly_total_display: string;
+	yearly_total: number;
+	yearly_total_display: string;
+	upcoming: Subscription[];
+};
+
+export type SubscriptionCandidateTransaction = {
+	id: string;
+	account_id: string;
+	account_name: string;
+	amount: number;
+	amount_display: string;
+	description: string | null;
+	category_id: string | null;
+	category_name: string | null;
+	subcategory_id: string | null;
+	subcategory_name: string | null;
+	transaction_date: string;
+	score: number;
+	match_reasons: string[];
+};
+
+export type SubscriptionCandidateResult = {
+	items: SubscriptionCandidateTransaction[];
+	total: number;
+};
+
+export type SubscriptionUpsertPayload = {
+	name: string;
+	amount: string;
+	description?: string;
+	icon?: string;
+	website_url?: string;
+	account_id: string;
+	period: SubscriptionPeriod;
+	weekday?: number;
+	day_of_month?: number;
+	start_date: string;
+	time_local?: string;
+	active?: boolean;
+	attach_transaction_id?: string;
+};
+
+export function listSubscriptions() {
+	return request<Subscription[]>('/api/v1/subscriptions');
+}
+
+export function getSubscriptionsSummary(params?: { upcoming_days?: number }) {
+	const q = new URLSearchParams();
+	if (params?.upcoming_days != null) q.set('upcoming_days', String(params.upcoming_days));
+	const suffix = q.toString() ? `?${q}` : '';
+	return request<SubscriptionSummary>(`/api/v1/subscriptions/summary${suffix}`);
+}
+
+export function createSubscription(payload: SubscriptionUpsertPayload) {
+	return request<Subscription>('/api/v1/subscriptions', {
+		method: 'POST',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function updateSubscription(id: string, payload: SubscriptionUpsertPayload) {
+	return request<Subscription>(`/api/v1/subscriptions/${id}`, {
+		method: 'PUT',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function deleteSubscription(id: string) {
+	return request<void>(`/api/v1/subscriptions/${id}`, { method: 'DELETE' });
+}
+
+export function listSubscriptionCandidateTransactions(id: string, params?: Record<string, string>) {
+	const q = params ? '?' + new URLSearchParams(params).toString() : '';
+	return request<SubscriptionCandidateResult>(
+		`/api/v1/subscriptions/${id}/candidate-transactions${q}`
+	);
+}
+
+export function attachSubscriptionTransactions(id: string, ids: string[]) {
+	return request<{ attached_count: number; attached_ids: string[] }>(
+		`/api/v1/subscriptions/${id}/attach-transactions`,
+		{
+			method: 'POST',
+			body: JSON.stringify({ ids })
+		}
+	);
+}
+
+export function createSubscriptionFromRecurring(
+	recurringId: string,
+	payload?: {
+		name?: string;
+		description?: string;
+		icon?: string;
+		website_url?: string;
+	}
+) {
+	return request<{ subscription: Subscription }>(
+		`/api/v1/subscriptions/from-recurring/${recurringId}`,
+		{
+			method: 'POST',
+			body: JSON.stringify(payload ?? {})
+		}
+	);
 }
 
 export type BudgetScope = 'category' | 'subcategory' | 'all_expense';

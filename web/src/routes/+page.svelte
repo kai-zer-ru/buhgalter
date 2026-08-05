@@ -549,6 +549,12 @@
 															`/settings/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`
 														)
 													)}
+												onmakeSubscription={(tx) =>
+													void goto(resolve(`/subscriptions?from_tx=${encodeURIComponent(tx.id)}`))}
+												onattachSubscription={(tx) =>
+													void goto(
+														resolve(`/subscriptions?attach_tx=${encodeURIComponent(tx.id)}`)
+													)}
 												onrepeat={openRepeat}
 												onedit={openEdit}
 												ondelete={(tx) => void removeTx(tx)}
@@ -588,6 +594,12 @@
 														resolve(
 															`/settings/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`
 														)
+													)}
+												onmakeSubscription={(tx) =>
+													void goto(resolve(`/subscriptions?from_tx=${encodeURIComponent(tx.id)}`))}
+												onattachSubscription={(tx) =>
+													void goto(
+														resolve(`/subscriptions?attach_tx=${encodeURIComponent(tx.id)}`)
 													)}
 												onrepeat={openRepeat}
 												onedit={openEdit}

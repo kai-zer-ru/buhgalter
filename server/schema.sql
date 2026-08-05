@@ -136,6 +136,31 @@ CREATE TABLE subcategories (
 );
 CREATE INDEX idx_subcategories_category ON subcategories(category_id);
 
+CREATE TABLE subscriptions (
+    id              TEXT PRIMARY KEY,
+    user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name            TEXT NOT NULL,
+    description     TEXT,
+    icon            TEXT,
+    website_url     TEXT,
+    amount          INTEGER NOT NULL CHECK (amount > 0),
+    account_id      TEXT NOT NULL REFERENCES accounts(id),
+    subcategory_id  TEXT REFERENCES subcategories(id),
+    period          TEXT NOT NULL CHECK (period IN ('week', 'two_weeks', 'month', 'quarter', 'half_year', 'year')),
+    weekday         INTEGER CHECK (weekday BETWEEN 1 AND 7),
+    day_of_month    INTEGER CHECK (day_of_month BETWEEN 1 AND 31),
+    start_date      TEXT NOT NULL,
+    time_local      TEXT NOT NULL DEFAULT '00:00',
+    next_run_at     TEXT NOT NULL,
+    last_run_at     TEXT,
+    active          INTEGER NOT NULL DEFAULT 1,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_subscriptions_user ON subscriptions(user_id);
+CREATE INDEX idx_subscriptions_due ON subscriptions(user_id, active, next_run_at);
+CREATE INDEX idx_subscriptions_subcategory ON subscriptions(subcategory_id);
+
 CREATE TABLE transactions (
     id                  TEXT PRIMARY KEY,
     user_id             TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -150,6 +175,7 @@ CREATE TABLE transactions (
     transfer_account_id TEXT REFERENCES accounts(id),
     transaction_date    TEXT NOT NULL,
     affects_balance     INTEGER NOT NULL DEFAULT 1,
+    subscription_id     TEXT REFERENCES subscriptions(id) ON DELETE SET NULL,
     created_at          TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at          TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -158,6 +184,7 @@ CREATE INDEX idx_tx_account ON transactions(account_id);
 CREATE INDEX idx_tx_date ON transactions(transaction_date);
 CREATE INDEX idx_tx_transfer_group ON transactions(transfer_group_id);
 CREATE INDEX idx_tx_kind ON transactions(kind);
+CREATE INDEX idx_tx_subscription ON transactions(subscription_id);
 CREATE INDEX idx_tx_user_account_balance ON transactions(user_id, account_id, kind, type, transaction_date);
 
 CREATE TABLE recurring_operations (
@@ -319,11 +346,13 @@ CREATE TABLE notification_settings (
     trigger_auto_topup_disabled INTEGER NOT NULL DEFAULT 1,
     trigger_user_registration INTEGER NOT NULL DEFAULT 1,
     trigger_password_reset INTEGER NOT NULL DEFAULT 1,
+    trigger_subscription INTEGER NOT NULL DEFAULT 1,
     debt_days_before    INTEGER NOT NULL DEFAULT 1,
     my_debt_overdue_days_limit INTEGER NOT NULL DEFAULT 7,
     owed_debt_overdue_start_after_days INTEGER NOT NULL DEFAULT 0,
     owed_debt_overdue_days_limit INTEGER NOT NULL DEFAULT 7,
     credit_days_before  INTEGER NOT NULL DEFAULT 1,
+    subscription_days_before INTEGER NOT NULL DEFAULT 1,
     notification_time_local TEXT NOT NULL DEFAULT '00:00',
     updated_at          TEXT NOT NULL DEFAULT (datetime('now'))
 );

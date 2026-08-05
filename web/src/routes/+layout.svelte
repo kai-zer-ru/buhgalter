@@ -3,7 +3,6 @@
 	import { get } from 'svelte/store';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import type { Pathname } from '$app/types';
 	import { page } from '$app/stores';
 	import { _ } from 'svelte-i18n';
 	import { ApiError, getSetupStatus } from '$lib/api/client';
@@ -113,6 +112,11 @@
 			href: resolve('/credits'),
 			labelKey: 'nav.credits',
 			isActive: (p) => p.startsWith('/credits')
+		},
+		{
+			href: resolve('/subscriptions'),
+			labelKey: 'nav.subscriptions',
+			isActive: (p) => p.startsWith('/subscriptions')
 		},
 		{
 			href: resolve('/budget'),
@@ -459,7 +463,7 @@
 						</p>
 						{#each mobileNavView === 'settings' ? settingsNavItems : adminNavItems as item (item.path)}
 							<a
-								href={resolve(item.path as Pathname)}
+								href={resolve(item.path as '/')}
 								class={navLinkClass(isDropdownItemActive(item), 'nav-mobile-link')}
 								aria-current={isDropdownItemActive(item) ? 'page' : undefined}
 								role="menuitem"

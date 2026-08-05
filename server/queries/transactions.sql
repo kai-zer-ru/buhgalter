@@ -14,6 +14,7 @@ SELECT
     t.subcategory_id,
     t.transfer_group_id,
     t.transfer_account_id,
+    t.subscription_id,
     t.transaction_date,
     t.created_at,
     t.updated_at,
@@ -68,6 +69,7 @@ SELECT
     t.subcategory_id,
     t.transfer_group_id,
     t.transfer_account_id,
+    t.subscription_id,
     t.transaction_date,
     t.created_at,
     t.updated_at,
@@ -103,8 +105,8 @@ ORDER BY t.created_at ASC, t.id ASC;
 INSERT INTO transactions (
     id, user_id, account_id, type, kind, amount, description,
     category_id, subcategory_id, transfer_group_id, transfer_account_id,
-    transaction_date, affects_balance, created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    transaction_date, affects_balance, subscription_id, created_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: UpdateTransaction :exec
 UPDATE transactions
@@ -145,6 +147,7 @@ SELECT
     t.subcategory_id,
     t.transfer_group_id,
     t.transfer_account_id,
+    t.subscription_id,
     t.transaction_date,
     t.affects_balance,
     t.created_at,
@@ -208,6 +211,7 @@ SELECT
     t.subcategory_id,
     t.transfer_group_id,
     t.transfer_account_id,
+    t.subscription_id,
     t.transaction_date,
     t.created_at,
     t.updated_at,
@@ -272,6 +276,7 @@ SELECT
     t.subcategory_id,
     t.transfer_group_id,
     t.transfer_account_id,
+    t.subscription_id,
     t.transaction_date,
     t.created_at,
     t.updated_at,
@@ -336,6 +341,7 @@ SELECT
     t.subcategory_id,
     t.transfer_group_id,
     t.transfer_account_id,
+    t.subscription_id,
     t.transaction_date,
     t.created_at,
     t.updated_at,

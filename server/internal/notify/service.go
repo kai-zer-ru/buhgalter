@@ -40,11 +40,13 @@ type SettingsView struct {
 	TriggerAutoTopupDisabled      bool           `json:"trigger_auto_topup_disabled"`
 	TriggerUserRegistration       bool           `json:"trigger_user_registration"`
 	TriggerPasswordReset          bool           `json:"trigger_password_reset"`
+	TriggerSubscription           bool           `json:"trigger_subscription"`
 	DebtDaysBefore                int64          `json:"debt_days_before"`
 	MyDebtOverdueDaysLimit        int64          `json:"my_debt_overdue_days_limit"`
 	OwedDebtOverdueStartAfterDays int64          `json:"owed_debt_overdue_start_after_days"`
 	OwedDebtOverdueDaysLimit      int64          `json:"owed_debt_overdue_days_limit"`
 	CreditDaysBefore              int64          `json:"credit_days_before"`
+	SubscriptionDaysBefore        int64          `json:"subscription_days_before"`
 	NotificationTimeLocal         string         `json:"notification_time_local"`
 	Templates                     []TemplateView `json:"templates"`
 }
@@ -71,11 +73,13 @@ type UpdateSettingsInput struct {
 	TriggerAutoTopupDisabled      *bool            `json:"trigger_auto_topup_disabled,omitempty"`
 	TriggerUserRegistration       *bool            `json:"trigger_user_registration,omitempty"`
 	TriggerPasswordReset          *bool            `json:"trigger_password_reset,omitempty"`
+	TriggerSubscription           *bool            `json:"trigger_subscription,omitempty"`
 	DebtDaysBefore                *int64           `json:"debt_days_before,omitempty"`
 	MyDebtOverdueDaysLimit        *int64           `json:"my_debt_overdue_days_limit,omitempty"`
 	OwedDebtOverdueStartAfterDays *int64           `json:"owed_debt_overdue_start_after_days,omitempty"`
 	OwedDebtOverdueDaysLimit      *int64           `json:"owed_debt_overdue_days_limit,omitempty"`
 	CreditDaysBefore              *int64           `json:"credit_days_before,omitempty"`
+	SubscriptionDaysBefore        *int64           `json:"subscription_days_before,omitempty"`
 	NotificationTimeLocal         *string          `json:"notification_time_local,omitempty"`
 	Templates                     []TemplateUpdate `json:"templates,omitempty"`
 }
@@ -137,11 +141,13 @@ func getSettingsOnce(ctx context.Context, sqlDB *sql.DB, userID string) (Setting
 		TriggerAutoTopupDisabled:      settings.TriggerAutoTopupDisabled == 1,
 		TriggerUserRegistration:       isAdmin && regEnabled && settings.TriggerUserRegistration == 1,
 		TriggerPasswordReset:          isAdmin && settings.TriggerPasswordReset == 1,
+		TriggerSubscription:           settings.TriggerSubscription == 1,
 		DebtDaysBefore:                settings.DebtDaysBefore,
 		MyDebtOverdueDaysLimit:        settings.MyDebtOverdueDaysLimit,
 		OwedDebtOverdueStartAfterDays: settings.OwedDebtOverdueStartAfterDays,
 		OwedDebtOverdueDaysLimit:      settings.OwedDebtOverdueDaysLimit,
 		CreditDaysBefore:              settings.CreditDaysBefore,
+		SubscriptionDaysBefore:        settings.SubscriptionDaysBefore,
 		NotificationTimeLocal:         normalizeNotificationTimeLocal(settings.NotificationTimeLocal),
 		Templates:                     make([]TemplateView, 0, len(triggerOrder)),
 	}
@@ -195,23 +201,30 @@ func UpdateSettings(ctx context.Context, db *sql.DB, userID string, in UpdateSet
 	if in.TriggerPlanned != nil {
 		triggerPlanned = *in.TriggerPlanned
 	}
-	if in.DebtDaysBefore != nil && !PolicySettingEnabled(triggerDebt, triggerCredit, triggerPlanned, "debt_days_before") {
+	triggerSubscription := settings.TriggerSubscription == 1
+	if in.TriggerSubscription != nil {
+		triggerSubscription = *in.TriggerSubscription
+	}
+	if in.DebtDaysBefore != nil && !PolicySettingEnabled(triggerDebt, triggerCredit, triggerPlanned, triggerSubscription, "debt_days_before") {
 		return SettingsView{}, fmt.Errorf("debt_days_before requires trigger_debt to be enabled")
 	}
-	if in.MyDebtOverdueDaysLimit != nil && !PolicySettingEnabled(triggerDebt, triggerCredit, triggerPlanned, "my_debt_overdue_days_limit") {
+	if in.MyDebtOverdueDaysLimit != nil && !PolicySettingEnabled(triggerDebt, triggerCredit, triggerPlanned, triggerSubscription, "my_debt_overdue_days_limit") {
 		return SettingsView{}, fmt.Errorf("my_debt_overdue_days_limit requires trigger_debt to be enabled")
 	}
-	if in.OwedDebtOverdueStartAfterDays != nil && !PolicySettingEnabled(triggerDebt, triggerCredit, triggerPlanned, "owed_debt_overdue_start_after_days") {
+	if in.OwedDebtOverdueStartAfterDays != nil && !PolicySettingEnabled(triggerDebt, triggerCredit, triggerPlanned, triggerSubscription, "owed_debt_overdue_start_after_days") {
 		return SettingsView{}, fmt.Errorf("owed_debt_overdue_start_after_days requires trigger_debt to be enabled")
 	}
-	if in.OwedDebtOverdueDaysLimit != nil && !PolicySettingEnabled(triggerDebt, triggerCredit, triggerPlanned, "owed_debt_overdue_days_limit") {
+	if in.OwedDebtOverdueDaysLimit != nil && !PolicySettingEnabled(triggerDebt, triggerCredit, triggerPlanned, triggerSubscription, "owed_debt_overdue_days_limit") {
 		return SettingsView{}, fmt.Errorf("owed_debt_overdue_days_limit requires trigger_debt to be enabled")
 	}
-	if in.CreditDaysBefore != nil && !PolicySettingEnabled(triggerDebt, triggerCredit, triggerPlanned, "credit_days_before") {
+	if in.CreditDaysBefore != nil && !PolicySettingEnabled(triggerDebt, triggerCredit, triggerPlanned, triggerSubscription, "credit_days_before") {
 		return SettingsView{}, fmt.Errorf("credit_days_before requires trigger_credit to be enabled")
 	}
-	if in.NotificationTimeLocal != nil && !PolicySettingEnabled(triggerDebt, triggerCredit, triggerPlanned, "notification_time_local") {
-		return SettingsView{}, fmt.Errorf("notification_time_local requires at least one scheduled trigger (debt, credit, or planned) to be enabled")
+	if in.SubscriptionDaysBefore != nil && !PolicySettingEnabled(triggerDebt, triggerCredit, triggerPlanned, triggerSubscription, "subscription_days_before") {
+		return SettingsView{}, fmt.Errorf("subscription_days_before requires trigger_subscription to be enabled")
+	}
+	if in.NotificationTimeLocal != nil && !PolicySettingEnabled(triggerDebt, triggerCredit, triggerPlanned, triggerSubscription, "notification_time_local") {
+		return SettingsView{}, fmt.Errorf("notification_time_local requires at least one scheduled trigger (debt, credit, planned, or subscription) to be enabled")
 	}
 
 	if in.MaxProvider != nil {
@@ -232,6 +245,12 @@ func UpdateSettings(ctx context.Context, db *sql.DB, userID string, in UpdateSet
 			return SettingsView{}, fmt.Errorf("credit_days_before must be in range 0..30")
 		}
 		settings.CreditDaysBefore = *in.CreditDaysBefore
+	}
+	if in.SubscriptionDaysBefore != nil {
+		if *in.SubscriptionDaysBefore < 0 || *in.SubscriptionDaysBefore > 30 {
+			return SettingsView{}, fmt.Errorf("subscription_days_before must be in range 0..30")
+		}
+		settings.SubscriptionDaysBefore = *in.SubscriptionDaysBefore
 	}
 	if in.MyDebtOverdueDaysLimit != nil {
 		if *in.MyDebtOverdueDaysLimit < 0 || *in.MyDebtOverdueDaysLimit > 365 {
@@ -272,6 +291,9 @@ func UpdateSettings(ctx context.Context, db *sql.DB, userID string, in UpdateSet
 	}
 	if in.TriggerPlanned != nil {
 		settings.TriggerPlanned = boolToInt(*in.TriggerPlanned)
+	}
+	if in.TriggerSubscription != nil {
+		settings.TriggerSubscription = boolToInt(*in.TriggerSubscription)
 	}
 	if in.TriggerNegativeBalance != nil {
 		settings.TriggerNegativeBalance = boolToInt(*in.TriggerNegativeBalance)
@@ -378,11 +400,13 @@ func UpdateSettings(ctx context.Context, db *sql.DB, userID string, in UpdateSet
 		TriggerAutoTopupDisabled:      settings.TriggerAutoTopupDisabled,
 		TriggerUserRegistration:       settings.TriggerUserRegistration,
 		TriggerPasswordReset:          settings.TriggerPasswordReset,
+		TriggerSubscription:           settings.TriggerSubscription,
 		DebtDaysBefore:                settings.DebtDaysBefore,
 		MyDebtOverdueDaysLimit:        settings.MyDebtOverdueDaysLimit,
 		OwedDebtOverdueStartAfterDays: settings.OwedDebtOverdueStartAfterDays,
 		OwedDebtOverdueDaysLimit:      settings.OwedDebtOverdueDaysLimit,
 		CreditDaysBefore:              settings.CreditDaysBefore,
+		SubscriptionDaysBefore:        settings.SubscriptionDaysBefore,
 		NotificationTimeLocal:         settings.NotificationTimeLocal,
 		UpdatedAt:                     time.Now().UTC().Format(time.RFC3339),
 	}); err != nil {
@@ -784,6 +808,15 @@ func applyPreviewURLs(triggerType string, data FormatData, externalURL, localeCo
 		data["debt_url"] = debtURLPlaceholderValue(externalURL, localeCode, previewDebtID)
 	case TriggerCreditPayment:
 		data["credit_url"] = creditURLPlaceholderValue(externalURL, localeCode, previewCreditID)
+	case TriggerSubscriptionCharge:
+		data["name"] = choose(normalizeLocale(localeCode) == "ru", "Яндекс Плюс", "Yandex Plus")
+		data["amount"] = FormatAmountDisplay(29900, currencyCode)
+		data["account"] = choose(normalizeLocale(localeCode) == "ru", "Карта", "Card")
+		data["description"] = choose(normalizeLocale(localeCode) == "ru", "своя", "mine")
+		data["website_url"] = "https://plus.yandex.ru"
+		data["date"] = "2026-08-05"
+		data["when"] = choose(normalizeLocale(localeCode) == "ru", "завтра", "tomorrow")
+		data["subscription_url"] = subscriptionURLPlaceholderValue(externalURL, localeCode, "preview-subscription")
 	case TriggerPlannedOp:
 		data["transaction_url"] = transactionURLPlaceholderValue(externalURL, localeCode, previewTransactionID)
 	case TriggerBudgetThreshold:

@@ -6,7 +6,8 @@ export type EntityKind =
 	| 'account'
 	| 'budget'
 	| 'credit'
-	| 'recurring';
+	| 'recurring'
+	| 'subscription';
 
 export type PendingOp = 'create' | 'update' | 'delete';
 
@@ -168,6 +169,23 @@ export type RecurringPayload = {
 	active?: boolean;
 };
 
+export type SubscriptionPayload = {
+	name: string;
+	amount: string;
+	description?: string;
+	icon?: string;
+	website_url?: string;
+	account_id: string;
+	period: 'week' | 'two_weeks' | 'month' | 'quarter' | 'half_year' | 'year';
+	weekday?: number;
+	day_of_month?: number;
+	start_date: string;
+	time_local?: string;
+	active?: boolean;
+	/** Online-only; stripped from offline outbox creates. */
+	attach_transaction_id?: string;
+};
+
 export type OutboxPayload =
 	| TransactionPayload
 	| TransferPayload
@@ -180,7 +198,8 @@ export type OutboxPayload =
 	| AccountStatusPayload
 	| BudgetPayload
 	| CreditActionPayload
-	| RecurringPayload;
+	| RecurringPayload
+	| SubscriptionPayload;
 
 export type OutboxEntry = {
 	entityKey: string;

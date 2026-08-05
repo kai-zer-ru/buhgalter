@@ -33,6 +33,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/setup"
 	"github.com/kai-zer-ru/buhgalter/internal/static"
 	"github.com/kai-zer-ru/buhgalter/internal/stats"
+	"github.com/kai-zer-ru/buhgalter/internal/subscription"
 	"github.com/kai-zer-ru/buhgalter/internal/transaction"
 	"github.com/kai-zer-ru/buhgalter/internal/ui"
 	"github.com/kai-zer-ru/buhgalter/internal/user"
@@ -97,6 +98,7 @@ func (s *Server) Handler() http.Handler {
 	debtHandler := &debt.Handler{Store: dbHandle, Audit: s.audit}
 	creditHandler := &credit.Handler{Store: dbHandle, Audit: s.audit}
 	recurringHandler := &recurring.Handler{Store: dbHandle, Audit: s.audit}
+	subscriptionHandler := &subscription.Handler{Store: dbHandle, Audit: s.audit}
 	budgetHandler := &budget.Handler{Store: dbHandle, Audit: s.audit}
 	importHandler := &importexport.Handler{Store: dbHandle, Audit: s.audit, Logger: s.logger}
 	statsHandler := &stats.Handler{Store: dbHandle}
@@ -153,6 +155,15 @@ func (s *Server) Handler() http.Handler {
 			ar.Put("/recurring-operations/{id}", recurringHandler.Update)
 			ar.Delete("/recurring-operations/{id}", recurringHandler.Delete)
 
+			ar.Get("/subscriptions", subscriptionHandler.List)
+			ar.Get("/subscriptions/summary", subscriptionHandler.Summary)
+			ar.Post("/subscriptions", subscriptionHandler.Create)
+			ar.Post("/subscriptions/from-recurring/{recurring_id}", subscriptionHandler.ConvertFromRecurring)
+			ar.Put("/subscriptions/{id}", subscriptionHandler.Update)
+			ar.Delete("/subscriptions/{id}", subscriptionHandler.Delete)
+			ar.Get("/subscriptions/{id}/candidate-transactions", subscriptionHandler.Candidates)
+			ar.Post("/subscriptions/{id}/attach-transactions", subscriptionHandler.Attach)
+
 			ar.Get("/budgets/summary", budgetHandler.Summary)
 			ar.Get("/budgets/spent-preview", budgetHandler.SpentPreview)
 			ar.Get("/budgets", budgetHandler.List)
@@ -164,6 +175,7 @@ func (s *Server) Handler() http.Handler {
 
 			if os.Getenv("BUHGALTER_E2E") == "1" {
 				ar.Post("/test/recurring-operations/{id}/run-now", recurringHandler.E2ERunNow)
+				ar.Post("/test/subscriptions/{id}/run-now", subscriptionHandler.E2ERunNow)
 				ar.Post("/test/credits/{id}/apply-due", creditHandler.E2EApplyDue)
 			}
 

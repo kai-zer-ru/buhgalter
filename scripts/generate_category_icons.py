@@ -11,6 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 JSON_PATH = ROOT / "data" / "category_icons.json"
 OFFICIAL_DIR = ROOT / "data" / "category_icons"
+BANK_DIR = ROOT / "data" / "banks"
 OUT_DIRS = (
     ROOT / "web" / "static" / "icons" / "categories",
     ROOT / "android" / "ui" / "static" / "icons" / "categories",
@@ -35,7 +36,19 @@ def main() -> int:
             raise SystemExit(f"duplicate icon id: {icon_id}")
         seen.add(icon_id)
 
-        if item.get("official_logo"):
+        if item.get("bank_logo"):
+            bank_id = item["bank_logo"] if isinstance(item["bank_logo"], str) else icon_id
+            src = BANK_DIR / f"{bank_id}.svg"
+            if not src.is_file():
+                print(
+                    f"missing bank logo for {icon_id} ({bank_id}.svg): run "
+                    f"'make download-bank-logos'",
+                    file=sys.stderr,
+                )
+                return 1
+            for out_dir in OUT_DIRS:
+                shutil.copyfile(src, out_dir / f"{icon_id}.svg")
+        elif item.get("official_logo"):
             src = OFFICIAL_DIR / f"{icon_id}.svg"
             if not src.is_file():
                 print(
