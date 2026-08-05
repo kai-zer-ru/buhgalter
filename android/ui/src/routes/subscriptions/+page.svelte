@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
-	import { _ } from 'svelte-i18n';
+	import { _, locale } from 'svelte-i18n';
 	import {
 		attachSubscriptionTransactions,
 		getSubscriptionsSummary,
@@ -27,7 +27,10 @@
 	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
 	import SectionHeader from '$lib/components/SectionHeader.svelte';
 	import { confirm } from '$lib/confirm';
-	import { formatAPIOperationDateTimeForDisplay } from '$lib/dates';
+	import {
+		formatAPIDayMonthTimeForDisplay,
+		formatAPIOperationDateTimeForDisplay
+	} from '$lib/dates';
 	import { reportPageLoadFailure } from '$lib/page-load';
 	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
@@ -282,7 +285,7 @@
 								<span class="truncate font-medium">{item.name}</span>
 							</span>
 							<span class="shrink-0 tabular-nums" style:color="var(--text-muted)">
-								{formatAPIOperationDateTimeForDisplay(item.next_run_at, tz)}
+								{formatAPIDayMonthTimeForDisplay(item.next_run_at, tz, $locale ?? 'ru')}
 								·
 								<MoneyDisplay value={item.amount_display} {currency} class="" />
 							</span>

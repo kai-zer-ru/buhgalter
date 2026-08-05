@@ -27,6 +27,14 @@ export function formatDisplayDateTimeShort(d: Date): string {
 	return `${formatDisplayDate(d)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
 
+/** Local wall-clock → «4 мая в 09:22» / «May 4 at 09:22» (без года). */
+export function formatDisplayDayMonthTime(d: Date, locale = 'ru'): string {
+	const dayMonth = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'long' }).format(d);
+	const time = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+	const prep = locale.startsWith('ru') ? 'в' : 'at';
+	return `${dayMonth} ${prep} ${time}`;
+}
+
 /** Date parts → `DISPLAY_DATE_FORMAT` */
 export function formatDatePartsForDisplay(year: number, month: number, day: number): string {
 	return `${pad2(day)}.${pad2(month)}.${year}`;
@@ -145,6 +153,15 @@ export function formatAPIDateTimeForDisplay(s: string, tz: string): string {
 export function formatAPIOperationDateTimeForDisplay(s: string, tz: string): string {
 	try {
 		return formatDisplayDateTimeShort(fromAPIDateTime(s, tz));
+	} catch {
+		return s;
+	}
+}
+
+/** API UTC string → day+month+time without year (subscriptions upcoming; next charge within a year). */
+export function formatAPIDayMonthTimeForDisplay(s: string, tz: string, locale = 'ru'): string {
+	try {
+		return formatDisplayDayMonthTime(fromAPIDateTime(s, tz), locale);
 	} catch {
 		return s;
 	}

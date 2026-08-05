@@ -5,11 +5,13 @@ import {
 	DISPLAY_DATETIME_SHORT_FORMAT,
 	formatAPIDateForDisplay,
 	formatAPIDateTimeForDisplay,
+	formatAPIDayMonthTimeForDisplay,
 	formatAPIOperationDateTimeForDisplay,
 	formatCreditPaymentDateForDisplay,
 	formatDisplayDate,
 	formatDisplayDateTime,
 	formatDisplayDateTimeShort,
+	formatDisplayDayMonthTime,
 	formatISODateForDisplay
 } from './dates';
 
@@ -39,6 +41,16 @@ describe('formatDisplayDateTimeShort', () => {
 	});
 });
 
+describe('formatDisplayDayMonthTime', () => {
+	it('formats Russian day+month+time without year', () => {
+		expect(formatDisplayDayMonthTime(new Date(2027, 4, 4, 9, 22), 'ru')).toBe('4 мая в 09:22');
+	});
+
+	it('formats English day+month+time without year', () => {
+		expect(formatDisplayDayMonthTime(new Date(2027, 4, 4, 9, 22), 'en')).toBe('May 4 at 09:22');
+	});
+});
+
 describe('formatISODateForDisplay', () => {
 	it('converts yyyy-MM-dd to dd.MM.yyyy', () => {
 		expect(formatISODateForDisplay('2026-12-31')).toBe('31.12.2026');
@@ -65,6 +77,14 @@ describe('formatAPIOperationDateTimeForDisplay', () => {
 	it('formats without seconds in user timezone', () => {
 		expect(formatAPIOperationDateTimeForDisplay('2026-12-31 08:30:45', 'UTC')).toBe(
 			'31.12.2026 08:30'
+		);
+	});
+});
+
+describe('formatAPIDayMonthTimeForDisplay', () => {
+	it('formats upcoming subscription date without year', () => {
+		expect(formatAPIDayMonthTimeForDisplay('2027-05-04 09:22:00', 'UTC', 'ru')).toBe(
+			'4 мая в 09:22'
 		);
 	});
 });

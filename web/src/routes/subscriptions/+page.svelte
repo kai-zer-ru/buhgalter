@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
-	import { _ } from 'svelte-i18n';
+	import { _, locale } from 'svelte-i18n';
 	import {
 		attachSubscriptionTransactions,
 		createSubscription,
@@ -35,6 +35,7 @@
 		todayDateLocal,
 		fromDatetimeLocalValue,
 		toDatetimeLocalValue,
+		formatAPIDayMonthTimeForDisplay,
 		formatAPIOperationDateTimeForDisplay
 	} from '$lib/dates';
 	import { formatMoneyForInput, toAPIAmount } from '$lib/money';
@@ -604,7 +605,7 @@
 								<span class="truncate font-medium">{item.name}</span>
 							</span>
 							<span class="shrink-0 tabular-nums" style:color="var(--text-muted)">
-								{formatAPIOperationDateTimeForDisplay(item.next_run_at, tz)}
+								{formatAPIDayMonthTimeForDisplay(item.next_run_at, tz, $locale ?? 'ru')}
 								·
 								<MoneyDisplay value={item.amount_display} {currency} class="" />
 							</span>
