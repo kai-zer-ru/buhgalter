@@ -3,6 +3,7 @@
 	 * Date/time picker. Project standards: docs/date-time-display.md,
 	 * props helpers in $lib/datetime-picker-standards.ts
 	 */
+	import { untrack } from 'svelte';
 	import { portal } from '$lib/actions/portal';
 	import { dropdownListStyle } from '$lib/dropdown-position';
 	import FieldHint from '$lib/components/FieldHint.svelte';
@@ -25,6 +26,7 @@
 
 	let {
 		value = $bindable(''),
+		timeExpanded = $bindable(false),
 		id = 'datetime',
 		label = '',
 		hint = '',
@@ -34,9 +36,12 @@
 		defaultTime = 'now' as 'now' | 'preserve' | string,
 		required = false,
 		blockPastIncludingToday = false,
-		timezone = ''
+		timezone = '',
+		/** When false, optional time UI is not rendered (parent can host it). */
+		showOptionalTimeUI = true
 	}: {
 		value?: string;
+		timeExpanded?: boolean;
 		id?: string;
 		label?: string;
 		hint?: string;
@@ -48,13 +53,13 @@
 		blockPastIncludingToday?: boolean;
 		/** User TZ for min-date when blockPastIncludingToday; falls back to browser local. */
 		timezone?: string;
+		showOptionalTimeUI?: boolean;
 	} = $props();
 
 	let open = $state(false);
 	let triggerEl: HTMLButtonElement | undefined = $state();
 	let panelEl: HTMLDivElement | undefined = $state();
 	let panelStyle = $state('');
-	let timeExpanded = $state(false);
 	let timeValue = $state('');
 	let viewYear = $state(new Date().getFullYear());
 	let viewMonth = $state(new Date().getMonth() + 1);
@@ -112,12 +117,19 @@
 
 	function syncViewFromValue() {
 		const p = parseDatetimeLocal(value);
-		if (p) {
-			viewYear = p.year;
-			viewMonth = p.month;
-			timeValue = `${String(p.hour).padStart(2, '0')}:${String(p.minute).padStart(2, '0')}`;
-		}
+		if (!p) return;
+		if (viewYear !== p.year) viewYear = p.year;
+		if (viewMonth !== p.month) viewMonth = p.month;
+		const next = `${String(p.hour).padStart(2, '0')}:${String(p.minute).padStart(2, '0')}`;
+		if (timeValue !== next) timeValue = next;
 	}
+
+	$effect(() => {
+		const p = parseDatetimeLocal(value);
+		if (!p) return;
+		const next = `${String(p.hour).padStart(2, '0')}:${String(p.minute).padStart(2, '0')}`;
+		if (untrack(() => timeValue) !== next) timeValue = next;
+	});
 
 	function resolveDefaultTime(): { hour: number; minute: number } {
 		if (defaultTime === 'now') {
@@ -447,7 +459,7 @@
 		{/if}
 	</div>
 
-	{#if timeMode === 'optional'}
+	{#if timeMode === 'optional' && showOptionalTimeUI}
 		<details bind:open={timeExpanded} class="mt-2">
 			<summary class="cursor-pointer text-sm" style:color="var(--text-muted)">
 				{$_('transactions.field.timeOptional')}

@@ -30,6 +30,8 @@ const uiMeta = {
 	],
 	income_categories: [],
 	debtors: [],
+	merchants: [],
+	tags: [],
 	active_credits: [],
 	closed_credits: []
 };

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { _ } from 'svelte-i18n';
-	import type { Account, Category } from '$lib/api/client';
+	import type { Account, Category, Merchant, Tag } from '$lib/api/client';
 	import { categorySelectLabel } from '$lib/category-label';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
 	import { dateOnlyPicker } from '$lib/datetime-picker-standards';
@@ -16,8 +16,12 @@
 		accountId: string;
 		kind: string;
 		search: string;
+		merchantId: string;
+		tagId: string;
 		accounts?: Account[];
 		categories?: Category[];
+		merchants?: Merchant[];
+		tags?: Tag[];
 		showAccount?: boolean;
 		showCategory?: boolean;
 		showType?: boolean;
@@ -34,8 +38,12 @@
 		accountId = $bindable(),
 		kind = $bindable(),
 		search = $bindable(),
+		merchantId = $bindable(''),
+		tagId = $bindable(''),
 		accounts = [],
 		categories = [],
+		merchants = [],
+		tags = [],
 		showAccount = true,
 		showCategory = true,
 		showType = true,
@@ -79,6 +87,20 @@
 		{ value: '', label: $_('transactions.filter.all') },
 		{ value: 'manual', label: $_('transactions.filters.actual') },
 		{ value: 'future', label: $_('transactions.filter.planned') }
+	]);
+
+	const merchantOptions = $derived([
+		{ value: '', label: $_('transactions.filters.allMerchants') },
+		...merchants.map((m) => ({
+			value: m.id,
+			label: m.name,
+			icon: { type: 'category' as const, icon: m.icon || 'default' }
+		}))
+	]);
+
+	const tagOptions = $derived([
+		{ value: '', label: $_('transactions.filters.allTags') },
+		...tags.map((t) => ({ value: t.id, label: t.name }))
 	]);
 </script>
 
@@ -138,6 +160,28 @@
 				usePortal
 			/>
 		{/if}
+
+		<Select
+			id="tx-filter-merchant"
+			label={$_('transactions.filters.merchant')}
+			bind:value={merchantId}
+			options={merchantOptions}
+			usePortal
+			searchable
+			searchPlaceholder={$_('common.searchPlaceholder')}
+			emptyLabel={$_('common.notFound')}
+		/>
+
+		<Select
+			id="tx-filter-tag"
+			label={$_('transactions.filters.tag')}
+			bind:value={tagId}
+			options={tagOptions}
+			usePortal
+			searchable
+			searchPlaceholder={$_('common.searchPlaceholder')}
+			emptyLabel={$_('common.notFound')}
+		/>
 
 		<label
 			class={`space-y-1 sm:col-span-2 ${expandSearchToEnd ? 'lg:col-span-3' : 'lg:col-span-2'}`}

@@ -9,12 +9,16 @@
 		listAccounts,
 		listBanks,
 		listCategories,
+		listMerchants,
+		listTags,
 		listTransactions,
 		setPrimaryAccount,
 		type Account,
 		type AccountBalanceSummary,
 		type Bank,
 		type Category,
+		type Merchant,
+		type Tag,
 		type Transaction
 	} from '$lib/api/client';
 	import { unarchiveAccount, updateAccount } from '$lib/offline/accounts-api';
@@ -71,6 +75,8 @@
 	let accBalanceBase = $state<AccountBalanceSummary | null>(null);
 	let banks = $state<Bank[]>([]);
 	let categories = $state<Category[]>([]);
+	let merchants = $state<Merchant[]>([]);
+	let tags = $state<Tag[]>([]);
 	let serverTransactions = $state<Transaction[]>([]);
 	let txTotal = $state(0);
 	let txPage = $state(1);
@@ -90,6 +96,8 @@
 	let categoryFilter = $state('');
 	let kindFilter = $state('');
 	let searchFilter = $state('');
+	let merchantFilter = $state('');
+	let tagFilter = $state('');
 	let filtersAutoApplyReady = $state(false);
 	let lastFiltersKey = $state('');
 
@@ -169,7 +177,9 @@
 			type: typeFilter,
 			categoryId: categoryFilter,
 			kind: kindFilter,
-			search: searchFilter.trim()
+			search: searchFilter.trim(),
+			merchantId: merchantFilter,
+			tagId: tagFilter
 		});
 	}
 
@@ -180,7 +190,9 @@
 			to: toLocal ? fromDateLocalEnd(toLocal, tz) : '',
 			type: typeFilter,
 			category_id: categoryFilter,
-			search: searchFilter
+			search: searchFilter,
+			merchant_id: merchantFilter,
+			tag_id: tagFilter
 		};
 		if (kindFilter) {
 			params.kind = kindFilter;
@@ -199,6 +211,8 @@
 		categoryFilter = q.get('category_id') ?? '';
 		kindFilter = q.get('kind') ?? '';
 		searchFilter = q.get('search') ?? '';
+		merchantFilter = q.get('merchant_id') ?? '';
+		tagFilter = q.get('tag_id') ?? '';
 	}
 
 	async function load(opts: { background?: boolean } = {}) {
@@ -211,15 +225,25 @@
 		if (!opts.background && !hasCache) loading = true;
 		try {
 			await refreshMergeMeta().catch(() => undefined);
-			const [account, accountBalance, bankList, expenseCats, incomeCats, accountList] =
-				await Promise.all([
-					getAccount(id),
-					getAccountBalance(id),
-					listBanks(),
-					listCategories('expense'),
-					listCategories('income'),
-					listAccounts()
-				]);
+			const [
+				account,
+				accountBalance,
+				bankList,
+				expenseCats,
+				incomeCats,
+				accountList,
+				merchantList,
+				tagList
+			] = await Promise.all([
+				getAccount(id),
+				getAccountBalance(id),
+				listBanks(),
+				listCategories('expense'),
+				listCategories('income'),
+				listAccounts(),
+				listMerchants(),
+				listTags()
+			]);
 			acc = opts.background ? assignIfChanged(acc, account) : account;
 			accBalanceBase = opts.background
 				? assignIfChanged(accBalanceBase, accountBalance)
@@ -234,6 +258,8 @@
 				a.name.localeCompare(b.name, 'ru')
 			);
 			categories = opts.background ? assignIfChanged(categories, nextCategories) : nextCategories;
+			merchants = opts.background ? assignIfChanged(merchants, merchantList) : merchantList;
+			tags = opts.background ? assignIfChanged(tags, tagList) : tagList;
 			name = account.name;
 			bankId = account.bank_id ?? '';
 			paymentAccountId = account.payment_account_id ?? '';
@@ -265,6 +291,8 @@
 			if (categoryFilter) params.category_id = categoryFilter;
 			if (kindFilter) params.kind = kindFilter;
 			if (searchFilter.trim()) params.search = searchFilter.trim();
+			if (merchantFilter) params.merchant_id = merchantFilter;
+			if (tagFilter) params.tag_id = tagFilter;
 			const result = await listTransactions(params);
 			const nextData = result.data;
 			serverTransactions = opts.background
@@ -287,6 +315,8 @@
 		if (categoryFilter) queryParts.push(`category_id=${encodeURIComponent(categoryFilter)}`);
 		if (kindFilter) queryParts.push(`kind=${encodeURIComponent(kindFilter)}`);
 		if (searchFilter.trim()) queryParts.push(`search=${encodeURIComponent(searchFilter.trim())}`);
+		if (merchantFilter) queryParts.push(`merchant_id=${encodeURIComponent(merchantFilter)}`);
+		if (tagFilter) queryParts.push(`tag_id=${encodeURIComponent(tagFilter)}`);
 		await goto(resolveAppPath(`/accounts/${id}?${queryParts.join('&')}`), {
 			replaceState: true,
 			noScroll: true,
@@ -541,6 +571,8 @@
 		categoryFilter = '';
 		kindFilter = '';
 		searchFilter = '';
+		merchantFilter = '';
+		tagFilter = '';
 		txPage = 1;
 		lastFiltersKey = currentFiltersKey();
 		await applyURLFilters();
@@ -740,6 +772,8 @@
 					accountId=""
 					accounts={[]}
 					{categories}
+					{merchants}
+					{tags}
 					showAccount={false}
 					expandSearchToEnd={true}
 					onreset={resetFilters}
@@ -747,6 +781,8 @@
 					bind:categoryId={categoryFilter}
 					bind:kind={kindFilter}
 					bind:search={searchFilter}
+					bind:merchantId={merchantFilter}
+					bind:tagId={tagFilter}
 				/>
 
 				<TransactionContextStats params={accountStatsContextParams()} transactionCount={txTotal} />

@@ -28,6 +28,7 @@ import {
 import type { TransactionPayload, TransferPayload } from '$lib/offline/types';
 import { isLocalEntityKey } from '$lib/offline/types';
 import { afterOnlineWrite } from '$lib/offline/after-online-write';
+import { ensureMerchantsTagsFromTransaction } from '$lib/offline/ref-cache-mutations';
 
 function isOfflineError(err: unknown): boolean {
 	return isConnectionError(err) || (err instanceof ApiError && isTransientHttpError(err.status));
@@ -45,28 +46,23 @@ async function tryOnline<T>(fn: () => Promise<T>): Promise<T | null> {
 	}
 }
 
-export async function createTransaction(payload: TransactionPayload): Promise<Transaction> {
-	if (!shouldUseOfflineQueue()) {
-		return apiCreateTransaction(payload);
-	}
-	if (await shouldTryServer()) {
-		const res = await tryOnline(() => apiCreateTransaction(payload));
-		if (res) {
-			afterOnlineWrite();
-			return res;
-		}
-	}
-	const localKey = makeLocalKey();
-	enqueueTransactionCreate(localKey, payload);
+function localTransactionFromPayload(id: string, payload: TransactionPayload): Transaction {
 	const ts = new Date().toISOString();
+	const tags = [
+		...(payload.tag_ids ?? []).map((tagId) => ({ id: tagId, name: '' })),
+		...(payload.tag_names ?? []).map((name) => ({ id: '', name }))
+	];
 	return {
-		id: localKey,
+		id,
 		account_id: payload.account_id,
 		type: payload.type,
 		kind: 'manual',
 		amount: 0,
 		amount_display: payload.amount,
 		description: payload.description ?? null,
+		merchant_id: payload.merchant_id ?? null,
+		merchant_name: payload.merchant_name ?? null,
+		tags: tags.length ? tags : undefined,
 		category_id: payload.category_id ?? null,
 		subcategory_id: payload.subcategory_id ?? null,
 		transaction_date: payload.transaction_date,
@@ -75,38 +71,63 @@ export async function createTransaction(payload: TransactionPayload): Promise<Tr
 	} as Transaction;
 }
 
+export async function createTransaction(payload: TransactionPayload): Promise<Transaction> {
+	if (!shouldUseOfflineQueue()) {
+		const tx = await apiCreateTransaction(payload);
+		ensureMerchantsTagsFromTransaction(tx);
+		return tx;
+	}
+	if (await shouldTryServer()) {
+		const res = await tryOnline(() => apiCreateTransaction(payload));
+		if (res) {
+			ensureMerchantsTagsFromTransaction(res);
+			afterOnlineWrite();
+			return res;
+		}
+	}
+	const localKey = makeLocalKey();
+	enqueueTransactionCreate(localKey, payload);
+	const tx = localTransactionFromPayload(localKey, payload);
+	ensureMerchantsTagsFromTransaction(tx, {
+		merchantName: payload.merchant_name,
+		tagNames: payload.tag_names
+	});
+	return tx;
+}
+
 export async function updateTransaction(
 	id: string,
 	payload: TransactionPayload
 ): Promise<Transaction> {
 	if (!shouldUseOfflineQueue()) {
-		return apiUpdateTransaction(id, payload);
+		const tx = await apiUpdateTransaction(id, payload);
+		ensureMerchantsTagsFromTransaction(tx);
+		return tx;
 	}
 	if (isLocalEntityKey(id)) {
 		enqueueTransactionUpdate(id, payload);
-		return {
-			id,
-			...payload,
-			kind: 'manual',
-			amount: 0,
-			amount_display: payload.amount
-		} as Transaction;
+		const tx = localTransactionFromPayload(id, payload);
+		ensureMerchantsTagsFromTransaction(tx, {
+			merchantName: payload.merchant_name,
+			tagNames: payload.tag_names
+		});
+		return tx;
 	}
 	if (await shouldTryServer()) {
 		const res = await tryOnline(() => apiUpdateTransaction(id, payload));
 		if (res) {
+			ensureMerchantsTagsFromTransaction(res);
 			afterOnlineWrite();
 			return res;
 		}
 	}
 	enqueueTransactionUpdate(id, payload);
-	return {
-		id,
-		...payload,
-		kind: 'manual',
-		amount: 0,
-		amount_display: payload.amount
-	} as Transaction;
+	const tx = localTransactionFromPayload(id, payload);
+	ensureMerchantsTagsFromTransaction(tx, {
+		merchantName: payload.merchant_name,
+		tagNames: payload.tag_names
+	});
+	return tx;
 }
 
 export async function deleteTransaction(id: string): Promise<void> {

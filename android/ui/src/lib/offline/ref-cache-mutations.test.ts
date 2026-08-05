@@ -4,6 +4,7 @@ import {
 	onCategoryCreated,
 	onCategoryDeleted,
 	onCategoryUpdated,
+	ensureMerchantsTagsFromTransaction,
 	onDebtCreated,
 	onDebtDeleted,
 	onDebtUpdated,
@@ -164,6 +165,92 @@ describe('ref-cache-mutations debts', () => {
 
 		expect(readRefCache<Debt[]>('/api/v1/debts?settled=false')).toEqual([]);
 		expect(readRefCache<Debt[]>('/api/v1/debts?settled=true')).toEqual([]);
+	});
+});
+
+describe('ensureMerchantsTagsFromTransaction', () => {
+	beforeEach(() => {
+		resetRefCacheForTests();
+	});
+
+	it('adds merchant and tags to lists and ui/meta', () => {
+		writeRefCache('/api/v1/merchants', [
+			{ id: 'old-m', name: 'Старый', icon: 'default', created_at: '2026-01-01T00:00:00Z' }
+		]);
+		writeRefCache('/api/v1/tags', [
+			{ id: 'old-t', name: 'old', created_at: '2026-01-01T00:00:00Z' }
+		]);
+		writeRefCache('/api/v1/ui/meta', {
+			merchants: [
+				{ id: 'old-m', name: 'Старый', icon: 'default', created_at: '2026-01-01T00:00:00Z' }
+			],
+			tags: [{ id: 'old-t', name: 'old', created_at: '2026-01-01T00:00:00Z' }],
+			expense_categories: [],
+			income_categories: []
+		});
+
+		ensureMerchantsTagsFromTransaction({
+			id: 'tx1',
+			account_id: 'a1',
+			type: 'expense',
+			kind: 'manual',
+			amount: 100,
+			amount_display: '1.00',
+			description: null,
+			merchant_id: 'm-new',
+			merchant_name: 'Пятёрочка',
+			merchant_icon: 'shopping',
+			tags: [{ id: 't-new', name: 'еда' }],
+			category_id: null,
+			subcategory_id: null,
+			transaction_date: '2026-07-08 10:00:00',
+			created_at: '2026-07-08T10:00:00Z',
+			updated_at: '2026-07-08T10:00:00Z'
+		});
+
+		expect(readRefCache<{ id: string }[]>('/api/v1/merchants')?.map((m) => m.id)).toEqual([
+			'm-new',
+			'old-m'
+		]);
+		expect(
+			readRefCache<{ id: string; icon: string }[]>('/api/v1/merchants')?.find(
+				(m) => m.id === 'm-new'
+			)?.icon
+		).toBe('shopping');
+		expect(readRefCache<{ id: string }[]>('/api/v1/tags')?.map((t) => t.id)).toEqual([
+			't-new',
+			'old-t'
+		]);
+		expect(
+			readRefCache<{ merchants: { id: string }[] }>('/api/v1/ui/meta')?.merchants.map((m) => m.id)
+		).toEqual(['m-new', 'old-m']);
+	});
+
+	it('creates local merchant from merchantName when id is missing', () => {
+		writeRefCache('/api/v1/merchants', []);
+		ensureMerchantsTagsFromTransaction(
+			{
+				id: 'tx1',
+				account_id: 'a1',
+				type: 'expense',
+				kind: 'manual',
+				amount: 100,
+				amount_display: '1.00',
+				description: null,
+				category_id: null,
+				subcategory_id: null,
+				transaction_date: '2026-07-08 10:00:00',
+				created_at: '2026-07-08T10:00:00Z',
+				updated_at: '2026-07-08T10:00:00Z'
+			},
+			{ merchantName: 'Новый', tagNames: ['отпуск'] }
+		);
+
+		const merchants = readRefCache<{ id: string; name: string }[]>('/api/v1/merchants');
+		expect(merchants).toHaveLength(1);
+		expect(merchants?.[0]?.name).toBe('Новый');
+		expect(merchants?.[0]?.id.startsWith('local:')).toBe(true);
+		expect(readRefCache<{ name: string }[]>('/api/v1/tags')?.[0]?.name).toBe('отпуск');
 	});
 });
 

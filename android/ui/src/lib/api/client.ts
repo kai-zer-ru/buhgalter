@@ -715,6 +715,8 @@ export type UIMeta = {
 	expense_categories: Category[];
 	income_categories: Category[];
 	debtors: Debtor[];
+	merchants: Merchant[];
+	tags: Tag[];
 	active_credits: Credit[];
 	closed_credits: Credit[];
 };
@@ -746,6 +748,8 @@ async function warmSubcategoriesCache(categories: Category[]): Promise<void> {
 export async function getUIMeta() {
 	const meta = await request<UIMeta>('/api/v1/ui/meta');
 	seedStaticRef('/api/v1/banks', meta.banks);
+	seedStaticRef('/api/v1/merchants', meta.merchants ?? []);
+	seedStaticRef('/api/v1/tags', meta.tags ?? []);
 	seedCategoriesFromUIMeta(meta);
 	void warmSubcategoriesCache([...meta.expense_categories, ...meta.income_categories]);
 	return meta;
@@ -921,6 +925,10 @@ export type Transaction = {
 	commission?: number;
 	commission_display?: string;
 	description: string | null;
+	merchant_id?: string | null;
+	merchant_name?: string | null;
+	merchant_icon?: string | null;
+	tags?: TagRef[];
 	category_id: string | null;
 	category_name?: string | null;
 	category_icon?: string | null;
@@ -1078,6 +1086,24 @@ export type DebtTransaction = {
 	deletable: boolean;
 };
 
+export type Merchant = {
+	id: string;
+	name: string;
+	icon: string;
+	created_at: string;
+};
+
+export type Tag = {
+	id: string;
+	name: string;
+	created_at: string;
+};
+
+export type TagRef = {
+	id: string;
+	name: string;
+};
+
 export type Debtor = {
 	id: string;
 	name: string;
@@ -1140,7 +1166,7 @@ export function getTransaction(id: string) {
 	});
 }
 
-export function createTransaction(payload: {
+export type TransactionWritePayload = {
 	account_id: string;
 	type: 'income' | 'expense';
 	amount: string;
@@ -1148,27 +1174,21 @@ export function createTransaction(payload: {
 	category_id?: string;
 	subcategory_id?: string;
 	subcategory_name?: string;
+	merchant_id?: string;
+	merchant_name?: string;
+	tag_ids?: string[];
+	tag_names?: string[];
 	transaction_date: string;
-}) {
+};
+
+export function createTransaction(payload: TransactionWritePayload) {
 	return request<Transaction>('/api/v1/transactions', {
 		method: 'POST',
 		body: JSON.stringify(payload)
 	});
 }
 
-export function updateTransaction(
-	id: string,
-	payload: {
-		account_id: string;
-		type: 'income' | 'expense';
-		amount: string;
-		description?: string;
-		category_id?: string;
-		subcategory_id?: string;
-		subcategory_name?: string;
-		transaction_date: string;
-	}
-) {
+export function updateTransaction(id: string, payload: TransactionWritePayload) {
 	return request<Transaction>(`/api/v1/transactions/${id}`, {
 		method: 'PUT',
 		body: JSON.stringify(payload)
@@ -1579,6 +1599,51 @@ export function getAccountsSummary() {
 
 export function getAccountBalance(id: string) {
 	return request<AccountBalanceSummary>(`/api/v1/accounts/${id}/balance`);
+}
+
+export function listMerchants() {
+	return request<Merchant[]>('/api/v1/merchants');
+}
+
+export function createMerchant(name: string, icon?: string) {
+	return request<Merchant>('/api/v1/merchants', {
+		method: 'POST',
+		body: JSON.stringify({ name, icon: icon?.trim() || 'default' })
+	});
+}
+
+export function updateMerchant(id: string, name: string, icon?: string) {
+	return request<Merchant>(`/api/v1/merchants/${id}`, {
+		method: 'PUT',
+		body: JSON.stringify({ name, icon: icon?.trim() || 'default' })
+	});
+}
+
+export function deleteMerchant(id: string) {
+	return request<void>(`/api/v1/merchants/${id}`, { method: 'DELETE' });
+}
+
+export function listTags(q?: string) {
+	const params = q?.trim() ? `?q=${encodeURIComponent(q.trim())}` : '';
+	return request<Tag[]>(`/api/v1/tags${params}`);
+}
+
+export function createTag(name: string) {
+	return request<Tag>('/api/v1/tags', {
+		method: 'POST',
+		body: JSON.stringify({ name })
+	});
+}
+
+export function updateTag(id: string, name: string) {
+	return request<Tag>(`/api/v1/tags/${id}`, {
+		method: 'PUT',
+		body: JSON.stringify({ name })
+	});
+}
+
+export function deleteTag(id: string) {
+	return request<void>(`/api/v1/tags/${id}`, { method: 'DELETE' });
 }
 
 export function listDebtors() {

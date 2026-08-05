@@ -28,6 +28,8 @@ vi.mock('$lib/api/client', async (importOriginal) => {
 		listSubscriptions: ok,
 		getSubscriptionsSummary: ok,
 		listDebts: ok,
+		listMerchants: ok,
+		listTags: ok,
 		listTransactions: ok
 	};
 });

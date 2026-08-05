@@ -22,6 +22,8 @@
 		| '/credits'
 		| '/subscriptions'
 		| '/categories'
+		| '/merchants'
+		| '/tags'
 		| '/recurring-operations'
 		| '/transactions'
 		| '/stats'
@@ -39,7 +41,9 @@
 	} = $props();
 
 	function target(item: BreadcrumbItem): string {
-		return resolve(item.href);
+		// BackLinkHref is a curated set of static routes; casting to full Pathname
+		// pulls in param routes and breaks resolve() overload selection.
+		return resolve(item.href as '/');
 	}
 </script>
 

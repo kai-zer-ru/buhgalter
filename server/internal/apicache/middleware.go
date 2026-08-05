@@ -155,7 +155,8 @@ func cacheKey(r *http.Request) (string, time.Duration, bool) {
 	}
 
 	ttl := DataTTL
-	if strings.HasPrefix(path, "/api/v1/categories") || path == "/api/v1/debtors" {
+	if strings.HasPrefix(path, "/api/v1/categories") || path == "/api/v1/debtors" ||
+		path == "/api/v1/merchants" || path == "/api/v1/tags" {
 		ttl = RefDataTTL
 	}
 	return key, ttl, true

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import {
 		createTransaction,
@@ -6,12 +7,18 @@
 		listAccounts,
 		listCategories,
 		listSubcategories,
+		listMerchants,
+		listTags,
 		type Account,
 		type Category,
 		type Subcategory,
+		type Merchant,
+		type Tag,
+		type TagRef,
 		type Transaction
 	} from '$lib/api/client';
 	import { fromDatetimeLocalValue, nowDatetimeLocal, toDatetimeLocalValue } from '$lib/dates';
+	import { buildDatetimeLocal, parseDatetimeLocal } from '$lib/datetime-picker';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
 	import {
 		operationDatetimePickerCreate,
@@ -19,6 +26,7 @@
 	} from '$lib/datetime-picker-standards';
 	import FieldHint from '$lib/components/FieldHint.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
+	import Combobox from '$lib/components/Combobox.svelte';
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import { defaultAccountId } from '$lib/accounts';
@@ -57,13 +65,22 @@
 	let selectedAccount = $state('');
 	let categoryId = $state('');
 	let subcategoryId = $state('');
-	let newSubcategory = $state('');
+	let subcategoryQuery = $state('');
+	let merchantId = $state('');
+	let merchantQuery = $state('');
+	let selectedTags = $state<TagRef[]>([]);
+	let tagInput = $state('');
 	let description = $state('');
 	let dateTimeValue = $state('');
 	let accounts = $state<Account[]>([]);
 	let categories = $state<Category[]>([]);
 	let subcategories = $state<Subcategory[]>([]);
+	let merchants = $state<Merchant[]>([]);
+	let allTags = $state<Tag[]>([]);
 	let saving = $state(false);
+	let optionalDetailsOpen = $state(false);
+	let timeExpanded = $state(false);
+	let timeInput = $state('');
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
 	const editing = $derived(!!transaction);
@@ -79,10 +96,32 @@
 		return userCats;
 	});
 	const categoryOptions = $derived(categorySelectOptions(pickableCategories));
-	const subcategoryOptions = $derived([
-		{ value: '', label: '—' },
-		...subcategorySelectOptions(subcategories)
-	]);
+	const subcategoryOptions = $derived(subcategorySelectOptions(subcategories));
+	const merchantOptions = $derived(
+		merchants.map((m) => ({
+			value: m.id,
+			label: m.name,
+			icon: { type: 'category' as const, icon: m.icon || 'default' }
+		}))
+	);
+	const newSubcategoryName = $derived(subcategoryId ? '' : subcategoryQuery.trim());
+	const newMerchantName = $derived(merchantId ? '' : merchantQuery.trim());
+
+	$effect(() => {
+		const p = parseDatetimeLocal(dateTimeValue);
+		if (!p) return;
+		const next = `${String(p.hour).padStart(2, '0')}:${String(p.minute).padStart(2, '0')}`;
+		if (untrack(() => timeInput) !== next) timeInput = next;
+	});
+
+	const tagSuggestions = $derived.by(() => {
+		const q = tagInput.trim().toLowerCase();
+		const selected = new Set(selectedTags.map((t) => t.name.toLowerCase()));
+		return allTags
+			.filter((t) => !selected.has(t.name.toLowerCase()))
+			.filter((t) => !q || t.name.toLowerCase().includes(q))
+			.slice(0, 8);
+	});
 
 	const isFuture = $derived.by(() => {
 		if (!dateTimeValue) return false;
@@ -107,7 +146,12 @@
 
 	$effect(() => {
 		if (!open) return;
-		void init(transaction, repeatFrom, defaultType);
+		// Capture props as deps; run init untracked so its $state writes / tz reads
+		// cannot re-enter this effect (effect_update_depth_exceeded on edit/repeat).
+		const editSource = transaction;
+		const repeatSource = repeatFrom;
+		const createType = defaultType;
+		void untrack(() => init(editSource, repeatSource, createType));
 	});
 
 	async function init(
@@ -121,32 +165,55 @@
 			selectedAccount = editSource.account_id;
 			categoryId = editSource.category_id ?? '';
 			subcategoryId = editSource.subcategory_id ?? '';
-			newSubcategory = '';
+			subcategoryQuery = editSource.subcategory_name ?? '';
+			merchantId = editSource.merchant_id ?? '';
+			merchantQuery = editSource.merchant_name ?? '';
+			selectedTags = [...(editSource.tags ?? [])];
+			tagInput = '';
 			description = editSource.description ?? '';
-			dateTimeValue = toDatetimeLocalValue(editSource.transaction_date, tz);
+			dateTimeValue = toDatetimeLocalValue(
+				editSource.transaction_date,
+				untrack(() => tz)
+			);
+			timeExpanded = false;
+			optionalDetailsOpen = Boolean(merchantId || selectedTags.length || description.trim());
 		} else if (repeatSource) {
 			txType = repeatSource.type === 'income' ? 'income' : 'expense';
 			amount = formatMoneyForInput(repeatSource.amount_display);
 			selectedAccount = repeatSource.account_id;
 			categoryId = repeatSource.category_id ?? '';
 			subcategoryId = repeatSource.subcategory_id ?? '';
-			newSubcategory = '';
+			subcategoryQuery = repeatSource.subcategory_name ?? '';
+			merchantId = repeatSource.merchant_id ?? '';
+			merchantQuery = repeatSource.merchant_name ?? '';
+			selectedTags = [...(repeatSource.tags ?? [])];
+			tagInput = '';
 			description = repeatSource.description ?? '';
-			dateTimeValue = nowDatetimeLocal(tz);
+			dateTimeValue = nowDatetimeLocal(untrack(() => tz));
+			timeExpanded = false;
+			optionalDetailsOpen = Boolean(merchantId || selectedTags.length || description.trim());
 		} else {
 			txType = createType;
 			amount = '';
 			selectedAccount = '';
 			categoryId = '';
 			subcategoryId = '';
-			newSubcategory = '';
+			subcategoryQuery = '';
+			merchantId = '';
+			merchantQuery = '';
+			timeExpanded = false;
+			optionalDetailsOpen = false;
+			selectedTags = [];
+			tagInput = '';
 			description = '';
-			dateTimeValue = nowDatetimeLocal(tz);
+			dateTimeValue = nowDatetimeLocal(untrack(() => tz));
 		}
 		accounts = await listAccounts('active');
 		if (!editSource && !repeatSource) {
 			selectedAccount = defaultAccountId(accounts, accountId);
 		}
+		merchants = await listMerchants();
+		allTags = await listTags();
 		await loadCategories();
 	}
 
@@ -168,22 +235,36 @@
 
 	async function onCategoryChange() {
 		subcategoryId = '';
-		newSubcategory = '';
+		subcategoryQuery = '';
 		subcategories = categoryId ? await listSubcategories(categoryId) : [];
+	}
+
+	function applyOperationTime() {
+		timeExpanded = true;
+		const p = parseDatetimeLocal(dateTimeValue);
+		if (!p) return;
+		const [h, m] = (timeInput || '00:00').split(':').map(Number);
+		dateTimeValue = buildDatetimeLocal(p.year, p.month, p.day, h || 0, m || 0);
 	}
 
 	async function save(e: Event) {
 		e.preventDefault();
 		saving = true;
 		try {
+			const tagIds = selectedTags.filter((t) => t.id).map((t) => t.id);
+			const tagNames = selectedTags.filter((t) => !t.id).map((t) => t.name);
 			const payload = {
 				account_id: selectedAccount,
 				type: txType,
 				amount: toAPIAmount(amount),
 				description: description || undefined,
 				category_id: categoryId || undefined,
-				subcategory_id: newSubcategory ? undefined : subcategoryId || undefined,
-				subcategory_name: newSubcategory || undefined,
+				subcategory_id: newSubcategoryName ? undefined : subcategoryId || undefined,
+				subcategory_name: newSubcategoryName || undefined,
+				merchant_id: newMerchantName ? undefined : merchantId || undefined,
+				merchant_name: newMerchantName || undefined,
+				tag_ids: tagIds,
+				tag_names: tagNames,
 				transaction_date: fromDatetimeLocalValue(dateTimeValue, tz)
 			};
 			if (transaction) {
@@ -204,6 +285,32 @@
 	function close() {
 		open = false;
 		onclose();
+	}
+
+	function addTag(name: string, id = '') {
+		const trimmed = name.trim();
+		if (!trimmed) return;
+		if (selectedTags.some((t) => t.name.toLowerCase() === trimmed.toLowerCase())) {
+			tagInput = '';
+			return;
+		}
+		selectedTags = [...selectedTags, { id, name: trimmed }];
+		tagInput = '';
+	}
+
+	function removeTag(name: string) {
+		selectedTags = selectedTags.filter((t) => t.name !== name);
+	}
+
+	function onTagKeydown(e: KeyboardEvent) {
+		if (e.key === 'Enter') {
+			e.preventDefault();
+			const match = tagSuggestions.find(
+				(t) => t.name.toLowerCase() === tagInput.trim().toLowerCase()
+			);
+			if (match) addTag(match.name, match.id);
+			else addTag(tagInput);
+		}
 	}
 </script>
 
@@ -240,25 +347,20 @@
 			onchange={() => void onCategoryChange()}
 		/>
 
-		<div>
-			<Select
-				id="tx-sub"
-				label={$_('transactions.field.subcategory')}
-				bind:value={subcategoryId}
-				options={subcategoryOptions}
-				usePortal
-				onchange={() => {
-					if (subcategoryId) newSubcategory = '';
-				}}
-			/>
-			{#if !subcategoryId}
-				<input
-					class="input mt-2 w-full"
-					placeholder={$_('transactions.field.newSubcategory')}
-					bind:value={newSubcategory}
-				/>
-			{/if}
-		</div>
+		<Combobox
+			id="tx-sub"
+			label={$_('transactions.field.subcategory')}
+			bind:value={subcategoryId}
+			bind:query={subcategoryQuery}
+			options={subcategoryOptions}
+			usePortal
+			allowCreate
+			placeholder={$_('transactions.field.newSubcategory')}
+			createLabel={$_('transactions.field.createNamed', {
+				values: { name: subcategoryQuery.trim() || '…' }
+			})}
+			emptyLabel={$_('common.notFound')}
+		/>
 
 		<div>
 			<label class="mb-1 block text-sm font-medium" for="tx-amount"
@@ -267,17 +369,12 @@
 			<MoneyInput id="tx-amount" bind:value={amount} required />
 		</div>
 
-		<div>
-			<label class="mb-1 block text-sm font-medium" for="tx-desc"
-				>{$_('transactions.field.description')}</label
-			>
-			<input id="tx-desc" class="input w-full" bind:value={description} />
-		</div>
-
 		<DateTimePicker
 			id="tx-date"
 			label={$_('transactions.field.dateOnly')}
 			bind:value={dateTimeValue}
+			bind:timeExpanded
+			showOptionalTimeUI={false}
 			{...editing ? operationDatetimePickerEdit : operationDatetimePickerCreate}
 			usePortal
 			required
@@ -288,6 +385,93 @@
 				<FieldHint text={$_('transactions.field.plannedHint')} />
 			</div>
 		{/if}
+
+		<details bind:open={optionalDetailsOpen}>
+			<summary class="cursor-pointer text-sm" style:color="var(--text-muted)">
+				{$_('transactions.field.optionalDetails')}
+			</summary>
+			<div class="mt-3 space-y-4">
+				<div>
+					<label class="mb-1 block text-sm font-medium" for="tx-time"
+						>{$_('transactions.field.timeOptional')}</label
+					>
+					<input
+						id="tx-time"
+						type="time"
+						class="input w-full"
+						bind:value={timeInput}
+						onchange={applyOperationTime}
+					/>
+					<FieldHint text={$_('transactions.field.timeHint')} />
+				</div>
+
+				<div>
+					<label class="mb-1 block text-sm font-medium" for="tx-desc"
+						>{$_('transactions.field.description')}</label
+					>
+					<input id="tx-desc" class="input w-full" bind:value={description} />
+				</div>
+
+				<Combobox
+					id="tx-merchant"
+					label={$_('transactions.field.merchant')}
+					bind:value={merchantId}
+					bind:query={merchantQuery}
+					options={merchantOptions}
+					usePortal
+					allowCreate
+					placeholder={$_('transactions.field.newMerchant')}
+					createLabel={$_('transactions.field.createNamed', {
+						values: { name: merchantQuery.trim() || '…' }
+					})}
+					emptyLabel={$_('common.notFound')}
+				/>
+
+				<div>
+					<span class="mb-1 block text-sm font-medium">{$_('transactions.field.tags')}</span>
+					{#if selectedTags.length}
+						<div class="mb-2 flex flex-wrap gap-2">
+							{#each selectedTags as t (t.name)}
+								<button
+									type="button"
+									class="rounded-md px-2 py-1 text-sm"
+									style:background="var(--surface-2)"
+									onclick={() => removeTag(t.name)}
+								>
+									{t.name} ×
+								</button>
+							{/each}
+						</div>
+					{/if}
+					<input
+						id="tx-tags"
+						class="input w-full"
+						placeholder={$_('transactions.field.tagsHint')}
+						bind:value={tagInput}
+						onkeydown={onTagKeydown}
+					/>
+					{#if tagInput.trim() && tagSuggestions.length}
+						<ul
+							class="mt-1 max-h-40 overflow-auto rounded-md border text-sm"
+							style:border-color="var(--border)"
+						>
+							{#each tagSuggestions as sug (sug.id)}
+								<li>
+									<button
+										type="button"
+										class="block w-full px-3 py-2 text-left hover:opacity-80"
+										onclick={() => addTag(sug.name, sug.id)}
+									>
+										{sug.name}
+									</button>
+								</li>
+							{/each}
+						</ul>
+					{/if}
+				</div>
+			</div>
+		</details>
+
 		{#if creditCardNegativeWarning}
 			<p class="text-sm" style:color="var(--warning)">
 				{$_('accounts.creditCard.negativeBalance')}

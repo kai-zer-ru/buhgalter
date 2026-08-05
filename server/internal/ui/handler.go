@@ -12,6 +12,8 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/credit"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
 	"github.com/kai-zer-ru/buhgalter/internal/debt"
+	"github.com/kai-zer-ru/buhgalter/internal/merchant"
+	"github.com/kai-zer-ru/buhgalter/internal/tag"
 )
 
 type Handler struct {
@@ -33,6 +35,8 @@ type MetaResponse struct {
 	ExpenseCategories []category.Category `json:"expense_categories"`
 	IncomeCategories  []category.Category `json:"income_categories"`
 	Debtors           []debt.Debtor       `json:"debtors"`
+	Merchants         []merchant.Merchant `json:"merchants"`
+	Tags              []tag.Tag           `json:"tags"`
 	ActiveCredits     []credit.Credit     `json:"active_credits"`
 	ClosedCredits     []credit.Credit     `json:"closed_credits"`
 }
@@ -81,6 +85,16 @@ func (h *Handler) Meta(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
+	merchants, err := merchant.List(ctx, sqlDB, userID)
+	if err != nil {
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	}
+	tags, err := tag.List(ctx, sqlDB, userID, "")
+	if err != nil {
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	}
 
 	activeCredits, err := credit.List(ctx, sqlDB, userID, "active")
 	if err != nil {
@@ -99,6 +113,8 @@ func (h *Handler) Meta(w http.ResponseWriter, r *http.Request) {
 		ExpenseCategories: expenseCategories,
 		IncomeCategories:  incomeCategories,
 		Debtors:           debtors,
+		Merchants:         merchants,
+		Tags:              tags,
 		ActiveCredits:     activeCredits,
 		ClosedCredits:     closedCredits,
 	})

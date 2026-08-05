@@ -132,6 +132,16 @@
 			isActive: (p) => p.startsWith('/categories')
 		},
 		{
+			path: '/merchants',
+			labelKey: 'nav.merchants',
+			isActive: (p) => p.startsWith('/merchants')
+		},
+		{
+			path: '/tags',
+			labelKey: 'nav.tags',
+			isActive: (p) => p.startsWith('/tags')
+		},
+		{
 			path: '/recurring-operations',
 			labelKey: 'nav.recurring',
 			isActive: (p) => p.startsWith('/recurring-operations')
@@ -201,6 +211,8 @@
 			p.startsWith('/debtors') ||
 			p.startsWith('/credits') ||
 			p.startsWith('/categories') ||
+			p.startsWith('/merchants') ||
+			p.startsWith('/tags') ||
 			p.startsWith('/recurring-operations') ||
 			p.startsWith('/subscriptions')
 		);

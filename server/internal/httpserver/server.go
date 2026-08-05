@@ -27,6 +27,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/debt"
 	"github.com/kai-zer-ru/buhgalter/internal/docs"
 	"github.com/kai-zer-ru/buhgalter/internal/importexport"
+	"github.com/kai-zer-ru/buhgalter/internal/merchant"
 	appmw "github.com/kai-zer-ru/buhgalter/internal/middleware"
 	"github.com/kai-zer-ru/buhgalter/internal/recurring"
 	"github.com/kai-zer-ru/buhgalter/internal/settingscache"
@@ -34,6 +35,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/static"
 	"github.com/kai-zer-ru/buhgalter/internal/stats"
 	"github.com/kai-zer-ru/buhgalter/internal/subscription"
+	"github.com/kai-zer-ru/buhgalter/internal/tag"
 	"github.com/kai-zer-ru/buhgalter/internal/transaction"
 	"github.com/kai-zer-ru/buhgalter/internal/ui"
 	"github.com/kai-zer-ru/buhgalter/internal/user"
@@ -95,6 +97,8 @@ func (s *Server) Handler() http.Handler {
 	accountDeleteHandler := &accountDeleteHandler{store: dbHandle, audit: s.audit}
 	categoryHandler := &category.Handler{Store: dbHandle, Audit: s.audit}
 	transactionHandler := &transaction.Handler{Store: dbHandle, Audit: s.audit}
+	merchantHandler := &merchant.Handler{Store: dbHandle, Audit: s.audit}
+	tagHandler := &tag.Handler{Store: dbHandle, Audit: s.audit}
 	debtHandler := &debt.Handler{Store: dbHandle, Audit: s.audit}
 	creditHandler := &credit.Handler{Store: dbHandle, Audit: s.audit}
 	recurringHandler := &recurring.Handler{Store: dbHandle, Audit: s.audit}
@@ -185,6 +189,18 @@ func (s *Server) Handler() http.Handler {
 
 			ar.Get("/dashboard", transactionHandler.Dashboard)
 			ar.Get("/version/check", versionHandler.Check)
+
+			ar.Get("/merchants", merchantHandler.List)
+			ar.Post("/merchants", merchantHandler.Create)
+			ar.Get("/merchants/{id}", merchantHandler.Get)
+			ar.Put("/merchants/{id}", merchantHandler.Update)
+			ar.Delete("/merchants/{id}", merchantHandler.Delete)
+
+			ar.Get("/tags", tagHandler.List)
+			ar.Post("/tags", tagHandler.Create)
+			ar.Get("/tags/{id}", tagHandler.Get)
+			ar.Put("/tags/{id}", tagHandler.Update)
+			ar.Delete("/tags/{id}", tagHandler.Delete)
 
 			ar.Get("/debtors", debtHandler.ListDebtors)
 			ar.Post("/debtors", debtHandler.CreateDebtor)

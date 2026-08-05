@@ -22,6 +22,8 @@ OpenAPI-схемы: [`Transaction`](api/openapi.yaml#/components/schemas/Transac
 | `commission` | integer | Только для `type=transfer`: комиссия в копейках (сумма ноги `expense` в группе) |
 | `commission_display` | string | Отформатированная комиссия (если `commission > 0`) |
 | `credit_payment_linked` | bool | `true` — операция привязана к платежу по кредиту; редактирование через `PUT /transactions/{id}` запрещено |
+| `merchant_id`, `merchant_name`, `merchant_icon` | | Магазин (`merchants`); иконка из каталога категорий |
+| `tags` | array `{id,name}` | Теги операции (`transaction_tags` + `tags`); не колонка БД |
 
 `transfer_is_out` вычисляется в sqlc-запросах (`CASE` + подзапрос по `transfer_group_id`), не хранится в таблице `transactions`.
 
@@ -112,8 +114,9 @@ OpenAPI: `CreateTransferRequest.commission`, схемы `Transfer` и `Transacti
   - **Плановые** (`kind=future`) — **выше** прошлых, спойлер **свёрнут** по умолчанию, сортировка `date_desc`, до 20 записей первой страницы (без пагинации);
   - **Прошлые операции** (`kind=manual`) — спойлер **открыт** по умолчанию, сортировка `date_desc`, пагинация **20** на страницу (`?page=`, `TransactionPagination` только под блоком прошлых).
 - При фильтре `kind=manual` или `kind=future` — один плоский список с пагинацией (как раньше).
-- Общие фильтры (даты, тип, счёт, категория, поиск) применяются к обеим группам; `TransactionContextStats` учитывает `kind`, если он задан; без `kind` — `include_future=true` (доход/расход по плановым и фактическим). Число **«Операций»** в сводке — сумма `meta.total` групп (как в заголовках спойлеров), не `transaction_count` из stats API (тот считает только доход/расход).
+- Общие фильтры (даты, тип, счёт, категория, магазин, тег, поиск) применяются к обеим группам; `TransactionContextStats` учитывает `kind`, если он задан; без `kind` — `include_future=true` (доход/расход по плановым и фактическим). Число **«Операций»** в сводке — сумма `meta.total` групп (как в заголовках спойлеров), не `transaction_count` из stats API (тот считает только доход/расход).
 - Заголовок страницы — «Все операции» (`transactions.all`); пункт верхнего меню — «Операции» (`nav.transactions`).
+- В списке (`TransactionList`): **магазин** и **теги** — в колонке описания/комментария рядом с `description` (`TransactionMerchantTags`: иконка + имя, chips тегов). Категория отдельно, без магазина/тегов.
 
 ## Операции счёта (`/accounts/[id]`)
 
@@ -132,7 +135,7 @@ OpenAPI: `CreateTransferRequest.commission`, схемы `Transfer` и `Transacti
 
 Иконки — Font Awesome Solid (`f067` доход, `f068` расход, `f0ec` перевод); видимый текст только в `title` / `aria-label`.
 
-`TransactionForm` при **создании**: без вкладок типа; заголовок модалки — «Доход» или «Расход» (`defaultType` из родителя). При **редактировании** — заголовок «Изменить операцию», тип текстом, смена типа запрещена API. Порядок полей: счёт → категория → подкатегория → сумма → описание → дата → время (свёрнуто, `timeMode: optional`). Поле **«Новая подкатегория»** под селектом подкатегории показывается **только если** подкатегория в списке не выбрана (`{#if !subcategoryId}`).
+`TransactionForm` при **создании**: без вкладок типа; заголовок модалки — «Доход» или «Расход» (`defaultType` из родителя). При **редактировании** — заголовок «Изменить операцию», тип текстом, смена типа запрещена API. Порядок полей: счёт → категория → подкатегория → сумма → дата → спойлер **«Время, комментарий, магазин, теги»** (`transactions.field.optionalDetails`: время → описание / `description` → магазин → теги). Дата — `DateTimePicker` с `timeMode: optional` и `showOptionalTimeUI={false}` (время в спойлере; если не меняли — текущее / из БД). Спойлер свёрнут по умолчанию; при редактировании/повторе открыт, если заполнены комментарий, магазин или теги. Подкатегория и магазин — единый `Combobox` с `allowCreate`: ввод фильтрует список; точное совпадение выбирает существующее; иначе — создание по имени (`subcategory_name` / `merchant_name`, пункт «Создать «…»»). Теги — chips + ввод с подсказками по тексту (`tag_ids` / `tag_names`). Справочники: `/merchants` и `/tags` (отдельные страницы; поиск по названию в списке). У магазина — иконка из каталога категорий (`CategoryIconPicker`).
 
 `TransferForm` — отдельная модалка по кнопке перевода на тех же экранах. **(v1.2.3)** В селектах «Откуда» и «Куда» выбранный в одном поле счёт **не показывается** в другом (`transferAccountOptions` в `$lib/transfer-accounts.ts`); при совпадении значений (например, один активный счёт) поле «Куда» сбрасывается на другой счёт. При создании перевода со **страницы счёта** (`/accounts/[id]`) в «Откуда» подставляется **текущий счёт** (как счёт в `TransactionForm` для дохода/расхода); на главной и в «Все операции» — **основной** счёт (`defaultAccountId` без явного id).
 
@@ -141,7 +144,7 @@ OpenAPI: `CreateTransferRequest.commission`, схемы `Transfer` и `Transacti
 Из списка операций (`TransactionList` — главная, `/transactions`, `/accounts/[id]`) — пункт меню «Изменить» открывает `TransactionForm`:
 
 - API: `PUT /api/v1/transactions/{id}` (`updateTransaction` в клиенте)
-- Можно менять: счёт, категорию, подкатегорию, сумму, описание, дату
+- Можно менять: счёт, категорию, подкатегорию, магазин, теги, сумму, описание, дату
 - **Тип** (`income` / `expense`) не меняется — в форме показывается текстом; при смене типа в теле запроса — `ERR_TX_TYPE_CHANGE`
 - Дата в будущем (в TZ пользователя) → `kind=future` (плановая операция)
 - Операции с `credit_payment_linked` **не** редактируются из списка (`canEditTransaction`)
@@ -156,7 +159,7 @@ OpenAPI: `CreateTransferRequest.commission`, схемы `Transfer` и `Transacti
 
 ## Фильтры
 
-`TransactionFilters` внутри `FilterPanel`: на мобильных — спойлер «Фильтры» с chevron; на десктопе — всегда открыта. Поля с `dateOnlyPicker`: только дата, границы суток — `fromDateLocalStart` / `toDateLocalEnd` (`$lib/dates.ts`) в часовом поясе пользователя. См. [date-time-display.md](date-time-display.md). Используется на `/transactions`, `/stats`, странице счёта.
+`TransactionFilters` внутри `FilterPanel`: на мобильных — спойлер «Фильтры» с chevron; на десктопе — всегда открыта. Поля с `dateOnlyPicker`: только дата, границы суток — `fromDateLocalStart` / `toDateLocalEnd` (`$lib/dates.ts`) в часовом поясе пользователя. Дополнительно: `merchant_id`, `tag_id` (списки из справочников). См. [date-time-display.md](date-time-display.md). Используется на `/transactions`, `/stats`, странице счёта.
 
 Подробнее: [ui-row-actions.md](ui-row-actions.md).
 

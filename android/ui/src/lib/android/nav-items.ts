@@ -53,6 +53,16 @@ export function androidMainNavItems(): AndroidNavItem[] {
 			isActive: (p) => p.startsWith('/categories')
 		},
 		{
+			href: resolve('/merchants'),
+			labelKey: 'nav.merchants',
+			isActive: (p) => p.startsWith('/merchants')
+		},
+		{
+			href: resolve('/tags'),
+			labelKey: 'nav.tags',
+			isActive: (p) => p.startsWith('/tags')
+		},
+		{
 			href: resolve('/budget'),
 			labelKey: 'nav.budget',
 			isActive: (p) => p.startsWith('/budget')

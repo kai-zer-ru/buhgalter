@@ -161,6 +161,23 @@ CREATE INDEX idx_subscriptions_user ON subscriptions(user_id);
 CREATE INDEX idx_subscriptions_due ON subscriptions(user_id, active, next_run_at);
 CREATE INDEX idx_subscriptions_subcategory ON subscriptions(subcategory_id);
 
+CREATE TABLE merchants (
+    id              TEXT PRIMARY KEY,
+    user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name            TEXT NOT NULL COLLATE NOCASE,
+    icon            TEXT NOT NULL DEFAULT 'default',
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(user_id, name)
+);
+
+CREATE TABLE tags (
+    id              TEXT PRIMARY KEY,
+    user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name            TEXT NOT NULL COLLATE NOCASE,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(user_id, name)
+);
+
 CREATE TABLE transactions (
     id                  TEXT PRIMARY KEY,
     user_id             TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -176,6 +193,7 @@ CREATE TABLE transactions (
     transaction_date    TEXT NOT NULL,
     affects_balance     INTEGER NOT NULL DEFAULT 1,
     subscription_id     TEXT REFERENCES subscriptions(id) ON DELETE SET NULL,
+    merchant_id         TEXT REFERENCES merchants(id) ON DELETE SET NULL,
     created_at          TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at          TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -185,7 +203,15 @@ CREATE INDEX idx_tx_date ON transactions(transaction_date);
 CREATE INDEX idx_tx_transfer_group ON transactions(transfer_group_id);
 CREATE INDEX idx_tx_kind ON transactions(kind);
 CREATE INDEX idx_tx_subscription ON transactions(subscription_id);
+CREATE INDEX idx_tx_merchant ON transactions(merchant_id);
 CREATE INDEX idx_tx_user_account_balance ON transactions(user_id, account_id, kind, type, transaction_date);
+
+CREATE TABLE transaction_tags (
+    transaction_id  TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+    tag_id          TEXT NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+    PRIMARY KEY (transaction_id, tag_id)
+);
+CREATE INDEX idx_transaction_tags_tag ON transaction_tags(tag_id);
 
 CREATE TABLE recurring_operations (
     id              TEXT PRIMARY KEY,

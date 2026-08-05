@@ -56,7 +56,7 @@ import {
 
 | Форма | Поле |
 |-------|------|
-| `TransactionForm` | дата операции |
+| `TransactionForm` | дата операции; блок «Указать время» вынесен в спойлер опциональных полей (`showOptionalTimeUI={false}`, `bind:timeExpanded`) |
 | `TransferForm` | дата перевода |
 | `DebtForm` | дата операции (дать/взять в долг) |
 | `SettleDebtForm` | дата погашения |

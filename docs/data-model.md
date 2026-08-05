@@ -67,12 +67,27 @@ erDiagram
         INTEGER sort_order
     }
 
+    merchants {
+        TEXT name
+        TEXT icon
+    }
+
+    tags {
+        TEXT name
+    }
+
     transactions {
         TEXT type "income|expense|transfer"
         TEXT kind "manual|future"
         INTEGER amount
         INTEGER affects_balance
         TEXT transfer_group_id
+        TEXT merchant_id
+    }
+
+    transaction_tags {
+        TEXT transaction_id
+        TEXT tag_id
     }
 
     subscriptions {
@@ -199,6 +214,8 @@ erDiagram
     users ||--o{ api_tokens : has
     users ||--o{ accounts : owns
     users ||--o{ categories : owns
+    users ||--o{ merchants : owns
+    users ||--o{ tags : owns
     users ||--o{ transactions : owns
     users ||--o{ subscriptions : owns
     users ||--o{ recurring_operations : owns
@@ -217,6 +234,9 @@ erDiagram
     categories ||--o{ subcategories : has
     categories ||--o{ transactions : category_id
     subcategories ||--o{ transactions : subcategory_id
+    merchants ||--o{ transactions : merchant_id
+    transactions ||--o{ transaction_tags : has
+    tags ||--o{ transaction_tags : has
     accounts ||--o{ transactions : account_id
     accounts ||--o{ transactions : transfer_account_id
     accounts ||--o{ credits : debit_account_id

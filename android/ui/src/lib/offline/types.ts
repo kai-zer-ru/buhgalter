@@ -19,6 +19,10 @@ export type TransactionPayload = {
 	category_id?: string;
 	subcategory_id?: string;
 	subcategory_name?: string;
+	merchant_id?: string;
+	merchant_name?: string;
+	tag_ids?: string[];
+	tag_names?: string[];
 	transaction_date: string;
 };
 

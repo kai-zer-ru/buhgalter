@@ -222,12 +222,13 @@
 
 - [x] [Подписки](roadmap/subscriptions.md) — отдельный экран поверх периодических операций (сводка «в месяц», ближайшие списания)
 - [ ] [Перехват уведомлений банка](roadmap/notification-intercept.md) — Android, push/SMS → черновик операции
-- [ ] [Разбивка операции на несколько счетов](roadmap/transaction-split-accounts.md)
-- [ ] [Магазины, теги, комментарий](roadmap/merchants-tags.md) — в т.ч. магазин из чека
-- [ ] [Цели накопления](roadmap/savings-goals.md) — копилки, прогресс, напоминания
+- [x] [Магазины, теги](roadmap/merchants-tags.md) — справочник + теги; магазин из чека — follow-up после сканера
+- [ ] [Включение/отключение функционала в админке](roadmap/feature-toggles.md) — флаги модулей + правило для новых фич
 
 ## Общие планы
 
+- [ ] [Цели накопления](roadmap/savings-goals.md) — копилки, прогресс, напоминания
+- [ ] [Разбивка операции на несколько счетов](roadmap/transaction-split-accounts.md)
 - [ ] [Семья / команда](roadmap/team-collaboration.md) — личные + семейные счета; owner invite (ссылка/QR/код); спецификация зафиксирована, реализация отложена
 - [ ] [Валюта счёта](roadmap/multicurrency.md) — отдельно от валюты профиля (`users.currency`)
 - [ ] [PostgreSQL](roadmap/postgresql.md) — опциональная БД вместо SQLite

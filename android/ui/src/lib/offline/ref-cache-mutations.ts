@@ -5,8 +5,11 @@ import type {
 	Credit,
 	Debt,
 	Debtor,
+	Merchant,
 	RecurringOperation,
 	Subscription,
+	Tag,
+	Transaction,
 	UIMetaAccountRef
 } from '$lib/api/client';
 import {
@@ -16,9 +19,12 @@ import {
 	publishRefCachePath,
 	readRefCache
 } from '$lib/offline/ref-cache';
+import { makeLocalKey } from '$lib/offline/types';
 
 const UI_META_PATH = '/api/v1/ui/meta';
 const DEBTORS_PATH = '/api/v1/debtors';
+const MERCHANTS_PATH = '/api/v1/merchants';
+const TAGS_PATH = '/api/v1/tags';
 const ACCOUNTS_ACTIVE = '/api/v1/accounts?status=active';
 const ACCOUNTS_ARCHIVED = '/api/v1/accounts?status=archived';
 const ACCOUNTS_ALL = '/api/v1/accounts';
@@ -168,6 +174,94 @@ function ensureDebtorInCache(debt: Debt): void {
 			...meta,
 			debtors: [debtor, ...meta.debtors]
 		});
+	}
+}
+
+function ensureMerchantInCache(merchant: Merchant): void {
+	const list = readRefCache<Merchant[]>(MERCHANTS_PATH);
+	if (list !== null && !list.some((row) => row.id === merchant.id)) {
+		prependRefCacheList(MERCHANTS_PATH, merchant);
+	} else if (list === null) {
+		publishRefCachePath(MERCHANTS_PATH, [merchant]);
+	}
+	const meta = readRefCache<{ merchants?: Merchant[] } & Record<string, unknown>>(UI_META_PATH);
+	if (meta) {
+		const merchants = meta.merchants ?? [];
+		if (!merchants.some((row) => row.id === merchant.id)) {
+			publishRefCachePath(UI_META_PATH, {
+				...meta,
+				merchants: [merchant, ...merchants]
+			});
+		}
+	}
+}
+
+function ensureTagInCache(tag: Tag): void {
+	const list = readRefCache<Tag[]>(TAGS_PATH);
+	if (list !== null && !list.some((row) => row.id === tag.id)) {
+		prependRefCacheList(TAGS_PATH, tag);
+	} else if (list === null) {
+		publishRefCachePath(TAGS_PATH, [tag]);
+	}
+	const meta = readRefCache<{ tags?: Tag[] } & Record<string, unknown>>(UI_META_PATH);
+	if (meta) {
+		const tags = meta.tags ?? [];
+		if (!tags.some((row) => row.id === tag.id)) {
+			publishRefCachePath(UI_META_PATH, {
+				...meta,
+				tags: [tag, ...tags]
+			});
+		}
+	}
+}
+
+/** Patch merchants/tags ref-cache when a transaction creates or links them. */
+export function ensureMerchantsTagsFromTransaction(
+	tx: Transaction,
+	opts?: { merchantName?: string; tagNames?: string[] }
+): void {
+	const createdAt = tx.created_at;
+	if (tx.merchant_id && (tx.merchant_name || opts?.merchantName)) {
+		ensureMerchantInCache({
+			id: tx.merchant_id,
+			name: tx.merchant_name || opts?.merchantName || '',
+			icon: tx.merchant_icon || 'default',
+			created_at: createdAt
+		});
+	} else if (opts?.merchantName) {
+		const existing = readRefCache<Merchant[]>(MERCHANTS_PATH);
+		const byName = existing?.find((m) => m.name.toLowerCase() === opts.merchantName!.toLowerCase());
+		if (!byName) {
+			ensureMerchantInCache({
+				id: makeLocalKey(),
+				name: opts.merchantName,
+				icon: 'default',
+				created_at: createdAt
+			});
+		}
+	}
+	for (const tag of tx.tags ?? []) {
+		if (!tag.id && !tag.name) continue;
+		if (tag.id) {
+			ensureTagInCache({
+				id: tag.id,
+				name: tag.name,
+				created_at: createdAt
+			});
+		}
+	}
+	for (const name of opts?.tagNames ?? []) {
+		const trimmed = name.trim();
+		if (!trimmed) continue;
+		const existing = readRefCache<Tag[]>(TAGS_PATH);
+		const byName = existing?.find((t) => t.name.toLowerCase() === trimmed.toLowerCase());
+		if (!byName) {
+			ensureTagInCache({
+				id: makeLocalKey(),
+				name: trimmed,
+				created_at: createdAt
+			});
+		}
 	}
 }
 

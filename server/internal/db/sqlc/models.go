@@ -199,6 +199,14 @@ type ImportJob struct {
 	UpdatedAt    string  `json:"updated_at"`
 }
 
+type Merchant struct {
+	ID        string `json:"id"`
+	UserID    string `json:"user_id"`
+	Name      string `json:"name"`
+	Icon      string `json:"icon"`
+	CreatedAt string `json:"created_at"`
+}
+
 type NotificationLog struct {
 	ID          string  `json:"id"`
 	UserID      string  `json:"user_id"`
@@ -341,6 +349,13 @@ type SystemSetting struct {
 	UpdatedAt             string  `json:"updated_at"`
 }
 
+type Tag struct {
+	ID        string `json:"id"`
+	UserID    string `json:"user_id"`
+	Name      string `json:"name"`
+	CreatedAt string `json:"created_at"`
+}
+
 type Transaction struct {
 	ID                string  `json:"id"`
 	UserID            string  `json:"user_id"`
@@ -356,8 +371,14 @@ type Transaction struct {
 	TransactionDate   string  `json:"transaction_date"`
 	AffectsBalance    int64   `json:"affects_balance"`
 	SubscriptionID    *string `json:"subscription_id"`
+	MerchantID        *string `json:"merchant_id"`
 	CreatedAt         string  `json:"created_at"`
 	UpdatedAt         string  `json:"updated_at"`
+}
+
+type TransactionTag struct {
+	TransactionID string `json:"transaction_id"`
+	TagID         string `json:"tag_id"`
 }
 
 type User struct {

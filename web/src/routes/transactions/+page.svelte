@@ -10,6 +10,8 @@
 		listTransactions,
 		type Account,
 		type Category,
+		type Merchant,
+		type Tag,
 		type Transaction
 	} from '$lib/api/client';
 	import { accountsFromUIMeta } from '$lib/select-options';
@@ -56,6 +58,8 @@
 	let newTxType = $state<'expense' | 'income'>('expense');
 	let accounts = $state<Account[]>([]);
 	let categories = $state<Category[]>([]);
+	let merchants = $state<Merchant[]>([]);
+	let tags = $state<Tag[]>([]);
 
 	let fromLocal = $state('');
 	let toLocal = $state('');
@@ -64,6 +68,8 @@
 	let accountId = $state('');
 	let kind = $state('');
 	let search = $state('');
+	let merchantId = $state('');
+	let tagId = $state('');
 	let filtersAutoApplyReady = $state(false);
 	let lastFiltersKey = $state('');
 
@@ -101,6 +107,8 @@
 		accountId = q.get('account_id') ?? '';
 		kind = q.get('kind') ?? '';
 		search = q.get('search') ?? '';
+		merchantId = q.get('merchant_id') ?? '';
+		tagId = q.get('tag_id') ?? '';
 	}
 
 	function baseFilterParams() {
@@ -111,6 +119,8 @@
 		if (categoryId) params.category_id = categoryId;
 		if (accountId) params.account_id = accountId;
 		if (search.trim()) params.search = search.trim();
+		if (merchantId) params.merchant_id = merchantId;
+		if (tagId) params.tag_id = tagId;
 		return params;
 	}
 
@@ -136,7 +146,9 @@
 			categoryId,
 			accountId,
 			kind,
-			search: search.trim()
+			search: search.trim(),
+			merchantId,
+			tagId
 		});
 	}
 
@@ -165,8 +177,14 @@
 			const nextCategories = Object.values(uniqueByID).sort((a, b) =>
 				a.name.localeCompare(b.name, 'ru')
 			);
+			const nextMerchants = [...(meta.merchants ?? [])].sort((a, b) =>
+				a.name.localeCompare(b.name, 'ru')
+			);
+			const nextTags = [...(meta.tags ?? [])].sort((a, b) => a.name.localeCompare(b.name, 'ru'));
 			accounts = opts.silent ? assignIfChanged(accounts, nextAccounts) : nextAccounts;
 			categories = opts.silent ? assignIfChanged(categories, nextCategories) : nextCategories;
+			merchants = opts.silent ? assignIfChanged(merchants, nextMerchants) : nextMerchants;
+			tags = opts.silent ? assignIfChanged(tags, nextTags) : nextTags;
 			loadError = null;
 		} catch (err) {
 			const msg = reportPageLoadFailure(err, {
@@ -262,6 +280,8 @@
 		if (accountId) queryParts.push(`account_id=${encodeURIComponent(accountId)}`);
 		if (kind) queryParts.push(`kind=${encodeURIComponent(kind)}`);
 		if (search.trim()) queryParts.push(`search=${encodeURIComponent(search.trim())}`);
+		if (merchantId) queryParts.push(`merchant_id=${encodeURIComponent(merchantId)}`);
+		if (tagId) queryParts.push(`tag_id=${encodeURIComponent(tagId)}`);
 		// eslint-disable-next-line svelte/no-navigation-without-resolve -- query string is appended to resolved base path
 		await goto(`${basePath}?${queryParts.join('&')}`, {
 			replaceState: true,
@@ -279,6 +299,8 @@
 		accountId = '';
 		kind = '';
 		search = '';
+		merchantId = '';
+		tagId = '';
 		page = 1;
 		lastFiltersKey = currentFiltersKey();
 		await pushURLAndReload();
@@ -383,8 +405,12 @@
 		bind:accountId
 		bind:kind
 		bind:search
+		bind:merchantId
+		bind:tagId
 		{accounts}
 		{categories}
+		{merchants}
+		{tags}
 		onreset={resetFilters}
 	/>
 

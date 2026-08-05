@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { categoryIconUrl } from '$lib/finance';
 
 	let { icon, size = 32 }: { icon: string; size?: number } = $props();
@@ -8,7 +9,7 @@
 
 	$effect(() => {
 		void icon;
-		failed = false;
+		if (untrack(() => failed)) failed = false;
 	});
 </script>
 

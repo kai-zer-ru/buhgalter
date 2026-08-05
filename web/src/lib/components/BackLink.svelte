@@ -23,6 +23,8 @@
 		| '/budget'
 		| '/subscriptions'
 		| '/categories'
+		| '/merchants'
+		| '/tags'
 		| '/recurring-operations';
 
 	export type BreadcrumbItem = {

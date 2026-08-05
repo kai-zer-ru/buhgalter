@@ -15,9 +15,12 @@ SELECT
     t.transfer_group_id,
     t.transfer_account_id,
     t.subscription_id,
+    t.merchant_id,
     t.transaction_date,
     t.created_at,
     t.updated_at,
+    m.name AS merchant_name,
+    m.icon AS merchant_icon,
     c.name AS category_name,
     c.icon AS category_icon,
     c.is_system AS category_is_system,
@@ -49,6 +52,7 @@ SELECT
         ELSE 0
     END AS commission
 FROM transactions t
+LEFT JOIN merchants m ON m.id = t.merchant_id
 LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
 LEFT JOIN accounts a ON a.id = t.account_id
@@ -70,9 +74,12 @@ SELECT
     t.transfer_group_id,
     t.transfer_account_id,
     t.subscription_id,
+    t.merchant_id,
     t.transaction_date,
     t.created_at,
     t.updated_at,
+    m.name AS merchant_name,
+    m.icon AS merchant_icon,
     c.name AS category_name,
     c.icon AS category_icon,
     c.is_system AS category_is_system,
@@ -94,6 +101,7 @@ SELECT
         ELSE 0
     END AS transfer_is_out
 FROM transactions t
+LEFT JOIN merchants m ON m.id = t.merchant_id
 LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
 LEFT JOIN accounts a ON a.id = t.account_id
@@ -105,13 +113,13 @@ ORDER BY t.created_at ASC, t.id ASC;
 INSERT INTO transactions (
     id, user_id, account_id, type, kind, amount, description,
     category_id, subcategory_id, transfer_group_id, transfer_account_id,
-    transaction_date, affects_balance, subscription_id, created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    transaction_date, affects_balance, subscription_id, merchant_id, created_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: UpdateTransaction :exec
 UPDATE transactions
 SET account_id = ?, type = ?, kind = ?, amount = ?, description = ?,
-    category_id = ?, subcategory_id = ?, transaction_date = ?, updated_at = ?
+    category_id = ?, subcategory_id = ?, merchant_id = ?, transaction_date = ?, updated_at = ?
 WHERE id = ? AND user_id = ?;
 
 -- name: UpdateTransactionAffectsBalance :execrows
@@ -148,6 +156,7 @@ SELECT
     t.transfer_group_id,
     t.transfer_account_id,
     t.subscription_id,
+    t.merchant_id,
     t.transaction_date,
     t.affects_balance,
     t.created_at,
@@ -196,6 +205,11 @@ WHERE t.user_id = ?
   AND (? = '' OR t.transaction_date >= ?)
   AND (? = '' OR t.transaction_date <= ?)
   AND (? = '' OR t.description LIKE '%' || ? || '%')
+  AND (? = '' OR t.merchant_id = ?)
+  AND (? = '' OR EXISTS (
+    SELECT 1 FROM transaction_tags tt
+    WHERE tt.transaction_id = t.id AND tt.tag_id = ?
+  ))
   AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL);
 
 -- name: ListTransactionsFilteredDateDesc :many
@@ -212,9 +226,12 @@ SELECT
     t.transfer_group_id,
     t.transfer_account_id,
     t.subscription_id,
+    t.merchant_id,
     t.transaction_date,
     t.created_at,
     t.updated_at,
+    m.name AS merchant_name,
+    m.icon AS merchant_icon,
     c.name AS category_name,
     c.icon AS category_icon,
     c.is_system AS category_is_system,
@@ -246,6 +263,7 @@ SELECT
         ELSE 0
     END AS commission
 FROM transactions t
+LEFT JOIN merchants m ON m.id = t.merchant_id
 LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
 LEFT JOIN accounts a ON a.id = t.account_id
@@ -259,6 +277,11 @@ WHERE t.user_id = ?
   AND (? = '' OR t.transaction_date >= ?)
   AND (? = '' OR t.transaction_date <= ?)
   AND (? = '' OR t.description LIKE '%' || ? || '%')
+  AND (? = '' OR t.merchant_id = ?)
+  AND (? = '' OR EXISTS (
+    SELECT 1 FROM transaction_tags tt
+    WHERE tt.transaction_id = t.id AND tt.tag_id = ?
+  ))
   AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL)
 ORDER BY t.transaction_date DESC, t.created_at DESC
 LIMIT ? OFFSET ?;
@@ -277,9 +300,12 @@ SELECT
     t.transfer_group_id,
     t.transfer_account_id,
     t.subscription_id,
+    t.merchant_id,
     t.transaction_date,
     t.created_at,
     t.updated_at,
+    m.name AS merchant_name,
+    m.icon AS merchant_icon,
     c.name AS category_name,
     c.icon AS category_icon,
     c.is_system AS category_is_system,
@@ -311,6 +337,7 @@ SELECT
         ELSE 0
     END AS commission
 FROM transactions t
+LEFT JOIN merchants m ON m.id = t.merchant_id
 LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
 LEFT JOIN accounts a ON a.id = t.account_id
@@ -324,6 +351,11 @@ WHERE t.user_id = ?
   AND (? = '' OR t.transaction_date >= ?)
   AND (? = '' OR t.transaction_date <= ?)
   AND (? = '' OR t.description LIKE '%' || ? || '%')
+  AND (? = '' OR t.merchant_id = ?)
+  AND (? = '' OR EXISTS (
+    SELECT 1 FROM transaction_tags tt
+    WHERE tt.transaction_id = t.id AND tt.tag_id = ?
+  ))
   AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL)
 ORDER BY t.transaction_date ASC, t.created_at ASC
 LIMIT ? OFFSET ?;
@@ -342,9 +374,12 @@ SELECT
     t.transfer_group_id,
     t.transfer_account_id,
     t.subscription_id,
+    t.merchant_id,
     t.transaction_date,
     t.created_at,
     t.updated_at,
+    m.name AS merchant_name,
+    m.icon AS merchant_icon,
     c.name AS category_name,
     c.icon AS category_icon,
     c.is_system AS category_is_system,
@@ -376,6 +411,7 @@ SELECT
         ELSE 0
     END AS commission
 FROM transactions t
+LEFT JOIN merchants m ON m.id = t.merchant_id
 LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
 LEFT JOIN accounts a ON a.id = t.account_id

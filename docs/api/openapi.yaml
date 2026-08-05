@@ -1552,6 +1552,16 @@ paths:
           description: Подстрока в description
           schema:
             type: string
+        - name: merchant_id
+          in: query
+          description: Фильтр по магазину
+          schema:
+            type: string
+        - name: tag_id
+          in: query
+          description: Фильтр по тегу (операции с этим тегом)
+          schema:
+            type: string
         - name: sort
           in: query
           schema:
@@ -1794,6 +1804,163 @@ paths:
           description: |
             Конфликт направления — нельзя «взять в долг» при активном «дал в долг» у того же должника
             и нельзя «дать в долг» при активном «взял в долг».
+  /merchants:
+    get:
+      summary: Список магазинов
+      description: |
+        Справочник магазинов пользователя. Кеш GET TTL 5 мин; сброс при мутациях.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Список
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Merchant'
+    post:
+      summary: Создать магазин
+      description: Get-or-create по имени (без учёта регистра, включая кириллицу).
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MerchantUpsert'
+      responses:
+        '201':
+          description: Создан или найден существующий
+  /merchants/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Магазин по id
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Merchant'
+        '404':
+          description: Не найден
+    put:
+      summary: Обновить магазин
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MerchantUpsert'
+      responses:
+        '200':
+          description: Обновлён
+    delete:
+      summary: Удалить магазин
+      description: У операций `merchant_id` становится null (`ON DELETE SET NULL`).
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Удалён
+  /tags:
+    get:
+      summary: Список тегов
+      description: |
+        Опциональный фильтр `q` — подстрока в имени. Кеш GET TTL 5 мин.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Список
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Tag'
+    post:
+      summary: Создать тег
+      description: Get-or-create по имени.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NameCreate'
+      responses:
+        '201':
+          description: Создан или найден
+  /tags/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Тег по id
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tag'
+        '404':
+          description: Не найден
+    put:
+      summary: Переименовать тег
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NameCreate'
+      responses:
+        '200':
+          description: Обновлён
+    delete:
+      summary: Удалить тег
+      description: Связи в `transaction_tags` удаляются каскадом.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Удалён
   /debtors:
     get:
       summary: Список должников
@@ -3816,6 +3983,49 @@ components:
         icon:
           type: string
           description: ID иконки из каталога; если не передан — иконка родительской категории
+    NameCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+    Merchant:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        icon:
+          type: string
+          description: ID иконки из каталога категорий (`data/category_icons.json`)
+        created_at:
+          type: string
+    MerchantUpsert:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        icon:
+          type: string
+          description: ID иконки; пусто при создании → `default`, при обновлении — не менять
+    Tag:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        created_at:
+          type: string
+    TagRef:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
     Transaction:
       type: object
       description: |
@@ -3857,6 +4067,22 @@ components:
         description:
           type: string
           nullable: true
+          description: Описание / комментарий операции
+        merchant_id:
+          type: string
+          nullable: true
+        merchant_name:
+          type: string
+          nullable: true
+        merchant_icon:
+          type: string
+          nullable: true
+          description: Иконка магазина из справочника
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/TagRef'
+          description: Теги операции
         category_id:
           type: string
           nullable: true
@@ -3950,6 +4176,23 @@ components:
           type: string
           nullable: true
           description: Inline-создание подкатегории
+        merchant_id:
+          type: string
+          nullable: true
+        merchant_name:
+          type: string
+          nullable: true
+          description: Inline get-or-create магазина
+        tag_ids:
+          type: array
+          items:
+            type: string
+          description: Существующие теги
+        tag_names:
+          type: array
+          items:
+            type: string
+          description: Inline get-or-create тегов
         transaction_date:
           type: string
           description: UTC, `YYYY-MM-DD HH:MM:SS`
@@ -3959,6 +4202,8 @@ components:
       description: |
         Тело как при создании. `type` должен совпадать с существующей операцией.
         Дата в будущем переводит операцию в `kind=future`.
+        Если `tag_ids` и `tag_names` **оба отсутствуют** в JSON — теги операции не меняются.
+        Пустые массивы — снять все теги.
     Transfer:
       type: object
       properties:

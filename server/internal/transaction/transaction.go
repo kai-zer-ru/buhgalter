@@ -14,39 +14,45 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/credit"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/debt"
+	"github.com/kai-zer-ru/buhgalter/internal/merchant"
 	"github.com/kai-zer-ru/buhgalter/internal/money"
+	"github.com/kai-zer-ru/buhgalter/internal/tag"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
 )
 
 type Transaction struct {
-	ID                    string  `json:"id"`
-	AccountID             string  `json:"account_id"`
-	AccountName           string  `json:"account_name,omitempty"`
-	AccountStatus         string  `json:"account_status,omitempty"`
-	TransferAccountName   string  `json:"transfer_account_name,omitempty"`
-	TransferAccountStatus string  `json:"transfer_account_status,omitempty"`
-	Type                  string  `json:"type"`
-	Kind                  string  `json:"kind"`
-	Amount                int64   `json:"amount"`
-	AmountDisplay         string  `json:"amount_display"`
-	Commission            int64   `json:"commission,omitempty"`
-	CommissionDisplay     string  `json:"commission_display,omitempty"`
-	Description           *string `json:"description"`
-	CategoryID            *string `json:"category_id"`
-	CategoryName          *string `json:"category_name,omitempty"`
-	CategoryIcon          *string `json:"category_icon,omitempty"`
-	CategoryIsSystem      bool    `json:"category_is_system,omitempty"`
-	SubcategoryID         *string `json:"subcategory_id"`
-	SubcategoryName       *string `json:"subcategory_name,omitempty"`
-	SubcategoryIcon       *string `json:"subcategory_icon,omitempty"`
-	TransferGroupID       *string `json:"transfer_group_id,omitempty"`
-	TransferAccountID     *string `json:"transfer_account_id,omitempty"`
-	TransferIsOut         bool    `json:"transfer_is_out,omitempty"`
-	CreditPaymentLinked   bool    `json:"credit_payment_linked,omitempty"`
-	SubscriptionID        *string `json:"subscription_id,omitempty"`
-	TransactionDate       string  `json:"transaction_date"`
-	CreatedAt             string  `json:"created_at"`
-	UpdatedAt             string  `json:"updated_at"`
+	ID                    string    `json:"id"`
+	AccountID             string    `json:"account_id"`
+	AccountName           string    `json:"account_name,omitempty"`
+	AccountStatus         string    `json:"account_status,omitempty"`
+	TransferAccountName   string    `json:"transfer_account_name,omitempty"`
+	TransferAccountStatus string    `json:"transfer_account_status,omitempty"`
+	Type                  string    `json:"type"`
+	Kind                  string    `json:"kind"`
+	Amount                int64     `json:"amount"`
+	AmountDisplay         string    `json:"amount_display"`
+	Commission            int64     `json:"commission,omitempty"`
+	CommissionDisplay     string    `json:"commission_display,omitempty"`
+	Description           *string   `json:"description"`
+	CategoryID            *string   `json:"category_id"`
+	CategoryName          *string   `json:"category_name,omitempty"`
+	CategoryIcon          *string   `json:"category_icon,omitempty"`
+	CategoryIsSystem      bool      `json:"category_is_system,omitempty"`
+	SubcategoryID         *string   `json:"subcategory_id"`
+	SubcategoryName       *string   `json:"subcategory_name,omitempty"`
+	SubcategoryIcon       *string   `json:"subcategory_icon,omitempty"`
+	TransferGroupID       *string   `json:"transfer_group_id,omitempty"`
+	TransferAccountID     *string   `json:"transfer_account_id,omitempty"`
+	TransferIsOut         bool      `json:"transfer_is_out,omitempty"`
+	CreditPaymentLinked   bool      `json:"credit_payment_linked,omitempty"`
+	SubscriptionID        *string   `json:"subscription_id,omitempty"`
+	MerchantID            *string   `json:"merchant_id,omitempty"`
+	MerchantName          *string   `json:"merchant_name,omitempty"`
+	MerchantIcon          *string   `json:"merchant_icon,omitempty"`
+	Tags                  []tag.Ref `json:"tags"`
+	TransactionDate       string    `json:"transaction_date"`
+	CreatedAt             string    `json:"created_at"`
+	UpdatedAt             string    `json:"updated_at"`
 }
 
 type ListFilters struct {
@@ -57,6 +63,8 @@ type ListFilters struct {
 	From       string
 	To         string
 	Search     string
+	MerchantID string
+	TagID      string
 	Sort       string
 	Page       int
 	Limit      int
@@ -90,6 +98,8 @@ var (
 	ErrTypeChange                    = errors.New("transaction type cannot be changed")
 	ErrUseTransfersEndpoint          = errors.New("use transfer endpoint to update transfers")
 	ErrCommissionLinked              = errors.New("commission is linked to transfer")
+	ErrInvalidMerchant               = errors.New("invalid merchant")
+	ErrInvalidTag                    = errors.New("invalid tag")
 )
 
 func isTransferCommission(tx Transaction) bool {
@@ -103,9 +113,9 @@ func queries(db sqlcdb.DBTX) *sqlcdb.Queries {
 func txFromGetRow(row sqlcdb.GetTransactionByIDRow) Transaction {
 	return txFromFields(
 		row.ID, row.AccountID, row.Type, row.Kind, row.Amount, row.Commission, row.Description,
-		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID, row.SubscriptionID,
+		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID, row.SubscriptionID, row.MerchantID,
 		row.TransactionDate, row.CreatedAt, row.UpdatedAt,
-		row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.TransferAccountName, row.TransferAccountStatus,
+		row.MerchantName, row.MerchantIcon, row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.TransferAccountName, row.TransferAccountStatus,
 		row.TransferIsOut, row.CreditPaymentLinked,
 	)
 }
@@ -113,9 +123,9 @@ func txFromGetRow(row sqlcdb.GetTransactionByIDRow) Transaction {
 func txFromListDesc(row sqlcdb.ListTransactionsFilteredDateDescRow) Transaction {
 	return txFromFields(
 		row.ID, row.AccountID, row.Type, row.Kind, row.Amount, row.Commission, row.Description,
-		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID, row.SubscriptionID,
+		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID, row.SubscriptionID, row.MerchantID,
 		row.TransactionDate, row.CreatedAt, row.UpdatedAt,
-		row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.TransferAccountName, row.TransferAccountStatus,
+		row.MerchantName, row.MerchantIcon, row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.TransferAccountName, row.TransferAccountStatus,
 		row.TransferIsOut, row.CreditPaymentLinked,
 	)
 }
@@ -123,9 +133,9 @@ func txFromListDesc(row sqlcdb.ListTransactionsFilteredDateDescRow) Transaction 
 func txFromListAsc(row sqlcdb.ListTransactionsFilteredDateAscRow) Transaction {
 	return txFromFields(
 		row.ID, row.AccountID, row.Type, row.Kind, row.Amount, row.Commission, row.Description,
-		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID, row.SubscriptionID,
+		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID, row.SubscriptionID, row.MerchantID,
 		row.TransactionDate, row.CreatedAt, row.UpdatedAt,
-		row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.TransferAccountName, row.TransferAccountStatus,
+		row.MerchantName, row.MerchantIcon, row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.TransferAccountName, row.TransferAccountStatus,
 		row.TransferIsOut, row.CreditPaymentLinked,
 	)
 }
@@ -133,9 +143,9 @@ func txFromListAsc(row sqlcdb.ListTransactionsFilteredDateAscRow) Transaction {
 func txFromRecent(row sqlcdb.ListRecentTransactionsRow) Transaction {
 	return txFromFields(
 		row.ID, row.AccountID, row.Type, row.Kind, row.Amount, row.Commission, row.Description,
-		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID, row.SubscriptionID,
+		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID, row.SubscriptionID, row.MerchantID,
 		row.TransactionDate, row.CreatedAt, row.UpdatedAt,
-		row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.TransferAccountName, row.TransferAccountStatus,
+		row.MerchantName, row.MerchantIcon, row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.TransferAccountName, row.TransferAccountStatus,
 		row.TransferIsOut, row.CreditPaymentLinked,
 	)
 }
@@ -143,18 +153,18 @@ func txFromRecent(row sqlcdb.ListRecentTransactionsRow) Transaction {
 func txFromGroupRow(row sqlcdb.ListTransactionsByTransferGroupRow) Transaction {
 	return txFromFields(
 		row.ID, row.AccountID, row.Type, row.Kind, row.Amount, 0, row.Description,
-		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID, row.SubscriptionID,
+		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID, row.SubscriptionID, row.MerchantID,
 		row.TransactionDate, row.CreatedAt, row.UpdatedAt,
-		row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.TransferAccountName, row.TransferAccountStatus,
+		row.MerchantName, row.MerchantIcon, row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.TransferAccountName, row.TransferAccountStatus,
 		row.TransferIsOut, 0,
 	)
 }
 
 func txFromFields(
 	id, accountID, txType, kind string, amount, commission int64, description *string,
-	categoryID, subcategoryID, transferGroupID, transferAccountID, subscriptionID *string,
+	categoryID, subcategoryID, transferGroupID, transferAccountID, subscriptionID, merchantID *string,
 	transactionDate, createdAt, updatedAt string,
-	categoryName, categoryIcon *string, categoryIsSystem *int64, subcategoryName, subcategoryIcon, accountName, accountStatus, transferAccountName, transferAccountStatus *string,
+	merchantName, merchantIcon, categoryName, categoryIcon *string, categoryIsSystem *int64, subcategoryName, subcategoryIcon, accountName, accountStatus, transferAccountName, transferAccountStatus *string,
 	transferIsOut, creditPaymentLinked int64,
 ) Transaction {
 	t := Transaction{
@@ -170,6 +180,10 @@ func txFromFields(
 		TransferGroupID:   transferGroupID,
 		TransferAccountID: transferAccountID,
 		SubscriptionID:    subscriptionID,
+		MerchantID:        merchantID,
+		MerchantName:      merchantName,
+		MerchantIcon:      merchantIcon,
+		Tags:              []tag.Ref{},
 		TransactionDate:   transactionDate,
 		CreatedAt:         createdAt,
 		UpdatedAt:         updatedAt,
@@ -240,6 +254,11 @@ type CreateInput struct {
 	CategoryID      *string
 	SubcategoryID   *string
 	SubcategoryName *string
+	MerchantID      *string
+	MerchantName    *string
+	TagIDs          []string
+	TagNames        []string
+	SetTags         bool // true if tag_ids/tag_names present in request (create always applies when set)
 	TransactionDate time.Time
 }
 
@@ -258,6 +277,15 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Tra
 		return Transaction{}, err
 	}
 	if err := validateCategoryForType(ctx, db, userID, in.CategoryID, in.Type); err != nil {
+		return Transaction{}, err
+	}
+	merchantID, err := resolveMerchant(ctx, db, userID, in.MerchantID, in.MerchantName)
+	if err != nil {
+		return Transaction{}, err
+	}
+	// Create always applies tags (nil/empty → no tags).
+	tagIDs, err := resolveTags(ctx, db, userID, in.TagIDs, in.TagNames)
+	if err != nil {
 		return Transaction{}, err
 	}
 
@@ -286,10 +314,14 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Tra
 		TransferAccountID: nil,
 		TransactionDate:   txDate,
 		AffectsBalance:    1,
+		MerchantID:        merchantID,
 		CreatedAt:         now,
 		UpdatedAt:         now,
 	}); err != nil {
 		return Transaction{}, fmt.Errorf("insert transaction: %w", err)
+	}
+	if err := tag.SetForTransaction(ctx, db, id, tagIDs); err != nil {
+		return Transaction{}, err
 	}
 	if err := refreshAccountBalances(ctx, db, userID, in.TransactionDate, in.AccountID); err != nil {
 		return Transaction{}, err
@@ -306,6 +338,11 @@ type UpdateInput struct {
 	CategoryID      *string
 	SubcategoryID   *string
 	SubcategoryName *string
+	MerchantID      *string
+	MerchantName    *string
+	TagIDs          []string
+	TagNames        []string
+	SetTags         bool
 	TransactionDate time.Time
 }
 
@@ -343,6 +380,17 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in UpdateInput) 
 	if err := validateCategoryForType(ctx, db, userID, in.CategoryID, in.Type); err != nil {
 		return Transaction{}, err
 	}
+	merchantID, err := resolveMerchant(ctx, db, userID, in.MerchantID, in.MerchantName)
+	if err != nil {
+		return Transaction{}, err
+	}
+	var tagIDs []string
+	if in.SetTags {
+		tagIDs, err = resolveTags(ctx, db, userID, in.TagIDs, in.TagNames)
+		if err != nil {
+			return Transaction{}, err
+		}
+	}
 	kind, err := resolveKind(ctx, db, userID, in.TransactionDate)
 	if err != nil {
 		return Transaction{}, err
@@ -360,12 +408,18 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in UpdateInput) 
 		Description:     in.Description,
 		CategoryID:      in.CategoryID,
 		SubcategoryID:   subID,
+		MerchantID:      merchantID,
 		TransactionDate: timeutil.FormatUTC(in.TransactionDate),
 		UpdatedAt:       now,
 		ID:              id,
 		UserID:          userID,
 	}); err != nil {
 		return Transaction{}, err
+	}
+	if in.SetTags {
+		if err := tag.SetForTransaction(ctx, db, id, tagIDs); err != nil {
+			return Transaction{}, err
+		}
 	}
 	if err := refreshAccountBalances(ctx, db, userID, in.TransactionDate, uniqueAccountIDs(existing.AccountID, in.AccountID)...); err != nil {
 		return Transaction{}, err
@@ -382,7 +436,13 @@ func GetByID(ctx context.Context, db *sql.DB, userID, id string) (Transaction, e
 	if err != nil {
 		return Transaction{}, err
 	}
-	return txFromGetRow(row), nil
+	tx := txFromGetRow(row)
+	tags, err := tag.ListForTransaction(ctx, db, id)
+	if err != nil {
+		return Transaction{}, err
+	}
+	tx.Tags = tags
+	return tx, nil
 }
 
 func Delete(ctx context.Context, db *sql.DB, userID, id string) error {
@@ -550,6 +610,9 @@ func List(ctx context.Context, db *sql.DB, userID string, f ListFilters) (ListRe
 	if items == nil {
 		items = []Transaction{}
 	}
+	if err := attachTags(ctx, db, items); err != nil {
+		return ListResult{}, err
+	}
 	return ListResult{
 		Data: items,
 		Meta: ListMeta{Page: f.Page, Limit: f.Limit, Total: total},
@@ -571,7 +634,33 @@ func ListRecent(ctx context.Context, db *sql.DB, userID string, limit int) ([]Tr
 	for _, row := range rows {
 		out = append(out, txFromRecent(row))
 	}
+	if err := attachTags(ctx, db, out); err != nil {
+		return nil, err
+	}
 	return out, nil
+}
+
+func attachTags(ctx context.Context, db *sql.DB, items []Transaction) error {
+	if len(items) == 0 {
+		return nil
+	}
+	ids := make([]string, len(items))
+	for i := range items {
+		ids[i] = items[i].ID
+		if items[i].Tags == nil {
+			items[i].Tags = []tag.Ref{}
+		}
+	}
+	m, err := tag.MapForTransactions(ctx, db, ids)
+	if err != nil {
+		return err
+	}
+	for i := range items {
+		if tags, ok := m[items[i].ID]; ok {
+			items[i].Tags = tags
+		}
+	}
+	return nil
 }
 
 type filterParams struct {
@@ -583,6 +672,8 @@ type filterParams struct {
 	from       string
 	to         string
 	search     string
+	merchantID string
+	tagID      string
 }
 
 func buildFilterParams(userID string, f ListFilters) filterParams {
@@ -595,12 +686,15 @@ func buildFilterParams(userID string, f ListFilters) filterParams {
 		from:       f.From,
 		to:         f.To,
 		search:     f.Search,
+		merchantID: f.MerchantID,
+		tagID:      f.TagID,
 	}
 }
 
 func (fp filterParams) count() sqlcdb.CountTransactionsFilteredParams {
 	searchPtr := strPtr(fp.search)
 	catPtr := strPtr(fp.categoryID)
+	merchantPtr := strPtr(fp.merchantID)
 	return sqlcdb.CountTransactionsFilteredParams{
 		UserID:            fp.userID,
 		Column2:           fp.accountID,
@@ -617,6 +711,10 @@ func (fp filterParams) count() sqlcdb.CountTransactionsFilteredParams {
 		TransactionDate_2: fp.to,
 		Column14:          fp.search,
 		Column15:          searchPtr,
+		Column16:          fp.merchantID,
+		MerchantID:        merchantPtr,
+		Column18:          fp.tagID,
+		TagID:             fp.tagID,
 	}
 }
 
@@ -638,6 +736,10 @@ func (fp filterParams) listDesc(limit, offset int64) sqlcdb.ListTransactionsFilt
 		TransactionDate_2: p.TransactionDate_2,
 		Column14:          p.Column14,
 		Column15:          p.Column15,
+		Column16:          p.Column16,
+		MerchantID:        p.MerchantID,
+		Column18:          p.Column18,
+		TagID:             p.TagID,
 		Limit:             limit,
 		Offset:            offset,
 	}
@@ -661,6 +763,10 @@ func (fp filterParams) listAsc(limit, offset int64) sqlcdb.ListTransactionsFilte
 		TransactionDate_2: p.TransactionDate_2,
 		Column14:          p.Column14,
 		Column15:          p.Column15,
+		Column16:          p.Column16,
+		MerchantID:        p.MerchantID,
+		Column18:          p.Column18,
+		TagID:             p.TagID,
 		Limit:             limit,
 		Offset:            offset,
 	}
@@ -743,6 +849,22 @@ func validatePlannedForCategory(ctx context.Context, db *sql.DB, userID string, 
 		return ErrSystemCategoryPlanned
 	}
 	return nil
+}
+
+func resolveMerchant(ctx context.Context, db *sql.DB, userID string, merchantID, merchantName *string) (*string, error) {
+	id, err := merchant.Resolve(ctx, db, userID, merchantID, merchantName)
+	if errors.Is(err, merchant.ErrNotFound) || errors.Is(err, merchant.ErrInvalidName) {
+		return nil, ErrInvalidMerchant
+	}
+	return id, err
+}
+
+func resolveTags(ctx context.Context, db *sql.DB, userID string, tagIDs, tagNames []string) ([]string, error) {
+	ids, err := tag.ResolveIDs(ctx, db, userID, tagIDs, tagNames)
+	if errors.Is(err, tag.ErrNotFound) || errors.Is(err, tag.ErrInvalidName) {
+		return nil, ErrInvalidTag
+	}
+	return ids, err
 }
 
 func resolveSubcategory(ctx context.Context, db *sql.DB, userID string, categoryID, subcategoryID, subcategoryName *string) (*string, error) {

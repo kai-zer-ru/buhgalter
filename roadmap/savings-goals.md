@@ -10,6 +10,8 @@
 
 ## Scope (v1.6.0)
 
+Feature flag: `savings_goals` (см. [feature-toggles.md](feature-toggles.md)).
+
 | Возможность | Суть |
 |-------------|------|
 | Цель | Название, целевая сумма, опционально дедлайн |

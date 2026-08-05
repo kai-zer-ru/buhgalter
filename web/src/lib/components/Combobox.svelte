@@ -1,11 +1,15 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { portal } from '$lib/actions/portal';
 	import { dropdownListStyle } from '$lib/dropdown-position';
+	import SelectOptionIcon from '$lib/components/SelectOptionIcon.svelte';
+	import type { SelectOptionIcon as SelectOptionIconType } from '$lib/select-options';
 
 	export type ComboboxOption = {
 		value: string;
 		label: string;
 		disabled?: boolean;
+		icon?: SelectOptionIconType;
 	};
 
 	let {
@@ -17,9 +21,11 @@
 		hint = '',
 		placeholder = '',
 		emptyLabel = '',
+		createLabel = '',
 		disabled = false,
 		usePortal = false,
 		filterOptions = true,
+		allowCreate = false,
 		onchange
 	}: {
 		value?: string;
@@ -30,9 +36,13 @@
 		hint?: string;
 		placeholder?: string;
 		emptyLabel?: string;
+		/** Shown when allowCreate and typed text has no exact match, e.g. «Создать "{name}"». */
+		createLabel?: string;
 		disabled?: boolean;
 		usePortal?: boolean;
 		filterOptions?: boolean;
+		/** Keep free text as a new value when nothing matches; clear `value`. */
+		allowCreate?: boolean;
 		onchange?: (value: string) => void;
 	} = $props();
 
@@ -43,21 +53,41 @@
 	let listStyle = $state('');
 
 	const listId = $derived(`${id}-list`);
+	const CREATE_VALUE = '__create__';
+
+	const trimmedQuery = $derived(query.trim());
+	const exactMatch = $derived(
+		options.find((option) => option.label.toLowerCase() === trimmedQuery.toLowerCase())
+	);
 
 	const visibleOptions = $derived.by(() => {
-		const q = query.trim().toLowerCase();
+		const q = trimmedQuery.toLowerCase();
 		const list =
 			filterOptions && q
 				? options.filter((option) => option.label.toLowerCase().includes(q))
 				: options;
-		return list.filter((option) => !option.disabled || option.value === value);
+		const filtered = list.filter((option) => !option.disabled || option.value === value);
+		if (allowCreate && trimmedQuery && !exactMatch) {
+			return [
+				...filtered,
+				{
+					value: CREATE_VALUE,
+					label: createLabel || trimmedQuery,
+					disabled: false
+				} satisfies ComboboxOption
+			];
+		}
+		return filtered;
 	});
 
+	// Sync closed-state label from value. untrack(query) so the equality read does not
+	// subscribe and re-enter after we write query (effect_update_depth_exceeded).
 	$effect(() => {
-		if (!open) {
-			const selected = options.find((option) => option.value === value);
-			query = selected?.label ?? value;
-		}
+		if (open) return;
+		if (allowCreate && !value) return;
+		const selected = options.find((option) => option.value === value);
+		const next = selected?.label ?? value;
+		if (untrack(() => query) !== next) query = next;
 	});
 
 	function positionList() {
@@ -68,6 +98,10 @@
 
 	function close() {
 		open = false;
+		if (allowCreate && !value) {
+			query = trimmedQuery;
+			return;
+		}
 		const selected = options.find((option) => option.value === value);
 		query = selected?.label ?? value;
 	}
@@ -75,7 +109,11 @@
 	function openList() {
 		if (disabled) return;
 		open = true;
-		query = filterOptions ? '' : (options.find((option) => option.value === value)?.label ?? value);
+		if (filterOptions && value) {
+			query = '';
+		} else if (!filterOptions) {
+			query = options.find((option) => option.value === value)?.label ?? value;
+		}
 		requestAnimationFrame(() => {
 			positionList();
 			const index = visibleOptions.findIndex((option) => option.value === value);
@@ -84,6 +122,13 @@
 	}
 
 	function selectOption(next: string) {
+		if (next === CREATE_VALUE) {
+			value = '';
+			query = trimmedQuery;
+			onchange?.('');
+			open = false;
+			return;
+		}
 		value = next;
 		const selected = options.find((option) => option.value === next);
 		query = selected?.label ?? next;
@@ -91,13 +136,26 @@
 		close();
 	}
 
+	function syncFromQuery() {
+		if (exactMatch) {
+			if (value !== exactMatch.value) {
+				value = exactMatch.value;
+				onchange?.(exactMatch.value);
+			}
+			return;
+		}
+		if (allowCreate) {
+			if (value) {
+				value = '';
+				onchange?.('');
+			}
+			return;
+		}
+	}
+
 	function onInput() {
 		open = true;
-		if (!filterOptions) return;
-		const exact = options.find(
-			(option) => option.label.toLowerCase() === query.trim().toLowerCase()
-		);
-		if (exact) value = exact.value;
+		syncFromQuery();
 		requestAnimationFrame(positionList);
 	}
 
@@ -205,16 +263,22 @@
 						<li>
 							<button
 								type="button"
-								class="w-full cursor-pointer px-4 py-2 text-left text-sm hover:opacity-90"
-								class:font-medium={option.value === value}
-								style:background-color={index === highlighted || option.value === value
+								class="flex w-full cursor-pointer items-center gap-2 px-4 py-2 text-left text-sm hover:opacity-90"
+								class:font-medium={option.value === value ||
+									(option.value === CREATE_VALUE && !value && trimmedQuery)}
+								style:background-color={index === highlighted ||
+								option.value === value ||
+								(option.value === CREATE_VALUE && !value && trimmedQuery)
 									? 'color-mix(in srgb, var(--primary) 12%, transparent)'
 									: 'transparent'}
 								disabled={option.disabled}
 								onmousedown={(event) => event.preventDefault()}
 								onclick={() => selectOption(option.value)}
 							>
-								{option.label}
+								{#if option.icon}
+									<SelectOptionIcon icon={option.icon} />
+								{/if}
+								<span class="min-w-0 truncate">{option.label}</span>
 							</button>
 						</li>
 					{/each}

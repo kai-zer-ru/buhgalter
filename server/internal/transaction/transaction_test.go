@@ -569,6 +569,79 @@ func TestCreateWithSubcategoryName(t *testing.T) {
 	}
 }
 
+func TestCreateWithMerchantAndTags(t *testing.T) {
+	handle, env := seedEnvFull(t)
+	ctx := context.Background()
+	database := handle.DB()
+	merchantName := "Пятёрочка"
+	tx, err := Create(ctx, database, env.userID, CreateInput{
+		AccountID: env.accountID, Type: "expense", Amount: 1200,
+		CategoryID: &env.expenseID, MerchantName: &merchantName,
+		TagNames:        []string{"отпуск", "семья"},
+		TransactionDate: timeutil.NowUTC().Add(-time.Hour),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tx.MerchantID == nil || tx.MerchantName == nil || *tx.MerchantName != "Пятёрочка" {
+		t.Fatalf("merchant=%v %v", tx.MerchantID, tx.MerchantName)
+	}
+	if len(tx.Tags) != 2 {
+		t.Fatalf("tags=%v", tx.Tags)
+	}
+
+	list, err := List(ctx, database, env.userID, ListFilters{
+		MerchantID: *tx.MerchantID, Page: 1, Limit: 10,
+	})
+	if err != nil || list.Meta.Total != 1 {
+		t.Fatalf("merchant filter meta=%+v err=%v", list.Meta, err)
+	}
+	listTag, err := List(ctx, database, env.userID, ListFilters{
+		TagID: tx.Tags[0].ID, Page: 1, Limit: 10,
+	})
+	if err != nil || listTag.Meta.Total != 1 {
+		t.Fatalf("tag filter meta=%+v err=%v", listTag.Meta, err)
+	}
+
+	updated, err := Update(ctx, database, env.userID, tx.ID, UpdateInput{
+		AccountID: env.accountID, Type: "expense", Amount: 1300,
+		CategoryID: &env.expenseID, MerchantID: tx.MerchantID,
+		TagIDs:          []string{tx.Tags[0].ID},
+		SetTags:         true,
+		TransactionDate: timeutil.NowUTC().Add(-time.Hour),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(updated.Tags) != 1 || updated.Tags[0].ID != tx.Tags[0].ID {
+		t.Fatalf("updated tags=%v", updated.Tags)
+	}
+	// Update without SetTags must keep existing tags
+	kept, err := Update(ctx, database, env.userID, tx.ID, UpdateInput{
+		AccountID: env.accountID, Type: "expense", Amount: 1400,
+		CategoryID: &env.expenseID, MerchantID: tx.MerchantID,
+		TransactionDate: timeutil.NowUTC().Add(-time.Hour),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(kept.Tags) != 1 {
+		t.Fatalf("tags cleared unexpectedly: %v", kept.Tags)
+	}
+
+	// delete merchant → SET NULL on transaction
+	if _, err := database.ExecContext(ctx, `DELETE FROM merchants WHERE id = ?`, *tx.MerchantID); err != nil {
+		t.Fatal(err)
+	}
+	got, err := GetByID(ctx, database, env.userID, tx.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.MerchantID != nil {
+		t.Fatalf("expected merchant cleared, got %v", *got.MerchantID)
+	}
+}
+
 func seedBanksForTest(t *testing.T, ctx context.Context, database *sql.DB) {
 	t.Helper()
 	if err := bank.SeedIfEmpty(ctx, database); err != nil {

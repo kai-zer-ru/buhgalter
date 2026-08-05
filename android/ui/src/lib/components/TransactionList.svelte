@@ -17,6 +17,7 @@
 	} from '$lib/transaction-display';
 	import { isPendingTransaction, pendingSyncFailed } from '$lib/offline/pending-display';
 	import TransactionCategoryCell from '$lib/components/TransactionCategoryCell.svelte';
+	import TransactionMerchantTags from '$lib/components/TransactionMerchantTags.svelte';
 
 	let {
 		transactions,
@@ -193,10 +194,21 @@
 						</td>
 						{#if showDescription}
 							<td class="p-3 align-middle" style:color="var(--text-muted)">
-								{tx.description ?? ''}
-								{#if descriptionExtra}
-									{@render descriptionExtra(tx)}
-								{/if}
+								<div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+									<TransactionMerchantTags
+										merchantName={tx.merchant_name}
+										merchantIcon={tx.merchant_icon}
+										tags={tx.tags}
+									/>
+									{#if tx.description || descriptionExtra}
+										<span>
+											{tx.description ?? ''}
+											{#if descriptionExtra}
+												{@render descriptionExtra(tx)}
+											{/if}
+										</span>
+									{/if}
+								</div>
 							</td>
 						{/if}
 						{#if showActions}
@@ -261,13 +273,25 @@
 						/>
 					</p>
 				{/if}
-				{#if showDescription && (tx.description || descriptionExtra)}
-					<p class="mt-2 text-sm" style:color="var(--text-muted)">
-						{tx.description ?? ''}
-						{#if descriptionExtra}
-							{@render descriptionExtra(tx)}
+				{#if showDescription && (tx.description || descriptionExtra || tx.merchant_name || (tx.tags && tx.tags.length > 0))}
+					<div
+						class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm"
+						style:color="var(--text-muted)"
+					>
+						<TransactionMerchantTags
+							merchantName={tx.merchant_name}
+							merchantIcon={tx.merchant_icon}
+							tags={tx.tags}
+						/>
+						{#if tx.description || descriptionExtra}
+							<span>
+								{tx.description ?? ''}
+								{#if descriptionExtra}
+									{@render descriptionExtra(tx)}
+								{/if}
+							</span>
 						{/if}
-					</p>
+					</div>
 				{/if}
 			</article>
 		{/each}

@@ -26,14 +26,18 @@ type Handler struct {
 }
 
 type createRequest struct {
-	AccountID       string  `json:"account_id"`
-	Type            string  `json:"type"`
-	Amount          string  `json:"amount"`
-	Description     *string `json:"description"`
-	CategoryID      *string `json:"category_id"`
-	SubcategoryID   *string `json:"subcategory_id"`
-	SubcategoryName *string `json:"subcategory_name"`
-	TransactionDate string  `json:"transaction_date"`
+	AccountID       string    `json:"account_id"`
+	Type            string    `json:"type"`
+	Amount          string    `json:"amount"`
+	Description     *string   `json:"description"`
+	CategoryID      *string   `json:"category_id"`
+	SubcategoryID   *string   `json:"subcategory_id"`
+	SubcategoryName *string   `json:"subcategory_name"`
+	MerchantID      *string   `json:"merchant_id"`
+	MerchantName    *string   `json:"merchant_name"`
+	TagIDs          *[]string `json:"tag_ids"`
+	TagNames        *[]string `json:"tag_names"`
+	TransactionDate string    `json:"transaction_date"`
 }
 
 type transferRequest struct {
@@ -62,6 +66,8 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		From:       q.Get("from"),
 		To:         q.Get("to"),
 		Search:     q.Get("search"),
+		MerchantID: q.Get("merchant_id"),
+		TagID:      q.Get("tag_id"),
 		Sort:       q.Get("sort"),
 		Page:       page,
 		Limit:      limit,
@@ -326,7 +332,7 @@ func parseCreateInput(req createRequest) (CreateInput, error) {
 	if err != nil {
 		return CreateInput{}, errors.New("некорректная дата операции")
 	}
-	return CreateInput{
+	in := CreateInput{
 		AccountID:       req.AccountID,
 		Type:            req.Type,
 		Amount:          amount,
@@ -334,8 +340,19 @@ func parseCreateInput(req createRequest) (CreateInput, error) {
 		CategoryID:      req.CategoryID,
 		SubcategoryID:   req.SubcategoryID,
 		SubcategoryName: req.SubcategoryName,
+		MerchantID:      req.MerchantID,
+		MerchantName:    req.MerchantName,
 		TransactionDate: txDate,
-	}, nil
+	}
+	if req.TagIDs != nil {
+		in.TagIDs = *req.TagIDs
+		in.SetTags = true
+	}
+	if req.TagNames != nil {
+		in.TagNames = *req.TagNames
+		in.SetTags = true
+	}
+	return in, nil
 }
 
 func parseTransferInput(req transferRequest) (TransferInput, error) {
@@ -389,6 +406,10 @@ func writeTxError(w http.ResponseWriter, r *http.Request, err error) bool {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_CANNOT_EDIT_PAYMENT")
 	case errors.Is(err, ErrInvalidSubcategory):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_SUBCATEGORY_NOT_FOUND")
+	case errors.Is(err, ErrInvalidMerchant):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_MERCHANT_NOT_FOUND")
+	case errors.Is(err, ErrInvalidTag):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_TAG_NOT_FOUND")
 	case errors.Is(err, ErrSameAccount):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_TRANSFER_SAME_ACCOUNT")
 	case errors.Is(err, ErrCreditCardPaymentExceedsLimit):
