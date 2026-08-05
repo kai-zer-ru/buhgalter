@@ -221,16 +221,16 @@
 ## v1.5.0
 
 - [x] [Подписки](roadmap/subscriptions.md) — отдельный экран поверх периодических операций (сводка «в месяц», ближайшие списания)
-- [ ] [Валюта счёта](roadmap/multicurrency.md) — отдельно от валюты профиля (`users.currency`)
-- [ ] [Семья / команда](roadmap/team-collaboration.md) — несколько пользователей на одном учёте
 - [ ] [Перехват уведомлений банка](roadmap/notification-intercept.md) — Android, push/SMS → черновик операции
-- [ ] [PostgreSQL](roadmap/postgresql.md) — опциональная БД вместо SQLite
 - [ ] [Разбивка операции на несколько счетов](roadmap/transaction-split-accounts.md)
 - [ ] [Магазины, теги, комментарий](roadmap/merchants-tags.md) — в т.ч. магазин из чека
 - [ ] [Цели накопления](roadmap/savings-goals.md) — копилки, прогресс, напоминания
 
 ## Общие планы
 
+- [ ] [Семья / команда](roadmap/team-collaboration.md) — личные + семейные счета; owner invite (ссылка/QR/код); спецификация зафиксирована, реализация отложена
+- [ ] [Валюта счёта](roadmap/multicurrency.md) — отдельно от валюты профиля (`users.currency`)
+- [ ] [PostgreSQL](roadmap/postgresql.md) — опциональная БД вместо SQLite
 - [ ] [Сканер чеков](roadmap/receipt-scanner.md) — QR ФНС (РФ) и разбор фото через ИИ; в доке — уроки сбитого эксперимента (ветка `scan_chek`, код не мержить вслепую)
 - [ ] [Правила категорий + очередь «разобрать»](roadmap/category-rules-inbox.md) — например транспорт → «Автобус» → счёт «Наличные»
 - [ ] [Бюджет: rollover, прогноз, конверты](roadmap/budget-post-mvp.md) — перенос остатка, прогноз из периодических, бюджет «конвертами»

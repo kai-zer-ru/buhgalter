@@ -35,6 +35,7 @@
 | [../roadmap/budget-post-mvp.md](../roadmap/budget-post-mvp.md) | (план) Бюджет: rollover и прогноз из recurring |
 | [transactions-display.md](transactions-display.md) | Отображение операций в UI и API |
 | [../roadmap/multicurrency.md](../roadmap/multicurrency.md) | (план) Настоящая мультивалютность |
+| [../roadmap/team-collaboration.md](../roadmap/team-collaboration.md) | (план) Семья / команда: личные и общие счета, инвайты; спецификация зафиксирована |
 | [../roadmap/transaction-enrichment.md](../roadmap/transaction-enrichment.md) | (план) Теги, контрагент, split, вложения |
 | [../roadmap/savings-reports-import.md](../roadmap/savings-reports-import.md) | (план) Цели накопления, PDF-отчёты, расширенный импорт |
 | [accounts-archive-delete.md](accounts-archive-delete.md) | Архивация, мягкое удаление счётов, автоперевод остатка |
