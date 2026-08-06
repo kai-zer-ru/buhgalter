@@ -1,6 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
     <string name="app_name">Бухгалтер</string>
+    <string name="notification_intercept_service_label">Бухгалтер — уведомления банков</string>
     <string name="title_activity_main">Бухгалтер</string>
     <string name="package_name">ru.kai_zer.buhgalter</string>
     <string name="custom_url_scheme">ru.kai_zer.buhgalter</string>

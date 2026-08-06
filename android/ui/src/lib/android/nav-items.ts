@@ -28,6 +28,12 @@ export function androidMainNavItems(): AndroidNavItem[] {
 			isActive: (p) => p.startsWith('/transactions')
 		},
 		{
+			href: resolve('/settings/bank-notifications/drafts'),
+			labelKey: 'nav.bankNotificationDrafts',
+			// Drafts + debug history are top-level (not Settings).
+			isActive: (p) => isBankNotificationDraftsPath(p)
+		},
+		{
 			href: resolve('/debts'),
 			labelKey: 'nav.debts',
 			isActive: (p) => p.startsWith('/debts') || p.startsWith('/debtors')
@@ -108,6 +114,12 @@ export function androidSettingsNavItems(): AndroidNavItem[] {
 			isActive: (p) => p === '/settings/notifications'
 		},
 		{
+			href: resolve('/settings/bank-notifications'),
+			labelKey: 'settings.tab.bankNotifications',
+			isActive: (p) =>
+				p.startsWith('/settings/bank-notifications') && !isBankNotificationDraftsPath(p)
+		},
+		{
 			href: resolve('/settings/import'),
 			labelKey: 'settings.tab.import',
 			isActive: (p) => p === '/settings/import'
@@ -139,7 +151,16 @@ export function androidMainNavItemsAfterHome(): AndroidNavItem[] {
 	return androidMainNavItems().slice(1);
 }
 
+/** Drafts / history live under /settings/... URL but are main-nav, not Settings. */
+export function isBankNotificationDraftsPath(pathname: string): boolean {
+	return (
+		pathname.startsWith('/settings/bank-notifications/drafts') ||
+		pathname.startsWith('/settings/bank-notifications/history')
+	);
+}
+
 export function isAndroidSettingsGroupActive(pathname: string): boolean {
+	if (isBankNotificationDraftsPath(pathname)) return false;
 	return pathname === '/settings' || pathname.startsWith('/settings/');
 }
 

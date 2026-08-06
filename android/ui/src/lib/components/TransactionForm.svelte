@@ -42,6 +42,18 @@
 	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
 
+	type CreatePrefill = {
+		description?: string;
+		amount?: string;
+		accountId?: string;
+		merchantId?: string;
+		merchantName?: string;
+		categoryId?: string;
+		subcategoryId?: string;
+		/** ISO datetime */
+		occurredAt?: string;
+	};
+
 	type Props = {
 		variant?: 'modal' | 'page';
 		open?: boolean;
@@ -51,6 +63,8 @@
 		transaction?: Transaction | null;
 		repeatFrom?: Transaction | null;
 		initialDescription?: string;
+		/** Richer create prefill (bank notification intercept, etc.). */
+		createPrefill?: CreatePrefill | null;
 		onclose: () => void;
 		onsaved: () => void;
 	};
@@ -64,6 +78,7 @@
 		transaction = null,
 		repeatFrom = null,
 		initialDescription = '',
+		createPrefill = null,
 		onclose,
 		onsaved
 	}: Props = $props();
@@ -164,14 +179,16 @@
 		const repeatSource = repeatFrom;
 		const createType = defaultType;
 		const desc = initialDescription;
-		void untrack(() => init(editSource, repeatSource, createType, desc));
+		const prefill = createPrefill;
+		void untrack(() => init(editSource, repeatSource, createType, desc, prefill));
 	});
 
 	async function init(
 		editSource: Transaction | null,
 		repeatSource: Transaction | null,
 		createType: 'expense' | 'income',
-		createDescription: string
+		createDescription: string,
+		prefill: CreatePrefill | null
 	) {
 		if (editSource) {
 			txType = editSource.type === 'income' ? 'income' : 'expense';
@@ -205,24 +222,35 @@
 			optionalDetailsOpen = Boolean(merchantId || selectedTags.length || description.trim());
 		} else {
 			txType = createType;
-			amount = '';
+			amount = prefill?.amount ? formatMoneyForInput(prefill.amount) : '';
 			selectedAccount = '';
-			categoryId = '';
-			subcategoryId = '';
+			categoryId = prefill?.categoryId ?? '';
+			subcategoryId = prefill?.subcategoryId ?? '';
 			subcategoryQuery = '';
-			merchantId = '';
-			merchantQuery = '';
+			merchantId = prefill?.merchantId ?? '';
+			merchantQuery = prefill?.merchantName ?? '';
 			selectedTags = [];
 			tagInput = '';
-			description = createDescription;
-			dateTimeValue = nowDatetimeLocal(tz);
-			timeExpanded = false;
-			optionalDetailsOpen = Boolean(createDescription.trim());
+			description = prefill?.description ?? createDescription;
+			if (prefill?.occurredAt) {
+				try {
+					dateTimeValue = toDatetimeLocalValue(prefill.occurredAt, tz);
+				} catch {
+					dateTimeValue = nowDatetimeLocal(tz);
+				}
+			} else {
+				dateTimeValue = nowDatetimeLocal(tz);
+			}
+			timeExpanded = Boolean(prefill?.occurredAt);
+			optionalDetailsOpen = Boolean(
+				merchantId || merchantQuery.trim() || description.trim() || selectedTags.length
+			);
 		}
 		accountsBase = await listAccounts('active');
 		accounts = applyOutboxToAccounts(accountsBase, tz);
 		if (!editSource && !repeatSource) {
-			selectedAccount = defaultAccountId(accounts, accountId);
+			const preferred = prefill?.accountId || accountId;
+			selectedAccount = defaultAccountId(accounts, preferred);
 		}
 		merchants = await listMerchants();
 		allTags = await listTags();
@@ -242,6 +270,9 @@
 			subcategories = await listSubcategories(categoryId);
 		} else {
 			subcategories = [];
+		}
+		if (subcategoryId && !subcategories.some((s) => s.id === subcategoryId)) {
+			subcategoryId = '';
 		}
 	}
 

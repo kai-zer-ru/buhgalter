@@ -5,8 +5,10 @@
 	import { leaveForm } from '$lib/android/form-nav';
 	import { parseFormReturnPath } from '$lib/android/form-routes';
 	import { takeSharePrefill } from '$lib/android/share-target';
+	import { deleteInterceptDraft, takeInterceptPrefill } from '$lib/android/notification-intercept';
 	import { lookupServerTransaction } from '$lib/offline/transaction-index';
 	import type { Transaction } from '$lib/api/client';
+	import { user } from '$lib/stores/auth';
 
 	import { dataRefreshTick } from '$lib/offline/sync';
 
@@ -16,7 +18,10 @@
 	const returnTo = $derived(parseFormReturnPath($page.url.searchParams.get('from'), '/'));
 	const descriptionParam = $derived($page.url.searchParams.get('description') ?? '');
 	const shareOnce = takeSharePrefill();
-	let initialDescription = $state(shareOnce?.description ?? '');
+	const interceptOnce = takeInterceptPrefill();
+	let initialDescription = $state(interceptOnce?.description ?? shareOnce?.description ?? '');
+	let createPrefill = $state(interceptOnce);
+	const interceptDraftId = interceptOnce?.draftId;
 	let repeatFrom = $state<Transaction | null>(null);
 	let ready = $state(true);
 
@@ -46,7 +51,10 @@
 		}
 	}
 
-	function finish() {
+	function finish(saved: boolean) {
+		if (saved && interceptDraftId) {
+			deleteInterceptDraft(interceptDraftId, $user?.id);
+		}
 		dataRefreshTick.update((n) => n + 1);
 		void leaveForm(returnTo);
 	}
@@ -56,11 +64,12 @@
 	<TransactionForm
 		variant="page"
 		backHref={returnTo}
-		{accountId}
+		accountId={createPrefill?.accountId || accountId}
 		defaultType={type}
 		{repeatFrom}
 		{initialDescription}
-		onclose={finish}
-		onsaved={finish}
+		{createPrefill}
+		onclose={() => finish(false)}
+		onsaved={() => finish(true)}
 	/>
 {/if}

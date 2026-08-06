@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { androidAdminNavItems, androidMainNavItems, androidSettingsNavItems } from './nav-items';
+import {
+	androidAdminNavItems,
+	androidMainNavItems,
+	androidSettingsNavItems,
+	isAndroidSettingsGroupActive,
+	isBankNotificationDraftsPath
+} from './nav-items';
 
 describe('android nav items', () => {
 	it('includes full main navigation like web', () => {
@@ -8,6 +14,7 @@ describe('android nav items', () => {
 			'nav.home',
 			'nav.accounts',
 			'nav.transactions',
+			'nav.bankNotificationDrafts',
 			'nav.debts',
 			'nav.credits',
 			'nav.subscriptions',
@@ -29,6 +36,26 @@ describe('android nav items', () => {
 		expect(paths.some((href) => href.endsWith('/settings/recurring-operations'))).toBe(false);
 		expect(paths.some((href) => href.endsWith('/categories'))).toBe(false);
 		expect(paths.some((href) => href.endsWith('/recurring-operations'))).toBe(false);
+	});
+
+	it('does not mark Settings active on bank drafts/history', () => {
+		expect(isBankNotificationDraftsPath('/settings/bank-notifications/drafts')).toBe(true);
+		expect(isBankNotificationDraftsPath('/settings/bank-notifications/history')).toBe(true);
+		expect(isBankNotificationDraftsPath('/settings/bank-notifications')).toBe(false);
+		expect(isAndroidSettingsGroupActive('/settings/bank-notifications/drafts')).toBe(false);
+		expect(isAndroidSettingsGroupActive('/settings/bank-notifications/history')).toBe(false);
+		expect(isAndroidSettingsGroupActive('/settings/bank-notifications')).toBe(true);
+
+		const drafts = androidMainNavItems().find((i) => i.labelKey === 'nav.bankNotificationDrafts')!;
+		expect(drafts.isActive('/settings/bank-notifications/drafts')).toBe(true);
+		expect(drafts.isActive('/settings/bank-notifications/history')).toBe(true);
+		expect(drafts.isActive('/settings/bank-notifications')).toBe(false);
+
+		const bankSettings = androidSettingsNavItems().find((i) =>
+			i.href.endsWith('/settings/bank-notifications')
+		)!;
+		expect(bankSettings.isActive('/settings/bank-notifications')).toBe(true);
+		expect(bankSettings.isActive('/settings/bank-notifications/drafts')).toBe(false);
 	});
 
 	it('includes admin navigation with system route', () => {

@@ -62,6 +62,7 @@
 | `stats` | Статистика `/stats` | `true` |
 | `notifications` | Уведомления (Telegram / MAX, настройки, исходящая доставка) | `true` |
 | `merchants_tags` | Магазины и теги | `true` (когда модуль появится) |
+| `transaction_templates` | Шаблоны операций | `true` (когда модуль появится) |
 | `receipt_scanner` | Сканер чеков | `true` (когда модуль появится) |
 | `savings_goals` | Цели накопления | `true` (когда модуль появится) |
 

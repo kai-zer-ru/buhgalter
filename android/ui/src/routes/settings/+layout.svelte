@@ -29,6 +29,21 @@
 			titleKey: 'settings.tab.notifications',
 			href: '/settings/notifications'
 		},
+		{
+			path: '/settings/bank-notifications',
+			titleKey: 'settings.tab.bankNotifications',
+			href: '/settings/bank-notifications'
+		},
+		{
+			path: '/settings/bank-notifications/drafts',
+			titleKey: 'bankNotifications.drafts.title',
+			href: '/settings/bank-notifications/drafts'
+		},
+		{
+			path: '/settings/bank-notifications/history',
+			titleKey: 'bankNotifications.history.title',
+			href: '/settings/bank-notifications/history'
+		},
 		{ path: '/settings/import', titleKey: 'settings.tab.import', href: '/settings/import' }
 	];
 
@@ -38,11 +53,16 @@
 	);
 
 	const current = $derived.by(() => {
-		return (
-			pages.find((p) => p.path === pathname) ??
-			pages.find((p) => pathname.startsWith(`${p.path}/`)) ??
-			pages[0]
-		);
+		const exact = pages.find((p) => p.path === pathname);
+		if (exact) return exact;
+		// Longest prefix wins — otherwise `/settings` steals bank-notifications/*.
+		let best: SettingsPage | undefined;
+		for (const p of pages) {
+			if (pathname.startsWith(`${p.path}/`) && (!best || p.path.length > best.path.length)) {
+				best = p;
+			}
+		}
+		return best ?? pages[0];
 	});
 
 	const breadcrumbItems = $derived.by((): BreadcrumbItem[] => {
@@ -52,6 +72,19 @@
 		const page = current;
 		if (page.path === '/settings') {
 			return [home, settings];
+		}
+		if (page.path === '/settings/bank-notifications/drafts') {
+			return [home, { href: page.href, label: tr(page.titleKey) }];
+		}
+		if (page.path === '/settings/bank-notifications/history') {
+			return [
+				home,
+				{
+					href: '/settings/bank-notifications/drafts',
+					label: tr('bankNotifications.drafts.title')
+				},
+				{ href: page.href, label: tr(page.titleKey) }
+			];
 		}
 		return [home, settings, { href: page.href, label: tr(page.titleKey) }];
 	});

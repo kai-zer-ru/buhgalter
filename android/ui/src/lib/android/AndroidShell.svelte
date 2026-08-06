@@ -16,6 +16,11 @@
 		isAndroidAdminGroupActive,
 		isAndroidSettingsGroupActive
 	} from '$lib/android/nav-items';
+	import {
+		countInterceptDrafts,
+		getCurrentInterceptSettings,
+		interceptDraftsTick
+	} from '$lib/android/notification-intercept';
 	import AndroidDrawerSync from '$lib/android/AndroidDrawerSync.svelte';
 	import AndroidDrawerVersion from '$lib/android/AndroidDrawerVersion.svelte';
 	import UpdateAvailableModal from '$lib/components/UpdateAvailableModal.svelte';
@@ -46,6 +51,12 @@
 	const mainNav = $derived(androidMainNavItemsAfterHome());
 	const settingsHref = resolve('/settings');
 	const adminHref = resolve('/admin');
+	const draftCount = $derived.by(() => {
+		void $interceptDraftsTick;
+		void $user?.id;
+		if (!getCurrentInterceptSettings().enabled) return 0;
+		return countInterceptDrafts($user?.id);
+	});
 
 	function closeDrawer() {
 		drawerOpen = false;
@@ -116,7 +127,17 @@
 					aria-current={item.isActive(path) ? 'page' : undefined}
 					onclick={closeDrawer}
 				>
-					{$_(item.labelKey)}
+					<span class="flex w-full items-center justify-between gap-2">
+						<span>{$_(item.labelKey)}</span>
+						{#if item.labelKey === 'nav.bankNotificationDrafts' && draftCount > 0}
+							<span
+								class="rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums text-white"
+								style:background="var(--primary)"
+							>
+								{draftCount}
+							</span>
+						{/if}
+					</span>
 				</a>
 			{/each}
 			<a

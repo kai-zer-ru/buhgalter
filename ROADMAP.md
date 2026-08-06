@@ -221,9 +221,10 @@
 ## v1.5.0
 
 - [x] [Подписки](roadmap/subscriptions.md) — отдельный экран поверх периодических операций (сводка «в месяц», ближайшие списания)
-- [ ] [Перехват уведомлений банка](roadmap/notification-intercept.md) — Android, push/SMS → черновик операции
+- [ ] [Перехват уведомлений банка](roadmap/notification-intercept.md) — Android, push → черновик операции (last4/банк→счёт)
 - [x] [Магазины, теги](roadmap/merchants-tags.md) — справочник + теги; магазин из чека — follow-up после сканера
 - [ ] [Включение/отключение функционала в админке](roadmap/feature-toggles.md) — флаги модулей + правило для новых фич
+- [ ] [Шаблоны операций](roadmap/transaction-templates.md) — именованные пресеты для быстрого ручного добавления
 
 ## Общие планы
 
@@ -244,6 +245,8 @@
 - [ ] [Webhook](roadmap/webhooks.md) — исходящие события для внешних интеграций
 - [ ] [Home Assistant](roadmap/home-assistant.md) — интеграция для умного дома
 - [ ] [Эволюция уведомлений](roadmap/notifications-evolution.md) — развитие политик/шаблонов/частоты
+- [ ] Android: quick-actions в шторке для черновиков из перехвата уведомлений (принять / отклонить без открытия приложения) — follow-up к [notification-intercept.md](roadmap/notification-intercept.md)
+- [ ] Android: SMS-перехват покупок банка — после push MVP ([notification-intercept.md](roadmap/notification-intercept.md))
 
 ## На подумать
 

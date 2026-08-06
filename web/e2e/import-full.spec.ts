@@ -34,7 +34,10 @@ test('import CSV wizard reaches mapping step', async ({ page }) => {
 test('export CSV download button is enabled with filters', async ({ page }) => {
 	await page.goto('/settings/import');
 	await waitAppReady(page);
-	await page.getByRole('tab', { name: 'Экспорт', exact: true }).click();
+
+	const exportTab = page.getByRole('tab', { name: 'Экспорт', exact: true });
+	await expect(exportTab).toBeVisible({ timeout: 15_000 });
+	await exportTab.click();
 
 	const downloadBtn = page.getByRole('button', { name: 'Скачать CSV' });
 	await expect(downloadBtn).toBeVisible();

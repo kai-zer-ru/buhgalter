@@ -47,6 +47,12 @@
 	import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
 	import { reportPageLoadFailure } from '$lib/page-load';
+	import {
+		countInterceptDrafts,
+		getCurrentInterceptSettings,
+		interceptDraftsTick,
+		processPendingBankNotifications
+	} from '$lib/android/notification-intercept';
 
 	const DASHBOARD_PATH = '/api/v1/dashboard';
 	const PAST_TX_PATH = '/api/v1/transactions?kind=manual&limit=10&page=1&sort=date_desc';
@@ -72,6 +78,12 @@
 	let budgetItems = $state<BudgetSummaryItem[]>(budgetCached?.items ?? []);
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
+	const bankDraftCount = $derived.by(() => {
+		void $interceptDraftsTick;
+		void $user?.id;
+		if (!getCurrentInterceptSettings().enabled) return 0;
+		return countInterceptDrafts($user?.id);
+	});
 	const dash = $derived.by(() => {
 		void $outboxTick;
 		void $localDataTick;
@@ -110,6 +122,7 @@
 
 	onMount(() => {
 		void loadAll();
+		void processPendingBankNotifications();
 	});
 
 	$effect(() => {
@@ -298,6 +311,24 @@
 			/>
 		</div>
 	</div>
+
+	{#if bankDraftCount > 0}
+		<a
+			href={resolve('/settings/bank-notifications/drafts')}
+			class="card flex items-center justify-between gap-3 transition hover:opacity-90"
+			style:border-color="var(--primary)"
+		>
+			<div class="min-w-0">
+				<p class="font-medium">
+					{$_('bankNotifications.drafts.homeBanner', { values: { n: bankDraftCount } })}
+				</p>
+				<p class="text-sm" style:color="var(--text-muted)">
+					{$_('bankNotifications.drafts.homeBannerHint')}
+				</p>
+			</div>
+			<span class="text-sm font-semibold" style:color="var(--primary)">→</span>
+		</a>
+	{/if}
 
 	{#snippet budgetWidget()}
 		{#if budgetItems.length > 0}

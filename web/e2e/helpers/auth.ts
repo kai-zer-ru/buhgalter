@@ -25,6 +25,17 @@ export async function waitAppReady(page: Page) {
 		return;
 	}
 	await expect(page.locator('header')).toBeVisible({ timeout: 20_000 });
+
+	// SPA client crash (failed chunk / render) shows SvelteKit's default error inside the shell.
+	// Header is still visible, so without this check later locators time out for 60s.
+	const crashed = page.getByRole('heading', { name: '500', exact: true });
+	if (await crashed.isVisible().catch(() => false)) {
+		await page.reload();
+		await expect(page.getByText('Загрузка…')).toHaveCount(0, { timeout: 20_000 });
+		await expect(page.locator('header')).toBeVisible({ timeout: 20_000 });
+		await expect(crashed).toHaveCount(0, { timeout: 15_000 });
+	}
+
 	const { dismissBlockingModals } = await import('./ui');
 	await dismissBlockingModals(page);
 }

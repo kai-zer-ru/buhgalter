@@ -229,15 +229,18 @@ test('edit expense from dashboard updates balance', async ({ page }) => {
 	await dialog.getByRole('button', { name: 'Сохранить' }).click();
 	await expect(dialog).toHaveCount(0, { timeout: 15_000 });
 
-	// silent reload after edit can collapse the recent-ops spoiler
-	await expandCollapsibleSection(page, 'Последние операции');
+	// 1000 − 150 — balance is authoritative; dashboard recent is only limit=10 and
+	// shared e2e DB traffic can push this row off the preview after silent reload.
+	await expect(accountCard.getByText('850.00 ₽')).toBeVisible({ timeout: 10_000 });
+
+	await page.goto('/transactions');
+	await waitAppReady(page);
+	await selectCombobox(page, 'tx-filter-account', { label: account.name });
 	await expect(
 		page.getByRole('row', {
 			name: new RegExp(`${description}.*150\\.00|150\\.00.*${description}`)
 		})
 	).toBeVisible({ timeout: 10_000 });
-	// 1000 − 150
-	await expect(accountCard.getByText('850.00 ₽')).toBeVisible({ timeout: 10_000 });
 });
 
 test('transfer form excludes selected account from opposite select', async ({ page }) => {

@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Buhgalter</string>
+    <string name="notification_intercept_service_label">Buhgalter — bank notifications</string>
     <string name="title_activity_main">Buhgalter</string>
     <string name="shortcut_new_expense_short">+ Expense</string>
     <string name="shortcut_new_expense_long">New expense</string>

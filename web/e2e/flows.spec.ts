@@ -330,4 +330,15 @@ test('password reset request on login page', async ({ page }) => {
 	await page.getByRole('dialog').locator('input').fill('admin');
 	await page.getByRole('button', { name: 'Отправить запрос' }).click();
 	await expect(page.getByText('Запрос отправлен')).toBeVisible({ timeout: 10_000 });
+
+	// Ack so later tests do not keep the admin password-reset banner.
+	await restoreAdminSession(page);
+	const pending = await apiJSON<{ id: string }[]>(
+		page,
+		'GET',
+		'/api/v1/admin/password-reset-requests'
+	);
+	for (const req of pending) {
+		await apiJSON(page, 'POST', `/api/v1/admin/password-reset-requests/${req.id}/ack`);
+	}
 });

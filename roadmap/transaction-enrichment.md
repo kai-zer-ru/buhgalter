@@ -5,6 +5,7 @@
 | Тема | Версия | Документ |
 |------|--------|----------|
 | Магазины, теги, комментарий | **v1.5.0** | [merchants-tags.md](merchants-tags.md) |
+| Шаблоны операций | **v1.5.0** | [transaction-templates.md](transaction-templates.md) |
 | Сканер чеков (+ вложение фото) | **v1.5.0** | [receipt-scanner.md](receipt-scanner.md) |
 | Разбивка операции на несколько счетов | **v1.6.0** | [transaction-split-accounts.md](transaction-split-accounts.md) |
 

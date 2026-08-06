@@ -48,6 +48,7 @@
 	} from '$lib/version-check';
 	import { initDeepLinkListener } from '$lib/android/deep-link';
 	import { initShareTargetListener } from '$lib/android/share-target';
+	import { initNotificationIntercept } from '$lib/android/notification-intercept';
 	import { initDebugLogListeners, debugLogInfo } from '$lib/platform/debug-log';
 	import type { User } from '$lib/api/client';
 	import './layout.css';
@@ -238,6 +239,7 @@
 		const cleanupAppLock = initAppLockListener();
 		let cleanupDeepLink: (() => void) | undefined;
 		let cleanupShare: (() => void) | undefined;
+		let cleanupIntercept: (() => void) | undefined;
 		void initDeepLinkListener((route) => {
 			pendingDeepLink = route;
 		}).then((cleanup) => {
@@ -251,6 +253,9 @@
 		).then((cleanup) => {
 			cleanupShare = cleanup;
 		});
+		void initNotificationIntercept().then((cleanup) => {
+			cleanupIntercept = cleanup;
+		});
 		// Token must be loaded before warmRefCache — otherwise unauthenticated 401s wipe SecureStorage.
 		void (async () => {
 			await initAuthToken();
@@ -261,6 +266,7 @@
 			cleanupAppLock();
 			cleanupDeepLink?.();
 			cleanupShare?.();
+			cleanupIntercept?.();
 		};
 	});
 

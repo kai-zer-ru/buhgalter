@@ -1,0 +1,142 @@
+import { bankIdForPackage } from './banks';
+import type { ParsedPurchase, RawBankNotification } from './types';
+
+// Avoid \\b with Cyrillic — JS word boundaries are ASCII-oriented.
+const IGNORE_RE =
+	/(код|code|otp|пароль|вход|войдите|баланс|остаток|отказ|отклонен|отклонён|заблокир|перевод\s+на\s+карт)/i;
+
+/** Incoming / credit pushes — never draft as expense (v1.5 is purchase-only). */
+const INCOME_RE =
+	/(выплат|процент|начислен|кэшб[еэ]к|кешб[еэ]к|cashback|поступило|поступил[аи]?|зачисл|пополнен|входящ|перевод\s+от|вам\s+перевел|зарплат|стипенд|доход\b|заработн)/i;
+
+const CANCEL_RE =
+	/(отмена\s+покупки|отмен[аы]\s+операц|отменена?\s+покупк|возврат\s+средств|возврат\s+покупк|purchase\s+cancel|canceled?\s+purchase|refund)/i;
+
+const PURCHASE_HINT_RE = /(покупк|оплат|списан|трата|платёж|платеж|purchase|payment|spent|оплата)/i;
+
+/** Titles that are bank/card chrome, not a merchant (Yandex cancel uses «Карта Пэй»). */
+const GENERIC_TITLE_RE =
+	/^(карта(\s+пэй)?|card(\s+pay)?|пэй|pay|яндекс(\s+пэй)?|yandex(\s+pay)?|тинькофф|т-?банк|сбер(банк)?|wb\s*банк)$/i;
+
+const AMOUNT_RE =
+	/(?:^|[^\d])(\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*(?:₽|руб\.?|р\.|RUB|rub)?(?!\d)/i;
+
+const LAST4_RE = /(?:\*|⁎|•|∙|●|○|∗|карты?\s*|карта\s*|card\s*)(\d{4})\b/i;
+
+function combinedText(raw: RawBankNotification): string {
+	return [raw.title, raw.text, raw.bigText].filter(Boolean).join('\n');
+}
+
+function normalizeAmount(raw: string): string | null {
+	const cleaned = raw.replace(/[\s\u00a0]/g, '').replace(',', '.');
+	const n = Number(cleaned);
+	if (!Number.isFinite(n) || n <= 0) return null;
+	return n.toFixed(2);
+}
+
+function extractLast4(text: string): string | undefined {
+	const m = text.match(LAST4_RE);
+	return m?.[1];
+}
+
+function extractAmount(text: string): string | null {
+	const currencyFirst =
+		text.match(
+			/(?:₽|руб\.?|RUB)\s*(\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)/i
+		) ??
+		text.match(
+			/(\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*(?:₽|руб\.?|р\.|RUB)/i
+		);
+	if (currencyFirst?.[1]) {
+		const a = normalizeAmount(currencyFirst[1]);
+		if (a) return a;
+	}
+	const m = text.match(AMOUNT_RE);
+	if (!m?.[1]) return null;
+	return normalizeAmount(m[1]);
+}
+
+/**
+ * Merchant: prefer notification title when it looks like a store name
+ * (Yandex Pay puts the shop in EXTRA_TITLE and purchase details in EXTRA_TEXT).
+ * Cancel pushes often use a generic title («Карта Пэй») and put the shop in the body.
+ */
+function extractMerchant(raw: RawBankNotification, amount: string): string {
+	const title = raw.title.trim();
+	if (
+		title &&
+		!GENERIC_TITLE_RE.test(title) &&
+		!PURCHASE_HINT_RE.test(title) &&
+		!CANCEL_RE.test(title) &&
+		!IGNORE_RE.test(title) &&
+		title.length <= 80
+	) {
+		if (!/^\d/.test(title) && !/(₽|RUB|руб)/i.test(title)) {
+			return title;
+		}
+	}
+
+	let t = [raw.text, raw.bigText].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+	t = t.replace(/^(сбер|сбербанк|тинькофф|т-?банк|tinkoff|яндекс)\s*[:.]?\s*/i, '');
+	t = t.replace(CANCEL_RE, ' ');
+	t = t.replace(PURCHASE_HINT_RE, ' ').replace(/\s+/g, ' ').trim();
+	const amountAlt = amount.replace('.', '[,.]');
+	t = t.replace(new RegExp(`\\b${amountAlt}\\b`, 'i'), ' ');
+	t = t.replace(/\b\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d{1,2})?\s*(?:₽|руб\.?|р\.|RUB)?/gi, ' ');
+	t = t.replace(LAST4_RE, ' ');
+	t = t.replace(/\b(карта|card|счёт|счет|доступно|на|MIR|Visa|MasterCard)\b/gi, ' ');
+	t = t.replace(/[•*⁎∙●○∗]+/g, ' ');
+	t = t.replace(/\s+/g, ' ').trim();
+	const inMatch = t.match(/\bв\s+([A-Za-zА-Яа-яЁё0-9 ._-]{2,60})/i);
+	if (inMatch?.[1]) {
+		t = inMatch[1].trim();
+	}
+	t = t.replace(/^[\s.,:;!\-–—]+|[\s.,:;!\-–—]+$/g, '').trim();
+	if (t.length > 80) t = t.slice(0, 80).trim();
+	return t;
+}
+
+function looksLikePurchase(text: string): boolean {
+	if (CANCEL_RE.test(text)) return false;
+	// Credits/top-ups before purchase hints — «выплата» must not become an expense draft.
+	if (INCOME_RE.test(text)) return false;
+	if (PURCHASE_HINT_RE.test(text)) return true;
+	if (IGNORE_RE.test(text)) return false;
+	return /(?:₽|руб\.?|RUB)/i.test(text) && AMOUNT_RE.test(text);
+}
+
+function hashRaw(raw: RawBankNotification): string {
+	return (
+		raw.dedupeKey || `${raw.packageName}|${raw.postedAt}|${raw.title}|${raw.text}|${raw.bigText}`
+	);
+}
+
+export function parseBankNotification(raw: RawBankNotification): ParsedPurchase | null {
+	const bankId = bankIdForPackage(raw.packageName);
+	if (!bankId) return null;
+
+	const text = combinedText(raw);
+	if (!text.trim()) return null;
+
+	const isCancel = CANCEL_RE.test(text);
+	if (!isCancel && INCOME_RE.test(text)) return null;
+	if (!isCancel && !looksLikePurchase(text)) return null;
+
+	const amount = extractAmount(text);
+	if (!amount) return null;
+
+	const last4 = extractLast4(text);
+	const merchantText = extractMerchant(raw, amount);
+	const occurredAt = new Date(raw.postedAt > 0 ? raw.postedAt : Date.now()).toISOString();
+
+	return {
+		bankId,
+		packageName: raw.packageName,
+		amount,
+		occurredAt,
+		merchantText,
+		last4,
+		rawHash: hashRaw(raw),
+		kind: isCancel ? 'cancel' : 'purchase'
+	};
+}

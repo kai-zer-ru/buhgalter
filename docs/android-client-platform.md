@@ -117,12 +117,13 @@ BUHGALTER_ALLOWED_HOSTS=192.168.1.176
 - **Outbox при resume / смене сети:** внеочередной probe `/health`; при online — warm cache и `scheduleSyncOutbox`, если очередь не пуста.
 - **Экспорт очереди:** Настройки → Сервер — JSON в буфер обмена (для support).
 - **Ярлыки и share:** static shortcuts «+ Расход/Доход», «Перевод» → deep links; **«Поделиться»** (`ACTION_SEND` text/plain, image/*) → `ShareTargetPlugin` → `/transactions/new?type=expense` с префиллом описания (`share-target.ts`). Вложение файла / OCR — не в MVP.
+- **Перехват уведомлений банка:** `BankNotificationListenerService` + `NotificationInterceptPlugin` → JS-парсеры (allowlist package для банков каталога) → локальные черновики расходов. Парсер игнорит OTP/баланс/отказы и **входящие** (пополнение, выплата процентов, перевод от …). При открытии черновика: категория/подкатегория по истории расходов сматченного `merchant_id` (majority из последних 10; иначе primary). Настройки: `/settings/bank-notifications` (per-user toggle, счёт→банк, last4→счёт; блок автозапуск/батарея). Черновики — меню «Черновики банка»; история — `BuhgalterNotificationHistory`. Отмена покупки (Yandex «Отмена покупки…») снимает черновик с той же суммой/магазином. Сырые push только на устройстве. **Фон:** NLS должен жить без UI — на MIUI без автозапуска после «закрыть все» push теряется (смахнул — не восстановить). Rebind: `onResume`, `onListenerConnected`, `BOOT_COMPLETED` / `MY_PACKAGE_REPLACED`. SMS и quick-actions — не в MVP ([roadmap/notification-intercept.md](../roadmap/notification-intercept.md)).
 - **Тёмная иконка / splash:** `values-night/ic_launcher_background` (#0f172a), splash в night mode — тот же фон до загрузки WebView. Это системный night mode лаунчера, не настройка темы SPA (`system` / light / dark в профиле). **Night bg лаунчера не гарантирован на HyperOS/Xiaomi** (кеш иконки); эталон — Pixel Launcher / AVD. Splash при этом может темнеть независимо.
 - **Themed icon (Material You):** слой `<monochrome>` в adaptive icon (`@drawable/ic_launcher_monochrome`), исходник `ui/static/icon-monochrome-512.png` → `make android-icons`. Работает при включённых тематических иконках ОС (API 33+); на OEM — основной способ «иконка меняет вид».
 - **SystemBars:** Capacitor 8 `SystemBars.setStyle` из `applyTheme` (`system-bars.ts`) — contrast иконок status/nav bar следует **resolved** теме SPA, не только OS night. Cold start до JS может кратко совпадать с device night.
 - **Доступность сервера:** `server-connectivity.ts` — отдельно от «есть Wi‑Fi». При недоступности API (в т.ч. Capacitor `Failed to connect`) включается офлайн-режим: запросы не уходят на сервер, GET берутся из ref-cache, мутации — в outbox. Полоска внизу показывает «Нет соединения» и при наличии очереди — число операций; фоновая проверка `/health` раз в **60 с**; при смене сети / resume приложения — внеочередной probe; кнопка «Синхронизировать» тоже форсирует probe. Опциональный fallback LAN→remote на домашнем SSID.
 
-Плагины: `@capacitor/network`, `@capacitor/preferences`, `@capacitor/app` (кнопка «Назад», блокировка в фоне), встроенный `SystemBars` (стиль status/nav), native `WifiSubnet`, `SslTrust`, `ShareTarget`, `WidgetBridge`, `DebugExport`, `LanDiscovery`; `@aparajita/capacitor-biometric-auth`, `@aparajita/capacitor-secure-storage` (PIN и API-токен).
+Плагины: `@capacitor/network`, `@capacitor/preferences`, `@capacitor/app` (кнопка «Назад», блокировка в фоне), встроенный `SystemBars` (стиль status/nav), native `WifiSubnet`, `SslTrust`, `ShareTarget`, `NotificationIntercept`, `WidgetBridge`, `DebugExport`, `LanDiscovery`; `@aparajita/capacitor-biometric-auth`, `@aparajita/capacitor-secure-storage` (PIN и API-токен).
 ## Блокировка приложения
 
 Настройки → **Безопасность** (`/settings/security`).
@@ -261,7 +262,7 @@ Self-hosted API обычно на `http://` в LAN. Нужно три уровн
 - Вход: логин/пароль (session) или API-токен; токен в secure storage; экран URL при первом запуске
 - LAN discovery (mDNS + subnet scan); `external_url` в health для подписи домена в списке
 - Два URL + SSID, HTTPS TOFU, офлайн outbox (в т.ч. счета и бюджет) и ref-cache SWR
-- Создание кредита (пошаговый мастер); home-screen виджеты; share-intent; static shortcuts
+- Создание кредита (пошаговый мастер); home-screen виджеты; share-intent; перехват push банков; static shortcuts
 - Тема `light` | `dark` | `system` (default); SystemBars по resolved теме; themed icon `<monochrome>`
 - Remote i18n при `app < server` (`GET /ui/i18n/{lang}`)
 - Блокировка PIN/биометрия; настраиваемый таймаут в фоне; сброс при выходе и отключении сервера
