@@ -28,6 +28,7 @@
 	import { user } from '$lib/stores/auth';
 	import { fromDateLocalEnd, fromDateLocalStart } from '$lib/dates';
 	import { dedupeTransferLegs } from '$lib/transaction-display';
+	import { saveTransactionAsTemplate } from '$lib/save-transaction-template';
 	import { refCacheReady, refCacheUpdate } from '$lib/ref-cache';
 	import { refCachePathMatches } from '$lib/ref-cache-watch';
 	import { reportPageLoadFailure } from '$lib/page-load';
@@ -335,6 +336,10 @@
 		txOpen = true;
 	}
 
+	async function saveAsTemplate(tx: Transaction) {
+		await saveTransactionAsTemplate(tx);
+	}
+
 	function openRepeat(tx: Transaction) {
 		if (tx.credit_payment_linked) return;
 		if (tx.type === 'transfer' && tx.transfer_group_id) {
@@ -465,6 +470,7 @@
 											onattachSubscription={(tx) =>
 												void goto(resolve(`/subscriptions?attach_tx=${encodeURIComponent(tx.id)}`))}
 											onrepeat={openRepeat}
+											onsaveAsTemplate={(tx) => void saveAsTemplate(tx)}
 											onedit={openEdit}
 											ondelete={(tx) => void removeTx(tx)}
 										/>
@@ -507,6 +513,7 @@
 											onattachSubscription={(tx) =>
 												void goto(resolve(`/subscriptions?attach_tx=${encodeURIComponent(tx.id)}`))}
 											onrepeat={openRepeat}
+											onsaveAsTemplate={(tx) => void saveAsTemplate(tx)}
 											onedit={openEdit}
 											ondelete={(tx) => void removeTx(tx)}
 										/>
@@ -545,6 +552,7 @@
 						onattachSubscription={(tx) =>
 							void goto(resolve(`/subscriptions?attach_tx=${encodeURIComponent(tx.id)}`))}
 						onrepeat={openRepeat}
+						onsaveAsTemplate={(tx) => void saveAsTemplate(tx)}
 						onedit={openEdit}
 						ondelete={(tx) => void removeTx(tx)}
 					/>

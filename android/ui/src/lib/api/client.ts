@@ -717,6 +717,7 @@ export type UIMeta = {
 	debtors: Debtor[];
 	merchants: Merchant[];
 	tags: Tag[];
+	transaction_templates?: TransactionTemplate[];
 	active_credits: Credit[];
 	closed_credits: Credit[];
 };
@@ -750,6 +751,7 @@ export async function getUIMeta() {
 	seedStaticRef('/api/v1/banks', meta.banks);
 	seedStaticRef('/api/v1/merchants', meta.merchants ?? []);
 	seedStaticRef('/api/v1/tags', meta.tags ?? []);
+	seedStaticRef('/api/v1/transaction-templates', meta.transaction_templates ?? []);
 	seedCategoriesFromUIMeta(meta);
 	void warmSubcategoriesCache([...meta.expense_categories, ...meta.income_categories]);
 	return meta;
@@ -1102,6 +1104,38 @@ export type Tag = {
 export type TagRef = {
 	id: string;
 	name: string;
+};
+
+export type TransactionTemplate = {
+	id: string;
+	name: string;
+	type: 'income' | 'expense' | 'transfer';
+	account_id?: string | null;
+	to_account_id?: string | null;
+	category_id?: string | null;
+	subcategory_id?: string | null;
+	amount?: number | null;
+	description?: string | null;
+	merchant_id?: string | null;
+	icon?: string | null;
+	sort_order: number;
+	tags: TagRef[];
+	created_at: string;
+	updated_at: string;
+};
+
+export type TransactionTemplateUpsert = {
+	name: string;
+	type: 'income' | 'expense' | 'transfer';
+	account_id?: string | null;
+	to_account_id?: string | null;
+	category_id?: string | null;
+	subcategory_id?: string | null;
+	amount?: number | null;
+	description?: string | null;
+	merchant_id?: string | null;
+	icon?: string | null;
+	tag_ids?: string[];
 };
 
 export type Debtor = {
@@ -1644,6 +1678,39 @@ export function updateTag(id: string, name: string) {
 
 export function deleteTag(id: string) {
 	return request<void>(`/api/v1/tags/${id}`, { method: 'DELETE' });
+}
+
+export function listTransactionTemplates() {
+	return request<TransactionTemplate[]>('/api/v1/transaction-templates');
+}
+
+export function getTransactionTemplate(id: string) {
+	return request<TransactionTemplate>(`/api/v1/transaction-templates/${id}`);
+}
+
+export function createTransactionTemplate(payload: TransactionTemplateUpsert) {
+	return request<TransactionTemplate>('/api/v1/transaction-templates', {
+		method: 'POST',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function updateTransactionTemplate(id: string, payload: TransactionTemplateUpsert) {
+	return request<TransactionTemplate>(`/api/v1/transaction-templates/${id}`, {
+		method: 'PUT',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function deleteTransactionTemplate(id: string) {
+	return request<void>(`/api/v1/transaction-templates/${id}`, { method: 'DELETE' });
+}
+
+export function reorderTransactionTemplates(ids: string[]) {
+	return request<TransactionTemplate[]>('/api/v1/transaction-templates/reorder', {
+		method: 'PUT',
+		body: JSON.stringify({ ids })
+	});
 }
 
 export function listDebtors() {

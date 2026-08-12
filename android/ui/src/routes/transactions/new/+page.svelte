@@ -6,15 +6,22 @@
 	import { parseFormReturnPath } from '$lib/android/form-routes';
 	import { takeSharePrefill } from '$lib/android/share-target';
 	import { deleteInterceptDraft, takeInterceptPrefill } from '$lib/android/notification-intercept';
+	import {
+		hasTemplatePrefillWarnings,
+		loadTemplateRepeatFrom
+	} from '$lib/android/template-prefill';
 	import { lookupServerTransaction } from '$lib/offline/transaction-index';
 	import type { Transaction } from '$lib/api/client';
 	import { user } from '$lib/stores/auth';
+	import { toast } from '$lib/toast';
+	import { _ } from 'svelte-i18n';
 
 	import { dataRefreshTick } from '$lib/offline/sync';
 
 	const type = $derived($page.url.searchParams.get('type') === 'income' ? 'income' : 'expense');
 	const accountId = $derived($page.url.searchParams.get('account') ?? '');
 	const repeatId = $derived($page.url.searchParams.get('repeat'));
+	const templateId = $derived($page.url.searchParams.get('template'));
 	const returnTo = $derived(parseFormReturnPath($page.url.searchParams.get('from'), '/'));
 	const descriptionParam = $derived($page.url.searchParams.get('description') ?? '');
 	const shareOnce = takeSharePrefill();
@@ -32,6 +39,11 @@
 	});
 
 	$effect(() => {
+		if (templateId) {
+			ready = false;
+			void loadTemplate(templateId);
+			return;
+		}
 		if (!repeatId) {
 			repeatFrom = null;
 			ready = true;
@@ -40,6 +52,22 @@
 		ready = false;
 		void loadRepeat(repeatId);
 	});
+
+	async function loadTemplate(id: string) {
+		try {
+			const result = await loadTemplateRepeatFrom(id);
+			if (!result) {
+				repeatFrom = null;
+				return;
+			}
+			repeatFrom = result.tx;
+			if (hasTemplatePrefillWarnings(result.warnings)) {
+				toast($_('templates.prefill.missing'));
+			}
+		} finally {
+			ready = true;
+		}
+	}
 
 	async function loadRepeat(id: string) {
 		try {

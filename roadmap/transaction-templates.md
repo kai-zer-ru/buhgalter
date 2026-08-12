@@ -1,6 +1,6 @@
 # Шаблоны операций
 
-Планируется в **v1.5.0** ([ROADMAP](../ROADMAP.md#v150)). Web + Android + сервер.
+Реализовано в **v1.5.0** ([ROADMAP](../ROADMAP.md#v150)). Web + Android + сервер.
 
 Именованные пресеты полей операции для **быстрого ручного** создания частых доходов, расходов и переводов. Пользователь выбирает шаблон → открывается форма с подставленными полями → при необходимости правит → сохраняет. **Без** автосоздания по расписанию.
 
@@ -46,8 +46,12 @@
 | Из журнала | «Сохранить как шаблон» в меню «⋯» строки (те же ограничения, что у «Повторить» / «Сделать периодической») |
 | Управление | **Отдельная страница** на web и Android (CRUD, порядок); не встраивать CRUD в главную |
 | Применение на главной | Блок «Шаблоны» на главной: **спойлер** (`<details>`), **перед** виджетом бюджета; тап по шаблону → форма с prefill |
-| Feature flag | `transaction_templates` (см. [feature-toggles.md](feature-toggles.md)) |
-| Офлайн Android | CRUD шаблонов через outbox по тем же правилам, что справочники; применение — локальный prefill формы |
+| Feature flag | Пока **нет** (система toggles не реализована; как у merchants). Ключ `transaction_templates` — в [feature-toggles.md](feature-toggles.md) на будущее |
+| Офлайн Android | Список из ref-cache; CRUD страницы управления — online; применение — локальный prefill; create операции — как обычно |
+| Prefill | Клиентский маппинг (`templateToRepeatFrom`), без `POST …/apply` |
+| Пустая сумма | `amount IS NULL` |
+| Пустой список на главной | Спойлер **не показывать** |
+| Мёртвые ссылки | При apply очистить поле + toast; БД шаблона не трогать |
 
 ---
 
@@ -105,19 +109,8 @@ flowchart LR
 | `PUT` | `/transaction-templates/{id}` | Обновить поля |
 | `DELETE` | `/transaction-templates/{id}` | Удалить |
 | `PUT` | `/transaction-templates/reorder` | Тело: упорядоченный массив `id` → перезапись `sort_order` |
-| `POST` | `/transaction-templates/{id}/apply` | **Не** создаёт операцию. Возвращает DTO prefill для формы (см. ниже) |
 
-Альтернатива без `apply`: клиент сам мапит поля шаблона в props формы (`repeatFrom`-подобный объект). Тогда `apply` можно не делать в MVP — достаточно GET одного шаблона. Если оставляем `apply` — удобно централизовать «обнулить дату, проверить живость ссылок, отфильтровать мёртвые теги».
-
-### Prefill DTO (ответ apply / клиентский маппинг)
-
-Совместим по смыслу с `repeatFrom` у `TransactionForm` / `TransferForm`:
-
-- `type`, `account_id`, `to_account_id`, `category_id`, `subcategory_id`, `amount` (или отсутствует), `description`, `merchant_id`, `tag_ids`
-- `date` / время **не** отдаём — форма ставит «сейчас»
-- Флаги предупреждений: `account_missing`, `category_missing`, … — опционально
-
-Создание операции после подтверждения — существующие эндпоинты; шаблон в теле create **не** передаётся (нет обязательной связи template→transaction в MVP).
+Prefill — на клиенте (`templateToRepeatFrom` → `repeatFrom` / `?template=`). Создание операции — обычные `POST /transactions` / `POST /transfers`.
 
 ### Кеш
 
@@ -159,7 +152,7 @@ flowchart LR
 
 ### Android: офлайн
 
-Список на главной и на странице управления — из локального кеша; CRUD через outbox. Применение шаблона — локальный prefill формы, create операции — как обычно (online / outbox).
+Список на главной — из ref-cache. CRUD на странице управления — online (как merchants). Применение — локальный prefill; create операции — online / outbox как обычно. Полный outbox CRUD шаблонов — follow-up.
 
 ### Лимиты UX
 
@@ -170,28 +163,15 @@ flowchart LR
 
 ## Scope (v1.5.0)
 
-Feature flag: `transaction_templates` (default `true` при появлении модуля).
-
 | Возможность | Суть |
 |-------------|------|
-| CRUD шаблонов | Отдельная страница web + Android; expense / income / transfer |
-| Теги / магазин | Если включён `merchants_tags` |
-| Порядок | `sort_order` + reorder API |
+| CRUD шаблонов | `/settings/transaction-templates` web + Android; expense / income / transfer |
+| Теги / магазин | Поля на шаблоне (как на операции) |
+| Порядок | `sort_order` + drag-reorder + `PUT …/reorder` |
 | Быстрый выбор | Главная: спойлер **перед бюджетом** (web + Android) |
 | Из журнала | «Сохранить как шаблон» |
 | Применение | Prefill формы; create обычным API |
 | i18n | `en` / `ru` строки UI |
-
----
-
-## MVP (порядок работ)
-
-1. Миграция + sqlc + OpenAPI CRUD (+ reorder).
-2. Флаг `transaction_templates` в реестре feature-toggles, гейты API/навигации.
-3. Web: страница управления + спойлер шаблонов на главной (перед бюджетом) + пункт в меню строки.
-4. Android: то же + outbox/кеш.
-5. Тесты: API (CRUD, валидация transfer/income, мёртвые ссылки при apply), vitest маппинга prefill; e2e — по желанию пользователя отдельно.
-6. Release notes / краткая строка в [transactions-display.md](../docs/transactions-display.md) после реализации.
 
 ---
 
@@ -224,7 +204,8 @@ Feature flag: `transaction_templates` (default `true` при появлении 
 
 ## Follow-up
 
-- Android: pinned templates в шторке / app shortcuts.
+- Feature flag `transaction_templates` после [feature-toggles.md](feature-toggles.md).
+- Android: полный outbox CRUD шаблонов; pinned templates в шторке / app shortcuts.
 - Опциональная комиссия в шаблоне перевода.
 - «Создать периодическую из шаблона».
 - Статистика использования / сортировка по частоте применения (если появится `template_id` на операции).
@@ -232,9 +213,9 @@ Feature flag: `transaction_templates` (default `true` при появлении 
 
 ---
 
-## Открытые вопросы
+## Закрытые решения
 
-- [ ] `POST …/apply` на сервере или только клиентский маппинг из GET?
-- [ ] Пустая сумма: явный флаг `amount_fixed` или достаточно `amount IS NULL`?
-- [ ] При архивации счёта из шаблона — очищать `account_id` сразу (фон/при чтении) или только предупреждать при apply?
-- [ ] Пустой список шаблонов: полностью скрыть спойлер на главной или показать ссылку «Добавить шаблон»?
+- [x] Без `POST …/apply` — клиентский маппинг из GET/списка.
+- [x] Пустая сумма = `amount IS NULL`.
+- [x] При apply — предупреждать / очищать поля; БД не чистить при архивации счёта (`ON DELETE SET NULL` в миграции).
+- [x] Пустой список — спойлер на главной скрыт.

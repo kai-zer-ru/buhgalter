@@ -381,6 +381,29 @@ type TransactionTag struct {
 	TagID         string `json:"tag_id"`
 }
 
+type TransactionTemplate struct {
+	ID            string  `json:"id"`
+	UserID        string  `json:"user_id"`
+	Name          string  `json:"name"`
+	Type          string  `json:"type"`
+	AccountID     *string `json:"account_id"`
+	ToAccountID   *string `json:"to_account_id"`
+	CategoryID    *string `json:"category_id"`
+	SubcategoryID *string `json:"subcategory_id"`
+	Amount        *int64  `json:"amount"`
+	Description   *string `json:"description"`
+	MerchantID    *string `json:"merchant_id"`
+	Icon          *string `json:"icon"`
+	SortOrder     int64   `json:"sort_order"`
+	CreatedAt     string  `json:"created_at"`
+	UpdatedAt     string  `json:"updated_at"`
+}
+
+type TransactionTemplateTag struct {
+	TemplateID string `json:"template_id"`
+	TagID      string `json:"tag_id"`
+}
+
 type User struct {
 	ID           string  `json:"id"`
 	Login        string  `json:"login"`

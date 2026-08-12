@@ -184,11 +184,13 @@ OpenAPI: `CreateTransferRequest.commission`, схемы `Transfer` и `Transacti
 
 ## Действия в списке операций
 
-`TransactionList` — меню «⋯» в каждой строке (повторить, сделать периодической, изменить, удалить). На мобильных меню в шапке карточки рядом с суммой. Используется на **главной** («Последние операции»), `/transactions`, странице счёта. После create/edit/delete — silent reload (`loadAll` / `load` / `onsaved`), не только filter списка: иначе балансы (и вторая нога перевода) не обновляются (см. [ui-stable-layout.md](ui-stable-layout.md)). Android: `afterOnlineWrite` в offline wrappers + `dataRefreshTick` в `finish` форм.
+`TransactionList` — меню «⋯» в каждой строке (повторить, сохранить как шаблон, сделать периодической, изменить, удалить). На мобильных меню в шапке карточки рядом с суммой. Используется на **главной** («Последние операции»), `/transactions`, странице счёта. После create/edit/delete — silent reload (`loadAll` / `load` / `onsaved`), не только filter списка: иначе балансы (и вторая нога перевода) не обновляются (см. [ui-stable-layout.md](ui-stable-layout.md)). Android: `afterOnlineWrite` в offline wrappers + `dataRefreshTick` в `finish` форм.
 
 На странице **удалённого** счёта (`/accounts/[id]`, `status = deleted`) в меню операций доступно только **«Повторить»** — см. [accounts-archive-delete.md](accounts-archive-delete.md).
 
 **Повторить (v1.2.3)** — открывает форму **создания** новой операции с полями из выбранной строки (счёт, категория, сумма, описание; для перевода — счета, сумма, комиссия); дата — текущая. Работает для **дохода**, **расхода** и **перевода**. Доход/расход — `TransactionForm` (`repeatFrom`); перевод — `TransferForm` (`repeatFrom`). Недоступно для операций с `credit_payment_linked` и для дохода/расхода в **системных категориях** (как «Сделать периодической»).
+
+**Шаблоны операций (v1.5.0)** — именованные пресеты полей для быстрого ручного создания (не scheduler). Управление: `/settings/transaction-templates` (web + Android). На главной — спойлер «Шаблоны» **перед** виджетом бюджета (скрыт, если шаблонов нет); тап → форма с prefill (`repeatFrom` / `?template=`). Из журнала — «Сохранить как шаблон» (те же ограничения, что у «Повторить»). API: `/api/v1/transaction-templates`. План: [transaction-templates.md](../roadmap/transaction-templates.md).
 
 ## Категории с одинаковым именем
 

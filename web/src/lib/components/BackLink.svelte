@@ -10,6 +10,7 @@
 		| '/settings/tokens'
 		| '/settings/notifications'
 		| '/settings/import'
+		| '/settings/transaction-templates'
 		| '/admin'
 		| '/admin/users'
 		| '/admin/backups'

@@ -7,10 +7,12 @@
 	import {
 		getBudgetSummary,
 		getDashboard,
+		listTransactionTemplates,
 		listTransactions,
 		type BudgetSummaryItem,
 		type Dashboard,
-		type Transaction
+		type Transaction,
+		type TransactionTemplate
 	} from '$lib/api/client';
 	import { deleteTransaction, deleteTransfer } from '$lib/offline/transactions-api';
 	import {
@@ -39,6 +41,8 @@
 	import { confirm } from '$lib/confirm';
 	import { budgetStatusLine } from '$lib/budget-display';
 	import { dedupeTransferLegs } from '$lib/transaction-display';
+	import { fromCents } from '$lib/money';
+	import { saveTransactionAsTemplate } from '$lib/save-transaction-template';
 	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
 	import { resolveAutoTopupSourceName } from '$lib/accounts/auto-topup';
@@ -58,6 +62,8 @@
 	const PAST_TX_PATH = '/api/v1/transactions?kind=manual&limit=10&page=1&sort=date_desc';
 	const PLANNED_TX_PATH = '/api/v1/transactions?kind=future&limit=10&page=1&sort=date_desc';
 	const BUDGET_PATH = '/api/v1/budgets/summary';
+	const TEMPLATES_PATH = '/api/v1/transaction-templates';
+	const HOME_TEMPLATE_LIMIT = 12;
 
 	let dashBase = $state<Dashboard | null>(readRefCache<Dashboard>(DASHBOARD_PATH));
 	let loading = $state(!refCacheReady(DASHBOARD_PATH));
@@ -76,6 +82,9 @@
 	let plannedLoading = $state(!refCacheReady(PLANNED_TX_PATH));
 	const budgetCached = readRefCache<{ items: BudgetSummaryItem[] }>(BUDGET_PATH);
 	let budgetItems = $state<BudgetSummaryItem[]>(budgetCached?.items ?? []);
+	const templatesCached = readRefCache<TransactionTemplate[]>(TEMPLATES_PATH);
+	let templates = $state<TransactionTemplate[]>(templatesCached ?? []);
+	const homeTemplates = $derived(templates.slice(0, HOME_TEMPLATE_LIMIT));
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
 	const bankDraftCount = $derived.by(() => {
@@ -146,6 +155,9 @@
 		if (refCachePathMatches(update.path, BUDGET_PATH)) {
 			void loadBudget({ background: true });
 		}
+		if (refCachePathMatches(update.path, TEMPLATES_PATH)) {
+			void loadTemplates({ background: true });
+		}
 	});
 
 	async function loadDashboard(opts: { background?: boolean } = {}) {
@@ -213,13 +225,43 @@
 		}
 	}
 
+	async function loadTemplates(opts: { background?: boolean } = {}) {
+		try {
+			const next = await listTransactionTemplates();
+			templates = opts.background ? assignIfChanged(templates, next) : next;
+		} catch {
+			if (!opts.background) templates = [];
+		}
+	}
+
 	async function loadAll(opts: { background?: boolean } = {}) {
 		await refreshMergeMeta().catch(() => undefined);
 		await loadDashboard(opts);
-		await Promise.all([loadPastTx(opts), loadPlannedTx(opts), loadBudget(opts)]);
+		await Promise.all([
+			loadPastTx(opts),
+			loadPlannedTx(opts),
+			loadBudget(opts),
+			loadTemplates(opts)
+		]);
 		if (!opts.background) scheduleSyncOutbox();
 		const { publishWidgetSnapshot } = await import('$lib/widgets/publish');
 		void publishWidgetSnapshot();
+	}
+
+	function applyTemplate(tpl: TransactionTemplate) {
+		if (tpl.type === 'transfer') {
+			void goto(resolve(transferNewPath({ templateId: tpl.id, from: '/' })));
+			return;
+		}
+		void goto(
+			resolve(
+				transactionNewPath({
+					type: tpl.type === 'income' ? 'income' : 'expense',
+					templateId: tpl.id,
+					from: '/'
+				})
+			)
+		);
 	}
 
 	function openNewTransaction(type: 'expense' | 'income') {
@@ -250,6 +292,11 @@
 				})
 			)
 		);
+	}
+
+	async function saveAsTemplate(tx: Transaction) {
+		const ok = await saveTransactionAsTemplate(tx);
+		if (ok) await loadTemplates({ background: true });
 	}
 
 	function openMakeRecurring(tx: Transaction) {
@@ -515,6 +562,42 @@
 				</div>
 			{/if}
 
+			{#if homeTemplates.length > 0}
+				<details class="card">
+					<summary
+						class="flex cursor-pointer list-none items-center justify-between gap-2 p-4 font-medium"
+					>
+						<span>{$_('templates.widget.title')}</span>
+						<a
+							href={resolve('/settings/transaction-templates')}
+							class="text-xs hover:underline"
+							style:color="var(--primary)"
+							onclick={(e) => e.stopPropagation()}
+						>
+							{$_('templates.widget.manage')} →
+						</a>
+					</summary>
+					<div class="space-y-1 border-t px-2 pb-3" style:border-color="var(--border)">
+						{#each homeTemplates as tpl (tpl.id)}
+							<button
+								type="button"
+								class="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left hover:bg-[color-mix(in_srgb,var(--primary)_8%,transparent)]"
+								onclick={() => applyTemplate(tpl)}
+							>
+								<span class="min-w-0 truncate font-medium">{tpl.name}</span>
+								<span class="shrink-0 text-sm tabular-nums" style:color="var(--text-muted)">
+									{#if tpl.amount != null}
+										{fromCents(tpl.amount)}
+									{:else}
+										—
+									{/if}
+								</span>
+							</button>
+						{/each}
+					</div>
+				</details>
+			{/if}
+
 			{@render budgetWidget()}
 
 			{#if dash.accounts.length === 0}
@@ -612,6 +695,7 @@
 												showEdit
 												showDelete
 												onrepeat={openRepeat}
+												onsaveAsTemplate={(tx) => void saveAsTemplate(tx)}
 												onmakeRecurring={openMakeRecurring}
 												onmakeSubscription={openMakeSubscription}
 												onattachSubscription={openAttachSubscription}
@@ -649,6 +733,7 @@
 												showEdit
 												showDelete
 												onrepeat={openRepeat}
+												onsaveAsTemplate={(tx) => void saveAsTemplate(tx)}
 												onmakeRecurring={openMakeRecurring}
 												onmakeSubscription={openMakeSubscription}
 												onattachSubscription={openAttachSubscription}

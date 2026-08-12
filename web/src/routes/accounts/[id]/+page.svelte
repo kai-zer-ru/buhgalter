@@ -42,6 +42,7 @@
 	import { accountSelectOptions } from '$lib/select-options';
 	import AccountAutoTopupDialog from '$lib/components/AccountAutoTopupDialog.svelte';
 	import { isCreditCard } from '$lib/credit-card';
+	import { saveTransactionAsTemplate } from '$lib/save-transaction-template';
 	import {
 		promptArchiveAccount,
 		executeArchiveAccount,
@@ -494,6 +495,10 @@
 		txOpen = true;
 	}
 
+	async function saveAsTemplate(tx: Transaction) {
+		await saveTransactionAsTemplate(tx);
+	}
+
 	function openRepeat(tx: Transaction) {
 		if (tx.credit_payment_linked) return;
 		if (tx.type === 'transfer' && tx.transfer_group_id) {
@@ -761,6 +766,7 @@
 							? undefined
 							: (tx) => void goto(resolve(`/subscriptions?attach_tx=${encodeURIComponent(tx.id)}`))}
 						onrepeat={openRepeat}
+						onsaveAsTemplate={(tx) => void saveAsTemplate(tx)}
 						onedit={accountTxReadOnly ? undefined : openEdit}
 						ondelete={accountTxReadOnly ? undefined : (tx) => void removeTx(tx)}
 					/>

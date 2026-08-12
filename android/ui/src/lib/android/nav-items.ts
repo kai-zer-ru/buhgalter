@@ -123,6 +123,11 @@ export function androidSettingsNavItems(): AndroidNavItem[] {
 			href: resolve('/settings/import'),
 			labelKey: 'settings.tab.import',
 			isActive: (p) => p === '/settings/import'
+		},
+		{
+			href: resolve('/settings/transaction-templates'),
+			labelKey: 'settings.tab.templates',
+			isActive: (p) => p === '/settings/transaction-templates'
 		}
 	];
 }

@@ -44,7 +44,12 @@
 			titleKey: 'bankNotifications.history.title',
 			href: '/settings/bank-notifications/history'
 		},
-		{ path: '/settings/import', titleKey: 'settings.tab.import', href: '/settings/import' }
+		{ path: '/settings/import', titleKey: 'settings.tab.import', href: '/settings/import' },
+		{
+			path: '/settings/transaction-templates',
+			titleKey: 'settings.tab.templates',
+			href: '/settings/transaction-templates'
+		}
 	];
 
 	const pathname = $derived($page.url.pathname);

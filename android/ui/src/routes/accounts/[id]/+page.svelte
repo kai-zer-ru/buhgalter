@@ -65,6 +65,7 @@
 	import { toAPIAmount } from '$lib/money';
 	import { fromDateLocalEnd, fromDateLocalStart } from '$lib/dates';
 	import { dedupeTransferLegs } from '$lib/transaction-display';
+	import { saveTransactionAsTemplate } from '$lib/save-transaction-template';
 	import { user } from '$lib/stores/auth';
 	import { refCacheReadyAny, refCacheUpdate } from '$lib/offline/ref-cache';
 	import { refCachePathMatches } from '$lib/offline/ref-cache-watch';
@@ -530,6 +531,10 @@
 		void goto(resolve(transactionEditPath(tx.id, accountFrom)));
 	}
 
+	async function saveAsTemplate(tx: Transaction) {
+		await saveTransactionAsTemplate(tx);
+	}
+
 	function openRepeat(tx: Transaction) {
 		if (tx.credit_payment_linked) return;
 		if (tx.type === 'transfer' && tx.transfer_group_id) {
@@ -799,6 +804,7 @@
 						showEdit={!accountTxReadOnly}
 						showDelete={!accountTxReadOnly}
 						onrepeat={openRepeat}
+						onsaveAsTemplate={(tx) => void saveAsTemplate(tx)}
 						onmakeRecurring={openMakeRecurring}
 						onmakeSubscription={openMakeSubscription}
 						onattachSubscription={openAttachSubscription}

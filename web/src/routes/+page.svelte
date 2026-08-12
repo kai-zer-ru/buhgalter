@@ -7,10 +7,16 @@
 		deleteTransaction,
 		getBudgetSummary,
 		getDashboard,
+		listAccounts,
+		listCategories,
+		listMerchants,
+		listTags,
+		listTransactionTemplates,
 		listTransactions,
 		type BudgetSummaryItem,
 		type Dashboard,
-		type Transaction
+		type Transaction,
+		type TransactionTemplate
 	} from '$lib/api/client';
 	import AccountIcon from '$lib/components/AccountIcon.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
@@ -21,6 +27,12 @@
 	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
 	import { confirm } from '$lib/confirm';
 	import { dedupeTransferLegs } from '$lib/transaction-display';
+	import {
+		hasTemplatePrefillWarnings,
+		templateToRepeatFrom
+	} from '$lib/transaction-template-prefill';
+	import { saveTransactionAsTemplate } from '$lib/save-transaction-template';
+	import { fromCents } from '$lib/money';
 	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
 	import { tr } from '$lib/i18n';
@@ -39,6 +51,8 @@
 	const PAST_TX_PATH = '/api/v1/transactions?kind=manual&limit=10&page=1&sort=date_desc';
 	const PLANNED_TX_PATH = '/api/v1/transactions?kind=future&limit=10&page=1&sort=date_desc';
 	const BUDGET_PATH = '/api/v1/budgets/summary';
+	const TEMPLATES_PATH = '/api/v1/transaction-templates';
+	const HOME_TEMPLATE_LIMIT = 12;
 
 	let dash = $state<Dashboard | null>(readRefCache<Dashboard>(DASHBOARD_PATH));
 	let loading = $state(!refCacheReady(DASHBOARD_PATH));
@@ -64,8 +78,11 @@
 	let plannedLoading = $state(!refCacheReady(PLANNED_TX_PATH));
 	const budgetCached = readRefCache<{ items: BudgetSummaryItem[] }>(BUDGET_PATH);
 	let budgetItems = $state<BudgetSummaryItem[]>(budgetCached?.items ?? []);
+	const templatesCached = readRefCache<TransactionTemplate[]>(TEMPLATES_PATH);
+	let templates = $state<TransactionTemplate[]>(templatesCached ?? []);
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
+	const homeTemplates = $derived(templates.slice(0, HOME_TEMPLATE_LIMIT));
 	const categoryBudgets = $derived(
 		[...budgetItems].filter((b) => b.scope !== 'all_expense').sort((a, b) => b.percent - a.percent)
 	);
@@ -105,6 +122,9 @@
 		}
 		if (refCachePathMatches(update.path, BUDGET_PATH)) {
 			void loadBudget({ silent: true });
+		}
+		if (refCachePathMatches(update.path, TEMPLATES_PATH)) {
+			void loadTemplates({ silent: true });
 		}
 	});
 
@@ -170,9 +190,47 @@
 		}
 	}
 
+	async function loadTemplates(opts: { silent?: boolean } = {}) {
+		try {
+			const next = await listTransactionTemplates();
+			templates = opts.silent ? assignIfChanged(templates, next) : next;
+		} catch {
+			if (!opts.silent) templates = [];
+		}
+	}
+
 	async function loadAll(opts: { silent?: boolean } = {}) {
 		await loadDashboard(opts);
-		await Promise.all([loadPastTx(opts), loadPlannedTx(opts), loadBudget(opts)]);
+		await Promise.all([
+			loadPastTx(opts),
+			loadPlannedTx(opts),
+			loadBudget(opts),
+			loadTemplates(opts)
+		]);
+	}
+
+	async function applyTemplate(tpl: TransactionTemplate) {
+		try {
+			const [accounts, expenseCats, incomeCats, merchants, tags] = await Promise.all([
+				listAccounts('active'),
+				listCategories('expense'),
+				listCategories('income'),
+				listMerchants(),
+				listTags()
+			]);
+			const { tx, warnings } = templateToRepeatFrom(tpl, {
+				activeAccountIds: new Set(accounts.map((a) => a.id)),
+				categoryIds: new Set([...expenseCats, ...incomeCats].map((c) => c.id)),
+				merchantIds: new Set(merchants.map((m) => m.id)),
+				tagIds: new Set(tags.map((t) => t.id))
+			});
+			if (hasTemplatePrefillWarnings(warnings)) {
+				toast($_('templates.prefill.missing'));
+			}
+			openRepeat(tx);
+		} catch (err) {
+			toast.fromError(err);
+		}
 	}
 
 	function openNewTransaction(type: 'expense' | 'income') {
@@ -215,6 +273,11 @@
 		repeatTx = tx;
 		newTxType = tx.type === 'income' ? 'income' : 'expense';
 		txOpen = true;
+	}
+
+	async function saveAsTemplate(tx: Transaction) {
+		const ok = await saveTransactionAsTemplate(tx);
+		if (ok) await loadTemplates({ silent: true });
 	}
 
 	async function removeTx(tx: Transaction) {
@@ -447,6 +510,42 @@
 				</div>
 			{/if}
 
+			{#if homeTemplates.length > 0}
+				<details class="card">
+					<summary
+						class="flex cursor-pointer list-none items-center justify-between gap-2 p-4 font-medium"
+					>
+						<span>{$_('templates.widget.title')}</span>
+						<a
+							href={resolve('/settings/transaction-templates')}
+							class="text-xs hover:underline"
+							style:color="var(--primary)"
+							onclick={(e) => e.stopPropagation()}
+						>
+							{$_('templates.widget.manage')} →
+						</a>
+					</summary>
+					<div class="space-y-1 border-t px-2 pb-3" style:border-color="var(--border)">
+						{#each homeTemplates as tpl (tpl.id)}
+							<button
+								type="button"
+								class="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left hover:bg-[color-mix(in_srgb,var(--primary)_8%,transparent)]"
+								onclick={() => void applyTemplate(tpl)}
+							>
+								<span class="min-w-0 truncate font-medium">{tpl.name}</span>
+								<span class="shrink-0 text-sm tabular-nums" style:color="var(--text-muted)">
+									{#if tpl.amount != null}
+										{fromCents(tpl.amount)}
+									{:else}
+										—
+									{/if}
+								</span>
+							</button>
+						{/each}
+					</div>
+				</details>
+			{/if}
+
 			{@render budgetWidget()}
 
 			{#if dash.accounts.length === 0}
@@ -554,6 +653,7 @@
 														resolve(`/subscriptions?attach_tx=${encodeURIComponent(tx.id)}`)
 													)}
 												onrepeat={openRepeat}
+												onsaveAsTemplate={(tx) => void saveAsTemplate(tx)}
 												onedit={openEdit}
 												ondelete={(tx) => void removeTx(tx)}
 											/>
@@ -598,6 +698,7 @@
 														resolve(`/subscriptions?attach_tx=${encodeURIComponent(tx.id)}`)
 													)}
 												onrepeat={openRepeat}
+												onsaveAsTemplate={(tx) => void saveAsTemplate(tx)}
 												onedit={openEdit}
 												ondelete={(tx) => void removeTx(tx)}
 											/>

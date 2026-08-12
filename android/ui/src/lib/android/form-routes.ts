@@ -15,11 +15,13 @@ export function transactionNewPath(opts: {
 	type: 'expense' | 'income';
 	accountId?: string;
 	repeatId?: string;
+	templateId?: string;
 	from?: string;
 }): AppHref {
 	const params = new URLSearchParams({ type: opts.type });
 	if (opts.accountId) params.set('account', opts.accountId);
 	if (opts.repeatId) params.set('repeat', opts.repeatId);
+	if (opts.templateId) params.set('template', opts.templateId);
 	if (opts.from) params.set('from', opts.from);
 	return href(`/transactions/new?${params}`);
 }
@@ -33,12 +35,14 @@ export function transferNewPath(opts: {
 	accountId?: string;
 	payCardId?: string;
 	repeatId?: string;
+	templateId?: string;
 	from?: string;
 }): AppHref {
 	const params = new URLSearchParams();
 	if (opts.accountId) params.set('account', opts.accountId);
 	if (opts.payCardId) params.set('payCard', opts.payCardId);
 	if (opts.repeatId) params.set('repeat', opts.repeatId);
+	if (opts.templateId) params.set('template', opts.templateId);
 	if (opts.from) params.set('from', opts.from);
 	const q = params.toString();
 	return href(q ? `/transfers/new?${q}` : '/transfers/new');

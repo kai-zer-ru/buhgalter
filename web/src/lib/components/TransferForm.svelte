@@ -110,7 +110,7 @@
 			commission = formatMoneyForInput(commissionValue);
 			description = metaLeg.description ?? '';
 			dateTimeValue = toDatetimeLocalValue(metaLeg.transaction_date, tz);
-		} else if (repeatSource?.transfer_group_id) {
+		} else if (repeatSource?.type === 'transfer') {
 			const legs = transferGroupLegs(repeatSource, related);
 			const metaLeg = legs.length >= 2 ? transferOutLeg(repeatSource, legs) : repeatSource;
 			const commissionValue =
@@ -136,7 +136,7 @@
 			dateTimeValue = nowDatetimeLocal(tz);
 		}
 		accounts = await listAccounts('active');
-		if (!editSource?.transfer_group_id && !repeatSource?.transfer_group_id) {
+		if (!editSource?.transfer_group_id && repeatSource?.type !== 'transfer') {
 			if (payCard) {
 				fromAccount = resolvePaymentAccountId(payCard, accounts) ?? '';
 				toAccount = payCard.id;

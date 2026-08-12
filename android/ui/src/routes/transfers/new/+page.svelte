@@ -4,13 +4,20 @@
 	import { getAccount, getTransaction, type Account, type Transaction } from '$lib/api/client';
 	import { leaveForm } from '$lib/android/form-nav';
 	import { parseFormReturnPath } from '$lib/android/form-routes';
+	import {
+		hasTemplatePrefillWarnings,
+		loadTemplateRepeatFrom
+	} from '$lib/android/template-prefill';
 	import { listIndexedTransferLegs, lookupServerTransaction } from '$lib/offline/transaction-index';
+	import { toast } from '$lib/toast';
+	import { _ } from 'svelte-i18n';
 
 	import { dataRefreshTick } from '$lib/offline/sync';
 
 	const accountId = $derived($page.url.searchParams.get('account') ?? '');
 	const payCardId = $derived($page.url.searchParams.get('payCard'));
 	const repeatId = $derived($page.url.searchParams.get('repeat'));
+	const templateId = $derived($page.url.searchParams.get('template'));
 	const returnTo = $derived(parseFormReturnPath($page.url.searchParams.get('from'), '/'));
 
 	let creditCardPay = $state<Account | null>(null);
@@ -36,7 +43,15 @@
 			}
 		}
 
-		if (repeatId) {
+		if (templateId) {
+			const result = await loadTemplateRepeatFrom(templateId);
+			if (result) {
+				repeatFrom = result.tx;
+				if (hasTemplatePrefillWarnings(result.warnings)) {
+					toast($_('templates.prefill.missing'));
+				}
+			}
+		} else if (repeatId) {
 			try {
 				repeatFrom = await getTransaction(repeatId);
 			} catch {

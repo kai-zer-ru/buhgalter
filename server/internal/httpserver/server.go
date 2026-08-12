@@ -37,6 +37,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/subscription"
 	"github.com/kai-zer-ru/buhgalter/internal/tag"
 	"github.com/kai-zer-ru/buhgalter/internal/transaction"
+	"github.com/kai-zer-ru/buhgalter/internal/transactiontemplate"
 	"github.com/kai-zer-ru/buhgalter/internal/ui"
 	"github.com/kai-zer-ru/buhgalter/internal/user"
 	"github.com/kai-zer-ru/buhgalter/internal/versioncheck"
@@ -99,6 +100,7 @@ func (s *Server) Handler() http.Handler {
 	transactionHandler := &transaction.Handler{Store: dbHandle, Audit: s.audit}
 	merchantHandler := &merchant.Handler{Store: dbHandle, Audit: s.audit}
 	tagHandler := &tag.Handler{Store: dbHandle, Audit: s.audit}
+	templateHandler := &transactiontemplate.Handler{Store: dbHandle, Audit: s.audit}
 	debtHandler := &debt.Handler{Store: dbHandle, Audit: s.audit}
 	creditHandler := &credit.Handler{Store: dbHandle, Audit: s.audit}
 	recurringHandler := &recurring.Handler{Store: dbHandle, Audit: s.audit}
@@ -201,6 +203,13 @@ func (s *Server) Handler() http.Handler {
 			ar.Get("/tags/{id}", tagHandler.Get)
 			ar.Put("/tags/{id}", tagHandler.Update)
 			ar.Delete("/tags/{id}", tagHandler.Delete)
+
+			ar.Get("/transaction-templates", templateHandler.List)
+			ar.Post("/transaction-templates", templateHandler.Create)
+			ar.Put("/transaction-templates/reorder", templateHandler.Reorder)
+			ar.Get("/transaction-templates/{id}", templateHandler.Get)
+			ar.Put("/transaction-templates/{id}", templateHandler.Update)
+			ar.Delete("/transaction-templates/{id}", templateHandler.Delete)
 
 			ar.Get("/debtors", debtHandler.ListDebtors)
 			ar.Post("/debtors", debtHandler.CreateDebtor)

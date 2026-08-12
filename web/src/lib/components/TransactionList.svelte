@@ -31,6 +31,7 @@
 		ondelete,
 		onedit,
 		onrepeat,
+		onsaveAsTemplate,
 		onmakeRecurring,
 		onmakeSubscription,
 		onattachSubscription,
@@ -49,6 +50,7 @@
 		ondelete?: (tx: Transaction) => void;
 		onedit?: (tx: Transaction) => void;
 		onrepeat?: (tx: Transaction) => void;
+		onsaveAsTemplate?: (tx: Transaction) => void;
 		onmakeRecurring?: (tx: Transaction) => void;
 		onmakeSubscription?: (tx: Transaction) => void;
 		onattachSubscription?: (tx: Transaction) => void;
@@ -60,6 +62,7 @@
 			(showDelete && ondelete) ||
 			(showEdit && onedit) ||
 			onrepeat ||
+			onsaveAsTemplate ||
 			onmakeRecurring ||
 			onmakeSubscription ||
 			onattachSubscription
@@ -85,6 +88,13 @@
 				icon: 'create',
 				label: $_('transactions.repeat'),
 				onclick: () => onrepeat(tx)
+			});
+		}
+		if (onsaveAsTemplate && canRepeatTransaction(tx)) {
+			actions.push({
+				icon: 'save',
+				label: $_('templates.saveAs'),
+				onclick: () => onsaveAsTemplate(tx)
 			});
 		}
 		if (canMakeRecurring(tx)) {

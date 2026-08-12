@@ -34,6 +34,7 @@
 		refreshAppLockConfig
 	} from '$lib/platform/app-lock';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import PromptDialog from '$lib/components/PromptDialog.svelte';
 	import AccountTransferConfirmDialog from '$lib/components/AccountTransferConfirmDialog.svelte';
 	import AndroidShell from '$lib/android/AndroidShell.svelte';
 	import AppLockScreen from '$lib/android/AppLockScreen.svelte';
@@ -320,5 +321,6 @@
 {/if}
 
 <ConfirmDialog />
+<PromptDialog />
 <AccountTransferConfirmDialog />
 <ToastContainer />

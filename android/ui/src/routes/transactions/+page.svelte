@@ -41,6 +41,7 @@
 	import { user } from '$lib/stores/auth';
 	import { fromDateLocalEnd, fromDateLocalStart } from '$lib/dates';
 	import { dedupeTransferLegs } from '$lib/transaction-display';
+	import { saveTransactionAsTemplate } from '$lib/save-transaction-template';
 
 	let serverTransactions = $state<Transaction[]>([]);
 	let total = $state(0);
@@ -349,6 +350,10 @@
 		void goto(resolve(transactionEditPath(tx.id, listFrom)));
 	}
 
+	async function saveAsTemplate(tx: Transaction) {
+		await saveTransactionAsTemplate(tx);
+	}
+
 	function openRepeat(tx: Transaction) {
 		if (tx.credit_payment_linked) return;
 		if (tx.type === 'transfer' && tx.transfer_group_id) {
@@ -485,6 +490,7 @@
 											showEdit
 											showDelete
 											onrepeat={openRepeat}
+											onsaveAsTemplate={(tx) => void saveAsTemplate(tx)}
 											onmakeRecurring={openMakeRecurring}
 											onmakeSubscription={openMakeSubscription}
 											onattachSubscription={openAttachSubscription}
@@ -522,6 +528,7 @@
 											showEdit
 											showDelete
 											onrepeat={openRepeat}
+											onsaveAsTemplate={(tx) => void saveAsTemplate(tx)}
 											onmakeRecurring={openMakeRecurring}
 											onmakeSubscription={openMakeSubscription}
 											onattachSubscription={openAttachSubscription}
@@ -557,6 +564,7 @@
 						showEdit
 						showDelete
 						onrepeat={openRepeat}
+						onsaveAsTemplate={(tx) => void saveAsTemplate(tx)}
 						onmakeRecurring={openMakeRecurring}
 						onmakeSubscription={openMakeSubscription}
 						onattachSubscription={openAttachSubscription}

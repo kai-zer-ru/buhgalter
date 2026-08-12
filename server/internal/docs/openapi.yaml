@@ -1962,6 +1962,127 @@ paths:
       responses:
         '204':
           description: Удалён
+  /transaction-templates:
+    get:
+      summary: Список шаблонов операций
+      description: |
+        Именованные пресеты для быстрого создания операций. Кеш GET TTL 5 мин.
+        Сортировка: `sort_order`, затем имя.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Список
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TransactionTemplate'
+    post:
+      summary: Создать шаблон операции
+      description: |
+        Не создаёт операцию. Лимит — 100 шаблонов на пользователя.
+        Для `transfer` обязательны разные `account_id` и `to_account_id`.
+        `amount` можно не передавать (сумма при создании операции).
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionTemplateUpsert'
+      responses:
+        '201':
+          description: Создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionTemplate'
+        '400':
+          description: Ошибка валидации или лимит
+  /transaction-templates/reorder:
+    put:
+      summary: Изменить порядок шаблонов
+      description: Тело — полный упорядоченный список `ids` всех шаблонов пользователя.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids]
+              properties:
+                ids:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Список после перестановки
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TransactionTemplate'
+        '400':
+          description: Неполный или неверный набор id
+  /transaction-templates/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Шаблон операции по id
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionTemplate'
+        '404':
+          description: Не найден
+    put:
+      summary: Обновить шаблон операции
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionTemplateUpsert'
+      responses:
+        '200':
+          description: Обновлён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionTemplate'
+        '404':
+          description: Не найден
+    delete:
+      summary: Удалить шаблон операции
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Удалён
   /debtors:
     get:
       summary: Список должников
@@ -3451,6 +3572,18 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Debtor'
+        merchants:
+          type: array
+          items:
+            $ref: '#/components/schemas/Merchant'
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tag'
+        transaction_templates:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransactionTemplate'
         active_credits:
           type: array
           items:
@@ -3990,6 +4123,93 @@ components:
       properties:
         name:
           type: string
+    TransactionTemplate:
+      type: object
+      required: [id, name, type, sort_order, tags, created_at, updated_at]
+      description: Шаблон операции (пресет полей для формы создания)
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          enum: [income, expense, transfer]
+        account_id:
+          type: string
+          nullable: true
+        to_account_id:
+          type: string
+          nullable: true
+          description: Только для transfer
+        category_id:
+          type: string
+          nullable: true
+        subcategory_id:
+          type: string
+          nullable: true
+        amount:
+          type: integer
+          nullable: true
+          description: Копейки; null — ввести при создании операции
+        description:
+          type: string
+          nullable: true
+        merchant_id:
+          type: string
+          nullable: true
+        icon:
+          type: string
+          nullable: true
+        sort_order:
+          type: integer
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/TagRef'
+        created_at:
+          type: string
+        updated_at:
+          type: string
+    TransactionTemplateUpsert:
+      type: object
+      required: [name, type]
+      properties:
+        name:
+          type: string
+          maxLength: 80
+        type:
+          type: string
+          enum: [income, expense, transfer]
+        account_id:
+          type: string
+          nullable: true
+        to_account_id:
+          type: string
+          nullable: true
+        category_id:
+          type: string
+          nullable: true
+        subcategory_id:
+          type: string
+          nullable: true
+        amount:
+          type: integer
+          nullable: true
+          description: Копейки; не передавать или null — сумма при создании
+        description:
+          type: string
+          nullable: true
+        merchant_id:
+          type: string
+          nullable: true
+        icon:
+          type: string
+          nullable: true
+        tag_ids:
+          type: array
+          items:
+            type: string
     Merchant:
       type: object
       properties:

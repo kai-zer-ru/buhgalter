@@ -90,6 +90,18 @@ erDiagram
         TEXT tag_id
     }
 
+    transaction_templates {
+        TEXT type "income|expense|transfer"
+        INTEGER amount "nullable"
+        INTEGER sort_order
+        TEXT merchant_id
+    }
+
+    transaction_template_tags {
+        TEXT template_id
+        TEXT tag_id
+    }
+
     subscriptions {
         TEXT name
         TEXT period "week|two_weeks|month|quarter|half_year|year"
@@ -237,6 +249,9 @@ erDiagram
     merchants ||--o{ transactions : merchant_id
     transactions ||--o{ transaction_tags : has
     tags ||--o{ transaction_tags : has
+    users ||--o{ transaction_templates : owns
+    transaction_templates ||--o{ transaction_template_tags : has
+    tags ||--o{ transaction_template_tags : has
     accounts ||--o{ transactions : account_id
     accounts ||--o{ transactions : transfer_account_id
     accounts ||--o{ credits : debit_account_id

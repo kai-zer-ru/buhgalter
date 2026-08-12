@@ -14,6 +14,7 @@
 	import { initTheme, syncThemeFromUser } from '$lib/stores/theme';
 	import { setLocale } from '$lib/i18n';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import PromptDialog from '$lib/components/PromptDialog.svelte';
 	import AccountTransferConfirmDialog from '$lib/components/AccountTransferConfirmDialog.svelte';
 	import UpdateAvailableModal from '$lib/components/UpdateAvailableModal.svelte';
 	import AppIcon from '$lib/components/AppIcon.svelte';
@@ -178,6 +179,11 @@
 			path: '/settings/import',
 			labelKey: 'settings.tab.import',
 			isActive: (p) => p === '/settings/import'
+		},
+		{
+			path: '/settings/transaction-templates',
+			labelKey: 'settings.tab.templates',
+			isActive: (p) => p === '/settings/transaction-templates'
 		}
 	];
 
@@ -545,6 +551,7 @@
 {/if}
 
 <ConfirmDialog />
+<PromptDialog />
 <AccountTransferConfirmDialog />
 {#if pendingUpdate && $user?.is_admin}
 	<UpdateAvailableModal update={pendingUpdate} onclose={() => (pendingUpdate = null)} />
