@@ -251,6 +251,69 @@ func (q *Queries) InsertSubscription(ctx context.Context, arg InsertSubscription
 	return err
 }
 
+const listActiveSubscriptionsForForecast = `-- name: ListActiveSubscriptionsForForecast :many
+SELECT
+    amount,
+    account_id,
+    period,
+    weekday,
+    day_of_month,
+    start_date,
+    time_local,
+    next_run_at
+FROM subscriptions
+WHERE user_id = ? AND active = 1 AND next_run_at <= ?
+ORDER BY next_run_at ASC
+`
+
+type ListActiveSubscriptionsForForecastParams struct {
+	UserID    string `json:"user_id"`
+	NextRunAt string `json:"next_run_at"`
+}
+
+type ListActiveSubscriptionsForForecastRow struct {
+	Amount     int64  `json:"amount"`
+	AccountID  string `json:"account_id"`
+	Period     string `json:"period"`
+	Weekday    *int64 `json:"weekday"`
+	DayOfMonth *int64 `json:"day_of_month"`
+	StartDate  string `json:"start_date"`
+	TimeLocal  string `json:"time_local"`
+	NextRunAt  string `json:"next_run_at"`
+}
+
+func (q *Queries) ListActiveSubscriptionsForForecast(ctx context.Context, arg ListActiveSubscriptionsForForecastParams) ([]ListActiveSubscriptionsForForecastRow, error) {
+	rows, err := q.db.QueryContext(ctx, listActiveSubscriptionsForForecast, arg.UserID, arg.NextRunAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListActiveSubscriptionsForForecastRow{}
+	for rows.Next() {
+		var i ListActiveSubscriptionsForForecastRow
+		if err := rows.Scan(
+			&i.Amount,
+			&i.AccountID,
+			&i.Period,
+			&i.Weekday,
+			&i.DayOfMonth,
+			&i.StartDate,
+			&i.TimeLocal,
+			&i.NextRunAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listActiveSubscriptionsForNotify = `-- name: ListActiveSubscriptionsForNotify :many
 SELECT
     s.id,

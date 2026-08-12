@@ -112,6 +112,21 @@ FROM recurring_operations
 WHERE user_id = ? AND active = 1 AND next_run_at <= ?
 ORDER BY next_run_at ASC;
 
+-- name: ListActiveRecurringForForecast :many
+SELECT
+    type,
+    amount,
+    account_id,
+    period,
+    weekday,
+    day_of_month,
+    start_date,
+    time_local,
+    next_run_at
+FROM recurring_operations
+WHERE user_id = ? AND active = 1 AND next_run_at <= ?
+ORDER BY next_run_at ASC;
+
 -- name: MarkRecurringOperationRan :execrows
 UPDATE recurring_operations
 SET next_run_at = ?, last_run_at = ?, updated_at = ?

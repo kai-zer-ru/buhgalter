@@ -4,14 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 
 	"github.com/kai-zer-ru/buhgalter/internal/account"
 	"github.com/kai-zer-ru/buhgalter/internal/accountbalance"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/debt"
 	"github.com/kai-zer-ru/buhgalter/internal/money"
-	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
 )
 
 type AccountBalance struct {
@@ -73,75 +71,19 @@ func Balance(ctx context.Context, db *sql.DB, userID, accountID string, initialB
 	return row.CurrentBalance, nil
 }
 
-// ForecastBalance adds future transactions in the current month (user timezone) to balance.
+// ForecastBalance adds future transactions and pending scheduled charges
+// (subscriptions + recurring) in the current month (user timezone) to balance.
 func ForecastBalance(ctx context.Context, db *sql.DB, userID, accountID string, balance int64) (int64, bool, error) {
 	tz, err := userTimezone(ctx, db, userID)
 	if err != nil {
 		return 0, false, err
 	}
-	monthStart, monthEnd, err := timeutil.MonthBoundsUTC(tz, timeutil.NowUTC())
+	forecasts, err := accountbalance.ForecastsByUser(ctx, db, userID, tz, map[string]int64{accountID: balance})
 	if err != nil {
 		return 0, false, err
 	}
-	q := queries(db)
-
-	hasFuture, err := q.HasFutureInMonth(ctx, sqlcdb.HasFutureInMonthParams{
-		UserID: userID, AccountID: accountID,
-		TransactionDate: monthStart, TransactionDate_2: monthEnd,
-	})
-	if err != nil {
-		return 0, false, err
-	}
-
-	fi, err := sumInt64(q.SumFutureIncomeInRange(ctx, sqlcdb.SumFutureIncomeInRangeParams{
-		UserID: userID, AccountID: accountID,
-		TransactionDate: monthStart, TransactionDate_2: monthEnd,
-	}))
-	if err != nil {
-		return 0, false, err
-	}
-	fe, err := sumInt64(q.SumFutureExpenseInRange(ctx, sqlcdb.SumFutureExpenseInRangeParams{
-		UserID: userID, AccountID: accountID,
-		TransactionDate: monthStart, TransactionDate_2: monthEnd,
-	}))
-	if err != nil {
-		return 0, false, err
-	}
-	ftOut, err := sumInt64(q.SumFutureTransferOutInRange(ctx, sqlcdb.SumFutureTransferOutInRangeParams{
-		UserID: userID, AccountID: accountID,
-		TransactionDate: monthStart, TransactionDate_2: monthEnd,
-	}))
-	if err != nil {
-		return 0, false, err
-	}
-	ftIn, err := sumInt64(q.SumFutureTransferInInRange(ctx, sqlcdb.SumFutureTransferInInRangeParams{
-		UserID: userID, AccountID: accountID,
-		TransactionDate: monthStart, TransactionDate_2: monthEnd,
-	}))
-	if err != nil {
-		return 0, false, err
-	}
-
-	forecast := balance + fi - fe + ftIn - ftOut
-	return forecast, hasFuture > 0, nil
-}
-
-func sumInt64(v interface{}, err error) (int64, error) {
-	if err != nil {
-		return 0, err
-	}
-	switch n := v.(type) {
-	case int64:
-		return n, nil
-	case int:
-		return int64(n), nil
-	case int32:
-		return int64(n), nil
-	case float64:
-		return int64(n), nil
-	default:
-		return 0, fmt.Errorf("unexpected sum type %T", v)
-	}
+	fc := forecasts[accountID]
+	return fc.Balance, fc.HasFutureThisMonth, nil
 }
 
 func accountBalanceFromRow(

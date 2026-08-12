@@ -1205,7 +1205,8 @@ paths:
       summary: Главный экран
       description: |
         Общий баланс, карточки счетов (с `type`, `bank_icon`), последние 10 операций.
-        `forecast_balance` и `has_future_this_month` учитывают операции `kind=future`
+        `forecast_balance` и `has_future_this_month` учитывают операции `kind=future`,
+        ещё не исполненные активные подписки и периодические операции
         в рамках текущего месяца (по часовому поясу пользователя).
       security:
         - sessionCookie: []
@@ -4407,10 +4408,17 @@ components:
           type: string
         forecast_balance:
           type: integer
+          description: |
+            Текущий баланс с учётом плановых операций `kind=future` за месяц,
+            а также ещё не исполненных активных подписок и периодических операций
+            (прогоны с `next_run_at` в текущем месяце по TZ пользователя; у периодических
+            доход увеличивает прогноз, расход — уменьшает).
         forecast_display:
           type: string
         has_future_this_month:
           type: boolean
+          description: |
+            Есть вклад в прогноз за текущий месяц (`kind=future` и/или подписки/периодические).
         is_primary:
           type: boolean
           description: Основной счёт (`cash`/`bank`); кредитные карты всегда `false`

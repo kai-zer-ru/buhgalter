@@ -103,6 +103,20 @@ FROM subscriptions
 WHERE user_id = ? AND active = 1 AND next_run_at <= ?
 ORDER BY next_run_at ASC;
 
+-- name: ListActiveSubscriptionsForForecast :many
+SELECT
+    amount,
+    account_id,
+    period,
+    weekday,
+    day_of_month,
+    start_date,
+    time_local,
+    next_run_at
+FROM subscriptions
+WHERE user_id = ? AND active = 1 AND next_run_at <= ?
+ORDER BY next_run_at ASC;
+
 -- name: MarkSubscriptionRan :execrows
 UPDATE subscriptions
 SET next_run_at = ?, last_run_at = ?, subcategory_id = ?, updated_at = ?

@@ -168,7 +168,8 @@ func BackfillAll(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
-// ForecastsByUser returns month forecast per account in one batch.
+// ForecastsByUser returns month forecast per account in one batch
+// (kind=future txs + pending active subscriptions and recurring).
 func ForecastsByUser(ctx context.Context, db *sql.DB, userID, tz string, balances map[string]int64) (map[string]Forecast, error) {
 	monthStart, monthEnd, err := timeutil.MonthBoundsUTC(tz, timeutil.NowUTC())
 	if err != nil {
@@ -249,9 +250,17 @@ func ForecastsByUser(ctx context.Context, db *sql.DB, userID, tz string, balance
 		ftIn[row.AccountID] = total
 	}
 
+	scheduled, scheduledHas, err := ScheduledEffectsByUser(ctx, db, userID, tz, timeutil.NowUTC())
+	if err != nil {
+		return nil, err
+	}
+
 	for id, base := range balances {
-		forecast := base + fi[id] - fe[id] + ftIn[id] - ftOut[id]
+		forecast := base + fi[id] - fe[id] + ftIn[id] - ftOut[id] + scheduled[id]
 		_, hasFuture := futureSet[id]
+		if _, ok := scheduledHas[id]; ok {
+			hasFuture = true
+		}
 		out[id] = Forecast{Balance: forecast, HasFutureThisMonth: hasFuture}
 	}
 	return out, nil

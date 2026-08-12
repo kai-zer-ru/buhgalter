@@ -33,6 +33,10 @@ OpenAPI-схемы: [`Transaction`](api/openapi.yaml#/components/schemas/Transac
 |------|----------|
 | `type` | `cash` \| `bank` |
 | `bank_icon` | Slug логотипа банка (для `AccountIcon` на главной) |
+| `forecast_balance` | Текущий баланс + `kind=future` за месяц + ещё не исполненные активные [подписки](subscriptions.md) и периодические операции (`next_run_at` в текущем месяце, TZ пользователя) |
+| `has_future_this_month` | Есть вклад в прогноз (future-операции и/или подписки/периодические) |
+
+UI показывает строку «С учётом плановых», если `forecast_balance !== balance`.
 
 ## Модуль `$lib/transaction-display.ts`
 

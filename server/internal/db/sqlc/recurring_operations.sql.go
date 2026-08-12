@@ -170,6 +170,72 @@ func (q *Queries) InsertRecurringOperation(ctx context.Context, arg InsertRecurr
 	return err
 }
 
+const listActiveRecurringForForecast = `-- name: ListActiveRecurringForForecast :many
+SELECT
+    type,
+    amount,
+    account_id,
+    period,
+    weekday,
+    day_of_month,
+    start_date,
+    time_local,
+    next_run_at
+FROM recurring_operations
+WHERE user_id = ? AND active = 1 AND next_run_at <= ?
+ORDER BY next_run_at ASC
+`
+
+type ListActiveRecurringForForecastParams struct {
+	UserID    string `json:"user_id"`
+	NextRunAt string `json:"next_run_at"`
+}
+
+type ListActiveRecurringForForecastRow struct {
+	Type       string `json:"type"`
+	Amount     int64  `json:"amount"`
+	AccountID  string `json:"account_id"`
+	Period     string `json:"period"`
+	Weekday    *int64 `json:"weekday"`
+	DayOfMonth *int64 `json:"day_of_month"`
+	StartDate  string `json:"start_date"`
+	TimeLocal  string `json:"time_local"`
+	NextRunAt  string `json:"next_run_at"`
+}
+
+func (q *Queries) ListActiveRecurringForForecast(ctx context.Context, arg ListActiveRecurringForForecastParams) ([]ListActiveRecurringForForecastRow, error) {
+	rows, err := q.db.QueryContext(ctx, listActiveRecurringForForecast, arg.UserID, arg.NextRunAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListActiveRecurringForForecastRow{}
+	for rows.Next() {
+		var i ListActiveRecurringForForecastRow
+		if err := rows.Scan(
+			&i.Type,
+			&i.Amount,
+			&i.AccountID,
+			&i.Period,
+			&i.Weekday,
+			&i.DayOfMonth,
+			&i.StartDate,
+			&i.TimeLocal,
+			&i.NextRunAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDueRecurringOperations = `-- name: ListDueRecurringOperations :many
 SELECT
     id,
