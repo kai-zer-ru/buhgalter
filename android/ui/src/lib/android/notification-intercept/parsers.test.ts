@@ -65,34 +65,41 @@ describe('parseBankNotification', () => {
 		).toBeNull();
 	});
 
-	it('ignores interest payout (income, not expense)', () => {
-		expect(
-			parseBankNotification(
-				raw({
-					packageName: 'com.yandex.bank',
-					text: 'Выплата процентов 6 ₽.\nДоступно 34 337,70 ₽'
-				})
-			)
-		).toBeNull();
+	it('parses interest payout as income (not expense)', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'com.wildberries.ru',
+				title: 'WB Банк',
+				text: 'Выплата процентов 5,36 ₽.\nДоступно 29 323,51 ₽'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.kind).toBe('income');
+		expect(parsed!.amount).toBe('5.36');
+		expect(parsed!.bankId).toBe('wbbank');
+		expect(parsed!.merchantText.toLowerCase()).toContain('процент');
 	});
 
-	it('ignores top-up / incoming transfer', () => {
-		expect(
-			parseBankNotification(
-				raw({
-					packageName: 'com.idamob.tinkoff.android',
-					text: 'Пополнение на 5 000 ₽. Доступно 12 000 ₽'
-				})
-			)
-		).toBeNull();
-		expect(
-			parseBankNotification(
-				raw({
-					packageName: 'ru.sberbankmobile',
-					text: 'Перевод от Иван И. +1 500 ₽. Баланс 10 000 ₽'
-				})
-			)
-		).toBeNull();
+	it('parses top-up / incoming transfer as income', () => {
+		const topup = parseBankNotification(
+			raw({
+				packageName: 'com.idamob.tinkoff.android',
+				text: 'Пополнение на 5 000 ₽. Доступно 12 000 ₽'
+			})
+		);
+		expect(topup).not.toBeNull();
+		expect(topup!.kind).toBe('income');
+		expect(topup!.amount).toBe('5000.00');
+
+		const transfer = parseBankNotification(
+			raw({
+				packageName: 'ru.sberbankmobile',
+				text: 'Перевод от Иван И. 1 500 ₽. Баланс 10 000 ₽'
+			})
+		);
+		expect(transfer).not.toBeNull();
+		expect(transfer!.kind).toBe('income');
+		expect(transfer!.amount).toBe('1500.00');
 	});
 
 	it('ignores unknown packages', () => {

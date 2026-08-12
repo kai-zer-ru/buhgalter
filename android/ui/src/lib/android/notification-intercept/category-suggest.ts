@@ -13,17 +13,20 @@ function pairKey(categoryId: string, subcategoryId: string | null | undefined): 
 }
 
 /**
- * Majority vote over recent expenses for a merchant.
+ * Majority vote over recent txs of the given type for a merchant.
  * Ignores empty / system categories. Ties → more recent pair (first in date_desc list).
  */
-export function pickCategorySuggestion(txs: Transaction[]): CategorySuggestion | null {
+export function pickCategorySuggestion(
+	txs: Transaction[],
+	type: 'expense' | 'income' = 'expense'
+): CategorySuggestion | null {
 	const counts = new Map<
 		string,
 		{ n: number; firstIndex: number; categoryId: string; subcategoryId?: string }
 	>();
 
 	txs.forEach((tx, index) => {
-		if (tx.type !== 'expense') return;
+		if (tx.type !== type) return;
 		const categoryId = tx.category_id;
 		if (!categoryId || tx.category_is_system) return;
 		const subcategoryId = tx.subcategory_id || undefined;
@@ -51,23 +54,24 @@ export function pickCategorySuggestion(txs: Transaction[]): CategorySuggestion |
 }
 
 /**
- * Suggest category/subcategory from prior expenses of this merchant catalog entry.
+ * Suggest category/subcategory from prior txs of this merchant (same type).
  * Offline / API errors → null (form keeps primary default).
  */
 export async function suggestCategoryFromMerchant(
-	merchantId: string
+	merchantId: string,
+	type: 'expense' | 'income' = 'expense'
 ): Promise<CategorySuggestion | null> {
 	const id = merchantId.trim();
 	if (!id) return null;
 	try {
 		const res = await listTransactions({
-			type: 'expense',
+			type,
 			merchant_id: id,
 			sort: 'date_desc',
 			limit: String(HISTORY_LIMIT),
 			page: '1'
 		});
-		return pickCategorySuggestion(res.data ?? []);
+		return pickCategorySuggestion(res.data ?? [], type);
 	} catch {
 		return null;
 	}

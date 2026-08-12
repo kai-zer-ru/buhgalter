@@ -132,7 +132,8 @@ export function removeDraftMatchingCancel(cancel: ParsedPurchase, userId?: strin
 		const d = drafts[i];
 		if (d.parsed.bankId !== cancel.bankId) continue;
 		if (d.parsed.amount !== cancel.amount) continue;
-		if (d.parsed.kind === 'cancel') continue;
+		// Only purchase drafts are cancelled by refund pushes — not income.
+		if (d.parsed.kind === 'cancel' || d.parsed.kind === 'income') continue;
 
 		const draftAt = Date.parse(d.parsed.occurredAt) || Date.parse(d.createdAt) || 0;
 		if (Math.abs(cancelAt - draftAt) > CANCEL_MATCH_WINDOW_MS) continue;

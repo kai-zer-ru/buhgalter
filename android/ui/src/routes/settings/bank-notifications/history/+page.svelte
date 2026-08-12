@@ -99,8 +99,10 @@
 	function statusLabel(row: NotificationHistoryItem): string {
 		if (!row.inAllowlist) return $_('bankNotifications.history.status.notAllowlisted');
 		const parsed = parseBankNotification(row);
-		if (parsed) return $_('bankNotifications.history.status.wouldParse');
-		return $_('bankNotifications.history.status.queuedNoParse');
+		if (!parsed) return $_('bankNotifications.history.status.queuedNoParse');
+		if (parsed.kind === 'income') return $_('bankNotifications.history.status.wouldParseIncome');
+		if (parsed.kind === 'cancel') return $_('bankNotifications.history.status.wouldParseCancel');
+		return $_('bankNotifications.history.status.wouldParse');
 	}
 
 	function body(row: NotificationHistoryItem): string {

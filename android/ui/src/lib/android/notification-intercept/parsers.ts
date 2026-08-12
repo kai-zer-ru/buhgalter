@@ -5,7 +5,7 @@ import type { ParsedPurchase, RawBankNotification } from './types';
 const IGNORE_RE =
 	/(код|code|otp|пароль|вход|войдите|баланс|остаток|отказ|отклонен|отклонён|заблокир|перевод\s+на\s+карт)/i;
 
-/** Incoming / credit pushes — never draft as expense (v1.5 is purchase-only). */
+/** Incoming / credit pushes → income drafts (not expense). */
 const INCOME_RE =
 	/(выплат|процент|начислен|кэшб[еэ]к|кешб[еэ]к|cashback|поступило|поступил[аи]?|зачисл|пополнен|входящ|перевод\s+от|вам\s+перевел|зарплат|стипенд|доход\b|заработн)/i;
 
@@ -57,7 +57,7 @@ function extractAmount(text: string): string | null {
 }
 
 /**
- * Merchant: prefer notification title when it looks like a store name
+ * Merchant / counterparty label: prefer notification title when it looks like a store name
  * (Yandex Pay puts the shop in EXTRA_TITLE and purchase details in EXTRA_TEXT).
  * Cancel pushes often use a generic title («Карта Пэй») and put the shop in the body.
  */
@@ -68,6 +68,7 @@ function extractMerchant(raw: RawBankNotification, amount: string): string {
 		!GENERIC_TITLE_RE.test(title) &&
 		!PURCHASE_HINT_RE.test(title) &&
 		!CANCEL_RE.test(title) &&
+		!INCOME_RE.test(title) &&
 		!IGNORE_RE.test(title) &&
 		title.length <= 80
 	) {
@@ -79,6 +80,7 @@ function extractMerchant(raw: RawBankNotification, amount: string): string {
 	let t = [raw.text, raw.bigText].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
 	t = t.replace(/^(сбер|сбербанк|тинькофф|т-?банк|tinkoff|яндекс)\s*[:.]?\s*/i, '');
 	t = t.replace(CANCEL_RE, ' ');
+	t = t.replace(INCOME_RE, ' ');
 	t = t.replace(PURCHASE_HINT_RE, ' ').replace(/\s+/g, ' ').trim();
 	const amountAlt = amount.replace('.', '[,.]');
 	t = t.replace(new RegExp(`\\b${amountAlt}\\b`, 'i'), ' ');
@@ -96,9 +98,30 @@ function extractMerchant(raw: RawBankNotification, amount: string): string {
 	return t;
 }
 
+/** Short label for income when there is no counterparty (e.g. «Выплата процентов»). */
+function extractIncomeLabel(raw: RawBankNotification): string {
+	const line = [raw.text, raw.bigText, raw.title]
+		.filter(Boolean)
+		.join(' ')
+		.replace(/\s+/g, ' ')
+		.trim();
+	const beforeAmount = line.split(/(?:\d[\d \u00a0]*(?:[.,]\d{1,2})?\s*(?:₽|руб\.?|р\.|RUB))/i)[0];
+	let t = (beforeAmount || line).trim();
+	t = t.replace(GENERIC_TITLE_RE, ' ').replace(/\s+/g, ' ').trim();
+	t = t.replace(/^[\s.,:;!\-–—]+|[\s.,:;!\-–—]+$/g, '').trim();
+	if (t.length > 80) t = t.slice(0, 80).trim();
+	return t;
+}
+
+function looksLikeIncome(text: string): boolean {
+	if (CANCEL_RE.test(text)) return false;
+	if (!INCOME_RE.test(text)) return false;
+	if (PURCHASE_HINT_RE.test(text)) return false;
+	return /(?:₽|руб\.?|RUB)/i.test(text) && AMOUNT_RE.test(text);
+}
+
 function looksLikePurchase(text: string): boolean {
 	if (CANCEL_RE.test(text)) return false;
-	// Credits/top-ups before purchase hints — «выплата» must not become an expense draft.
 	if (INCOME_RE.test(text)) return false;
 	if (PURCHASE_HINT_RE.test(text)) return true;
 	if (IGNORE_RE.test(text)) return false;
@@ -119,14 +142,17 @@ export function parseBankNotification(raw: RawBankNotification): ParsedPurchase 
 	if (!text.trim()) return null;
 
 	const isCancel = CANCEL_RE.test(text);
-	if (!isCancel && INCOME_RE.test(text)) return null;
-	if (!isCancel && !looksLikePurchase(text)) return null;
+	const isIncome = !isCancel && looksLikeIncome(text);
+	if (!isCancel && !isIncome && !looksLikePurchase(text)) return null;
 
 	const amount = extractAmount(text);
 	if (!amount) return null;
 
 	const last4 = extractLast4(text);
-	const merchantText = extractMerchant(raw, amount);
+	let merchantText = extractMerchant(raw, amount);
+	if (isIncome && !merchantText) {
+		merchantText = extractIncomeLabel(raw);
+	}
 	const occurredAt = new Date(raw.postedAt > 0 ? raw.postedAt : Date.now()).toISOString();
 
 	return {
@@ -137,6 +163,6 @@ export function parseBankNotification(raw: RawBankNotification): ParsedPurchase 
 		merchantText,
 		last4,
 		rawHash: hashRaw(raw),
-		kind: isCancel ? 'cancel' : 'purchase'
+		kind: isCancel ? 'cancel' : isIncome ? 'income' : 'purchase'
 	};
 }

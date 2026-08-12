@@ -9,10 +9,11 @@
 	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
 	import {
-		INTERCEPT_EXPENSE_ROUTE,
 		deleteInterceptDraft,
+		draftTxType,
 		getCurrentInterceptSettings,
 		getNotificationListenerState,
+		interceptCreateRoute,
 		interceptDraftsTick,
 		listInterceptDrafts,
 		prefillFromDraftWithSuggestions,
@@ -66,8 +67,9 @@
 	});
 
 	async function openDraft(draft: InterceptDraft) {
-		setInterceptPrefill(await prefillFromDraftWithSuggestions(draft));
-		void goto(resolveAppPath(INTERCEPT_EXPENSE_ROUTE));
+		const prefill = await prefillFromDraftWithSuggestions(draft);
+		setInterceptPrefill(prefill);
+		void goto(resolveAppPath(interceptCreateRoute(prefill.type ?? draftTxType(draft))));
 	}
 
 	function removeDraft(draft: InterceptDraft) {
@@ -142,6 +144,11 @@
 				<li class="card space-y-2">
 					<div class="flex items-start justify-between gap-3">
 						<div class="min-w-0">
+							<p class="text-sm" style:color="var(--text-muted)">
+								{draftTxType(draft) === 'income'
+									? $_('bankNotifications.drafts.kindIncome')
+									: $_('bankNotifications.drafts.kindExpense')}
+							</p>
 							<p class="text-lg font-semibold">
 								{formatMoneyDisplay(draft.parsed.amount)} ₽
 							</p>

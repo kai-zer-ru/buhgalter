@@ -23,6 +23,7 @@ describe('intercept prefill', () => {
 			categoryId: undefined,
 			subcategoryId: undefined,
 			occurredAt: undefined,
+			type: 'expense',
 			draftId: 'd1'
 		});
 		expect(takeInterceptPrefill()).toBeNull();
@@ -62,5 +63,28 @@ describe('intercept prefill', () => {
 		expect(prefill.merchantName).toBe('Cafe');
 		expect(prefill.description).toBeUndefined();
 		expect(prefill.categoryId).toBeUndefined();
+		expect(prefill.type).toBe('expense');
+	});
+
+	it('income draft uses label as description, not merchant', () => {
+		const draft: InterceptDraft = {
+			id: 'd3',
+			createdAt: new Date().toISOString(),
+			parsed: {
+				bankId: 'wbbank',
+				packageName: 'com.wildberries.ru',
+				amount: '5.36',
+				occurredAt: '2024-01-01T10:00:00.000Z',
+				merchantText: 'Выплата процентов',
+				rawHash: 'h2',
+				kind: 'income'
+			},
+			accountId: 'a1',
+			merchantName: 'Выплата процентов'
+		};
+		const prefill = prefillFromDraft(draft);
+		expect(prefill.type).toBe('income');
+		expect(prefill.description).toBe('Выплата процентов');
+		expect(prefill.merchantName).toBeUndefined();
 	});
 });

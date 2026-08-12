@@ -40,8 +40,8 @@ export type ParsedPurchase = {
 	merchantText: string;
 	last4?: string;
 	rawHash: string;
-	/** Purchase push vs cancel/refund that should drop a matching draft. */
-	kind?: 'purchase' | 'cancel';
+	/** Purchase / income draft, or cancel/refund that drops a matching purchase draft. */
+	kind?: 'purchase' | 'income' | 'cancel';
 };
 
 export type InterceptDraft = {
@@ -59,11 +59,13 @@ export type TransactionCreatePrefill = {
 	accountId?: string;
 	merchantId?: string;
 	merchantName?: string;
-	/** Suggested from prior expenses of this merchant. */
+	/** Suggested from prior txs of this merchant (same type). */
 	categoryId?: string;
 	subcategoryId?: string;
 	/** ISO datetime */
 	occurredAt?: string;
+	/** expense (default) or income — selects create form type. */
+	type?: 'expense' | 'income';
 	/** Remove this intercept draft after successful create. */
 	draftId?: string;
 };

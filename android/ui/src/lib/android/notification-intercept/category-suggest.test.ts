@@ -62,11 +62,15 @@ describe('pickCategorySuggestion', () => {
 		expect(result).toEqual({ categoryId: 'food', subcategoryId: undefined });
 	});
 
-	it('ignores income rows', () => {
-		const result = pickCategorySuggestion([
+	it('filters by transaction type', () => {
+		const txs = [
 			tx({ id: '1', type: 'income', category_id: 'salary' }),
 			tx({ id: '2', category_id: 'food', subcategory_id: 'cafe' })
-		]);
-		expect(result).toEqual({ categoryId: 'food', subcategoryId: 'cafe' });
+		];
+		expect(pickCategorySuggestion(txs, 'expense')).toEqual({
+			categoryId: 'food',
+			subcategoryId: 'cafe'
+		});
+		expect(pickCategorySuggestion(txs, 'income')).toEqual({ categoryId: 'salary' });
 	});
 });

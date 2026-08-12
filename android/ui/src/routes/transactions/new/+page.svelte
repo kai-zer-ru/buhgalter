@@ -18,7 +18,6 @@
 
 	import { dataRefreshTick } from '$lib/offline/sync';
 
-	const type = $derived($page.url.searchParams.get('type') === 'income' ? 'income' : 'expense');
 	const accountId = $derived($page.url.searchParams.get('account') ?? '');
 	const repeatId = $derived($page.url.searchParams.get('repeat'));
 	const templateId = $derived($page.url.searchParams.get('template'));
@@ -26,6 +25,11 @@
 	const descriptionParam = $derived($page.url.searchParams.get('description') ?? '');
 	const shareOnce = takeSharePrefill();
 	const interceptOnce = takeInterceptPrefill();
+	const type = $derived(
+		interceptOnce?.type === 'income' || $page.url.searchParams.get('type') === 'income'
+			? 'income'
+			: 'expense'
+	);
 	let initialDescription = $state(interceptOnce?.description ?? shareOnce?.description ?? '');
 	let createPrefill = $state(interceptOnce);
 	const interceptDraftId = interceptOnce?.draftId;
