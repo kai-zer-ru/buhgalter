@@ -1,10 +1,16 @@
 import { resolve } from '$app/paths';
+import { isFeatureEnabled } from '$lib/features';
 
 export type AndroidNavItem = {
 	href: string;
 	labelKey: string;
+	feature?: string;
 	isActive: (pathname: string) => boolean;
 };
+
+function filterByFeature(items: AndroidNavItem[]): AndroidNavItem[] {
+	return items.filter((item) => !item.feature || isFeatureEnabled(item.feature));
+}
 
 export function androidHomeNavItem(): AndroidNavItem {
 	return {
@@ -15,7 +21,7 @@ export function androidHomeNavItem(): AndroidNavItem {
 }
 
 export function androidMainNavItems(): AndroidNavItem[] {
-	return [
+	return filterByFeature([
 		androidHomeNavItem(),
 		{
 			href: resolve('/accounts'),
@@ -36,21 +42,25 @@ export function androidMainNavItems(): AndroidNavItem[] {
 		{
 			href: resolve('/debts'),
 			labelKey: 'nav.debts',
+			feature: 'debts',
 			isActive: (p) => p.startsWith('/debts') || p.startsWith('/debtors')
 		},
 		{
 			href: resolve('/credits'),
 			labelKey: 'nav.credits',
+			feature: 'credits',
 			isActive: (p) => p.startsWith('/credits')
 		},
 		{
 			href: resolve('/subscriptions'),
 			labelKey: 'nav.subscriptions',
+			feature: 'subscriptions',
 			isActive: (p) => p.startsWith('/subscriptions')
 		},
 		{
 			href: resolve('/recurring-operations'),
 			labelKey: 'nav.recurring',
+			feature: 'recurring',
 			isActive: (p) => p.startsWith('/recurring-operations')
 		},
 		{
@@ -61,28 +71,32 @@ export function androidMainNavItems(): AndroidNavItem[] {
 		{
 			href: resolve('/merchants'),
 			labelKey: 'nav.merchants',
+			feature: 'merchants_tags',
 			isActive: (p) => p.startsWith('/merchants')
 		},
 		{
 			href: resolve('/tags'),
 			labelKey: 'nav.tags',
+			feature: 'merchants_tags',
 			isActive: (p) => p.startsWith('/tags')
 		},
 		{
 			href: resolve('/budget'),
 			labelKey: 'nav.budget',
+			feature: 'budget',
 			isActive: (p) => p.startsWith('/budget')
 		},
 		{
 			href: resolve('/stats'),
 			labelKey: 'nav.stats',
+			feature: 'stats',
 			isActive: (p) => p.startsWith('/stats')
 		}
-	];
+	]);
 }
 
 export function androidSettingsNavItems(): AndroidNavItem[] {
-	return [
+	return filterByFeature([
 		{
 			href: resolve('/settings/profile'),
 			labelKey: 'settings.tab.profile',
@@ -111,6 +125,7 @@ export function androidSettingsNavItems(): AndroidNavItem[] {
 		{
 			href: resolve('/settings/notifications'),
 			labelKey: 'settings.tab.notifications',
+			feature: 'notifications',
 			isActive: (p) => p === '/settings/notifications'
 		},
 		{
@@ -122,14 +137,16 @@ export function androidSettingsNavItems(): AndroidNavItem[] {
 		{
 			href: resolve('/settings/import'),
 			labelKey: 'settings.tab.import',
+			feature: 'import_export',
 			isActive: (p) => p === '/settings/import'
 		},
 		{
 			href: resolve('/settings/transaction-templates'),
 			labelKey: 'settings.tab.templates',
+			feature: 'transaction_templates',
 			isActive: (p) => p === '/settings/transaction-templates'
 		}
-	];
+	]);
 }
 
 export function androidAdminNavItems(): AndroidNavItem[] {

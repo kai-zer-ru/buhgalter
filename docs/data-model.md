@@ -17,7 +17,12 @@ erDiagram
         INTEGER is_configured
         TEXT notification_secret_key
         TEXT app_version
-        INTEGER registration_enabled
+    }
+
+    feature_flags {
+        TEXT key PK
+        INTEGER enabled
+        TEXT updated_at
     }
 
     users {

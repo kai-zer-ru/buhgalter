@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/features"
 	"github.com/kai-zer-ru/buhgalter/internal/settingscache"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
 )
@@ -713,11 +714,7 @@ func userIsAdmin(ctx context.Context, db *sql.DB, userID string) (bool, error) {
 }
 
 func registrationEnabled(ctx context.Context, db *sql.DB) (bool, error) {
-	enabled, err := sqlcdb.New(db).GetRegistrationEnabled(ctx)
-	if err != nil {
-		return false, err
-	}
-	return enabled == 1, nil
+	return features.IsEnabled(ctx, db, features.Registration)
 }
 
 func rejectTemplateWhenSettingDisabled(ctx context.Context, db *sql.DB, userID, triggerType string) error {

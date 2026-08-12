@@ -3,6 +3,8 @@
   "FORBIDDEN": "Insufficient permissions",
   "INVALID_CREDENTIALS": "Invalid login or password",
   "REGISTRATION_DISABLED": "Registration is disabled",
+  "FEATURE_DISABLED": "Module disabled by administrator",
+  "ERR_FEATURES_EMPTY": "Provide at least one feature flag",
   "RATE_LIMITED": "Too many login attempts",
   "VALIDATION_ERROR": "Validation error",
   "PASSWORDS_MISMATCH": "Passwords do not match",

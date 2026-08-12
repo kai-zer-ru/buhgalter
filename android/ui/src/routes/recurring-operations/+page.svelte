@@ -44,6 +44,7 @@
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
 	import SectionHeader from '$lib/components/SectionHeader.svelte';
 	import { formatMoneyForInput, toAPIAmount } from '$lib/money';
+	import { featureFlags, isFeatureEnabled } from '$lib/features';
 	import { toast } from '$lib/toast';
 	import { reportPageLoadFailure } from '$lib/page-load';
 	import {
@@ -364,7 +365,7 @@
 				onclick: () => beginEdit(item)
 			}
 		];
-		if (item.type === 'expense') {
+		if (item.type === 'expense' && isFeatureEnabled('subscriptions', $featureFlags)) {
 			actions.push({
 				icon: 'pay',
 				label: $_('subscriptions.fromRecurring'),

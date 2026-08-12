@@ -81,4 +81,5 @@
 | [ui-api-cache.md](ui-api-cache.md) | In-memory кеш GET на сервере и справочники в браузере |
 | [import/cubux.md](import/cubux.md) | Импорт и экспорт формата Cubux |
 | [../roadmap/category-rules-inbox.md](../roadmap/category-rules-inbox.md) | (план) Правила категорий и inbox неразнесённого |
-| [../roadmap/feature-toggles.md](../roadmap/feature-toggles.md) | (план) Включение/отключение модулей в админке; чеклист для новых фич |
+| [feature-toggles.md](feature-toggles.md) | Флаги модулей в админке; чеклист для новых фич |
+| [release-notes-v1.5.0.md](release-notes-v1.5.0.md) | Release notes v1.5.0 (фрагмент: модули) |

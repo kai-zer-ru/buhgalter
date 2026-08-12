@@ -9,6 +9,7 @@ import (
 
 	"github.com/kai-zer-ru/buhgalter/internal/credit"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/features"
 	"github.com/kai-zer-ru/buhgalter/internal/recurring"
 	"github.com/kai-zer-ru/buhgalter/internal/subscription"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
@@ -101,6 +102,9 @@ func (s *Scheduler) loop() {
 
 func (s *Scheduler) runCreditPayments(now time.Time) {
 	ctx := context.Background()
+	if enabled, err := features.IsEnabled(ctx, s.Credit.DB, features.Credits); err != nil || !enabled {
+		return
+	}
 	users, err := sqlcdb.New(s.Credit.DB).ListUsersWithTimezone(ctx)
 	if err != nil {
 		s.Logger.Error("credit scheduler: list users", "err", err)
@@ -145,6 +149,9 @@ func (s *Scheduler) runCreditPayments(now time.Time) {
 
 func (s *Scheduler) runRecurring(now time.Time) {
 	ctx := context.Background()
+	if enabled, err := features.IsEnabled(ctx, s.Recurring.DB, features.Recurring); err != nil || !enabled {
+		return
+	}
 	users, err := sqlcdb.New(s.Recurring.DB).ListUsersWithTimezone(ctx)
 	if err != nil {
 		s.Logger.Error("recurring scheduler: list users", "err", err)
@@ -181,6 +188,9 @@ func (s *Scheduler) runRecurring(now time.Time) {
 
 func (s *Scheduler) runSubscriptions(now time.Time) {
 	ctx := context.Background()
+	if enabled, err := features.IsEnabled(ctx, s.Subscription.DB, features.Subscriptions); err != nil || !enabled {
+		return
+	}
 	users, err := sqlcdb.New(s.Subscription.DB).ListUsersWithTimezone(ctx)
 	if err != nil {
 		s.Logger.Error("subscription scheduler: list users", "err", err)

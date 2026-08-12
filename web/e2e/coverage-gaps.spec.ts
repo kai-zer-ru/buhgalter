@@ -30,9 +30,8 @@ test('setup redirects when already configured', async ({ page }) => {
 test('register creates account when registration is enabled', async ({ page }) => {
 	const tag = Date.now();
 	await restoreAdminSession(page);
-	await apiJSON(page, 'PUT', '/api/v1/admin/settings', {
-		registration_enabled: true,
-		external_url: ''
+	await apiJSON(page, 'PUT', '/api/v1/admin/features', {
+		registration: true
 	});
 
 	await page.context().clearCookies();
@@ -72,9 +71,8 @@ test('register creates account when registration is enabled', async ({ page }) =
 	await expect(page.locator('#display')).toHaveValue(`E2E Reg ${tag}`);
 
 	await restoreAdminSession(page);
-	await apiJSON(page, 'PUT', '/api/v1/admin/settings', {
-		registration_enabled: false,
-		external_url: ''
+	await apiJSON(page, 'PUT', '/api/v1/admin/features', {
+		registration: false
 	});
 });
 
@@ -241,9 +239,8 @@ test('import CSV commits transactions', async ({ page }) => {
 });
 
 test('login page shows register link when registration enabled', async ({ page }) => {
-	await apiJSON(page, 'PUT', '/api/v1/admin/settings', {
-		registration_enabled: true,
-		external_url: ''
+	await apiJSON(page, 'PUT', '/api/v1/admin/features', {
+		registration: true
 	});
 
 	const status = await page.request.get('/api/v1/setup/status');
@@ -258,8 +255,7 @@ test('login page shows register link when registration enabled', async ({ page }
 
 	await login(page);
 	await restoreAdminSession(page);
-	await apiJSON(page, 'PUT', '/api/v1/admin/settings', {
-		registration_enabled: false,
-		external_url: ''
+	await apiJSON(page, 'PUT', '/api/v1/admin/features', {
+		registration: false
 	});
 });

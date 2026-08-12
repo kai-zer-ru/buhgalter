@@ -6,8 +6,10 @@
 	import { getRegistrationEnabled, login, requestPasswordReset } from '$lib/api/client';
 	import { formatAuthUserApiError } from '$lib/auth/api-errors';
 	import { user, markSessionHint } from '$lib/stores/auth';
+	import { loadFeatureFlags } from '$lib/features';
 	import { syncThemeFromUser } from '$lib/stores/theme';
 	import { setLocale } from '$lib/i18n';
+	import { setRefCacheUserId } from '$lib/ref-cache';
 	import ModalShell from '$lib/components/ModalShell.svelte';
 	import { toast } from '$lib/toast';
 
@@ -30,7 +32,9 @@
 		try {
 			const res = await login(loginName.trim(), password);
 			user.set(res.user);
+			setRefCacheUserId(res.user.id);
 			markSessionHint();
+			await loadFeatureFlags();
 			setLocale(res.user.language);
 			syncThemeFromUser(res.user.theme);
 			await goto(resolve('/'));

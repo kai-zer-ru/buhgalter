@@ -13,6 +13,7 @@ import (
 
 	"github.com/kai-zer-ru/buhgalter/internal/audit"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
+	"github.com/kai-zer-ru/buhgalter/internal/features"
 	appmw "github.com/kai-zer-ru/buhgalter/internal/middleware"
 )
 
@@ -24,6 +25,7 @@ func testDB(t *testing.T) *db.Handle {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = mgr.Close() })
+	features.Invalidate()
 	return db.NewHandle(mgr)
 }
 
@@ -110,10 +112,11 @@ func TestHandlerLoginInvalidCredentials(t *testing.T) {
 func TestHandlerRegister(t *testing.T) {
 	mgr := testDB(t)
 	seedAdmin(t, mgr)
-	_, err := mgr.DB().Exec(`UPDATE system_settings SET registration_enabled = 1 WHERE id = 1`)
+	_, err := mgr.DB().Exec(`INSERT INTO feature_flags (key, enabled, updated_at) VALUES ('registration', 1, datetime('now')) ON CONFLICT(key) DO UPDATE SET enabled = 1`)
 	if err != nil {
 		t.Fatal(err)
 	}
+	features.Invalidate()
 	h := testHandler(t, mgr)
 
 	body, _ := json.Marshal(map[string]string{

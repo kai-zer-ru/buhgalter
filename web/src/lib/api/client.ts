@@ -201,14 +201,22 @@ export type NotificationSettingsUpdate = {
 };
 
 export type AdminSettings = {
-	registration_enabled: boolean;
 	external_url: string;
 	secret_key_set: boolean;
 };
 
 export type AdminSettingsUpdate = {
-	registration_enabled: boolean;
 	external_url: string;
+};
+
+export type FeatureFlagsSnapshot = Record<string, boolean>;
+
+export type AdminFeatureFlag = {
+	key: string;
+	enabled: boolean;
+	title_key: string;
+	description_key: string;
+	default_enabled: boolean;
 };
 
 export type AdminDiagnostics = {
@@ -460,6 +468,21 @@ export function putAdminNotificationSecretKey(notificationSecretKey: string) {
 	return request<AdminSettings>('/api/v1/admin/settings/notification-secret', {
 		method: 'PUT',
 		body: JSON.stringify({ notification_secret_key: notificationSecretKey })
+	});
+}
+
+export function getFeatures() {
+	return request<FeatureFlagsSnapshot>('/api/v1/features');
+}
+
+export function getAdminFeatures() {
+	return request<AdminFeatureFlag[]>('/api/v1/admin/features');
+}
+
+export function putAdminFeatures(updates: FeatureFlagsSnapshot) {
+	return request<FeatureFlagsSnapshot>('/api/v1/admin/features', {
+		method: 'PUT',
+		body: JSON.stringify(updates)
 	});
 }
 

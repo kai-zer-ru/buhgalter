@@ -27,6 +27,7 @@
 	} from '$lib/accounts/account-inactive-prompt';
 	import { requireOnline } from '$lib/offline/require-online';
 	import { isAutoTopupEligible } from '$lib/accounts/auto-topup';
+	import { featureFlags, isFeatureEnabled } from '$lib/features';
 	import {
 		groupAccountsByType,
 		accountGroupKind,
@@ -309,7 +310,11 @@
 			disabled: busy || (editingId !== null && editingId !== acc.id),
 			onclick: () => startEdit(acc)
 		});
-		if (filter === 'active' && isAutoTopupEligible(acc)) {
+		if (
+			filter === 'active' &&
+			isFeatureEnabled('balance_maintenance', $featureFlags) &&
+			isAutoTopupEligible(acc)
+		) {
 			actions.push({
 				icon: 'transfer',
 				label: $_('accounts.action.autoTopup'),

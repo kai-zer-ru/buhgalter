@@ -13,7 +13,6 @@
 	import { reportPageLoadFailure } from '$lib/page-load';
 	import { user } from '$lib/stores/auth';
 
-	let registrationEnabled = $state(false);
 	let externalURL = $state('');
 	let secretKeySet = $state(false);
 	let notificationSecretKey = $state('');
@@ -33,7 +32,6 @@
 		pageLoading = true;
 		try {
 			const s = await getAdminSettings();
-			registrationEnabled = s.registration_enabled;
 			externalURL = s.external_url ?? '';
 			secretKeySet = s.secret_key_set;
 			loadError = null;
@@ -50,7 +48,6 @@
 		loading = true;
 		try {
 			await putAdminSettings({
-				registration_enabled: registrationEnabled,
 				external_url: externalURL.trim()
 			});
 			const s = await getAdminSettings();
@@ -86,28 +83,6 @@
 <div class="space-y-4">
 	<PageLoadGate loading={pageLoading} error={loadError} onretry={() => void reloadSettings()}>
 		<form class="card max-w-lg space-y-4" onsubmit={submit}>
-			<div class="flex items-center justify-between gap-4">
-				<div>
-					<p class="text-sm font-medium">{$_('admin.system.registration.title')}</p>
-					<p class="text-xs" style:color="var(--text-muted)">
-						{$_('admin.system.registration.hint')}
-					</p>
-				</div>
-				<button
-					type="button"
-					role="switch"
-					aria-label={$_('admin.system.registration.title')}
-					aria-checked={registrationEnabled}
-					class="relative h-6 w-11 shrink-0 rounded-full transition-colors"
-					style:background-color={registrationEnabled ? 'var(--primary)' : 'var(--border)'}
-					onclick={() => (registrationEnabled = !registrationEnabled)}
-				>
-					<span
-						class="absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform"
-						class:translate-x-5={registrationEnabled}
-					></span>
-				</button>
-			</div>
 			<div>
 				<label class="mb-1.5 block text-sm font-medium" for="external"
 					>{$_('admin.system.external_url')}</label

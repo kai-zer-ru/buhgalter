@@ -12,6 +12,7 @@
 		| '/settings/import'
 		| '/settings/transaction-templates'
 		| '/admin'
+		| '/admin/features'
 		| '/admin/users'
 		| '/admin/backups'
 		| '/admin/diagnostics'

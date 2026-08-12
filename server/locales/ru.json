@@ -3,6 +3,8 @@
   "FORBIDDEN": "Недостаточно прав",
   "INVALID_CREDENTIALS": "Неверный логин или пароль",
   "REGISTRATION_DISABLED": "Регистрация отключена",
+  "FEATURE_DISABLED": "Модуль отключён администратором",
+  "ERR_FEATURES_EMPTY": "Укажите хотя бы один флаг",
   "RATE_LIMITED": "Слишком много попыток входа",
   "VALIDATION_ERROR": "Ошибка валидации",
   "PASSWORDS_MISMATCH": "Пароли не совпадают",

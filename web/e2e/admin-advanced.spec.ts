@@ -69,9 +69,8 @@ test('admin: delete test user', async ({ page }) => {
 });
 
 test('registration: pending user redirected to login', async ({ page }) => {
-	await apiJSON(page, 'PUT', '/api/v1/admin/settings', {
-		registration_enabled: true,
-		external_url: ''
+	await apiJSON(page, 'PUT', '/api/v1/admin/features', {
+		registration: true
 	});
 
 	await deleteAdminUserByLogin(page, 'e2epending');
@@ -91,9 +90,8 @@ test('registration: pending user redirected to login', async ({ page }) => {
 
 test('admin: pending user banner opens moderation modal', async ({ page }) => {
 	await restoreAdminSession(page);
-	await apiJSON(page, 'PUT', '/api/v1/admin/settings', {
-		registration_enabled: true,
-		external_url: ''
+	await apiJSON(page, 'PUT', '/api/v1/admin/features', {
+		registration: true
 	});
 
 	await deleteAdminUserByLogin(page, 'e2emoderate');

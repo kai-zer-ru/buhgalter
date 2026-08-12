@@ -8,6 +8,7 @@ import (
 
 	"github.com/kai-zer-ru/buhgalter/internal/budget"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/features"
 	"github.com/kai-zer-ru/buhgalter/internal/notify"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
 )
@@ -19,6 +20,16 @@ func CheckThresholdsAfterTx(ctx context.Context, db *sql.DB, userID string) {
 
 // CheckThresholdsForUser sends budget_threshold notifications for crossed thresholds.
 func CheckThresholdsForUser(ctx context.Context, db *sql.DB, userID string) error {
+	if enabled, err := features.IsEnabled(ctx, db, features.Budget); err != nil {
+		return err
+	} else if !enabled {
+		return nil
+	}
+	if enabled, err := features.IsEnabled(ctx, db, features.Notifications); err != nil {
+		return err
+	} else if !enabled {
+		return nil
+	}
 	q := sqlcdb.New(db)
 	if err := q.EnsureNotificationSettings(ctx, userID); err != nil {
 		return err

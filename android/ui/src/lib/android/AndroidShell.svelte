@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { resolve } from '$app/paths';
 	import { _ } from 'svelte-i18n';
@@ -10,6 +11,7 @@
 	import { initAndroidBackHandler } from '$lib/android/back-handler';
 	import { shellHeader } from '$lib/android/shell-header';
 	import { user } from '$lib/stores/auth';
+	import { featureFlags, featureRequiredForPath, isFeatureEnabled } from '$lib/features';
 	import {
 		androidHomeNavItem,
 		androidMainNavItemsAfterHome,
@@ -48,7 +50,10 @@
 	const path = $derived($page.url.pathname);
 	const chrome = $derived($shellHeader);
 	const homeNav = $derived(androidHomeNavItem());
-	const mainNav = $derived(androidMainNavItemsAfterHome());
+	const mainNav = $derived.by(() => {
+		void $featureFlags;
+		return androidMainNavItemsAfterHome();
+	});
 	const settingsHref = resolve('/settings');
 	const adminHref = resolve('/admin');
 	const draftCount = $derived.by(() => {
@@ -56,6 +61,15 @@
 		void $user?.id;
 		if (!getCurrentInterceptSettings().enabled) return 0;
 		return countInterceptDrafts($user?.id);
+	});
+
+	$effect(() => {
+		if (!$user || !$featureFlags) return;
+		if (path === '/feature-disabled') return;
+		const required = featureRequiredForPath(path);
+		if (required && !isFeatureEnabled(required, $featureFlags)) {
+			void goto(resolve('/feature-disabled'), { replaceState: true });
+		}
 	});
 
 	function closeDrawer() {

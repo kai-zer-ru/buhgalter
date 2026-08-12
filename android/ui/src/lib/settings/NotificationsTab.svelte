@@ -15,6 +15,7 @@
 	import Select from '$lib/components/Select.svelte';
 	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
+	import { featureFlags, isFeatureEnabled } from '$lib/features';
 	import { toast } from '$lib/toast';
 	import { reportPageLoadFailure } from '$lib/page-load';
 	import { requireOnline } from '$lib/offline/require-online';
@@ -149,15 +150,19 @@
 	}
 
 	function notificationTriggerRows(): Array<{ key: NotificationTriggerKey; hintKey: string }> {
-		const rows: Array<{ key: NotificationTriggerKey; hintKey: string }> = [
-			{ key: 'debt', hintKey: 'debt_hint' },
-			{ key: 'credit', hintKey: 'credit_hint' },
-			{ key: 'subscription', hintKey: 'subscription_hint' },
-			{ key: 'planned', hintKey: 'planned_hint' },
-			{ key: 'negativeBalance', hintKey: 'negativeBalance_hint' },
-			{ key: 'budget', hintKey: 'budget_hint' },
-			{ key: 'autoTopupDisabled', hintKey: 'autoTopupDisabled_hint' }
-		];
+		const flags = $featureFlags;
+		const rows: Array<{ key: NotificationTriggerKey; hintKey: string }> = [];
+		if (isFeatureEnabled('debts', flags)) rows.push({ key: 'debt', hintKey: 'debt_hint' });
+		if (isFeatureEnabled('credits', flags)) rows.push({ key: 'credit', hintKey: 'credit_hint' });
+		if (isFeatureEnabled('subscriptions', flags)) {
+			rows.push({ key: 'subscription', hintKey: 'subscription_hint' });
+		}
+		rows.push({ key: 'planned', hintKey: 'planned_hint' });
+		rows.push({ key: 'negativeBalance', hintKey: 'negativeBalance_hint' });
+		if (isFeatureEnabled('budget', flags)) rows.push({ key: 'budget', hintKey: 'budget_hint' });
+		if (isFeatureEnabled('balance_maintenance', flags)) {
+			rows.push({ key: 'autoTopupDisabled', hintKey: 'autoTopupDisabled_hint' });
+		}
 		if ($user?.is_admin) {
 			rows.push({ key: 'passwordReset', hintKey: 'passwordReset_hint' });
 		}

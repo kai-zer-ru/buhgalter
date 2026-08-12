@@ -11,27 +11,21 @@ import (
 
 const completeSetup = `-- name: CompleteSetup :exec
 UPDATE system_settings
-SET is_configured = 1, external_url = ?, registration_enabled = ?, updated_at = datetime('now')
+SET is_configured = 1, external_url = ?, updated_at = datetime('now')
 WHERE id = 1
 `
 
-type CompleteSetupParams struct {
-	ExternalUrl         *string `json:"external_url"`
-	RegistrationEnabled int64   `json:"registration_enabled"`
-}
-
-func (q *Queries) CompleteSetup(ctx context.Context, arg CompleteSetupParams) error {
-	_, err := q.db.ExecContext(ctx, completeSetup, arg.ExternalUrl, arg.RegistrationEnabled)
+func (q *Queries) CompleteSetup(ctx context.Context, externalUrl *string) error {
+	_, err := q.db.ExecContext(ctx, completeSetup, externalUrl)
 	return err
 }
 
 const getAdminSettings = `-- name: GetAdminSettings :one
-SELECT registration_enabled, external_url, notification_secret_key
+SELECT external_url, notification_secret_key
 FROM system_settings WHERE id = 1
 `
 
 type GetAdminSettingsRow struct {
-	RegistrationEnabled   int64   `json:"registration_enabled"`
 	ExternalUrl           *string `json:"external_url"`
 	NotificationSecretKey string  `json:"notification_secret_key"`
 }
@@ -39,7 +33,7 @@ type GetAdminSettingsRow struct {
 func (q *Queries) GetAdminSettings(ctx context.Context) (GetAdminSettingsRow, error) {
 	row := q.db.QueryRowContext(ctx, getAdminSettings)
 	var i GetAdminSettingsRow
-	err := row.Scan(&i.RegistrationEnabled, &i.ExternalUrl, &i.NotificationSecretKey)
+	err := row.Scan(&i.ExternalUrl, &i.NotificationSecretKey)
 	return i, err
 }
 
@@ -131,31 +125,15 @@ func (q *Queries) GetNotificationSecretKey(ctx context.Context) (string, error) 
 	return notification_secret_key, err
 }
 
-const getRegistrationEnabled = `-- name: GetRegistrationEnabled :one
-SELECT registration_enabled FROM system_settings WHERE id = 1
-`
-
-func (q *Queries) GetRegistrationEnabled(ctx context.Context) (int64, error) {
-	row := q.db.QueryRowContext(ctx, getRegistrationEnabled)
-	var registration_enabled int64
-	err := row.Scan(&registration_enabled)
-	return registration_enabled, err
-}
-
 const getSetupStatus = `-- name: GetSetupStatus :one
-SELECT registration_enabled, external_url FROM system_settings WHERE id = 1
+SELECT external_url FROM system_settings WHERE id = 1
 `
 
-type GetSetupStatusRow struct {
-	RegistrationEnabled int64   `json:"registration_enabled"`
-	ExternalUrl         *string `json:"external_url"`
-}
-
-func (q *Queries) GetSetupStatus(ctx context.Context) (GetSetupStatusRow, error) {
+func (q *Queries) GetSetupStatus(ctx context.Context) (*string, error) {
 	row := q.db.QueryRowContext(ctx, getSetupStatus)
-	var i GetSetupStatusRow
-	err := row.Scan(&i.RegistrationEnabled, &i.ExternalUrl)
-	return i, err
+	var external_url *string
+	err := row.Scan(&external_url)
+	return external_url, err
 }
 
 const setAppVersionFirst = `-- name: SetAppVersionFirst :exec
@@ -187,17 +165,12 @@ func (q *Queries) SetAppVersionUpgrade(ctx context.Context, arg SetAppVersionUpg
 
 const updateAdminSettings = `-- name: UpdateAdminSettings :exec
 UPDATE system_settings
-SET registration_enabled = ?, external_url = ?, updated_at = datetime('now')
+SET external_url = ?, updated_at = datetime('now')
 WHERE id = 1
 `
 
-type UpdateAdminSettingsParams struct {
-	RegistrationEnabled int64   `json:"registration_enabled"`
-	ExternalUrl         *string `json:"external_url"`
-}
-
-func (q *Queries) UpdateAdminSettings(ctx context.Context, arg UpdateAdminSettingsParams) error {
-	_, err := q.db.ExecContext(ctx, updateAdminSettings, arg.RegistrationEnabled, arg.ExternalUrl)
+func (q *Queries) UpdateAdminSettings(ctx context.Context, externalUrl *string) error {
+	_, err := q.db.ExecContext(ctx, updateAdminSettings, externalUrl)
 	return err
 }
 

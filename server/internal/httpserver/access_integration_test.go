@@ -197,7 +197,7 @@ func TestExternalAccessAllowedWithConfiguredExternalURL(t *testing.T) {
 	env := setupConfigured(t)
 	env.login(t, "admin", "secret123")
 
-	body := []byte(`{"registration_enabled":false,"external_url":"https://buhgalter.example.com"}`)
+	body := []byte(`{"external_url":"https://buhgalter.example.com"}`)
 	resp, err := env.authedRequest(http.MethodPut, "/api/v1/admin/settings", bytes.NewReader(body))
 	if err != nil {
 		t.Fatal(err)
@@ -226,7 +226,7 @@ func TestHealthReturnsConfiguredExternalURL(t *testing.T) {
 	env := setupConfigured(t)
 	env.login(t, "admin", "secret123")
 
-	body := []byte(`{"registration_enabled":false,"external_url":"https://buhgalter-demo.example.com"}`)
+	body := []byte(`{"external_url":"https://buhgalter-demo.example.com"}`)
 	resp, err := env.authedRequest(http.MethodPut, "/api/v1/admin/settings", bytes.NewReader(body))
 	if err != nil {
 		t.Fatal(err)

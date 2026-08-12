@@ -43,6 +43,7 @@
 	import AccountAutoTopupDialog from '$lib/components/AccountAutoTopupDialog.svelte';
 	import { isCreditCard } from '$lib/credit-card';
 	import { saveTransactionAsTemplate } from '$lib/save-transaction-template';
+	import { featureFlags, isFeatureEnabled } from '$lib/features';
 	import {
 		promptArchiveAccount,
 		executeArchiveAccount,
@@ -430,7 +431,11 @@
 			label: $_('accounts.action.edit'),
 			onclick: () => (editing = true)
 		});
-		if (acc.status === 'active' && isAutoTopupEligible(acc)) {
+		if (
+			acc.status === 'active' &&
+			isFeatureEnabled('balance_maintenance', $featureFlags) &&
+			isAutoTopupEligible(acc)
+		) {
 			actions.push({
 				icon: 'transfer',
 				label: $_('accounts.action.autoTopup'),
@@ -676,11 +681,13 @@
 											/>
 										</p>
 									{/if}
-									{#if acc.type === 'bank'}
+									{#if acc.type === 'bank' && isFeatureEnabled('balance_maintenance', $featureFlags)}
 										{@const autoTopupSource = resolveAutoTopupSourceName(acc, allAccounts)}
 										{#if autoTopupSource}
 											<p class="mt-1 text-sm" style:color="var(--text-muted)">
-												{$_('accounts.autoTopup.status', { values: { source: autoTopupSource } })}
+												{$_('accounts.autoTopup.status', {
+													values: { source: autoTopupSource }
+												})}
 											</p>
 										{/if}
 									{/if}

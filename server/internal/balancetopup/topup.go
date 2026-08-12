@@ -7,6 +7,7 @@ import (
 	"time"
 
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/features"
 	"github.com/kai-zer-ru/buhgalter/internal/notify"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
 	"github.com/kai-zer-ru/buhgalter/internal/transaction"
@@ -50,6 +51,11 @@ func CheckAllForUser(ctx context.Context, db *sql.DB, userID string, asOf time.T
 // ApplyIfNeeded creates a transfer when the beneficiary balance is below the configured threshold.
 // asOf stamps the transfer's transaction_date; zero or future falls back to now.
 func ApplyIfNeeded(ctx context.Context, db *sql.DB, userID, beneficiaryID string, asOf time.Time) (bool, error) {
+	if enabled, err := features.IsEnabled(ctx, db, features.BalanceMaintenance); err != nil {
+		return false, err
+	} else if !enabled {
+		return false, nil
+	}
 	beneficiary, err := loadAccount(ctx, db, userID, beneficiaryID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil

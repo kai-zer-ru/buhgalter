@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/features"
 )
 
 // BudgetThresholdChecker is wired from main to avoid an import cycle (budget -> notify -> budget).
@@ -13,6 +14,9 @@ var BudgetThresholdChecker func(ctx context.Context, db *sql.DB, userID string) 
 
 // Deliver sends a notification on all enabled channels with deduplication.
 func Deliver(ctx context.Context, db *sql.DB, settings sqlcdb.NotificationSetting, userID, triggerType, entityID, dedupDate, text string) {
+	if enabled, err := features.IsEnabled(ctx, db, features.Notifications); err != nil || !enabled {
+		return
+	}
 	w := &Worker{DB: db, Logger: slog.Default()}
 	w.sendByChannels(ctx, sqlcdb.New(db), settings, userID, triggerType, entityID, dedupDate, text)
 }

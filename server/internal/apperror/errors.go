@@ -13,6 +13,7 @@ const (
 	Forbidden              = "FORBIDDEN"
 	InvalidCredentials     = "INVALID_CREDENTIALS"
 	RegistrationDisabled   = "REGISTRATION_DISABLED"
+	FeatureDisabled        = "FEATURE_DISABLED"
 	RateLimited            = "RATE_LIMITED"
 	ValidationError        = "VALIDATION_ERROR"
 	PasswordsMismatch      = "PASSWORDS_MISMATCH"

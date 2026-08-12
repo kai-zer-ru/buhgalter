@@ -40,7 +40,7 @@ TTL — страховка; при любой мутации кеш пользо
 | `POST .../preview`, `GET .../preview` | Разовые расчёты (в т.ч. `GET /budgets/spent-preview`) |
 | `GET /import/jobs/{id}` | Статус меняется |
 
-На **клиенте** (ref-cache) дополнительно не кладутся в SWR: `GET /setup/status` (флаг регистрации на /login — иначе pre-mutation snapshot). `GET /credits/{id}` (тело с графиком) **кешируется** — нужен офлайн-просмотр карточки кредита в Android. Серверный кеш `GET /setup/status` остаётся; сброс при `PUT /admin/settings`.
+На **клиенте** (ref-cache) дополнительно не кладутся в SWR: `GET /setup/status` (флаг регистрации на /login — иначе pre-mutation snapshot). `GET /credits/{id}` (тело с графиком) **кешируется** — нужен офлайн-просмотр карточки кредита в Android. Серверный кеш `GET /setup/status` остаётся; сброс при `PUT /admin/settings` и `PUT /admin/features`.
 
 ## Инвалидация
 

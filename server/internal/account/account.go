@@ -12,6 +12,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/accountbalance"
 	"github.com/kai-zer-ru/buhgalter/internal/bank"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/features"
 	"github.com/kai-zer-ru/buhgalter/internal/money"
 )
 
@@ -634,6 +635,11 @@ func applyAutoTopupSettings(ctx context.Context, db *sql.DB, userID, accountID, 
 	var threshold, target *int64
 	var sourceID *string
 	if in.Enabled {
+		if ok, err := features.IsEnabled(ctx, db, features.BalanceMaintenance); err != nil {
+			return err
+		} else if !ok {
+			return ErrAutoTopupNotAllowed
+		}
 		if err := validateAutoTopupAmounts(in.Threshold, in.Target); err != nil {
 			return err
 		}

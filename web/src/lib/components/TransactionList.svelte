@@ -16,6 +16,7 @@
 	} from '$lib/transaction-display';
 	import TransactionCategoryCell from '$lib/components/TransactionCategoryCell.svelte';
 	import TransactionMerchantTags from '$lib/components/TransactionMerchantTags.svelte';
+	import { featureFlags, isFeatureEnabled } from '$lib/features';
 
 	let {
 		transactions,
@@ -57,15 +58,19 @@
 		descriptionExtra?: Snippet<[Transaction]>;
 	} = $props();
 
+	const templatesEnabled = $derived(isFeatureEnabled('transaction_templates', $featureFlags));
+	const recurringEnabled = $derived(isFeatureEnabled('recurring', $featureFlags));
+	const subscriptionsEnabled = $derived(isFeatureEnabled('subscriptions', $featureFlags));
+
 	const showActions = $derived(
 		Boolean(
 			(showDelete && ondelete) ||
 			(showEdit && onedit) ||
 			onrepeat ||
-			onsaveAsTemplate ||
-			onmakeRecurring ||
-			onmakeSubscription ||
-			onattachSubscription
+			(onsaveAsTemplate && templatesEnabled) ||
+			(onmakeRecurring && recurringEnabled) ||
+			(onmakeSubscription && subscriptionsEnabled) ||
+			(onattachSubscription && subscriptionsEnabled)
 		)
 	);
 
@@ -90,28 +95,28 @@
 				onclick: () => onrepeat(tx)
 			});
 		}
-		if (onsaveAsTemplate && canRepeatTransaction(tx)) {
+		if (templatesEnabled && onsaveAsTemplate && canRepeatTransaction(tx)) {
 			actions.push({
 				icon: 'save',
 				label: $_('templates.saveAs'),
 				onclick: () => onsaveAsTemplate(tx)
 			});
 		}
-		if (canMakeRecurring(tx)) {
+		if (recurringEnabled && canMakeRecurring(tx)) {
 			actions.push({
 				icon: 'repeat',
 				label: $_('recurring.fromTransaction'),
 				onclick: () => onmakeRecurring?.(tx)
 			});
 		}
-		if (canMakeSubscription(tx)) {
+		if (subscriptionsEnabled && canMakeSubscription(tx)) {
 			actions.push({
 				icon: 'pay',
 				label: $_('subscriptions.fromTransaction'),
 				onclick: () => onmakeSubscription?.(tx)
 			});
 		}
-		if (canAttachSubscription(tx)) {
+		if (subscriptionsEnabled && canAttachSubscription(tx)) {
 			actions.push({
 				icon: 'add',
 				label: $_('subscriptions.attachToSubscription'),

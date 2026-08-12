@@ -12,6 +12,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/features"
 	. "github.com/kai-zer-ru/buhgalter/internal/notify"
 	"github.com/kai-zer-ru/buhgalter/internal/settingscache"
 )
@@ -311,10 +312,11 @@ func TestGetSettingsHidesUserRegistrationWhenDisabled(t *testing.T) {
 		t.Fatal("expected trigger_user_registration to be false when registration is disabled")
 	}
 
-	_, err = sqlDB.ExecContext(ctx, `UPDATE system_settings SET registration_enabled = 1 WHERE id = 1`)
+	_, err = sqlDB.ExecContext(ctx, `INSERT INTO feature_flags (key, enabled, updated_at) VALUES ('registration', 1, datetime('now')) ON CONFLICT(key) DO UPDATE SET enabled = 1`)
 	if err != nil {
 		t.Fatal(err)
 	}
+	features.Invalidate()
 	settings, err = GetSettings(ctx, sqlDB, adminID)
 	if err != nil {
 		t.Fatal(err)

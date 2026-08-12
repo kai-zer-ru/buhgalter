@@ -9,6 +9,12 @@
 	import { loadUser, logout, user, hasRecentSession, clearSessionHint } from '$lib/stores/auth';
 	import { isPublicAppRoute, sessionExpiredTick } from '$lib/auth/session-expired';
 	import { invalidateApiCache } from '$lib/api/cache';
+	import {
+		clearFeatureFlags,
+		featureFlags,
+		featureRequiredForPath,
+		isFeatureEnabled
+	} from '$lib/features';
 	import { clearRefCache, setRefCacheUserId } from '$lib/ref-cache';
 	import { registerServiceWorker } from '$lib/pwa';
 	import { initTheme, syncThemeFromUser } from '$lib/stores/theme';
@@ -65,6 +71,7 @@
 		if ($sessionExpiredTick === 0) return;
 		clearSessionHint();
 		clearRefCache();
+		clearFeatureFlags();
 		setRefCacheUserId(null);
 		user.set(null);
 		invalidateApiCache();
@@ -81,14 +88,24 @@
 		}
 	});
 
+	$effect(() => {
+		if (!ready || bootError || !$user || !$featureFlags) return;
+		if (path === '/feature-disabled') return;
+		const required = featureRequiredForPath(path);
+		if (required && !isFeatureEnabled(required, $featureFlags)) {
+			void goto(resolve('/feature-disabled'), { replaceState: true });
+		}
+	});
+
 	type NavItem = {
 		href: string;
 		labelKey: string;
 		mobileOnly?: boolean;
+		feature?: string;
 		isActive: (pathname: string, search: URLSearchParams) => boolean;
 	};
 
-	const flatNavItems: NavItem[] = [
+	const flatNavItemsAll: NavItem[] = [
 		{
 			href: resolve('/'),
 			labelKey: 'nav.home',
@@ -102,16 +119,18 @@
 		{
 			href: resolve('/budget'),
 			labelKey: 'nav.budget',
+			feature: 'budget',
 			isActive: (p) => p.startsWith('/budget')
 		},
 		{
 			href: resolve('/stats'),
 			labelKey: 'nav.stats',
+			feature: 'stats',
 			isActive: (p) => p.startsWith('/stats')
 		}
 	];
 
-	const otherNavItems: NavDropdownItem[] = [
+	const otherNavItemsAll: (NavDropdownItem & { feature?: string })[] = [
 		{
 			path: '/accounts',
 			labelKey: 'nav.accounts',
@@ -120,11 +139,13 @@
 		{
 			path: '/debts',
 			labelKey: 'nav.debts',
+			feature: 'debts',
 			isActive: (p) => p.startsWith('/debts') || p.startsWith('/debtors')
 		},
 		{
 			path: '/credits',
 			labelKey: 'nav.credits',
+			feature: 'credits',
 			isActive: (p) => p.startsWith('/credits')
 		},
 		{
@@ -135,26 +156,30 @@
 		{
 			path: '/merchants',
 			labelKey: 'nav.merchants',
+			feature: 'merchants_tags',
 			isActive: (p) => p.startsWith('/merchants')
 		},
 		{
 			path: '/tags',
 			labelKey: 'nav.tags',
+			feature: 'merchants_tags',
 			isActive: (p) => p.startsWith('/tags')
 		},
 		{
 			path: '/recurring-operations',
 			labelKey: 'nav.recurring',
+			feature: 'recurring',
 			isActive: (p) => p.startsWith('/recurring-operations')
 		},
 		{
 			path: '/subscriptions',
 			labelKey: 'nav.subscriptions',
+			feature: 'subscriptions',
 			isActive: (p) => p.startsWith('/subscriptions')
 		}
 	];
 
-	const settingsNavItems: NavDropdownItem[] = [
+	const settingsNavItemsAll: (NavDropdownItem & { feature?: string })[] = [
 		{
 			path: '/settings',
 			labelKey: 'settings.tab.profile',
@@ -173,25 +198,47 @@
 		{
 			path: '/settings/notifications',
 			labelKey: 'settings.tab.notifications',
+			feature: 'notifications',
 			isActive: (p) => p === '/settings/notifications'
 		},
 		{
 			path: '/settings/import',
 			labelKey: 'settings.tab.import',
+			feature: 'import_export',
 			isActive: (p) => p === '/settings/import'
 		},
 		{
 			path: '/settings/transaction-templates',
 			labelKey: 'settings.tab.templates',
+			feature: 'transaction_templates',
 			isActive: (p) => p === '/settings/transaction-templates'
 		}
 	];
+
+	const flatNavItems = $derived(
+		flatNavItemsAll.filter((item) => !item.feature || isFeatureEnabled(item.feature, $featureFlags))
+	);
+	const otherNavItems = $derived(
+		otherNavItemsAll.filter(
+			(item) => !item.feature || isFeatureEnabled(item.feature, $featureFlags)
+		)
+	);
+	const settingsNavItems = $derived(
+		settingsNavItemsAll.filter(
+			(item) => !item.feature || isFeatureEnabled(item.feature, $featureFlags)
+		)
+	);
 
 	const adminNavItems: NavDropdownItem[] = [
 		{
 			path: '/admin',
 			labelKey: 'admin.tab.system',
 			isActive: (p) => p === '/admin'
+		},
+		{
+			path: '/admin/features',
+			labelKey: 'admin.tab.features',
+			isActive: (p) => p.startsWith('/admin/features')
 		},
 		{
 			path: '/admin/users',

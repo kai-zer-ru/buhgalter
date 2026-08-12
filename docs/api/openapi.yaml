@@ -285,6 +285,31 @@ paths:
       responses:
         '200':
           description: Результат проверки
+  /features:
+    get:
+      summary: Снимок флагов модулей
+      description: |
+        Инстанс-флаги опциональных модулей для UI (навигация, роуты).
+        Требуется авторизация. При выключенном модуле соответствующий API отвечает 404 `FEATURE_DISABLED`.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Карта key → enabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeatureFlagsSnapshot'
+        '401':
+          description: Не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                unauthorized:
+                  $ref: '#/components/examples/ApiErrorUnauthorized'
   /auth/me:
     get:
       summary: Текущий пользователь
@@ -551,6 +576,9 @@ paths:
   /admin/settings:
     get:
       summary: Системные настройки
+      description: |
+        Внешний URL и признак заданного ключа уведомлений.
+        Самостоятельная регистрация и модули — `GET/PUT /admin/features` (флаг `registration`).
       security:
         - sessionCookie: []
       responses:
@@ -586,6 +614,53 @@ paths:
               examples:
                 external_url:
                   $ref: '#/components/examples/ApiErrorExternalURL'
+  /admin/features:
+    get:
+      summary: Каталог флагов модулей
+      description: Список известных флагов с метаданными и текущим состоянием (только admin).
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Каталог
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminFeatureFlag'
+    put:
+      summary: Обновить флаги модулей
+      description: |
+        Частичная или полная запись overrides. Неизвестный ключ — 400.
+        При выключенном модуле API модуля отвечает 404 с кодом `FEATURE_DISABLED`.
+        Значение `registration` также отдаётся публично в `GET /setup/status` как `registration_enabled`.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminFeatureFlagsUpdate'
+      responses:
+        '200':
+          description: Актуальный снимок флагов
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeatureFlagsSnapshot'
+        '400':
+          description: Неизвестный ключ или пустое тело
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                unknown_key:
+                  $ref: '#/components/examples/ApiErrorUnknownFeatureFlag'
+                empty:
+                  $ref: '#/components/examples/ApiErrorFeaturesEmpty'
   /admin/settings/notification-secret:
     put:
       summary: Обновить ключ шифрования уведомлений
@@ -3393,6 +3468,25 @@ components:
         error:
           code: VALIDATION_ERROR
           message: Некорректные параметры запроса
+    ApiErrorUnauthorized:
+      summary: Не авторизован
+      value:
+        error:
+          code: UNAUTHORIZED
+          message: Требуется авторизация
+    ApiErrorUnknownFeatureFlag:
+      summary: Неизвестный ключ флага модуля
+      value:
+        error:
+          code: VALIDATION_ERROR
+          message: unknown feature flag
+          field: features
+    ApiErrorFeaturesEmpty:
+      summary: Пустое тело обновления флагов
+      value:
+        error:
+          code: VALIDATION_ERROR
+          message: Укажите хотя бы один флаг
     ApiErrorPasswordUnchanged:
       summary: Новый пароль совпадает с текущим
       value:
@@ -3620,9 +3714,9 @@ components:
               type: string
               description: |
                 Код ошибки: UNAUTHORIZED, FORBIDDEN, INVALID_CREDENTIALS, REGISTRATION_DISABLED,
-                USER_PENDING_MODERATION, USER_BANNED, USER_STATUS_INVALID, USER_STATUS_TRANSITION,
-                RATE_LIMITED, VALIDATION_ERROR, INTERNAL_ERROR, NOT_FOUND, CONFLICT,
-                ALREADY_CONFIGURED, SERVICE_UNAVAILABLE.
+                FEATURE_DISABLED, USER_PENDING_MODERATION, USER_BANNED, USER_STATUS_INVALID,
+                USER_STATUS_TRANSITION, RATE_LIMITED, VALIDATION_ERROR, INTERNAL_ERROR, NOT_FOUND,
+                CONFLICT, ALREADY_CONFIGURED, SERVICE_UNAVAILABLE.
                 Для смены пароля и большинства 400 — `VALIDATION_ERROR`; текст в `message`
                 локализуется по ключам (PASSWORDS_MISMATCH, ERR_CHANNEL, ERR_SYSTEM_CATEGORY_PLANNED,
                 ERR_TX_TYPE_CHANGE, ERR_CREDIT_INVALID_PAYMENT, ERR_CREDIT_INVALID_TERM, ERR_CREDIT_INVALID_MORTGAGE, …).
@@ -3686,10 +3780,8 @@ components:
           type: string
     AdminSettings:
       type: object
-      required: [registration_enabled, external_url, secret_key_set]
+      required: [external_url, secret_key_set]
       properties:
-        registration_enabled:
-          type: boolean
         external_url:
           type: string
           nullable: true
@@ -3698,12 +3790,46 @@ components:
           description: true, если `notification_secret_key` задан в БД
     AdminSettingsUpdate:
       type: object
-      required: [registration_enabled, external_url]
+      required: [external_url]
       properties:
-        registration_enabled:
-          type: boolean
         external_url:
           type: string
+    FeatureFlagsSnapshot:
+      type: object
+      description: |
+        Снимок инстанс-флагов модулей (`key` → enabled).
+        Ключи: registration, debts, credits, budget, subscriptions, recurring,
+        balance_maintenance, import_export, stats, notifications, merchants_tags,
+        transaction_templates.
+      additionalProperties:
+        type: boolean
+      example:
+        budget: true
+        registration: false
+    AdminFeatureFlag:
+      type: object
+      required: [key, enabled, title_key, description_key, default_enabled]
+      properties:
+        key:
+          type: string
+        enabled:
+          type: boolean
+        title_key:
+          type: string
+          description: Ключ i18n для названия модуля
+        description_key:
+          type: string
+          description: Ключ i18n для описания
+        default_enabled:
+          type: boolean
+    AdminFeatureFlagsUpdate:
+      type: object
+      description: Частичный или полный набор overrides (`key` → enabled). Неизвестный ключ — 400.
+      additionalProperties:
+        type: boolean
+      example:
+        budget: false
+        registration: true
     AdminNotificationSecretKeyUpdate:
       type: object
       required: [notification_secret_key]

@@ -23,6 +23,7 @@
 	import TransferForm from '$lib/components/TransferForm.svelte';
 	import { isAutoTopupEligible } from '$lib/accounts/auto-topup';
 	import AccountAutoTopupDialog from '$lib/components/AccountAutoTopupDialog.svelte';
+	import { featureFlags, isFeatureEnabled } from '$lib/features';
 	import {
 		groupAccountsByType,
 		accountGroupKind,
@@ -286,7 +287,11 @@
 			disabled: busy || (editingId !== null && editingId !== acc.id),
 			onclick: () => startEdit(acc)
 		});
-		if (filter === 'active' && isAutoTopupEligible(acc)) {
+		if (
+			filter === 'active' &&
+			isFeatureEnabled('balance_maintenance', $featureFlags) &&
+			isAutoTopupEligible(acc)
+		) {
 			actions.push({
 				icon: 'transfer',
 				label: $_('accounts.action.autoTopup'),

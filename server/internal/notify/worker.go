@@ -10,6 +10,7 @@ import (
 	"time"
 
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/features"
 	"github.com/kai-zer-ru/buhgalter/internal/settingscache"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
 )
@@ -55,6 +56,9 @@ func (w *Worker) loop() {
 
 func (w *Worker) run(now time.Time) {
 	ctx := context.Background()
+	if enabled, err := features.IsEnabled(ctx, w.DB, features.Notifications); err != nil || !enabled {
+		return
+	}
 	q := sqlcdb.New(w.DB)
 	users, err := q.ListUsersWithTimezone(ctx)
 	if err != nil {
@@ -195,6 +199,9 @@ func (w *Worker) processDebts(
 	if settings.TriggerDebt != 1 {
 		return nil
 	}
+	if enabled, err := features.IsEnabled(ctx, w.DB, features.Debts); err != nil || !enabled {
+		return err
+	}
 	rows, err := q.ListActiveDebtsByUser(ctx, userID)
 	if err != nil {
 		return err
@@ -301,6 +308,9 @@ func (w *Worker) processCreditPayments(
 	if settings.TriggerCredit != 1 {
 		return nil
 	}
+	if enabled, err := features.IsEnabled(ctx, w.DB, features.Credits); err != nil || !enabled {
+		return err
+	}
 	rows, err := q.CreditPaymentsUnappliedByUser(ctx, userID)
 	if err != nil {
 		return err
@@ -349,6 +359,9 @@ func (w *Worker) processSubscriptionCharges(
 ) error {
 	if settings.TriggerSubscription != 1 {
 		return nil
+	}
+	if enabled, err := features.IsEnabled(ctx, w.DB, features.Subscriptions); err != nil || !enabled {
+		return err
 	}
 	rows, err := q.ListActiveSubscriptionsForNotify(ctx, userID)
 	if err != nil {

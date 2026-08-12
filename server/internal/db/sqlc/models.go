@@ -178,6 +178,12 @@ type Debtor struct {
 	CreatedAt string `json:"created_at"`
 }
 
+type FeatureFlag struct {
+	Key       string `json:"key"`
+	Enabled   int64  `json:"enabled"`
+	UpdatedAt string `json:"updated_at"`
+}
+
 type ImportIdempotency struct {
 	ID             string `json:"id"`
 	UserID         string `json:"user_id"`
@@ -341,7 +347,6 @@ type SystemSetting struct {
 	NotificationSecretKey string  `json:"notification_secret_key"`
 	AppVersion            string  `json:"app_version"`
 	PreviousAppVersion    *string `json:"previous_app_version"`
-	RegistrationEnabled   int64   `json:"registration_enabled"`
 	BackupEnabled         int64   `json:"backup_enabled"`
 	BackupTime            *string `json:"backup_time"`
 	BackupRetention       int64   `json:"backup_retention"`

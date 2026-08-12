@@ -10,6 +10,7 @@ import {
 	writeRefCache
 } from '$lib/offline/ref-cache';
 import { isServerOfflineMode, markServerOffline } from '$lib/offline/server-connectivity';
+import { clearFeatureFlags, loadFeatureFlags } from '$lib/features';
 import { clearAuthToken, getAuthToken, getAuthTokenKind } from '$lib/platform/auth-token';
 import { clearAppLock } from '$lib/platform/app-lock';
 
@@ -153,6 +154,7 @@ export async function loadUser(): Promise<LoadUserResult> {
 			user.set(me);
 			persistLastUser(me);
 			markSessionHint();
+			await loadFeatureFlags();
 			return 'ok';
 		} catch (err) {
 			const retryable =
@@ -167,6 +169,7 @@ export async function loadUser(): Promise<LoadUserResult> {
 
 			if (err instanceof ApiError && err.status === 401) {
 				clearSessionHint();
+				clearFeatureFlags();
 				user.set(null);
 				return 'unauthorized';
 			}
@@ -201,6 +204,7 @@ export async function logout() {
 	await clearAuthToken();
 	await clearAppLock();
 	clearRefCache();
+	clearFeatureFlags();
 	clearLastUser();
 	user.set(null);
 }

@@ -46,6 +46,7 @@
 	import { refCachePathMatches } from '$lib/ref-cache-watch';
 	import { reportPageLoadFailure } from '$lib/page-load';
 	import { assignIfChanged } from '$lib/state-utils';
+	import { featureFlags, isFeatureEnabled } from '$lib/features';
 
 	const DASHBOARD_PATH = '/api/v1/dashboard';
 	const PAST_TX_PATH = '/api/v1/transactions?kind=manual&limit=10&page=1&sort=date_desc';
@@ -181,6 +182,10 @@
 	}
 
 	async function loadBudget(opts: { silent?: boolean } = {}) {
+		if (!isFeatureEnabled('budget')) {
+			budgetItems = [];
+			return;
+		}
 		try {
 			const res = await getBudgetSummary();
 			const next = res.items;
@@ -191,6 +196,10 @@
 	}
 
 	async function loadTemplates(opts: { silent?: boolean } = {}) {
+		if (!isFeatureEnabled('transaction_templates')) {
+			templates = [];
+			return;
+		}
 		try {
 			const next = await listTransactionTemplates();
 			templates = opts.silent ? assignIfChanged(templates, next) : next;
@@ -510,7 +519,7 @@
 				</div>
 			{/if}
 
-			{#if homeTemplates.length > 0}
+			{#if isFeatureEnabled('transaction_templates', $featureFlags) && homeTemplates.length > 0}
 				<details class="card">
 					<summary
 						class="flex cursor-pointer list-none items-center justify-between gap-2 p-4 font-medium"
@@ -546,7 +555,9 @@
 				</details>
 			{/if}
 
-			{@render budgetWidget()}
+			{#if isFeatureEnabled('budget', $featureFlags)}
+				{@render budgetWidget()}
+			{/if}
 
 			{#if dash.accounts.length === 0}
 				<EmptyStateCard message={$_('dashboard.accountsEmpty')} />
@@ -573,7 +584,7 @@
 													<MoneyDisplay value={acc.credit_limit_display} {currency} class="" />
 												</p>
 											{/if}
-											{#if acc.type === 'bank'}
+											{#if acc.type === 'bank' && isFeatureEnabled('balance_maintenance', $featureFlags)}
 												{@const autoTopupSource = resolveAutoTopupSourceName(acc, dash.accounts)}
 												{#if autoTopupSource}
 													<p class="mt-1 text-sm" style:color="var(--text-muted)">

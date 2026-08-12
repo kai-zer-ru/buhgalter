@@ -36,6 +36,7 @@
 	} from '$lib/dates';
 	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
 	import { formatMoneyForInput, toAPIAmount } from '$lib/money';
+	import { featureFlags, isFeatureEnabled } from '$lib/features';
 	import { reportPageLoadFailure } from '$lib/page-load';
 	import { toast } from '$lib/toast';
 	import {
@@ -333,7 +334,7 @@
 				onclick: () => beginEdit(item)
 			}
 		];
-		if (item.type === 'expense') {
+		if (item.type === 'expense' && isFeatureEnabled('subscriptions', $featureFlags)) {
 			actions.push({
 				icon: 'pay',
 				label: $_('subscriptions.fromRecurring'),

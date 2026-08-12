@@ -26,6 +26,7 @@
 	import { refCacheReady, refCacheUpdate, readRefCache } from '$lib/offline/ref-cache';
 	import { refCachePathMatches } from '$lib/offline/ref-cache-watch';
 	import { assignIfChanged } from '$lib/state-utils';
+	import { featureFlags, isFeatureEnabled } from '$lib/features';
 	import AccountIcon from '$lib/components/AccountIcon.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
 	import NewTransactionButtons from '$lib/components/NewTransactionButtons.svelte';
@@ -216,6 +217,10 @@
 	}
 
 	async function loadBudget(opts: { background?: boolean } = {}) {
+		if (!isFeatureEnabled('budget')) {
+			budgetItems = [];
+			return;
+		}
 		try {
 			const res = await getBudgetSummary();
 			const next = res.items;
@@ -226,6 +231,10 @@
 	}
 
 	async function loadTemplates(opts: { background?: boolean } = {}) {
+		if (!isFeatureEnabled('transaction_templates')) {
+			templates = [];
+			return;
+		}
 		try {
 			const next = await listTransactionTemplates();
 			templates = opts.background ? assignIfChanged(templates, next) : next;
@@ -562,7 +571,7 @@
 				</div>
 			{/if}
 
-			{#if homeTemplates.length > 0}
+			{#if isFeatureEnabled('transaction_templates', $featureFlags) && homeTemplates.length > 0}
 				<details class="card">
 					<summary
 						class="flex cursor-pointer list-none items-center justify-between gap-2 p-4 font-medium"
@@ -598,7 +607,9 @@
 				</details>
 			{/if}
 
-			{@render budgetWidget()}
+			{#if isFeatureEnabled('budget', $featureFlags)}
+				{@render budgetWidget()}
+			{/if}
 
 			{#if dash.accounts.length === 0}
 				<EmptyStateCard message={$_('dashboard.accountsEmpty')} />
@@ -625,7 +636,7 @@
 													<MoneyDisplay value={acc.credit_limit_display} {currency} class="" />
 												</p>
 											{/if}
-											{#if acc.type === 'bank'}
+											{#if acc.type === 'bank' && isFeatureEnabled('balance_maintenance', $featureFlags)}
 												{@const autoTopupSource = resolveAutoTopupSourceName(acc, dash.accounts)}
 												{#if autoTopupSource}
 													<p class="mt-1 text-sm" style:color="var(--text-muted)">

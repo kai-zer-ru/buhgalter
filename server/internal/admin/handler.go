@@ -30,14 +30,12 @@ type Handler struct {
 }
 
 type settingsResponse struct {
-	RegistrationEnabled bool   `json:"registration_enabled"`
-	ExternalURL         string `json:"external_url"`
-	SecretKeySet        bool   `json:"secret_key_set"`
+	ExternalURL  string `json:"external_url"`
+	SecretKeySet bool   `json:"secret_key_set"`
 }
 
 type settingsRequest struct {
-	RegistrationEnabled bool   `json:"registration_enabled"`
-	ExternalURL         string `json:"external_url"`
+	ExternalURL string `json:"external_url"`
 }
 
 type notificationSecretKeyRequest struct {
@@ -89,7 +87,7 @@ func (h *Handler) GetSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := settingsResponse{RegistrationEnabled: row.RegistrationEnabled == 1}
+	resp := settingsResponse{}
 	if row.ExternalUrl != nil {
 		resp.ExternalURL = *row.ExternalUrl
 	}
@@ -116,15 +114,8 @@ func (h *Handler) PutSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reg := int64(0)
-	if req.RegistrationEnabled {
-		reg = 1
-	}
 	q := sqlcdb.New(h.Store.DB())
-	if err := q.UpdateAdminSettings(r.Context(), sqlcdb.UpdateAdminSettingsParams{
-		RegistrationEnabled: reg,
-		ExternalUrl:         optionalExternalURL(externalURL),
-	}); err != nil {
+	if err := q.UpdateAdminSettings(r.Context(), optionalExternalURL(externalURL)); err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
@@ -132,15 +123,13 @@ func (h *Handler) PutSettings(w http.ResponseWriter, r *http.Request) {
 
 	ip := auth.ClientIP(r)
 	_ = h.Audit.Log("admin.settings.update", info.User.ID, info.User.Login, ip, map[string]any{
-		"registration_enabled": req.RegistrationEnabled,
-		"external_url_set":     externalURL != "",
+		"external_url_set": externalURL != "",
 	})
 
 	secretKey, _ := q.GetNotificationSecretKey(r.Context())
 	writeJSON(w, http.StatusOK, settingsResponse{
-		RegistrationEnabled: req.RegistrationEnabled,
-		ExternalURL:         externalURL,
-		SecretKeySet:        strings.TrimSpace(secretKey) != "",
+		ExternalURL:  externalURL,
+		SecretKeySet: strings.TrimSpace(secretKey) != "",
 	})
 }
 
@@ -181,7 +170,7 @@ func (h *Handler) PutNotificationSecretKey(w http.ResponseWriter, r *http.Reques
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
-	resp := settingsResponse{RegistrationEnabled: row.RegistrationEnabled == 1, SecretKeySet: strings.TrimSpace(row.NotificationSecretKey) != ""}
+	resp := settingsResponse{SecretKeySet: strings.TrimSpace(row.NotificationSecretKey) != ""}
 	if row.ExternalUrl != nil {
 		resp.ExternalURL = *row.ExternalUrl
 	}

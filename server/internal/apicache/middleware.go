@@ -119,8 +119,9 @@ func invalidateForRequest(cache *Cache, r *http.Request) {
 	}
 	if info, ok := auth.FromContext(r.Context()); ok {
 		cache.DeletePrefix("u:" + info.User.ID + ":")
-		if strings.HasPrefix(path, "/api/v1/admin/settings") {
+		if strings.HasPrefix(path, "/api/v1/admin/settings") || strings.HasPrefix(path, "/api/v1/admin/features") {
 			cache.DeletePrefix("g:setup:")
+			cache.Clear()
 		}
 	}
 }

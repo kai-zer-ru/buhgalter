@@ -18,12 +18,17 @@ CREATE TABLE system_settings (
     notification_secret_key TEXT NOT NULL DEFAULT '',
     app_version     TEXT NOT NULL DEFAULT '',
     previous_app_version TEXT,
-    registration_enabled INTEGER NOT NULL DEFAULT 0,
     backup_enabled  INTEGER NOT NULL DEFAULT 0,
     backup_time     TEXT DEFAULT '03:00',
     backup_retention INTEGER NOT NULL DEFAULT 7,
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE feature_flags (
+    key         TEXT PRIMARY KEY,
+    enabled     INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE users (

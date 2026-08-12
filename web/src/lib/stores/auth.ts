@@ -2,6 +2,7 @@ import { writable } from 'svelte/store';
 import type { User } from '$lib/api/client';
 import { ApiError, getMe, isTransientHttpError, logout as apiLogout } from '$lib/api/client';
 import { resetSessionExpiredSignal } from '$lib/auth/session-expired';
+import { clearFeatureFlags, loadFeatureFlags } from '$lib/features';
 import { clearRefCache, setRefCacheUserId } from '$lib/ref-cache';
 import { warmRefCache } from '$lib/ref-cache-warm';
 
@@ -55,6 +56,7 @@ export async function loadUser(): Promise<LoadUserResult> {
 			user.set(me);
 			setRefCacheUserId(me.id);
 			markSessionHint();
+			await loadFeatureFlags();
 			void warmRefCache();
 			return 'ok';
 		} catch (err) {
@@ -71,6 +73,7 @@ export async function loadUser(): Promise<LoadUserResult> {
 			if (err instanceof ApiError && err.status === 401) {
 				clearSessionHint();
 				clearRefCache();
+				clearFeatureFlags();
 				setRefCacheUserId(null);
 				user.set(null);
 				return 'unauthorized';
@@ -90,6 +93,7 @@ export async function logout() {
 	}
 	clearSessionHint();
 	clearRefCache();
+	clearFeatureFlags();
 	setRefCacheUserId(null);
 	user.set(null);
 }
