@@ -3,7 +3,66 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 версии — [SemVer](https://semver.org/lang/ru/).
 
-Подробные release notes для пользователей: [docs/release-notes-v1.4.1.md](docs/release-notes-v1.4.1.md).
+Подробные release notes для пользователей: [docs/release-notes-v1.5.0.md](docs/release-notes-v1.5.0.md).
+
+## [v1.5.0] — 2026-08-15
+
+> **ОБЯЗАТЕЛЬНО СДЕЛАЙТЕ БЕКАП!** Перед обновлением сохраните копию базы (`data/buhgalter.db`) и каталога `backups/`. Новые миграции: `043`–`050`.
+
+### Добавлено
+
+**Подписки** (web + Android)
+
+- Отдельная сущность и экран поверх периодических: сводка «в месяц» / «в год», ближайшие списания, системная категория «Подписки», поиск и привязка операций, «Сделать подпиской» из журнала
+- Уведомления `subscription_charge` / `subscription_days_before`
+- Плановый остаток (`forecast_balance`) учитывает активные подписки и периодические операции текущего месяца (TZ пользователя); подпись в UI различает плановые / подписки / оба (`has_planned_this_month`, `has_subscriptions_this_month`)
+- Документация: [subscriptions.md](docs/subscriptions.md)
+
+**Магазины и теги** (web + Android)
+
+- Справочник магазинов (`merchants`) и тегов (`tags`); на форме операции — выбор / создание по имени; фильтры списка `merchant_id`, `tag_id`
+- Описание операции по-прежнему в `description` (отдельное поле комментария не вводилось)
+- Feature flag `merchants_tags`
+
+**Шаблоны операций** (web + Android)
+
+- Именованные пресеты расхода / дохода / перевода; CRUD в настройках; «Сохранить как шаблон» из журнала; блок на главной (спойлер) и применение с экрана настроек
+- Feature flag `transaction_templates`
+- Документация: [roadmap/transaction-templates.md](roadmap/transaction-templates.md)
+
+**Перехват уведомлений банка** (только Android)
+
+- Opt-in: `NotificationListenerService` → локальные черновики расхода или дохода (покупки / входящие); OTP и баланс — игнор; отмена покупки снимает черновик
+- Маппинг last4→счёт и банк→счёт; магазин из справочника или предложение имени; категория/подкатегория по истории merchant при открытии черновика
+- Настройки `/settings/bank-notifications`; очередь черновиков; rebind / автозапуск на MIUI
+- Документация: [roadmap/notification-intercept.md](roadmap/notification-intercept.md), [android-client-platform.md](docs/android-client-platform.md)
+
+**Модули в админке (feature toggles)**
+
+- `GET/PUT /api/v1/admin/features`, `GET /api/v1/features`; страница **Админка → Модули** (только web)
+- Выключенный модуль скрыт в nav (web + Android), API → `404 FEATURE_DISABLED`
+- Документация: [feature-toggles.md](docs/feature-toggles.md)
+
+### Изменено
+
+**Регистрация (breaking для admin API)**
+
+- Поле `registration_enabled` **убрано** из `GET/PUT /admin/settings`; управление — флаг `registration` в `/admin/features`
+- Публично по-прежнему `registration_enabled` в `GET /setup/status`; значение переносится миграцией `050_feature_flags.sql`
+
+**Форма операции / главная**
+
+- Спойлер «Время, комментарий, магазин, теги»; единый Combobox для подкатегории и магазина с созданием по имени
+- На главной шаблоны и бюджет — в сворачиваемых секциях
+
+### Техническое
+
+- Миграции `043`–`050`: subscriptions, merchants/tags, transaction_templates, feature_flags
+- OpenAPI `1.5.0`: subscriptions, merchants, tags, templates, features, уточнения `forecast_balance`
+- Unit/e2e: подписки, магазины/теги, шаблоны, feature toggles, Android notification intercept
+- Документация: [subscriptions.md](docs/subscriptions.md), [feature-toggles.md](docs/feature-toggles.md), [transactions-display.md](docs/transactions-display.md), [ui-budget.md](docs/ui-budget.md), [android-client-*.md](docs/android-client.md), [README.md](README.md)
+- [docs/release-notes-v1.5.0.md](docs/release-notes-v1.5.0.md)
+- Версия `1.5.0`
 
 ## [v1.4.1] — 2026-08-03
 
@@ -839,6 +898,7 @@
 - Стек: Go 1.26+, SQLite, SvelteKit, встроенный статический фронтенд (`embedstatic`)
 - Команда `make version vX.Y.Z` — единая простановка semver во всех артефактах (`VERSION`, OpenAPI, Dockerfile, …)
 
+[v1.5.0]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.5.0
 [v1.4.1]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.4.1
 [v1.4.0]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.4.0
 [v1.3.2]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.3.2

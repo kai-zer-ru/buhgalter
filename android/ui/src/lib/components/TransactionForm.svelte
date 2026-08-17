@@ -258,7 +258,11 @@
 	}
 
 	async function loadCategories() {
-		categories = await listCategories(txType);
+		try {
+			categories = await listCategories(txType);
+		} catch {
+			categories = [];
+		}
 		const selectable = categories.filter((c) => !c.is_system);
 		if (!categoryId && selectable.length) {
 			categoryId = selectable.find((c) => c.is_primary)?.id ?? selectable[0].id;
@@ -267,7 +271,11 @@
 			categoryId = selectable.find((c) => c.is_primary)?.id ?? selectable[0]?.id ?? '';
 		}
 		if (categoryId) {
-			subcategories = await listSubcategories(categoryId);
+			try {
+				subcategories = await listSubcategories(categoryId);
+			} catch {
+				subcategories = [];
+			}
 		} else {
 			subcategories = [];
 		}

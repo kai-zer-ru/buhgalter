@@ -5,51 +5,62 @@ export type CategorySuggestion = {
 	subcategoryId?: string;
 };
 
-const HISTORY_LIMIT = 10;
+/** API allows up to 200; take a wide window so rare but consistent merchants still match. */
+const HISTORY_LIMIT = 100;
 
-/** Pair key: category + optional subcategory (empty subcategory is distinct from missing). */
-function pairKey(categoryId: string, subcategoryId: string | null | undefined): string {
-	return `${categoryId}\0${subcategoryId ?? ''}`;
+function majorityId(
+	items: { id: string; index: number }[]
+): { id: string; index: number } | null {
+	const counts = new Map<string, { n: number; firstIndex: number }>();
+	for (const item of items) {
+		const prev = counts.get(item.id);
+		if (prev) prev.n += 1;
+		else counts.set(item.id, { n: 1, firstIndex: item.index });
+	}
+	let best: { id: string; n: number; firstIndex: number } | null = null;
+	for (const [id, row] of counts) {
+		if (!best || row.n > best.n || (row.n === best.n && row.firstIndex < best.firstIndex)) {
+			best = { id, n: row.n, firstIndex: row.firstIndex };
+		}
+	}
+	return best ? { id: best.id, index: best.firstIndex } : null;
 }
 
 /**
- * Majority vote over recent txs of the given type for a merchant.
- * Ignores empty / system categories. Ties → more recent pair (first in date_desc list).
+ * Suggest category (+ subcategory when history has one) from recent txs.
+ * 1) majority category_id among non-system expenses/incomes;
+ * 2) among that category, majority of *non-empty* subcategory_id (empty does not block).
+ * Ties → more recent (earlier in date_desc list).
  */
 export function pickCategorySuggestion(
 	txs: Transaction[],
 	type: 'expense' | 'income' = 'expense'
 ): CategorySuggestion | null {
-	const counts = new Map<
-		string,
-		{ n: number; firstIndex: number; categoryId: string; subcategoryId?: string }
-	>();
-
+	const usable: { index: number; categoryId: string; subcategoryId?: string }[] = [];
 	txs.forEach((tx, index) => {
 		if (tx.type !== type) return;
 		const categoryId = tx.category_id;
 		if (!categoryId || tx.category_is_system) return;
-		const subcategoryId = tx.subcategory_id || undefined;
-		const key = pairKey(categoryId, subcategoryId);
-		const prev = counts.get(key);
-		if (prev) {
-			prev.n += 1;
-		} else {
-			counts.set(key, { n: 1, firstIndex: index, categoryId, subcategoryId });
-		}
+		usable.push({
+			index,
+			categoryId,
+			subcategoryId: tx.subcategory_id || undefined
+		});
 	});
+	if (!usable.length) return null;
 
-	let best: { n: number; firstIndex: number; categoryId: string; subcategoryId?: string } | null =
-		null;
-	for (const row of counts.values()) {
-		if (!best || row.n > best.n || (row.n === best.n && row.firstIndex < best.firstIndex)) {
-			best = row;
-		}
-	}
-	if (!best) return null;
+	const cat = majorityId(usable.map((u) => ({ id: u.categoryId, index: u.index })));
+	if (!cat) return null;
+
+	const inCat = usable.filter((u) => u.categoryId === cat.id);
+	const withSub = inCat
+		.filter((u) => u.subcategoryId)
+		.map((u) => ({ id: u.subcategoryId!, index: u.index }));
+	const sub = withSub.length ? majorityId(withSub) : null;
+
 	return {
-		categoryId: best.categoryId,
-		subcategoryId: best.subcategoryId
+		categoryId: cat.id,
+		subcategoryId: sub?.id
 	};
 }
 

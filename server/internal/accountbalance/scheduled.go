@@ -12,32 +12,43 @@ import (
 
 const maxScheduledOccurrences = 64
 
+// ScheduledEffects is the per-account forecast contribution from active
+// subscriptions and recurring operations in the current calendar month.
+type ScheduledEffects struct {
+	Deltas          map[string]int64
+	HasSubscription map[string]struct{}
+	HasRecurring    map[string]struct{}
+}
+
 // ScheduledEffectsByUser sums signed balance deltas from active subscriptions
 // and recurring operations that still run in the current calendar month (user TZ).
-// Positive = income, negative = expense. Also returns accounts with any contribution.
-func ScheduledEffectsByUser(ctx context.Context, db *sql.DB, userID, tz string, now time.Time) (deltas map[string]int64, has map[string]struct{}, err error) {
+// Positive = income, negative = expense.
+func ScheduledEffectsByUser(ctx context.Context, db *sql.DB, userID, tz string, now time.Time) (ScheduledEffects, error) {
+	out := ScheduledEffects{
+		Deltas:          make(map[string]int64),
+		HasSubscription: make(map[string]struct{}),
+		HasRecurring:    make(map[string]struct{}),
+	}
 	monthStart, monthEnd, err := timeutil.MonthBoundsUTC(tz, now)
 	if err != nil {
-		return nil, nil, err
+		return out, err
 	}
 	monthStartT, err := timeutil.ParseUTC(monthStart)
 	if err != nil {
-		return nil, nil, err
+		return out, err
 	}
 	monthEndT, err := timeutil.ParseUTC(monthEnd)
 	if err != nil {
-		return nil, nil, err
+		return out, err
 	}
 
 	q := queries(db)
-	deltas = make(map[string]int64)
-	has = make(map[string]struct{})
 
 	subs, err := q.ListActiveSubscriptionsForForecast(ctx, sqlcdb.ListActiveSubscriptionsForForecastParams{
 		UserID: userID, NextRunAt: monthEnd,
 	})
 	if err != nil {
-		return nil, nil, err
+		return out, err
 	}
 	for _, s := range subs {
 		sum, err := sumScheduleCharges(schedule.Input{
@@ -53,15 +64,15 @@ func ScheduledEffectsByUser(ctx context.Context, db *sql.DB, userID, tz string, 
 		if sum == 0 {
 			continue
 		}
-		deltas[s.AccountID] -= sum
-		has[s.AccountID] = struct{}{}
+		out.Deltas[s.AccountID] -= sum
+		out.HasSubscription[s.AccountID] = struct{}{}
 	}
 
 	recs, err := q.ListActiveRecurringForForecast(ctx, sqlcdb.ListActiveRecurringForForecastParams{
 		UserID: userID, NextRunAt: monthEnd,
 	})
 	if err != nil {
-		return nil, nil, err
+		return out, err
 	}
 	for _, r := range recs {
 		sum, err := sumScheduleCharges(schedule.Input{
@@ -79,14 +90,14 @@ func ScheduledEffectsByUser(ctx context.Context, db *sql.DB, userID, tz string, 
 		}
 		switch r.Type {
 		case "income":
-			deltas[r.AccountID] += sum
+			out.Deltas[r.AccountID] += sum
 		default:
-			deltas[r.AccountID] -= sum
+			out.Deltas[r.AccountID] -= sum
 		}
-		has[r.AccountID] = struct{}{}
+		out.HasRecurring[r.AccountID] = struct{}{}
 	}
 
-	return deltas, has, nil
+	return out, nil
 }
 
 func parseScheduleStart(v string) time.Time {

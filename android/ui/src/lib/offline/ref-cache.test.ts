@@ -11,8 +11,20 @@ import {
 } from './ref-cache';
 import * as connectivity from './server-connectivity';
 
+let currentServerUrl = 'http://test.local:8765';
+
 vi.mock('$lib/platform/server-url', () => ({
-	getServerUrl: () => 'http://test.local:8765'
+	getServerUrl: () => currentServerUrl
+}));
+
+vi.mock('$lib/platform/server-profile', () => ({
+	getServerProfile: () => ({
+		lanUrl: 'http://lan.local:8765',
+		remoteUrl: 'http://test.local:8765',
+		homeSsids: [],
+		lanFallbackRemote: false,
+		trustedOrigins: []
+	})
 }));
 
 describe('shouldPersistRefCache', () => {
@@ -29,6 +41,7 @@ describe('shouldPersistRefCache', () => {
 describe('fetchWithRefCache SWR', () => {
 	beforeEach(() => {
 		resetRefCacheForTests();
+		currentServerUrl = 'http://test.local:8765';
 		vi.spyOn(connectivity, 'isServerOfflineMode').mockReturnValue(false);
 		vi.spyOn(connectivity, 'markServerOnline').mockImplementation(() => {});
 		vi.spyOn(connectivity, 'markServerOffline').mockImplementation(() => {});
@@ -106,6 +119,16 @@ describe('fetchWithRefCache SWR', () => {
 		expect(value).toEqual(detail);
 		expect(fetcher).not.toHaveBeenCalled();
 	});
+
+	it('reuses cached data from another configured origin after active url switch', async () => {
+		currentServerUrl = 'http://lan.local:8765';
+		const cached = { total_balance: 321 };
+		writeRefCache('/api/v1/dashboard', cached);
+
+		currentServerUrl = 'http://test.local:8765';
+		expect(readRefCache('/api/v1/dashboard')).toEqual(cached);
+		expect(refCacheReady('/api/v1/dashboard')).toBe(true);
+	});
 });
 
 describe('clearRefCache preserveAuthMe', () => {
@@ -120,5 +143,65 @@ describe('clearRefCache preserveAuthMe', () => {
 		clearRefCache({ preserveAuthMe: true });
 		expect(readRefCache('/api/v1/auth/me')).toEqual({ id: 'u1' });
 		expect(readRefCache('/api/v1/accounts')).toBeNull();
+	});
+
+	it('keeps category dictionaries so offline forms survive a write', async () => {
+		const { clearRefCache, readRefCache, writeRefCache } = await import('./ref-cache');
+		const cats = [{ id: 'c1', name: 'Еда' }];
+		const subs = [{ id: 's1', name: 'Кафе' }];
+		writeRefCache('/api/v1/categories?type=expense', cats);
+		writeRefCache('/api/v1/categories/c1/subcategories', subs);
+		writeRefCache('/api/v1/ui/meta', { expense_categories: cats });
+		writeRefCache('/api/v1/merchants', [{ id: 'm1' }]);
+		writeRefCache('/api/v1/dashboard', { total: 1 });
+		clearRefCache({ preserveAuthMe: true });
+		expect(readRefCache('/api/v1/categories?type=expense')).toEqual(cats);
+		expect(readRefCache('/api/v1/categories/c1/subcategories')).toEqual(subs);
+		expect(readRefCache('/api/v1/ui/meta')).toEqual({ expense_categories: cats });
+		expect(readRefCache('/api/v1/merchants')).toEqual([{ id: 'm1' }]);
+		expect(readRefCache('/api/v1/dashboard')).toBeNull();
+	});
+
+	it('seedDictionariesFromUIMeta overwrites dictionaries without clearing other keys', async () => {
+		const { readRefCache, seedDictionariesFromUIMeta, writeRefCache } = await import('./ref-cache');
+		writeRefCache('/api/v1/dashboard', { total: 1 });
+		writeRefCache('/api/v1/merchants', [{ id: 'old' }]);
+		seedDictionariesFromUIMeta({
+			expense_categories: [{ id: 'c1' }],
+			income_categories: [],
+			merchants: [{ id: 'm1' }],
+			tags: [{ id: 't1' }],
+			banks: [{ id: 'b1' }],
+			transaction_templates: [{ id: 'tpl1' }],
+			debtors: [{ id: 'd1' }]
+		});
+		expect(readRefCache('/api/v1/merchants')).toEqual([{ id: 'm1' }]);
+		expect(readRefCache('/api/v1/tags')).toEqual([{ id: 't1' }]);
+		expect(readRefCache('/api/v1/banks')).toEqual([{ id: 'b1' }]);
+		expect(readRefCache('/api/v1/transaction-templates')).toEqual([{ id: 'tpl1' }]);
+		expect(readRefCache('/api/v1/debtors')).toEqual([{ id: 'd1' }]);
+		expect(readRefCache('/api/v1/categories?type=expense')).toEqual([{ id: 'c1' }]);
+		expect(readRefCache('/api/v1/dashboard')).toEqual({ total: 1 });
+	});
+
+	it('full clear still removes dictionaries', async () => {
+		const { clearRefCache, readRefCache, writeRefCache } = await import('./ref-cache');
+		writeRefCache('/api/v1/categories?type=expense', [{ id: 'c1' }]);
+		writeRefCache('/api/v1/auth/me', { id: 'u1' });
+		clearRefCache();
+		expect(readRefCache('/api/v1/categories?type=expense')).toBeNull();
+		expect(readRefCache('/api/v1/auth/me')).toBeNull();
+	});
+});
+
+describe('isPreservedOfflineRefPath', () => {
+	it('matches dictionary paths used by offline forms', async () => {
+		const { isPreservedOfflineRefPath } = await import('./ref-cache');
+		expect(isPreservedOfflineRefPath('/api/v1/auth/me')).toBe(true);
+		expect(isPreservedOfflineRefPath('/api/v1/categories?type=income')).toBe(true);
+		expect(isPreservedOfflineRefPath('/api/v1/categories/abc/subcategories')).toBe(true);
+		expect(isPreservedOfflineRefPath('/api/v1/transaction-templates')).toBe(true);
+		expect(isPreservedOfflineRefPath('/api/v1/dashboard')).toBe(false);
+		expect(isPreservedOfflineRefPath('/api/v1/accounts?status=active')).toBe(false);
 	});
 });

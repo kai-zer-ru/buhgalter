@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { waitAppReady } from './helpers/auth';
 import { selectLabeledCombobox } from './helpers/combobox';
+import { expandCollapsibleSection } from './helpers/ui';
 
 test('home: budget widget when budget exists', async ({ page }) => {
 	await page.goto('/budget');
@@ -15,5 +16,6 @@ test('home: budget widget when budget exists', async ({ page }) => {
 	await page.goto('/');
 	await waitAppReady(page);
 	await expect(page.getByText('Бюджет месяца')).toBeVisible({ timeout: 10_000 });
+	await expandCollapsibleSection(page, 'Бюджет месяца');
 	await expect(page.getByText('Home Widget Budget')).toBeVisible();
 });

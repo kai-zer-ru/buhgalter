@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { _ } from 'svelte-i18n';
 	import {
 		createTransactionTemplate,
@@ -20,6 +22,7 @@
 		type TransactionTemplate,
 		type TransactionTemplateUpsert
 	} from '$lib/api/client';
+	import { transactionNewPath, transferNewPath } from '$lib/android/form-routes';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
@@ -254,8 +257,30 @@
 		}
 	}
 
+	function createFromTemplate(tpl: TransactionTemplate) {
+		const from = '/settings/transaction-templates';
+		if (tpl.type === 'transfer') {
+			void goto(resolve(transferNewPath({ templateId: tpl.id, from })));
+			return;
+		}
+		void goto(
+			resolve(
+				transactionNewPath({
+					type: tpl.type === 'income' ? 'income' : 'expense',
+					templateId: tpl.id,
+					from
+				})
+			)
+		);
+	}
+
 	function rowActions(t: TransactionTemplate): RowAction[] {
 		return [
+			{
+				icon: 'create',
+				label: $_('templates.createTransaction'),
+				onclick: () => createFromTemplate(t)
+			},
 			{ icon: 'edit', label: $_('common.edit'), onclick: () => void openEdit(t) },
 			{
 				icon: 'delete',

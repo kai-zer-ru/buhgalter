@@ -915,6 +915,8 @@ export type AccountBalanceSummary = {
 	forecast_balance: number;
 	forecast_display: string;
 	has_future_this_month: boolean;
+	has_planned_this_month?: boolean;
+	has_subscriptions_this_month?: boolean;
 	is_primary: boolean;
 	credit_limit?: number | null;
 	credit_limit_display?: string | null;

@@ -42,6 +42,7 @@
 	import { accountSelectOptions } from '$lib/select-options';
 	import AccountAutoTopupDialog from '$lib/components/AccountAutoTopupDialog.svelte';
 	import { isCreditCard } from '$lib/credit-card';
+	import { forecastWithLabelKey } from '$lib/forecast-label';
 	import { saveTransactionAsTemplate } from '$lib/save-transaction-template';
 	import { featureFlags, isFeatureEnabled } from '$lib/features';
 	import {
@@ -693,7 +694,7 @@
 									{/if}
 									{#if accBalance ? accBalance.forecast_balance !== accBalance.balance : false}
 										<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
-											{$_('dashboard.withPlans')}:
+											{$_(forecastWithLabelKey(accBalance ?? {}))}:
 											<MoneyDisplay
 												value={accBalance?.forecast_display ?? acc.balance_display}
 												currency={$user?.currency ?? 'RUB'}

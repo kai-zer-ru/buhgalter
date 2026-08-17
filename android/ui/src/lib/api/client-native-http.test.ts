@@ -42,6 +42,7 @@ vi.mock('$lib/offline/ref-cache', () => ({
 	OfflineCacheMissError: class OfflineCacheMissError extends Error {},
 	readCategoriesFromUIMetaCache: vi.fn(),
 	seedCategoriesFromUIMeta: vi.fn(),
+	seedDictionariesFromUIMeta: vi.fn(),
 	shouldPersistRefCache: () => false
 }));
 

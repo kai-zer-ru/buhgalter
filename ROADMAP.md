@@ -225,7 +225,8 @@
 - [x] [Магазины, теги](roadmap/merchants-tags.md) — справочник + теги; магазин из чека — follow-up после сканера
 - [x] [Включение/отключение функционала в админке](docs/feature-toggles.md) — флаги модулей + правило для новых фич ([план](roadmap/feature-toggles.md))
 - [x] [Шаблоны операций](roadmap/transaction-templates.md) — именованные пресеты для быстрого ручного добавления
-- [x] Учёт подписок и периодических операций текущего месяца в плановом остатке (`forecast_balance`)
+- [x] Учёт подписок и периодических операций текущего месяца в плановом остатке (`forecast_balance`); подпись «С учётом плановых / подписок / обоих»
+- [x] [Release notes](docs/release-notes-v1.5.0.md) · [subscriptions.md](docs/subscriptions.md) · [feature-toggles.md](docs/feature-toggles.md) · [transactions-display.md](docs/transactions-display.md) · [android-client-platform.md](docs/android-client-platform.md)
 
 ## Общие планы
 

@@ -1283,6 +1283,8 @@ paths:
         `forecast_balance` и `has_future_this_month` учитывают операции `kind=future`,
         ещё не исполненные активные подписки и периодические операции
         в рамках текущего месяца (по часовому поясу пользователя).
+        Флаги `has_planned_this_month` (future и/или периодические) и
+        `has_subscriptions_this_month` уточняют подпись «С учётом …» в UI.
       security:
         - sessionCookie: []
         - bearerAuth: []
@@ -4765,6 +4767,16 @@ components:
           type: boolean
           description: |
             Есть вклад в прогноз за текущий месяц (`kind=future` и/или подписки/периодические).
+        has_planned_this_month:
+          type: boolean
+          description: |
+            В прогноз входят плановые операции `kind=future` и/или активные периодические
+            операции текущего месяца (TZ пользователя).
+        has_subscriptions_this_month:
+          type: boolean
+          description: |
+            В прогноз входят ещё не исполненные активные подписки текущего месяца
+            (TZ пользователя).
         is_primary:
           type: boolean
           description: Основной счёт (`cash`/`bank`); кредитные карты всегда `false`

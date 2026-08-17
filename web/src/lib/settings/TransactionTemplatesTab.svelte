@@ -17,6 +17,7 @@
 		type Merchant,
 		type Subcategory,
 		type Tag,
+		type Transaction,
 		type TransactionTemplate,
 		type TransactionTemplateUpsert
 	} from '$lib/api/client';
@@ -27,6 +28,8 @@
 	import ReorderDragGhost from '$lib/components/ReorderDragGhost.svelte';
 	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
 	import Select from '$lib/components/Select.svelte';
+	import TransactionForm from '$lib/components/TransactionForm.svelte';
+	import TransferForm from '$lib/components/TransferForm.svelte';
 	import {
 		accountSelectOptions,
 		categorySelectOptions,
@@ -36,6 +39,10 @@
 	import { confirm } from '$lib/confirm';
 	import { fromCents, toCents } from '$lib/money';
 	import { reportPageLoadFailure } from '$lib/page-load';
+	import {
+		hasTemplatePrefillWarnings,
+		templateToRepeatFrom
+	} from '$lib/transaction-template-prefill';
 	import { toast } from '$lib/toast';
 
 	let templates = $state<TransactionTemplate[]>([]);
@@ -51,6 +58,11 @@
 
 	let formOpen = $state(false);
 	let editingId = $state<string | null>(null);
+	let txOpen = $state(false);
+	let transferOpen = $state(false);
+	let repeatTx = $state<Transaction | null>(null);
+	let repeatTransfer = $state<Transaction | null>(null);
+	let newTxType = $state<'expense' | 'income'>('expense');
 	let name = $state('');
 	let tplType = $state<'expense' | 'income' | 'transfer'>('expense');
 	let accountId = $state('');
@@ -254,8 +266,35 @@
 		}
 	}
 
+	function createFromTemplate(tpl: TransactionTemplate) {
+		const { tx, warnings } = templateToRepeatFrom(tpl, {
+			activeAccountIds: new Set(accounts.map((a) => a.id)),
+			categoryIds: new Set([...expenseCategories, ...incomeCategories].map((c) => c.id)),
+			merchantIds: new Set(merchants.map((m) => m.id)),
+			tagIds: new Set(allTags.map((t) => t.id))
+		});
+		if (hasTemplatePrefillWarnings(warnings)) {
+			toast($_('templates.prefill.missing'));
+		}
+		if (tx.type === 'transfer') {
+			repeatTx = null;
+			repeatTransfer = tx;
+			transferOpen = true;
+			return;
+		}
+		repeatTransfer = null;
+		repeatTx = tx;
+		newTxType = tx.type === 'income' ? 'income' : 'expense';
+		txOpen = true;
+	}
+
 	function rowActions(t: TransactionTemplate): RowAction[] {
 		return [
+			{
+				icon: 'create',
+				label: $_('templates.createTransaction'),
+				onclick: () => void createFromTemplate(t)
+			},
 			{ icon: 'edit', label: $_('common.edit'), onclick: () => void openEdit(t) },
 			{
 				icon: 'delete',
@@ -488,3 +527,31 @@
 		</form>
 	</ModalShell>
 {/if}
+
+<TransactionForm
+	bind:open={txOpen}
+	defaultType={newTxType}
+	repeatFrom={repeatTx}
+	onclose={() => {
+		txOpen = false;
+		repeatTx = null;
+	}}
+	onsaved={() => {
+		txOpen = false;
+		repeatTx = null;
+		toast($_('common.saved'));
+	}}
+/>
+<TransferForm
+	bind:open={transferOpen}
+	repeatFrom={repeatTransfer}
+	onclose={() => {
+		transferOpen = false;
+		repeatTransfer = null;
+	}}
+	onsaved={() => {
+		transferOpen = false;
+		repeatTransfer = null;
+		toast($_('common.saved'));
+	}}
+/>

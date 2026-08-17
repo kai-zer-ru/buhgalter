@@ -21,6 +21,8 @@ const REF_CACHE_SKIP = new Set([
 /** Kept across mutation clears so offline cold start can unlock (PIN/biometrics). */
 export const AUTH_ME_PATH = '/api/v1/auth/me';
 
+const UI_META_PATH = '/api/v1/ui/meta';
+
 const memoryStore = new Map<string, string>();
 const inflightRevalidate = new Map<string, Promise<void>>();
 
@@ -38,8 +40,44 @@ function storageKey(path: string): string {
 	return storageKeyForServer(getServerUrl() || '_no_server', path);
 }
 
-function isPreservedAuthMeKey(key: string): boolean {
-	return key.endsWith(`::${AUTH_ME_PATH}`);
+function parseCachedValue<T>(raw: string | null): T | null {
+	if (!raw) return null;
+	try {
+		return JSON.parse(raw) as T;
+	} catch {
+		return null;
+	}
+}
+
+function readRefCacheForServer<T>(server: string, path: string): T | null {
+	return parseCachedValue<T>(storageGet(storageKeyForServer(server || '_no_server', path)));
+}
+
+function pathFromStorageKey(key: string): string {
+	const parts = key.split('::');
+	return parts.length >= 3 ? parts.slice(2).join('::') : '';
+}
+
+/**
+ * Dictionary paths never wiped on mutation clears (`preserveAuthMe`).
+ * They stay on device and are only overwritten by fresh GET / seed helpers.
+ * Full clear (logout / disconnect server) still removes everything.
+ */
+export function isPreservedOfflineRefPath(path: string): boolean {
+	const pathOnly = path.split('?')[0] ?? path;
+	if (pathOnly === AUTH_ME_PATH) return true;
+	if (pathOnly === UI_META_PATH) return true;
+	if (pathOnly === '/api/v1/categories') return true;
+	if (pathOnly === '/api/v1/merchants') return true;
+	if (pathOnly === '/api/v1/tags') return true;
+	if (pathOnly === '/api/v1/banks') return true;
+	if (pathOnly === '/api/v1/debtors') return true;
+	if (pathOnly === '/api/v1/transaction-templates') return true;
+	return /^\/api\/v1\/categories\/[^/]+\/subcategories$/.test(pathOnly);
+}
+
+function isPreservedOfflineRefKey(key: string): boolean {
+	return isPreservedOfflineRefPath(pathFromStorageKey(key));
 }
 
 function storageGet(key: string): string | null {
@@ -95,13 +133,10 @@ export function isOfflineFetchError(err: unknown): boolean {
 }
 
 export function readRefCache<T>(path: string): T | null {
-	const raw = storageGet(storageKey(path));
-	if (!raw) return null;
-	try {
-		return JSON.parse(raw) as T;
-	} catch {
-		return null;
-	}
+	const current = getServerUrl() || '_no_server';
+	const direct = readRefCacheForServer<T>(current, path);
+	if (direct !== null) return direct;
+	return readRefCacheAnyConfiguredServer<T>(path);
 }
 
 /**
@@ -109,22 +144,14 @@ export function readRefCache<T>(path: string): T | null {
  * Cold start may resolve a different origin than the one that wrote the cache.
  */
 export function readRefCacheAnyConfiguredServer<T>(path: string): T | null {
-	const direct = readRefCache<T>(path);
-	if (direct !== null) return direct;
-
-	const current = getServerUrl() || '';
+	const current = getServerUrl() || '_no_server';
 	const profile = getServerProfile();
 	const candidates = [profile.lanUrl, profile.remoteUrl].filter(
 		(u): u is string => Boolean(u) && u !== current
 	);
 	for (const origin of candidates) {
-		const raw = storageGet(storageKeyForServer(origin, path));
-		if (!raw) continue;
-		try {
-			return JSON.parse(raw) as T;
-		} catch {
-			// try next
-		}
+		const cached = readRefCacheForServer<T>(origin, path);
+		if (cached !== null) return cached;
 	}
 	return null;
 }
@@ -253,7 +280,7 @@ export function clearRefCache(opts?: { preserveAuthMe?: boolean }): void {
 				if (key?.startsWith(prefix)) keys.push(key);
 			}
 			for (const key of keys) {
-				if (preserveAuthMe && isPreservedAuthMeKey(key)) continue;
+				if (preserveAuthMe && isPreservedOfflineRefKey(key)) continue;
 				localStorage.removeItem(key);
 			}
 		} catch {
@@ -262,7 +289,7 @@ export function clearRefCache(opts?: { preserveAuthMe?: boolean }): void {
 	}
 	for (const key of [...memoryStore.keys()]) {
 		if (!key.startsWith(prefix)) continue;
-		if (preserveAuthMe && isPreservedAuthMeKey(key)) continue;
+		if (preserveAuthMe && isPreservedOfflineRefKey(key)) continue;
 		memoryStore.delete(key);
 	}
 	inflightRevalidate.clear();
@@ -276,14 +303,12 @@ export function resetRefCacheForTests(): void {
 	refCacheUpdate.set(null);
 }
 
-const UI_META_PATH = '/api/v1/ui/meta';
-
 export function categoriesRefPath(type?: 'income' | 'expense'): string {
 	const q = type ? `?type=${type}` : '';
 	return `/api/v1/categories${q}`;
 }
 
-/** ui/meta and GET /categories share the same rows — keep list paths warm for offline forms. */
+/** ui/meta and list GETs share the same rows — overwrite local dictionaries (never wipe on write). */
 export function seedCategoriesFromUIMeta(meta: {
 	expense_categories: unknown[];
 	income_categories: unknown[];
@@ -291,6 +316,26 @@ export function seedCategoriesFromUIMeta(meta: {
 	writeRefCache(categoriesRefPath('expense'), meta.expense_categories);
 	writeRefCache(categoriesRefPath('income'), meta.income_categories);
 	writeRefCache(categoriesRefPath(), [...meta.expense_categories, ...meta.income_categories]);
+}
+
+/** Full dictionary refresh from ui/meta — update-in-place on device. */
+export function seedDictionariesFromUIMeta(meta: {
+	expense_categories: unknown[];
+	income_categories: unknown[];
+	banks?: unknown[];
+	merchants?: unknown[];
+	tags?: unknown[];
+	transaction_templates?: unknown[];
+	debtors?: unknown[];
+}): void {
+	seedCategoriesFromUIMeta(meta);
+	if (meta.banks !== undefined) writeRefCache('/api/v1/banks', meta.banks);
+	if (meta.merchants !== undefined) writeRefCache('/api/v1/merchants', meta.merchants);
+	if (meta.tags !== undefined) writeRefCache('/api/v1/tags', meta.tags);
+	if (meta.transaction_templates !== undefined) {
+		writeRefCache('/api/v1/transaction-templates', meta.transaction_templates);
+	}
+	if (meta.debtors !== undefined) writeRefCache('/api/v1/debtors', meta.debtors);
 }
 
 export function readCategoriesFromUIMetaCache<T>(type?: 'income' | 'expense'): T[] | null {

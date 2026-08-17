@@ -61,7 +61,7 @@ TTL — страховка; при любой мутации кеш пользо
 
 Фоновое обновление: `refCacheUpdate` (path-aware) → страницы перезагружают только затронутый блок; `assignIfChanged` не триггерит лишний re-render при идентичном JSON.
 
-**Инвалидация на клиенте:** любой успешный `POST` / `PUT` / `PATCH` / `DELETE` через `client.ts` сбрасывает ref-cache и in-memory TTL (`clearRefCache` + `invalidateApiCache`), чтобы последующий `load()` на странице шёл в сеть, а не рисовал pre-mutation snapshot. In-flight SWR revalidate после сброса не записывает устаревший ответ (epoch). То же правило в **Android** (`android/ui/src/lib/api/client.ts`) — с `clearRefCache({ preserveAuthMe: true })`, чтобы офлайн cold start всё ещё находил `/auth/me` для PIN/биометрии. Дополнительно Android хранит профиль в `buhgalter.last_user.v1` (не привязан к URL сервера).
+**Инвалидация на клиенте:** любой успешный `POST` / `PUT` / `PATCH` / `DELETE` через `client.ts` сбрасывает ref-cache и in-memory TTL (`clearRefCache` + `invalidateApiCache`), чтобы последующий `load()` на странице шёл в сеть, а не рисовал pre-mutation snapshot. In-flight SWR revalidate после сброса не записывает устаревший ответ (epoch). То же правило в **Android** (`android/ui/src/lib/api/client.ts`) — с `clearRefCache({ preserveAuthMe: true })`: сбрасываются дашборд/счета/операции; **словари** (categories/subcategories, merchants, tags, banks, debtors, templates, `ui/meta`) и `/auth/me` остаются на устройстве и только перезаписываются свежим GET / `seedDictionariesFromUIMeta`. Дополнительно Android хранит профиль в `buhgalter.last_user.v1` (не привязан к URL сервера).
 
 Прогрев при входе: `warmRefCache()` в фоне после `loadUser()`.
 

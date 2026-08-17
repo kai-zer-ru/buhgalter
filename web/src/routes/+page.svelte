@@ -39,6 +39,10 @@
 	import { budgetStatusLine } from '$lib/budget-display';
 	import { resolveAutoTopupSourceName } from '$lib/accounts/auto-topup';
 	import { groupAccountsByType, accountGroupKind } from '$lib/accounts/group-by-type';
+	import {
+		aggregateForecastLabelFlags,
+		forecastWithLabelKey
+	} from '$lib/forecast-label';
 	import AccountGroupPanel from '$lib/components/AccountGroupPanel.svelte';
 	import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
@@ -98,6 +102,16 @@
 	const currency = $derived($user?.currency ?? 'RUB');
 	const accountGroups = $derived(dash ? groupAccountsByType(dash.accounts) : []);
 	const recentTotal = $derived(pastTotal + plannedTotal);
+	const ownForecastFlags = $derived(
+		dash
+			? aggregateForecastLabelFlags(dash.accounts.filter((a) => a.type !== 'credit_card'))
+			: {}
+	);
+	const creditForecastFlags = $derived(
+		dash
+			? aggregateForecastLabelFlags(dash.accounts.filter((a) => a.type === 'credit_card'))
+			: {}
+	);
 
 	function budgetProgressClass(status: string) {
 		if (status === 'exceeded') return 'bg-red-500';
@@ -311,73 +325,82 @@
 	<title>{$_('dashboard.title')} — {$_('app.title')}</title>
 </svelte:head>
 
+{#snippet budgetCategoryList()}
+	<ul class="space-y-1.5">
+		{#each categoryBudgets as item (item.id)}
+			<li>
+				<div class="flex items-center justify-between gap-2 text-xs">
+					<span class="truncate">{item.name}</span>
+					<span class="shrink-0 tabular-nums" style:color="var(--text-muted)">
+						{item.percent}%
+					</span>
+				</div>
+				<div
+					class="mt-0.5 h-1 overflow-hidden rounded-full"
+					style:background-color="color-mix(in srgb, var(--border) 80%, transparent)"
+				>
+					<div
+						class="h-full {budgetProgressClass(item.status)}"
+						style="width: {Math.min(item.percent, 100)}%"
+					></div>
+				</div>
+			</li>
+		{/each}
+	</ul>
+{/snippet}
+
 {#snippet budgetWidget()}
 	{#if budgetItems.length > 0}
-		<div class="card space-y-2">
-			<div class="flex items-center justify-between gap-2">
-				<p class="text-sm" style:color="var(--text-muted)">{$_('budget.widget.title')}</p>
-				<a href={resolve('/budget')} class="text-xs hover:underline" style:color="var(--primary)">
+		<CollapsibleSection label={$_('budget.widget.title')}>
+			<div class="card space-y-3">
+				{#if allExpenseBudget}
+					<div>
+						<div class="flex items-baseline justify-between gap-2">
+							<span class="truncate text-sm font-medium">{allExpenseBudget.name}</span>
+							<span class="shrink-0 text-xs" style:color="var(--text-muted)">
+								<MoneyDisplay value={allExpenseBudget.spent_display} class="" />
+								/
+								<MoneyDisplay value={allExpenseBudget.planned_display} class="" />
+							</span>
+						</div>
+						<div
+							class="mt-1.5 h-1.5 overflow-hidden rounded-full"
+							style:background-color="color-mix(in srgb, var(--border) 80%, transparent)"
+						>
+							<div
+								class="h-full transition-all {budgetProgressClass(allExpenseBudget.status)}"
+								style="width: {Math.min(allExpenseBudget.percent, 100)}%"
+							></div>
+						</div>
+						<p class="mt-1 text-xs tabular-nums" style:color="var(--text-muted)">
+							{budgetStatusLine(allExpenseBudget)}
+						</p>
+					</div>
+				{/if}
+				{#if categoryBudgets.length > 0}
+					{#if allExpenseBudget}
+						<details class="border-t pt-2" style:border-color="var(--border)">
+							<summary
+								class="cursor-pointer list-none text-xs font-medium select-none [&::-webkit-details-marker]:hidden"
+								style:color="var(--text-muted)"
+							>
+								{tr('budget.widget.categories', {
+									values: { count: String(categoryBudgets.length) }
+								})}
+							</summary>
+							<div class="mt-2">
+								{@render budgetCategoryList()}
+							</div>
+						</details>
+					{:else}
+						{@render budgetCategoryList()}
+					{/if}
+				{/if}
+				<a href={resolve('/budget')} class="inline-block text-xs hover:underline" style:color="var(--primary)">
 					{$_('budget.widget.more')} →
 				</a>
 			</div>
-			{#if allExpenseBudget}
-				<div>
-					<div class="flex items-baseline justify-between gap-2">
-						<span class="truncate text-sm font-medium">{allExpenseBudget.name}</span>
-						<span class="shrink-0 text-xs" style:color="var(--text-muted)">
-							<MoneyDisplay value={allExpenseBudget.spent_display} class="" />
-							/
-							<MoneyDisplay value={allExpenseBudget.planned_display} class="" />
-						</span>
-					</div>
-					<div
-						class="mt-1.5 h-1.5 overflow-hidden rounded-full"
-						style:background-color="color-mix(in srgb, var(--border) 80%, transparent)"
-					>
-						<div
-							class="h-full transition-all {budgetProgressClass(allExpenseBudget.status)}"
-							style="width: {Math.min(allExpenseBudget.percent, 100)}%"
-						></div>
-					</div>
-					<p class="mt-1 text-xs tabular-nums" style:color="var(--text-muted)">
-						{budgetStatusLine(allExpenseBudget)}
-					</p>
-				</div>
-			{/if}
-			{#if categoryBudgets.length > 0}
-				<details class={allExpenseBudget ? 'border-t pt-2' : ''} style:border-color="var(--border)">
-					<summary
-						class="cursor-pointer list-none text-xs font-medium select-none [&::-webkit-details-marker]:hidden"
-						style:color="var(--text-muted)"
-					>
-						{tr('budget.widget.categories', {
-							values: { count: String(categoryBudgets.length) }
-						})}
-					</summary>
-					<ul class="mt-2 space-y-1.5">
-						{#each categoryBudgets as item (item.id)}
-							<li>
-								<div class="flex items-center justify-between gap-2 text-xs">
-									<span class="truncate">{item.name}</span>
-									<span class="shrink-0 tabular-nums" style:color="var(--text-muted)">
-										{item.percent}%
-									</span>
-								</div>
-								<div
-									class="mt-0.5 h-1 overflow-hidden rounded-full"
-									style:background-color="color-mix(in srgb, var(--border) 80%, transparent)"
-								>
-									<div
-										class="h-full {budgetProgressClass(item.status)}"
-										style="width: {Math.min(item.percent, 100)}%"
-									></div>
-								</div>
-							</li>
-						{/each}
-					</ul>
-				</details>
-			{/if}
-		</div>
+		</CollapsibleSection>
 	{/if}
 {/snippet}
 
@@ -419,7 +442,7 @@
 							</p>
 							{#if dash.total_forecast !== dash.total_balance}
 								<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
-									{$_('dashboard.withPlans')}:
+									{$_(forecastWithLabelKey(ownForecastFlags))}:
 									<MoneyDisplay cents={dash.total_forecast} {currency} class="" />
 								</p>
 							{/if}
@@ -443,7 +466,7 @@
 							</p>
 							{#if dash.credit_cards_summary!.total_forecast !== dash.credit_cards_summary!.total_balance}
 								<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
-									{$_('dashboard.withPlans')}:
+									{$_(forecastWithLabelKey(creditForecastFlags))}:
 									<MoneyDisplay
 										value={dash.credit_cards_summary!.total_forecast_display}
 										{currency}
@@ -488,7 +511,7 @@
 						</p>
 						{#if dash.total_forecast !== dash.total_balance}
 							<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
-								{$_('dashboard.withPlans')}:
+								{$_(forecastWithLabelKey(ownForecastFlags))}:
 								<MoneyDisplay cents={dash.total_forecast} {currency} class="" />
 							</p>
 						{/if}
@@ -519,50 +542,40 @@
 				</div>
 			{/if}
 
-			{#if isFeatureEnabled('transaction_templates', $featureFlags) && homeTemplates.length > 0}
-				<details class="card">
-					<summary
-						class="flex cursor-pointer list-none items-center justify-between gap-2 p-4 font-medium"
+			<div class="space-y-6">
+				{#if isFeatureEnabled('transaction_templates', $featureFlags) && homeTemplates.length > 0}
+					<CollapsibleSection
+						label={$_('templates.widget.title')}
+						count={homeTemplates.length}
 					>
-						<span>{$_('templates.widget.title')}</span>
-						<a
-							href={resolve('/settings/transaction-templates')}
-							class="text-xs hover:underline"
-							style:color="var(--primary)"
-							onclick={(e) => e.stopPropagation()}
-						>
-							{$_('templates.widget.manage')} →
-						</a>
-					</summary>
-					<div class="space-y-1 border-t px-2 pb-3" style:border-color="var(--border)">
-						{#each homeTemplates as tpl (tpl.id)}
-							<button
-								type="button"
-								class="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left hover:bg-[color-mix(in_srgb,var(--primary)_8%,transparent)]"
-								onclick={() => void applyTemplate(tpl)}
-							>
-								<span class="min-w-0 truncate font-medium">{tpl.name}</span>
-								<span class="shrink-0 text-sm tabular-nums" style:color="var(--text-muted)">
-									{#if tpl.amount != null}
-										{fromCents(tpl.amount)}
-									{:else}
-										—
-									{/if}
-								</span>
-							</button>
-						{/each}
-					</div>
-				</details>
-			{/if}
+						<div class="card space-y-0.5 px-3 py-2">
+							{#each homeTemplates as tpl (tpl.id)}
+								<button
+									type="button"
+									class="flex w-full items-center justify-between gap-2 rounded-lg px-1 py-1.5 text-left text-sm hover:bg-[color-mix(in_srgb,var(--primary)_8%,transparent)]"
+									onclick={() => void applyTemplate(tpl)}
+								>
+									<span class="min-w-0 truncate">{tpl.name}</span>
+									<span class="shrink-0 tabular-nums" style:color="var(--text-muted)">
+										{#if tpl.amount != null}
+											{fromCents(tpl.amount)}
+										{:else}
+											—
+										{/if}
+									</span>
+								</button>
+							{/each}
+						</div>
+					</CollapsibleSection>
+				{/if}
 
-			{#if isFeatureEnabled('budget', $featureFlags)}
-				{@render budgetWidget()}
-			{/if}
+				{#if isFeatureEnabled('budget', $featureFlags)}
+					{@render budgetWidget()}
+				{/if}
 
-			{#if dash.accounts.length === 0}
-				<EmptyStateCard message={$_('dashboard.accountsEmpty')} />
-			{:else}
-				<div class="space-y-6">
+				{#if dash.accounts.length === 0}
+					<EmptyStateCard message={$_('dashboard.accountsEmpty')} />
+				{:else}
 					{#each accountGroups as group (accountGroupKind(group))}
 						{@const kind = accountGroupKind(group)}
 						<AccountGroupPanel {kind} count={group.length}>
@@ -596,7 +609,7 @@
 											{/if}
 											{#if acc.forecast_balance !== acc.balance}
 												<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
-													{$_('dashboard.withPlans')}:
+													{$_(forecastWithLabelKey(acc))}:
 													<MoneyDisplay value={acc.forecast_display} {currency} class="" />
 												</p>
 											{/if}
@@ -606,8 +619,8 @@
 							</div>
 						</AccountGroupPanel>
 					{/each}
-				</div>
-			{/if}
+				{/if}
+			</div>
 
 			<CollapsibleSection
 				label={$_('dashboard.recent')}

@@ -36,7 +36,7 @@ describe('pickCategorySuggestion', () => {
 		).toBeNull();
 	});
 
-	it('picks majority pair', () => {
+	it('picks majority category and its subcategory', () => {
 		const result = pickCategorySuggestion([
 			tx({ id: '1', category_id: 'food', subcategory_id: 'cafe' }),
 			tx({ id: '2', category_id: 'food', subcategory_id: 'cafe' }),
@@ -45,7 +45,7 @@ describe('pickCategorySuggestion', () => {
 		expect(result).toEqual({ categoryId: 'food', subcategoryId: 'cafe' });
 	});
 
-	it('on tie prefers more recent (earlier in date_desc list)', () => {
+	it('on category tie prefers more recent (earlier in date_desc list)', () => {
 		const result = pickCategorySuggestion([
 			tx({ id: '1', category_id: 'food', subcategory_id: 'a' }),
 			tx({ id: '2', category_id: 'transport', subcategory_id: 'b' })
@@ -53,11 +53,19 @@ describe('pickCategorySuggestion', () => {
 		expect(result).toEqual({ categoryId: 'food', subcategoryId: 'a' });
 	});
 
-	it('treats missing subcategory as its own pair', () => {
+	it('empty subcategory does not block a rarer non-empty one in same category', () => {
 		const result = pickCategorySuggestion([
 			tx({ id: '1', category_id: 'food', subcategory_id: null }),
 			tx({ id: '2', category_id: 'food', subcategory_id: null }),
 			tx({ id: '3', category_id: 'food', subcategory_id: 'cafe' })
+		]);
+		expect(result).toEqual({ categoryId: 'food', subcategoryId: 'cafe' });
+	});
+
+	it('leaves subcategory empty when none in winning category have one', () => {
+		const result = pickCategorySuggestion([
+			tx({ id: '1', category_id: 'food', subcategory_id: null }),
+			tx({ id: '2', category_id: 'food', subcategory_id: null })
 		]);
 		expect(result).toEqual({ categoryId: 'food', subcategoryId: undefined });
 	});

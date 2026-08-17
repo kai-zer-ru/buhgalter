@@ -29,8 +29,10 @@ func sumInt64(v interface{}, err error) (int64, error) {
 }
 
 type Forecast struct {
-	Balance            int64
-	HasFutureThisMonth bool
+	Balance                   int64
+	HasFutureThisMonth        bool // any contribution (compat)
+	HasPlannedThisMonth       bool // kind=future and/or recurring
+	HasSubscriptionsThisMonth bool
 }
 
 func queries(db *sql.DB) *sqlcdb.Queries {
@@ -178,7 +180,7 @@ func ForecastsByUser(ctx context.Context, db *sql.DB, userID, tz string, balance
 	q := queries(db)
 	out := make(map[string]Forecast, len(balances))
 	for id, bal := range balances {
-		out[id] = Forecast{Balance: bal, HasFutureThisMonth: false}
+		out[id] = Forecast{Balance: bal}
 	}
 
 	futureAccounts, err := q.AccountsWithFutureInMonth(ctx, sqlcdb.AccountsWithFutureInMonthParams{
@@ -250,18 +252,23 @@ func ForecastsByUser(ctx context.Context, db *sql.DB, userID, tz string, balance
 		ftIn[row.AccountID] = total
 	}
 
-	scheduled, scheduledHas, err := ScheduledEffectsByUser(ctx, db, userID, tz, timeutil.NowUTC())
+	scheduled, err := ScheduledEffectsByUser(ctx, db, userID, tz, timeutil.NowUTC())
 	if err != nil {
 		return nil, err
 	}
 
 	for id, base := range balances {
-		forecast := base + fi[id] - fe[id] + ftIn[id] - ftOut[id] + scheduled[id]
-		_, hasFuture := futureSet[id]
-		if _, ok := scheduledHas[id]; ok {
-			hasFuture = true
+		forecast := base + fi[id] - fe[id] + ftIn[id] - ftOut[id] + scheduled.Deltas[id]
+		_, hasFutureTx := futureSet[id]
+		_, hasRecurring := scheduled.HasRecurring[id]
+		_, hasSubs := scheduled.HasSubscription[id]
+		hasPlanned := hasFutureTx || hasRecurring
+		out[id] = Forecast{
+			Balance:                   forecast,
+			HasFutureThisMonth:        hasPlanned || hasSubs,
+			HasPlannedThisMonth:       hasPlanned,
+			HasSubscriptionsThisMonth: hasSubs,
 		}
-		out[id] = Forecast{Balance: forecast, HasFutureThisMonth: hasFuture}
 	}
 	return out, nil
 }

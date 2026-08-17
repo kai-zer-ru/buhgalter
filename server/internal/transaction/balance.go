@@ -22,6 +22,8 @@ type AccountBalance struct {
 	ForecastBalance           int64   `json:"forecast_balance"`
 	ForecastDisplay           string  `json:"forecast_display"`
 	HasFutureThisMonth        bool    `json:"has_future_this_month"`
+	HasPlannedThisMonth       bool    `json:"has_planned_this_month"`
+	HasSubscriptionsThisMonth bool    `json:"has_subscriptions_this_month"`
 	IsPrimary                 bool    `json:"is_primary"`
 	CreditLimit               *int64  `json:"credit_limit,omitempty"`
 	CreditLimitDisplay        *string `json:"credit_limit_display,omitempty"`
@@ -150,6 +152,8 @@ func EnrichAccountBalance(ctx context.Context, db *sql.DB, userID, accountID, ac
 	ab.ForecastBalance = fc.Balance
 	ab.ForecastDisplay = money.FormatRubles(fc.Balance)
 	ab.HasFutureThisMonth = fc.HasFutureThisMonth
+	ab.HasPlannedThisMonth = fc.HasPlannedThisMonth
+	ab.HasSubscriptionsThisMonth = fc.HasSubscriptionsThisMonth
 	return ab, nil
 }
 
@@ -184,6 +188,8 @@ func AccountsSummaryForUser(ctx context.Context, db *sql.DB, userID string) (Acc
 			out[i].ForecastBalance = fc.Balance
 			out[i].ForecastDisplay = money.FormatRubles(fc.Balance)
 			out[i].HasFutureThisMonth = fc.HasFutureThisMonth
+			out[i].HasPlannedThisMonth = fc.HasPlannedThisMonth
+			out[i].HasSubscriptionsThisMonth = fc.HasSubscriptionsThisMonth
 		}
 		if account.IsCreditCard(out[i].Type) {
 			continue

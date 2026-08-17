@@ -9,7 +9,7 @@ import {
 	isOfflineFetchError,
 	OfflineCacheMissError,
 	readCategoriesFromUIMetaCache,
-	seedCategoriesFromUIMeta,
+	seedDictionariesFromUIMeta,
 	shouldPersistRefCache
 } from '$lib/offline/ref-cache';
 import { indexTransactions } from '$lib/offline/transaction-index';
@@ -209,8 +209,8 @@ async function request<T>(path: string, init?: RequestInit, opts?: { auth?: bool
 	}
 	const result = await fetcher();
 	if (method !== 'GET') {
-		// Match web client / server apicache: writes invalidate SWR so load() hits network.
-		// Keep /auth/me so offline cold start can still show PIN/biometrics.
+		// Wipe mutable lists (dashboard/accounts/txs). Dictionaries stay on device and
+		// are only overwritten by later GET / seedDictionariesFromUIMeta / mutations.
 		invalidateApiCache();
 		clearRefCache({ preserveAuthMe: true });
 	}
@@ -756,7 +756,7 @@ export async function getUIMeta() {
 	seedStaticRef('/api/v1/merchants', meta.merchants ?? []);
 	seedStaticRef('/api/v1/tags', meta.tags ?? []);
 	seedStaticRef('/api/v1/transaction-templates', meta.transaction_templates ?? []);
-	seedCategoriesFromUIMeta(meta);
+	seedDictionariesFromUIMeta(meta);
 	void warmSubcategoriesCache([...meta.expense_categories, ...meta.income_categories]);
 	return meta;
 }
@@ -889,7 +889,12 @@ export function setPrimaryCategory(id: string) {
 }
 
 export function listSubcategories(categoryId: string) {
-	return request<Subcategory[]>(`/api/v1/categories/${categoryId}/subcategories`);
+	return request<Subcategory[]>(`/api/v1/categories/${categoryId}/subcategories`).catch(
+		(err) => {
+			if (!isOfflineFetchError(err)) throw err;
+			return [];
+		}
+	);
 }
 
 export function reorderSubcategories(categoryId: string, ids: string[]) {
@@ -1034,6 +1039,8 @@ export type AccountBalanceSummary = {
 	forecast_balance: number;
 	forecast_display: string;
 	has_future_this_month: boolean;
+	has_planned_this_month?: boolean;
+	has_subscriptions_this_month?: boolean;
 	is_primary: boolean;
 	credit_limit?: number | null;
 	credit_limit_display?: string | null;
