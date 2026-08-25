@@ -21,43 +21,45 @@ import (
 )
 
 type Subscription struct {
-	ID              string  `json:"id"`
-	Name            string  `json:"name"`
-	Description     *string `json:"description"`
-	Icon            *string `json:"icon"`
-	WebsiteURL      *string `json:"website_url"`
-	Amount          int64   `json:"amount"`
-	AmountDisplay   string  `json:"amount_display"`
-	AccountID       string  `json:"account_id"`
-	AccountName     string  `json:"account_name"`
-	SubcategoryID   *string `json:"subcategory_id"`
-	SubcategoryName *string `json:"subcategory_name"`
-	SubcategoryIcon *string `json:"subcategory_icon"`
-	Period          string  `json:"period"`
-	Weekday         *int64  `json:"weekday"`
-	DayOfMonth      *int64  `json:"day_of_month"`
-	StartDate       string  `json:"start_date"`
-	TimeLocal       string  `json:"time_local"`
-	NextRunAt       string  `json:"next_run_at"`
-	LastRunAt       *string `json:"last_run_at"`
-	Active          bool    `json:"active"`
-	CreatedAt       string  `json:"created_at"`
-	UpdatedAt       string  `json:"updated_at"`
+	ID              string   `json:"id"`
+	Name            string   `json:"name"`
+	Description     *string  `json:"description"`
+	Icon            *string  `json:"icon"`
+	WebsiteURL      *string  `json:"website_url"`
+	Amount          int64    `json:"amount"`
+	AmountDisplay   string   `json:"amount_display"`
+	AccountID       string   `json:"account_id"`
+	AccountName     string   `json:"account_name"`
+	SubcategoryID   *string  `json:"subcategory_id"`
+	SubcategoryName *string  `json:"subcategory_name"`
+	SubcategoryIcon *string  `json:"subcategory_icon"`
+	Period          string   `json:"period"`
+	Weekday         *int64   `json:"weekday"`
+	DayOfMonth      *int64   `json:"day_of_month"`
+	StartDate       string   `json:"start_date"`
+	TimeLocal       string   `json:"time_local"`
+	NextRunAt       string   `json:"next_run_at"`
+	UpcomingRunAts  []string `json:"upcoming_run_ats"`
+	LastRunAt       *string  `json:"last_run_at"`
+	Active          bool     `json:"active"`
+	CreatedAt       string   `json:"created_at"`
+	UpdatedAt       string   `json:"updated_at"`
 }
 
 type Input struct {
-	Name        string
-	Description *string
-	Icon        *string
-	WebsiteURL  *string
-	Amount      int64
-	AccountID   string
-	Period      string
-	Weekday     *int64
-	DayOfMonth  *int64
-	StartDate   time.Time
-	TimeLocal   string
-	Active      bool
+	Name           string
+	Description    *string
+	Icon           *string
+	WebsiteURL     *string
+	Amount         int64
+	AccountID      string
+	Period         string
+	Weekday        *int64
+	DayOfMonth     *int64
+	StartDate      time.Time
+	TimeLocal      string
+	Active         bool
+	UpcomingRunAts []string
 }
 
 type Summary struct {
@@ -116,6 +118,14 @@ var (
 
 func queries(db sqlcdb.DBTX) *sqlcdb.Queries { return sqlcdb.New(db) }
 
+func upcomingFromStored(raw string) []string {
+	dates, err := decodeUpcoming(raw)
+	if err != nil {
+		return []string{}
+	}
+	return dates
+}
+
 func fromRow(row sqlcdb.ListSubscriptionsByUserRow) Subscription {
 	return Subscription{
 		ID: row.ID, Name: row.Name, Description: row.Description, Icon: row.Icon, WebsiteURL: row.WebsiteUrl,
@@ -123,7 +133,8 @@ func fromRow(row sqlcdb.ListSubscriptionsByUserRow) Subscription {
 		AccountID: row.AccountID, AccountName: row.AccountName,
 		SubcategoryID: row.SubcategoryID, SubcategoryName: row.SubcategoryName, SubcategoryIcon: row.SubcategoryIcon,
 		Period: row.Period, Weekday: row.Weekday, DayOfMonth: row.DayOfMonth,
-		StartDate: row.StartDate, TimeLocal: row.TimeLocal, NextRunAt: row.NextRunAt, LastRunAt: row.LastRunAt,
+		StartDate: row.StartDate, TimeLocal: row.TimeLocal, NextRunAt: row.NextRunAt,
+		UpcomingRunAts: upcomingFromStored(row.UpcomingRunAts), LastRunAt: row.LastRunAt,
 		Active: row.Active == 1, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
 	}
 }
@@ -135,7 +146,8 @@ func fromGet(row sqlcdb.GetSubscriptionByIDRow) Subscription {
 		AccountID: row.AccountID, AccountName: row.AccountName,
 		SubcategoryID: row.SubcategoryID, SubcategoryName: row.SubcategoryName, SubcategoryIcon: row.SubcategoryIcon,
 		Period: row.Period, Weekday: row.Weekday, DayOfMonth: row.DayOfMonth,
-		StartDate: row.StartDate, TimeLocal: row.TimeLocal, NextRunAt: row.NextRunAt, LastRunAt: row.LastRunAt,
+		StartDate: row.StartDate, TimeLocal: row.TimeLocal, NextRunAt: row.NextRunAt,
+		UpcomingRunAts: upcomingFromStored(row.UpcomingRunAts), LastRunAt: row.LastRunAt,
 		Active: row.Active == 1, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
 	}
 }
@@ -172,7 +184,7 @@ func Create(ctx context.Context, db *sql.DB, userID string, in Input) (Subscript
 		return Subscription{}, err
 	}
 	now := timeutil.NowUTC()
-	next, err := nextRun(in, tz, now)
+	dates, encoded, err := resolveUpcoming(in, tz, now)
 	if err != nil {
 		return Subscription{}, err
 	}
@@ -183,7 +195,8 @@ func Create(ctx context.Context, db *sql.DB, userID string, in Input) (Subscript
 		Icon: in.Icon, WebsiteUrl: in.WebsiteURL, Amount: in.Amount, AccountID: in.AccountID,
 		SubcategoryID: nil, Period: in.Period, Weekday: in.Weekday, DayOfMonth: in.DayOfMonth,
 		StartDate: timeutil.FormatUTC(in.StartDate), TimeLocal: in.TimeLocal,
-		NextRunAt: next, LastRunAt: nil, Active: boolToInt(in.Active), CreatedAt: ts, UpdatedAt: ts,
+		NextRunAt: dates[0], UpcomingRunAts: encoded, LastRunAt: nil, Active: boolToInt(in.Active),
+		CreatedAt: ts, UpdatedAt: ts,
 	}); err != nil {
 		return Subscription{}, err
 	}
@@ -202,7 +215,7 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in Input) (Subsc
 	if err != nil {
 		return Subscription{}, err
 	}
-	next, err := nextRun(in, tz, timeutil.NowUTC())
+	dates, encoded, err := resolveUpcoming(in, tz, timeutil.NowUTC())
 	if err != nil {
 		return Subscription{}, err
 	}
@@ -224,8 +237,9 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in Input) (Subsc
 		Amount: in.Amount, AccountID: in.AccountID, SubcategoryID: subID,
 		Period: in.Period, Weekday: in.Weekday, DayOfMonth: in.DayOfMonth,
 		StartDate: timeutil.FormatUTC(in.StartDate), TimeLocal: in.TimeLocal,
-		NextRunAt: next, Active: boolToInt(in.Active), UpdatedAt: timeutil.FormatUTC(timeutil.NowUTC()),
-		ID: id, UserID: userID,
+		NextRunAt: dates[0], UpcomingRunAts: encoded, Active: boolToInt(in.Active),
+		UpdatedAt: timeutil.FormatUTC(timeutil.NowUTC()),
+		ID:        id, UserID: userID,
 	})
 	if err != nil {
 		return Subscription{}, err
@@ -336,17 +350,28 @@ func ApplyDue(ctx context.Context, db *sql.DB, userID string, now time.Time, tz 
 		if runAt, err := timeutil.ParseUTC(op.NextRunAt); err == nil {
 			lastAsOf = runAt
 		}
-		next, err := nextRun(Input{
-			Name: op.Name, Amount: op.Amount, AccountID: op.AccountID, Period: op.Period,
-			Weekday: op.Weekday, DayOfMonth: op.DayOfMonth, StartDate: mustParse(op.StartDate),
-			TimeLocal: op.TimeLocal, Active: true,
-		}, tz, mustParse(op.NextRunAt).Add(time.Second))
+		sched := schedule.Input{
+			Period: op.Period, Weekday: op.Weekday, DayOfMonth: op.DayOfMonth,
+			StartDate: mustParse(op.StartDate), TimeLocal: op.TimeLocal,
+		}
+		current, err := decodeUpcoming(op.UpcomingRunAts)
+		if err != nil {
+			current, err = seedFromStoredNext(sched, tz, op.NextRunAt)
+			if err != nil {
+				continue
+			}
+		}
+		advanced, err := AdvanceUpcoming(current, sched, tz)
+		if err != nil {
+			continue
+		}
+		encoded, err := encodeUpcoming(advanced)
 		if err != nil {
 			continue
 		}
 		_, _ = q.MarkSubscriptionRan(ctx, sqlcdb.MarkSubscriptionRanParams{
-			NextRunAt: next, LastRunAt: strPtr(op.NextRunAt), SubcategoryID: &subCatID,
-			UpdatedAt: createdAt, ID: op.ID, UserID: userID,
+			NextRunAt: advanced[0], UpcomingRunAts: encoded, LastRunAt: strPtr(op.NextRunAt),
+			SubcategoryID: &subCatID, UpdatedAt: createdAt, ID: op.ID, UserID: userID,
 		})
 		applied++
 	}
@@ -677,13 +702,6 @@ func validateInput(ctx context.Context, db *sql.DB, userID string, in Input) err
 		return ErrAccountArchived
 	}
 	return nil
-}
-
-func nextRun(in Input, tz string, ref time.Time) (string, error) {
-	return schedule.NextRunAt(schedule.Input{
-		Period: in.Period, Weekday: in.Weekday, DayOfMonth: in.DayOfMonth,
-		StartDate: in.StartDate, TimeLocal: in.TimeLocal,
-	}, tz, ref)
 }
 
 func userTimezone(ctx context.Context, db *sql.DB, userID string) (string, error) {

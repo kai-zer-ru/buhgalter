@@ -2,6 +2,7 @@ package subscription_test
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"testing"
 	"time"
@@ -59,8 +60,13 @@ func TestCreateNoSubcategoryUntilApply(t *testing.T) {
 
 	tz := "Europe/Moscow"
 	past := timeutil.FormatUTC(timeutil.NowUTC().Add(-time.Hour))
+	upcomingJSON := mustEncodeUpcoming(t, []string{
+		past,
+		timeutil.FormatUTC(timeutil.NowUTC().Add(24 * time.Hour)),
+		timeutil.FormatUTC(timeutil.NowUTC().Add(48 * time.Hour)),
+	})
 	_, err = sqlcdb.New(mgr.DB()).MarkSubscriptionRan(ctx, sqlcdb.MarkSubscriptionRanParams{
-		NextRunAt: past, LastRunAt: nil, SubcategoryID: nil,
+		NextRunAt: past, UpcomingRunAts: upcomingJSON, LastRunAt: nil, SubcategoryID: nil,
 		UpdatedAt: timeutil.FormatUTC(timeutil.NowUTC()), ID: sub.ID, UserID: userID,
 	})
 	if err != nil {
@@ -113,9 +119,14 @@ func TestSameNameSharesSubcategory(t *testing.T) {
 		t.Fatal(err)
 	}
 	past := timeutil.FormatUTC(timeutil.NowUTC().Add(-time.Hour))
+	upcomingJSON := mustEncodeUpcoming(t, []string{
+		past,
+		timeutil.FormatUTC(timeutil.NowUTC().Add(24 * time.Hour)),
+		timeutil.FormatUTC(timeutil.NowUTC().Add(48 * time.Hour)),
+	})
 	for _, id := range []string{a.ID, b.ID} {
 		_, _ = sqlcdb.New(mgr.DB()).MarkSubscriptionRan(ctx, sqlcdb.MarkSubscriptionRanParams{
-			NextRunAt: past, UpdatedAt: past, ID: id, UserID: userID,
+			NextRunAt: past, UpcomingRunAts: upcomingJSON, UpdatedAt: past, ID: id, UserID: userID,
 		})
 	}
 	if _, err := subscription.ApplyDue(ctx, mgr.DB(), userID, timeutil.NowUTC(), "Europe/Moscow"); err != nil {
@@ -128,4 +139,16 @@ func TestSameNameSharesSubcategory(t *testing.T) {
 	if list[0].SubcategoryID == nil || list[1].SubcategoryID == nil || *list[0].SubcategoryID != *list[1].SubcategoryID {
 		t.Fatalf("expected shared subcategory: %+v", list)
 	}
+}
+
+func mustEncodeUpcoming(t *testing.T, dates []string) string {
+	t.Helper()
+	if err := subscription.ValidateUpcoming(dates); err != nil {
+		t.Fatal(err)
+	}
+	b, err := json.Marshal(dates)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
 }

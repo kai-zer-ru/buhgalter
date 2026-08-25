@@ -8,9 +8,7 @@ export type CategorySuggestion = {
 /** API allows up to 200; take a wide window so rare but consistent merchants still match. */
 const HISTORY_LIMIT = 100;
 
-function majorityId(
-	items: { id: string; index: number }[]
-): { id: string; index: number } | null {
+function majorityId(items: { id: string; index: number }[]): { id: string; index: number } | null {
 	const counts = new Map<string, { n: number; firstIndex: number }>();
 	for (const item of items) {
 		const prev = counts.get(item.id);

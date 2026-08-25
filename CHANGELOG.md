@@ -5,15 +5,18 @@
 
 Подробные release notes для пользователей: [docs/release-notes-v1.5.0.md](docs/release-notes-v1.5.0.md).
 
-## [v1.5.0] — 2026-08-15
+## [Unreleased]
 
-> **ОБЯЗАТЕЛЬНО СДЕЛАЙТЕ БЕКАП!** Перед обновлением сохраните копию базы (`data/buhgalter.db`) и каталога `backups/`. Новые миграции: `043`–`050`.
+## [v1.5.0] — 2026-08-26
+
+> **ОБЯЗАТЕЛЬНО СДЕЛАЙТЕ БЕКАП!** Перед обновлением сохраните копию базы (`data/buhgalter.db`) и каталога `backups/`. Новые миграции: `043`–`051`.
 
 ### Добавлено
 
 **Подписки** (web + Android)
 
 - Отдельная сущность и экран поверх периодических: сводка «в месяц» / «в год», ближайшие списания, системная категория «Подписки», поиск и привязка операций, «Сделать подпиской» из журнала
+- Редактируемая очередь из **трёх** ближайших дат списания (`upcoming_run_ats`); после списания очередь сдвигается, `next_run_at` = новая первая дата; `POST /subscriptions/preview-upcoming`; в форме — правка дат и сброс по периоду
 - Уведомления `subscription_charge` / `subscription_days_before`
 - Плановый остаток (`forecast_balance`) учитывает активные подписки и периодические операции текущего месяца (TZ пользователя); подпись в UI различает плановые / подписки / оба (`has_planned_this_month`, `has_subscriptions_this_month`)
 - Документация: [subscriptions.md](docs/subscriptions.md)
@@ -57,9 +60,9 @@
 
 ### Техническое
 
-- Миграции `043`–`050`: subscriptions, merchants/tags, transaction_templates, feature_flags
-- OpenAPI `1.5.0`: subscriptions, merchants, tags, templates, features, уточнения `forecast_balance`
-- Unit/e2e: подписки, магазины/теги, шаблоны, feature toggles, Android notification intercept
+- Миграции `043`–`051`: subscriptions (+ `upcoming_run_ats`), merchants/tags, transaction_templates, feature_flags
+- OpenAPI `1.5.0`: subscriptions (`preview-upcoming`, `upcoming_run_ats`), merchants, tags, templates, features, уточнения `forecast_balance`
+- Unit/e2e: подписки (в т.ч. очередь дат), магазины/теги, шаблоны, feature toggles, Android notification intercept
 - Документация: [subscriptions.md](docs/subscriptions.md), [feature-toggles.md](docs/feature-toggles.md), [transactions-display.md](docs/transactions-display.md), [ui-budget.md](docs/ui-budget.md), [android-client-*.md](docs/android-client.md), [README.md](README.md)
 - [docs/release-notes-v1.5.0.md](docs/release-notes-v1.5.0.md)
 - Версия `1.5.0`

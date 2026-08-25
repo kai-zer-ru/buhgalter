@@ -92,7 +92,8 @@ test-e2e-web:
 	cd web && npm exec playwright test
 
 lint-go:
-	cd server && golangci-lint run ./...
+	@test -n "$(GOLANGCI_LINT)" || (echo "golangci-lint not found" >&2; exit 1)
+	cd server && $(GOLANGCI_LINT) run ./...
 
 ACT_PLATFORM := -P ubuntu-latest=catthehacker/ubuntu:full-latest
 # act по умолчанию: concurrent-jobs=CPU и --pull=true (каждый раз тянет образ).
@@ -140,11 +141,27 @@ lint: lint-go
 
 # Автофикс форматирования, линтера и сгенерированных артефактов перед коммитом / make ci.
 # prepare-gen синхронизирует артефакты (copy-*), check-цели с git diff — только в make ci.
+# Prefer a user-built binary (e.g. after Arch upgrades go ahead of golangci-lint package).
+GOLANGCI_LINT ?= $(firstword $(wildcard $(shell go env GOPATH 2>/dev/null)/bin/golangci-lint) $(shell command -v golangci-lint 2>/dev/null))
+
 prepare: prepare-go prepare-web prepare-android prepare-gen prepare-sql-check
 
+# golangci-lint must be built with a Go >= the runtime toolchain (GOROOT).
+# Arch often ships go N+1 before rebuilding golangci-lint → typecheck panic on stdlib.
 prepare-go:
-	cd server && golangci-lint fmt ./...
-	cd server && golangci-lint run --fix ./...
+	@test -n "$(GOLANGCI_LINT)" || (echo "golangci-lint not found in PATH or \$$(go env GOPATH)/bin" >&2; exit 1)
+	@go_mm=$$(go env GOVERSION | sed -E 's/^go([0-9]+\.[0-9]+).*/\1/'); \
+	lint_mm=$$($(GOLANGCI_LINT) version 2>/dev/null | sed -En 's/.*built with go([0-9]+\.[0-9]+).*/\1/p'); \
+	if [ -n "$$lint_mm" ] && [ "$$go_mm" != "$$lint_mm" ] && \
+	   [ "$$(printf '%s\n' "$$lint_mm" "$$go_mm" | sort -V | tail -1)" = "$$go_mm" ]; then \
+		echo "golangci-lint was built with go$$lint_mm, but runtime is go$$go_mm." >&2; \
+		echo "Rebuild the linter with the current Go, then ensure it is first on PATH:" >&2; \
+		echo "  go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.1" >&2; \
+		echo "  export PATH=\"\$$(go env GOPATH)/bin:\$$PATH\"" >&2; \
+		exit 1; \
+	fi
+	cd server && $(GOLANGCI_LINT) fmt ./...
+	cd server && $(GOLANGCI_LINT) run --fix ./...
 
 prepare-web:
 	cd web && npm run lint:fix

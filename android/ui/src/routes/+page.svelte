@@ -48,10 +48,7 @@
 	import { user } from '$lib/stores/auth';
 	import { resolveAutoTopupSourceName } from '$lib/accounts/auto-topup';
 	import { groupAccountsByType, accountGroupKind } from '$lib/accounts/group-by-type';
-	import {
-		aggregateForecastLabelFlags,
-		forecastWithLabelKey
-	} from '$lib/forecast-label';
+	import { aggregateForecastLabelFlags, forecastWithLabelKey } from '$lib/forecast-label';
 	import AccountGroupPanel from '$lib/components/AccountGroupPanel.svelte';
 	import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
@@ -124,14 +121,10 @@
 	const accountGroups = $derived(dash ? groupAccountsByType(dash.accounts) : []);
 	const recentTotal = $derived(pastTotal + plannedTotal);
 	const ownForecastFlags = $derived(
-		dash
-			? aggregateForecastLabelFlags(dash.accounts.filter((a) => a.type !== 'credit_card'))
-			: {}
+		dash ? aggregateForecastLabelFlags(dash.accounts.filter((a) => a.type !== 'credit_card')) : {}
 	);
 	const creditForecastFlags = $derived(
-		dash
-			? aggregateForecastLabelFlags(dash.accounts.filter((a) => a.type === 'credit_card'))
-			: {}
+		dash ? aggregateForecastLabelFlags(dash.accounts.filter((a) => a.type === 'credit_card')) : {}
 	);
 	const categoryBudgets = $derived(
 		[...budgetItems].filter((b) => b.scope !== 'all_expense').sort((a, b) => b.percent - a.percent)
@@ -597,10 +590,7 @@
 
 			<div class="space-y-6">
 				{#if isFeatureEnabled('transaction_templates', $featureFlags) && homeTemplates.length > 0}
-					<CollapsibleSection
-						label={$_('templates.widget.title')}
-						count={homeTemplates.length}
-					>
+					<CollapsibleSection label={$_('templates.widget.title')} count={homeTemplates.length}>
 						<div class="card space-y-0.5 px-3 py-2">
 							{#each homeTemplates as tpl (tpl.id)}
 								<button

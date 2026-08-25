@@ -3,6 +3,7 @@ package accountbalance
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"path/filepath"
 	"testing"
 	"time"
@@ -64,15 +65,29 @@ func atLocal(day time.Time, timeLocal string) time.Time {
 
 func insertSubscription(t *testing.T, database *sql.DB, userID, accountID string, amount int64, period string, weekday, dayOfMonth *int64, startDate, timeLocal, nextRunAt string, active int) {
 	t.Helper()
+	upcoming, _ := json.Marshal([]string{
+		nextRunAt,
+		timeutil.FormatUTC(mustParseUTC(t, nextRunAt).AddDate(0, 1, 0)),
+		timeutil.FormatUTC(mustParseUTC(t, nextRunAt).AddDate(0, 2, 0)),
+	})
 	_, err := database.ExecContext(context.Background(), `
 		INSERT INTO subscriptions (
 			id, user_id, name, amount, account_id, period, weekday, day_of_month,
-			start_date, time_local, next_run_at, active, created_at, updated_at
-		) VALUES (?, ?, 'Sub', ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
-		"sub-1", userID, amount, accountID, period, weekday, dayOfMonth, startDate, timeLocal, nextRunAt, active)
+			start_date, time_local, next_run_at, upcoming_run_ats, active, created_at, updated_at
+		) VALUES (?, ?, 'Sub', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+		"sub-1", userID, amount, accountID, period, weekday, dayOfMonth, startDate, timeLocal, nextRunAt, string(upcoming), active)
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+func mustParseUTC(t *testing.T, v string) time.Time {
+	t.Helper()
+	parsed, err := timeutil.ParseUTC(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return parsed
 }
 
 func insertRecurring(t *testing.T, database *sql.DB, id, userID, accountID, catID, typ string, amount int64, period string, weekday, dayOfMonth *int64, startDate, timeLocal, nextRunAt string, active int) {

@@ -2569,6 +2569,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Subscription'
+
+  /subscriptions/preview-upcoming:
+    post:
+      tags: [Subscriptions]
+      summary: Предпросмотр трёх ближайших дат списания
+      description: |
+        Считает `upcoming_run_ats` по периоду и якорю без сохранения.
+        Ответ не кешируется.
+      operationId: previewSubscriptionUpcoming
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubscriptionPreviewUpcomingRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionPreviewUpcomingResponse'
   /subscriptions/summary:
     get:
       tags: [Subscriptions]
@@ -5456,7 +5478,7 @@ components:
 
     Subscription:
       type: object
-      required: [id, name, amount, amount_display, account_id, period, start_date, time_local, next_run_at, active, created_at, updated_at]
+      required: [id, name, amount, amount_display, account_id, period, start_date, time_local, next_run_at, upcoming_run_ats, active, created_at, updated_at]
       properties:
         id: { type: string }
         name: { type: string }
@@ -5477,7 +5499,15 @@ components:
         day_of_month: { type: integer, nullable: true }
         start_date: { type: string }
         time_local: { type: string }
-        next_run_at: { type: string }
+        next_run_at:
+          type: string
+          description: Курсор следующего списания; всегда равен upcoming_run_ats[0]
+        upcoming_run_ats:
+          type: array
+          description: Ровно три ближайшие даты списания (UTC)
+          minItems: 3
+          maxItems: 3
+          items: { type: string }
         last_run_at: { type: string, nullable: true }
         active: { type: boolean }
         created_at: { type: string }
@@ -5502,7 +5532,35 @@ components:
         start_date: { type: string }
         time_local: { type: string }
         active: { type: boolean }
+        upcoming_run_ats:
+          type: array
+          description: |
+            Опционально — три ближайшие даты. Если не переданы, сервер заполняет по периоду.
+            Время нормализуется по time_local в TZ пользователя. next_run_at = [0].
+          minItems: 3
+          maxItems: 3
+          items: { type: string }
         attach_transaction_id: { type: string, nullable: true }
+    SubscriptionPreviewUpcomingRequest:
+      type: object
+      required: [period, start_date]
+      properties:
+        period:
+          type: string
+          enum: [week, two_weeks, month, quarter, half_year, year]
+        weekday: { type: integer, nullable: true }
+        day_of_month: { type: integer, nullable: true }
+        start_date: { type: string }
+        time_local: { type: string }
+    SubscriptionPreviewUpcomingResponse:
+      type: object
+      required: [upcoming_run_ats]
+      properties:
+        upcoming_run_ats:
+          type: array
+          minItems: 3
+          maxItems: 3
+          items: { type: string }
     SubscriptionSummary:
       type: object
       properties:

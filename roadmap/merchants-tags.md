@@ -1,8 +1,8 @@
 # Магазины (контрагенты), теги и комментарий
 
-Планируется в **v1.5.0** ([ROADMAP](../ROADMAP.md#v150)).
+**Реализовано** в **v1.5.0** ([ROADMAP](../ROADMAP.md#v150)). Часть обогащения операций — также в [transaction-enrichment.md](transaction-enrichment.md).
 
-Часть обогащения операций. Разбивка одной оплаты на несколько счетов — отдельно: [transaction-split-accounts.md](transaction-split-accounts.md) (v1.6.0). Вложения/фото к операции — вместе со [сканером чеков](receipt-scanner.md).
+Разбивка одной оплаты на несколько счетов — отдельно: [transaction-split-accounts.md](transaction-split-accounts.md) (v1.6.0). Вложения/фото к операции — вместе со [сканером чеков](receipt-scanner.md).
 
 ## Зачем
 

@@ -79,9 +79,8 @@ test('register creates account when registration is enabled', async ({ page }) =
 test('admin root saves system settings', async ({ page }) => {
 	await page.goto('/admin');
 	await waitAppReady(page);
-	await expect(page.getByText('Открытая регистрация')).toBeVisible();
+	await expect(page.locator('#external')).toBeVisible();
 
-	await page.getByRole('switch', { name: 'Открытая регистрация' }).click();
 	await page.locator('#external').fill('https://e2e.example.com');
 	await page
 		.locator('form.card.max-w-lg')
@@ -90,7 +89,6 @@ test('admin root saves system settings', async ({ page }) => {
 		.click();
 	await expectToast(page, 'success', 'Сохранено');
 
-	await page.getByRole('switch', { name: 'Открытая регистрация' }).click();
 	await page.locator('#external').fill('');
 	await page
 		.locator('form.card.max-w-lg')

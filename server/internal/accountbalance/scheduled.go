@@ -3,6 +3,7 @@ package accountbalance
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"time"
 
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
@@ -51,13 +52,14 @@ func ScheduledEffectsByUser(ctx context.Context, db *sql.DB, userID, tz string, 
 		return out, err
 	}
 	for _, s := range subs {
-		sum, err := sumScheduleCharges(schedule.Input{
+		in := schedule.Input{
 			Period:     s.Period,
 			Weekday:    s.Weekday,
 			DayOfMonth: s.DayOfMonth,
 			StartDate:  parseScheduleStart(s.StartDate),
 			TimeLocal:  s.TimeLocal,
-		}, tz, s.NextRunAt, s.Amount, monthStartT, monthEndT, now, true)
+		}
+		sum, err := sumSubscriptionCharges(in, tz, s.NextRunAt, s.UpcomingRunAts, s.Amount, monthStartT, monthEndT, now)
 		if err != nil {
 			continue
 		}
@@ -106,6 +108,88 @@ func parseScheduleStart(v string) time.Time {
 		return time.Time{}
 	}
 	return t
+}
+
+func sumSubscriptionCharges(
+	in schedule.Input,
+	tz, nextRunAt, upcomingJSON string,
+	amount int64,
+	monthStart, monthEnd, now time.Time,
+) (int64, error) {
+	if amount <= 0 {
+		return 0, nil
+	}
+	if err := schedule.ValidatePeriodFields(in, true); err != nil {
+		return 0, err
+	}
+	queue := decodeUpcomingJSON(upcomingJSON)
+	if len(queue) == 0 {
+		return sumScheduleCharges(in, tz, nextRunAt, amount, monthStart, monthEnd, now, true)
+	}
+	var total int64
+	var prev, last time.Time
+	for i, raw := range queue {
+		t, err := timeutil.ParseUTC(raw)
+		if err != nil {
+			continue
+		}
+		if t.After(monthEnd) {
+			return total, nil
+		}
+		if !t.Before(monthStart) || !t.After(now) {
+			total += amount
+		}
+		if i == len(queue)-2 {
+			prev = t
+		}
+		if i == len(queue)-1 {
+			last = t
+		}
+	}
+	if last.IsZero() {
+		return total, nil
+	}
+	// Continue past stored queue (e.g. weekly within month) via learned interval or period.
+	t := last
+	useDelta := !prev.IsZero() && last.After(prev)
+	delta := last.Sub(prev)
+	for i := 0; i < maxScheduledOccurrences; i++ {
+		var nextT time.Time
+		if useDelta {
+			nextT = t.Add(delta)
+		} else {
+			nextStr, err := schedule.NextRunAt(in, tz, t.Add(time.Second))
+			if err != nil {
+				return total, err
+			}
+			nextT, err = timeutil.ParseUTC(nextStr)
+			if err != nil {
+				return total, err
+			}
+			if !nextT.After(t) {
+				break
+			}
+		}
+		if nextT.After(monthEnd) {
+			break
+		}
+		if !nextT.Before(monthStart) || !nextT.After(now) {
+			total += amount
+		}
+		t = nextT
+	}
+	return total, nil
+}
+
+func decodeUpcomingJSON(raw string) []string {
+	if raw == "" || raw == "[]" {
+		return nil
+	}
+	var dates []string
+	if err := json.Unmarshal([]byte(raw), &dates); err != nil || len(dates) == 0 {
+		return nil
+	}
+	return dates
 }
 
 func sumScheduleCharges(

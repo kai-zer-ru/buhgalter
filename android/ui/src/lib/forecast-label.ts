@@ -18,9 +18,7 @@ export function forecastWithLabelKey(flags: ForecastLabelFlags): string {
 	return 'dashboard.withPlans';
 }
 
-export function aggregateForecastLabelFlags(
-	accounts: ForecastLabelFlags[]
-): ForecastLabelFlags {
+export function aggregateForecastLabelFlags(accounts: ForecastLabelFlags[]): ForecastLabelFlags {
 	let hasPlanned = false;
 	let hasSubs = false;
 	for (const a of accounts) {

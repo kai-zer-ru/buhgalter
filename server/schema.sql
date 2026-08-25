@@ -157,6 +157,7 @@ CREATE TABLE subscriptions (
     start_date      TEXT NOT NULL,
     time_local      TEXT NOT NULL DEFAULT '00:00',
     next_run_at     TEXT NOT NULL,
+    upcoming_run_ats TEXT NOT NULL DEFAULT '[]',
     last_run_at     TEXT,
     active          INTEGER NOT NULL DEFAULT 1,
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),

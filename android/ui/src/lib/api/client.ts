@@ -889,12 +889,10 @@ export function setPrimaryCategory(id: string) {
 }
 
 export function listSubcategories(categoryId: string) {
-	return request<Subcategory[]>(`/api/v1/categories/${categoryId}/subcategories`).catch(
-		(err) => {
-			if (!isOfflineFetchError(err)) throw err;
-			return [];
-		}
-	);
+	return request<Subcategory[]>(`/api/v1/categories/${categoryId}/subcategories`).catch((err) => {
+		if (!isOfflineFetchError(err)) throw err;
+		return [];
+	});
 }
 
 export function reorderSubcategories(categoryId: string, ids: string[]) {
@@ -1316,6 +1314,7 @@ export type Subscription = {
 	start_date: string;
 	time_local: string;
 	next_run_at: string;
+	upcoming_run_ats: string[];
 	last_run_at: string | null;
 	active: boolean;
 	created_at: string;
@@ -1364,7 +1363,16 @@ export type SubscriptionUpsertPayload = {
 	start_date: string;
 	time_local?: string;
 	active?: boolean;
+	upcoming_run_ats?: string[];
 	attach_transaction_id?: string;
+};
+
+export type SubscriptionPreviewUpcomingPayload = {
+	period: SubscriptionPeriod;
+	weekday?: number;
+	day_of_month?: number;
+	start_date: string;
+	time_local?: string;
 };
 
 export function listSubscriptions() {
@@ -1376,6 +1384,13 @@ export function getSubscriptionsSummary(params?: { upcoming_days?: number }) {
 	if (params?.upcoming_days != null) q.set('upcoming_days', String(params.upcoming_days));
 	const suffix = q.toString() ? `?${q}` : '';
 	return request<SubscriptionSummary>(`/api/v1/subscriptions/summary${suffix}`);
+}
+
+export function previewSubscriptionUpcoming(payload: SubscriptionPreviewUpcomingPayload) {
+	return request<{ upcoming_run_ats: string[] }>('/api/v1/subscriptions/preview-upcoming', {
+		method: 'POST',
+		body: JSON.stringify(payload)
+	});
 }
 
 export function createSubscription(payload: SubscriptionUpsertPayload) {

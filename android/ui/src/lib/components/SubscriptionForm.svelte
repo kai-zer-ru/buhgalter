@@ -21,6 +21,12 @@
 	import { accountSelectOptions } from '$lib/select-options';
 	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
+	import {
+		fetchUpcomingLocalDates,
+		seedUpcomingLocalDates,
+		upcomingLocalToAPI,
+		upcomingToLocalDates
+	} from '$lib/subscription-upcoming';
 
 	type Props = {
 		backHref?: string;
@@ -52,6 +58,8 @@
 	let timeLocal = $state('08:00');
 	let active = $state(true);
 	let attachTransactionId = $state<string | null>(null);
+	let upcomingDates = $state<string[]>(['', '', '']);
+	let upcomingLoading = $state(false);
 	let saving = $state(false);
 	let ready = $state(false);
 
@@ -91,6 +99,31 @@
 	function onPeriodChange(nextPeriod: SubscriptionPeriod) {
 		period = nextPeriod;
 		syncDayOfMonthFromStartDate(nextPeriod, startDate);
+		void refreshUpcoming();
+	}
+
+	function previewPayload() {
+		return {
+			period,
+			weekday: period === 'week' || period === 'two_weeks' ? Number(weekday) : undefined,
+			day_of_month: usesDayOfMonth(period)
+				? period === 'year'
+					? Number(dayOfMonth)
+					: Number(dayFromDate(startDate))
+				: undefined,
+			start_date: fromDatetimeLocalValue(`${dateOnly(startDate)}T00:00`, tz),
+			time_local: timeLocal || '08:00'
+		};
+	}
+
+	async function refreshUpcoming() {
+		if (!startDate) return;
+		upcomingLoading = true;
+		try {
+			upcomingDates = await fetchUpcomingLocalDates(previewPayload(), tz);
+		} finally {
+			upcomingLoading = false;
+		}
 	}
 
 	async function init() {
@@ -116,6 +149,8 @@
 				timeLocal = current.time_local || '08:00';
 				active = current.active;
 				attachTransactionId = null;
+				upcomingDates = upcomingToLocalDates(current.upcoming_run_ats, tz);
+				if (!upcomingDates[0]) await refreshUpcoming();
 			} else {
 				name = '';
 				amount = '';
@@ -131,9 +166,11 @@
 				timeLocal = '08:00';
 				active = true;
 				attachTransactionId = null;
+				upcomingDates = [...seedUpcomingLocalDates(startDate, 'month')];
 				if (txId) {
 					await prefillFromTransaction(txId);
 				}
+				await refreshUpcoming();
 			}
 		} catch (err) {
 			toast.fromError(err);
@@ -155,6 +192,7 @@
 			syncDayOfMonthFromStartDate(period, startDate);
 			active = true;
 			attachTransactionId = tx.id;
+			await refreshUpcoming();
 			toast(tr('subscriptions.prefilled'));
 		} catch {
 			// Ignore optional prefill failures.
@@ -182,6 +220,7 @@
 				start_date: fromDatetimeLocalValue(`${dateOnly(startDate)}T00:00`, tz),
 				time_local: timeLocal || '08:00',
 				active,
+				upcoming_run_ats: upcomingLocalToAPI(upcomingDates, timeLocal || '08:00', tz),
 				attach_transaction_id: !isEdit && attachTransactionId ? attachTransactionId : undefined
 			};
 			if (isEdit && subscription) {
@@ -304,7 +343,12 @@
 						style:color="var(--text-muted)"
 						for="subscription-weekday">{$_('recurring.weekday')}</label
 					>
-					<select id="subscription-weekday" class="input w-full" bind:value={weekday}>
+					<select
+						id="subscription-weekday"
+						class="input w-full"
+						bind:value={weekday}
+						onchange={() => void refreshUpcoming()}
+					>
 						<option value="1">{$_('datetime.weekday.mon')}</option>
 						<option value="2">{$_('datetime.weekday.tue')}</option>
 						<option value="3">{$_('datetime.weekday.wed')}</option>
@@ -328,15 +372,60 @@
 						min="1"
 						max="31"
 						bind:value={dayOfMonth}
+						onchange={() => void refreshUpcoming()}
 					/>
 				</div>
 			{/if}
+			<div class="space-y-2">
+				<div class="flex flex-wrap items-center justify-between gap-2">
+					<p class="text-sm font-medium">{$_('subscriptions.upcomingDates')}</p>
+					<button
+						type="button"
+						class="btn-ghost text-sm"
+						disabled={upcomingLoading}
+						onclick={() => void refreshUpcoming()}
+					>
+						{$_('subscriptions.upcomingReset')}
+					</button>
+				</div>
+				<p class="text-xs" style:color="var(--text-muted)">{$_('subscriptions.upcomingHint')}</p>
+				<DateTimePicker
+					id="subscription-upcoming-0"
+					label={$_('subscriptions.upcoming1')}
+					bind:value={upcomingDates[0]}
+					{...dateOnlyPicker}
+					usePortal
+					required
+				/>
+				<DateTimePicker
+					id="subscription-upcoming-1"
+					label={$_('subscriptions.upcoming2')}
+					bind:value={upcomingDates[1]}
+					{...dateOnlyPicker}
+					usePortal
+					required
+				/>
+				<DateTimePicker
+					id="subscription-upcoming-2"
+					label={$_('subscriptions.upcoming3')}
+					bind:value={upcomingDates[2]}
+					{...dateOnlyPicker}
+					usePortal
+					required
+				/>
+			</div>
 			<details>
 				<summary class="cursor-pointer text-sm" style:color="var(--text-muted)">
 					{$_('recurring.timeAdvanced')}
 				</summary>
 				<div class="mt-2">
-					<input class="input w-full" type="time" bind:value={timeLocal} step="60" />
+					<input
+						class="input w-full"
+						type="time"
+						bind:value={timeLocal}
+						step="60"
+						onchange={() => void refreshUpcoming()}
+					/>
 				</div>
 			</details>
 			<label class="inline-flex items-center gap-2 text-sm">

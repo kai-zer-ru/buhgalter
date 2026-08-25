@@ -318,25 +318,26 @@ type Subcategory struct {
 }
 
 type Subscription struct {
-	ID            string  `json:"id"`
-	UserID        string  `json:"user_id"`
-	Name          string  `json:"name"`
-	Description   *string `json:"description"`
-	Icon          *string `json:"icon"`
-	WebsiteUrl    *string `json:"website_url"`
-	Amount        int64   `json:"amount"`
-	AccountID     string  `json:"account_id"`
-	SubcategoryID *string `json:"subcategory_id"`
-	Period        string  `json:"period"`
-	Weekday       *int64  `json:"weekday"`
-	DayOfMonth    *int64  `json:"day_of_month"`
-	StartDate     string  `json:"start_date"`
-	TimeLocal     string  `json:"time_local"`
-	NextRunAt     string  `json:"next_run_at"`
-	LastRunAt     *string `json:"last_run_at"`
-	Active        int64   `json:"active"`
-	CreatedAt     string  `json:"created_at"`
-	UpdatedAt     string  `json:"updated_at"`
+	ID             string  `json:"id"`
+	UserID         string  `json:"user_id"`
+	Name           string  `json:"name"`
+	Description    *string `json:"description"`
+	Icon           *string `json:"icon"`
+	WebsiteUrl     *string `json:"website_url"`
+	Amount         int64   `json:"amount"`
+	AccountID      string  `json:"account_id"`
+	SubcategoryID  *string `json:"subcategory_id"`
+	Period         string  `json:"period"`
+	Weekday        *int64  `json:"weekday"`
+	DayOfMonth     *int64  `json:"day_of_month"`
+	StartDate      string  `json:"start_date"`
+	TimeLocal      string  `json:"time_local"`
+	NextRunAt      string  `json:"next_run_at"`
+	UpcomingRunAts string  `json:"upcoming_run_ats"`
+	LastRunAt      *string `json:"last_run_at"`
+	Active         int64   `json:"active"`
+	CreatedAt      string  `json:"created_at"`
+	UpdatedAt      string  `json:"updated_at"`
 }
 
 type SystemSetting struct {

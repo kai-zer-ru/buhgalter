@@ -174,6 +174,7 @@ func (s *Server) Handler() http.Handler {
 				mod.Use(features.RequireFeature(dbHandle, features.Subscriptions))
 				mod.Get("/subscriptions", subscriptionHandler.List)
 				mod.Get("/subscriptions/summary", subscriptionHandler.Summary)
+				mod.Post("/subscriptions/preview-upcoming", subscriptionHandler.PreviewUpcoming)
 				mod.Post("/subscriptions", subscriptionHandler.Create)
 				mod.Post("/subscriptions/from-recurring/{recurring_id}", subscriptionHandler.ConvertFromRecurring)
 				mod.Put("/subscriptions/{id}", subscriptionHandler.Update)

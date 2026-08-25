@@ -111,6 +111,7 @@ erDiagram
         TEXT name
         TEXT period "week|two_weeks|month|quarter|half_year|year"
         TEXT next_run_at
+        TEXT upcoming_run_ats "JSON[3] UTC"
     }
 
     recurring_operations {

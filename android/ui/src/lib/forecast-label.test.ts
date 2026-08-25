@@ -1,14 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import {
-	aggregateForecastLabelFlags,
-	forecastWithLabelKey
-} from './forecast-label';
+import { aggregateForecastLabelFlags, forecastWithLabelKey } from './forecast-label';
 
 describe('forecastWithLabelKey', () => {
 	it('planned only', () => {
-		expect(forecastWithLabelKey({ has_planned_this_month: true })).toBe(
-			'dashboard.withPlans'
-		);
+		expect(forecastWithLabelKey({ has_planned_this_month: true })).toBe('dashboard.withPlans');
 	});
 
 	it('subscriptions only', () => {

@@ -186,6 +186,7 @@ export type SubscriptionPayload = {
 	start_date: string;
 	time_local?: string;
 	active?: boolean;
+	upcoming_run_ats?: string[];
 	/** Online-only; stripped from offline outbox creates. */
 	attach_transaction_id?: string;
 };

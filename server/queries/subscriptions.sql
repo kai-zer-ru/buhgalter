@@ -18,6 +18,7 @@ SELECT
     s.start_date,
     s.time_local,
     s.next_run_at,
+    s.upcoming_run_ats,
     s.last_run_at,
     s.active,
     s.created_at,
@@ -48,6 +49,7 @@ SELECT
     s.start_date,
     s.time_local,
     s.next_run_at,
+    s.upcoming_run_ats,
     s.last_run_at,
     s.active,
     s.created_at,
@@ -62,16 +64,16 @@ INSERT INTO subscriptions (
     id, user_id, name, description, icon, website_url,
     amount, account_id, subcategory_id,
     period, weekday, day_of_month,
-    start_date, time_local, next_run_at, last_run_at, active,
+    start_date, time_local, next_run_at, upcoming_run_ats, last_run_at, active,
     created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: UpdateSubscription :execrows
 UPDATE subscriptions
 SET name = ?, description = ?, icon = ?, website_url = ?,
     amount = ?, account_id = ?, subcategory_id = ?,
     period = ?, weekday = ?, day_of_month = ?,
-    start_date = ?, time_local = ?, next_run_at = ?, active = ?, updated_at = ?
+    start_date = ?, time_local = ?, next_run_at = ?, upcoming_run_ats = ?, active = ?, updated_at = ?
 WHERE id = ? AND user_id = ?;
 
 -- name: DeleteSubscription :execrows
@@ -95,6 +97,7 @@ SELECT
     start_date,
     time_local,
     next_run_at,
+    upcoming_run_ats,
     last_run_at,
     active,
     created_at,
@@ -112,15 +115,35 @@ SELECT
     day_of_month,
     start_date,
     time_local,
-    next_run_at
+    next_run_at,
+    upcoming_run_ats
 FROM subscriptions
 WHERE user_id = ? AND active = 1 AND next_run_at <= ?
 ORDER BY next_run_at ASC;
 
+-- name: ListSubscriptionsForUpcomingBackfill :many
+SELECT
+    id,
+    user_id,
+    period,
+    weekday,
+    day_of_month,
+    start_date,
+    time_local,
+    next_run_at,
+    upcoming_run_ats
+FROM subscriptions
+WHERE upcoming_run_ats = '[]' OR upcoming_run_ats = '' OR upcoming_run_ats IS NULL;
+
 -- name: MarkSubscriptionRan :execrows
 UPDATE subscriptions
-SET next_run_at = ?, last_run_at = ?, subcategory_id = ?, updated_at = ?
+SET next_run_at = ?, upcoming_run_ats = ?, last_run_at = ?, subcategory_id = ?, updated_at = ?
 WHERE id = ? AND user_id = ?;
+
+-- name: SetSubscriptionUpcoming :execrows
+UPDATE subscriptions
+SET next_run_at = ?, upcoming_run_ats = ?, updated_at = ?
+WHERE id = ?;
 
 -- name: SetSubscriptionSubcategory :execrows
 UPDATE subscriptions

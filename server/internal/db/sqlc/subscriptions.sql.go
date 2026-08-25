@@ -124,6 +124,7 @@ SELECT
     s.start_date,
     s.time_local,
     s.next_run_at,
+    s.upcoming_run_ats,
     s.last_run_at,
     s.active,
     s.created_at,
@@ -158,6 +159,7 @@ type GetSubscriptionByIDRow struct {
 	StartDate       string  `json:"start_date"`
 	TimeLocal       string  `json:"time_local"`
 	NextRunAt       string  `json:"next_run_at"`
+	UpcomingRunAts  string  `json:"upcoming_run_ats"`
 	LastRunAt       *string `json:"last_run_at"`
 	Active          int64   `json:"active"`
 	CreatedAt       string  `json:"created_at"`
@@ -186,6 +188,7 @@ func (q *Queries) GetSubscriptionByID(ctx context.Context, arg GetSubscriptionBy
 		&i.StartDate,
 		&i.TimeLocal,
 		&i.NextRunAt,
+		&i.UpcomingRunAts,
 		&i.LastRunAt,
 		&i.Active,
 		&i.CreatedAt,
@@ -199,31 +202,32 @@ INSERT INTO subscriptions (
     id, user_id, name, description, icon, website_url,
     amount, account_id, subcategory_id,
     period, weekday, day_of_month,
-    start_date, time_local, next_run_at, last_run_at, active,
+    start_date, time_local, next_run_at, upcoming_run_ats, last_run_at, active,
     created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type InsertSubscriptionParams struct {
-	ID            string  `json:"id"`
-	UserID        string  `json:"user_id"`
-	Name          string  `json:"name"`
-	Description   *string `json:"description"`
-	Icon          *string `json:"icon"`
-	WebsiteUrl    *string `json:"website_url"`
-	Amount        int64   `json:"amount"`
-	AccountID     string  `json:"account_id"`
-	SubcategoryID *string `json:"subcategory_id"`
-	Period        string  `json:"period"`
-	Weekday       *int64  `json:"weekday"`
-	DayOfMonth    *int64  `json:"day_of_month"`
-	StartDate     string  `json:"start_date"`
-	TimeLocal     string  `json:"time_local"`
-	NextRunAt     string  `json:"next_run_at"`
-	LastRunAt     *string `json:"last_run_at"`
-	Active        int64   `json:"active"`
-	CreatedAt     string  `json:"created_at"`
-	UpdatedAt     string  `json:"updated_at"`
+	ID             string  `json:"id"`
+	UserID         string  `json:"user_id"`
+	Name           string  `json:"name"`
+	Description    *string `json:"description"`
+	Icon           *string `json:"icon"`
+	WebsiteUrl     *string `json:"website_url"`
+	Amount         int64   `json:"amount"`
+	AccountID      string  `json:"account_id"`
+	SubcategoryID  *string `json:"subcategory_id"`
+	Period         string  `json:"period"`
+	Weekday        *int64  `json:"weekday"`
+	DayOfMonth     *int64  `json:"day_of_month"`
+	StartDate      string  `json:"start_date"`
+	TimeLocal      string  `json:"time_local"`
+	NextRunAt      string  `json:"next_run_at"`
+	UpcomingRunAts string  `json:"upcoming_run_ats"`
+	LastRunAt      *string `json:"last_run_at"`
+	Active         int64   `json:"active"`
+	CreatedAt      string  `json:"created_at"`
+	UpdatedAt      string  `json:"updated_at"`
 }
 
 func (q *Queries) InsertSubscription(ctx context.Context, arg InsertSubscriptionParams) error {
@@ -243,6 +247,7 @@ func (q *Queries) InsertSubscription(ctx context.Context, arg InsertSubscription
 		arg.StartDate,
 		arg.TimeLocal,
 		arg.NextRunAt,
+		arg.UpcomingRunAts,
 		arg.LastRunAt,
 		arg.Active,
 		arg.CreatedAt,
@@ -260,7 +265,8 @@ SELECT
     day_of_month,
     start_date,
     time_local,
-    next_run_at
+    next_run_at,
+    upcoming_run_ats
 FROM subscriptions
 WHERE user_id = ? AND active = 1 AND next_run_at <= ?
 ORDER BY next_run_at ASC
@@ -272,14 +278,15 @@ type ListActiveSubscriptionsForForecastParams struct {
 }
 
 type ListActiveSubscriptionsForForecastRow struct {
-	Amount     int64  `json:"amount"`
-	AccountID  string `json:"account_id"`
-	Period     string `json:"period"`
-	Weekday    *int64 `json:"weekday"`
-	DayOfMonth *int64 `json:"day_of_month"`
-	StartDate  string `json:"start_date"`
-	TimeLocal  string `json:"time_local"`
-	NextRunAt  string `json:"next_run_at"`
+	Amount         int64  `json:"amount"`
+	AccountID      string `json:"account_id"`
+	Period         string `json:"period"`
+	Weekday        *int64 `json:"weekday"`
+	DayOfMonth     *int64 `json:"day_of_month"`
+	StartDate      string `json:"start_date"`
+	TimeLocal      string `json:"time_local"`
+	NextRunAt      string `json:"next_run_at"`
+	UpcomingRunAts string `json:"upcoming_run_ats"`
 }
 
 func (q *Queries) ListActiveSubscriptionsForForecast(ctx context.Context, arg ListActiveSubscriptionsForForecastParams) ([]ListActiveSubscriptionsForForecastRow, error) {
@@ -300,6 +307,7 @@ func (q *Queries) ListActiveSubscriptionsForForecast(ctx context.Context, arg Li
 			&i.StartDate,
 			&i.TimeLocal,
 			&i.NextRunAt,
+			&i.UpcomingRunAts,
 		); err != nil {
 			return nil, err
 		}
@@ -497,6 +505,7 @@ SELECT
     start_date,
     time_local,
     next_run_at,
+    upcoming_run_ats,
     last_run_at,
     active,
     created_at,
@@ -536,6 +545,7 @@ func (q *Queries) ListDueSubscriptions(ctx context.Context, arg ListDueSubscript
 			&i.StartDate,
 			&i.TimeLocal,
 			&i.NextRunAt,
+			&i.UpcomingRunAts,
 			&i.LastRunAt,
 			&i.Active,
 			&i.CreatedAt,
@@ -574,6 +584,7 @@ SELECT
     s.start_date,
     s.time_local,
     s.next_run_at,
+    s.upcoming_run_ats,
     s.last_run_at,
     s.active,
     s.created_at,
@@ -604,6 +615,7 @@ type ListSubscriptionsByUserRow struct {
 	StartDate       string  `json:"start_date"`
 	TimeLocal       string  `json:"time_local"`
 	NextRunAt       string  `json:"next_run_at"`
+	UpcomingRunAts  string  `json:"upcoming_run_ats"`
 	LastRunAt       *string `json:"last_run_at"`
 	Active          int64   `json:"active"`
 	CreatedAt       string  `json:"created_at"`
@@ -638,6 +650,7 @@ func (q *Queries) ListSubscriptionsByUser(ctx context.Context, userID string) ([
 			&i.StartDate,
 			&i.TimeLocal,
 			&i.NextRunAt,
+			&i.UpcomingRunAts,
 			&i.LastRunAt,
 			&i.Active,
 			&i.CreatedAt,
@@ -656,24 +669,86 @@ func (q *Queries) ListSubscriptionsByUser(ctx context.Context, userID string) ([
 	return items, nil
 }
 
+const listSubscriptionsForUpcomingBackfill = `-- name: ListSubscriptionsForUpcomingBackfill :many
+SELECT
+    id,
+    user_id,
+    period,
+    weekday,
+    day_of_month,
+    start_date,
+    time_local,
+    next_run_at,
+    upcoming_run_ats
+FROM subscriptions
+WHERE upcoming_run_ats = '[]' OR upcoming_run_ats = '' OR upcoming_run_ats IS NULL
+`
+
+type ListSubscriptionsForUpcomingBackfillRow struct {
+	ID             string `json:"id"`
+	UserID         string `json:"user_id"`
+	Period         string `json:"period"`
+	Weekday        *int64 `json:"weekday"`
+	DayOfMonth     *int64 `json:"day_of_month"`
+	StartDate      string `json:"start_date"`
+	TimeLocal      string `json:"time_local"`
+	NextRunAt      string `json:"next_run_at"`
+	UpcomingRunAts string `json:"upcoming_run_ats"`
+}
+
+func (q *Queries) ListSubscriptionsForUpcomingBackfill(ctx context.Context) ([]ListSubscriptionsForUpcomingBackfillRow, error) {
+	rows, err := q.db.QueryContext(ctx, listSubscriptionsForUpcomingBackfill)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListSubscriptionsForUpcomingBackfillRow{}
+	for rows.Next() {
+		var i ListSubscriptionsForUpcomingBackfillRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Period,
+			&i.Weekday,
+			&i.DayOfMonth,
+			&i.StartDate,
+			&i.TimeLocal,
+			&i.NextRunAt,
+			&i.UpcomingRunAts,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markSubscriptionRan = `-- name: MarkSubscriptionRan :execrows
 UPDATE subscriptions
-SET next_run_at = ?, last_run_at = ?, subcategory_id = ?, updated_at = ?
+SET next_run_at = ?, upcoming_run_ats = ?, last_run_at = ?, subcategory_id = ?, updated_at = ?
 WHERE id = ? AND user_id = ?
 `
 
 type MarkSubscriptionRanParams struct {
-	NextRunAt     string  `json:"next_run_at"`
-	LastRunAt     *string `json:"last_run_at"`
-	SubcategoryID *string `json:"subcategory_id"`
-	UpdatedAt     string  `json:"updated_at"`
-	ID            string  `json:"id"`
-	UserID        string  `json:"user_id"`
+	NextRunAt      string  `json:"next_run_at"`
+	UpcomingRunAts string  `json:"upcoming_run_ats"`
+	LastRunAt      *string `json:"last_run_at"`
+	SubcategoryID  *string `json:"subcategory_id"`
+	UpdatedAt      string  `json:"updated_at"`
+	ID             string  `json:"id"`
+	UserID         string  `json:"user_id"`
 }
 
 func (q *Queries) MarkSubscriptionRan(ctx context.Context, arg MarkSubscriptionRanParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, markSubscriptionRan,
 		arg.NextRunAt,
+		arg.UpcomingRunAts,
 		arg.LastRunAt,
 		arg.SubcategoryID,
 		arg.UpdatedAt,
@@ -712,33 +787,60 @@ func (q *Queries) SetSubscriptionSubcategory(ctx context.Context, arg SetSubscri
 	return result.RowsAffected()
 }
 
+const setSubscriptionUpcoming = `-- name: SetSubscriptionUpcoming :execrows
+UPDATE subscriptions
+SET next_run_at = ?, upcoming_run_ats = ?, updated_at = ?
+WHERE id = ?
+`
+
+type SetSubscriptionUpcomingParams struct {
+	NextRunAt      string `json:"next_run_at"`
+	UpcomingRunAts string `json:"upcoming_run_ats"`
+	UpdatedAt      string `json:"updated_at"`
+	ID             string `json:"id"`
+}
+
+func (q *Queries) SetSubscriptionUpcoming(ctx context.Context, arg SetSubscriptionUpcomingParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, setSubscriptionUpcoming,
+		arg.NextRunAt,
+		arg.UpcomingRunAts,
+		arg.UpdatedAt,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const updateSubscription = `-- name: UpdateSubscription :execrows
 UPDATE subscriptions
 SET name = ?, description = ?, icon = ?, website_url = ?,
     amount = ?, account_id = ?, subcategory_id = ?,
     period = ?, weekday = ?, day_of_month = ?,
-    start_date = ?, time_local = ?, next_run_at = ?, active = ?, updated_at = ?
+    start_date = ?, time_local = ?, next_run_at = ?, upcoming_run_ats = ?, active = ?, updated_at = ?
 WHERE id = ? AND user_id = ?
 `
 
 type UpdateSubscriptionParams struct {
-	Name          string  `json:"name"`
-	Description   *string `json:"description"`
-	Icon          *string `json:"icon"`
-	WebsiteUrl    *string `json:"website_url"`
-	Amount        int64   `json:"amount"`
-	AccountID     string  `json:"account_id"`
-	SubcategoryID *string `json:"subcategory_id"`
-	Period        string  `json:"period"`
-	Weekday       *int64  `json:"weekday"`
-	DayOfMonth    *int64  `json:"day_of_month"`
-	StartDate     string  `json:"start_date"`
-	TimeLocal     string  `json:"time_local"`
-	NextRunAt     string  `json:"next_run_at"`
-	Active        int64   `json:"active"`
-	UpdatedAt     string  `json:"updated_at"`
-	ID            string  `json:"id"`
-	UserID        string  `json:"user_id"`
+	Name           string  `json:"name"`
+	Description    *string `json:"description"`
+	Icon           *string `json:"icon"`
+	WebsiteUrl     *string `json:"website_url"`
+	Amount         int64   `json:"amount"`
+	AccountID      string  `json:"account_id"`
+	SubcategoryID  *string `json:"subcategory_id"`
+	Period         string  `json:"period"`
+	Weekday        *int64  `json:"weekday"`
+	DayOfMonth     *int64  `json:"day_of_month"`
+	StartDate      string  `json:"start_date"`
+	TimeLocal      string  `json:"time_local"`
+	NextRunAt      string  `json:"next_run_at"`
+	UpcomingRunAts string  `json:"upcoming_run_ats"`
+	Active         int64   `json:"active"`
+	UpdatedAt      string  `json:"updated_at"`
+	ID             string  `json:"id"`
+	UserID         string  `json:"user_id"`
 }
 
 func (q *Queries) UpdateSubscription(ctx context.Context, arg UpdateSubscriptionParams) (int64, error) {
@@ -756,6 +858,7 @@ func (q *Queries) UpdateSubscription(ctx context.Context, arg UpdateSubscription
 		arg.StartDate,
 		arg.TimeLocal,
 		arg.NextRunAt,
+		arg.UpcomingRunAts,
 		arg.Active,
 		arg.UpdatedAt,
 		arg.ID,

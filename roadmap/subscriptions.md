@@ -1,6 +1,6 @@
 # Подписки (отдельно от периодических операций)
 
-Планируется в **v1.5.0** ([ROADMAP](../ROADMAP.md#v150)). Реализация: [docs/subscriptions.md](../docs/subscriptions.md).
+**Реализовано** в **v1.5.0** ([ROADMAP](../ROADMAP.md#v150)). Актуальная документация: [docs/subscriptions.md](../docs/subscriptions.md).
 
 ## Зачем
 
@@ -13,6 +13,7 @@
 | Сущность `subscriptions` | Отдельная таблица и scheduler, не флаг на recurring |
 | Категория «Подписки» | Системная; подкатегории managed-only (lazy по имени) |
 | Сводка | В месяц / в год; ближайшие списания |
+| Очередь дат | `upcoming_run_ats` — 3 даты, правка в форме / preview API; сдвиг после списания |
 | Найти операции | Score (norm, Levenshtein, сумма, счёт) + ручной выбор |
 | Журнал / recurring | «Сделать подпиской», привязка, convert |
 | Уведомления | `subscription_charge` + `subscription_days_before` |

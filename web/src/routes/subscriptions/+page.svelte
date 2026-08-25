@@ -44,6 +44,12 @@
 	import { defaultAccountId } from '$lib/accounts';
 	import { accountSelectOptions } from '$lib/select-options';
 	import { user } from '$lib/stores/auth';
+	import {
+		fetchUpcomingLocalDates,
+		seedUpcomingLocalDates,
+		upcomingLocalToAPI,
+		upcomingToLocalDates
+	} from '$lib/subscription-upcoming';
 
 	let items = $state<Subscription[]>([]);
 	let summary = $state<SubscriptionSummary | null>(null);
@@ -69,6 +75,8 @@
 	let timeLocal = $state('08:00');
 	let active = $state(true);
 	let attachTransactionId = $state<string | null>(null);
+	let upcomingDates = $state<string[]>(['', '', '']);
+	let upcomingLoading = $state(false);
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
 	const currency = $derived($user?.currency ?? 'RUB');
@@ -77,7 +85,18 @@
 	onMount(() => {
 		startDate = todayDateLocal(tz).slice(0, 10);
 		syncDayOfMonthFromStartDate('month', startDate);
+		upcomingDates = [...seedUpcomingLocalDates(startDate, 'month')];
 		void loadAll();
+	});
+
+	let lastScheduleKey = $state('');
+	$effect(() => {
+		const key = `${period}|${weekday}|${dayOfMonth}|${dateOnly(startDate)}|${timeLocal}|${editId ?? ''}|${formOpen}`;
+		if (!startDate || key === lastScheduleKey) return;
+		lastScheduleKey = key;
+		if (!formOpen && !editId) return;
+		syncDayOfMonthFromStartDate(period, startDate);
+		void refreshUpcoming();
 	});
 
 	function dayFromDate(value: string): string {
@@ -206,6 +225,8 @@
 		timeLocal = '08:00';
 		active = true;
 		attachTransactionId = null;
+		upcomingDates = [...seedUpcomingLocalDates(startDate, 'month')];
+		void refreshUpcoming();
 	}
 
 	function beginEdit(item: Subscription) {
@@ -229,6 +250,9 @@
 		timeLocal = item.time_local || '08:00';
 		active = item.active;
 		attachTransactionId = null;
+		upcomingDates = upcomingToLocalDates(item.upcoming_run_ats, tz);
+		lastScheduleKey = `${period}|${weekday}|${dayOfMonth}|${dateOnly(startDate)}|${timeLocal}|${editId ?? ''}|${formOpen}`;
+		if (!upcomingDates[0]) void refreshUpcoming();
 	}
 
 	async function remove(item: Subscription) {
@@ -269,6 +293,7 @@
 				start_date: fromDatetimeLocalValue(`${dateOnly(startDate)}T00:00`, tz),
 				time_local: timeLocal || '08:00',
 				active,
+				upcoming_run_ats: upcomingLocalToAPI(upcomingDates, timeLocal || '08:00', tz),
 				attach_transaction_id: !editId && attachTransactionId ? attachTransactionId : undefined
 			};
 			if (editId) {
@@ -299,6 +324,31 @@
 	function onPeriodChange(nextPeriod: SubscriptionPeriod) {
 		period = nextPeriod;
 		syncDayOfMonthFromStartDate(nextPeriod, startDate);
+		void refreshUpcoming();
+	}
+
+	function previewPayload() {
+		return {
+			period,
+			weekday: period === 'week' || period === 'two_weeks' ? Number(weekday) : undefined,
+			day_of_month: usesDayOfMonth(period)
+				? period === 'year'
+					? Number(dayOfMonth)
+					: Number(dayFromDate(startDate))
+				: undefined,
+			start_date: fromDatetimeLocalValue(`${dateOnly(startDate)}T00:00`, tz),
+			time_local: timeLocal || '08:00'
+		};
+	}
+
+	async function refreshUpcoming() {
+		if (!startDate) return;
+		upcomingLoading = true;
+		try {
+			upcomingDates = await fetchUpcomingLocalDates(previewPayload(), tz);
+		} finally {
+			upcomingLoading = false;
+		}
 	}
 
 	function periodLabel(itemPeriod: SubscriptionPeriod): string {
@@ -471,7 +521,12 @@
 					style:color="var(--text-muted)"
 					for="subscription-weekday-{formPrefix}">{$_('recurring.weekday')}</label
 				>
-				<select id="subscription-weekday-{formPrefix}" class="input w-full" bind:value={weekday}>
+				<select
+					id="subscription-weekday-{formPrefix}"
+					class="input w-full"
+					bind:value={weekday}
+					onchange={() => void refreshUpcoming()}
+				>
 					<option value="1">{$_('datetime.weekday.mon')}</option>
 					<option value="2">{$_('datetime.weekday.tue')}</option>
 					<option value="3">{$_('datetime.weekday.wed')}</option>
@@ -495,16 +550,64 @@
 					min="1"
 					max="31"
 					bind:value={dayOfMonth}
+					onchange={() => void refreshUpcoming()}
 				/>
 			</div>
 		{/if}
+
+		<div class="space-y-2">
+			<div class="flex flex-wrap items-center justify-between gap-2">
+				<p class="text-sm font-medium">{$_('subscriptions.upcomingDates')}</p>
+				<button
+					type="button"
+					class="btn-ghost text-sm"
+					disabled={upcomingLoading}
+					onclick={() => void refreshUpcoming()}
+				>
+					{$_('subscriptions.upcomingReset')}
+				</button>
+			</div>
+			<p class="text-xs" style:color="var(--text-muted)">{$_('subscriptions.upcomingHint')}</p>
+			<div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+				<DateTimePicker
+					id="subscription-upcoming-{formPrefix}-0"
+					label={$_('subscriptions.upcoming1')}
+					bind:value={upcomingDates[0]}
+					{...dateOnlyPicker}
+					usePortal
+					required
+				/>
+				<DateTimePicker
+					id="subscription-upcoming-{formPrefix}-1"
+					label={$_('subscriptions.upcoming2')}
+					bind:value={upcomingDates[1]}
+					{...dateOnlyPicker}
+					usePortal
+					required
+				/>
+				<DateTimePicker
+					id="subscription-upcoming-{formPrefix}-2"
+					label={$_('subscriptions.upcoming3')}
+					bind:value={upcomingDates[2]}
+					{...dateOnlyPicker}
+					usePortal
+					required
+				/>
+			</div>
+		</div>
 
 		<details>
 			<summary class="cursor-pointer text-sm" style:color="var(--text-muted)">
 				{$_('recurring.timeAdvanced')}
 			</summary>
 			<div class="mt-2 max-w-xs">
-				<input class="input w-full" type="time" bind:value={timeLocal} step="60" />
+				<input
+					class="input w-full"
+					type="time"
+					bind:value={timeLocal}
+					step="60"
+					onchange={() => void refreshUpcoming()}
+				/>
 			</div>
 		</details>
 		<label class="inline-flex items-center gap-2 text-sm">

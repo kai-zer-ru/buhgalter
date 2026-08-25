@@ -25,19 +25,20 @@ type Handler struct {
 }
 
 type upsertRequest struct {
-	Name        string  `json:"name"`
-	Amount      string  `json:"amount"`
-	Description *string `json:"description"`
-	Icon        *string `json:"icon"`
-	WebsiteURL  *string `json:"website_url"`
-	AccountID   string  `json:"account_id"`
-	Period      string  `json:"period"`
-	Weekday     *int64  `json:"weekday"`
-	DayOfMonth  *int64  `json:"day_of_month"`
-	StartDate   string  `json:"start_date"`
-	TimeLocal   string  `json:"time_local"`
-	Active      *bool   `json:"active"`
-	AttachTxID  *string `json:"attach_transaction_id"`
+	Name           string   `json:"name"`
+	Amount         string   `json:"amount"`
+	Description    *string  `json:"description"`
+	Icon           *string  `json:"icon"`
+	WebsiteURL     *string  `json:"website_url"`
+	AccountID      string   `json:"account_id"`
+	Period         string   `json:"period"`
+	Weekday        *int64   `json:"weekday"`
+	DayOfMonth     *int64   `json:"day_of_month"`
+	StartDate      string   `json:"start_date"`
+	TimeLocal      string   `json:"time_local"`
+	Active         *bool    `json:"active"`
+	UpcomingRunAts []string `json:"upcoming_run_ats"`
+	AttachTxID     *string  `json:"attach_transaction_id"`
 }
 
 type convertRequest struct {
@@ -49,6 +50,14 @@ type convertRequest struct {
 
 type attachRequest struct {
 	IDs []string `json:"ids"`
+}
+
+type previewUpcomingRequest struct {
+	Period     string `json:"period"`
+	Weekday    *int64 `json:"weekday"`
+	DayOfMonth *int64 `json:"day_of_month"`
+	StartDate  string `json:"start_date"`
+	TimeLocal  string `json:"time_local"`
 }
 
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
@@ -83,6 +92,41 @@ func (h *Handler) Summary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, sum)
+}
+
+func (h *Handler) PreviewUpcoming(w http.ResponseWriter, r *http.Request) {
+	info, ok := auth.FromContext(r.Context())
+	if !ok {
+		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
+		return
+	}
+	var req previewUpcomingRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_INVALID_JSON")
+		return
+	}
+	startDate, err := timeutil.ParseUTC(req.StartDate)
+	if err != nil {
+		apperror.WriteDetail(w, r, http.StatusBadRequest, apperror.ValidationError, apperror.ValidationError, "некорректная дата старта")
+		return
+	}
+	timeLocal := strings.TrimSpace(req.TimeLocal)
+	if timeLocal == "" {
+		timeLocal = "08:00"
+	}
+	tz, err := userTimezone(r.Context(), h.Store.DB(), info.User.ID)
+	if err != nil {
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	}
+	dates, err := ComputeUpcomingPreview(Input{
+		Period: req.Period, Weekday: req.Weekday, DayOfMonth: req.DayOfMonth,
+		StartDate: startDate, TimeLocal: timeLocal,
+	}, tz, timeutil.NowUTC())
+	if writeSubError(w, r, err) {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"upcoming_run_ats": dates})
 }
 
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
@@ -264,9 +308,21 @@ func (h *Handler) E2ERunNow(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
 		return
 	}
+	t0 := timeutil.NowUTC().Add(-time.Minute)
+	upcoming := []string{
+		timeutil.FormatUTC(t0),
+		timeutil.FormatUTC(t0.Add(24 * time.Hour)),
+		timeutil.FormatUTC(t0.Add(48 * time.Hour)),
+	}
+	encoded, err := encodeUpcoming(upcoming)
+	if err != nil {
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	}
 	_, _ = sqlcdb.New(h.Store.DB()).MarkSubscriptionRan(ctx, sqlcdb.MarkSubscriptionRanParams{
-		NextRunAt: past, LastRunAt: sub.LastRunAt, SubcategoryID: sub.SubcategoryID,
-		UpdatedAt: timeutil.FormatUTC(timeutil.NowUTC()), ID: id, UserID: info.User.ID,
+		NextRunAt: past, UpcomingRunAts: encoded, LastRunAt: sub.LastRunAt,
+		SubcategoryID: sub.SubcategoryID, UpdatedAt: timeutil.FormatUTC(timeutil.NowUTC()),
+		ID: id, UserID: info.User.ID,
 	})
 	tz, err := sqlcdb.New(h.Store.DB()).GetUserTimezone(ctx, info.User.ID)
 	if err != nil {
@@ -305,7 +361,7 @@ func parseInput(req upsertRequest) (Input, error) {
 		Name: req.Name, Amount: amount, Description: req.Description, Icon: req.Icon,
 		WebsiteURL: req.WebsiteURL, AccountID: req.AccountID, Period: req.Period,
 		Weekday: req.Weekday, DayOfMonth: req.DayOfMonth, StartDate: startDate,
-		TimeLocal: timeLocal, Active: active,
+		TimeLocal: timeLocal, Active: active, UpcomingRunAts: req.UpcomingRunAts,
 	}, nil
 }
 
@@ -318,7 +374,7 @@ func writeSubError(w http.ResponseWriter, r *http.Request, err error) bool {
 		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
 	case errors.Is(err, ErrInvalidName), errors.Is(err, ErrInvalidAmount), errors.Is(err, ErrInvalidPeriod),
 		errors.Is(err, ErrInvalidWeekday), errors.Is(err, ErrInvalidDay), errors.Is(err, ErrInvalidTime),
-		errors.Is(err, ErrInvalidURL), errors.Is(err, ErrInvalidType):
+		errors.Is(err, ErrInvalidURL), errors.Is(err, ErrInvalidType), errors.Is(err, ErrInvalidUpcoming):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "VALIDATION_ERROR")
 	case errors.Is(err, ErrInvalidAccount):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_ACCOUNT_NOT_FOUND")
