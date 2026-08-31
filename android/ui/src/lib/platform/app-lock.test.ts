@@ -13,6 +13,8 @@ import {
 	setAppLockConfigForTests,
 	setBackgroundLockMs,
 	setPin,
+	setShowWidgetsWhenLocked,
+	shouldHideWidgetAmounts,
 	shouldShowLockScreen,
 	unlockSession,
 	validateNewPin,
@@ -87,6 +89,37 @@ describe('shouldShowLockScreen', () => {
 	});
 });
 
+describe('shouldHideWidgetAmounts', () => {
+	it('hides when locked and option is off (default)', () => {
+		setAppLockConfigForTests({ enabled: true, showWidgetsWhenLocked: false });
+		lockSession();
+		expect(shouldHideWidgetAmounts()).toBe(true);
+	});
+
+	it('shows when locked but option is on', () => {
+		setAppLockConfigForTests({ enabled: true, showWidgetsWhenLocked: true });
+		lockSession();
+		expect(shouldHideWidgetAmounts()).toBe(false);
+	});
+
+	it('shows when unlocked regardless of option', () => {
+		setAppLockConfigForTests({ enabled: true, showWidgetsWhenLocked: false });
+		unlockSession();
+		expect(shouldHideWidgetAmounts()).toBe(false);
+	});
+});
+
+describe('setShowWidgetsWhenLocked', () => {
+	it('persists and defaults to off', async () => {
+		await enableAppLock('2580');
+		expect(getAppLockConfig().showWidgetsWhenLocked).toBe(false);
+		await setShowWidgetsWhenLocked(true);
+		expect(getAppLockConfig().showWidgetsWhenLocked).toBe(true);
+		await setShowWidgetsWhenLocked(false);
+		expect(getAppLockConfig().showWidgetsWhenLocked).toBe(false);
+	});
+});
+
 describe('enableAppLock', () => {
 	it('stores enabled config and requires unlock', async () => {
 		await enableAppLock('2580');
@@ -106,11 +139,13 @@ describe('enableAppLock', () => {
 describe('clearAppLock', () => {
 	it('removes PIN and biometric without verification', async () => {
 		await enableAppLock('2580');
+		await setShowWidgetsWhenLocked(true);
 		await clearAppLock();
 		expect(getAppLockConfig()).toEqual({
 			enabled: false,
 			biometricEnabled: false,
-			backgroundLockMs: 60_000
+			backgroundLockMs: 60_000,
+			showWidgetsWhenLocked: false
 		});
 		expect(shouldShowLockScreen()).toBe(false);
 	});

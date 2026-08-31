@@ -51,7 +51,7 @@
         <activity
             android:name=".widgets.AccountWidgetConfigureActivity"
             android:exported="false"
-            android:theme="@style/AppTheme">
+            android:theme="@style/AppTheme.WidgetConfigure">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
             </intent-filter>

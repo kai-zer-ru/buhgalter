@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import type { Account, Credit, Dashboard, Debt, Transaction } from '$lib/api/client';
+import type {
+	Account,
+	Credit,
+	Dashboard,
+	Debt,
+	RecurringOperation,
+	Subscription,
+	Transaction
+} from '$lib/api/client';
 import { buildUpcomingItems, buildWidgetSnapshot } from './snapshot';
 
 const dash = (partial: Partial<Dashboard> = {}): Dashboard => ({
@@ -24,8 +32,8 @@ const account = (partial: Partial<Account> = {}): Account =>
 		type: 'cash',
 		bank_id: null,
 		initial_balance: 0,
-		balance: 10050,
-		balance_display: '100.50',
+		balance: 100050,
+		balance_display: '1000.50',
 		status: 'active',
 		is_primary: true,
 		created_at: '',
@@ -34,7 +42,7 @@ const account = (partial: Partial<Account> = {}): Account =>
 	}) as Account;
 
 describe('buildUpcomingItems', () => {
-	it('merges and sorts by date', () => {
+	it('merges and sorts by date with formatted amounts', () => {
 		const credits = [
 			{
 				id: 'c1',
@@ -53,6 +61,7 @@ describe('buildUpcomingItems', () => {
 				debtor_name: 'Ivan',
 				direction: 'borrowed',
 				due_date: '2026-08-01',
+				amount: 20000,
 				amount_display: '200.00',
 				is_settled: false
 			} as Debt
@@ -62,27 +71,79 @@ describe('buildUpcomingItems', () => {
 				id: 't1',
 				description: 'Rent',
 				transaction_date: '2026-08-05',
+				amount: 30000,
 				amount_display: '300.00',
 				account_name: 'Main'
 			} as Transaction
 		];
 		const items = buildUpcomingItems(credits, debts, future, 'RUB', 5);
 		expect(items.map((i) => i.id)).toEqual(['d1', 't1', 'c1']);
+		expect(items[0].amount_display).toBe('200.00 ₽');
+		expect(items[2].amount_display).toBe('500.00 ₽');
 		expect(items[0].route).toBe('/debtors/p1');
 		expect(items[2].route).toBe('/credits/c1');
+	});
+
+	it('includes subscriptions and recurring operations', () => {
+		const subscriptions = [
+			{
+				id: 's1',
+				name: 'Netflix',
+				active: true,
+				next_run_at: '2026-08-03T12:00:00Z',
+				amount: 1500,
+				amount_display: '15.00',
+				account_name: 'Card'
+			} as Subscription
+		];
+		const recurring = [
+			{
+				id: 'r1',
+				description: 'Salary',
+				active: true,
+				next_run_at: '2026-08-02T09:00:00Z',
+				amount: 100000,
+				amount_display: '1000.00',
+				account_name: 'Main',
+				category_name: 'Income'
+			} as RecurringOperation
+		];
+		const items = buildUpcomingItems([], [], [], 'RUB', 5, subscriptions, recurring);
+		expect(items.map((i) => i.id)).toEqual(['r1', 's1']);
+		expect(items[0].amount_display).toBe('1 000.00 ₽');
+		expect(items[1].amount_display).toBe('15.00 ₽');
 	});
 });
 
 describe('buildWidgetSnapshot', () => {
-	it('formats balance and picks budget', () => {
+	it('formats funds by account type', () => {
 		const snap = buildWidgetSnapshot({
-			dashboard: dash(),
-			accounts: [account()],
+			dashboard: dash({
+				total_balance: 100050,
+				total_forecast: 90500,
+				credit_cards_summary: {
+					total_balance: 1001400,
+					total_forecast: 1001400,
+					total_limit: 0,
+					count: 1,
+					total_balance_display: '10014.00',
+					total_forecast_display: '10014.00',
+					total_limit_display: '0'
+				}
+			}),
+			accounts: [
+				account({ id: 'c1', type: 'cash', balance: 50000 }),
+				account({ id: 'b1', type: 'bank', balance: 4099253, is_primary: true }),
+				account({ id: 'cc1', type: 'credit_card', balance: 1001400, is_primary: false })
+			],
 			budgetItems: [
 				{
 					id: 'b1',
 					name: 'All',
 					scope: 'all_expense',
+					spent: 4000,
+					planned: 10000,
+					remaining: 6000,
 					spent_display: '40.00',
 					planned_display: '100.00',
 					remaining_display: '60.00',
@@ -97,9 +158,9 @@ describe('buildWidgetSnapshot', () => {
 			language: 'ru',
 			now: new Date('2026-07-15T12:00:00Z')
 		});
-		expect(snap.total_balance_display).toContain('RUB');
-		expect(snap.show_forecast).toBe(true);
-		expect(snap.budget?.name).toBe('All');
-		expect(snap.accounts[0].is_primary).toBe(true);
+		expect(snap.cash_display).toBe('500.00 ₽');
+		expect(snap.bank_display).toBe('40 992.53 ₽');
+		expect(snap.credit_funds_display).toBe('10 014.00 ₽');
+		expect(snap.budget?.spent_display).toBe('40.00 ₽');
 	});
 });

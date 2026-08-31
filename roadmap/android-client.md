@@ -39,7 +39,7 @@
 - [x] Главная, счета, операции, переводы, офлайн outbox
 - [x] LAN discovery (mDNS `_buhgalter._tcp` + subnet scan), кнопка «Назад», полноэкранные формы
 - [x] Два URL + SSID (в настройках сервера)
-- [x] Блокировка PIN + биометрия (`/settings/security`)
+- [x] Блокировка PIN + биометрия (`/settings/security`); опция «показывать виджеты при блокировке» (по умолчанию выкл.)
 - [x] MVP-навигация: долги, кредиты, бюджет, статистика, настройки, админка (без веб-only разделов)
 - [x] Офлайн polish, версия в drawer, хабы настроек/админки
 
@@ -88,7 +88,7 @@
 - [x] Тёмная adaptive icon (`values-night`) и splash
 - [x] Themed icon: adaptive `<monochrome>` (Material You) + источник `icon-monochrome-512.png`
 - [x] i18n: биометрия cancel, строки экспорта, `values-en` для shortcut
-- [x] Home-screen виджеты: быстрые действия, баланс, бюджет, «Скоро», один счёт (`WidgetBridge` + WorkManager)
+- [x] Home-screen виджеты: быстрые действия, баланс (`/accounts`), бюджет, «Скоро» (кредит/долг/плановые/подписки/периодические), один счёт (`WidgetBridge` + WorkManager); суммы скрыты пока `shouldHideWidgetAmounts`
 - [x] Static shortcuts: расход / доход / перевод
 - [x] **Share-intent:** `ACTION_SEND` text/image → форма расхода с префиллом описания (`ShareTargetPlugin`)
 - [x] **Шире outbox:** `account` (create/update/archive/unarchive) + `budget` (create/update/delete)

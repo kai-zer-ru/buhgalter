@@ -18,9 +18,12 @@
     <string name="widget_quick_actions_description">Быстрые действия: расход, доход, перевод</string>
 
     <string name="widget_balance_title">Мои средства</string>
-    <string name="widget_balance_description">Общий баланс счетов</string>
+    <string name="widget_balance_description">Наличные, банки и кредитные средства</string>
+    <string name="widget_funds_cash">Наличные</string>
+    <string name="widget_funds_bank">Банковские карты</string>
+    <string name="widget_funds_credit">Кредитные средства</string>
     <string name="widget_with_plans">С планами: %1$s</string>
-    <string name="widget_credit_cards">Карты: %1$s</string>
+    <string name="widget_credit_cards">Кредитные средства: %1$s</string>
 
     <string name="widget_budget_title">Бюджет месяца</string>
     <string name="widget_budget_description">План и факт бюджета</string>

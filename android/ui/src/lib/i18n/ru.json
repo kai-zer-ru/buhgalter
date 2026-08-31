@@ -1141,6 +1141,8 @@
 	"appLock.disableConfirm": "Отключить",
 	"appLock.backgroundTimeout": "Время в фоне",
 	"appLock.backgroundTimeoutHint": "Через сколько блокировать после сворачивания",
+	"appLock.showWidgetsWhenLocked": "Показывать виджеты при блокировке",
+	"appLock.showWidgetsWhenLockedHint": "Суммы и данные на виджетах домашнего экрана остаются видимыми, пока приложение заблокировано",
 	"appLock.timeout.seconds": "{n} с",
 	"appLock.timeout.minutes": "{n} мин",
 	"appLock.timeout.hour": "1 час",

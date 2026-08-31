@@ -4,10 +4,14 @@ import type {
 	Credit,
 	Dashboard,
 	Debt,
+	RecurringOperation,
+	Subscription,
 	Transaction
 } from '$lib/api/client';
+import { formatBalance } from '$lib/finance';
+import { fromCents } from '$lib/money';
 
-export type WidgetUpcomingKind = 'credit' | 'debt' | 'future';
+export type WidgetUpcomingKind = 'credit' | 'debt' | 'future' | 'subscription' | 'recurring';
 
 export type WidgetUpcomingItem = {
 	kind: WidgetUpcomingKind;
@@ -39,10 +43,14 @@ export type WidgetSnapshot = {
 	updated_at: string;
 	currency: string;
 	language: string;
+	/** @deprecated kept for older native builds; prefer cash/bank/credit_funds */
 	total_balance_display: string;
 	total_forecast_display: string;
 	show_forecast: boolean;
 	credit_cards_display: string | null;
+	cash_display: string;
+	bank_display: string;
+	credit_funds_display: string;
 	budget: WidgetBudgetItem | null;
 	upcoming: WidgetUpcomingItem[];
 	accounts: WidgetAccountItem[];
@@ -55,20 +63,24 @@ export type BuildWidgetSnapshotInput = {
 	credits: Credit[];
 	debts: Debt[];
 	futureTx: Transaction[];
+	subscriptions?: Subscription[];
+	recurring?: RecurringOperation[];
 	currency: string;
 	language: string;
 	now?: Date;
 };
 
-function formatCentsDisplay(cents: number, currency: string): string {
-	const value = (cents / 100).toLocaleString(undefined, {
-		minimumFractionDigits: 2,
-		maximumFractionDigits: 2
-	});
-	return `${value} ${currency}`;
+/** Same money formatting as in-app UI (`10 000.00 ₽`). */
+function formatWidgetCents(cents: number, currency: string): string {
+	return formatBalance(fromCents(cents), currency);
 }
 
-function pickBudget(items: BudgetSummaryItem[]): WidgetBudgetItem | null {
+function formatWidgetRaw(raw: string | null | undefined, currency: string): string {
+	if (!raw?.trim()) return '';
+	return formatBalance(raw, currency);
+}
+
+function pickBudget(items: BudgetSummaryItem[], currency: string): WidgetBudgetItem | null {
 	if (items.length === 0) return null;
 	const all = items.find((b) => b.scope === 'all_expense');
 	const pick =
@@ -77,9 +89,9 @@ function pickBudget(items: BudgetSummaryItem[]): WidgetBudgetItem | null {
 	if (!pick) return null;
 	return {
 		name: pick.name,
-		spent_display: pick.spent_display,
-		planned_display: pick.planned_display,
-		remaining_display: pick.remaining_display,
+		spent_display: formatWidgetCents(pick.spent, currency),
+		planned_display: formatWidgetCents(pick.planned, currency),
+		remaining_display: formatWidgetCents(pick.remaining, currency),
 		percent: pick.percent,
 		status: pick.status
 	};
@@ -90,13 +102,15 @@ function parseSortDate(raw: string): number {
 	return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY;
 }
 
-/** Merge credits / unsettled debts / future txs into a dated list (nearest first). */
+/** Merge credits / debts / future / subscriptions / recurring into a dated list (nearest first). */
 export function buildUpcomingItems(
 	credits: Credit[],
 	debts: Debt[],
 	futureTx: Transaction[],
 	currency = 'RUB',
-	limit = 5
+	limit = 5,
+	subscriptions: Subscription[] = [],
+	recurring: RecurringOperation[] = []
 ): WidgetUpcomingItem[] {
 	const items: WidgetUpcomingItem[] = [];
 
@@ -110,8 +124,8 @@ export function buildUpcomingItems(
 			date: c.next_payment_date,
 			amount_display:
 				c.next_payment_amount != null
-					? formatCentsDisplay(c.next_payment_amount, currency)
-					: c.monthly_payment_display,
+					? formatWidgetCents(c.next_payment_amount, currency)
+					: formatWidgetRaw(c.monthly_payment_display, currency),
 			route: `/credits/${c.id}`
 		});
 	}
@@ -124,7 +138,7 @@ export function buildUpcomingItems(
 			title: d.debtor_name,
 			subtitle: d.direction === 'borrowed' ? 'i_owe' : 'owed_to_me',
 			date: d.due_date,
-			amount_display: d.amount_display,
+			amount_display: formatWidgetCents(d.amount, currency),
 			route: `/debtors/${d.debtor_id}`
 		});
 	}
@@ -136,8 +150,34 @@ export function buildUpcomingItems(
 			title: tx.description?.trim() || tx.category_name || 'Payment',
 			subtitle: tx.account_name || '',
 			date: tx.transaction_date,
-			amount_display: tx.amount_display,
+			amount_display: formatWidgetCents(tx.amount, currency),
 			route: '/transactions'
+		});
+	}
+
+	for (const s of subscriptions) {
+		if (!s.active || !s.next_run_at) continue;
+		items.push({
+			kind: 'subscription',
+			id: s.id,
+			title: s.name?.trim() || 'Subscription',
+			subtitle: s.account_name || '',
+			date: s.next_run_at,
+			amount_display: formatWidgetCents(s.amount, currency),
+			route: '/subscriptions'
+		});
+	}
+
+	for (const r of recurring) {
+		if (!r.active || !r.next_run_at) continue;
+		items.push({
+			kind: 'recurring',
+			id: r.id,
+			title: r.description?.trim() || r.category_name || 'Recurring',
+			subtitle: r.account_name || '',
+			date: r.next_run_at,
+			amount_display: formatWidgetCents(r.amount, currency),
+			route: '/recurring-operations'
 		});
 	}
 
@@ -148,25 +188,51 @@ export function buildUpcomingItems(
 	}));
 }
 
+function sumActiveBalanceByType(accounts: Account[], type: Account['type']): number {
+	let sum = 0;
+	for (const a of accounts) {
+		if (a.status !== 'active' || a.type !== type) continue;
+		sum += a.balance;
+	}
+	return sum;
+}
+
 export function buildWidgetSnapshot(input: BuildWidgetSnapshotInput): WidgetSnapshot {
-	const { dashboard, currency } = input;
+	const { dashboard, currency, accounts } = input;
 	const cards = dashboard.credit_cards_summary;
+	const cashCents = sumActiveBalanceByType(accounts, 'cash');
+	const bankCents = sumActiveBalanceByType(accounts, 'bank');
+	const creditCents = cards?.total_balance ?? sumActiveBalanceByType(accounts, 'credit_card');
+	const cashDisplay = formatWidgetCents(cashCents, currency);
+	const bankDisplay = formatWidgetCents(bankCents, currency);
+	const creditDisplay = formatWidgetCents(creditCents, currency);
 	return {
 		updated_at: (input.now ?? new Date()).toISOString(),
 		currency,
 		language: input.language || 'ru',
-		total_balance_display: formatCentsDisplay(dashboard.total_balance, currency),
-		total_forecast_display: formatCentsDisplay(dashboard.total_forecast, currency),
+		total_balance_display: formatWidgetCents(dashboard.total_balance, currency),
+		total_forecast_display: formatWidgetCents(dashboard.total_forecast, currency),
 		show_forecast: dashboard.total_forecast !== dashboard.total_balance,
-		credit_cards_display: cards ? formatCentsDisplay(cards.total_balance, currency) : null,
-		budget: pickBudget(input.budgetItems),
-		upcoming: buildUpcomingItems(input.credits, input.debts, input.futureTx, currency),
-		accounts: input.accounts
+		credit_cards_display: cards ? creditDisplay : creditCents !== 0 ? creditDisplay : null,
+		cash_display: cashDisplay,
+		bank_display: bankDisplay,
+		credit_funds_display: creditDisplay,
+		budget: pickBudget(input.budgetItems, currency),
+		upcoming: buildUpcomingItems(
+			input.credits,
+			input.debts,
+			input.futureTx,
+			currency,
+			5,
+			input.subscriptions ?? [],
+			input.recurring ?? []
+		),
+		accounts: accounts
 			.filter((a) => a.status === 'active')
 			.map((a) => ({
 				id: a.id,
 				name: a.name,
-				balance_display: a.balance_display,
+				balance_display: formatWidgetCents(a.balance, currency),
 				is_primary: a.is_primary
 			}))
 	};

@@ -16,9 +16,12 @@
     <string name="widget_quick_actions_description">Quick actions: expense, income, transfer</string>
 
     <string name="widget_balance_title">My funds</string>
-    <string name="widget_balance_description">Total account balance</string>
+    <string name="widget_balance_description">Cash, bank cards and credit funds</string>
+    <string name="widget_funds_cash">Cash</string>
+    <string name="widget_funds_bank">Bank cards</string>
+    <string name="widget_funds_credit">Credit funds</string>
     <string name="widget_with_plans">With plans: %1$s</string>
-    <string name="widget_credit_cards">Cards: %1$s</string>
+    <string name="widget_credit_cards">Credit funds: %1$s</string>
 
     <string name="widget_budget_title">Monthly budget</string>
     <string name="widget_budget_description">Budget plan vs spent</string>

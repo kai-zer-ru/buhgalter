@@ -15,6 +15,18 @@
         <item name="android:background">@null</item>
     </style>
 
+    <!-- Account widget configure: DayNight + widget palette (matches home-screen widgets). -->
+    <style name="AppTheme.WidgetConfigure" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="android:windowBackground">@color/widget_background</item>
+        <item name="android:colorBackground">@color/widget_background</item>
+        <item name="android:textColorPrimary">@color/widget_text</item>
+        <item name="android:textColor">@color/widget_text</item>
+        <item name="colorPrimary">@color/widget_button</item>
+        <item name="colorAccent">@color/widget_button</item>
+        <item name="android:statusBarColor">@color/widget_background</item>
+        <item name="android:navigationBarColor">@color/widget_background</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
 
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="android:background">@drawable/splash</item>

@@ -13,13 +13,10 @@ import org.json.JSONObject;
 import java.io.IOException;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
-import java.text.DecimalFormat;
-import java.text.DecimalFormatSymbols;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -74,6 +71,10 @@ public class WidgetRefreshWorker extends Worker {
                             token);
             JSONArray future = futurePage.optJSONArray("data");
             if (future == null) future = new JSONArray();
+            // Optional modules — empty if feature is off or endpoint fails.
+            JSONArray subscriptions = getJsonArrayOptional(client, base + "/api/v1/subscriptions", token);
+            JSONArray recurring =
+                    getJsonArrayOptional(client, base + "/api/v1/recurring-operations", token);
 
             String currency = "RUB";
             JSONObject prevSnap = WidgetSnapshotStore.getSnapshot(ctx);
@@ -81,7 +82,17 @@ public class WidgetRefreshWorker extends Worker {
             String language = prevSnap != null ? prevSnap.optString("language", "ru") : "ru";
 
             JSONObject snapshot =
-                    buildSnapshot(dashboard, accounts, budget, credits, debts, future, currency, language);
+                    buildSnapshot(
+                            dashboard,
+                            accounts,
+                            budget,
+                            credits,
+                            debts,
+                            future,
+                            subscriptions,
+                            recurring,
+                            currency,
+                            language);
             WidgetSnapshotStore.publish(ctx, base, token, lock, snapshot.toString());
             WidgetUpdater.updateAll(ctx);
             return Result.success();
@@ -99,6 +110,8 @@ public class WidgetRefreshWorker extends Worker {
             JSONArray credits,
             JSONArray debts,
             JSONArray future,
+            JSONArray subscriptions,
+            JSONArray recurring,
             String currency,
             String language)
             throws Exception {
@@ -112,21 +125,34 @@ public class WidgetRefreshWorker extends Worker {
         snap.put("total_forecast_display", formatMoney(forecast, currency));
         snap.put("show_forecast", total != forecast);
         JSONObject cards = dashboard.optJSONObject("credit_cards_summary");
-        if (cards != null) {
-            snap.put("credit_cards_display", formatMoney(cards.optLong("total_balance", 0), currency));
+        long cashCents = sumBalanceByType(accounts, "cash");
+        long bankCents = sumBalanceByType(accounts, "bank");
+        long creditCents =
+                cards != null
+                        ? cards.optLong("total_balance", 0)
+                        : sumBalanceByType(accounts, "credit_card");
+        String cashDisplay = formatMoney(cashCents, currency);
+        String bankDisplay = formatMoney(bankCents, currency);
+        String creditDisplay = formatMoney(creditCents, currency);
+        snap.put("cash_display", cashDisplay);
+        snap.put("bank_display", bankDisplay);
+        snap.put("credit_funds_display", creditDisplay);
+        if (cards != null || creditCents != 0) {
+            snap.put("credit_cards_display", creditDisplay);
         } else {
             snap.put("credit_cards_display", JSONObject.NULL);
         }
-        snap.put("budget", pickBudget(budget.optJSONArray("items")));
-        snap.put("upcoming", buildUpcoming(credits, debts, future, currency));
+        snap.put("budget", pickBudget(budget.optJSONArray("items"), currency));
+        snap.put("upcoming", buildUpcoming(credits, debts, future, subscriptions, recurring, currency));
         JSONArray accountsOut = new JSONArray();
         if (accounts != null) {
             for (int i = 0; i < accounts.length(); i++) {
                 JSONObject a = accounts.getJSONObject(i);
+                if (!"active".equals(a.optString("status", "active"))) continue;
                 JSONObject item = new JSONObject();
                 item.put("id", a.optString("id"));
                 item.put("name", a.optString("name"));
-                item.put("balance_display", a.optString("balance_display"));
+                item.put("balance_display", formatMoney(a.optLong("balance", 0), currency));
                 item.put("is_primary", a.optBoolean("is_primary", false));
                 accountsOut.put(item);
             }
@@ -135,7 +161,20 @@ public class WidgetRefreshWorker extends Worker {
         return snap;
     }
 
-    private static Object pickBudget(JSONArray items) throws Exception {
+    private static long sumBalanceByType(JSONArray accounts, String type) {
+        if (accounts == null) return 0;
+        long sum = 0;
+        for (int i = 0; i < accounts.length(); i++) {
+            JSONObject a = accounts.optJSONObject(i);
+            if (a == null) continue;
+            if (!"active".equals(a.optString("status", "active"))) continue;
+            if (!type.equals(a.optString("type"))) continue;
+            sum += a.optLong("balance", 0);
+        }
+        return sum;
+    }
+
+    private static Object pickBudget(JSONArray items, String currency) throws Exception {
         if (items == null || items.length() == 0) return JSONObject.NULL;
         JSONObject all = null;
         JSONObject top = null;
@@ -157,16 +196,22 @@ public class WidgetRefreshWorker extends Worker {
         if (pick == null) return JSONObject.NULL;
         JSONObject out = new JSONObject();
         out.put("name", pick.optString("name"));
-        out.put("spent_display", pick.optString("spent_display"));
-        out.put("planned_display", pick.optString("planned_display"));
-        out.put("remaining_display", pick.optString("remaining_display"));
+        out.put("spent_display", formatMoney(pick.optLong("spent", 0), currency));
+        out.put("planned_display", formatMoney(pick.optLong("planned", 0), currency));
+        out.put("remaining_display", formatMoney(pick.optLong("remaining", 0), currency));
         out.put("percent", pick.optInt("percent", 0));
         out.put("status", pick.optString("status", "ok"));
         return out;
     }
 
     private static JSONArray buildUpcoming(
-            JSONArray credits, JSONArray debts, JSONArray future, String currency) throws Exception {
+            JSONArray credits,
+            JSONArray debts,
+            JSONArray future,
+            JSONArray subscriptions,
+            JSONArray recurring,
+            String currency)
+            throws Exception {
         List<JSONObject> list = new ArrayList<>();
         if (credits != null) {
             for (int i = 0; i < credits.length(); i++) {
@@ -183,8 +228,12 @@ public class WidgetRefreshWorker extends Worker {
                 item.put("date", date);
                 if (c.has("next_payment_amount") && !c.isNull("next_payment_amount")) {
                     item.put("amount_display", formatMoney(c.optLong("next_payment_amount"), currency));
+                } else if (c.has("monthly_payment") && !c.isNull("monthly_payment")) {
+                    item.put("amount_display", formatMoney(c.optLong("monthly_payment"), currency));
                 } else {
-                    item.put("amount_display", c.optString("monthly_payment_display", ""));
+                    item.put(
+                            "amount_display",
+                            formatMoneyDisplay(c.optString("monthly_payment_display", ""), currency));
                 }
                 item.put("route", "/credits/" + c.optString("id"));
                 list.add(item);
@@ -204,7 +253,7 @@ public class WidgetRefreshWorker extends Worker {
                         "subtitle",
                         "borrowed".equals(d.optString("direction")) ? "i_owe" : "owed_to_me");
                 item.put("date", date);
-                item.put("amount_display", d.optString("amount_display", ""));
+                item.put("amount_display", formatMoney(d.optLong("amount", 0), currency));
                 item.put("route", "/debtors/" + d.optString("debtor_id"));
                 list.add(item);
             }
@@ -220,8 +269,45 @@ public class WidgetRefreshWorker extends Worker {
                 item.put("title", title);
                 item.put("subtitle", tx.optString("account_name", ""));
                 item.put("date", tx.optString("transaction_date", ""));
-                item.put("amount_display", tx.optString("amount_display", ""));
+                item.put("amount_display", formatMoney(tx.optLong("amount", 0), currency));
                 item.put("route", "/transactions");
+                list.add(item);
+            }
+        }
+        if (subscriptions != null) {
+            for (int i = 0; i < subscriptions.length(); i++) {
+                JSONObject s = subscriptions.getJSONObject(i);
+                if (!s.optBoolean("active", false)) continue;
+                String date = s.optString("next_run_at", "");
+                if (date.isEmpty() || "null".equals(date)) continue;
+                JSONObject item = new JSONObject();
+                item.put("kind", "subscription");
+                item.put("id", s.optString("id"));
+                String name = s.optString("name", "").trim();
+                item.put("title", name.isEmpty() ? "Subscription" : name);
+                item.put("subtitle", s.optString("account_name", ""));
+                item.put("date", date);
+                item.put("amount_display", formatMoney(s.optLong("amount", 0), currency));
+                item.put("route", "/subscriptions");
+                list.add(item);
+            }
+        }
+        if (recurring != null) {
+            for (int i = 0; i < recurring.length(); i++) {
+                JSONObject r = recurring.getJSONObject(i);
+                if (!r.optBoolean("active", false)) continue;
+                String date = r.optString("next_run_at", "");
+                if (date.isEmpty() || "null".equals(date)) continue;
+                JSONObject item = new JSONObject();
+                item.put("kind", "recurring");
+                item.put("id", r.optString("id"));
+                String title = r.optString("description", "").trim();
+                if (title.isEmpty()) title = r.optString("category_name", "Recurring");
+                item.put("title", title);
+                item.put("subtitle", r.optString("account_name", ""));
+                item.put("date", date);
+                item.put("amount_display", formatMoney(r.optLong("amount", 0), currency));
+                item.put("route", "/recurring-operations");
                 list.add(item);
             }
         }
@@ -247,9 +333,56 @@ public class WidgetRefreshWorker extends Worker {
     }
 
     static String formatMoney(long cents, String currency) {
-        DecimalFormatSymbols symbols = new DecimalFormatSymbols(Locale.US);
-        DecimalFormat df = new DecimalFormat("#,##0.00", symbols);
-        return df.format(cents / 100.0) + " " + currency;
+        boolean negative = cents < 0;
+        long abs = Math.abs(cents);
+        long whole = abs / 100;
+        long frac = abs % 100;
+        StringBuilder sb = new StringBuilder();
+        if (negative) sb.append('-');
+        sb.append(groupThousands(whole));
+        sb.append('.');
+        if (frac < 10) sb.append('0');
+        sb.append(frac);
+        sb.append(' ');
+        sb.append(currencySymbol(currency));
+        return sb.toString();
+    }
+
+    /** Re-format API `*_display` strings (e.g. {@code 1500.00}) like in-app money UI. */
+    static String formatMoneyDisplay(String raw, String currency) {
+        if (raw == null) return "";
+        String cleaned =
+                raw.trim()
+                        .replace('\u00A0', ' ')
+                        .replace(" ", "")
+                        .replace("₽", "")
+                        .replace(",", ".");
+        cleaned = cleaned.replaceAll("(?i)[A-Z]{3}$", "").trim();
+        if (cleaned.isEmpty()) return "";
+        try {
+            java.math.BigDecimal bd = new java.math.BigDecimal(cleaned);
+            long cents =
+                    bd.movePointRight(2).setScale(0, java.math.RoundingMode.HALF_UP).longValue();
+            return formatMoney(cents, currency);
+        } catch (Exception e) {
+            return raw.trim();
+        }
+    }
+
+    private static String currencySymbol(String currency) {
+        if (currency != null && currency.equalsIgnoreCase("RUB")) return "₽";
+        return currency != null && !currency.isEmpty() ? currency : "₽";
+    }
+
+    private static String groupThousands(long n) {
+        String s = Long.toString(n);
+        StringBuilder out = new StringBuilder(s.length() + s.length() / 3);
+        int len = s.length();
+        for (int i = 0; i < len; i++) {
+            if (i > 0 && (len - i) % 3 == 0) out.append(' ');
+            out.append(s.charAt(i));
+        }
+        return out.toString();
     }
 
     private static JSONObject getJson(OkHttpClient client, String url, String token) throws IOException {
@@ -290,6 +423,14 @@ public class WidgetRefreshWorker extends Worker {
             throw e;
         } catch (Exception e) {
             throw new IOException(e);
+        }
+    }
+
+    private static JSONArray getJsonArrayOptional(OkHttpClient client, String url, String token) {
+        try {
+            return getJsonArray(client, url, token);
+        } catch (Exception e) {
+            return new JSONArray();
         }
     }
 

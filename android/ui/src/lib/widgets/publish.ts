@@ -5,16 +5,20 @@ import {
 	listAccounts,
 	listCredits,
 	listDebts,
+	listRecurringOperations,
+	listSubscriptions,
 	listTransactions,
 	type BudgetSummaryItem,
 	type Dashboard,
 	type Account,
 	type Credit,
 	type Debt,
+	type RecurringOperation,
+	type Subscription,
 	type Transaction
 } from '$lib/api/client';
 import { readRefCache } from '$lib/offline/ref-cache';
-import { isAppLockEnabled } from '$lib/platform/app-lock';
+import { shouldHideWidgetAmounts } from '$lib/platform/app-lock';
 import { getAuthToken } from '$lib/platform/auth-token';
 import { getApiBase } from '$lib/platform/server-url';
 import { isNativeApp } from '$lib/platform/native';
@@ -65,22 +69,31 @@ export async function publishWidgetSnapshot(): Promise<void> {
 			const creditsPath = '/api/v1/credits?status=active';
 			const debtsPath = '/api/v1/debts?settled=false';
 			const futurePath = '/api/v1/transactions?kind=future&limit=10&page=1&sort=date_asc';
+			const subscriptionsPath = '/api/v1/subscriptions';
+			const recurringPath = '/api/v1/recurring-operations';
 
-			const [dashboard, accounts, budgetRes, credits, debts, futureRes] = await Promise.all([
-				readCachedOrFetch<Dashboard>(dashboardPath, getDashboard),
-				readCachedOrFetch<Account[]>(accountsPath, () => listAccounts('active')),
-				readCachedOrFetch<{ items: BudgetSummaryItem[] }>(budgetPath, getBudgetSummary),
-				readCachedOrFetch<Credit[]>(creditsPath, () => listCredits({ status: 'active' })),
-				readCachedOrFetch<Debt[]>(debtsPath, () => listDebts({ settled: 'false' })),
-				readCachedOrFetch<{ data: Transaction[] }>(futurePath, () =>
-					listTransactions({
-						kind: 'future',
-						sort: 'date_asc',
-						page: '1',
-						limit: '10'
-					})
-				)
-			]);
+			const [dashboard, accounts, budgetRes, credits, debts, futureRes, subscriptions, recurring] =
+				await Promise.all([
+					readCachedOrFetch<Dashboard>(dashboardPath, getDashboard),
+					readCachedOrFetch<Account[]>(accountsPath, () => listAccounts('active')),
+					readCachedOrFetch<{ items: BudgetSummaryItem[] }>(budgetPath, getBudgetSummary),
+					readCachedOrFetch<Credit[]>(creditsPath, () => listCredits({ status: 'active' })),
+					readCachedOrFetch<Debt[]>(debtsPath, () => listDebts({ settled: 'false' })),
+					readCachedOrFetch<{ data: Transaction[] }>(futurePath, () =>
+						listTransactions({
+							kind: 'future',
+							sort: 'date_asc',
+							page: '1',
+							limit: '10'
+						})
+					),
+					readCachedOrFetch<Subscription[]>(subscriptionsPath, listSubscriptions).catch(
+						() => [] as Subscription[]
+					),
+					readCachedOrFetch<RecurringOperation[]>(recurringPath, listRecurringOperations).catch(
+						() => [] as RecurringOperation[]
+					)
+				]);
 			const futureTx = Array.isArray(futureRes) ? futureRes : futureRes.data;
 			const budgetItems = Array.isArray(budgetRes) ? budgetRes : budgetRes.items;
 			const u = get(user);
@@ -91,10 +104,12 @@ export async function publishWidgetSnapshot(): Promise<void> {
 				credits,
 				debts,
 				futureTx,
+				subscriptions: Array.isArray(subscriptions) ? subscriptions : [],
+				recurring: Array.isArray(recurring) ? recurring : [],
 				currency: u?.currency ?? 'RUB',
 				language: u?.language ?? 'ru'
 			});
-			const lockEnabled = await isAppLockEnabled();
+			const lockEnabled = shouldHideWidgetAmounts();
 			await publishWidgetBridge({
 				baseUrl,
 				token,

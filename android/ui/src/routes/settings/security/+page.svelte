@@ -13,6 +13,7 @@
 		refreshAppLockConfig,
 		setBackgroundLockMs,
 		setBiometricEnabled,
+		setShowWidgetsWhenLocked,
 		type BackgroundLockMs,
 		validateNewPin
 	} from '$lib/platform/app-lock';
@@ -129,6 +130,12 @@
 		config = getAppLockConfig();
 		toast($_('common.saved'));
 	}
+
+	async function toggleShowWidgetsWhenLocked() {
+		await setShowWidgetsWhenLocked(!config.showWidgetsWhenLocked);
+		config = getAppLockConfig();
+		toast($_('common.saved'));
+	}
 </script>
 
 {#if loading}
@@ -189,6 +196,23 @@
 					{/each}
 				</select>
 			</label>
+
+			<div
+				class="flex items-center justify-between gap-4 border-t pt-4"
+				style:border-color="var(--border)"
+			>
+				<div>
+					<p class="font-medium">{$_('appLock.showWidgetsWhenLocked')}</p>
+					<p class="text-sm" style:color="var(--text-muted)">
+						{$_('appLock.showWidgetsWhenLockedHint')}
+					</p>
+				</div>
+				<ToggleSwitch
+					label={$_('appLock.showWidgetsWhenLocked')}
+					checked={config.showWidgetsWhenLocked}
+					onchange={() => void toggleShowWidgetsWhenLocked()}
+				/>
+			</div>
 		{/if}
 
 		<p class="text-xs" style:color="var(--text-muted)">{$_('appLock.limitations')}</p>

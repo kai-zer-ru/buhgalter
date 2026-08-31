@@ -1,14 +1,20 @@
 package ru.kai_zer.buhgalter.widgets;
 
-import android.app.Activity;
 import android.appwidget.AppWidgetManager;
 import android.content.Intent;
 import android.os.Bundle;
+import android.util.TypedValue;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
 import android.widget.TextView;
+
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -18,7 +24,7 @@ import java.util.List;
 
 import ru.kai_zer.buhgalter.R;
 
-public class AccountWidgetConfigureActivity extends Activity {
+public class AccountWidgetConfigureActivity extends AppCompatActivity {
     private int appWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID;
     private final List<String> accountIds = new ArrayList<>();
 
@@ -39,7 +45,23 @@ public class AccountWidgetConfigureActivity extends Activity {
             return;
         }
 
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         setContentView(R.layout.widget_account_configure);
+
+        View root = findViewById(R.id.widget_configure_root);
+        final int pad =
+                Math.round(
+                        TypedValue.applyDimension(
+                                TypedValue.COMPLEX_UNIT_DIP, 16f, getResources().getDisplayMetrics()));
+        ViewCompat.setOnApplyWindowInsetsListener(
+                root,
+                (v, windowInsets) -> {
+                    Insets bars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars());
+                    v.setPadding(
+                            bars.left + pad, bars.top + pad, bars.right + pad, bars.bottom + pad);
+                    return WindowInsetsCompat.CONSUMED;
+                });
+
         TextView hint = findViewById(R.id.widget_configure_hint);
         ListView list = findViewById(R.id.widget_configure_list);
 
@@ -62,7 +84,7 @@ public class AccountWidgetConfigureActivity extends Activity {
             }
             labels.add(name);
         }
-        list.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, labels));
+        list.setAdapter(new ArrayAdapter<>(this, R.layout.widget_account_configure_item, labels));
         list.setOnItemClickListener(this::onPick);
     }
 

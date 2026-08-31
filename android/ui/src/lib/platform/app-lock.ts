@@ -24,6 +24,7 @@ const KEY_ENABLED = 'app_lock.enabled';
 const KEY_BIOMETRIC = 'app_lock.biometric_enabled';
 const KEY_PIN = 'app_lock.pin_credentials';
 const KEY_BACKGROUND_MS = 'app_lock.background_ms';
+const KEY_SHOW_WIDGETS_WHEN_LOCKED = 'app_lock.show_widgets_when_locked';
 /** Legacy keys from short-lived trigger toggles — cleared on logout. */
 const KEY_LOCK_ON_LAUNCH = 'app_lock.lock_on_launch';
 const KEY_LOCK_ON_BACKGROUND = 'app_lock.lock_on_background';
@@ -33,12 +34,15 @@ export type AppLockConfig = {
 	biometricEnabled: boolean;
 	/** Idle in background before lock when returning to the app. */
 	backgroundLockMs: BackgroundLockMs;
+	/** When true, home-screen widgets keep showing amounts while the app is locked. Default false. */
+	showWidgetsWhenLocked: boolean;
 };
 
 const DEFAULT_CONFIG: AppLockConfig = {
 	enabled: false,
 	biometricEnabled: false,
-	backgroundLockMs: BACKGROUND_LOCK_MS
+	backgroundLockMs: BACKGROUND_LOCK_MS,
+	showWidgetsWhenLocked: false
 };
 
 export type PinCredentials = {
@@ -191,15 +195,17 @@ export async function refreshAppLockConfig(force = false): Promise<AppLockConfig
 		syncLockScreenVisible();
 		return configCache;
 	}
-	const [enabledRaw, biometricRaw, timeoutRaw] = await Promise.all([
+	const [enabledRaw, biometricRaw, timeoutRaw, widgetsRaw] = await Promise.all([
 		secureGet(KEY_ENABLED),
 		secureGet(KEY_BIOMETRIC),
-		secureGet(KEY_BACKGROUND_MS)
+		secureGet(KEY_BACKGROUND_MS),
+		secureGet(KEY_SHOW_WIDGETS_WHEN_LOCKED)
 	]);
 	configCache = {
 		enabled: enabledRaw === '1',
 		biometricEnabled: biometricRaw === '1',
-		backgroundLockMs: parseBackgroundLockMs(timeoutRaw)
+		backgroundLockMs: parseBackgroundLockMs(timeoutRaw),
+		showWidgetsWhenLocked: widgetsRaw === '1'
 	};
 	syncLockScreenVisible();
 	return configCache;
@@ -223,17 +229,29 @@ export function shouldShowLockScreen(): boolean {
 	return config.enabled && !sessionUnlocked;
 }
 
+/** Hide widget amounts while the lock screen is required, unless the user opted in. */
+export function shouldHideWidgetAmounts(): boolean {
+	return shouldShowLockScreen() && !getAppLockConfig().showWidgetsWhenLocked;
+}
+
+function syncWidgetLockVisibility(): void {
+	const hideAmounts = shouldHideWidgetAmounts();
+	void import('$lib/widgets/bridge').then((m) => m.setWidgetLockEnabled(hideAmounts));
+}
+
 export function unlockSession(): void {
 	sessionUnlocked = true;
 	failedAttempts = 0;
 	blockedUntil = 0;
 	backgroundAt = null;
 	syncLockScreenVisible();
+	syncWidgetLockVisibility();
 }
 
 export function lockSession(): void {
 	sessionUnlocked = false;
 	syncLockScreenVisible();
+	syncWidgetLockVisibility();
 }
 
 export function retryBlockedMs(): number {
@@ -278,8 +296,6 @@ export async function enableAppLock(pin: string): Promise<void> {
 	await secureSet(KEY_ENABLED, '1');
 	await refreshAppLockConfig(true);
 	lockSession();
-	const { setWidgetLockEnabled } = await import('$lib/widgets/bridge');
-	await setWidgetLockEnabled(true);
 }
 
 export async function disableAppLock(pin: string): Promise<boolean> {
@@ -296,6 +312,7 @@ export async function clearAppLock(): Promise<void> {
 		secureRemove(KEY_BIOMETRIC),
 		secureRemove(KEY_PIN),
 		secureRemove(KEY_BACKGROUND_MS),
+		secureRemove(KEY_SHOW_WIDGETS_WHEN_LOCKED),
 		secureRemove(KEY_LOCK_ON_LAUNCH),
 		secureRemove(KEY_LOCK_ON_BACKGROUND)
 	]);
@@ -305,13 +322,22 @@ export async function clearAppLock(): Promise<void> {
 	blockedUntil = 0;
 	backgroundAt = null;
 	syncLockScreenVisible();
-	const { setWidgetLockEnabled } = await import('$lib/widgets/bridge');
-	await setWidgetLockEnabled(false);
+	syncWidgetLockVisibility();
 }
 
 export async function setBackgroundLockMs(ms: BackgroundLockMs): Promise<void> {
 	await secureSet(KEY_BACKGROUND_MS, String(ms));
 	await refreshAppLockConfig(true);
+}
+
+export async function setShowWidgetsWhenLocked(enabled: boolean): Promise<void> {
+	if (enabled) {
+		await secureSet(KEY_SHOW_WIDGETS_WHEN_LOCKED, '1');
+	} else {
+		await secureRemove(KEY_SHOW_WIDGETS_WHEN_LOCKED);
+	}
+	await refreshAppLockConfig(true);
+	syncWidgetLockVisibility();
 }
 
 export async function changePin(currentPin: string, nextPin: string): Promise<boolean> {

@@ -30,46 +30,33 @@ final class WidgetViews {
     }
 
     static void bindBalance(Context context, RemoteViews views) {
-        views.setOnClickPendingIntent(R.id.widget_root, WidgetDeepLinks.open(context, 201, "/"));
+        views.setOnClickPendingIntent(R.id.widget_root, WidgetDeepLinks.open(context, 201, "/accounts"));
+        views.setTextViewText(R.id.widget_title, context.getString(R.string.widget_balance_title));
         if (needLogin(context)) {
-            views.setTextViewText(R.id.widget_title, context.getString(R.string.widget_balance_title));
-            views.setTextViewText(R.id.widget_primary, context.getString(R.string.widget_need_login));
-            views.setViewVisibility(R.id.widget_secondary, View.GONE);
-            views.setViewVisibility(R.id.widget_tertiary, View.GONE);
+            views.setViewVisibility(R.id.widget_status, View.VISIBLE);
+            views.setViewVisibility(R.id.widget_funds_rows, View.GONE);
+            views.setTextViewText(R.id.widget_status, context.getString(R.string.widget_need_login));
             return;
         }
+        views.setViewVisibility(R.id.widget_status, View.GONE);
+        views.setViewVisibility(R.id.widget_funds_rows, View.VISIBLE);
         if (amountsHidden(context)) {
-            views.setTextViewText(R.id.widget_title, context.getString(R.string.widget_balance_title));
-            views.setTextViewText(R.id.widget_primary, context.getString(R.string.widget_locked));
-            views.setViewVisibility(R.id.widget_secondary, View.GONE);
-            views.setViewVisibility(R.id.widget_tertiary, View.GONE);
+            String hidden = context.getString(R.string.widget_amount_hidden);
+            views.setTextViewText(R.id.widget_cash_amount, hidden);
+            views.setTextViewText(R.id.widget_bank_amount, hidden);
+            views.setTextViewText(R.id.widget_credit_amount, hidden);
             return;
         }
         JSONObject snap = WidgetSnapshotStore.getSnapshot(context);
         if (snap == null) {
-            views.setTextViewText(R.id.widget_primary, context.getString(R.string.widget_need_login));
-            views.setViewVisibility(R.id.widget_secondary, View.GONE);
-            views.setViewVisibility(R.id.widget_tertiary, View.GONE);
+            views.setViewVisibility(R.id.widget_status, View.VISIBLE);
+            views.setViewVisibility(R.id.widget_funds_rows, View.GONE);
+            views.setTextViewText(R.id.widget_status, context.getString(R.string.widget_need_login));
             return;
         }
-        views.setTextViewText(R.id.widget_title, context.getString(R.string.widget_balance_title));
-        views.setTextViewText(R.id.widget_primary, snap.optString("total_balance_display", "—"));
-        if (snap.optBoolean("show_forecast", false)) {
-            views.setViewVisibility(R.id.widget_secondary, View.VISIBLE);
-            views.setTextViewText(
-                    R.id.widget_secondary,
-                    context.getString(R.string.widget_with_plans, snap.optString("total_forecast_display", "")));
-        } else {
-            views.setViewVisibility(R.id.widget_secondary, View.GONE);
-        }
-        if (!snap.isNull("credit_cards_display")) {
-            views.setViewVisibility(R.id.widget_tertiary, View.VISIBLE);
-            views.setTextViewText(
-                    R.id.widget_tertiary,
-                    context.getString(R.string.widget_credit_cards, snap.optString("credit_cards_display", "")));
-        } else {
-            views.setViewVisibility(R.id.widget_tertiary, View.GONE);
-        }
+        views.setTextViewText(R.id.widget_cash_amount, snap.optString("cash_display", "—"));
+        views.setTextViewText(R.id.widget_bank_amount, snap.optString("bank_display", "—"));
+        views.setTextViewText(R.id.widget_credit_amount, snap.optString("credit_funds_display", "—"));
     }
 
     static void bindBudget(Context context, RemoteViews views) {

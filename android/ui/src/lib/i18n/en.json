@@ -1141,6 +1141,8 @@
 	"appLock.disableConfirm": "Disable",
 	"appLock.backgroundTimeout": "Background timeout",
 	"appLock.backgroundTimeoutHint": "How long before locking after the app is minimized",
+	"appLock.showWidgetsWhenLocked": "Show widgets while locked",
+	"appLock.showWidgetsWhenLockedHint": "Keep balances and amounts visible on home-screen widgets while the app is locked",
 	"appLock.timeout.seconds": "{n}s",
 	"appLock.timeout.minutes": "{n} min",
 	"appLock.timeout.hour": "1 hour",
