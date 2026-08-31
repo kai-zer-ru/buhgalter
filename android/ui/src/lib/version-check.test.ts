@@ -5,6 +5,7 @@ import {
 	isBlockingVersionMismatch,
 	normalizeVersion,
 	releaseUrlForVersion,
+	resetVersionCheckForTests,
 	versionBehindBlocks,
 	versionsMismatch
 } from '$lib/version-check';
@@ -94,6 +95,7 @@ describe('normalizeVersion', () => {
 describe('fetchAppVersionInfo', () => {
 	beforeEach(() => {
 		mockedGetVersionCheck.mockReset();
+		resetVersionCheckForTests();
 	});
 
 	it('flags mismatch but not block for patch behind', async () => {
@@ -130,5 +132,32 @@ describe('fetchAppVersionInfo', () => {
 			versionMismatch: false,
 			versionBlocked: false
 		});
+	});
+
+	it('skips network within 24h and returns cached result', async () => {
+		mockedGetVersionCheck.mockResolvedValue({
+			current_version: '1.5.0',
+			update_available: false
+		});
+		await fetchAppVersionInfo('1.4.0');
+		mockedGetVersionCheck.mockClear();
+		const second = await fetchAppVersionInfo('1.4.0');
+		expect(mockedGetVersionCheck).not.toHaveBeenCalled();
+		expect(second.serverVersion).toBe('1.5.0');
+	});
+
+	it('force bypasses daily throttle', async () => {
+		mockedGetVersionCheck.mockResolvedValue({
+			current_version: '1.4.0',
+			update_available: false
+		});
+		await fetchAppVersionInfo('1.4.0');
+		mockedGetVersionCheck.mockResolvedValue({
+			current_version: '1.6.0',
+			update_available: false
+		});
+		const forced = await fetchAppVersionInfo('1.4.0', { force: true });
+		expect(mockedGetVersionCheck).toHaveBeenCalledTimes(2);
+		expect(forced.serverVersion).toBe('1.6.0');
 	});
 });

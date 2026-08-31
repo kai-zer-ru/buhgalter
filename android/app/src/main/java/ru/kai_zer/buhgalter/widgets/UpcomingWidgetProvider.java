@@ -15,11 +15,11 @@ public class UpcomingWidgetProvider extends AppWidgetProvider {
             WidgetViews.bindUpcoming(context, views);
             appWidgetManager.updateAppWidget(id, views);
         }
-        WidgetRefreshScheduler.runOnce(context);
+        // Bind from cached snapshot only — do not runOnce here (updateAll ↔ onUpdate loop).
     }
 
     @Override
     public void onEnabled(Context context) {
-        WidgetRefreshScheduler.ensurePeriodic(context);
+        WidgetRefreshScheduler.runOnce(context);
     }
 }

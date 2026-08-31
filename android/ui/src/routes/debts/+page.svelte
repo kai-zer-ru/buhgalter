@@ -17,12 +17,7 @@
 	import { confirm } from '$lib/confirm';
 	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
-	import {
-		refCacheReady,
-		refCacheReadyAny,
-		refCacheTick,
-		refCacheUpdate
-	} from '$lib/offline/ref-cache';
+	import { refCacheReady, refCacheReadyAny, refCacheUpdate } from '$lib/offline/ref-cache';
 	import { refCachePathMatches } from '$lib/offline/ref-cache-watch';
 	import { dataRefreshTick } from '$lib/offline/sync';
 	import { assignIfChanged } from '$lib/state-utils';
@@ -47,9 +42,8 @@
 	onMount(() => void load());
 
 	$effect(() => {
-		const tick = $refCacheTick;
 		const refresh = $dataRefreshTick;
-		if ((tick === 0 && refresh === 0) || !ready) return;
+		if (refresh === 0 || !ready) return;
 		void load({ background: true });
 	});
 

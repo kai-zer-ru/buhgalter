@@ -6,9 +6,12 @@ import android.webkit.WebView;
 import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeActivity;
 
+import ru.kai_zer.buhgalter.widgets.WidgetRefreshScheduler;
+
 public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        registerPlugin(AppInstancePlugin.class);
         registerPlugin(WifiSubnetPlugin.class);
         registerPlugin(SslTrustPlugin.class);
         registerPlugin(LanDiscoveryPlugin.class);
@@ -17,6 +20,8 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(ShareTargetPlugin.class);
         registerPlugin(NotificationInterceptPlugin.class);
         super.onCreate(savedInstanceState);
+        // Drain any stuck OneTime WidgetRefresh backlog from the old onUpdate feedback loop.
+        WidgetRefreshScheduler.ensurePeriodic(this);
         attachHistoryBridge();
     }
 

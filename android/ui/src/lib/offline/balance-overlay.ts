@@ -1,7 +1,8 @@
 import type { Transaction } from '$lib/api/client';
+import { get } from 'svelte/store';
 import { isCurrentMonthApiDatetime, isFutureApiDatetime } from '$lib/dates';
 import { toCents } from '$lib/money';
-import { getOutboxEntries } from '$lib/offline/store';
+import { getOutboxEntries, outboxTick } from '$lib/offline/store';
 import type { OutboxEntry, TransactionPayload, TransferPayload } from '$lib/offline/types';
 import {
 	findTransferCommissionKopecks,
@@ -140,7 +141,15 @@ function baselineEffect(entry: OutboxEntry, tz: string): AccountDeltas | null {
 }
 
 /** Net balance/forecast deltas from pending outbox (relative to last server snapshot). */
+let cachedDeltas: AccountDeltas | null = null;
+let cachedOutboxTick = -1;
+let cachedTz = '';
+
 export function computeOutboxAccountDeltas(tz: string): AccountDeltas {
+	const tick = get(outboxTick);
+	if (cachedDeltas && cachedOutboxTick === tick && cachedTz === tz) {
+		return cachedDeltas;
+	}
 	const net = emptyDeltas();
 	for (const entry of getOutboxEntries()) {
 		if (entry.op === 'delete') {
@@ -160,7 +169,16 @@ export function computeOutboxAccountDeltas(tz: string): AccountDeltas {
 			if (created) mergeDeltas(net, created);
 		}
 	}
+	cachedDeltas = net;
+	cachedOutboxTick = tick;
+	cachedTz = tz;
 	return net;
+}
+
+export function resetOutboxDeltasCacheForTests(): void {
+	cachedDeltas = null;
+	cachedOutboxTick = -1;
+	cachedTz = '';
 }
 
 export function applyAccountDeltas(

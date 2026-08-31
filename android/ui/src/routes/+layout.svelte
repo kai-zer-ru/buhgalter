@@ -23,7 +23,7 @@
 	import { syncRemoteI18nOnMismatch } from '$lib/i18n/remote-sync';
 	import { hasServerUrl, refreshActiveServerUrl } from '$lib/platform/server-url';
 	import { initAuthToken, clearAuthToken, getAuthToken } from '$lib/platform/auth-token';
-	import { initNativeOfflineSync } from '$lib/offline/init';
+	import { initNativeOfflineSyncListeners, startOfflineSyncAfterUnlock } from '$lib/offline/init';
 	import { prepareBootstrapConnectivity } from '$lib/offline/bootstrap-connectivity';
 	import { markServerOffline } from '$lib/offline/server-connectivity';
 	import {
@@ -51,6 +51,7 @@
 	import { initShareTargetListener } from '$lib/android/share-target';
 	import { initNotificationIntercept } from '$lib/android/notification-intercept';
 	import { initDebugLogListeners, debugLogInfo } from '$lib/platform/debug-log';
+	import { isNativeApp } from '$lib/platform/native';
 	import type { User } from '$lib/api/client';
 	import './layout.css';
 
@@ -58,6 +59,8 @@
 	let ready = $state(false);
 	let bootError = $state<string | null>(null);
 	let pendingDeepLink = $state<string | null>(null);
+	let notificationInterceptReady = $state(false);
+	let cleanupIntercept: (() => void) | undefined;
 
 	const path = $derived($page.url.pathname);
 	let lastLoggedPath = $state('');
@@ -141,7 +144,7 @@
 	}
 
 	/**
-	 * Token present → always show PIN/biometrics. Never block on /health or missing ref-cache.
+	 * Token present → always show PIN/biometrics. Never block on /health, SSID, or missing ref-cache.
 	 */
 	async function unlockWithExistingSession(): Promise<boolean> {
 		if (!getAuthToken()) return false;
@@ -167,7 +170,8 @@
 		ready = false;
 		debugLogInfo('bootstrap', 'App bootstrap started');
 		initTheme();
-		await initAuthToken();
+		// initAuthToken already awaited in onMount — do not block on SSID refresh.
+		void refreshActiveServerUrl();
 
 		const currentPath = $page.url.pathname;
 
@@ -186,7 +190,6 @@
 
 		if (isPublicAppRoute(currentPath)) {
 			if (onLoginPath && getAuthToken()) {
-				await refreshActiveServerUrl();
 				if (await unlockWithExistingSession()) {
 					await goto(resolve('/'), { replaceState: true });
 					ready = true;
@@ -197,7 +200,6 @@
 			return;
 		}
 
-		await refreshActiveServerUrl();
 		if (await unlockWithExistingSession()) {
 			ready = true;
 			return;
@@ -235,12 +237,27 @@
 		ready = true;
 	}
 
+	$effect(() => {
+		if (!ready || !$user || $appLockVisible) return;
+		startOfflineSyncAfterUnlock();
+	});
+
+	$effect(() => {
+		if (!ready || !$user || $appLockVisible || notificationInterceptReady) return;
+		notificationInterceptReady = true;
+		void initNotificationIntercept().then((cleanup) => {
+			cleanupIntercept = cleanup;
+		});
+	});
+
 	onMount(() => {
+		if (isNativeApp()) {
+			document.documentElement.classList.add('native-app');
+		}
 		initDebugLogListeners();
 		const cleanupAppLock = initAppLockListener();
 		let cleanupDeepLink: (() => void) | undefined;
 		let cleanupShare: (() => void) | undefined;
-		let cleanupIntercept: (() => void) | undefined;
 		void initDeepLinkListener((route) => {
 			pendingDeepLink = route;
 		}).then((cleanup) => {
@@ -254,13 +271,11 @@
 		).then((cleanup) => {
 			cleanupShare = cleanup;
 		});
-		void initNotificationIntercept().then((cleanup) => {
-			cleanupIntercept = cleanup;
-		});
 		// Token must be loaded before warmRefCache — otherwise unauthenticated 401s wipe SecureStorage.
 		void (async () => {
 			await initAuthToken();
-			initNativeOfflineSync();
+			await refreshAppLockConfig();
+			initNativeOfflineSyncListeners();
 			await bootstrap();
 		})();
 		return () => {

@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
 	clearAuthToken,
+	getAuthServerOrigin,
 	getAuthToken,
 	getAuthTokenKind,
 	initAuthToken,
@@ -8,6 +9,10 @@ import {
 	setAuthToken
 } from './auth-token';
 import { resetSecureStoreForTests } from './secure-store';
+
+vi.mock('$lib/platform/server-url', () => ({
+	getServerUrl: () => 'http://192.168.1.1:8765'
+}));
 
 describe('auth-token', () => {
 	beforeEach(() => {
@@ -27,8 +32,10 @@ describe('auth-token', () => {
 		await setAuthToken('session-token', 'session');
 		expect(getAuthToken()).toBe('session-token');
 		expect(getAuthTokenKind()).toBe('session');
+		expect(getAuthServerOrigin()).toBe('http://192.168.1.1:8765');
 		await clearAuthToken();
 		expect(getAuthTokenKind()).toBe('api_token');
+		expect(getAuthServerOrigin()).toBe('');
 	});
 
 	it('migrates legacy localStorage token on init', async () => {

@@ -17,8 +17,11 @@ function bump(): void {
 }
 
 const memoryDrafts = new Map<string, string>();
+const parsedDraftsCache = new Map<string, InterceptDraft[]>();
 
 function readDrafts(userId: string): InterceptDraft[] {
+	const cached = parsedDraftsCache.get(userId);
+	if (cached) return cached;
 	try {
 		let raw: string | null = null;
 		try {
@@ -29,10 +32,16 @@ function readDrafts(userId: string): InterceptDraft[] {
 			raw = null;
 		}
 		if (raw == null) raw = memoryDrafts.get(storageKey(userId)) ?? null;
-		if (!raw) return [];
+		if (!raw) {
+			parsedDraftsCache.set(userId, []);
+			return [];
+		}
 		const parsed = JSON.parse(raw) as InterceptDraft[];
-		return Array.isArray(parsed) ? parsed : [];
+		const list = Array.isArray(parsed) ? parsed : [];
+		parsedDraftsCache.set(userId, list);
+		return list;
 	} catch {
+		parsedDraftsCache.set(userId, []);
 		return [];
 	}
 }
@@ -40,6 +49,7 @@ function readDrafts(userId: string): InterceptDraft[] {
 function writeDrafts(userId: string, drafts: InterceptDraft[]): void {
 	const payload = JSON.stringify(drafts.slice(0, MAX_DRAFTS));
 	memoryDrafts.set(storageKey(userId), payload);
+	parsedDraftsCache.set(userId, drafts.slice(0, MAX_DRAFTS));
 	try {
 		if (typeof localStorage !== 'undefined') {
 			localStorage.setItem(storageKey(userId), payload);
@@ -181,6 +191,7 @@ export function clearInterceptDraftsForTests(userId?: string): void {
 		}
 	} else {
 		memoryDrafts.clear();
+		parsedDraftsCache.clear();
 	}
 	bump();
 }

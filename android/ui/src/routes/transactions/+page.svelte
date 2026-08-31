@@ -11,13 +11,14 @@
 		type Category,
 		type Merchant,
 		type Tag,
-		type Transaction
+		type Transaction,
+		type UIMeta
 	} from '$lib/api/client';
 	import { deleteTransaction, deleteTransfer } from '$lib/offline/transactions-api';
 	import { mergeOutboxTransactions, refreshMergeMeta } from '$lib/offline/merge';
 	import { outboxTick } from '$lib/offline/store';
 	import { dataRefreshTick, localDataTick, scheduleSyncOutbox } from '$lib/offline/sync';
-	import { refCacheReady, refCacheUpdate } from '$lib/offline/ref-cache';
+	import { readRefCache, refCacheReady, refCacheUpdate } from '$lib/offline/ref-cache';
 	import { refCachePathMatches } from '$lib/offline/ref-cache-watch';
 	import { assignIfChanged } from '$lib/state-utils';
 	import { accountsFromUIMeta } from '$lib/select-options';
@@ -190,7 +191,8 @@
 
 	async function loadFilterOptions(opts: { background?: boolean } = {}) {
 		try {
-			const meta = await getUIMeta();
+			let meta = readRefCache<UIMeta>('/api/v1/ui/meta');
+			if (!meta) meta = await getUIMeta();
 			const nextAccounts = accountsFromUIMeta(
 				meta.accounts.filter((acc) => acc.status === 'active'),
 				meta.banks

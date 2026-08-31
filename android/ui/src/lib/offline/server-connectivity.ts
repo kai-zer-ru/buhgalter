@@ -13,7 +13,7 @@ export type ServerReachability = 'unknown' | 'online' | 'offline';
 /** True when API calls should use cache/outbox instead of hitting the server. */
 export const serverReachability = writable<ServerReachability>('unknown');
 
-const PROBE_TIMEOUT_MS = 5_000;
+const PROBE_TIMEOUT_MS = 2_500;
 
 /** Capacitor / fetch errors when the host is unreachable (device may still be "online"). */
 export function isConnectionError(err: unknown): boolean {
@@ -37,10 +37,12 @@ export function isConnectionError(err: unknown): boolean {
 }
 
 export function markServerOffline(): void {
+	if (get(serverReachability) === 'offline') return;
 	serverReachability.set('offline');
 }
 
 export function markServerOnline(): void {
+	if (get(serverReachability) === 'online') return;
 	serverReachability.set('online');
 }
 

@@ -97,7 +97,18 @@ function appendEntry(entry: DebugLogEntry): void {
 	const entries = loadEntries();
 	entries.push(entry);
 	while (entries.length > MAX_ENTRIES) entries.shift();
-	persistEntries(entries);
+	schedulePersistEntries(entries);
+}
+
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+
+function schedulePersistEntries(entries: DebugLogEntry[]): void {
+	memoryEntries = entries;
+	if (persistTimer !== null) return;
+	persistTimer = setTimeout(() => {
+		persistTimer = null;
+		if (memoryEntries) persistEntries(memoryEntries);
+	}, 500);
 }
 
 export function debugLog(
@@ -322,6 +333,10 @@ export function logApiResponse(
 export function resetDebugLogForTests(): void {
 	memoryEnabled = null;
 	memoryEntries = null;
+	if (persistTimer !== null) {
+		clearTimeout(persistTimer);
+		persistTimer = null;
+	}
 	storageRemove(ENABLED_KEY);
 	storageRemove(ENTRIES_KEY);
 	listenersInstalled = false;

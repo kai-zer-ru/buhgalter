@@ -8,6 +8,7 @@ import {
 	markServerOnline
 } from '$lib/offline/server-connectivity';
 import { debugLogInfo, debugLogWarn } from '$lib/platform/debug-log';
+import { isDashboardRefPath, isDashboardShape, stableEqual } from '$lib/state-utils';
 
 const REF_CACHE_VERSION = 'buhgalter.ref_cache.v1';
 
@@ -25,6 +26,28 @@ const UI_META_PATH = '/api/v1/ui/meta';
 
 const memoryStore = new Map<string, string>();
 const inflightRevalidate = new Map<string, Promise<void>>();
+const pendingDiskWrites = new Map<string, string>();
+const lastRevalidatedAt = new Map<string, number>();
+const revalidateTimers = new Map<string, ReturnType<typeof setTimeout>>();
+let diskFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Wait before background GET so taps/scroll are not competing with revalidate. */
+const REVALIDATE_DEFER_MS = import.meta.env.MODE === 'test' ? 0 : 3_000;
+/** Per-path cooldown — avoid revalidate storms on every navigation. */
+export const REVALIDATE_COOLDOWN_MS = 60_000;
+
+function flushDiskWrites(): void {
+	diskFlushTimer = null;
+	if (typeof localStorage === 'undefined') return;
+	for (const [key, value] of pendingDiskWrites) {
+		try {
+			localStorage.setItem(key, value);
+		} catch {
+			// quota
+		}
+	}
+	pendingDiskWrites.clear();
+}
 
 /** Bumped when a background revalidate writes new data — pages reload softly. */
 export const refCacheTick = writable(0);
@@ -81,26 +104,26 @@ function isPreservedOfflineRefKey(key: string): boolean {
 }
 
 function storageGet(key: string): string | null {
+	const mem = memoryStore.get(key);
+	if (mem !== undefined) return mem;
 	if (typeof localStorage !== 'undefined') {
 		try {
-			return localStorage.getItem(key);
+			const raw = localStorage.getItem(key);
+			if (raw !== null) memoryStore.set(key, raw);
+			return raw;
 		} catch {
 			// private mode / quota
 		}
 	}
-	return memoryStore.get(key) ?? null;
+	return null;
 }
 
 function storageSet(key: string, value: string): void {
-	if (typeof localStorage !== 'undefined') {
-		try {
-			localStorage.setItem(key, value);
-			return;
-		} catch {
-			// quota — fall through to memory
-		}
-	}
 	memoryStore.set(key, value);
+	pendingDiskWrites.set(key, value);
+	if (diskFlushTimer === null) {
+		diskFlushTimer = setTimeout(flushDiskWrites, 32);
+	}
 }
 
 function storageRemove(key: string): void {
@@ -165,11 +188,27 @@ export function refCacheReadyAny(paths: string[]): boolean {
 	return paths.some(refCacheReady);
 }
 
-export function writeRefCache<T>(path: string, value: T): void {
+/** Write cache. Returns false when payload matches existing (no disk/UI churn). */
+export function writeRefCache<T>(path: string, value: T): boolean {
 	try {
-		storageSet(storageKey(path), JSON.stringify(value));
+		const key = storageKey(path);
+		const prevRaw = memoryStore.get(key) ?? null;
+		const nextRaw = JSON.stringify(value);
+		if (prevRaw === nextRaw) return false;
+		if (isDashboardRefPath(path) && prevRaw !== null) {
+			try {
+				const prev = JSON.parse(prevRaw) as unknown;
+				if (isDashboardShape(prev) && isDashboardShape(value) && stableEqual(prev, value)) {
+					return false;
+				}
+			} catch {
+				// fall through to write
+			}
+		}
+		storageSet(key, nextRaw);
+		return true;
 	} catch {
-		// ignore serialization / quota errors
+		return false;
 	}
 }
 
@@ -206,34 +245,84 @@ export class OfflineCacheMissError extends Error {
 
 /** Write cache and notify subscribers (mutation / optimistic update). */
 export function publishRefCachePath<T>(path: string, value: T): void {
-	writeRefCache(path, value);
-	notifyRefCacheUpdated(path);
+	if (!writeRefCache(path, value)) return;
+	notifyRefCacheUpdated(path, { bumpTick: true });
 }
 
-function notifyRefCacheUpdated(path: string): void {
+let suppressNotifyDepth = 0;
+/** Skip SWR revalidate while warmRefCache is writing many paths at once. */
+let warmRefCacheActive = false;
+let warmRefCacheGraceUntil = 0;
+
+export function setWarmRefCacheActive(active: boolean): void {
+	warmRefCacheActive = active;
+	if (!active) {
+		warmRefCacheGraceUntil = Date.now() + 8_000;
+	}
+}
+
+function isWarmOrGracePeriod(): boolean {
+	return warmRefCacheActive || Date.now() < warmRefCacheGraceUntil;
+}
+
+export function isWarmRefCacheActive(): boolean {
+	return warmRefCacheActive;
+}
+
+/** Batch cache writes (warmRefCache) without per-path UI reload storms. */
+export async function runWithSuppressedRefCacheNotifications<T>(fn: () => Promise<T>): Promise<T> {
+	suppressNotifyDepth++;
+	try {
+		return await fn();
+	} finally {
+		suppressNotifyDepth--;
+	}
+}
+
+function notifyRefCacheUpdated(path: string, opts?: { bumpTick?: boolean }): void {
+	if (suppressNotifyDepth > 0 || isWarmOrGracePeriod()) {
+		return;
+	}
 	refCacheUpdate.set({ path, seq: Date.now() });
-	refCacheTick.update((n) => n + 1);
+	if (opts?.bumpTick) {
+		refCacheTick.update((n) => n + 1);
+	}
 }
 
 function scheduleRevalidate<T>(path: string, fetcher: () => Promise<T>): void {
-	if (inflightRevalidate.has(path)) return;
-	const job = (async () => {
-		try {
-			const value = await fetcher();
-			markServerOnline();
-			const prev = readRefCache<T>(path);
-			writeRefCache(path, value);
-			if (JSON.stringify(prev) !== JSON.stringify(value)) {
-				debugLogInfo('cache', `SWR revalidated ${path}`);
-				notifyRefCacheUpdated(path);
+	if (isWarmOrGracePeriod() || inflightRevalidate.has(path)) return;
+	const last = lastRevalidatedAt.get(path) ?? 0;
+	if (Date.now() - last < REVALIDATE_COOLDOWN_MS) return;
+
+	const existing = revalidateTimers.get(path);
+	if (existing !== undefined) clearTimeout(existing);
+
+	const timer = setTimeout(() => {
+		revalidateTimers.delete(path);
+		if (inflightRevalidate.has(path) || isWarmOrGracePeriod()) return;
+
+		const job = (async () => {
+			try {
+				const value = await fetcher();
+				markServerOnline();
+				const changed = writeRefCache(path, value);
+				lastRevalidatedAt.set(path, Date.now());
+				if (changed) {
+					queueMicrotask(() => {
+						debugLogInfo('cache', `SWR revalidated ${path}`);
+						notifyRefCacheUpdated(path);
+					});
+				}
+			} catch (err) {
+				if (isOfflineFetchError(err)) markServerOffline();
+			} finally {
+				inflightRevalidate.delete(path);
 			}
-		} catch (err) {
-			if (isOfflineFetchError(err)) markServerOffline();
-		} finally {
-			inflightRevalidate.delete(path);
-		}
-	})();
-	inflightRevalidate.set(path, job);
+		})();
+		inflightRevalidate.set(path, job);
+	}, REVALIDATE_DEFER_MS);
+
+	revalidateTimers.set(path, timer);
 }
 
 export async function fetchWithRefCache<T>(path: string, fetcher: () => Promise<T>): Promise<T> {
@@ -299,8 +388,28 @@ export function resetRefCacheForTests(): void {
 	clearRefCache();
 	memoryStore.clear();
 	inflightRevalidate.clear();
+	pendingDiskWrites.clear();
+	lastRevalidatedAt.clear();
+	for (const t of revalidateTimers.values()) clearTimeout(t);
+	revalidateTimers.clear();
+	if (diskFlushTimer !== null) {
+		clearTimeout(diskFlushTimer);
+		diskFlushTimer = null;
+	}
+	suppressNotifyDepth = 0;
+	warmRefCacheActive = false;
+	warmRefCacheGraceUntil = 0;
 	refCacheTick.set(0);
 	refCacheUpdate.set(null);
+}
+
+/** Flush deferred disk writes — for tests that read localStorage directly. */
+export function flushRefCacheDiskForTests(): void {
+	if (diskFlushTimer !== null) {
+		clearTimeout(diskFlushTimer);
+		diskFlushTimer = null;
+	}
+	flushDiskWrites();
 }
 
 export function categoriesRefPath(type?: 'income' | 'expense'): string {

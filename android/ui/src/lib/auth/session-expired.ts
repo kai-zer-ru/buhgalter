@@ -32,6 +32,27 @@ export function shouldNotifySessionExpired(apiPath: string, hasAuthToken: boolea
 	return hasAuthToken && shouldRedirectApi401(apiPath);
 }
 
+/**
+ * Logout on 401 only when the active server URL matches the origin the token was issued for.
+ * Prevents a dual-app clone (demo server) from invalidating the main app's session and vice versa.
+ */
+export function shouldLogoutOnApi401(
+	apiPath: string,
+	hasAuthToken: boolean,
+	authServerOrigin: string,
+	activeServerUrl: string,
+	normalizeOrigin: (url: string) => string
+): boolean {
+	if (!shouldNotifySessionExpired(apiPath, hasAuthToken)) return false;
+	if (!authServerOrigin) return true;
+	if (!activeServerUrl) return false;
+	try {
+		return normalizeOrigin(authServerOrigin) === normalizeOrigin(activeServerUrl);
+	} catch {
+		return authServerOrigin === activeServerUrl;
+	}
+}
+
 export function notifySessionExpired(): void {
 	if (notifyLocked) return;
 	notifyLocked = true;

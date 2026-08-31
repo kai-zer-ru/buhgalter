@@ -15,7 +15,7 @@ public class AccountWidgetProvider extends AppWidgetProvider {
             WidgetViews.bindAccount(context, views, id);
             appWidgetManager.updateAppWidget(id, views);
         }
-        WidgetRefreshScheduler.runOnce(context);
+        // Bind from cached snapshot only — do not runOnce here (updateAll ↔ onUpdate loop).
     }
 
     @Override
@@ -27,6 +27,6 @@ public class AccountWidgetProvider extends AppWidgetProvider {
 
     @Override
     public void onEnabled(Context context) {
-        WidgetRefreshScheduler.ensurePeriodic(context);
+        WidgetRefreshScheduler.runOnce(context);
     }
 }

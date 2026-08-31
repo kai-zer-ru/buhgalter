@@ -22,6 +22,20 @@ describe('assignIfChanged', () => {
 		expect(assignIfChanged(null, null)).toBe(null);
 		expect(assignIfChanged([], [])).toEqual([]);
 	});
+
+	it('treats dashboard display-only diffs as unchanged', () => {
+		const prev = {
+			total_balance: 100,
+			accounts: [{ id: 'a1', balance: 100, balance_display: '100,00 ₽' }],
+			debts_summary: { i_owe: 0 }
+		};
+		const next = {
+			total_balance: 100,
+			accounts: [{ id: 'a1', balance: 100, balance_display: '100.00 RUB' }],
+			debts_summary: { i_owe: 0 }
+		};
+		expect(assignIfChanged(prev, next)).toBe(prev);
+	});
 });
 
 describe('diffNewIds', () => {

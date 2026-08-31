@@ -2,7 +2,8 @@ import { describe, expect, it, beforeEach } from 'vitest';
 import type { Transaction } from '$lib/api/client';
 import {
 	computeOutboxAccountDeltas,
-	effectFromTransactionPayload
+	effectFromTransactionPayload,
+	resetOutboxDeltasCacheForTests
 } from '$lib/offline/balance-overlay';
 import {
 	enqueueTransactionCreate,
@@ -10,7 +11,11 @@ import {
 	enqueueTransactionUpdate,
 	resetOutboxForTests
 } from '$lib/offline/store';
-import { indexTransactions, resetTransactionIndexForTests } from '$lib/offline/transaction-index';
+import {
+	indexTransactions,
+	flushTransactionIndexForTests,
+	resetTransactionIndexForTests
+} from '$lib/offline/transaction-index';
 import { makeLocalKey } from '$lib/offline/types';
 
 const tz = 'Europe/Moscow';
@@ -19,6 +24,7 @@ const pastDate = '2026-07-01 10:00:00';
 beforeEach(() => {
 	resetOutboxForTests();
 	resetTransactionIndexForTests();
+	resetOutboxDeltasCacheForTests();
 });
 
 describe('effectFromTransactionPayload', () => {
@@ -65,6 +71,7 @@ describe('computeOutboxAccountDeltas', () => {
 			updated_at: pastDate
 		};
 		indexTransactions([serverTx]);
+		flushTransactionIndexForTests();
 		enqueueTransactionUpdate('tx-1', {
 			account_id: 'acc-1',
 			type: 'expense',
@@ -92,6 +99,7 @@ describe('computeOutboxAccountDeltas', () => {
 				updated_at: pastDate
 			}
 		]);
+		flushTransactionIndexForTests();
 		enqueueTransactionDelete('tx-2');
 		const deltas = computeOutboxAccountDeltas(tz);
 		expect(deltas.balance['acc-2']).toBe(-20_000);

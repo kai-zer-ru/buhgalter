@@ -32,4 +32,17 @@ describe('serverReachability', () => {
 		markServerOffline();
 		expect(get(serverReachability)).toBe('offline');
 	});
+
+	it('markServerOnline is a no-op when already online', () => {
+		markServerOnline();
+		let notifies = 0;
+		const unsub = serverReachability.subscribe(() => {
+			notifies++;
+		});
+		notifies = 0;
+		markServerOnline();
+		markServerOnline();
+		expect(notifies).toBe(0);
+		unsub();
+	});
 });

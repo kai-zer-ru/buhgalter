@@ -1,4 +1,5 @@
 import { writable } from 'svelte/store';
+import { isDashboardRefPath, isDashboardShape, stableEqual } from '$lib/state-utils';
 
 const REF_CACHE_VERSION = 'buhgalter.ref_cache.web.v1';
 
@@ -102,11 +103,27 @@ export function refCacheReadyAny(paths: string[]): boolean {
 	return paths.some(refCacheReady);
 }
 
-export function writeRefCache<T>(path: string, value: T): void {
+/** Write cache. Returns false when payload matches existing (no disk/UI churn). */
+export function writeRefCache<T>(path: string, value: T): boolean {
 	try {
-		storageSet(storageKey(path), JSON.stringify(value));
+		const key = storageKey(path);
+		const prevRaw = memoryStore.get(key) ?? null;
+		const nextRaw = JSON.stringify(value);
+		if (prevRaw === nextRaw) return false;
+		if (isDashboardRefPath(path) && prevRaw !== null) {
+			try {
+				const prev = JSON.parse(prevRaw) as unknown;
+				if (isDashboardShape(prev) && isDashboardShape(value) && stableEqual(prev, value)) {
+					return false;
+				}
+			} catch {
+				// fall through to write
+			}
+		}
+		storageSet(key, nextRaw);
+		return true;
 	} catch {
-		// ignore serialization / quota errors
+		return false;
 	}
 }
 
@@ -153,9 +170,7 @@ function scheduleRevalidate<T>(path: string, fetcher: () => Promise<T>): void {
 		try {
 			const value = await fetcher();
 			if (epoch !== cacheEpoch) return;
-			const prev = readRefCache<T>(path);
-			writeRefCache(path, value);
-			if (JSON.stringify(prev) !== JSON.stringify(value)) {
+			if (writeRefCache(path, value)) {
 				notifyRefCacheUpdated(path);
 			}
 		} catch {

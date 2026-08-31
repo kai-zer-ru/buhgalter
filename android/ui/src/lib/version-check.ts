@@ -2,8 +2,10 @@ import { getVersionCheck, type VersionCheckResult } from '$lib/api/client';
 import { writable } from 'svelte/store';
 
 const LAST_CHECK_KEY = 'buhgalter.versionCheckLastAt';
+const LAST_RESULT_KEY = 'buhgalter.versionCheckLastResult.v1';
 const DISMISSED_VERSION_KEY = 'buhgalter.versionCheckDismissedVersion';
-const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+/** Network version check at most once per day (app vs server). */
+export const VERSION_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const GITHUB_REPO = 'kai-zer-ru/buhgalter';
 
 export type PendingVersionUpdate = VersionCheckResult;
@@ -25,16 +27,55 @@ export const versionBlockInfo = writable<AppVersionInfo | null>(null);
 /** @deprecated Use AppVersionInfo */
 export type PendingAppUpdate = AppVersionInfo & { updateNeeded: boolean };
 
+let memoryResult: AppVersionInfo | null = null;
+let memoryCheckedAt = 0;
+
 function shouldCheckNow(): boolean {
+	if (memoryCheckedAt > 0 && Date.now() - memoryCheckedAt < VERSION_CHECK_INTERVAL_MS) {
+		return false;
+	}
+	if (typeof localStorage === 'undefined') return true;
 	const raw = localStorage.getItem(LAST_CHECK_KEY);
 	if (!raw) return true;
 	const lastCheck = Number(raw);
 	if (!Number.isFinite(lastCheck)) return true;
-	return Date.now() - lastCheck >= CHECK_INTERVAL_MS;
+	if (Date.now() - lastCheck < VERSION_CHECK_INTERVAL_MS) {
+		memoryCheckedAt = lastCheck;
+		return false;
+	}
+	return true;
 }
 
 function markCheckedNow(): void {
-	localStorage.setItem(LAST_CHECK_KEY, String(Date.now()));
+	memoryCheckedAt = Date.now();
+	if (typeof localStorage === 'undefined') return;
+	localStorage.setItem(LAST_CHECK_KEY, String(memoryCheckedAt));
+}
+
+function readCachedResult(app: string): AppVersionInfo | null {
+	if (memoryResult && memoryResult.appVersion === app) return memoryResult;
+	if (typeof localStorage === 'undefined') return null;
+	try {
+		const raw = localStorage.getItem(LAST_RESULT_KEY);
+		if (!raw) return null;
+		const parsed = JSON.parse(raw) as AppVersionInfo;
+		if (!parsed || typeof parsed.appVersion !== 'string') return null;
+		if (parsed.appVersion !== app) return null;
+		memoryResult = parsed;
+		return parsed;
+	} catch {
+		return null;
+	}
+}
+
+function writeCachedResult(info: AppVersionInfo): void {
+	memoryResult = info;
+	if (typeof localStorage === 'undefined') return;
+	try {
+		localStorage.setItem(LAST_RESULT_KEY, JSON.stringify(info));
+	} catch {
+		// quota
+	}
 }
 
 export function dismissVersionUpdate(version: string): void {
@@ -114,18 +155,36 @@ export function versionsMismatch(appVersion: string, serverVersion: string): boo
 	return compareVersions(appVersion, serverVersion) < 0;
 }
 
-export async function fetchAppVersionInfo(appVersion: string): Promise<AppVersionInfo> {
+export type FetchAppVersionOptions = {
+	/** Bypass 24h throttle (e.g. explicit user action). */
+	force?: boolean;
+};
+
+/**
+ * Compare APK vs server version. Network at most once per 24h unless `force`.
+ * Within the interval returns last successful result (or offline shape).
+ */
+export async function fetchAppVersionInfo(
+	appVersion: string,
+	opts: FetchAppVersionOptions = {}
+): Promise<AppVersionInfo> {
 	const app = normalizeVersion(appVersion);
+	if (!opts.force && !shouldCheckNow()) {
+		return readCachedResult(app) ?? buildAppVersionInfo(app, null);
+	}
+
 	try {
 		const result = await getVersionCheck();
+		markCheckedNow();
 		const rawServer = result.current_version?.trim();
-		if (!rawServer) {
-			return buildAppVersionInfo(app, null);
-		}
-		const server = normalizeVersion(rawServer);
-		return buildAppVersionInfo(app, server);
+		const info = !rawServer
+			? buildAppVersionInfo(app, null)
+			: buildAppVersionInfo(app, normalizeVersion(rawServer));
+		writeCachedResult(info);
+		return info;
 	} catch {
-		return buildAppVersionInfo(app, null);
+		// Do not mark success timestamp on failure — retry next launch.
+		return readCachedResult(app) ?? buildAppVersionInfo(app, null);
 	}
 }
 
@@ -151,7 +210,19 @@ export async function checkForVersionUpdate(): Promise<PendingVersionUpdate | nu
 		}
 		return result;
 	} catch {
-		markCheckedNow();
 		return null;
+	}
+}
+
+export function resetVersionCheckForTests(): void {
+	memoryResult = null;
+	memoryCheckedAt = 0;
+	if (typeof localStorage === 'undefined') return;
+	try {
+		localStorage.removeItem(LAST_CHECK_KEY);
+		localStorage.removeItem(LAST_RESULT_KEY);
+		localStorage.removeItem(DISMISSED_VERSION_KEY);
+	} catch {
+		// ignore
 	}
 }

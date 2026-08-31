@@ -1,18 +1,39 @@
 import type { Transaction } from '$lib/api/client';
-import { readRefCache, writeRefCache } from '$lib/offline/ref-cache';
+import { readRefCache, writeRefCache, isWarmRefCacheActive } from '$lib/offline/ref-cache';
 
 const TX_INDEX_KEY = '__internal_tx_index__';
 
-export function indexTransactions(txs: Transaction[]): void {
-	if (!txs.length) return;
+let pendingTxs: Transaction[] = [];
+let flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+function flushTransactionIndex(): void {
+	flushTimer = null;
+	const batch = pendingTxs;
+	pendingTxs = [];
+	if (!batch.length) return;
+
 	const index = readRefCache<Record<string, Transaction>>(TX_INDEX_KEY) ?? {};
-	for (const tx of txs) {
+	for (const tx of batch) {
 		index[tx.id] = tx;
 		if (tx.transfer_group_id) {
 			index[`tg:${tx.transfer_group_id}`] = tx;
 		}
 	}
 	writeRefCache(TX_INDEX_KEY, index);
+}
+
+export function indexTransactions(txs: Transaction[]): void {
+	if (!txs.length || isWarmRefCacheActive()) return;
+	pendingTxs.push(...txs);
+	if (flushTimer !== null) return;
+	flushTimer = setTimeout(flushTransactionIndex, 0);
+}
+
+export function flushTransactionIndexForTests(): void {
+	if (flushTimer !== null) {
+		clearTimeout(flushTimer);
+		flushTransactionIndex();
+	}
 }
 
 export function lookupServerTransaction(entityKey: string): Transaction | null {
@@ -46,5 +67,10 @@ export function findTransferCommissionKopecks(groupId: string): number {
 }
 
 export function resetTransactionIndexForTests(): void {
+	pendingTxs = [];
+	if (flushTimer !== null) {
+		clearTimeout(flushTimer);
+		flushTimer = null;
+	}
 	writeRefCache(TX_INDEX_KEY, {});
 }

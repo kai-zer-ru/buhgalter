@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { isPublicAppRoute, shouldNotifySessionExpired } from './session-expired';
+import {
+	isPublicAppRoute,
+	shouldLogoutOnApi401,
+	shouldNotifySessionExpired
+} from './session-expired';
 
 describe('isPublicAppRoute', () => {
 	it('treats login chooser and method screens as public', () => {
@@ -30,5 +34,39 @@ describe('shouldNotifySessionExpired', () => {
 	it('keeps exempt paths quiet even with a token', () => {
 		expect(shouldNotifySessionExpired('/api/v1/version/check', true)).toBe(false);
 		expect(shouldNotifySessionExpired('/api/v1/auth/login', true)).toBe(false);
+	});
+});
+
+describe('shouldLogoutOnApi401', () => {
+	const norm = (u: string) => u.replace(/\/$/, '');
+
+	it('does not logout when token origin differs from active server (dual-app clone)', () => {
+		expect(
+			shouldLogoutOnApi401(
+				'/api/v1/dashboard',
+				true,
+				'https://demo.example.com',
+				'http://192.168.1.1:8765',
+				norm
+			)
+		).toBe(false);
+	});
+
+	it('logout when origins match', () => {
+		expect(
+			shouldLogoutOnApi401(
+				'/api/v1/dashboard',
+				true,
+				'http://192.168.1.1:8765',
+				'http://192.168.1.1:8765',
+				norm
+			)
+		).toBe(true);
+	});
+
+	it('logout when auth origin unknown (legacy)', () => {
+		expect(
+			shouldLogoutOnApi401('/api/v1/dashboard', true, '', 'http://192.168.1.1:8765', norm)
+		).toBe(true);
 	});
 });

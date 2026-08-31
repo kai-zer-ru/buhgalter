@@ -1,14 +1,15 @@
 import { get } from 'svelte/store';
 import { locale } from 'svelte-i18n';
 import { cachedGet, invalidateApiCache, seedStaticRef } from '$lib/api/cache';
-import { notifySessionExpired, shouldNotifySessionExpired } from '$lib/auth/session-expired';
-import { authHeaders, getAuthToken } from '$lib/platform/auth-token';
+import { notifySessionExpired, shouldLogoutOnApi401 } from '$lib/auth/session-expired';
+import { authHeaders, getAuthServerOrigin, getAuthToken } from '$lib/platform/auth-token';
 import {
 	clearRefCache,
 	fetchWithRefCache,
 	isOfflineFetchError,
 	OfflineCacheMissError,
 	readCategoriesFromUIMetaCache,
+	readRefCache,
 	seedDictionariesFromUIMeta,
 	shouldPersistRefCache
 } from '$lib/offline/ref-cache';
@@ -16,6 +17,7 @@ import { indexTransactions } from '$lib/offline/transaction-index';
 import { shouldUseOfflineQueue } from '$lib/offline/network';
 import { isServerOfflineMode } from '$lib/offline/server-connectivity';
 import { getApiBase } from '$lib/platform/server-url';
+import { normalizeServerUrl } from '$lib/platform/server-origin';
 import { isNativeApp } from '$lib/platform/native';
 import {
 	isHttpsOrigin,
@@ -46,6 +48,16 @@ export class ApiError extends Error {
 /** HTTP statuses that usually mean the server or proxy is temporarily down. */
 export function isTransientHttpError(status: number): boolean {
 	return status === 408 || status === 502 || status === 503 || status === 504;
+}
+
+function shouldLogoutOn401(path: string): boolean {
+	return shouldLogoutOnApi401(
+		path,
+		!!getAuthToken(),
+		getAuthServerOrigin(),
+		getApiBase(),
+		normalizeServerUrl
+	);
 }
 
 async function fetchApi<T>(
@@ -115,7 +127,7 @@ async function fetchApi<T>(
 				} catch {
 					// ignore
 				}
-				if ((result.status ?? 0) === 401 && shouldNotifySessionExpired(path, !!getAuthToken())) {
+				if ((result.status ?? 0) === 401 && shouldLogoutOn401(path)) {
 					notifySessionExpired();
 				}
 				const err = new ApiError(code, message, result.status ?? 0, field);
@@ -162,7 +174,7 @@ async function fetchApi<T>(
 			} catch {
 				// ignore
 			}
-			if (res.status === 401 && shouldNotifySessionExpired(path, !!getAuthToken())) {
+			if (res.status === 401 && shouldLogoutOn401(path)) {
 				notifySessionExpired();
 			}
 			const err = new ApiError(code, message, res.status, field);
@@ -734,12 +746,15 @@ export type UIi18nCatalog = {
 
 async function warmSubcategoriesCache(categories: Category[]): Promise<void> {
 	const withSubs = categories.filter((c) => c.subcategory_count > 0);
-	if (!withSubs.length) return;
-	const concurrency = 8;
+	const missing = withSubs.filter(
+		(c) => readRefCache<unknown[]>(`/api/v1/categories/${c.id}/subcategories`) === null
+	);
+	if (!missing.length) return;
+	const concurrency = 4;
 	let index = 0;
 	async function worker() {
-		while (index < withSubs.length) {
-			const cat = withSubs[index++];
+		while (index < missing.length) {
+			const cat = missing[index++];
 			try {
 				await listSubcategories(cat.id);
 			} catch {
@@ -747,7 +762,14 @@ async function warmSubcategoriesCache(categories: Category[]): Promise<void> {
 			}
 		}
 	}
-	await Promise.all(Array.from({ length: Math.min(concurrency, withSubs.length) }, () => worker()));
+	await Promise.all(Array.from({ length: Math.min(concurrency, missing.length) }, () => worker()));
+}
+
+/** Prefetch subcategory lists — manual sync / deferred warm only (not on every getUIMeta). */
+export async function warmAllSubcategoriesCache(): Promise<void> {
+	const meta = readRefCache<UIMeta>('/api/v1/ui/meta');
+	if (!meta) return;
+	await warmSubcategoriesCache([...meta.expense_categories, ...meta.income_categories]);
 }
 
 export async function getUIMeta() {
@@ -757,7 +779,6 @@ export async function getUIMeta() {
 	seedStaticRef('/api/v1/tags', meta.tags ?? []);
 	seedStaticRef('/api/v1/transaction-templates', meta.transaction_templates ?? []);
 	seedDictionariesFromUIMeta(meta);
-	void warmSubcategoriesCache([...meta.expense_categories, ...meta.income_categories]);
 	return meta;
 }
 

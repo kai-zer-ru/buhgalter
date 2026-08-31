@@ -63,12 +63,62 @@ describe('fetchWithRefCache SWR', () => {
 
 		const first = await fetchWithRefCache('/api/v1/dashboard', fetcher);
 		expect(first).toEqual({ total_balance: 100 });
-		expect(fetcher).toHaveBeenCalledOnce();
+		await vi.waitFor(() => expect(fetcher).toHaveBeenCalledOnce());
 
 		resolveFetch({ total_balance: 200 });
 		await vi.waitFor(() =>
 			expect(readRefCache('/api/v1/dashboard')).toEqual({ total_balance: 200 })
 		);
+	});
+
+	it('does not rewrite cache or notify when revalidate payload is identical', async () => {
+		const dash = {
+			total_balance: 100,
+			accounts: [],
+			debts_summary: { i_owe: 0 },
+			recent_transactions: []
+		};
+		writeRefCache('/api/v1/dashboard', dash);
+		let notified = false;
+		const unsub = refCacheUpdate.subscribe((v) => {
+			if (v?.path === '/api/v1/dashboard') notified = true;
+		});
+		notified = false;
+
+		let resolveFetch!: (value: typeof dash) => void;
+		const fetcher = vi.fn(
+			() =>
+				new Promise<typeof dash>((resolve) => {
+					resolveFetch = resolve;
+				})
+		);
+		await fetchWithRefCache('/api/v1/dashboard', fetcher);
+		await vi.waitFor(() => expect(fetcher).toHaveBeenCalledOnce());
+		resolveFetch({ ...dash });
+		await vi.waitFor(() => expect(fetcher.mock.results[0]?.type).toBe('return'));
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(notified).toBe(false);
+		expect(readRefCache('/api/v1/dashboard')).toEqual(dash);
+		unsub();
+	});
+
+	it('skips write when only dashboard *_display fields differ', async () => {
+		const prev = {
+			total_balance: 50,
+			total_forecast: 50,
+			accounts: [{ id: 'a1', balance: 50, balance_display: '50,00 ₽' }],
+			debts_summary: { i_owe: 0 },
+			recent_transactions: []
+		};
+		writeRefCache('/api/v1/dashboard', prev);
+		expect(
+			writeRefCache('/api/v1/dashboard', {
+				...prev,
+				accounts: [{ id: 'a1', balance: 50, balance_display: '50.00 RUB' }]
+			})
+		).toBe(false);
+		expect(readRefCache('/api/v1/dashboard')).toEqual(prev);
 	});
 
 	it('emits refCacheUpdate with path when background revalidate changes data', async () => {
@@ -81,13 +131,13 @@ describe('fetchWithRefCache SWR', () => {
 		unsub();
 	});
 
-	it('bumps refCacheTick when background revalidate changes data', async () => {
+	it('emits refCacheUpdate when background revalidate changes data', async () => {
 		writeRefCache('/api/v1/accounts', [{ id: 'a1' }]);
 		let tick = 0;
 		const unsub = refCacheTick.subscribe((n) => (tick = n));
 
 		await fetchWithRefCache('/api/v1/accounts', async () => [{ id: 'a1' }, { id: 'a2' }]);
-		await vi.waitFor(() => expect(tick).toBeGreaterThan(0));
+		await vi.waitFor(() => expect(tick).toBe(0));
 		unsub();
 	});
 

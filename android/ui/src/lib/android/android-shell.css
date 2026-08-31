@@ -18,10 +18,20 @@
 	align-items: center;
 	gap: 0.75rem;
 	border-bottom: 1px solid var(--border);
-	background-color: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
+	background-color: var(--bg-elevated);
 	padding: 0.75rem 1rem;
 	padding-top: max(0.75rem, env(safe-area-inset-top));
-	backdrop-filter: blur(8px);
+}
+
+/* backdrop-filter kills scroll/tap responsiveness on Android WebView */
+html.native-app .android-shell-header {
+	background-color: var(--bg-elevated);
+}
+
+/* Only buttons — not links (drawer nav links must keep normal scroll gestures). */
+html.native-app button,
+html.native-app [role='button'] {
+	touch-action: manipulation;
 }
 
 .android-drawer-backdrop {
@@ -49,7 +59,6 @@ html.dark .android-drawer-backdrop {
 	flex-direction: column;
 	border-right: 1px solid var(--border);
 	background-color: var(--bg-elevated);
-	box-shadow: 4px 0 24px color-mix(in srgb, #0f172a 18%, transparent);
 	transform: translateX(-105%);
 	transition: transform 0.22s ease;
 	/* Closed drawer must not steal taps (WebView hit-testing quirks with transform). */
@@ -59,6 +68,9 @@ html.dark .android-drawer-backdrop {
 .android-drawer.open {
 	transform: translateX(0);
 	pointer-events: auto;
+	/* Shadow + will-change only while open — permanent layers tank WebView scroll. */
+	box-shadow: 4px 0 24px color-mix(in srgb, #0f172a 18%, transparent);
+	will-change: transform;
 }
 
 .android-drawer-head {
@@ -72,7 +84,9 @@ html.dark .android-drawer-backdrop {
 .android-drawer-nav {
 	flex: 1;
 	overflow-y: auto;
+	-webkit-overflow-scrolling: touch;
 	padding: 0.5rem;
+	overscroll-behavior: contain;
 }
 
 .android-drawer-section {
@@ -90,11 +104,6 @@ html.dark .android-drawer-backdrop {
 	border-radius: 0.625rem;
 	padding: 0.625rem 0.75rem;
 	font-size: 0.9375rem;
-	transition: background-color 0.15s ease;
-}
-
-.android-drawer-link:hover {
-	background-color: color-mix(in srgb, var(--border) 45%, transparent);
 }
 
 .android-drawer-link.active {
@@ -175,10 +184,38 @@ html.dark .android-drawer-backdrop {
 	padding-bottom: calc(1rem + var(--money-keypad-inset, 0px));
 }
 
+/* While drawer is open: freeze page scroll/paint competition with drawer nav. */
+.android-shell-layout.drawer-open .android-shell-main {
+	overflow: hidden;
+	pointer-events: none;
+}
+
 /* FormPageShell owns scroll + sticky footer; outer main must not scroll. */
 .android-shell-main-flush {
 	padding: 0;
 	overflow: hidden;
 	display: flex;
 	flex-direction: column;
+}
+
+/*
+ * Android WebView: shadows + CSS transitions on every control make scroll/tap lag.
+ * Prefer solid borders; keep motion only where it matters (drawer slide).
+ */
+html.native-app .card,
+html.native-app .input,
+html.native-app .popover-panel {
+	box-shadow: none !important;
+}
+
+html.native-app .btn-primary,
+html.native-app .btn-danger,
+html.native-app .btn-ghost,
+html.native-app .input,
+html.native-app .android-drawer-link {
+	transition: none !important;
+}
+
+html.native-app .btn-danger:hover:not(:disabled) {
+	filter: none;
 }

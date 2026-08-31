@@ -186,7 +186,11 @@ function parseBackgroundLockMs(raw: string | null): BackgroundLockMs {
 	return best;
 }
 
-export async function refreshAppLockConfig(): Promise<AppLockConfig> {
+export async function refreshAppLockConfig(force = false): Promise<AppLockConfig> {
+	if (configCache !== null && !force) {
+		syncLockScreenVisible();
+		return configCache;
+	}
 	const [enabledRaw, biometricRaw, timeoutRaw] = await Promise.all([
 		secureGet(KEY_ENABLED),
 		secureGet(KEY_BIOMETRIC),
@@ -272,7 +276,7 @@ export async function setPin(pin: string): Promise<void> {
 export async function enableAppLock(pin: string): Promise<void> {
 	await setPin(pin);
 	await secureSet(KEY_ENABLED, '1');
-	await refreshAppLockConfig();
+	await refreshAppLockConfig(true);
 	lockSession();
 	const { setWidgetLockEnabled } = await import('$lib/widgets/bridge');
 	await setWidgetLockEnabled(true);
@@ -307,7 +311,7 @@ export async function clearAppLock(): Promise<void> {
 
 export async function setBackgroundLockMs(ms: BackgroundLockMs): Promise<void> {
 	await secureSet(KEY_BACKGROUND_MS, String(ms));
-	await refreshAppLockConfig();
+	await refreshAppLockConfig(true);
 }
 
 export async function changePin(currentPin: string, nextPin: string): Promise<boolean> {
@@ -325,7 +329,7 @@ export async function setBiometricEnabled(enabled: boolean): Promise<void> {
 	} else {
 		await secureRemove(KEY_BIOMETRIC);
 	}
-	await refreshAppLockConfig();
+	await refreshAppLockConfig(true);
 }
 
 export async function isBiometricAvailable(): Promise<boolean> {

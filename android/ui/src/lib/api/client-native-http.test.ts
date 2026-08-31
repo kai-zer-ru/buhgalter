@@ -52,7 +52,7 @@ vi.mock('$lib/offline/transaction-index', () => ({
 
 vi.mock('$lib/auth/session-expired', () => ({
 	notifySessionExpired: vi.fn(),
-	shouldNotifySessionExpired: () => false
+	shouldLogoutOnApi401: () => false
 }));
 
 vi.mock('$lib/platform/auth-token', () => ({

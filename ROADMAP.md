@@ -18,8 +18,10 @@
 - [v1.3.2](#v132)
 - [v1.4.0](#v140)
 - [v1.4.1](#v141)
-- [На подумать](#на-подумать)
+- [v1.5.0](#v150)
+- [v1.5.1](#v151)
 - [Общие планы](#общие-планы)
+- [На подумать](#на-подумать)
 
 ## v1.0.0
 
@@ -227,6 +229,11 @@
 - [x] [Шаблоны операций](roadmap/transaction-templates.md) — именованные пресеты для быстрого ручного добавления
 - [x] Учёт подписок и периодических операций текущего месяца в плановом остатке (`forecast_balance`); подпись «С учётом плановых / подписок / обоих»
 - [x] [Release notes](docs/release-notes-v1.5.0.md) · [subscriptions.md](docs/subscriptions.md) · [feature-toggles.md](docs/feature-toggles.md) · [transactions-display.md](docs/transactions-display.md) · [android-client-platform.md](docs/android-client-platform.md)
+
+## v1.5.1
+
+- [x] Исправление работы при клонировании Android-приложения
+- [x] Исправление тормозов в UI на Android
 
 ## Общие планы
 

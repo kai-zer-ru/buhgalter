@@ -1,4 +1,4 @@
-VERSION ?= 1.5.0
+VERSION ?= 1.5.1
 INSTALL_METHOD ?= manual
 BUILD_COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILD_TIME ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -318,19 +318,29 @@ android-apk-release: android-sync
 		"$(ANDROID_APK_RELEASE_X86_64)"
 	@bash scripts/verify-android-release-apks.sh "$(ANDROID_APK_RELEASE_DIR)"
 
-# Ensure android/local.properties exists (CI checkout has none; sdk.dir from ANDROID_*).
+# Ensure android/local.properties exists and sdk.dir is a real directory.
 android-ensure-sdk:
-	@if [ ! -f android/local.properties ]; then \
+	@SDK=""; \
+	if [ -f android/local.properties ]; then \
+		SDK=$$(grep '^sdk.dir=' android/local.properties | cut -d= -f2-); \
+	fi; \
+	if [ -z "$$SDK" ] || [ ! -d "$$SDK" ]; then \
 		SDK="$${ANDROID_SDK_ROOT:-$${ANDROID_HOME:-}}"; \
-		if [ -z "$$SDK" ] || [ ! -d "$$SDK" ]; then \
-			echo "ERROR: android/local.properties missing and ANDROID_SDK_ROOT/ANDROID_HOME unset."; \
-			echo "  Run scripts/setup-android-dev.sh or set ANDROID_SDK_ROOT."; \
-			exit 1; \
+	fi; \
+	if [ -z "$$SDK" ] || [ ! -d "$$SDK" ]; then \
+		echo "ERROR: Android SDK not found."; \
+		if [ -f android/local.properties ]; then \
+			echo "  android/local.properties: $$(grep '^sdk.dir=' android/local.properties)"; \
 		fi; \
+		echo "  Run: ./scripts/setup-android-dev.sh"; \
+		echo "  Then: source scripts/android-env.sh"; \
+		exit 1; \
+	fi; \
+	if [ ! -f android/local.properties ] || ! grep -qF "sdk.dir=$$SDK" android/local.properties; then \
 		printf 'sdk.dir=%s\n' "$$SDK" > android/local.properties; \
 		echo "Wrote android/local.properties (sdk.dir=$$SDK)"; \
-	fi
-	@echo "android SDK: $$(grep '^sdk.dir=' android/local.properties)"
+	fi; \
+	echo "android SDK: $$(grep '^sdk.dir=' android/local.properties)"
 	@echo "JAVA_HOME=$${JAVA_HOME:-<unset>}"
 	@if [ -n "$$JAVA_HOME" ] && [ -x "$$JAVA_HOME/bin/java" ]; then \
 		"$$JAVA_HOME/bin/java" -version; \

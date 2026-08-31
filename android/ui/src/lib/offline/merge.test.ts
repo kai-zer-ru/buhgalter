@@ -5,6 +5,7 @@ import {
 	mergeOutboxTransactions,
 	refreshMergeMeta
 } from '$lib/offline/merge';
+import { resetRefCacheForTests } from '$lib/offline/ref-cache';
 import { enqueueTransactionCreate, makeLocalKey, resetOutboxForTests } from '$lib/offline/store';
 import * as client from '$lib/api/client';
 
@@ -37,6 +38,7 @@ const uiMeta = {
 };
 
 beforeEach(() => {
+	resetRefCacheForTests();
 	resetOutboxForTests();
 	vi.mocked(client.getUIMeta).mockResolvedValue(uiMeta);
 });

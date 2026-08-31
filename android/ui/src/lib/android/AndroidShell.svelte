@@ -91,7 +91,8 @@
 	}
 
 	onMount(() => {
-		void refreshAppVersionInfo();
+		// Version check is throttled to 1×/day inside fetchAppVersionInfo — defer off first paint.
+		const versionTimer = setTimeout(() => void refreshAppVersionInfo(), 5_000);
 		let cleanup: (() => void) | undefined;
 		void initAndroidBackHandler({
 			isDrawerOpen: () => drawerOpen,
@@ -99,16 +100,14 @@
 		}).then((fn) => {
 			cleanup = fn;
 		});
-		return () => cleanup?.();
-	});
-
-	$effect(() => {
-		if (!drawerOpen) return;
-		void refreshAppVersionInfo();
+		return () => {
+			clearTimeout(versionTimer);
+			cleanup?.();
+		};
 	});
 </script>
 
-<div class="android-shell-layout">
+<div class="android-shell-layout" class:drawer-open={drawerOpen}>
 	{#if drawerOpen}
 		<button
 			type="button"
@@ -174,7 +173,9 @@
 			{/if}
 		</nav>
 		<div class="android-drawer-foot">
-			<AndroidDrawerSync />
+			{#if drawerOpen}
+				<AndroidDrawerSync />
+			{/if}
 			<div class="android-drawer-foot-row">
 				<button
 					type="button"

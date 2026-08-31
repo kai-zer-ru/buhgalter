@@ -22,10 +22,16 @@
 	} from '$lib/offline/merge';
 	import { applyOutboxToDashboard } from '$lib/offline/local-state';
 	import { outboxTick } from '$lib/offline/store';
-	import { dataRefreshTick, localDataTick, scheduleSyncOutbox } from '$lib/offline/sync';
+	import {
+		dataRefreshTick,
+		localDataTick,
+		scheduleSyncOutbox,
+		shouldSuppressHomeDataRefresh
+	} from '$lib/offline/sync';
 	import { refCacheReady, refCacheUpdate, readRefCache } from '$lib/offline/ref-cache';
 	import { refCachePathMatches } from '$lib/offline/ref-cache-watch';
 	import { assignIfChanged } from '$lib/state-utils';
+	import { getOutboxEntries } from '$lib/offline/store';
 	import { featureFlags, isFeatureEnabled } from '$lib/features';
 	import AccountIcon from '$lib/components/AccountIcon.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
@@ -95,19 +101,25 @@
 		if (!getCurrentInterceptSettings().enabled) return 0;
 		return countInterceptDrafts($user?.id);
 	});
+	const HOME_CORE_PATHS = [DASHBOARD_PATH, PAST_TX_PATH, PLANNED_TX_PATH];
+
 	const dash = $derived.by(() => {
 		void $outboxTick;
 		void $localDataTick;
-		return dashBase ? applyOutboxToDashboard(dashBase, tz) : null;
+		if (!dashBase) return null;
+		if (getOutboxEntries().length === 0) return dashBase;
+		return applyOutboxToDashboard(dashBase, tz);
 	});
 	const pastTx = $derived.by(() => {
 		void $outboxTick;
 		void $localDataTick;
+		if (getOutboxEntries().length === 0) return serverPastTx;
 		return mergeOutboxTransactions(serverPastTx);
 	});
 	const plannedTx = $derived.by(() => {
 		void $outboxTick;
 		void $localDataTick;
+		if (getOutboxEntries().length === 0) return serverPlannedTx;
 		return mergeOutboxTransactions(serverPlannedTx);
 	});
 	const pastVisible = $derived(dedupeTransferLegs(pastTx));
@@ -137,34 +149,40 @@
 		return 'bg-emerald-500';
 	}
 
+	let backgroundLoadTimer: ReturnType<typeof setTimeout> | null = null;
+
+	function scheduleBackgroundLoadAll() {
+		if (backgroundLoadTimer !== null) clearTimeout(backgroundLoadTimer);
+		backgroundLoadTimer = setTimeout(() => {
+			backgroundLoadTimer = null;
+			void loadAll({ background: true });
+		}, 1500);
+	}
+
 	onMount(() => {
-		void loadAll();
-		void processPendingBankNotifications();
+		const cacheWarm = HOME_CORE_PATHS.every(refCacheReady);
+		if (cacheWarm) {
+			loading = false;
+			pastLoading = false;
+			plannedLoading = false;
+		} else {
+			void loadAll();
+		}
+		setTimeout(() => void processPendingBankNotifications(), 3000);
 	});
 
 	$effect(() => {
 		const tick = $dataRefreshTick;
-		if (tick === 0) return;
-		void loadAll({ background: true });
+		if (tick === 0 || shouldSuppressHomeDataRefresh()) return;
+		scheduleBackgroundLoadAll();
 	});
 
 	$effect(() => {
 		const update = $refCacheUpdate;
-		if (!update || !dashBase) return;
-		if (refCachePathMatches(update.path, DASHBOARD_PATH)) {
-			void loadDashboard({ background: true });
-		}
-		if (refCachePathMatches(update.path, PAST_TX_PATH)) {
-			void loadPastTx({ background: true });
-		}
-		if (refCachePathMatches(update.path, PLANNED_TX_PATH)) {
-			void loadPlannedTx({ background: true });
-		}
-		if (refCachePathMatches(update.path, BUDGET_PATH)) {
-			void loadBudget({ background: true });
-		}
-		if (refCachePathMatches(update.path, TEMPLATES_PATH)) {
-			void loadTemplates({ background: true });
+		if (!update || !dashBase || shouldSuppressHomeDataRefresh()) return;
+		const paths = [DASHBOARD_PATH, PAST_TX_PATH, PLANNED_TX_PATH, BUDGET_PATH, TEMPLATES_PATH];
+		if (paths.some((p) => refCachePathMatches(update.path, p))) {
+			scheduleBackgroundLoadAll();
 		}
 	});
 
@@ -260,8 +278,6 @@
 			loadTemplates(opts)
 		]);
 		if (!opts.background) scheduleSyncOutbox();
-		const { publishWidgetSnapshot } = await import('$lib/widgets/publish');
-		void publishWidgetSnapshot();
 	}
 
 	function applyTemplate(tpl: TransactionTemplate) {

@@ -9,7 +9,9 @@ vi.mock('$lib/api/cache', () => ({
 }));
 
 vi.mock('$lib/widgets/publish', () => ({
-	publishWidgetSnapshot: vi.fn().mockResolvedValue(undefined)
+	publishWidgetSnapshot: vi.fn().mockResolvedValue(undefined),
+	scheduleWidgetSnapshotPublish: vi.fn(),
+	resetWidgetPublishForTests: vi.fn()
 }));
 
 vi.mock('$lib/api/client', async (importOriginal) => {

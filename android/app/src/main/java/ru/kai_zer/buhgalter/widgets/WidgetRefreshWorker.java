@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
@@ -32,6 +33,10 @@ import okhttp3.Request;
 import okhttp3.Response;
 
 public class WidgetRefreshWorker extends Worker {
+    /** Guard against stacked OneTime work / accidental re-entry storms. */
+    private static final long MIN_REFRESH_INTERVAL_MS = 30_000L;
+    private static final AtomicLong lastRefreshElapsedMs = new AtomicLong(0);
+
     public WidgetRefreshWorker(@NonNull Context context, @NonNull WorkerParameters params) {
         super(context, params);
     }
@@ -39,6 +44,15 @@ public class WidgetRefreshWorker extends Worker {
     @NonNull
     @Override
     public Result doWork() {
+        long now = android.os.SystemClock.elapsedRealtime();
+        long prev = lastRefreshElapsedMs.get();
+        if (prev > 0 && now - prev < MIN_REFRESH_INTERVAL_MS) {
+            return Result.success();
+        }
+        if (!lastRefreshElapsedMs.compareAndSet(prev, now)) {
+            return Result.success();
+        }
+
         Context ctx = getApplicationContext();
         if (!WidgetSnapshotStore.hasAuth(ctx)) {
             return Result.success();
@@ -62,9 +76,9 @@ public class WidgetRefreshWorker extends Worker {
             if (future == null) future = new JSONArray();
 
             String currency = "RUB";
-            JSONObject prev = WidgetSnapshotStore.getSnapshot(ctx);
-            if (prev != null) currency = prev.optString("currency", "RUB");
-            String language = prev != null ? prev.optString("language", "ru") : "ru";
+            JSONObject prevSnap = WidgetSnapshotStore.getSnapshot(ctx);
+            if (prevSnap != null) currency = prevSnap.optString("currency", "RUB");
+            String language = prevSnap != null ? prevSnap.optString("language", "ru") : "ru";
 
             JSONObject snapshot =
                     buildSnapshot(dashboard, accounts, budget, credits, debts, future, currency, language);
@@ -72,6 +86,8 @@ public class WidgetRefreshWorker extends Worker {
             WidgetUpdater.updateAll(ctx);
             return Result.success();
         } catch (Exception e) {
+            // Allow a quicker retry after a failed attempt.
+            lastRefreshElapsedMs.set(0);
             return Result.retry();
         }
     }

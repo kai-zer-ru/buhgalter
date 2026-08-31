@@ -10,8 +10,6 @@ import {
 	listBanks,
 	listCredits,
 	listDebts,
-	listMerchants,
-	listTags,
 	listRecurringOperations,
 	listSubscriptions,
 	getSubscriptionsSummary,
@@ -83,6 +81,10 @@ import {
 	probeServerReachability,
 	shouldTryServer
 } from '$lib/offline/server-connectivity';
+import {
+	runWithSuppressedRefCacheNotifications,
+	setWarmRefCacheActive
+} from '$lib/offline/ref-cache';
 import { debugLogError, debugLogInfo, debugLogWarn } from '$lib/platform/debug-log';
 
 export const syncState = writable<'idle' | 'syncing'>('idle');
@@ -131,6 +133,7 @@ function refreshPullStatus(override?: PullStatusKind) {
 			else if (pending > 0) kind = 'pending';
 			else if (!['ok', 'syncing', 'error', 'offline'].includes(s.kind)) kind = 'idle';
 		}
+		if (s.kind === kind && s.pendingCount === pending) return s;
 		return { ...s, kind, pendingCount: pending };
 	});
 }
@@ -347,7 +350,7 @@ export async function pullFromServer(): Promise<boolean> {
 			}
 
 			invalidateApiCache();
-			await warmRefCache();
+			await warmRefCache({ force: true });
 			if (hasPendingOutbox()) {
 				await replayOutbox();
 			}
@@ -416,51 +419,128 @@ async function warmupCreditDetails(): Promise<void> {
 }
 
 /** Prefetch main GET endpoints into ref-cache (startup / manual sync). */
-export async function warmRefCache(): Promise<void> {
-	debugLogInfo('sync', 'warmRefCache started');
-	await Promise.allSettled([
-		getDashboard(),
-		getUIMeta(),
-		listAccounts(),
-		listAccounts('active'),
-		listAccounts('archived'),
-		listMerchants(),
-		listTags(),
-		warmupCreditDetails(),
-		listRecurringOperations(),
-		listSubscriptions(),
-		getSubscriptionsSummary({ upcoming_days: 14 }),
-		getDebtsSummary(),
-		listDebts({ settled: 'false' }),
-		listDebts({ settled: 'true' }),
-		getBudgetSummary(),
-		warmupTransactionIndex(),
-		listTransactions({
-			kind: 'manual',
-			sort: 'date_desc',
-			page: '1',
-			limit: '20'
-		}),
-		listTransactions({
-			kind: 'future',
-			sort: 'date_desc',
-			page: '1',
-			limit: '20'
-		}),
-		listTransactions({
-			kind: 'manual',
-			sort: 'date_desc',
-			page: '1',
-			limit: '10'
-		}),
-		listTransactions({
-			kind: 'future',
-			sort: 'date_desc',
-			page: '1',
-			limit: '10'
-		})
+let warmRefCacheInflight: Promise<void> | null = null;
+let lastWarmFinishedAt = 0;
+
+/** Skip background warm on resume/network if a full warm ran recently. */
+export const WARM_BACKGROUND_COOLDOWN_MS = 5 * 60_000;
+
+export type WarmRefCacheOptions = {
+	/** Throttle when called from resume / network reconnect. */
+	background?: boolean;
+	/** Ignore background cooldown (manual sync). */
+	force?: boolean;
+};
+
+/** Skip home reload effects right after warmRefCache (avoids duplicate loadAll storm). */
+export function shouldSuppressHomeDataRefresh(): boolean {
+	if (warmRefCacheInflight) return true;
+	return lastWarmFinishedAt > 0 && Date.now() - lastWarmFinishedAt < 8000;
+}
+
+function yieldToUi(): Promise<void> {
+	return new Promise((resolve) => {
+		if (typeof requestAnimationFrame === 'function') {
+			requestAnimationFrame(() => setTimeout(resolve, 0));
+		} else {
+			setTimeout(resolve, 0);
+		}
+	});
+}
+
+/** Run fetch batches sequentially so JSON parse / cache writes do not freeze the WebView. */
+async function runWarmBatches(batches: Array<Array<() => Promise<unknown>>>): Promise<void> {
+	for (const batch of batches) {
+		await Promise.allSettled(batch.map((fn) => fn()));
+		await yieldToUi();
+	}
+}
+
+/**
+ * Core warm: home + dictionaries only.
+ * Merchants/tags come from getUIMeta (seedDictionariesFromUIMeta) — no separate GETs.
+ * Accounts list without status is redundant with active+archived.
+ */
+async function warmRefCacheCore(): Promise<void> {
+	await runWarmBatches([
+		[
+			() => getDashboard(),
+			() => getUIMeta(),
+			() =>
+				listTransactions({
+					kind: 'manual',
+					sort: 'date_desc',
+					page: '1',
+					limit: '10'
+				}),
+			() =>
+				listTransactions({
+					kind: 'future',
+					sort: 'date_desc',
+					page: '1',
+					limit: '10'
+				})
+		],
+		[() => listAccounts('active'), () => listAccounts('archived'), () => getBudgetSummary()],
+		[
+			() => listRecurringOperations(),
+			() => listSubscriptions(),
+			() => getSubscriptionsSummary({ upcoming_days: 14 }),
+			() => getDebtsSummary(),
+			() => listDebts({ settled: 'false' }),
+			() => listDebts({ settled: 'true' })
+		]
 	]);
-	debugLogInfo('sync', 'warmRefCache finished');
-	const { publishWidgetSnapshot } = await import('$lib/widgets/publish');
-	void publishWidgetSnapshot();
+}
+
+async function warmRefCacheHeavy(): Promise<void> {
+	const { warmAllSubcategoriesCache } = await import('$lib/api/client');
+	await Promise.allSettled([
+		warmupCreditDetails(),
+		warmupTransactionIndex(),
+		warmAllSubcategoriesCache()
+	]);
+}
+
+async function warmRefCacheBody(opts: WarmRefCacheOptions): Promise<void> {
+	debugLogInfo('sync', 'warmRefCache started');
+	setWarmRefCacheActive(true);
+	try {
+		await runWithSuppressedRefCacheNotifications(warmRefCacheCore);
+		if (opts.force) {
+			notifyServerDataChanged();
+			await runWithSuppressedRefCacheNotifications(warmRefCacheHeavy);
+		}
+		// Credit details / tx-index / subcategories: only on manual sync (force).
+		// Automatic deferred warm was causing scroll freezes ~60s after unlock.
+	} finally {
+		setWarmRefCacheActive(false);
+		lastWarmFinishedAt = Date.now();
+		debugLogInfo('sync', 'warmRefCache finished');
+		const { scheduleWidgetSnapshotPublish } = await import('$lib/widgets/publish');
+		scheduleWidgetSnapshotPublish();
+	}
+}
+
+export async function warmRefCache(opts: WarmRefCacheOptions = {}): Promise<void> {
+	if (
+		opts.background &&
+		!opts.force &&
+		lastWarmFinishedAt > 0 &&
+		Date.now() - lastWarmFinishedAt < WARM_BACKGROUND_COOLDOWN_MS
+	) {
+		debugLogInfo('sync', 'warmRefCache skipped (background cooldown)');
+		return;
+	}
+	if (warmRefCacheInflight) return warmRefCacheInflight;
+	warmRefCacheInflight = warmRefCacheBody(opts).finally(() => {
+		warmRefCacheInflight = null;
+	});
+	return warmRefCacheInflight;
+}
+
+export function resetWarmRefCacheForTests(): void {
+	warmRefCacheInflight = null;
+	lastWarmFinishedAt = 0;
+	void import('$lib/widgets/publish').then((m) => m.resetWidgetPublishForTests());
 }

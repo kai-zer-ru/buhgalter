@@ -19,6 +19,7 @@
 	import TransactionCategoryCell from '$lib/components/TransactionCategoryCell.svelte';
 	import TransactionMerchantTags from '$lib/components/TransactionMerchantTags.svelte';
 	import { featureFlags, isFeatureEnabled } from '$lib/features';
+	import { isNativeApp } from '$lib/platform/native';
 
 	let {
 		transactions,
@@ -63,6 +64,7 @@
 	const templatesEnabled = $derived(isFeatureEnabled('transaction_templates', $featureFlags));
 	const recurringEnabled = $derived(isFeatureEnabled('recurring', $featureFlags));
 	const subscriptionsEnabled = $derived(isFeatureEnabled('subscriptions', $featureFlags));
+	const compactLayout = isNativeApp();
 
 	const showActions = $derived(
 		Boolean(
@@ -146,6 +148,81 @@
 
 {#if transactions.length === 0}
 	<EmptyStateCard message={emptyMessage} />
+{:else if compactLayout}
+	<div class="space-y-3">
+		{#each transactions as tx (tx.id)}
+			{@const commissionDisplay = transferCommissionDisplay(tx, siblings)}
+			<article class="rounded-xl border p-4" style:border-color="var(--border)">
+				<div class="flex items-start justify-between gap-3">
+					<div class="min-w-0">
+						<p class="text-sm" style:color="var(--text-muted)">
+							{formatAPIOperationDateTimeForDisplay(tx.transaction_date, tz)}
+							{#if tx.kind === 'future'}
+								<span title={$_('transactions.planned')}> 📅</span>
+							{/if}
+							{#if pendingSyncFailed(tx)}
+								<span title={pendingSyncFailed(tx)}> ⚠️</span>
+							{:else if isPendingTransaction(tx)}
+								<span title={$_('offline.pending')}> ⏳</span>
+							{/if}
+						</p>
+						<p class="mt-1 text-sm font-medium">
+							<TransactionAccountCell {tx} {siblings} mode="prefix" />
+						</p>
+					</div>
+					<div class="flex shrink-0 items-start gap-2">
+						<div class="text-right">
+							<p class="text-sm font-semibold tabular-nums">
+								{showAmountSign ? transactionAmountSign(tx, { singleAccount }) : ''}<MoneyDisplay
+									value={tx.amount_display}
+									class=""
+								/>
+							</p>
+							{#if commissionDisplay}
+								<p class="text-xs tabular-nums" style:color="var(--text-muted)">
+									{$_('transactions.commission')}:
+									<MoneyDisplay value={commissionDisplay} class="" />
+								</p>
+							{/if}
+						</div>
+						{#if showActions}
+							<RowActionsMenu actions={rowActions(tx)} />
+						{/if}
+					</div>
+				</div>
+				{#if showCategory}
+					<p class="mt-2 text-sm">
+						<TransactionCategoryCell
+							categoryName={transactionCategoryLabel(tx, $_)}
+							categoryIcon={tx.category_icon}
+							subcategoryName={tx.subcategory_name}
+							subcategoryIcon={tx.subcategory_icon}
+						/>
+					</p>
+				{/if}
+				{#if showDescription && (tx.description || descriptionExtra || tx.merchant_name || (tx.tags && tx.tags.length > 0))}
+					<div
+						class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm"
+						style:color="var(--text-muted)"
+					>
+						<TransactionMerchantTags
+							merchantName={tx.merchant_name}
+							merchantIcon={tx.merchant_icon}
+							tags={tx.tags}
+						/>
+						{#if tx.description || descriptionExtra}
+							<span>
+								{tx.description ?? ''}
+								{#if descriptionExtra}
+									{@render descriptionExtra(tx)}
+								{/if}
+							</span>
+						{/if}
+					</div>
+				{/if}
+			</article>
+		{/each}
+	</div>
 {:else}
 	<div class="hidden md:block">
 		<table class="w-full text-left text-sm">
