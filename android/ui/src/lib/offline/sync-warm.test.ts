@@ -19,7 +19,6 @@ vi.mock('$lib/widgets/publish', () => ({
 
 vi.mock('$lib/api/client', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('$lib/api/client')>();
-	const ok = vi.fn().mockResolvedValue({});
 	return {
 		...actual,
 		getDashboard: vi.fn().mockResolvedValue({}),

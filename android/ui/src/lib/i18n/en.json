@@ -65,7 +65,7 @@
 	"bankNotifications.listener.reconnected": "Listener connected",
 	"bankNotifications.listener.reconnectFailed": "Could not connect. Turn «Бухгалтер» off and on again in system notification access.",
 	"bankNotifications.banks.title": "Account → bank",
-	"bankNotifications.banks.hint": "For each account pick the bank whose push to watch. If a card (*XXXX) is not mapped, expenses go to this account.",
+	"bankNotifications.banks.hint": "For each account pick a bank (the same bank can be used on several accounts). If a card (*XXXX) is not mapped, expenses go to the first account bound to that bank.",
 	"bankNotifications.bank.none": "Not selected",
 	"bankNotifications.account.none": "Not selected",
 	"bankNotifications.accounts.empty": "No bank accounts or credit cards. Add an account with a bank.",

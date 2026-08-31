@@ -1,6 +1,6 @@
 import type { InterceptSettings, ParsedPurchase } from './types';
 
-/** last4 binding wins; else bank/package default account. */
+/** last4 binding wins; else first bank/package default account (many accounts may share a bank). */
 export function resolveAccountId(
 	parsed: ParsedPurchase,
 	settings: InterceptSettings

@@ -17,6 +17,7 @@
 		packageForBankId,
 		reconnectNotificationListener,
 		saveInterceptSettings,
+		setAccountBankBinding,
 		syncInterceptNativeFromSettings,
 		type CardBinding,
 		type InterceptSettings,
@@ -141,19 +142,21 @@
 		return settings.bankBindings.find((b) => b.accountId === accountId)?.bankId ?? '';
 	}
 
-	/** Account → bank: one bank maps to at most one account. */
+	/** Account → bank; same bank may be bound to several accounts. */
 	function setAccountBank(accountId: string, bankId: string) {
-		let bankBindings = settings.bankBindings.filter((b) => b.accountId !== accountId);
+		let opts: { bankId: string; packageName: string } | null = null;
 		if (bankId) {
 			const packageName = packageForBankId(bankId);
 			if (!packageName) {
 				toast($_('bankNotifications.bank.none'));
 				return;
 			}
-			bankBindings = bankBindings.filter((b) => b.bankId !== bankId);
-			bankBindings = [...bankBindings, { bankId, packageName, accountId }];
+			opts = { bankId, packageName };
 		}
-		persist({ ...settings, bankBindings });
+		persist({
+			...settings,
+			bankBindings: setAccountBankBinding(settings.bankBindings, accountId, opts)
+		});
 		toast($_('common.saved'));
 	}
 

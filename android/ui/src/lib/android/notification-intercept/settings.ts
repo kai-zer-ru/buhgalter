@@ -1,6 +1,6 @@
 import { get } from 'svelte/store';
 import { user } from '$lib/stores/auth';
-import type { InterceptSettings } from './types';
+import type { BankBinding, InterceptSettings } from './types';
 
 const STORAGE_PREFIX = 'buhgalter.notification_intercept.settings.v1:';
 
@@ -9,6 +9,20 @@ const DEFAULT_SETTINGS: InterceptSettings = {
 	bankBindings: [],
 	cardBindings: []
 };
+
+/**
+ * Bind account → bank. Several accounts may share the same bank
+ * (disambiguation for drafts is last4 → account, else first bank match).
+ */
+export function setAccountBankBinding(
+	bankBindings: BankBinding[],
+	accountId: string,
+	opts: { bankId: string; packageName: string } | null
+): BankBinding[] {
+	const withoutAccount = bankBindings.filter((b) => b.accountId !== accountId);
+	if (!opts) return withoutAccount;
+	return [...withoutAccount, { bankId: opts.bankId, packageName: opts.packageName, accountId }];
+}
 
 function storageKey(userId: string): string {
 	return `${STORAGE_PREFIX}${userId}`;

@@ -3,7 +3,8 @@ import {
 	clearInterceptSettingsForTests,
 	loadInterceptSettings,
 	saveInterceptSettings,
-	normalizeLast4
+	normalizeLast4,
+	setAccountBankBinding
 } from './settings';
 
 describe('intercept settings', () => {
@@ -45,5 +46,47 @@ describe('intercept settings', () => {
 			cardBindings: []
 		});
 		expect(loadInterceptSettings('u2').enabled).toBe(false);
+	});
+
+	it('allows the same bank on several accounts', () => {
+		const pkg = 'com.idamob.tinkoff.android';
+		let bindings = setAccountBankBinding([], 'acc-1', { bankId: 'tinkoff', packageName: pkg });
+		bindings = setAccountBankBinding(bindings, 'acc-2', { bankId: 'tinkoff', packageName: pkg });
+		bindings = setAccountBankBinding(bindings, 'acc-3', { bankId: 'tinkoff', packageName: pkg });
+		expect(bindings).toEqual([
+			{ bankId: 'tinkoff', packageName: pkg, accountId: 'acc-1' },
+			{ bankId: 'tinkoff', packageName: pkg, accountId: 'acc-2' },
+			{ bankId: 'tinkoff', packageName: pkg, accountId: 'acc-3' }
+		]);
+	});
+
+	it('replaces bank for one account without clearing siblings', () => {
+		const tinkoffPkg = 'com.idamob.tinkoff.android';
+		const sberPkg = 'ru.sberbankmobile';
+		let bindings = [
+			{ bankId: 'tinkoff', packageName: tinkoffPkg, accountId: 'acc-1' },
+			{ bankId: 'tinkoff', packageName: tinkoffPkg, accountId: 'acc-2' }
+		];
+		bindings = setAccountBankBinding(bindings, 'acc-2', {
+			bankId: 'sberbank',
+			packageName: sberPkg
+		});
+		expect(bindings).toEqual([
+			{ bankId: 'tinkoff', packageName: tinkoffPkg, accountId: 'acc-1' },
+			{ bankId: 'sberbank', packageName: sberPkg, accountId: 'acc-2' }
+		]);
+	});
+
+	it('clears binding for one account', () => {
+		const pkg = 'com.idamob.tinkoff.android';
+		const bindings = setAccountBankBinding(
+			[
+				{ bankId: 'tinkoff', packageName: pkg, accountId: 'acc-1' },
+				{ bankId: 'tinkoff', packageName: pkg, accountId: 'acc-2' }
+			],
+			'acc-1',
+			null
+		);
+		expect(bindings).toEqual([{ bankId: 'tinkoff', packageName: pkg, accountId: 'acc-2' }]);
 	});
 });

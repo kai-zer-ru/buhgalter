@@ -65,7 +65,7 @@
 	"bankNotifications.listener.reconnected": "Слушатель подключён",
 	"bankNotifications.listener.reconnectFailed": "Не удалось подключить. Выключите и снова включите «Бухгалтер» в системном списке доступа к уведомлениям.",
 	"bankNotifications.banks.title": "Счёт → банк",
-	"bankNotifications.banks.hint": "Для каждого счёта укажите банк, от которого ждать push. Если карта (*XXXX) не сопоставлена — расход пойдёт на этот счёт.",
+	"bankNotifications.banks.hint": "Для каждого счёта укажите банк (один банк можно выбрать у нескольких счетов). Если карта (*XXXX) не сопоставлена — расход пойдёт на первый привязанный счёт этого банка.",
 	"bankNotifications.bank.none": "Не выбран",
 	"bankNotifications.account.none": "Не выбран",
 	"bankNotifications.accounts.empty": "Нет банковских счетов или кредитных карт. Добавьте счёт с банком.",

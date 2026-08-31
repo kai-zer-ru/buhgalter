@@ -34,6 +34,26 @@ describe('resolveAccountId', () => {
 		expect(resolveAccountId({ ...parsed, last4: '9999' }, settings)).toBe('acc-bank');
 	});
 
+	it('uses first bank binding when several accounts share the bank', () => {
+		const multi: InterceptSettings = {
+			enabled: true,
+			bankBindings: [
+				{
+					bankId: 'tinkoff',
+					packageName: 'com.idamob.tinkoff.android',
+					accountId: 'acc-a'
+				},
+				{
+					bankId: 'tinkoff',
+					packageName: 'com.idamob.tinkoff.android',
+					accountId: 'acc-b'
+				}
+			],
+			cardBindings: []
+		};
+		expect(resolveAccountId({ ...parsed, last4: undefined }, multi)).toBe('acc-a');
+	});
+
 	it('returns undefined when nothing matches', () => {
 		expect(
 			resolveAccountId(parsed, { enabled: true, bankBindings: [], cardBindings: [] })

@@ -182,6 +182,7 @@ export function clearInterceptDraftsForTests(userId?: string): void {
 	const id = userId ?? get(user)?.id;
 	if (id) {
 		memoryDrafts.delete(storageKey(id));
+		parsedDraftsCache.delete(id);
 		try {
 			if (typeof localStorage !== 'undefined') {
 				localStorage.removeItem(storageKey(id));

@@ -80,10 +80,12 @@ describe('fetchWithRefCache SWR', () => {
 		};
 		writeRefCache('/api/v1/dashboard', dash);
 		let notified = false;
+		let ignoreInitial = true;
 		const unsub = refCacheUpdate.subscribe((v) => {
+			if (ignoreInitial) return;
 			if (v?.path === '/api/v1/dashboard') notified = true;
 		});
-		notified = false;
+		ignoreInitial = false;
 
 		let resolveFetch!: (value: typeof dash) => void;
 		const fetcher = vi.fn(
