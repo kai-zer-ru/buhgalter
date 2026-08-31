@@ -81,6 +81,36 @@ export function getInterceptDraft(draftId: string, userId?: string | null): Inte
 	return listInterceptDrafts(userId).find((d) => d.id === draftId) ?? null;
 }
 
+/** Drop duplicate push↔SMS drafts for the same purchase within this window. */
+const SEMANTIC_DEDUP_WINDOW_MS = 2 * 60 * 60 * 1000;
+
+function isSemanticDuplicate(
+	existing: InterceptDraft,
+	incoming: ParsedPurchase,
+	extraMerchantName?: string
+): boolean {
+	if (existing.parsed.bankId !== incoming.bankId) return false;
+	if (existing.parsed.amount !== incoming.amount) return false;
+	const existingKind = existing.parsed.kind ?? 'purchase';
+	const incomingKind = incoming.kind ?? 'purchase';
+	if (existingKind !== incomingKind) return false;
+	if (existingKind === 'cancel') return false;
+
+	if (existing.parsed.last4 && incoming.last4 && existing.parsed.last4 !== incoming.last4) {
+		return false;
+	}
+
+	const a = normMerchant(existing.merchantName || existing.parsed.merchantText || '');
+	const b = normMerchant(extraMerchantName || incoming.merchantText || '');
+	if (a && b && a !== b && !a.includes(b) && !b.includes(a)) {
+		return false;
+	}
+
+	const existingAt = Date.parse(existing.parsed.occurredAt) || Date.parse(existing.createdAt) || 0;
+	const incomingAt = Date.parse(incoming.occurredAt) || Date.now();
+	return Math.abs(existingAt - incomingAt) <= SEMANTIC_DEDUP_WINDOW_MS;
+}
+
 export function addInterceptDraft(
 	parsed: ParsedPurchase,
 	extra: { accountId?: string; merchantId?: string; merchantName?: string },
@@ -90,6 +120,9 @@ export function addInterceptDraft(
 	if (!id) return null;
 	const drafts = readDrafts(id);
 	if (drafts.some((d) => d.parsed.rawHash === parsed.rawHash)) {
+		return null;
+	}
+	if (drafts.some((d) => isSemanticDuplicate(d, parsed, extra.merchantName))) {
 		return null;
 	}
 	const draft: InterceptDraft = {

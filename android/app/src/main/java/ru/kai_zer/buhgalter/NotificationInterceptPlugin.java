@@ -1,7 +1,9 @@
 package ru.kai_zer.buhgalter;
 
+import android.Manifest;
 import android.content.ComponentName;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
@@ -9,25 +11,38 @@ import android.os.PowerManager;
 import android.provider.Settings;
 import android.text.TextUtils;
 
+import androidx.core.content.ContextCompat;
+
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
+import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.annotation.Permission;
+import com.getcapacitor.annotation.PermissionCallback;
 
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.WeakHashMap;
 
 /**
- * Bridge for bank notification intercept: access status, capture toggle, pending queue.
+ * Bridge for bank notification intercept: access status, capture toggle, pending queue, SMS.
  */
-@CapacitorPlugin(name = "NotificationIntercept")
+@CapacitorPlugin(
+        name = "NotificationIntercept",
+        permissions = {
+            @Permission(
+                    strings = {Manifest.permission.RECEIVE_SMS},
+                    alias = "sms")
+        })
 public class NotificationInterceptPlugin extends Plugin {
 
     private static final WeakHashMap<NotificationInterceptPlugin, Boolean> INSTANCES = new WeakHashMap<>();
@@ -153,11 +168,72 @@ public class NotificationInterceptPlugin extends Plugin {
         call.resolve();
     }
 
+    /**
+     * Sync SMS sender → package map from JS ({@code senders: [{sender, packageName}, ...]}).
+     */
+    @PluginMethod
+    public void setAllowedSmsSenders(PluginCall call) {
+        JSArray senders = call.getArray("senders");
+        Map<String, String> map = new HashMap<>();
+        if (senders != null) {
+            try {
+                for (int i = 0; i < senders.length(); i++) {
+                    JSONObject row = senders.getJSONObject(i);
+                    String sender = row.optString("sender", "");
+                    String pkg = row.optString("packageName", "");
+                    if (!sender.trim().isEmpty() && !pkg.trim().isEmpty()) {
+                        map.put(sender.trim(), pkg.trim());
+                    }
+                }
+            } catch (JSONException e) {
+                call.reject(e.getMessage());
+                return;
+            }
+        }
+        NotificationInterceptStore.setAllowedSmsSenders(getContext(), map);
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void getSmsPermissionStatus(PluginCall call) {
+        JSObject ret = new JSObject();
+        ret.put("granted", hasSmsPermission());
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void requestSmsPermission(PluginCall call) {
+        if (hasSmsPermission()) {
+            JSObject ret = new JSObject();
+            ret.put("granted", true);
+            call.resolve(ret);
+            return;
+        }
+        requestPermissionForAlias("sms", call, "smsPermissionCallback");
+    }
+
+    @PermissionCallback
+    private void smsPermissionCallback(PluginCall call) {
+        JSObject ret = new JSObject();
+        ret.put("granted", getPermissionState("sms") == PermissionState.GRANTED);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void openAppPermissionSettings(PluginCall call) {
+        Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+        intent.setData(Uri.parse("package:" + getContext().getPackageName()));
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        getContext().startActivity(intent);
+        call.resolve();
+    }
+
     @PluginMethod
     public void getCaptureState(PluginCall call) {
         JSObject ret = new JSObject();
         ret.put("captureEnabled", NotificationInterceptStore.isCaptureEnabled(getContext()));
         ret.put("notificationAccess", hasNotificationAccess());
+        ret.put("smsPermission", hasSmsPermission());
         JSArray pkgs = new JSArray();
         for (String pkg : NotificationInterceptStore.allowedPackages(getContext())) {
             pkgs.put(pkg);
@@ -279,6 +355,7 @@ public class NotificationInterceptPlugin extends Plugin {
         ret.put("listenerConnected", BankNotificationListenerService.isConnected());
         ret.put("notificationAccess", hasNotificationAccess());
         ret.put("captureEnabled", NotificationInterceptStore.isCaptureEnabled(getContext()));
+        ret.put("smsPermission", hasSmsPermission());
         call.resolve(ret);
     }
 
@@ -295,6 +372,10 @@ public class NotificationInterceptPlugin extends Plugin {
                 item.put("bigText", obj.optString("bigText", ""));
                 item.put("postedAt", obj.optLong("postedAt", 0L));
                 item.put("dedupeKey", obj.optString("dedupeKey", ""));
+                String channel = obj.optString("channel", "");
+                if (!channel.isEmpty()) {
+                    item.put("channel", channel);
+                }
                 items.put(item);
             } catch (JSONException ignored) {
                 // skip bad row
@@ -302,6 +383,11 @@ public class NotificationInterceptPlugin extends Plugin {
         }
         ret.put("items", items);
         return ret;
+    }
+
+    private boolean hasSmsPermission() {
+        return ContextCompat.checkSelfPermission(getContext(), Manifest.permission.RECEIVE_SMS)
+                == PackageManager.PERMISSION_GRANTED;
     }
 
     private boolean hasNotificationAccess() {

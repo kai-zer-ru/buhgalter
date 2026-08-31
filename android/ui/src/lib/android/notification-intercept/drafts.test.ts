@@ -35,6 +35,28 @@ describe('intercept drafts', () => {
 		expect(listInterceptDrafts('user-1')).toHaveLength(1);
 	});
 
+	it('dedupes push vs SMS by amount/merchant within 2h', () => {
+		addInterceptDraft(purchase, { merchantName: 'Shop' }, 'user-1');
+		const fromSms: ParsedPurchase = {
+			...purchase,
+			rawHash: 'sms-hash-different',
+			occurredAt: new Date(Date.now() + 60_000).toISOString()
+		};
+		expect(addInterceptDraft(fromSms, { merchantName: 'Shop' }, 'user-1')).toBeNull();
+		expect(listInterceptDrafts('user-1')).toHaveLength(1);
+	});
+
+	it('allows same amount different merchant', () => {
+		addInterceptDraft(purchase, { merchantName: 'Shop A' }, 'user-1');
+		const other: ParsedPurchase = {
+			...purchase,
+			rawHash: 'hash-2',
+			merchantText: 'Shop B'
+		};
+		expect(addInterceptDraft(other, { merchantName: 'Shop B' }, 'user-1')).not.toBeNull();
+		expect(listInterceptDrafts('user-1')).toHaveLength(2);
+	});
+
 	it('deletes draft without creating transaction', () => {
 		const d = addInterceptDraft(purchase, {}, 'user-1');
 		expect(deleteInterceptDraft(d!.id, 'user-1')).toBe(true);

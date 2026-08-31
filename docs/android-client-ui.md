@@ -129,7 +129,7 @@
 | Сервер | `/settings/server` |
 | API-токены | `/settings/tokens` |
 | Уведомления | `/settings/notifications` |
-| Банковские уведомления | `/settings/bank-notifications` (черновики — `/settings/bank-notifications/drafts`) |
+| Банковские уведомления | `/settings/bank-notifications` (push + SMS; черновики — `/settings/bank-notifications/drafts`) |
 | Импорт / экспорт | `/settings/import` |
 
 ### Админка (`/admin`)

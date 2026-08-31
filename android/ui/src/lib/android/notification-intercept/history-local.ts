@@ -36,6 +36,7 @@ export function appendLocalHistoryFromRaw(
 		bigText: raw.bigText,
 		postedAt: raw.postedAt,
 		dedupeKey: raw.dedupeKey,
+		channel: raw.channel,
 		inAllowlist: extra.inAllowlist,
 		queued: extra.queued
 	};

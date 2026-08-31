@@ -11,11 +11,14 @@
 		KNOWN_BANK_APPS,
 		getCurrentInterceptSettings,
 		getNotificationListenerState,
+		getSmsPermissionGranted,
 		isNotificationAccessEnabled,
+		openAppPermissionSettings,
 		openBackgroundRestrictionsSettings,
 		openNotificationAccessSettings,
 		packageForBankId,
 		reconnectNotificationListener,
+		requestSmsPermission,
 		saveInterceptSettings,
 		setAccountBankBinding,
 		syncInterceptNativeFromSettings,
@@ -31,7 +34,9 @@
 	let banks = $state<Bank[]>([]);
 	let accessEnabled = $state(false);
 	let listenerConnected = $state(false);
+	let smsPermission = $state(false);
 	let reconnecting = $state(false);
+	let requestingSms = $state(false);
 	let loading = $state(true);
 	let newCardBankId = $state('tinkoff');
 	let newCardLast4 = $state('');
@@ -68,8 +73,12 @@
 			banks = [];
 		}
 		accessEnabled = await isNotificationAccessEnabled();
+		smsPermission = await getSmsPermissionGranted();
 		const listener = await getNotificationListenerState();
 		listenerConnected = Boolean(listener?.listenerConnected);
+		if (listener?.smsPermission != null) {
+			smsPermission = Boolean(listener.smsPermission);
+		}
 		if (!newCardAccountId && bindableAccounts.length) {
 			newCardAccountId = bindableAccounts[0].id;
 			const bound = bankIdForAccount(bindableAccounts[0].id);
@@ -136,6 +145,22 @@
 				listenerConnected = Boolean(listener?.listenerConnected);
 			})();
 		}, 800);
+	}
+
+	async function grantSms() {
+		requestingSms = true;
+		try {
+			smsPermission = await requestSmsPermission();
+			if (!smsPermission) {
+				toast($_('bankNotifications.sms.needPermission'));
+				await openAppPermissionSettings();
+			} else {
+				toast($_('common.saved'));
+			}
+		} finally {
+			requestingSms = false;
+			smsPermission = await getSmsPermissionGranted();
+		}
 	}
 
 	function bankIdForAccount(accountId: string): string {
@@ -264,6 +289,32 @@
 			>
 				{$_('bankNotifications.listener.reconnect')}
 			</button>
+		</div>
+
+		<div class="space-y-2 border-t pt-4" style:border-color="var(--border)">
+			<p class="font-medium">{$_('bankNotifications.sms.title')}</p>
+			<p class="text-sm" style:color="var(--text-muted)">{$_('bankNotifications.sms.hint')}</p>
+			<p class="text-sm" style:color={smsPermission ? 'var(--primary)' : 'var(--text-muted)'}>
+				{smsPermission ? $_('bankNotifications.sms.on') : $_('bankNotifications.sms.off')}
+			</p>
+			<button
+				type="button"
+				class="btn-ghost"
+				disabled={!isNativeApp() || requestingSms || smsPermission}
+				onclick={() => void grantSms()}
+			>
+				{$_('bankNotifications.sms.request')}
+			</button>
+			{#if !smsPermission}
+				<button
+					type="button"
+					class="btn-ghost"
+					disabled={!isNativeApp()}
+					onclick={() => void openAppPermissionSettings()}
+				>
+					{$_('bankNotifications.sms.openSettings')}
+				</button>
+			{/if}
 		</div>
 
 		<div class="space-y-2 border-t pt-4" style:border-color="var(--border)">

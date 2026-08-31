@@ -237,6 +237,7 @@ public class BankNotificationListenerService extends NotificationListenerService
                 historyItem.put("bigText", bigText);
                 historyItem.put("postedAt", postTime);
                 historyItem.put("dedupeKey", dedupeKey);
+                historyItem.put("channel", "push");
                 historyItem.put("inAllowlist", allowed);
                 historyItem.put("queued", allowed && captureOn);
                 // Primary: same prefs as pending queue (reliable on MIUI).
@@ -260,6 +261,7 @@ public class BankNotificationListenerService extends NotificationListenerService
             item.put("bigText", bigText);
             item.put("postedAt", postTime);
             item.put("dedupeKey", dedupeKey);
+            item.put("channel", "push");
             NotificationInterceptStore.append(context, item);
             if (!forceHistory) {
                 NotificationInterceptPlugin.emitPendingAvailable();

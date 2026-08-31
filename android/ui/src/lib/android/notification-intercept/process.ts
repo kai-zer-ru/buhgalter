@@ -2,7 +2,7 @@ import { get } from 'svelte/store';
 import { listMerchants } from '$lib/api/client';
 import { user } from '$lib/stores/auth';
 import { resolveAccountId } from './account-resolve';
-import { allKnownPackages } from './banks';
+import { allKnownPackages, allKnownSmsSenderEntries } from './banks';
 import { bankIdForPackage } from './banks';
 import { addInterceptDraft, removeDraftMatchingCancel } from './drafts';
 import { appendLocalHistoryFromRaw } from './history-local';
@@ -23,7 +23,8 @@ export async function syncInterceptNativeFromSettings(userId?: string | null): P
 	const settings = id ? loadInterceptSettings(id) : getCurrentInterceptSettings();
 	await syncNativeCapture({
 		enabled: settings.enabled,
-		packages: allKnownPackages()
+		packages: allKnownPackages(),
+		smsSenders: allKnownSmsSenderEntries()
 	});
 }
 

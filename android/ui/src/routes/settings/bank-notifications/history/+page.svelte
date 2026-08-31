@@ -167,6 +167,14 @@
 							{$_('bankNotifications.history.bankId')}: {bankIdForPackage(row.packageName)}
 						</p>
 					{/if}
+					{#if row.channel}
+						<p style:color="var(--text-muted)">
+							{$_('bankNotifications.history.channel')}:
+							{row.channel === 'sms'
+								? $_('bankNotifications.history.channel.sms')
+								: $_('bankNotifications.history.channel.push')}
+						</p>
+					{/if}
 					{#if row.title}
 						<p>
 							<span style:color="var(--text-muted)"

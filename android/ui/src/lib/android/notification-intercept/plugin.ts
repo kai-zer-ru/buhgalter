@@ -7,6 +7,7 @@ type CaptureState = {
 	captureEnabled: boolean;
 	notificationAccess: boolean;
 	allowedPackages: string[];
+	smsPermission?: boolean;
 };
 
 interface NotificationInterceptPlugin {
@@ -18,6 +19,10 @@ interface NotificationInterceptPlugin {
 	}>;
 	setCaptureEnabled(opts: { enabled: boolean }): Promise<void>;
 	setAllowedPackages(opts: { packages: string[] }): Promise<void>;
+	setAllowedSmsSenders(opts: { senders: { sender: string; packageName: string }[] }): Promise<void>;
+	getSmsPermissionStatus(): Promise<{ granted: boolean }>;
+	requestSmsPermission(): Promise<{ granted: boolean }>;
+	openAppPermissionSettings(): Promise<void>;
 	getCaptureState(): Promise<CaptureState>;
 	consumePending(): Promise<{ items: RawBankNotification[] }>;
 	peekPending(): Promise<{ items: RawBankNotification[] }>;
@@ -37,6 +42,7 @@ interface NotificationInterceptPlugin {
 		listenerConnected: boolean;
 		notificationAccess: boolean;
 		captureEnabled: boolean;
+		smsPermission?: boolean;
 	}>;
 	addListener(
 		eventName: 'pendingAvailable',
@@ -79,11 +85,44 @@ export async function openBackgroundRestrictionsSettings(): Promise<boolean> {
 export async function syncNativeCapture(opts: {
 	enabled: boolean;
 	packages: string[];
+	smsSenders?: { sender: string; packageName: string }[];
 }): Promise<void> {
 	if (!isNativeApp()) return;
 	try {
 		await Native.setAllowedPackages({ packages: opts.packages });
+		if (opts.smsSenders) {
+			await Native.setAllowedSmsSenders({ senders: opts.smsSenders });
+		}
 		await Native.setCaptureEnabled({ enabled: opts.enabled });
+	} catch {
+		// ignore
+	}
+}
+
+export async function getSmsPermissionGranted(): Promise<boolean> {
+	if (!isNativeApp()) return false;
+	try {
+		const r = await Native.getSmsPermissionStatus();
+		return Boolean(r.granted);
+	} catch {
+		return false;
+	}
+}
+
+export async function requestSmsPermission(): Promise<boolean> {
+	if (!isNativeApp()) return false;
+	try {
+		const r = await Native.requestSmsPermission();
+		return Boolean(r.granted);
+	} catch {
+		return false;
+	}
+}
+
+export async function openAppPermissionSettings(): Promise<void> {
+	if (!isNativeApp()) return;
+	try {
+		await Native.openAppPermissionSettings();
 	} catch {
 		// ignore
 	}
@@ -285,6 +324,7 @@ export async function getNotificationListenerState(): Promise<{
 	listenerConnected: boolean;
 	notificationAccess: boolean;
 	captureEnabled: boolean;
+	smsPermission?: boolean;
 } | null> {
 	if (!isNativeApp()) return null;
 	try {

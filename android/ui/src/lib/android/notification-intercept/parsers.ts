@@ -23,7 +23,18 @@ const AMOUNT_RE =
 
 const LAST4_RE = /(?:\*|⁎|•|∙|●|○|∗|карты?\s*|карта\s*|card\s*)(\d{4})\b/i;
 
+const PURCHASE_WORD_RE =
+	/\b(покупка|оплата|оплат|списание|списан|трата|платёж|платеж|purchase|payment|spent)\b/gi;
+
+/** T-Bank SMS: «Покупка, карта *2552. 56 RUB. STOLOVAYA. Доступно …» */
+const TBANK_SMS_MERCHANT_RE =
+	/(?:^|[^\d])(?:\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*(?:₽|руб\.?|р\.|RUB)\.?\s+([A-Za-zА-Яа-яЁё0-9 ._-]{2,60}?)\s*\.?\s*(?:доступно|available)/i;
+
 function combinedText(raw: RawBankNotification): string {
+	// SMS title is the sender address — exclude from amount/kind heuristics.
+	if (raw.channel === 'sms') {
+		return [raw.text, raw.bigText].filter(Boolean).join('\n');
+	}
 	return [raw.title, raw.text, raw.bigText].filter(Boolean).join('\n');
 }
 
@@ -62,8 +73,18 @@ function extractAmount(text: string): string | null {
  * Cancel pushes often use a generic title («Карта Пэй») and put the shop in the body.
  */
 function extractMerchant(raw: RawBankNotification, amount: string): string {
+	if (raw.channel === 'sms') {
+		const body = [raw.text, raw.bigText].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+		const tbank = body.match(TBANK_SMS_MERCHANT_RE);
+		if (tbank?.[1]) {
+			return tbank[1].replace(/^[\s.,:;!\-–—]+|[\s.,:;!\-–—]+$/g, '').trim();
+		}
+	}
+
 	const title = raw.title.trim();
+	// SMS title is the originator (900 / T-Bank), never a shop name.
 	if (
+		raw.channel !== 'sms' &&
 		title &&
 		!GENERIC_TITLE_RE.test(title) &&
 		!PURCHASE_HINT_RE.test(title) &&
@@ -81,11 +102,13 @@ function extractMerchant(raw: RawBankNotification, amount: string): string {
 	t = t.replace(/^(сбер|сбербанк|тинькофф|т-?банк|tinkoff|яндекс)\s*[:.]?\s*/i, '');
 	t = t.replace(CANCEL_RE, ' ');
 	t = t.replace(INCOME_RE, ' ');
-	t = t.replace(PURCHASE_HINT_RE, ' ').replace(/\s+/g, ' ').trim();
+	t = t.replace(PURCHASE_WORD_RE, ' ').replace(/\s+/g, ' ').trim();
 	const amountAlt = amount.replace('.', '[,.]');
 	t = t.replace(new RegExp(`\\b${amountAlt}\\b`, 'i'), ' ');
-	t = t.replace(/\b\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d{1,2})?\s*(?:₽|руб\.?|р\.|RUB)?/gi, ' ');
+	// Strip card mask before amounts — otherwise «2552» becomes «255» + stray digit.
 	t = t.replace(LAST4_RE, ' ');
+	t = t.replace(/\b\d{1,3}(?:[ \u00a0]\d{3})+(?:[.,]\d{1,2})?\s*(?:₽|руб\.?|р\.|RUB)\b/gi, ' ');
+	t = t.replace(/\b\d+(?:[.,]\d{1,2})?\s*(?:₽|руб\.?|р\.|RUB)\b/gi, ' ');
 	t = t.replace(/\b(карта|card|счёт|счет|доступно|на|MIR|Visa|MasterCard)\b/gi, ' ');
 	t = t.replace(/[•*⁎∙●○∗]+/g, ' ');
 	t = t.replace(/\s+/g, ' ').trim();

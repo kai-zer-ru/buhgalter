@@ -239,8 +239,7 @@
 - [x] БАГ. Android: экран выбора счёта для виджета «Счёт» — тема DayNight (палитра виджетов) и отступ под status bar
 - [x] БАГ. Android виджеты: форматирование сумм везде как в UI (`1 500.00 ₽`), не только в «Мои средства»
 - [x] Android виджет «Мои средства»: подпись строки кредитных карт — «Кредитные средства» (не «Карты»). Три строки — наличные, банковские карты, кредитные средства
-- [ ] Android: quick-actions в шторке для черновиков из перехвата уведомлений (принять / отклонить без открытия приложения) — follow-up к [notification-intercept.md](roadmap/notification-intercept.md)
-- [ ] Android: SMS-перехват покупок банка — после push MVP ([notification-intercept.md](roadmap/notification-intercept.md))
+- [x] Android: SMS-перехват покупок банка — после push MVP ([notification-intercept.md](roadmap/notification-intercept.md))
 
 ## Общие планы
 
@@ -261,7 +260,7 @@
 - [ ] [Webhook](roadmap/webhooks.md) — исходящие события для внешних интеграций
 - [ ] [Home Assistant](roadmap/home-assistant.md) — интеграция для умного дома
 - [ ] [Эволюция уведомлений](roadmap/notifications-evolution.md) — развитие политик/шаблонов/частоты
-
+- [ ] Android: quick-actions в шторке для черновиков из перехвата уведомлений (принять / отклонить без открытия приложения) — follow-up к [notification-intercept.md](roadmap/notification-intercept.md)
 
 ## На подумать
 

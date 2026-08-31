@@ -5,6 +5,8 @@ export type RawBankNotification = {
 	bigText: string;
 	postedAt: number;
 	dedupeKey: string;
+	/** Capture channel; omitted on older native payloads → treat as push. */
+	channel?: 'push' | 'sms';
 };
 
 /** Debug history row (all posts while capture is on). */

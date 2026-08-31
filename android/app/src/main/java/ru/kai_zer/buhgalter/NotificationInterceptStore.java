@@ -9,7 +9,10 @@ import org.json.JSONObject;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -25,6 +28,11 @@ final class NotificationInterceptStore {
     private static final String KEY_PACKAGES_JSON = "allowed_packages_json";
     /** Legacy StringSet key; migrated on read. */
     private static final String KEY_PACKAGES_LEGACY = "allowed_packages";
+    /**
+     * JSON object: normalized SMS sender → primary bank packageName. Keep in sync with
+     * {@code banks.ts} smsSenders.
+     */
+    private static final String KEY_SMS_SENDERS_JSON = "allowed_sms_senders_json";
     private static final int MAX_PENDING = 100;
     private static final int MAX_HISTORY = 80;
     private static final Object HISTORY_LOCK = new Object();
@@ -60,6 +68,39 @@ final class NotificationInterceptStore {
                                     "com.wildberries.ru",
                                     "ru.otpbank.mobile",
                                     "ru.atb.mobilbank")));
+
+    /** Default sender → package map (mirror of banks.ts smsSenders). */
+    private static final String DEFAULT_SMS_SENDERS_JSON =
+            "{"
+                    + "\"900\":\"ru.sberbankmobile\","
+                    + "\"t-bank\":\"com.idamob.tinkoff.android\","
+                    + "\"tbank\":\"com.idamob.tinkoff.android\","
+                    + "\"tinkoff\":\"com.idamob.tinkoff.android\","
+                    + "\"7555\":\"com.idamob.tinkoff.android\","
+                    + "\"vtb\":\"ru.vtb24.mobilebanking.android\","
+                    + "\"1000\":\"ru.vtb24.mobilebanking.android\","
+                    + "\"alfabank\":\"ru.alfabank.mobile.android\","
+                    + "\"alfa-bank\":\"ru.alfabank.mobile.android\","
+                    + "\"2265\":\"ru.alfabank.mobile.android\","
+                    + "\"gazprombank\":\"ru.gazprombank.android.mobilebank.app\","
+                    + "\"raiffeisen\":\"ru.raiffeisennews\","
+                    + "\"rosbank\":\"ru.rosbank.android\","
+                    + "\"mkb\":\"ru.mkb.mobile\","
+                    + "\"rshb\":\"ru.rshb.dbo\","
+                    + "\"otkritie\":\"com.openbank\","
+                    + "\"open\":\"com.openbank\","
+                    + "\"sovcombank\":\"ru.sovcombank.mobile\","
+                    + "\"halva\":\"ru.sovcomcard.halva.v1\","
+                    + "\"psb\":\"ru.ftc.faktura.psb\","
+                    + "\"uralsib\":\"ru.uralsib.mb\","
+                    + "\"homecredit\":\"ru.homecredit.mycredit\","
+                    + "\"ozon\":\"ru.ozon.fintech.finance\","
+                    + "\"yandex\":\"com.yandex.bank\","
+                    + "\"wb\":\"ru.wildberries.fintech\","
+                    + "\"wbbank\":\"ru.wildberries.fintech\","
+                    + "\"otpbank\":\"ru.otpbank.mobile\","
+                    + "\"atb\":\"ru.atb.mobilbank\""
+                    + "}";
 
     private NotificationInterceptStore() {}
 
@@ -117,6 +158,85 @@ final class NotificationInterceptStore {
                 String pkg = arr.optString(i, "").trim();
                 if (!pkg.isEmpty()) {
                     out.add(pkg);
+                }
+            }
+        } catch (JSONException ignored) {
+            // empty
+        }
+        return out;
+    }
+
+    /** Normalize SMS originator for allowlist lookup (trim, lower, strip +7/8 prefixes). */
+    static String normalizeSmsSender(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        String s = raw.trim().toLowerCase();
+        s = s.replace(" ", "").replace("-", "");
+        if (s.startsWith("+7") && s.length() > 2) {
+            s = s.substring(2);
+        } else if (s.startsWith("8") && s.length() == 11 && s.chars().allMatch(Character::isDigit)) {
+            s = s.substring(1);
+        }
+        return s;
+    }
+
+    static Map<String, String> smsSenderToPackage(Context context) {
+        SharedPreferences p = prefs(context);
+        String json = p.getString(KEY_SMS_SENDERS_JSON, null);
+        if (json == null) {
+            return sendersFromJson(DEFAULT_SMS_SENDERS_JSON);
+        }
+        return sendersFromJson(json);
+    }
+
+    /**
+     * Replace SMS sender allowlist. Pass empty map to clear synced data (fallback defaults apply
+     * on next read when JSON is missing; empty object means "synced empty" — no SMS capture).
+     */
+    static void setAllowedSmsSenders(Context context, Map<String, String> senderToPackage) {
+        JSONObject obj = new JSONObject();
+        if (senderToPackage != null) {
+            for (Map.Entry<String, String> e : senderToPackage.entrySet()) {
+                String sender = normalizeSmsSender(e.getKey());
+                String pkg = e.getValue() != null ? e.getValue().trim() : "";
+                if (!sender.isEmpty() && !pkg.isEmpty()) {
+                    try {
+                        obj.put(sender, pkg);
+                    } catch (JSONException ignored) {
+                        // skip
+                    }
+                }
+            }
+        }
+        prefs(context).edit().putString(KEY_SMS_SENDERS_JSON, obj.toString()).commit();
+    }
+
+    /** @return primary package for sender, or null if not allowlisted */
+    static String packageForSmsSender(Context context, String sender) {
+        String key = normalizeSmsSender(sender);
+        if (key.isEmpty()) {
+            return null;
+        }
+        Map<String, String> map = smsSenderToPackage(context);
+        String pkg = map.get(key);
+        return pkg != null && !pkg.isEmpty() ? pkg : null;
+    }
+
+    private static Map<String, String> sendersFromJson(String json) {
+        Map<String, String> out = new HashMap<>();
+        if (json == null || json.isEmpty()) {
+            return out;
+        }
+        try {
+            JSONObject obj = new JSONObject(json);
+            Iterator<String> keys = obj.keys();
+            while (keys.hasNext()) {
+                String k = keys.next();
+                String pkg = obj.optString(k, "").trim();
+                String norm = normalizeSmsSender(k);
+                if (!norm.isEmpty() && !pkg.isEmpty()) {
+                    out.put(norm, pkg);
                 }
             }
         } catch (JSONException ignored) {

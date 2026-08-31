@@ -181,4 +181,68 @@ describe('parseBankNotification', () => {
 		expect(parsed!.last4).toBe('6517');
 		expect(parsed!.merchantText).toBe('Народный');
 	});
+
+	it('parses Sber SMS purchase (sender as title)', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'ru.sberbankmobile',
+				title: '900',
+				text: 'Покупка 450.00р MAGNIT Карта *1234 Баланс: 12 340.50р',
+				channel: 'sms',
+				dedupeKey: 'sms|900|1|abc'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.bankId).toBe('sberbank');
+		expect(parsed!.kind).toBe('purchase');
+		expect(parsed!.amount).toBe('450.00');
+		expect(parsed!.last4).toBe('1234');
+		expect(parsed!.merchantText.toUpperCase()).toContain('MAGNIT');
+	});
+
+	it('parses T-Bank SMS purchase', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'com.idamob.tinkoff.android',
+				title: 'T-Bank',
+				text: 'Покупка 89,90 RUB, карта *4321. Пятёрочка. Доступно 5 000 RUB',
+				channel: 'sms'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.bankId).toBe('tinkoff');
+		expect(parsed!.amount).toBe('89.90');
+		expect(parsed!.last4).toBe('4321');
+		expect(parsed!.merchantText.toLowerCase()).toContain('пят');
+	});
+
+	it('parses T-Bank SMS purchase with dot-separated fields', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'com.idamob.tinkoff.android',
+				title: 'T-Bank',
+				text: 'Покупка, карта *2552. 56 RUB. STOLOVAYA. Доступно 65,3 RUB',
+				channel: 'sms'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.bankId).toBe('tinkoff');
+		expect(parsed!.kind).toBe('purchase');
+		expect(parsed!.amount).toBe('56.00');
+		expect(parsed!.last4).toBe('2552');
+		expect(parsed!.merchantText).toBe('STOLOVAYA');
+	});
+
+	it('ignores OTP SMS', () => {
+		expect(
+			parseBankNotification(
+				raw({
+					packageName: 'ru.sberbankmobile',
+					title: '900',
+					text: 'Никому не сообщайте код: 12345. Вход в СберБанк Онлайн.',
+					channel: 'sms'
+				})
+			)
+		).toBeNull();
+	});
 });
