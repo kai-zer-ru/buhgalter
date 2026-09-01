@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import type { Transaction } from '$lib/api/client';
 import {
 	canDeleteTransaction,
@@ -6,9 +6,11 @@ import {
 	canRepeatTransaction,
 	dedupeTransferLegs,
 	isTransferCommission,
+	resolveTransactionSubcategoryName,
 	transactionCategoryLabel,
 	transferCommissionDisplay
 } from './transaction-display';
+import { resetRefCacheForTests, subcategoriesRefPath, writeRefCache } from '$lib/offline/ref-cache';
 
 function tx(overrides: Partial<Transaction> = {}): Transaction {
 	return {
@@ -121,5 +123,31 @@ describe('transactionCategoryLabel', () => {
 	it('uses category name for income and expense', () => {
 		expect(transactionCategoryLabel({ type: 'expense', category_name: 'Food' }, t)).toBe('Food');
 		expect(transactionCategoryLabel({ type: 'income', category_name: null }, t)).toBe('income');
+	});
+});
+
+describe('resolveTransactionSubcategoryName', () => {
+	beforeEach(() => {
+		resetRefCacheForTests();
+	});
+
+	it('returns cached name when API name looks like uuid', () => {
+		writeRefCache(subcategoriesRefPath('c1'), [
+			{
+				id: 's1',
+				category_id: 'c1',
+				name: 'Карусели',
+				icon: 'fun',
+				sort_order: 0,
+				created_at: '2026-09-01T00:00:00Z'
+			}
+		]);
+		expect(
+			resolveTransactionSubcategoryName({
+				category_id: 'c1',
+				subcategory_id: 's1',
+				subcategory_name: '95269796-0747-49d2-a4c0-b85a06a48cc0'
+			})
+		).toBe('Карусели');
 	});
 });

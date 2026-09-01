@@ -9,6 +9,7 @@ import {
 	isOfflineFetchError,
 	OfflineCacheMissError,
 	readCategoriesFromUIMetaCache,
+	readAccountsFromOfflineCache,
 	readRefCache,
 	seedDictionariesFromUIMeta,
 	shouldPersistRefCache
@@ -221,8 +222,8 @@ async function request<T>(path: string, init?: RequestInit, opts?: { auth?: bool
 	}
 	const result = await fetcher();
 	if (method !== 'GET') {
-		// Wipe mutable lists (dashboard/accounts/txs). Dictionaries stay on device and
-		// are only overwritten by later GET / seedDictionariesFromUIMeta / mutations.
+		// Wipe dashboard/txs. Dictionaries + account lists stay so offline forms
+		// still have счёт/категория after a write (seeded from ui/meta if empty).
 		invalidateApiCache();
 		clearRefCache({ preserveAuthMe: true });
 	}
@@ -791,7 +792,12 @@ export function getUIi18n(lang: string) {
 export function listAccounts(status?: 'active' | 'archived' | 'deleted') {
 	const q = status ? `?status=${status}` : '';
 	const path = `/api/v1/accounts${q}`;
-	return request<Account[]>(path);
+	return request<Account[]>(path).catch((err) => {
+		if (!isOfflineFetchError(err)) throw err;
+		const fromCache = readAccountsFromOfflineCache(status);
+		if (fromCache !== null) return fromCache;
+		throw err;
+	});
 }
 
 export function getAccount(id: string) {

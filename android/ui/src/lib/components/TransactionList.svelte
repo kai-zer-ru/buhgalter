@@ -10,6 +10,7 @@
 	import {
 		transactionAmountSign,
 		transactionCategoryLabel,
+		resolveTransactionSubcategoryName,
 		transferCommissionDisplay,
 		canEditTransaction,
 		canRepeatTransaction,
@@ -195,7 +196,7 @@
 						<TransactionCategoryCell
 							categoryName={transactionCategoryLabel(tx, $_)}
 							categoryIcon={tx.category_icon}
-							subcategoryName={tx.subcategory_name}
+							subcategoryName={resolveTransactionSubcategoryName(tx)}
 							subcategoryIcon={tx.subcategory_icon}
 						/>
 					</p>
@@ -265,7 +266,7 @@
 								<TransactionCategoryCell
 									categoryName={transactionCategoryLabel(tx, $_)}
 									categoryIcon={tx.category_icon}
-									subcategoryName={tx.subcategory_name}
+									subcategoryName={resolveTransactionSubcategoryName(tx)}
 									subcategoryIcon={tx.subcategory_icon}
 								/>
 							</td>
@@ -360,7 +361,7 @@
 						<TransactionCategoryCell
 							categoryName={transactionCategoryLabel(tx, $_)}
 							categoryIcon={tx.category_icon}
-							subcategoryName={tx.subcategory_name}
+							subcategoryName={resolveTransactionSubcategoryName(tx)}
 							subcategoryIcon={tx.subcategory_icon}
 						/>
 					</p>

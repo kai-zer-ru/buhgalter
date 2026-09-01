@@ -188,13 +188,17 @@ describe('clearRefCache preserveAuthMe', () => {
 		resetRefCacheForTests();
 	});
 
-	it('keeps /auth/me when preserveAuthMe is set', async () => {
+	it('keeps /auth/me and account lists when preserveAuthMe is set', async () => {
 		const { clearRefCache, readRefCache, writeRefCache } = await import('./ref-cache');
 		writeRefCache('/api/v1/auth/me', { id: 'u1' });
 		writeRefCache('/api/v1/accounts', [{ id: 'a1' }]);
+		writeRefCache('/api/v1/accounts?status=active', [{ id: 'a1' }]);
+		writeRefCache('/api/v1/dashboard', { total: 1 });
 		clearRefCache({ preserveAuthMe: true });
 		expect(readRefCache('/api/v1/auth/me')).toEqual({ id: 'u1' });
-		expect(readRefCache('/api/v1/accounts')).toBeNull();
+		expect(readRefCache('/api/v1/accounts')).toEqual([{ id: 'a1' }]);
+		expect(readRefCache('/api/v1/accounts?status=active')).toEqual([{ id: 'a1' }]);
+		expect(readRefCache('/api/v1/dashboard')).toBeNull();
 	});
 
 	it('keeps category dictionaries so offline forms survive a write', async () => {
@@ -236,6 +240,27 @@ describe('clearRefCache preserveAuthMe', () => {
 		expect(readRefCache('/api/v1/dashboard')).toEqual({ total: 1 });
 	});
 
+	it('seeds empty account lists from ui/meta after a mutation clear', async () => {
+		const { clearRefCache, readRefCache, writeRefCache } = await import('./ref-cache');
+		writeRefCache('/api/v1/ui/meta', {
+			accounts: [{ id: 'a1', name: 'Наличные', type: 'cash', status: 'active' }],
+			banks: [],
+			expense_categories: [{ id: 'c1', name: 'Еда' }],
+			income_categories: [],
+			debtors: [],
+			merchants: [],
+			tags: [],
+			active_credits: [],
+			closed_credits: []
+		});
+		writeRefCache('/api/v1/dashboard', { total: 1, accounts: [] });
+		clearRefCache({ preserveAuthMe: true });
+		expect(readRefCache('/api/v1/dashboard')).toBeNull();
+		expect(readRefCache('/api/v1/accounts?status=active')).toMatchObject([
+			{ id: 'a1', name: 'Наличные', type: 'cash', status: 'active' }
+		]);
+	});
+
 	it('full clear still removes dictionaries', async () => {
 		const { clearRefCache, readRefCache, writeRefCache } = await import('./ref-cache');
 		writeRefCache('/api/v1/categories?type=expense', [{ id: 'c1' }]);
@@ -243,6 +268,91 @@ describe('clearRefCache preserveAuthMe', () => {
 		clearRefCache();
 		expect(readRefCache('/api/v1/categories?type=expense')).toBeNull();
 		expect(readRefCache('/api/v1/auth/me')).toBeNull();
+	});
+});
+
+describe('readAccountsFromOfflineCache', () => {
+	beforeEach(() => {
+		resetRefCacheForTests();
+		currentServerUrl = 'http://test.local:8765';
+	});
+
+	it('returns cached active accounts list', async () => {
+		const { readAccountsFromOfflineCache, writeRefCache } = await import('./ref-cache');
+		const rows = [
+			{
+				id: 'a1',
+				name: 'Карта',
+				type: 'bank' as const,
+				bank_id: null,
+				initial_balance: 0,
+				balance: 100,
+				balance_display: '1.00',
+				status: 'active' as const,
+				is_primary: true,
+				created_at: '',
+				updated_at: ''
+			}
+		];
+		writeRefCache('/api/v1/accounts?status=active', rows);
+		expect(readAccountsFromOfflineCache('active')).toEqual(rows);
+	});
+
+	it('falls back to ui/meta when accounts list was cleared on write', async () => {
+		const { readAccountsFromOfflineCache, writeRefCache } = await import('./ref-cache');
+		writeRefCache('/api/v1/ui/meta', {
+			accounts: [{ id: 'a1', name: 'Наличные', type: 'cash', status: 'active' }],
+			banks: [],
+			expense_categories: [],
+			income_categories: [],
+			debtors: [],
+			merchants: [],
+			tags: [],
+			active_credits: [],
+			closed_credits: []
+		});
+		expect(readAccountsFromOfflineCache('active')).toMatchObject([
+			{ id: 'a1', name: 'Наличные', type: 'cash', status: 'active' }
+		]);
+	});
+
+	it('merges dashboard balances into ui/meta accounts', async () => {
+		const { readAccountsFromOfflineCache, writeRefCache } = await import('./ref-cache');
+		writeRefCache('/api/v1/ui/meta', {
+			accounts: [{ id: 'a1', name: 'Карта', type: 'bank', status: 'active' }],
+			banks: [],
+			expense_categories: [],
+			income_categories: [],
+			debtors: [],
+			merchants: [],
+			tags: [],
+			active_credits: [],
+			closed_credits: []
+		});
+		writeRefCache('/api/v1/dashboard', {
+			total_balance: 500,
+			total_forecast: 500,
+			accounts: [
+				{
+					id: 'a1',
+					name: 'Карта',
+					type: 'bank',
+					balance: 500,
+					balance_display: '5.00',
+					forecast_balance: 500,
+					forecast_display: '5.00',
+					has_future_this_month: false,
+					is_primary: true
+				}
+			],
+			recent_transactions: [],
+			debts_summary: { i_owe: 0 }
+		});
+		expect(readAccountsFromOfflineCache('active')?.[0]).toMatchObject({
+			id: 'a1',
+			balance: 500,
+			is_primary: true
+		});
 	});
 });
 
@@ -254,6 +364,8 @@ describe('isPreservedOfflineRefPath', () => {
 		expect(isPreservedOfflineRefPath('/api/v1/categories/abc/subcategories')).toBe(true);
 		expect(isPreservedOfflineRefPath('/api/v1/transaction-templates')).toBe(true);
 		expect(isPreservedOfflineRefPath('/api/v1/dashboard')).toBe(false);
-		expect(isPreservedOfflineRefPath('/api/v1/accounts?status=active')).toBe(false);
+		expect(isPreservedOfflineRefPath('/api/v1/accounts?status=active')).toBe(true);
+		expect(isPreservedOfflineRefPath('/api/v1/accounts')).toBe(true);
+		expect(isPreservedOfflineRefPath('/api/v1/transactions')).toBe(false);
 	});
 });

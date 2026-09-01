@@ -28,7 +28,10 @@ import {
 import type { TransactionPayload, TransferPayload } from '$lib/offline/types';
 import { isLocalEntityKey } from '$lib/offline/types';
 import { afterOnlineWrite } from '$lib/offline/after-online-write';
-import { ensureMerchantsTagsFromTransaction } from '$lib/offline/ref-cache-mutations';
+import {
+	ensureMerchantsTagsFromTransaction,
+	ensureSubcategoryInCacheFromTransaction
+} from '$lib/offline/ref-cache-mutations';
 
 function isOfflineError(err: unknown): boolean {
 	return isConnectionError(err) || (err instanceof ApiError && isTransientHttpError(err.status));
@@ -71,16 +74,21 @@ function localTransactionFromPayload(id: string, payload: TransactionPayload): T
 	} as Transaction;
 }
 
+function patchTransactionCaches(tx: Transaction): void {
+	ensureMerchantsTagsFromTransaction(tx);
+	ensureSubcategoryInCacheFromTransaction(tx);
+}
+
 export async function createTransaction(payload: TransactionPayload): Promise<Transaction> {
 	if (!shouldUseOfflineQueue()) {
 		const tx = await apiCreateTransaction(payload);
-		ensureMerchantsTagsFromTransaction(tx);
+		patchTransactionCaches(tx);
 		return tx;
 	}
 	if (await shouldTryServer()) {
 		const res = await tryOnline(() => apiCreateTransaction(payload));
 		if (res) {
-			ensureMerchantsTagsFromTransaction(res);
+			patchTransactionCaches(res);
 			afterOnlineWrite();
 			return res;
 		}
@@ -101,7 +109,7 @@ export async function updateTransaction(
 ): Promise<Transaction> {
 	if (!shouldUseOfflineQueue()) {
 		const tx = await apiUpdateTransaction(id, payload);
-		ensureMerchantsTagsFromTransaction(tx);
+		patchTransactionCaches(tx);
 		return tx;
 	}
 	if (isLocalEntityKey(id)) {
@@ -116,7 +124,7 @@ export async function updateTransaction(
 	if (await shouldTryServer()) {
 		const res = await tryOnline(() => apiUpdateTransaction(id, payload));
 		if (res) {
-			ensureMerchantsTagsFromTransaction(res);
+			patchTransactionCaches(res);
 			afterOnlineWrite();
 			return res;
 		}

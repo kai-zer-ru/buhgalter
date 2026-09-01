@@ -18,6 +18,7 @@
 	import { createTransaction, updateTransaction } from '$lib/offline/transactions-api';
 	import { applyOutboxToAccounts } from '$lib/offline/local-state';
 	import { outboxTick } from '$lib/offline/store';
+	import { invalidateRefCache, subcategoriesRefPath } from '$lib/offline/ref-cache';
 	import { fromDatetimeLocalValue, nowDatetimeLocal, toDatetimeLocalValue } from '$lib/dates';
 	import { buildDatetimeLocal, parseDatetimeLocal } from '$lib/datetime-picker';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
@@ -133,7 +134,12 @@
 			icon: { type: 'category' as const, icon: m.icon || 'default' }
 		}))
 	);
-	const newSubcategoryName = $derived(subcategoryId ? '' : subcategoryQuery.trim());
+	const newSubcategoryName = $derived.by(() => {
+		if (subcategoryId) return '';
+		const trimmed = subcategoryQuery.trim();
+		if (!trimmed || isLikelyUuid(trimmed)) return '';
+		return trimmed;
+	});
 	const newMerchantName = $derived(merchantId ? '' : merchantQuery.trim());
 
 	$effect(() => {
@@ -172,6 +178,24 @@
 		if (!kopecks || kopecks <= 0) return false;
 		return creditCardExpenseWarning(selectedAccountRow.balance, kopecks);
 	});
+
+	const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+	function isLikelyUuid(value: string): boolean {
+		return UUID_RE.test(value.trim());
+	}
+
+	async function loadSubcategoriesForCategory(
+		categoryId: string,
+		requiredSubId = ''
+	): Promise<Subcategory[]> {
+		let list = await listSubcategories(categoryId);
+		if (requiredSubId && !list.some((s) => s.id === requiredSubId)) {
+			invalidateRefCache(subcategoriesRefPath(categoryId));
+			list = await listSubcategories(categoryId);
+		}
+		return list;
+	}
 
 	$effect(() => {
 		if (variant === 'modal' && !open) return;
@@ -246,14 +270,16 @@
 				merchantId || merchantQuery.trim() || description.trim() || selectedTags.length
 			);
 		}
-		accountsBase = await listAccounts('active');
+		accountsBase =
+			(await listAccounts('active').catch(() => [] as Account[])) ?? [];
 		accounts = applyOutboxToAccounts(accountsBase, tz);
 		if (!editSource && !repeatSource) {
 			const preferred = prefill?.accountId || accountId;
 			selectedAccount = defaultAccountId(accounts, preferred);
 		}
-		merchants = await listMerchants();
-		allTags = await listTags();
+		const [merchantsRes, tagsRes] = await Promise.allSettled([listMerchants(), listTags()]);
+		merchants = merchantsRes.status === 'fulfilled' ? merchantsRes.value : [];
+		allTags = tagsRes.status === 'fulfilled' ? tagsRes.value : [];
 		await loadCategories();
 	}
 
@@ -272,7 +298,7 @@
 		}
 		if (categoryId) {
 			try {
-				subcategories = await listSubcategories(categoryId);
+				subcategories = await loadSubcategoriesForCategory(categoryId, subcategoryId);
 			} catch {
 				subcategories = [];
 			}
@@ -280,7 +306,11 @@
 			subcategories = [];
 		}
 		if (subcategoryId && !subcategories.some((s) => s.id === subcategoryId)) {
+			const nameFromTx = subcategoryQuery.trim();
 			subcategoryId = '';
+			if (!nameFromTx || isLikelyUuid(nameFromTx)) {
+				subcategoryQuery = '';
+			}
 		}
 	}
 
@@ -292,7 +322,7 @@
 			return;
 		}
 		try {
-			subcategories = await listSubcategories(nextCategoryId);
+			subcategories = await loadSubcategoriesForCategory(nextCategoryId);
 		} catch {
 			subcategories = [];
 		}

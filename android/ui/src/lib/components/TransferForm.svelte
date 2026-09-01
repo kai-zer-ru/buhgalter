@@ -144,7 +144,7 @@
 			description = '';
 			dateTimeValue = nowDatetimeLocal(tz);
 		}
-		accountsBase = await listAccounts('active');
+		accountsBase = (await listAccounts('active').catch(() => [] as Account[])) ?? [];
 		accounts = applyOutboxToAccounts(accountsBase, tz);
 		if (!editSource?.transfer_group_id && repeatSource?.type !== 'transfer') {
 			if (payCard) {

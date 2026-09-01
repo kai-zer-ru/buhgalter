@@ -5,6 +5,9 @@ import {
 	onCategoryDeleted,
 	onCategoryUpdated,
 	ensureMerchantsTagsFromTransaction,
+	ensureSubcategoryInCacheFromTransaction,
+	onSubcategoryCreated,
+	onSubcategoryDeleted,
 	onDebtCreated,
 	onDebtDeleted,
 	onDebtUpdated,
@@ -17,6 +20,7 @@ import {
 	refCacheReady,
 	refCacheTick,
 	resetRefCacheForTests,
+	subcategoriesRefPath,
 	writeRefCache
 } from '$lib/offline/ref-cache';
 
@@ -253,6 +257,91 @@ describe('ensureMerchantsTagsFromTransaction', () => {
 		expect(readRefCache<{ name: string }[]>('/api/v1/tags')?.[0]?.name).toBe('отпуск');
 	});
 });
+
+describe('subcategory ref-cache mutations', () => {
+	beforeEach(() => {
+		resetRefCacheForTests();
+	});
+
+	it('onSubcategoryCreated prepends to category subcategory list and bumps count', () => {
+		const cat = expenseCat('c1', 'Развлечения');
+		cat.subcategory_count = 0;
+		writeRefCache('/api/v1/ui/meta', {
+			expense_categories: [cat],
+			income_categories: []
+		});
+		seedCategoryLists([cat]);
+
+		onSubcategoryCreated({
+			id: 's1',
+			category_id: 'c1',
+			name: 'Карусели',
+			icon: 'fun',
+			sort_order: 1,
+			created_at: '2026-09-01T00:00:00Z'
+		});
+
+		expect(readRefCache<{ id: string; name: string }[]>(subcategoriesRefPath('c1'))).toEqual([
+			{
+				id: 's1',
+				category_id: 'c1',
+				name: 'Карусели',
+				icon: 'fun',
+				sort_order: 1,
+				created_at: '2026-09-01T00:00:00Z'
+			}
+		]);
+		expect(readRefCache<{ subcategory_count: number }[]>(categoriesRefPath('expense'))?.[0]).toMatchObject({
+			subcategory_count: 1
+		});
+	});
+
+	it('ensureSubcategoryInCacheFromTransaction adds inline subcategory from transaction', () => {
+		writeRefCache(subcategoriesRefPath('c1'), []);
+		ensureSubcategoryInCacheFromTransaction({
+			category_id: 'c1',
+			subcategory_id: 's-new',
+			subcategory_name: 'Карусели',
+			subcategory_icon: 'fun'
+		});
+		expect(readRefCache<{ id: string; name: string }[]>(subcategoriesRefPath('c1'))?.[0]).toMatchObject({
+			id: 's-new',
+			name: 'Карусели'
+		});
+	});
+
+	it('onSubcategoryDeleted removes row and decrements count', () => {
+		const cat = expenseCat('c1', 'Развлечения');
+		cat.subcategory_count = 1;
+		writeRefCache(subcategoriesRefPath('c1'), [
+			{
+				id: 's1',
+				category_id: 'c1',
+				name: 'Карусели',
+				icon: 'fun',
+				sort_order: 1,
+				created_at: '2026-09-01T00:00:00Z'
+			}
+		]);
+		writeRefCache('/api/v1/ui/meta', {
+			expense_categories: [cat],
+			income_categories: []
+		});
+		seedCategoryLists([cat]);
+
+		onSubcategoryDeleted('c1', 's1');
+
+		expect(readRefCache(subcategoriesRefPath('c1'))).toEqual([]);
+		expect(readRefCache<{ subcategory_count: number }[]>(categoriesRefPath('expense'))?.[0]).toMatchObject({
+			subcategory_count: 0
+		});
+	});
+});
+
+function seedCategoryLists(categories: Category[]): void {
+	writeRefCache(categoriesRefPath('expense'), categories);
+	writeRefCache(categoriesRefPath(), categories);
+}
 
 describe('patchRefCacheList', () => {
 	beforeEach(() => {

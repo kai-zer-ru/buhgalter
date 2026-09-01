@@ -83,7 +83,8 @@ import {
 } from '$lib/offline/server-connectivity';
 import {
 	runWithSuppressedRefCacheNotifications,
-	setWarmRefCacheActive
+	setWarmRefCacheActive,
+	flushRefCacheDisk
 } from '$lib/offline/ref-cache';
 import { debugLogError, debugLogInfo, debugLogWarn } from '$lib/platform/debug-log';
 
@@ -515,6 +516,7 @@ async function warmRefCacheBody(opts: WarmRefCacheOptions): Promise<void> {
 		// Automatic deferred warm was causing scroll freezes ~60s after unlock.
 	} finally {
 		setWarmRefCacheActive(false);
+		flushRefCacheDisk();
 		lastWarmFinishedAt = Date.now();
 		debugLogInfo('sync', 'warmRefCache finished');
 		const { scheduleWidgetSnapshotPublish } = await import('$lib/widgets/publish');

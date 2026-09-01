@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { get } from 'svelte/store';
-import { deleteTransaction, deleteTransfer } from '$lib/offline/transactions-api';
+import { createTransaction, deleteTransaction, deleteTransfer } from '$lib/offline/transactions-api';
 import { getOutboxEntries, resetOutboxForTests } from '$lib/offline/store';
 import * as client from '$lib/api/client';
 import * as connectivity from '$lib/offline/server-connectivity';
@@ -59,6 +59,26 @@ beforeEach(() => {
 });
 
 describe('transactions-api delete', () => {
+	it('queues create when server is unreachable so the operation stays on device', async () => {
+		const tx = await createTransaction({
+			account_id: 'a1',
+			type: 'expense',
+			amount: '1254.00',
+			category_id: 'c1',
+			transaction_date: '2026-09-01 12:41:00'
+		});
+
+		expect(client.createTransaction).not.toHaveBeenCalled();
+		expect(getOutboxEntries()).toHaveLength(1);
+		expect(getOutboxEntries()[0]).toMatchObject({
+			op: 'create',
+			kind: 'transaction',
+			payload: { account_id: 'a1', amount: '1254.00', category_id: 'c1' }
+		});
+		expect(tx.account_id).toBe('a1');
+		expect(tx.amount_display).toBe('1254.00');
+	});
+
 	it('online delete bumps dataRefreshTick so lists reload without waiting for sync', async () => {
 		vi.mocked(connectivity.shouldTryServer).mockResolvedValue(true);
 		vi.mocked(client.deleteTransaction).mockResolvedValue(undefined);

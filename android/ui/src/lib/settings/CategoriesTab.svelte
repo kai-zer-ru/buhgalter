@@ -32,6 +32,12 @@
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
 	import { reportPageLoadFailure } from '$lib/page-load';
 	import { categoriesRefPath, refCacheUpdate } from '$lib/offline/ref-cache';
+	import {
+		onSubcategoriesReordered,
+		onSubcategoryCreated,
+		onSubcategoryDeleted,
+		onSubcategoryUpdated
+	} from '$lib/offline/ref-cache-mutations';
 	import { refCachePathMatches } from '$lib/offline/ref-cache-watch';
 	import { beginPointerDrag, moveId, type DragGhostView } from '$lib/drag-reorder';
 
@@ -269,10 +275,12 @@
 			if (subDialog.mode === 'create') {
 				const categoryId = subDialog.categoryId;
 				const sub = await createSubcategory(categoryId, payload);
+				onSubcategoryCreated(sub);
 				subs = { ...subs, [categoryId]: [...(subs[categoryId] ?? []), sub] };
 			} else {
 				const { categoryId, subId } = subDialog;
 				const updated = await updateSubcategory(subId, payload);
+				onSubcategoryUpdated(updated);
 				subs = {
 					...subs,
 					[categoryId]: (subs[categoryId] ?? []).map((s) => (s.id === updated.id ? updated : s))
@@ -297,6 +305,7 @@
 		if (!requireOnline('offline.onlineOnly.categoriesStructure')) return;
 		try {
 			await deleteSubcategory(subId);
+			onSubcategoryDeleted(categoryId, subId);
 			toast($_('common.deleted'));
 			subs = {
 				...subs,
@@ -335,7 +344,9 @@
 		);
 		if (!ids) return;
 		try {
-			subs = { ...subs, [categoryId]: await reorderSubcategories(categoryId, ids) };
+			const reordered = await reorderSubcategories(categoryId, ids);
+			onSubcategoriesReordered(categoryId, reordered);
+			subs = { ...subs, [categoryId]: reordered };
 		} catch (err) {
 			toast.fromError(err);
 		}

@@ -7,6 +7,7 @@ import type {
 	Debtor,
 	Merchant,
 	RecurringOperation,
+	Subcategory,
 	Subscription,
 	Tag,
 	Transaction,
@@ -17,7 +18,8 @@ import {
 	invalidateRefCache,
 	invalidateRefCachePrefix,
 	publishRefCachePath,
-	readRefCache
+	readRefCache,
+	subcategoriesRefPath
 } from '$lib/offline/ref-cache';
 import { makeLocalKey } from '$lib/offline/types';
 
@@ -131,6 +133,7 @@ export function onCategoryUpdated(category: Category): void {
 export function onCategoryDeleted(id: string, type: 'income' | 'expense'): void {
 	removeRefCacheListItem(categoriesRefPath(type), id);
 	removeRefCacheListItem(categoriesRefPath(), id);
+	invalidateRefCache(subcategoriesRefPath(id));
 	const meta = readUIMetaCategories();
 	if (meta) {
 		if (type === 'expense') {
@@ -145,6 +148,62 @@ export function onCategoryDeleted(id: string, type: 'income' | 'expense'): void 
 			);
 		}
 	}
+}
+
+function bumpCategorySubcategoryCount(categoryId: string, delta: number): void {
+	const patch = (list: Category[]) =>
+		list.map((c) =>
+			c.id === categoryId ? { ...c, subcategory_count: Math.max(0, c.subcategory_count + delta) } : c
+		);
+	patchRefCacheList<Category>(categoriesRefPath(), patch);
+	const meta = readUIMetaCategories();
+	if (!meta) return;
+	const inExpense = meta.expense.some((c) => c.id === categoryId);
+	if (inExpense) {
+		writeUIMetaCategories(patch(meta.expense), meta.income);
+	} else {
+		writeUIMetaCategories(meta.expense, patch(meta.income));
+	}
+}
+
+export function onSubcategoryCreated(sub: Subcategory): void {
+	const path = subcategoriesRefPath(sub.category_id);
+	const cached = readRefCache<Subcategory[]>(path);
+	if (cached?.some((row) => row.id === sub.id)) {
+		replaceRefCacheListItem(path, sub);
+		return;
+	}
+	prependRefCacheList(path, sub);
+	bumpCategorySubcategoryCount(sub.category_id, 1);
+}
+
+export function onSubcategoryUpdated(sub: Subcategory): void {
+	replaceRefCacheListItem(subcategoriesRefPath(sub.category_id), sub);
+}
+
+export function onSubcategoriesReordered(categoryId: string, subs: Subcategory[]): void {
+	publishRefCachePath(subcategoriesRefPath(categoryId), subs);
+}
+
+export function onSubcategoryDeleted(categoryId: string, subId: string): void {
+	removeRefCacheListItem<Subcategory>(subcategoriesRefPath(categoryId), subId);
+	bumpCategorySubcategoryCount(categoryId, -1);
+}
+
+/** Patch subcategory list when a transaction creates or links a subcategory inline. */
+export function ensureSubcategoryInCacheFromTransaction(
+	tx: Pick<Transaction, 'category_id' | 'subcategory_id' | 'subcategory_name' | 'subcategory_icon'>
+): void {
+	if (!tx.category_id || !tx.subcategory_id || !tx.subcategory_name) return;
+	const sub: Subcategory = {
+		id: tx.subcategory_id,
+		category_id: tx.category_id,
+		name: tx.subcategory_name,
+		icon: tx.subcategory_icon ?? 'default',
+		sort_order: 0,
+		created_at: new Date().toISOString()
+	};
+	onSubcategoryCreated(sub);
 }
 
 export function onDebtCreated(debt: Debt): void {

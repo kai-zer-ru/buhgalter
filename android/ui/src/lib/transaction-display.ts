@@ -1,6 +1,25 @@
 import type { Transaction } from '$lib/api/client';
+import { readRefCache, subcategoriesRefPath } from '$lib/offline/ref-cache';
 
-/** Category column label — transfers always from app i18n, not server category name. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isLikelyUuid(value: string): boolean {
+	return UUID_RE.test(value.trim());
+}
+
+/** Prefer cached subcategory label when API name is missing or looks like a raw id. */
+export function resolveTransactionSubcategoryName(
+	tx: Pick<Transaction, 'category_id' | 'subcategory_id' | 'subcategory_name'>
+): string | null | undefined {
+	const raw = tx.subcategory_name;
+	if (!tx.subcategory_id || !tx.category_id) return raw;
+	const looksBad = !raw || raw === tx.subcategory_id || isLikelyUuid(raw);
+	if (!looksBad) return raw;
+	const subs = readRefCache<{ id: string; name: string }[]>(
+		subcategoriesRefPath(tx.category_id)
+	);
+	return subs?.find((sub) => sub.id === tx.subcategory_id)?.name ?? raw;
+}
 export function transactionCategoryLabel(
 	tx: Pick<Transaction, 'type' | 'category_name'>,
 	translate: (key: string) => string
