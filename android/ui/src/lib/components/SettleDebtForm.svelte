@@ -58,7 +58,7 @@
 		amount = formatMoneyForInput(currentDebt.amount_display);
 		settledAtLocal = nowDatetimeLocal(tz);
 		skipBalance = false;
-		accounts = await listAccounts('active');
+		accounts = (await listAccounts('active').catch(() => [] as Account[])) ?? [];
 		accountId =
 			currentDebt.account_id && accounts.some((a) => a.id === currentDebt.account_id)
 				? currentDebt.account_id

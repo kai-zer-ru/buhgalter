@@ -1,5 +1,5 @@
 import type {
-	Account,
+	AccountBalanceSummary,
 	BudgetSummaryItem,
 	Credit,
 	Dashboard,
@@ -58,7 +58,6 @@ export type WidgetSnapshot = {
 
 export type BuildWidgetSnapshotInput = {
 	dashboard: Dashboard;
-	accounts: Account[];
 	budgetItems: BudgetSummaryItem[];
 	credits: Credit[];
 	debts: Debt[];
@@ -188,21 +187,25 @@ export function buildUpcomingItems(
 	}));
 }
 
-function sumActiveBalanceByType(accounts: Account[], type: Account['type']): number {
+function sumBalanceByType(
+	accounts: readonly AccountBalanceSummary[],
+	type: AccountBalanceSummary['type']
+): number {
 	let sum = 0;
 	for (const a of accounts) {
-		if (a.status !== 'active' || a.type !== type) continue;
+		if (a.type !== type) continue;
 		sum += a.balance;
 	}
 	return sum;
 }
 
 export function buildWidgetSnapshot(input: BuildWidgetSnapshotInput): WidgetSnapshot {
-	const { dashboard, currency, accounts } = input;
+	const { dashboard, currency } = input;
+	const accounts = dashboard.accounts;
 	const cards = dashboard.credit_cards_summary;
-	const cashCents = sumActiveBalanceByType(accounts, 'cash');
-	const bankCents = sumActiveBalanceByType(accounts, 'bank');
-	const creditCents = cards?.total_balance ?? sumActiveBalanceByType(accounts, 'credit_card');
+	const cashCents = sumBalanceByType(accounts, 'cash');
+	const bankCents = sumBalanceByType(accounts, 'bank');
+	const creditCents = cards?.total_balance ?? sumBalanceByType(accounts, 'credit_card');
 	const cashDisplay = formatWidgetCents(cashCents, currency);
 	const bankDisplay = formatWidgetCents(bankCents, currency);
 	const creditDisplay = formatWidgetCents(creditCents, currency);
@@ -227,13 +230,11 @@ export function buildWidgetSnapshot(input: BuildWidgetSnapshotInput): WidgetSnap
 			input.subscriptions ?? [],
 			input.recurring ?? []
 		),
-		accounts: accounts
-			.filter((a) => a.status === 'active')
-			.map((a) => ({
-				id: a.id,
-				name: a.name,
-				balance_display: formatWidgetCents(a.balance, currency),
-				is_primary: a.is_primary
-			}))
+		accounts: accounts.map((a) => ({
+			id: a.id,
+			name: a.name,
+			balance_display: a.balance_display,
+			is_primary: a.is_primary
+		}))
 	};
 }

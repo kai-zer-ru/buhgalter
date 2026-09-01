@@ -2,8 +2,12 @@ import { get } from 'svelte/store';
 import { listMerchants } from '$lib/api/client';
 import { user } from '$lib/stores/auth';
 import { resolveAccountId } from './account-resolve';
-import { allKnownPackages, allKnownSmsSenderEntries } from './banks';
-import { bankIdForPackage } from './banks';
+import {
+	allKnownPackages,
+	allKnownSmsSenderEntries,
+	bankIdForPackage,
+	resolveRawBankNotification
+} from './banks';
 import { addInterceptDraft, removeDraftMatchingCancel } from './drafts';
 import { appendLocalHistoryFromRaw } from './history-local';
 import { matchMerchant } from './merchant-match';
@@ -47,6 +51,14 @@ export async function processPendingBankNotificationsDetailed(): Promise<Process
 	if (!u?.id) return { added: 0, cancelled: 0 };
 	const settings = loadInterceptSettings(u.id);
 	if (!settings.enabled) {
+		const pending = await peekNativePending();
+		for (const raw of pending) {
+			const resolved = resolveRawBankNotification(raw);
+			appendLocalHistoryFromRaw(raw, {
+				inAllowlist: Boolean(bankIdForPackage(resolved.packageName)),
+				queued: false
+			});
+		}
 		await consumeNativePending();
 		return { added: 0, cancelled: 0 };
 	}
@@ -65,11 +77,12 @@ export async function processPendingBankNotificationsDetailed(): Promise<Process
 	let cancelled = 0;
 	const ackKeys: string[] = [];
 	for (const raw of items) {
+		const resolved = resolveRawBankNotification(raw);
 		const key = raw.dedupeKey || `${raw.packageName}|${raw.postedAt}|${raw.title}|${raw.text}`;
 		const parsed = parseBankNotification(raw);
 		// Always mirror into JS history — native history prefs were empty on some OEM builds.
 		appendLocalHistoryFromRaw(raw, {
-			inAllowlist: Boolean(bankIdForPackage(raw.packageName)),
+			inAllowlist: Boolean(bankIdForPackage(resolved.packageName)),
 			queued: Boolean(parsed)
 		});
 		if (!parsed) {

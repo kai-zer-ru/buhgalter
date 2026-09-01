@@ -153,14 +153,18 @@
 		dueDateLocal = todayDateLocal(tz);
 		skipBalance = false;
 		description = '';
-		const [accountsData, activeList] = await Promise.all([
+		const [accountsRes, activeRes] = await Promise.allSettled([
 			listAccounts('active'),
 			listDebts({ settled: 'false' })
 		]);
-		accounts = accountsData;
-		activeDebts = activeList;
+		accounts = accountsRes.status === 'fulfilled' ? accountsRes.value : [];
+		activeDebts = activeRes.status === 'fulfilled' ? activeRes.value : [];
 		if (!compact) {
-			debtors = await listDebtors();
+			try {
+				debtors = await listDebtors();
+			} catch {
+				debtors = [];
+			}
 		} else if (fixedDebtorId && !fixedDebtorName) {
 			try {
 				const debtor = await getDebtor(fixedDebtorId);

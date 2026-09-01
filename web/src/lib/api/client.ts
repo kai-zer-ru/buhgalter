@@ -5,7 +5,12 @@ import { notifySessionExpired, shouldRedirectApi401 } from '$lib/auth/session-ex
 import {
 	clearRefCache,
 	fetchWithRefCache,
-	seedCategoriesFromUIMeta,
+	invalidateRefCacheAfterWrite,
+	isStaleFetchError,
+	readAccountsFromOfflineCache,
+	readCategoriesFromOfflineCache,
+	readRefCache,
+	seedDictionariesFromUIMeta,
 	shouldPersistRefCache
 } from '$lib/ref-cache';
 
@@ -80,8 +85,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 	const result = await fetcher();
 	if (method !== 'GET') {
 		// Match server apicache: any write invalidates client SWR so subsequent load() hits network.
+		// Dictionaries + account lists stay so offline/PWA forms still have catalogs after a write.
 		invalidateApiCache();
-		clearRefCache();
+		clearRefCache({ preserveAuthMe: true });
+		invalidateRefCacheAfterWrite(path);
 	}
 	return result;
 }
@@ -650,14 +657,24 @@ export async function getUIMeta() {
 	seedStaticRef('/api/v1/merchants', meta.merchants ?? []);
 	seedStaticRef('/api/v1/tags', meta.tags ?? []);
 	seedStaticRef('/api/v1/transaction-templates', meta.transaction_templates ?? []);
-	seedCategoriesFromUIMeta(meta);
+	seedDictionariesFromUIMeta(meta);
 	return meta;
 }
 
 export function listAccounts(status?: 'active' | 'archived' | 'deleted') {
 	const q = status ? `?status=${status}` : '';
 	const path = `/api/v1/accounts${q}`;
-	return request<Account[]>(path);
+	return request<Account[]>(path)
+		.then((rows) => {
+			if (rows.length > 0) return rows;
+			return readAccountsFromOfflineCache(status) ?? rows;
+		})
+		.catch((err) => {
+			if (!isStaleFetchError(err)) throw err;
+			const fromCache = readAccountsFromOfflineCache(status);
+			if (fromCache !== null) return fromCache;
+			throw err;
+		});
 }
 
 export function getAccount(id: string) {
@@ -729,7 +746,16 @@ export function deleteAccount(id: string, transferToAccountId?: string) {
 
 export function listCategories(type?: 'income' | 'expense') {
 	const q = type ? `?type=${type}` : '';
-	return request<Category[]>(`/api/v1/categories${q}`);
+	const path = `/api/v1/categories${q}`;
+	return request<Category[]>(path)
+		.then((rows) => {
+			if (rows.length > 0) return rows;
+			return readCategoriesFromOfflineCache<Category>(type) ?? rows;
+		})
+		.catch((err) => {
+			if (!isStaleFetchError(err)) throw err;
+			return readCategoriesFromOfflineCache<Category>(type) ?? [];
+		});
 }
 
 export function createCategory(payload: {
@@ -770,7 +796,10 @@ export function setPrimaryCategory(id: string) {
 }
 
 export function listSubcategories(categoryId: string) {
-	return request<Subcategory[]>(`/api/v1/categories/${categoryId}/subcategories`);
+	return request<Subcategory[]>(`/api/v1/categories/${categoryId}/subcategories`).catch((err) => {
+		if (!isStaleFetchError(err)) throw err;
+		return [];
+	});
 }
 
 export function reorderSubcategories(categoryId: string, ids: string[]) {
@@ -1531,7 +1560,19 @@ export function getAccountBalance(id: string) {
 }
 
 export function listMerchants() {
-	return request<Merchant[]>('/api/v1/merchants');
+	return request<Merchant[]>('/api/v1/merchants')
+		.then((rows) => {
+			if (rows.length > 0) return rows;
+			return readRefCache<Merchant[]>('/api/v1/merchants') ?? rows;
+		})
+		.catch((err) => {
+			if (!isStaleFetchError(err)) throw err;
+			return (
+				readRefCache<Merchant[]>('/api/v1/merchants') ??
+				readRefCache<UIMeta>('/api/v1/ui/meta')?.merchants ??
+				[]
+			);
+		});
 }
 
 export function createMerchant(name: string, icon?: string) {
@@ -1554,7 +1595,18 @@ export function deleteMerchant(id: string) {
 
 export function listTags(q?: string) {
 	const params = q?.trim() ? `?q=${encodeURIComponent(q.trim())}` : '';
-	return request<Tag[]>(`/api/v1/tags${params}`);
+	return request<Tag[]>(`/api/v1/tags${params}`)
+		.then((rows) => {
+			if (rows.length > 0 || params) return rows;
+			return readRefCache<Tag[]>('/api/v1/tags') ?? rows;
+		})
+		.catch((err) => {
+			if (!isStaleFetchError(err)) throw err;
+			if (params) return [];
+			return (
+				readRefCache<Tag[]>('/api/v1/tags') ?? readRefCache<UIMeta>('/api/v1/ui/meta')?.tags ?? []
+			);
+		});
 }
 
 export function createTag(name: string) {

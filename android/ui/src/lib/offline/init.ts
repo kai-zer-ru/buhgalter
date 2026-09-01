@@ -1,6 +1,10 @@
 import { Network } from '@capacitor/network';
 import { warmRefCache } from '$lib/offline/sync';
-import { refCacheReadyAny } from '$lib/offline/ref-cache';
+import {
+	flushRefCacheDisk,
+	reconcileOfflineCatalogsOnUnlock,
+	refCacheReadyAny
+} from '$lib/offline/ref-cache';
 import { getAuthToken } from '$lib/platform/auth-token';
 import { hasServerUrl, refreshActiveServerUrl } from '$lib/platform/server-url';
 import { probeServerReachability, startServerProbeLoop } from '$lib/offline/server-connectivity';
@@ -55,7 +59,10 @@ export function initNativeOfflineSyncListeners() {
 
 	void import('@capacitor/app').then(({ App }) => {
 		void App.addListener('appStateChange', ({ isActive }) => {
-			if (!isActive) return;
+			if (!isActive) {
+				flushRefCacheDisk();
+				return;
+			}
 			onDeviceNetworkAvailable(true);
 		});
 	});
@@ -65,6 +72,8 @@ export function initNativeOfflineSyncListeners() {
 export function startOfflineSyncAfterUnlock() {
 	if (!hasServerUrl() || syncStarted) return;
 	syncStarted = true;
+	// Re-seed form catalogs before warm — cold start after days offline must not wait on /health.
+	reconcileOfflineCatalogsOnUnlock();
 	// Defer one frame so first paint / tap handlers register before network storm.
 	requestAnimationFrame(() => startProbeAndWarm(false));
 }

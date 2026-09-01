@@ -51,12 +51,7 @@
 
 <div class="android-drawer-sync">
 	<p class="android-drawer-sync-status">{statusText}</p>
-	<button
-		type="button"
-		class="btn-primary w-full"
-		disabled={syncing}
-		onclick={() => void sync()}
-	>
+	<button type="button" class="btn-primary w-full" disabled={syncing} onclick={() => void sync()}>
 		{syncing ? $_('offline.syncing') : $_('offline.syncNow')}
 	</button>
 	{#if hasFailedOutbox() && !offline}

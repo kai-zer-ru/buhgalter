@@ -1,10 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-/**
- * Regression: after an online write, mutation-clear used to wipe /accounts.
- * Opening «Расход» offline then had empty счёт/категория and nothing could be saved.
- */
-
 vi.mock('svelte-i18n', () => ({
 	locale: { subscribe: () => () => {} }
 }));
@@ -64,57 +59,42 @@ const morningSync = {
 		}
 	],
 	income_categories: [],
-	debtors: [],
-	merchants: [],
-	tags: [],
+	debtors: [{ id: 'd1', name: 'Иван' }],
+	merchants: [{ id: 'm1', name: 'Магнит', icon: 'default' }],
+	tags: [{ id: 't1', name: 'работа' }],
 	active_credits: [],
 	closed_credits: []
 };
 
-describe('offline expense form catalogs after an online write', () => {
+describe('list catalogs offline empty-cache fallback', () => {
 	beforeEach(async () => {
 		vi.resetModules();
 		const { resetRefCacheForTests } = await import('$lib/offline/ref-cache');
 		resetRefCacheForTests();
 	});
 
-	it('listAccounts and listCategories still work after mutation-clear (preserve catalogs)', async () => {
-		const { writeRefCache, clearRefCache, seedDictionariesFromUIMeta } =
-			await import('$lib/offline/ref-cache');
+	it('listAccounts ignores empty cached list and uses ui/meta', async () => {
+		const { writeRefCache } = await import('$lib/offline/ref-cache');
 		writeRefCache('/api/v1/ui/meta', morningSync);
-		seedDictionariesFromUIMeta(morningSync);
-		writeRefCache('/api/v1/accounts?status=active', [
-			{
-				id: 'a1',
-				name: 'Наличные',
-				type: 'cash',
-				bank_id: null,
-				initial_balance: 0,
-				balance: 100,
-				balance_display: '1.00',
-				status: 'active',
-				is_primary: true,
-				created_at: '',
-				updated_at: ''
-			}
-		]);
-		writeRefCache('/api/v1/dashboard', { total_balance: 100, accounts: [] });
-
-		clearRefCache({ preserveAuthMe: true });
-
-		const { listAccounts, listCategories } = await import('$lib/api/client');
+		writeRefCache('/api/v1/accounts?status=active', []);
+		const { listAccounts } = await import('./client');
 		await expect(listAccounts('active')).resolves.toMatchObject([{ id: 'a1', name: 'Наличные' }]);
+	});
+
+	it('listCategories ignores empty cached list and uses ui/meta', async () => {
+		const { writeRefCache } = await import('$lib/offline/ref-cache');
+		writeRefCache('/api/v1/ui/meta', morningSync);
+		writeRefCache('/api/v1/categories?type=expense', []);
+		const { listCategories } = await import('./client');
 		await expect(listCategories('expense')).resolves.toMatchObject([{ id: 'c1', name: 'Еда' }]);
 	});
 
-	it('rebuilds /accounts from ui/meta when the list key was never warmed', async () => {
-		const { writeRefCache, clearRefCache } = await import('$lib/offline/ref-cache');
+	it('listMerchants and listDebtors fall back to ui/meta', async () => {
+		const { writeRefCache } = await import('$lib/offline/ref-cache');
 		writeRefCache('/api/v1/ui/meta', morningSync);
-		writeRefCache('/api/v1/categories?type=expense', morningSync.expense_categories);
-		clearRefCache({ preserveAuthMe: true });
-
-		const { listAccounts, listCategories } = await import('$lib/api/client');
-		await expect(listAccounts('active')).resolves.toMatchObject([{ id: 'a1' }]);
-		await expect(listCategories('expense')).resolves.toMatchObject([{ id: 'c1' }]);
+		const { listMerchants, listDebtors, listTags } = await import('./client');
+		await expect(listMerchants()).resolves.toMatchObject([{ id: 'm1', name: 'Магнит' }]);
+		await expect(listDebtors()).resolves.toMatchObject([{ id: 'd1', name: 'Иван' }]);
+		await expect(listTags()).resolves.toMatchObject([{ id: 't1', name: 'работа' }]);
 	});
 });

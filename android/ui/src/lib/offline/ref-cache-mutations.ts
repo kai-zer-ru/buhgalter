@@ -153,7 +153,9 @@ export function onCategoryDeleted(id: string, type: 'income' | 'expense'): void 
 function bumpCategorySubcategoryCount(categoryId: string, delta: number): void {
 	const patch = (list: Category[]) =>
 		list.map((c) =>
-			c.id === categoryId ? { ...c, subcategory_count: Math.max(0, c.subcategory_count + delta) } : c
+			c.id === categoryId
+				? { ...c, subcategory_count: Math.max(0, c.subcategory_count + delta) }
+				: c
 		);
 	patchRefCacheList<Category>(categoriesRefPath(), patch);
 	const meta = readUIMetaCategories();

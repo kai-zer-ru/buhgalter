@@ -208,17 +208,27 @@
 			description = '';
 			dateTimeValue = nowDatetimeLocal(untrack(() => tz));
 		}
-		accounts = await listAccounts('active');
+		accounts = (await listAccounts('active').catch(() => [] as Account[])) ?? [];
 		if (!editSource && !repeatSource) {
 			selectedAccount = defaultAccountId(accounts, accountId);
 		}
-		merchants = await listMerchants();
-		allTags = await listTags();
-		await loadCategories();
+		const [merchantsRes, tagsRes] = await Promise.allSettled([listMerchants(), listTags()]);
+		merchants = merchantsRes.status === 'fulfilled' ? merchantsRes.value : [];
+		allTags = tagsRes.status === 'fulfilled' ? tagsRes.value : [];
+		try {
+			await loadCategories();
+		} catch {
+			categories = [];
+			subcategories = [];
+		}
 	}
 
 	async function loadCategories() {
-		categories = await listCategories(txType);
+		try {
+			categories = await listCategories(txType);
+		} catch {
+			categories = [];
+		}
 		const selectable = categories.filter((c) => !c.is_system);
 		if (!categoryId && selectable.length) {
 			categoryId = selectable.find((c) => c.is_primary)?.id ?? selectable[0].id;

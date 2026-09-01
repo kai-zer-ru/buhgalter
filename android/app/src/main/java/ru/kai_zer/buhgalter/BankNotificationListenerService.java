@@ -12,6 +12,10 @@ import android.service.notification.StatusBarNotification;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -29,6 +33,15 @@ public class BankNotificationListenerService extends NotificationListenerService
     private static volatile BankNotificationListenerService instance;
     private static final AtomicReference<CountDownLatch> connectLatch = new AtomicReference<>();
 
+    /** SMS apps that mirror bank SMS in the notification shade (Google Messages, etc.). */
+    private static final Set<String> MESSAGING_PACKAGES =
+            Collections.unmodifiableSet(
+                    new HashSet<>(
+                            Arrays.asList(
+                                    "com.google.android.apps.messaging",
+                                    "com.samsung.android.messaging",
+                                    "com.android.mms")));
+
     @Override
     public void onListenerConnected() {
         super.onListenerConnected();
@@ -44,11 +57,7 @@ public class BankNotificationListenerService extends NotificationListenerService
                 if (active != null) {
                     boolean anyQueued = false;
                     for (StatusBarNotification sbn : active) {
-                        if (process(this, sbn, true)
-                                && sbn != null
-                                && sbn.getPackageName() != null
-                                && NotificationInterceptStore.allowedPackages(this)
-                                        .contains(sbn.getPackageName())) {
+                        if (process(this, sbn, true) == 2) {
                             anyQueued = true;
                         }
                     }
@@ -178,13 +187,12 @@ public class BankNotificationListenerService extends NotificationListenerService
         int n = 0;
         boolean anyQueued = false;
         for (StatusBarNotification sbn : active) {
-            if (process(svc, sbn, true)) {
+            int r = process(svc, sbn, true);
+            if (r > 0) {
                 n += 1;
-                if (sbn != null
-                        && sbn.getPackageName() != null
-                        && NotificationInterceptStore.allowedPackages(svc).contains(sbn.getPackageName())) {
-                    anyQueued = true;
-                }
+            }
+            if (r == 2) {
+                anyQueued = true;
             }
         }
         if (anyQueued) {
@@ -195,21 +203,21 @@ public class BankNotificationListenerService extends NotificationListenerService
 
     /**
      * @param forceHistory write history even when capture is off (manual scan)
-     * @return true if a history/queue row was considered (had text)
+     * @return 0 skipped, 1 history only, 2 queued for JS
      */
-    static boolean process(Context context, StatusBarNotification sbn, boolean forceHistory) {
+    static int process(Context context, StatusBarNotification sbn, boolean forceHistory) {
         if (sbn == null || sbn.isOngoing()) {
-            return false;
+            return 0;
         }
 
         String packageName = sbn.getPackageName();
         if (packageName == null || packageName.isEmpty()) {
-            return false;
+            return 0;
         }
 
         Notification notification = sbn.getNotification();
         if (notification == null) {
-            return false;
+            return 0;
         }
         Bundle extras = notification.extras;
         CharSequence titleCs = extras != null ? extras.getCharSequence(Notification.EXTRA_TITLE) : null;
@@ -220,12 +228,30 @@ public class BankNotificationListenerService extends NotificationListenerService
         String text = textCs != null ? textCs.toString().trim() : "";
         String bigText = bigCs != null ? bigCs.toString().trim() : "";
         if (title.isEmpty() && text.isEmpty() && bigText.isEmpty()) {
-            return false;
+            return 0;
         }
 
         long postTime = sbn.getPostTime();
         String dedupeKey = packageName + "|" + postTime + "|" + title + "|" + text + "|" + bigText;
-        boolean allowed = NotificationInterceptStore.allowedPackages(context).contains(packageName);
+        String channel = "push";
+        String effectivePackage = packageName;
+        if (MESSAGING_PACKAGES.contains(packageName)) {
+            String bankPkg = NotificationInterceptStore.packageForSmsSender(context, title);
+            if (bankPkg == null || bankPkg.isEmpty()) {
+                String firstLine = text;
+                int dot = text.indexOf('.');
+                if (dot > 0) {
+                    firstLine = text.substring(0, dot);
+                }
+                bankPkg = NotificationInterceptStore.packageForSmsSender(context, firstLine);
+            }
+            if (bankPkg != null && !bankPkg.isEmpty()) {
+                effectivePackage = bankPkg;
+                channel = "sms";
+            }
+        }
+        boolean allowed =
+                NotificationInterceptStore.allowedPackages(context).contains(effectivePackage);
         boolean captureOn = NotificationInterceptStore.isCaptureEnabled(context);
 
         if (forceHistory || captureOn) {
@@ -237,9 +263,12 @@ public class BankNotificationListenerService extends NotificationListenerService
                 historyItem.put("bigText", bigText);
                 historyItem.put("postedAt", postTime);
                 historyItem.put("dedupeKey", dedupeKey);
-                historyItem.put("channel", "push");
+                historyItem.put("channel", channel);
                 historyItem.put("inAllowlist", allowed);
                 historyItem.put("queued", allowed && captureOn);
+                if (!effectivePackage.equals(packageName)) {
+                    historyItem.put("resolvedPackageName", effectivePackage);
+                }
                 // Primary: same prefs as pending queue (reliable on MIUI).
                 NotificationInterceptStore.appendHistory(context, historyItem);
                 // Legacy file — best effort.
@@ -250,18 +279,18 @@ public class BankNotificationListenerService extends NotificationListenerService
         }
 
         if (!allowed || !captureOn) {
-            return true;
+            return forceHistory || captureOn ? 1 : 0;
         }
 
         try {
             JSONObject item = new JSONObject();
-            item.put("packageName", packageName);
+            item.put("packageName", effectivePackage);
             item.put("title", title);
             item.put("text", text);
             item.put("bigText", bigText);
             item.put("postedAt", postTime);
             item.put("dedupeKey", dedupeKey);
-            item.put("channel", "push");
+            item.put("channel", channel);
             NotificationInterceptStore.append(context, item);
             if (!forceHistory) {
                 NotificationInterceptPlugin.emitPendingAvailable();
@@ -269,6 +298,6 @@ public class BankNotificationListenerService extends NotificationListenerService
         } catch (JSONException ignored) {
             // ignore
         }
-        return true;
+        return 2;
     }
 }

@@ -291,7 +291,9 @@ describe('subcategory ref-cache mutations', () => {
 				created_at: '2026-09-01T00:00:00Z'
 			}
 		]);
-		expect(readRefCache<{ subcategory_count: number }[]>(categoriesRefPath('expense'))?.[0]).toMatchObject({
+		expect(
+			readRefCache<{ subcategory_count: number }[]>(categoriesRefPath('expense'))?.[0]
+		).toMatchObject({
 			subcategory_count: 1
 		});
 	});
@@ -304,7 +306,9 @@ describe('subcategory ref-cache mutations', () => {
 			subcategory_name: 'Карусели',
 			subcategory_icon: 'fun'
 		});
-		expect(readRefCache<{ id: string; name: string }[]>(subcategoriesRefPath('c1'))?.[0]).toMatchObject({
+		expect(
+			readRefCache<{ id: string; name: string }[]>(subcategoriesRefPath('c1'))?.[0]
+		).toMatchObject({
 			id: 's-new',
 			name: 'Карусели'
 		});
@@ -332,7 +336,9 @@ describe('subcategory ref-cache mutations', () => {
 		onSubcategoryDeleted('c1', 's1');
 
 		expect(readRefCache(subcategoriesRefPath('c1'))).toEqual([]);
-		expect(readRefCache<{ subcategory_count: number }[]>(categoriesRefPath('expense'))?.[0]).toMatchObject({
+		expect(
+			readRefCache<{ subcategory_count: number }[]>(categoriesRefPath('expense'))?.[0]
+		).toMatchObject({
 			subcategory_count: 0
 		});
 	});

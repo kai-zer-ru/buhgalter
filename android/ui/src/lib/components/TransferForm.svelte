@@ -59,6 +59,7 @@
 	let accountsBase = $state<Account[]>([]);
 	let saving = $state(false);
 	let groupId = $state('');
+	let formInitialized = $state(false);
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
 	const editing = $derived(Boolean(groupId));
@@ -103,6 +104,10 @@
 		contextAccountId: string,
 		payCard: Account | null | undefined
 	) {
+		const preserveSelection =
+			formInitialized && !editSource?.transfer_group_id && repeatSource?.type !== 'transfer';
+		const savedFrom = preserveSelection ? fromAccount : '';
+		const savedTo = preserveSelection ? toAccount : '';
 		if (editSource?.transfer_group_id) {
 			const legs = transferGroupLegs(editSource, related);
 			const metaLeg = legs.length >= 2 ? transferOutLeg(editSource, legs) : editSource;
@@ -135,7 +140,7 @@
 			commission = formatMoneyForInput(commissionValue);
 			description = metaLeg.description ?? '';
 			dateTimeValue = nowDatetimeLocal(tz);
-		} else {
+		} else if (!preserveSelection) {
 			groupId = '';
 			fromAccount = '';
 			toAccount = '';
@@ -150,12 +155,20 @@
 			if (payCard) {
 				fromAccount = resolvePaymentAccountId(payCard, accounts) ?? '';
 				toAccount = payCard.id;
-			} else {
+			} else if (!preserveSelection) {
 				const from = defaultAccountId(accounts, contextAccountId);
 				fromAccount = from;
 				toAccount = pickOtherAccountId(accounts, from);
+			} else if (savedFrom && accounts.some((a) => a.id === savedFrom)) {
+				fromAccount = savedFrom;
+				if (savedTo && accounts.some((a) => a.id === savedTo && a.id !== savedFrom)) {
+					toAccount = savedTo;
+				} else {
+					toAccount = pickOtherAccountId(accounts, savedFrom);
+				}
 			}
 		}
+		formInitialized = true;
 	}
 
 	async function save(e: Event) {

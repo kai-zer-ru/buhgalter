@@ -1,4 +1,4 @@
-import { bankIdForPackage } from './banks';
+import { bankIdForPackage, resolveRawBankNotification } from './banks';
 import type { ParsedPurchase, RawBankNotification } from './types';
 
 // Avoid \\b with Cyrillic — JS word boundaries are ASCII-oriented.
@@ -158,10 +158,11 @@ function hashRaw(raw: RawBankNotification): string {
 }
 
 export function parseBankNotification(raw: RawBankNotification): ParsedPurchase | null {
-	const bankId = bankIdForPackage(raw.packageName);
+	const resolved = resolveRawBankNotification(raw);
+	const bankId = bankIdForPackage(resolved.packageName);
 	if (!bankId) return null;
 
-	const text = combinedText(raw);
+	const text = combinedText(resolved);
 	if (!text.trim()) return null;
 
 	const isCancel = CANCEL_RE.test(text);
@@ -172,20 +173,20 @@ export function parseBankNotification(raw: RawBankNotification): ParsedPurchase 
 	if (!amount) return null;
 
 	const last4 = extractLast4(text);
-	let merchantText = extractMerchant(raw, amount);
+	let merchantText = extractMerchant(resolved, amount);
 	if (isIncome && !merchantText) {
-		merchantText = extractIncomeLabel(raw);
+		merchantText = extractIncomeLabel(resolved);
 	}
-	const occurredAt = new Date(raw.postedAt > 0 ? raw.postedAt : Date.now()).toISOString();
+	const occurredAt = new Date(resolved.postedAt > 0 ? resolved.postedAt : Date.now()).toISOString();
 
 	return {
 		bankId,
-		packageName: raw.packageName,
+		packageName: resolved.packageName,
 		amount,
 		occurredAt,
 		merchantText,
 		last4,
-		rawHash: hashRaw(raw),
+		rawHash: hashRaw(resolved),
 		kind: isCancel ? 'cancel' : isIncome ? 'income' : 'purchase'
 	};
 }

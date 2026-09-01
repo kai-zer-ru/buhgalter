@@ -32,8 +32,8 @@
 	const pathname = $derived($page.url.pathname);
 	const isLegacyRedirect = $derived(
 		pathname === '/settings/categories' ||
-		pathname === '/settings/recurring-operations' ||
-		pathname === '/settings/transaction-templates'
+			pathname === '/settings/recurring-operations' ||
+			pathname === '/settings/transaction-templates'
 	);
 
 	const current = $derived.by(() => {

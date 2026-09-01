@@ -233,6 +233,21 @@ describe('parseBankNotification', () => {
 		expect(parsed!.merchantText).toBe('STOLOVAYA');
 	});
 
+	it('parses T-Bank SMS top-up as income', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'com.google.android.apps.messaging',
+				title: 'Ваш Т-Банк',
+				text: 'Пополнение. Счет RUB. 3535,96 ₽. Др. банк. Доступно 3535,96 ₽',
+				channel: 'push'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.bankId).toBe('tinkoff');
+		expect(parsed!.kind).toBe('income');
+		expect(parsed!.amount).toBe('3535.96');
+	});
+
 	it('ignores OTP SMS', () => {
 		expect(
 			parseBankNotification(

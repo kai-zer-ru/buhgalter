@@ -135,7 +135,7 @@
 			description = '';
 			dateTimeValue = nowDatetimeLocal(tz);
 		}
-		accounts = await listAccounts('active');
+		accounts = (await listAccounts('active').catch(() => [] as Account[])) ?? [];
 		if (!editSource?.transfer_group_id && repeatSource?.type !== 'transfer') {
 			if (payCard) {
 				fromAccount = resolvePaymentAccountId(payCard, accounts) ?? '';

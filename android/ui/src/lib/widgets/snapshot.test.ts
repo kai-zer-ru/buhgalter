@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import type {
-	Account,
 	Credit,
 	Dashboard,
 	Debt,
@@ -24,22 +23,6 @@ const dash = (partial: Partial<Dashboard> = {}): Dashboard => ({
 	},
 	...partial
 });
-
-const account = (partial: Partial<Account> = {}): Account =>
-	({
-		id: 'a1',
-		name: 'Cash',
-		type: 'cash',
-		bank_id: null,
-		initial_balance: 0,
-		balance: 100050,
-		balance_display: '1000.50',
-		status: 'active',
-		is_primary: true,
-		created_at: '',
-		updated_at: '',
-		...partial
-	}) as Account;
 
 describe('buildUpcomingItems', () => {
 	it('merges and sorts by date with formatted amounts', () => {
@@ -129,13 +112,43 @@ describe('buildWidgetSnapshot', () => {
 					total_balance_display: '10014.00',
 					total_forecast_display: '10014.00',
 					total_limit_display: '0'
-				}
+				},
+				accounts: [
+					{
+						id: 'c1',
+						name: 'Cash',
+						type: 'cash',
+						balance: 50000,
+						balance_display: '500.00',
+						forecast_balance: 50000,
+						forecast_display: '500.00',
+						has_future_this_month: false,
+						is_primary: false
+					},
+					{
+						id: 'b1',
+						name: 'Bank',
+						type: 'bank',
+						balance: 4099253,
+						balance_display: '40 992.53',
+						forecast_balance: 4099253,
+						forecast_display: '40 992.53',
+						has_future_this_month: false,
+						is_primary: true
+					},
+					{
+						id: 'cc1',
+						name: 'Card',
+						type: 'credit_card',
+						balance: 1001400,
+						balance_display: '10 014.00',
+						forecast_balance: 1001400,
+						forecast_display: '10 014.00',
+						has_future_this_month: false,
+						is_primary: false
+					}
+				]
 			}),
-			accounts: [
-				account({ id: 'c1', type: 'cash', balance: 50000 }),
-				account({ id: 'b1', type: 'bank', balance: 4099253, is_primary: true }),
-				account({ id: 'cc1', type: 'credit_card', balance: 1001400, is_primary: false })
-			],
 			budgetItems: [
 				{
 					id: 'b1',

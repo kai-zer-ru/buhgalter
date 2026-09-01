@@ -1,3 +1,12 @@
+import type { RawBankNotification } from './types';
+
+/** SMS apps whose notifications mirror bank SMS (not bank push). */
+export const MESSAGING_APP_PACKAGES = [
+	'com.google.android.apps.messaging',
+	'com.samsung.android.messaging',
+	'com.android.mms'
+] as const;
+
 /** Known RF bank apps for notification intercept (ids match `banks_ru.json`). */
 export type KnownBankApp = {
 	bankId: string;
@@ -136,13 +145,44 @@ export const KNOWN_BANK_APPS: KnownBankApp[] = [
 
 /** Normalize SMS originator the same way as native {@code NotificationInterceptStore}. */
 export function normalizeSmsSender(raw: string): string {
-	let s = raw.trim().toLowerCase().replace(/[\s-]/g, '');
+	let s = raw.trim().toLowerCase();
+	s = s.replace(/^(ваш|your)\s+/i, '');
+	s = s.replace(/т-?банк/g, 'tbank');
+	s = s.replace(/тинькофф/g, 'tinkoff');
+	s = s.replace(/[\s-]/g, '');
 	if (s.startsWith('+7') && s.length > 2) {
 		s = s.slice(2);
 	} else if (s.startsWith('8') && s.length === 11 && /^\d+$/.test(s)) {
 		s = s.slice(1);
 	}
 	return s;
+}
+
+export function isMessagingAppPackage(packageName: string): boolean {
+	return (MESSAGING_APP_PACKAGES as readonly string[]).includes(packageName);
+}
+
+/**
+ * Google Messages / Samsung Messages show bank SMS as their own notification.
+ * Remap to the bank package + sms channel so parsers and allowlist work.
+ */
+export function resolveRawBankNotification(raw: RawBankNotification): RawBankNotification {
+	if (raw.channel === 'sms' && bankIdForPackage(raw.packageName)) {
+		return raw;
+	}
+	if (!isMessagingAppPackage(raw.packageName)) {
+		return raw;
+	}
+	const bankId =
+		bankIdForSmsSender(raw.title) ?? bankIdForSmsSender(raw.text.split(/[\n.]/)[0]?.trim() ?? '');
+	if (!bankId) return raw;
+	const pkg = packageForBankId(bankId);
+	if (!pkg) return raw;
+	return {
+		...raw,
+		packageName: pkg,
+		channel: 'sms'
+	};
 }
 
 export function bankIdForPackage(packageName: string): string | null {

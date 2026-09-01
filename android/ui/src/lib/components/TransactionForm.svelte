@@ -270,8 +270,7 @@
 				merchantId || merchantQuery.trim() || description.trim() || selectedTags.length
 			);
 		}
-		accountsBase =
-			(await listAccounts('active').catch(() => [] as Account[])) ?? [];
+		accountsBase = (await listAccounts('active').catch(() => [] as Account[])) ?? [];
 		accounts = applyOutboxToAccounts(accountsBase, tz);
 		if (!editSource && !repeatSource) {
 			const preferred = prefill?.accountId || accountId;

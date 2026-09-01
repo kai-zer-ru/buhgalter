@@ -5,7 +5,8 @@ import {
 	allKnownSmsSenderEntries,
 	bankIdForPackage,
 	bankIdForSmsSender,
-	normalizeSmsSender
+	normalizeSmsSender,
+	resolveRawBankNotification
 } from './banks';
 
 describe('KNOWN_BANK_APPS', () => {
@@ -39,6 +40,20 @@ describe('KNOWN_BANK_APPS', () => {
 	it('normalizes phone-like senders', () => {
 		expect(normalizeSmsSender('+79001234567')).toBe('9001234567');
 		expect(normalizeSmsSender('T-Bank')).toBe('tbank');
+		expect(normalizeSmsSender('Ваш Т-Банк')).toBe('tbank');
 		expect(allKnownSmsSenderEntries().some((e) => e.sender === '900')).toBe(true);
+	});
+
+	it('resolves Google Messages notification title to T-Bank', () => {
+		const resolved = resolveRawBankNotification({
+			packageName: 'com.google.android.apps.messaging',
+			title: 'Ваш Т-Банк',
+			text: 'Пополнение. Счет RUB. 3535,96 ₽. Др. банк. Доступно 3535,96 ₽',
+			bigText: '',
+			postedAt: 1,
+			dedupeKey: 'k'
+		});
+		expect(resolved.packageName).toBe('com.idamob.tinkoff.android');
+		expect(resolved.channel).toBe('sms');
 	});
 });

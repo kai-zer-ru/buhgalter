@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { get } from 'svelte/store';
-import { createTransaction, deleteTransaction, deleteTransfer } from '$lib/offline/transactions-api';
+import {
+	createTransaction,
+	deleteTransaction,
+	deleteTransfer
+} from '$lib/offline/transactions-api';
 import { getOutboxEntries, resetOutboxForTests } from '$lib/offline/store';
 import * as client from '$lib/api/client';
 import * as connectivity from '$lib/offline/server-connectivity';

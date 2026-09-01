@@ -8,8 +8,10 @@ import {
 	fetchWithRefCache,
 	isOfflineFetchError,
 	OfflineCacheMissError,
-	readCategoriesFromUIMetaCache,
+	readCategoriesFromOfflineCache,
 	readAccountsFromOfflineCache,
+	enrichAccountsWithCachedBalances,
+	enrichAccountWithCachedBalances,
 	readRefCache,
 	seedDictionariesFromUIMeta,
 	shouldPersistRefCache
@@ -792,16 +794,22 @@ export function getUIi18n(lang: string) {
 export function listAccounts(status?: 'active' | 'archived' | 'deleted') {
 	const q = status ? `?status=${status}` : '';
 	const path = `/api/v1/accounts${q}`;
-	return request<Account[]>(path).catch((err) => {
-		if (!isOfflineFetchError(err)) throw err;
-		const fromCache = readAccountsFromOfflineCache(status);
-		if (fromCache !== null) return fromCache;
-		throw err;
-	});
+	const finalize = (rows: Account[]) => enrichAccountsWithCachedBalances(rows);
+	return request<Account[]>(path)
+		.then((rows) => {
+			if (rows.length > 0 || !isServerOfflineMode()) return finalize(rows);
+			return finalize(readAccountsFromOfflineCache(status) ?? rows);
+		})
+		.catch((err) => {
+			if (!isOfflineFetchError(err)) throw err;
+			const fromCache = readAccountsFromOfflineCache(status);
+			if (fromCache !== null) return fromCache;
+			throw err;
+		});
 }
 
 export function getAccount(id: string) {
-	return request<Account>(`/api/v1/accounts/${id}`);
+	return request<Account>(`/api/v1/accounts/${id}`).then(enrichAccountWithCachedBalances);
 }
 
 export function createAccount(payload: {
@@ -870,12 +878,15 @@ export function deleteAccount(id: string, transferToAccountId?: string) {
 export function listCategories(type?: 'income' | 'expense') {
 	const q = type ? `?type=${type}` : '';
 	const path = `/api/v1/categories${q}`;
-	return request<Category[]>(path).catch((err) => {
-		if (!isOfflineFetchError(err)) throw err;
-		const fromMeta = readCategoriesFromUIMetaCache<Category>(type);
-		if (fromMeta !== null) return fromMeta;
-		throw err;
-	});
+	return request<Category[]>(path)
+		.then((rows) => {
+			if (rows.length > 0 || !isServerOfflineMode()) return rows;
+			return readCategoriesFromOfflineCache<Category>(type) ?? rows;
+		})
+		.catch((err) => {
+			if (!isOfflineFetchError(err)) throw err;
+			return readCategoriesFromOfflineCache<Category>(type) ?? [];
+		});
 }
 
 export function createCategory(payload: {
@@ -1689,7 +1700,19 @@ export function getAccountBalance(id: string) {
 }
 
 export function listMerchants() {
-	return request<Merchant[]>('/api/v1/merchants');
+	return request<Merchant[]>('/api/v1/merchants')
+		.then((rows) => {
+			if (rows.length > 0 || !isServerOfflineMode()) return rows;
+			return readRefCache<Merchant[]>('/api/v1/merchants') ?? rows;
+		})
+		.catch((err) => {
+			if (!isOfflineFetchError(err)) throw err;
+			return (
+				readRefCache<Merchant[]>('/api/v1/merchants') ??
+				readRefCache<UIMeta>('/api/v1/ui/meta')?.merchants ??
+				[]
+			);
+		});
 }
 
 export function createMerchant(name: string, icon?: string) {
@@ -1712,7 +1735,18 @@ export function deleteMerchant(id: string) {
 
 export function listTags(q?: string) {
 	const params = q?.trim() ? `?q=${encodeURIComponent(q.trim())}` : '';
-	return request<Tag[]>(`/api/v1/tags${params}`);
+	return request<Tag[]>(`/api/v1/tags${params}`)
+		.then((rows) => {
+			if (rows.length > 0 || !isServerOfflineMode() || params) return rows;
+			return readRefCache<Tag[]>('/api/v1/tags') ?? rows;
+		})
+		.catch((err) => {
+			if (!isOfflineFetchError(err)) throw err;
+			if (params) return [];
+			return (
+				readRefCache<Tag[]>('/api/v1/tags') ?? readRefCache<UIMeta>('/api/v1/ui/meta')?.tags ?? []
+			);
+		});
 }
 
 export function createTag(name: string) {
@@ -1767,7 +1801,19 @@ export function reorderTransactionTemplates(ids: string[]) {
 }
 
 export function listDebtors() {
-	return request<Debtor[]>('/api/v1/debtors');
+	return request<Debtor[]>('/api/v1/debtors')
+		.then((rows) => {
+			if (rows.length > 0 || !isServerOfflineMode()) return rows;
+			return readRefCache<Debtor[]>('/api/v1/debtors') ?? rows;
+		})
+		.catch((err) => {
+			if (!isOfflineFetchError(err)) throw err;
+			return (
+				readRefCache<Debtor[]>('/api/v1/debtors') ??
+				readRefCache<UIMeta>('/api/v1/ui/meta')?.debtors ??
+				[]
+			);
+		});
 }
 
 export function getDebtor(id: string) {

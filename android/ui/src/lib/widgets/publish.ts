@@ -2,7 +2,6 @@ import { get } from 'svelte/store';
 import {
 	getBudgetSummary,
 	getDashboard,
-	listAccounts,
 	listCredits,
 	listDebts,
 	listRecurringOperations,
@@ -10,7 +9,6 @@ import {
 	listTransactions,
 	type BudgetSummaryItem,
 	type Dashboard,
-	type Account,
 	type Credit,
 	type Debt,
 	type RecurringOperation,
@@ -64,7 +62,6 @@ export async function publishWidgetSnapshot(): Promise<void> {
 	const job = (async () => {
 		try {
 			const dashboardPath = '/api/v1/dashboard';
-			const accountsPath = '/api/v1/accounts?status=active';
 			const budgetPath = '/api/v1/budgets/summary';
 			const creditsPath = '/api/v1/credits?status=active';
 			const debtsPath = '/api/v1/debts?settled=false';
@@ -72,10 +69,9 @@ export async function publishWidgetSnapshot(): Promise<void> {
 			const subscriptionsPath = '/api/v1/subscriptions';
 			const recurringPath = '/api/v1/recurring-operations';
 
-			const [dashboard, accounts, budgetRes, credits, debts, futureRes, subscriptions, recurring] =
+			const [dashboard, budgetRes, credits, debts, futureRes, subscriptions, recurring] =
 				await Promise.all([
 					readCachedOrFetch<Dashboard>(dashboardPath, getDashboard),
-					readCachedOrFetch<Account[]>(accountsPath, () => listAccounts('active')),
 					readCachedOrFetch<{ items: BudgetSummaryItem[] }>(budgetPath, getBudgetSummary),
 					readCachedOrFetch<Credit[]>(creditsPath, () => listCredits({ status: 'active' })),
 					readCachedOrFetch<Debt[]>(debtsPath, () => listDebts({ settled: 'false' })),
@@ -99,7 +95,6 @@ export async function publishWidgetSnapshot(): Promise<void> {
 			const u = get(user);
 			const snapshot = buildWidgetSnapshot({
 				dashboard,
-				accounts,
 				budgetItems,
 				credits,
 				debts,

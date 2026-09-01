@@ -316,6 +316,33 @@ describe('readAccountsFromOfflineCache', () => {
 		]);
 	});
 
+	it('ignores empty cached accounts list and falls back to ui/meta', async () => {
+		const { readAccountsFromOfflineCache, writeRefCache } = await import('./ref-cache');
+		writeRefCache('/api/v1/ui/meta', {
+			accounts: [{ id: 'a1', name: 'Наличные', type: 'cash', status: 'active' }],
+			banks: [],
+			expense_categories: [],
+			income_categories: [],
+			debtors: [],
+			merchants: [],
+			tags: [],
+			active_credits: [],
+			closed_credits: []
+		});
+		writeRefCache('/api/v1/accounts?status=active', []);
+		expect(readAccountsFromOfflineCache('active')).toMatchObject([{ id: 'a1' }]);
+	});
+
+	it('readCategoriesFromOfflineCache ignores empty list cache', async () => {
+		const { readCategoriesFromOfflineCache, writeRefCache } = await import('./ref-cache');
+		writeRefCache('/api/v1/ui/meta', {
+			expense_categories: [{ id: 'c1', name: 'Еда' }],
+			income_categories: []
+		});
+		writeRefCache('/api/v1/categories?type=expense', []);
+		expect(readCategoriesFromOfflineCache('expense')).toMatchObject([{ id: 'c1', name: 'Еда' }]);
+	});
+
 	it('merges dashboard balances into ui/meta accounts', async () => {
 		const { readAccountsFromOfflineCache, writeRefCache } = await import('./ref-cache');
 		writeRefCache('/api/v1/ui/meta', {
@@ -352,6 +379,104 @@ describe('readAccountsFromOfflineCache', () => {
 			id: 'a1',
 			balance: 500,
 			is_primary: true
+		});
+	});
+});
+
+describe('enrichAccountsWithCachedBalances', () => {
+	it('overlays dashboard balances onto account list rows', async () => {
+		const { enrichAccountsWithCachedBalances } = await import('./ref-cache');
+		const rows = enrichAccountsWithCachedBalances(
+			[
+				{
+					id: 'a1',
+					name: 'Карта',
+					type: 'bank',
+					bank_id: null,
+					initial_balance: 0,
+					balance: 0,
+					balance_display: '0.00',
+					status: 'active',
+					is_primary: false,
+					created_at: '',
+					updated_at: ''
+				}
+			],
+			{
+				total_balance: 500,
+				total_forecast: 500,
+				accounts: [
+					{
+						id: 'a1',
+						name: 'Карта',
+						type: 'bank',
+						balance: 500,
+						balance_display: '5.00',
+						forecast_balance: 500,
+						forecast_display: '5.00',
+						has_future_this_month: false,
+						is_primary: true
+					}
+				],
+				recent_transactions: [],
+				debts_summary: {
+					i_owe: 0,
+					owed_to_me: 0,
+					overdue_i_owe: 0,
+					overdue_owed_to_me: 0,
+					active_count: 0
+				}
+			}
+		);
+		expect(rows[0]).toMatchObject({ balance: 500, balance_display: '5.00', is_primary: true });
+	});
+
+	it('patches preserved account list caches when dashboard is written', async () => {
+		const { writeRefCache, readRefCache, resetRefCacheForTests } = await import('./ref-cache');
+		resetRefCacheForTests();
+		writeRefCache('/api/v1/accounts?status=active', [
+			{
+				id: 'a1',
+				name: 'Карта',
+				type: 'bank',
+				bank_id: null,
+				initial_balance: 0,
+				balance: 0,
+				balance_display: '0.00',
+				status: 'active',
+				is_primary: false,
+				created_at: '',
+				updated_at: ''
+			}
+		]);
+		writeRefCache('/api/v1/dashboard', {
+			total_balance: 500,
+			total_forecast: 500,
+			accounts: [
+				{
+					id: 'a1',
+					name: 'Карта',
+					type: 'bank',
+					balance: 500,
+					balance_display: '5.00',
+					forecast_balance: 500,
+					forecast_display: '5.00',
+					has_future_this_month: false,
+					is_primary: true
+				}
+			],
+			recent_transactions: [],
+			debts_summary: {
+				i_owe: 0,
+				owed_to_me: 0,
+				overdue_i_owe: 0,
+				overdue_owed_to_me: 0,
+				active_count: 0
+			}
+		});
+		expect(readRefCache('/api/v1/accounts?status=active')?.[0]).toMatchObject({
+			balance: 500,
+			balance_display: '5.00'
 		});
 	});
 });

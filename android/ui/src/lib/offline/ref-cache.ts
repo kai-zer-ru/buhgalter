@@ -32,6 +32,27 @@ export const AUTH_ME_PATH = '/api/v1/auth/me';
 
 const UI_META_PATH = '/api/v1/ui/meta';
 
+/**
+ * Form catalogs not keyed by server URL — survives LAN/remote switch, stale IP,
+ * `_no_server` race, and ref-cache key drift after days offline (like `last_user`).
+ */
+const STABLE_OFFLINE_CATALOG_KEY = 'buhgalter.offline_catalogs.v1';
+
+export type StableOfflineCatalog = {
+	savedAt: number;
+	accounts?: UIMetaAccountRef[];
+	expense_categories: unknown[];
+	income_categories: unknown[];
+	merchants?: unknown[];
+	tags?: unknown[];
+	debtors?: unknown[];
+	banks?: unknown[];
+	transaction_templates?: unknown[];
+};
+
+/** In-memory mirror when localStorage is unavailable (vitest) or as read-through cache. */
+let stableCatalogMemory: StableOfflineCatalog | null = null;
+
 const memoryStore = new Map<string, string>();
 const inflightRevalidate = new Map<string, Promise<void>>();
 const pendingDiskWrites = new Map<string, string>();
@@ -168,8 +189,60 @@ export function isOfflineFetchError(err: unknown): boolean {
 export function readRefCache<T>(path: string): T | null {
 	const current = getServerUrl() || '_no_server';
 	const direct = readRefCacheForServer<T>(current, path);
-	if (direct !== null) return direct;
-	return readRefCacheAnyConfiguredServer<T>(path);
+	if (direct !== null && !isEmptyListValue(direct)) return direct;
+
+	const fromProfile = readRefCacheAnyConfiguredServer<T>(path);
+	if (fromProfile !== null && !isEmptyListValue(fromProfile)) return fromProfile;
+
+	const fromAny = readRefCacheFromAnyStoredOrigin<T>(path);
+	if (fromAny !== null) return fromAny;
+
+	return direct;
+}
+
+function isEmptyListValue(value: unknown): boolean {
+	return Array.isArray(value) && value.length === 0;
+}
+
+/**
+ * Scan every ref-cache origin in storage (old LAN IP, `_no_server`, etc.).
+ * Prefers a non-empty list over an empty one.
+ */
+export function readRefCacheFromAnyStoredOrigin<T>(path: string): T | null {
+	const prefix = `${REF_CACHE_VERSION}::`;
+	const suffix = `::${path}`;
+	let emptyList: T | null = null;
+
+	const consider = (raw: string | null | undefined): T | null | undefined => {
+		const parsed = parseCachedValue<T>(raw ?? null);
+		if (parsed === null) return undefined;
+		if (isEmptyListValue(parsed)) {
+			if (emptyList === null) emptyList = parsed;
+			return undefined;
+		}
+		return parsed;
+	};
+
+	for (const [key, raw] of memoryStore) {
+		if (!key.startsWith(prefix) || !key.endsWith(suffix)) continue;
+		const hit = consider(raw);
+		if (hit !== undefined) return hit;
+	}
+
+	if (typeof localStorage !== 'undefined') {
+		try {
+			for (let i = 0; i < localStorage.length; i++) {
+				const key = localStorage.key(i);
+				if (!key?.startsWith(prefix) || !key.endsWith(suffix)) continue;
+				const hit = consider(localStorage.getItem(key));
+				if (hit !== undefined) return hit;
+			}
+		} catch {
+			// ignore
+		}
+	}
+
+	return emptyList;
 }
 
 /**
@@ -182,11 +255,95 @@ export function readRefCacheAnyConfiguredServer<T>(path: string): T | null {
 	const candidates = [profile.lanUrl, profile.remoteUrl].filter(
 		(u): u is string => Boolean(u) && u !== current
 	);
+	let emptyList: T | null = null;
 	for (const origin of candidates) {
 		const cached = readRefCacheForServer<T>(origin, path);
-		if (cached !== null) return cached;
+		if (cached === null) continue;
+		if (isEmptyListValue(cached)) {
+			if (emptyList === null) emptyList = cached;
+			continue;
+		}
+		return cached;
 	}
-	return null;
+	return emptyList;
+}
+
+export function readStableOfflineCatalog(): StableOfflineCatalog | null {
+	if (stableCatalogMemory) return stableCatalogMemory;
+	if (typeof localStorage === 'undefined') return null;
+	try {
+		const raw = localStorage.getItem(STABLE_OFFLINE_CATALOG_KEY);
+		if (!raw) return null;
+		const parsed = JSON.parse(raw) as StableOfflineCatalog;
+		if (!parsed || typeof parsed !== 'object') return null;
+		if (!Array.isArray(parsed.expense_categories) || !Array.isArray(parsed.income_categories)) {
+			return null;
+		}
+		stableCatalogMemory = parsed;
+		return parsed;
+	} catch {
+		return null;
+	}
+}
+
+export function persistStableOfflineCatalog(meta: {
+	accounts?: UIMetaAccountRef[];
+	expense_categories: unknown[];
+	income_categories: unknown[];
+	merchants?: unknown[];
+	tags?: unknown[];
+	debtors?: unknown[];
+	banks?: unknown[];
+	transaction_templates?: unknown[];
+}): void {
+	const snapshot: StableOfflineCatalog = {
+		savedAt: Date.now(),
+		accounts: meta.accounts,
+		expense_categories: meta.expense_categories,
+		income_categories: meta.income_categories,
+		merchants: meta.merchants,
+		tags: meta.tags,
+		debtors: meta.debtors,
+		banks: meta.banks,
+		transaction_templates: meta.transaction_templates
+	};
+	stableCatalogMemory = snapshot;
+	if (typeof localStorage === 'undefined') return;
+	try {
+		localStorage.setItem(STABLE_OFFLINE_CATALOG_KEY, JSON.stringify(snapshot));
+	} catch {
+		// quota
+	}
+}
+
+export function clearStableOfflineCatalog(): void {
+	stableCatalogMemory = null;
+	if (typeof localStorage !== 'undefined') {
+		try {
+			localStorage.removeItem(STABLE_OFFLINE_CATALOG_KEY);
+		} catch {
+			// ignore
+		}
+	}
+}
+
+/**
+ * Cold start after days offline: re-seed form catalogs for the active server URL
+ * from stable snapshot and any legacy ref-cache origin.
+ */
+export function reconcileOfflineCatalogsOnUnlock(): void {
+	flushRefCacheDisk();
+
+	const stable = readStableOfflineCatalog();
+	if (stable) {
+		seedDictionariesFromUIMeta(stable);
+	}
+
+	const legacyMeta = readRefCacheFromAnyStoredOrigin<UIMeta>(UI_META_PATH);
+	if (legacyMeta) {
+		writeRefCache(UI_META_PATH, legacyMeta);
+		seedDictionariesFromUIMeta(legacyMeta);
+	}
 }
 
 export function refCacheReady(path: string): boolean {
@@ -216,6 +373,9 @@ export function writeRefCache<T>(path: string, value: T): boolean {
 			}
 		}
 		storageSet(key, nextRaw);
+		if (isDashboardRefPath(path) && isDashboardShape(value)) {
+			patchAccountListCachesFromDashboard(value as Dashboard);
+		}
 		return true;
 	} catch {
 		return false;
@@ -393,13 +553,19 @@ export function clearRefCache(opts?: { preserveAuthMe?: boolean }): void {
 	}
 	inflightRevalidate.clear();
 	if (preserveAuthMe) {
-		const meta = readRefCache<UIMeta>(UI_META_PATH);
+		const meta =
+			readRefCache<UIMeta>(UI_META_PATH) ??
+			readStableOfflineCatalog() ??
+			readRefCacheFromAnyStoredOrigin<UIMeta>(UI_META_PATH);
 		if (meta) seedAccountsFromUIMetaIfEmpty(meta);
+	} else {
+		clearStableOfflineCatalog();
 	}
 }
 
 export function resetRefCacheForTests(): void {
 	clearRefCache();
+	clearStableOfflineCatalog();
 	memoryStore.clear();
 	inflightRevalidate.clear();
 	pendingDiskWrites.clear();
@@ -413,6 +579,7 @@ export function resetRefCacheForTests(): void {
 	suppressNotifyDepth = 0;
 	warmRefCacheActive = false;
 	warmRefCacheGraceUntil = 0;
+	stableCatalogMemory = null;
 	refCacheTick.set(0);
 	refCacheUpdate.set(null);
 }
@@ -470,6 +637,7 @@ export function seedDictionariesFromUIMeta(meta: {
 	}
 	if (meta.debtors !== undefined) writeRefCache('/api/v1/debtors', meta.debtors);
 	seedAccountsFromUIMetaIfEmpty(meta);
+	persistStableOfflineCatalog(meta);
 }
 
 export function readCategoriesFromUIMetaCache<T>(type?: 'income' | 'expense'): T[] | null {
@@ -481,6 +649,34 @@ export function readCategoriesFromUIMetaCache<T>(type?: 'income' | 'expense'): T
 	if (type === 'expense') return meta.expense_categories;
 	if (type === 'income') return meta.income_categories;
 	return [...meta.expense_categories, ...meta.income_categories];
+}
+
+function isNonEmptyList<T>(value: T[] | null | undefined): value is T[] {
+	return Array.isArray(value) && value.length > 0;
+}
+
+/** Offline fallback: typed list → full list → ui/meta. Empty cached lists are ignored. */
+export function readCategoriesFromOfflineCache<T>(type?: 'income' | 'expense'): T[] | null {
+	const fromList = readRefCache<T[]>(categoriesRefPath(type));
+	if (isNonEmptyList(fromList)) return fromList;
+
+	if (type) {
+		const all = readRefCache<Array<{ type?: string }>>(categoriesRefPath());
+		if (isNonEmptyList(all)) {
+			const filtered = all.filter((row) => row.type === type) as T[];
+			if (isNonEmptyList(filtered)) return filtered;
+		}
+	}
+
+	return readCategoriesFromUIMetaCache<T>(type) ?? readCategoriesFromStableCatalog<T>(type);
+}
+
+function readCategoriesFromStableCatalog<T>(type?: 'income' | 'expense'): T[] | null {
+	const stable = readStableOfflineCatalog();
+	if (!stable) return null;
+	if (type === 'expense') return stable.expense_categories as T[];
+	if (type === 'income') return stable.income_categories as T[];
+	return [...stable.expense_categories, ...stable.income_categories] as T[];
 }
 
 export function accountsRefPath(status?: 'active' | 'archived' | 'deleted'): string {
@@ -570,14 +766,85 @@ export function seedAccountsFromUIMetaIfEmpty(meta: {
 	const banks = Array.isArray(meta.banks) ? (meta.banks as Bank[]) : [];
 	const dash = readRefCache<Dashboard>('/api/v1/dashboard');
 	const summaryById = new Map((dash?.accounts ?? []).map((row) => [row.id, row]));
-	const mapped = refs.map((ref) => accountFromUIMetaRef(ref, banks, summaryById.get(ref.id)));
-	if (readRefCache(accountsRefPath()) === null) {
+	const mapped = enrichAccountsWithCachedBalances(
+		refs.map((ref) => accountFromUIMetaRef(ref, banks, summaryById.get(ref.id)))
+	);
+	const allCached = readRefCache<Account[]>(accountsRefPath());
+	if (!isNonEmptyList(allCached)) {
 		writeRefCache(accountsRefPath(), mapped);
 	}
 	for (const status of ['active', 'archived', 'deleted'] as const) {
-		if (readRefCache(accountsRefPath(status)) !== null) continue;
+		const statusCached = readRefCache<Account[]>(accountsRefPath(status));
+		if (isNonEmptyList(statusCached)) continue;
 		const rows = mapped.filter((row) => row.status === status);
 		if (rows.length) writeRefCache(accountsRefPath(status), rows);
+	}
+}
+
+/** Overlay cached dashboard balances onto account rows. */
+export function enrichAccountsWithCachedBalances(
+	accounts: Account[],
+	dashboard?: Dashboard | null
+): Account[] {
+	const dash = dashboard ?? readRefCache<Dashboard>('/api/v1/dashboard');
+	if (!dash?.accounts?.length) return accounts;
+	const summaryById = new Map(dash.accounts.map((row) => [row.id, row]));
+	return accounts.map((acc) => applyBalanceSummary(acc, summaryById.get(acc.id)));
+}
+
+/** @deprecated Use enrichAccountsWithCachedBalances */
+export const mergeAccountsWithDashboard = enrichAccountsWithCachedBalances;
+
+export function enrichAccountWithCachedBalances(
+	account: Account,
+	dashboard?: Dashboard | null
+): Account {
+	const dash = dashboard ?? readRefCache<Dashboard>('/api/v1/dashboard');
+	const summary = dash?.accounts.find((row) => row.id === account.id);
+	return summary ? applyBalanceSummary(account, summary) : account;
+}
+
+function applyBalanceSummary(account: Account, summary?: AccountBalanceSummary): Account {
+	if (!summary) return account;
+	return {
+		...account,
+		balance: summary.balance,
+		balance_display: summary.balance_display,
+		is_primary: summary.is_primary ?? account.is_primary,
+		credit_limit: summary.credit_limit ?? account.credit_limit,
+		credit_limit_display: summary.credit_limit_display ?? account.credit_limit_display,
+		auto_topup_enabled: summary.auto_topup_enabled ?? account.auto_topup_enabled,
+		auto_topup_threshold: summary.auto_topup_threshold ?? account.auto_topup_threshold,
+		auto_topup_threshold_display:
+			summary.auto_topup_threshold_display ?? account.auto_topup_threshold_display,
+		auto_topup_target: summary.auto_topup_target ?? account.auto_topup_target,
+		auto_topup_target_display:
+			summary.auto_topup_target_display ?? account.auto_topup_target_display,
+		auto_topup_source_account_id:
+			summary.auto_topup_source_account_id ?? account.auto_topup_source_account_id
+	};
+}
+
+/** Keep preserved `/accounts*` list caches in sync when dashboard is refreshed. */
+export function patchAccountListCachesFromDashboard(dashboard: Dashboard): void {
+	if (!dashboard.accounts?.length) return;
+	const paths = [
+		'/api/v1/accounts',
+		'/api/v1/accounts?status=active',
+		'/api/v1/accounts?status=archived',
+		'/api/v1/accounts?status=deleted'
+	] as const;
+	for (const path of paths) {
+		const rows = readRefCache<Account[]>(path);
+		if (!isNonEmptyList(rows)) continue;
+		writeRefCache(path, enrichAccountsWithCachedBalances(rows, dashboard));
+	}
+	for (const summary of dashboard.accounts) {
+		const acc = readRefCache<Account>(`/api/v1/accounts/${summary.id}`);
+		if (acc) {
+			writeRefCache(`/api/v1/accounts/${summary.id}`, applyBalanceSummary(acc, summary));
+		}
+		writeRefCache(`/api/v1/accounts/${summary.id}/balance`, summary);
 	}
 }
 
@@ -587,27 +854,44 @@ export function readAccountsFromOfflineCache(
 ): Account[] | null {
 	const path = accountsRefPath(status);
 	const direct = readRefCache<Account[]>(path);
-	if (direct !== null) return direct;
+	if (isNonEmptyList(direct)) return enrichAccountsWithCachedBalances(direct);
 
 	const all = readRefCache<Account[]>('/api/v1/accounts');
-	if (all !== null) {
+	if (isNonEmptyList(all)) {
 		const filtered = status ? all.filter((row) => row.status === status) : all;
-		if (filtered.length) return filtered;
+		if (isNonEmptyList(filtered)) return enrichAccountsWithCachedBalances(filtered);
 	}
 
 	if (!status || status === 'active') {
 		const dash = readRefCache<Dashboard>('/api/v1/dashboard');
-		if (dash?.accounts?.length) {
+		if (isNonEmptyList(dash?.accounts)) {
 			return dash.accounts.map((row) => accountFromBalanceSummary(row));
 		}
 	}
 
 	const meta = readRefCache<UIMeta>(UI_META_PATH);
-	if (!meta?.accounts?.length) return null;
+	if (!meta?.accounts?.length) {
+		const stable = readStableOfflineCatalog();
+		if (stable?.accounts?.length) {
+			const banks = Array.isArray(stable.banks) ? (stable.banks as Bank[]) : [];
+			const dash = readRefCache<Dashboard>('/api/v1/dashboard');
+			const summaryById = new Map((dash?.accounts ?? []).map((row) => [row.id, row]));
+			let refs = stable.accounts;
+			if (status) refs = refs.filter((row) => row.status === status);
+			if (refs.length) {
+				return enrichAccountsWithCachedBalances(
+					refs.map((ref) => accountFromUIMetaRef(ref, banks, summaryById.get(ref.id)))
+				);
+			}
+		}
+		return null;
+	}
 	const dash = readRefCache<Dashboard>('/api/v1/dashboard');
 	const summaryById = new Map((dash?.accounts ?? []).map((row) => [row.id, row]));
 	let refs = meta.accounts;
 	if (status) refs = refs.filter((row) => row.status === status);
 	if (!refs.length) return null;
-	return refs.map((ref) => accountFromUIMetaRef(ref, meta.banks, summaryById.get(ref.id)));
+	return enrichAccountsWithCachedBalances(
+		refs.map((ref) => accountFromUIMetaRef(ref, meta.banks, summaryById.get(ref.id)))
+	);
 }

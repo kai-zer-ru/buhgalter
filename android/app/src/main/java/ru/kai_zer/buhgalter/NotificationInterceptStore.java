@@ -172,6 +172,13 @@ final class NotificationInterceptStore {
             return "";
         }
         String s = raw.trim().toLowerCase();
+        if (s.startsWith("ваш ")) {
+            s = s.substring(4).trim();
+        } else if (s.startsWith("your ")) {
+            s = s.substring(5).trim();
+        }
+        s = s.replace("т-банк", "tbank").replace("тбанк", "tbank");
+        s = s.replace("тинькофф", "tinkoff");
         s = s.replace(" ", "").replace("-", "");
         if (s.startsWith("+7") && s.length() > 2) {
             s = s.substring(2);

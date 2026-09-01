@@ -15,9 +15,7 @@ export function resolveTransactionSubcategoryName(
 	if (!tx.subcategory_id || !tx.category_id) return raw;
 	const looksBad = !raw || raw === tx.subcategory_id || isLikelyUuid(raw);
 	if (!looksBad) return raw;
-	const subs = readRefCache<{ id: string; name: string }[]>(
-		subcategoriesRefPath(tx.category_id)
-	);
+	const subs = readRefCache<{ id: string; name: string }[]>(subcategoriesRefPath(tx.category_id));
 	return subs?.find((sub) => sub.id === tx.subcategory_id)?.name ?? raw;
 }
 export function transactionCategoryLabel(
