@@ -55,7 +55,7 @@
 | `/accounts` | Главная → Счета |
 | `/accounts/new`, `/accounts/[id]` | Главная → Счета → … |
 | `/transactions` | Главная → Все операции |
-| `/debts`, `/credits`, `/stats`, `/budget`, `/subscriptions`, `/categories`, `/merchants`, `/tags`, `/recurring-operations` | Главная → раздел |
+| `/debts`, `/credits`, `/stats`, `/budget`, `/subscriptions`, `/categories`, `/merchants`, `/tags`, `/recurring-operations`, `/transaction-templates` | Главная → раздел |
 | `/debtors/[id]` | Главная → Долги → должник |
 | `/credits/[id]` | Главная → Кредиты → кредит |
 | `/settings` | Главная → Настройки |
@@ -71,12 +71,12 @@ Badge-метки и спойлеры графика на `/credits` — [ui-cred
 | Элемент | Поведение |
 |---------|-----------|
 | Плоские пункты | **Главная** (первым), **Операции**, **Бюджет**, Статистика (логотип/название в шапке тоже ведут на `/`) |
-| «Прочее ▼» | Счета, Долги, Кредиты, Категории, Магазины, Теги, Периодические операции, Подписки — сразу перед «Настройки» |
+| «Прочее ▼» | Счета, Долги, Кредиты, Категории, Магазины, Теги, Периодические операции, Подписки, Шаблоны операций — сразу перед «Настройки» |
 | «Настройки ▼» | Профиль, Пароль, API-токены, Уведомления, Импорт/экспорт |
 | «Админка ▼» | Только для `is_admin`: Система, Пользователи, Бэкапы, Диагностика |
 | Десктоп | `NavDropdown` + `.popover-panel` |
 | Мобилка | Гамбургер; панель `.nav-mobile-panel` под шапкой (не на всю высоту экрана); **drill-down** для «Прочее», «Настройки» и «Админка» — отдельный экран подменю с кнопкой «Назад», без длинного accordion |
-| Активный пункт | `.nav-link-active` по pathname; для групп — любой путь внутри группы («Прочее»: `/accounts`, `/debts`, `/debtors`, `/credits`, `/categories`, `/merchants`, `/tags`, `/recurring-operations`, `/subscriptions`; `/settings/*`; `/admin/*`) |
+| Активный пункт | `.nav-link-active` по pathname; для групп — любой путь внутри группы («Прочее»: `/accounts`, `/debts`, `/debtors`, `/credits`, `/categories`, `/merchants`, `/tags`, `/recurring-operations`, `/subscriptions`, `/transaction-templates`; `/settings/*`; `/admin/*`) |
 | Закрытие | `afterNavigate` сбрасывает меню; backdrop по тапу вне меню |
 
 Канонические URL основных разделов (вне настроек):
@@ -88,8 +88,9 @@ Badge-метки и спойлеры графика на `/credits` — [ui-cred
 | `/tags` | Теги |
 | `/recurring-operations` | Периодические операции (`?from_tx=` — префилл из операции) |
 | `/subscriptions` | Подписки |
+| `/transaction-templates` | Шаблоны операций |
 
-Старые `/settings/categories` и `/settings/recurring-operations` — редирект `308` на новые пути (с сохранением query).
+Старые `/settings/categories`, `/settings/recurring-operations` и `/settings/transaction-templates` — редирект `308` на новые пути (с сохранением query).
 
 Канонические URL настроек:
 

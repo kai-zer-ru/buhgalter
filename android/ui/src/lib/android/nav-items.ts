@@ -64,6 +64,12 @@ export function androidMainNavItems(): AndroidNavItem[] {
 			isActive: (p) => p.startsWith('/recurring-operations')
 		},
 		{
+			href: resolve('/transaction-templates'),
+			labelKey: 'settings.tab.templates',
+			feature: 'transaction_templates',
+			isActive: (p) => p.startsWith('/transaction-templates')
+		},
+		{
 			href: resolve('/categories'),
 			labelKey: 'nav.categories',
 			isActive: (p) => p.startsWith('/categories')
@@ -139,12 +145,6 @@ export function androidSettingsNavItems(): AndroidNavItem[] {
 			labelKey: 'settings.tab.import',
 			feature: 'import_export',
 			isActive: (p) => p === '/settings/import'
-		},
-		{
-			href: resolve('/settings/transaction-templates'),
-			labelKey: 'settings.tab.templates',
-			feature: 'transaction_templates',
-			isActive: (p) => p === '/settings/transaction-templates'
 		}
 	]);
 }

@@ -15,7 +15,7 @@ const PATH_FEATURE_GATES: Array<{ prefix: string; feature: string }> = [
 	{ prefix: '/subscriptions', feature: 'subscriptions' },
 	{ prefix: '/settings/notifications', feature: 'notifications' },
 	{ prefix: '/settings/import', feature: 'import_export' },
-	{ prefix: '/settings/transaction-templates', feature: 'transaction_templates' }
+	{ prefix: '/transaction-templates', feature: 'transaction_templates' }
 ];
 
 /** Pass `$featureFlags` from Svelte templates/derived so the UI re-runs when flags load or change. */

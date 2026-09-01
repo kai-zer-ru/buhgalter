@@ -44,17 +44,14 @@
 			titleKey: 'bankNotifications.history.title',
 			href: '/settings/bank-notifications/history'
 		},
-		{ path: '/settings/import', titleKey: 'settings.tab.import', href: '/settings/import' },
-		{
-			path: '/settings/transaction-templates',
-			titleKey: 'settings.tab.templates',
-			href: '/settings/transaction-templates'
-		}
+		{ path: '/settings/import', titleKey: 'settings.tab.import', href: '/settings/import' }
 	];
 
 	const pathname = $derived($page.url.pathname);
 	const isLegacyRedirect = $derived(
-		pathname === '/settings/categories' || pathname === '/settings/recurring-operations'
+		pathname === '/settings/categories' ||
+		pathname === '/settings/recurring-operations' ||
+		pathname === '/settings/transaction-templates'
 	);
 
 	const current = $derived.by(() => {

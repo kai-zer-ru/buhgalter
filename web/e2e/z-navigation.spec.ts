@@ -166,6 +166,11 @@ test('other dropdown navigates to accounts, debts, credits, recurring and subscr
 	await page.getByRole('menuitem', { name: 'Подписки' }).click();
 	await waitAppReady(page);
 	await expect(page).toHaveURL(/\/subscriptions/);
+
+	await page.getByRole('button', { name: 'Прочее' }).click();
+	await page.getByRole('menuitem', { name: 'Шаблоны операций' }).click();
+	await waitAppReady(page);
+	await expect(page).toHaveURL(/\/transaction-templates/);
 });
 
 test('categories is under other menu with home breadcrumb', async ({ page }) => {
@@ -184,6 +189,22 @@ test('categories is under other menu with home breadcrumb', async ({ page }) => 
 	await expect(crumbs.getByRole('link', { name: 'Настройки' })).toHaveCount(0);
 });
 
+test('transaction templates is under other menu with home breadcrumb', async ({ page }) => {
+	await page.setViewportSize({ width: 1280, height: 720 });
+	await page.goto('/');
+	await waitAppReady(page);
+
+	await page.getByRole('button', { name: 'Прочее' }).click();
+	await page.getByRole('menuitem', { name: 'Шаблоны операций' }).click();
+	await waitAppReady(page);
+	await expect(page).toHaveURL(/\/transaction-templates/);
+
+	const crumbs = page.locator('.breadcrumbs');
+	await expect(crumbs.getByRole('link', { name: 'Главная' })).toBeVisible();
+	await expect(crumbs.getByText('Шаблоны операций', { exact: true })).toBeVisible();
+	await expect(crumbs.getByRole('link', { name: 'Настройки' })).toHaveCount(0);
+});
+
 test('mobile menu drill-down opens other submenu', async ({ page }) => {
 	await page.setViewportSize({ width: 390, height: 844 });
 	await page.goto('/');
@@ -199,6 +220,7 @@ test('mobile menu drill-down opens other submenu', async ({ page }) => {
 	await expect(panel.getByRole('menuitem', { name: 'Категории' })).toBeVisible();
 	await expect(panel.getByRole('menuitem', { name: 'Подписки' })).toBeVisible();
 	await expect(panel.getByRole('menuitem', { name: 'Периодические операции' })).toBeVisible();
+	await expect(panel.getByRole('menuitem', { name: 'Шаблоны операций' })).toBeVisible();
 	await panel.getByRole('menuitem', { name: 'Периодические операции' }).click();
 	await waitAppReady(page);
 	await expect(page).toHaveURL(/\/recurring-operations/);

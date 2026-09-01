@@ -19,12 +19,18 @@ describe('android nav items', () => {
 			'nav.credits',
 			'nav.subscriptions',
 			'nav.recurring',
+			'settings.tab.templates',
 			'nav.categories',
 			'nav.merchants',
 			'nav.tags',
 			'nav.budget',
 			'nav.stats'
 		]);
+	});
+
+	it('includes transaction templates in main navigation', () => {
+		const paths = androidMainNavItems().map((item) => item.href);
+		expect(paths.some((href) => href.endsWith('/transaction-templates'))).toBe(true);
 	});
 
 	it('includes settings tabs with server URL and web settings', () => {
@@ -34,8 +40,10 @@ describe('android nav items', () => {
 		expect(paths.some((href) => href.endsWith('/settings/import'))).toBe(true);
 		expect(paths.some((href) => href.endsWith('/settings/categories'))).toBe(false);
 		expect(paths.some((href) => href.endsWith('/settings/recurring-operations'))).toBe(false);
+		expect(paths.some((href) => href.endsWith('/settings/transaction-templates'))).toBe(false);
 		expect(paths.some((href) => href.endsWith('/categories'))).toBe(false);
 		expect(paths.some((href) => href.endsWith('/recurring-operations'))).toBe(false);
+		expect(paths.some((href) => href.endsWith('/transaction-templates'))).toBe(false);
 	});
 
 	it('does not mark Settings active on bank drafts/history', () => {

@@ -16,7 +16,7 @@
 		| '/settings/bank-notifications/drafts'
 		| '/settings/bank-notifications/history'
 		| '/settings/import'
-		| '/settings/transaction-templates'
+		| '/transaction-templates'
 		| '/admin'
 		| '/admin/system'
 		| '/admin/backups'

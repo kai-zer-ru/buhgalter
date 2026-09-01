@@ -176,6 +176,12 @@
 			labelKey: 'nav.subscriptions',
 			feature: 'subscriptions',
 			isActive: (p) => p.startsWith('/subscriptions')
+		},
+		{
+			path: '/transaction-templates',
+			labelKey: 'settings.tab.templates',
+			feature: 'transaction_templates',
+			isActive: (p) => p.startsWith('/transaction-templates')
 		}
 	];
 
@@ -206,12 +212,6 @@
 			labelKey: 'settings.tab.import',
 			feature: 'import_export',
 			isActive: (p) => p === '/settings/import'
-		},
-		{
-			path: '/settings/transaction-templates',
-			labelKey: 'settings.tab.templates',
-			feature: 'transaction_templates',
-			isActive: (p) => p === '/settings/transaction-templates'
 		}
 	];
 
@@ -267,7 +267,8 @@
 			p.startsWith('/merchants') ||
 			p.startsWith('/tags') ||
 			p.startsWith('/recurring-operations') ||
-			p.startsWith('/subscriptions')
+			p.startsWith('/subscriptions') ||
+			p.startsWith('/transaction-templates')
 		);
 	}
 

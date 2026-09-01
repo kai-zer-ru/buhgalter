@@ -258,7 +258,7 @@
 	}
 
 	function createFromTemplate(tpl: TransactionTemplate) {
-		const from = '/settings/transaction-templates';
+		const from = '/transaction-templates';
 		if (tpl.type === 'transfer') {
 			void goto(resolve(transferNewPath({ templateId: tpl.id, from })));
 			return;
