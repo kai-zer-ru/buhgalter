@@ -246,6 +246,7 @@
 - [x] БАГ. Android: SMS банка через приложение «Сообщения» не попадали в черновики (allowlist только bank app; заголовок «Ваш Т-Банк»)
 - [x] БАГ. Android: перевод — кнопка «Вся сумма» неактивна после смены исходящего счёта (устаревший баланс в кэше /accounts)
 - [x] Android: единый источник балансов — `GET /dashboard` обогащает `listAccounts`/`getAccount` и патчит сохранённые списки счетов при обновлении dashboard
+- [x] БАГ. Плановый остаток: еженедельные подписки учитывали только одно списание в текущем месяце вместо всех оставшихся (`forecast_balance` / `upcoming_run_ats`)
 - [x] [Release notes](docs/release-notes-v1.5.1.md) · [android-client-platform.md](docs/android-client-platform.md) · [android-client.md](docs/android-client.md) · [ui-navigation.md](docs/ui-navigation.md) · [notification-intercept.md](roadmap/notification-intercept.md)
 
 ## Общие планы

@@ -128,23 +128,21 @@ func sumSubscriptionCharges(
 	}
 	var total int64
 	var prev, last time.Time
-	for i, raw := range queue {
+	for _, raw := range queue {
 		t, err := timeutil.ParseUTC(raw)
 		if err != nil {
 			continue
 		}
 		if t.After(monthEnd) {
-			return total, nil
+			break
 		}
 		if !t.Before(monthStart) || !t.After(now) {
 			total += amount
 		}
-		if i == len(queue)-2 {
-			prev = t
+		if !last.IsZero() {
+			prev = last
 		}
-		if i == len(queue)-1 {
-			last = t
-		}
+		last = t
 	}
 	if last.IsZero() {
 		return total, nil
