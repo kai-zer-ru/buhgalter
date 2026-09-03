@@ -18,7 +18,7 @@ Self-hosted учёт финансов: один бинарник с веб-ин�
 Новости, обновления и помощь:
 
 - **Telegram** — [@kai_zer_ru_ha](https://t.me/kai_zer_ru_ha)
-- **Max** — [kai_zer_ru_ha](https://max.ru/id251603503331_biz)
+- **Max** — [kai_zer_ru_ha](https://max.ru/channel_kai_zer_ru_ha)
 - **Дзен** — [kai_zer_ru_ha](https://dzen.ru/kai_zer_ru_ha)
 - **VK** — [kai_zer_ru_ha](https://vk.com/kai_zer_ru_ha)
 - **Обсуждение** — [чат в Max](https://max.ru/join/KoCsTSA3VGOCiIFdSAW0myVJEwXZi-rt9fTfGxdgk6A)
