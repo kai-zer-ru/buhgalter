@@ -118,10 +118,12 @@
 	function syncViewFromValue() {
 		const p = parseDatetimeLocal(value);
 		if (!p) return;
-		if (viewYear !== p.year) viewYear = p.year;
-		if (viewMonth !== p.month) viewMonth = p.month;
-		const next = `${String(p.hour).padStart(2, '0')}:${String(p.minute).padStart(2, '0')}`;
-		if (timeValue !== next) timeValue = next;
+		// Do not read viewYear/viewMonth here: the $effect below would re-run on
+		// prev/next month and snap the calendar back to the selected date.
+		untrack(() => {
+			viewYear = p.year;
+			viewMonth = p.month;
+		});
 	}
 
 	$effect(() => {

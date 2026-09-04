@@ -20,6 +20,7 @@
 - [v1.4.1](#v141)
 - [v1.5.0](#v150)
 - [v1.5.1](#v151)
+- [v1.5.2](#v152)
 - [Общие планы](#общие-планы)
 - [На подумать](#на-подумать)
 
@@ -248,6 +249,10 @@
 - [x] Android: единый источник балансов — `GET /dashboard` обогащает `listAccounts`/`getAccount` и патчит сохранённые списки счетов при обновлении dashboard
 - [x] БАГ. Плановый остаток: еженедельные подписки учитывали только одно списание в текущем месяце вместо всех оставшихся (`forecast_balance` / `upcoming_run_ats`)
 - [x] [Release notes](docs/release-notes-v1.5.1.md) · [android-client-platform.md](docs/android-client-platform.md) · [android-client.md](docs/android-client.md) · [ui-navigation.md](docs/ui-navigation.md) · [notification-intercept.md](roadmap/notification-intercept.md)
+
+## v1.5.2
+
+- [x] БАГ. Web: календарь в подписках (и везде с выбранной датой) — не перелистывал месяцы: `$effect` в `DateTimePicker` сбрасывал `viewMonth` при навигации
 
 ## Общие планы
 
