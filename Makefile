@@ -77,7 +77,7 @@ server-build-arm: copy-openapi copy-ui-i18n
 test: test-unit test-e2e
 
 test-unit: copy-openapi copy-ui-i18n
-	cd server && go test ./...
+	cd server && go test -timeout 30m ./...
 	cd web && npm run check
 	cd android/ui && npm run check
 	cd android/ui && npm run test:unit

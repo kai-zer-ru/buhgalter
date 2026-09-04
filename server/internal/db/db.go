@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"testing"
 
 	"github.com/kai-zer-ru/buhgalter/internal/categoryseed"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
@@ -22,7 +23,7 @@ func Open(path string) (*sql.DB, error) {
 		return nil, fmt.Errorf("create db dir: %w", err)
 	}
 
-	if err := runMigrations(path); err != nil {
+	if err := prepareSchema(path); err != nil {
 		return nil, err
 	}
 
@@ -61,6 +62,10 @@ func sqliteDSN(path string, foreignKeys bool) string {
 	)
 	if foreignKeys {
 		dsn += "&_pragma=foreign_keys(1)"
+	}
+	if testing.Testing() {
+		// Avoid fsync storms when many packages open DBs in parallel (CI/act).
+		dsn += "&_pragma=synchronous(OFF)"
 	}
 	return dsn
 }

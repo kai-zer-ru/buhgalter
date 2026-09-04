@@ -17,6 +17,7 @@ import {
 	shouldPersistRefCache
 } from '$lib/offline/ref-cache';
 import { indexTransactions } from '$lib/offline/transaction-index';
+import { transactionsListPath } from '$lib/api/transactions-path';
 import { shouldUseOfflineQueue } from '$lib/offline/network';
 import { isServerOfflineMode } from '$lib/offline/server-connectivity';
 import { getApiBase } from '$lib/platform/server-url';
@@ -1233,8 +1234,7 @@ export type Transfer = {
 };
 
 export function listTransactions(params?: Record<string, string>) {
-	const q = params ? '?' + new URLSearchParams(params).toString() : '';
-	return request<TransactionList>(`/api/v1/transactions${q}`).then((res) => {
+	return request<TransactionList>(transactionsListPath(params)).then((res) => {
 		indexTransactions(res.data);
 		return res;
 	});

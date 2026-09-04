@@ -433,10 +433,13 @@ export type WarmRefCacheOptions = {
 	force?: boolean;
 };
 
-/** Skip home reload effects right after warmRefCache (avoids duplicate loadAll storm). */
+/**
+ * Skip home reload only while warmRefCache is in flight (avoids duplicate loadAll).
+ * Do not extend past warm completion — pullFromServer bumps dataRefreshTick right after,
+ * and an 8s grace window used to swallow that tick so the home list stayed stale.
+ */
 export function shouldSuppressHomeDataRefresh(): boolean {
-	if (warmRefCacheInflight) return true;
-	return lastWarmFinishedAt > 0 && Date.now() - lastWarmFinishedAt < 8000;
+	return warmRefCacheInflight !== null;
 }
 
 function yieldToUi(): Promise<void> {

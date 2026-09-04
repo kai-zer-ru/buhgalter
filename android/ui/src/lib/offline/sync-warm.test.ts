@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
 	warmRefCache,
 	resetWarmRefCacheForTests,
+	shouldSuppressHomeDataRefresh,
 	WARM_BACKGROUND_COOLDOWN_MS
 } from '$lib/offline/sync';
 import { resetOutboxForTests } from '$lib/offline/store';
@@ -106,5 +107,24 @@ describe('warmRefCache credit details', () => {
 		await warmRefCache({ background: true });
 		expect(client.getDashboard).toHaveBeenCalled();
 		vi.mocked(Date.now).mockRestore();
+	});
+});
+
+describe('shouldSuppressHomeDataRefresh', () => {
+	it('is true only while warmRefCache is in flight, not after', async () => {
+		let resolveDash!: () => void;
+		const gate = new Promise<void>((r) => {
+			resolveDash = r;
+		});
+		vi.mocked(client.getDashboard).mockImplementation(async () => {
+			await gate;
+			return {} as client.Dashboard;
+		});
+
+		const warm = warmRefCache();
+		expect(shouldSuppressHomeDataRefresh()).toBe(true);
+		resolveDash();
+		await warm;
+		expect(shouldSuppressHomeDataRefresh()).toBe(false);
 	});
 });

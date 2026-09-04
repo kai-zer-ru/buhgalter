@@ -1,4 +1,8 @@
 import { Network } from '@capacitor/network';
+import {
+	HOME_PAST_TRANSACTIONS_PATH,
+	HOME_PLANNED_TRANSACTIONS_PATH
+} from '$lib/api/transactions-path';
 import { warmRefCache } from '$lib/offline/sync';
 import {
 	flushRefCacheDisk,
@@ -13,8 +17,8 @@ import { hasPendingOutbox } from '$lib/offline/store';
 
 const CORE_WARM_PATHS = [
 	'/api/v1/dashboard',
-	'/api/v1/transactions?kind=manual&limit=10&page=1&sort=date_desc',
-	'/api/v1/transactions?kind=future&limit=10&page=1&sort=date_desc'
+	HOME_PAST_TRANSACTIONS_PATH,
+	HOME_PLANNED_TRANSACTIONS_PATH
 ];
 
 let listenersRegistered = false;

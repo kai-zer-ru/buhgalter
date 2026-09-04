@@ -33,7 +33,7 @@ jobs:
           cache-dependency-path: server/go.sum
       - run: go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1
       - run: make sqlc-check inline-sql-check openapi-check ui-i18n-check
-      - run: go test ./...
+      - run: go test -timeout 30m ./...
         working-directory: server
 
   test-web:

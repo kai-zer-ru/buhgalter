@@ -14,6 +14,10 @@
 		type Transaction,
 		type TransactionTemplate
 	} from '$lib/api/client';
+	import {
+		HOME_PAST_TRANSACTIONS_PATH,
+		HOME_PLANNED_TRANSACTIONS_PATH
+	} from '$lib/api/transactions-path';
 	import { deleteTransaction, deleteTransfer } from '$lib/offline/transactions-api';
 	import {
 		mergeOutboxTransactions,
@@ -67,8 +71,8 @@
 	} from '$lib/android/notification-intercept';
 
 	const DASHBOARD_PATH = '/api/v1/dashboard';
-	const PAST_TX_PATH = '/api/v1/transactions?kind=manual&limit=10&page=1&sort=date_desc';
-	const PLANNED_TX_PATH = '/api/v1/transactions?kind=future&limit=10&page=1&sort=date_desc';
+	const PAST_TX_PATH = HOME_PAST_TRANSACTIONS_PATH;
+	const PLANNED_TX_PATH = HOME_PLANNED_TRANSACTIONS_PATH;
 	const BUDGET_PATH = '/api/v1/budgets/summary';
 	const TEMPLATES_PATH = '/api/v1/transaction-templates';
 	const HOME_TEMPLATE_LIMIT = 12;
@@ -155,6 +159,11 @@
 		if (backgroundLoadTimer !== null) clearTimeout(backgroundLoadTimer);
 		backgroundLoadTimer = setTimeout(() => {
 			backgroundLoadTimer = null;
+			// Warm may still be writing when dataRefreshTick fires mid-sync — retry shortly.
+			if (shouldSuppressHomeDataRefresh()) {
+				scheduleBackgroundLoadAll();
+				return;
+			}
 			void loadAll({ background: true });
 		}, 1500);
 	}
@@ -165,6 +174,8 @@
 			loading = false;
 			pastLoading = false;
 			plannedLoading = false;
+			// Show cache immediately, then soft-refresh so in-memory list matches warm/SWR.
+			scheduleBackgroundLoadAll();
 		} else {
 			void loadAll();
 		}
@@ -173,13 +184,13 @@
 
 	$effect(() => {
 		const tick = $dataRefreshTick;
-		if (tick === 0 || shouldSuppressHomeDataRefresh()) return;
+		if (tick === 0) return;
 		scheduleBackgroundLoadAll();
 	});
 
 	$effect(() => {
 		const update = $refCacheUpdate;
-		if (!update || !dashBase || shouldSuppressHomeDataRefresh()) return;
+		if (!update || !dashBase) return;
 		const paths = [DASHBOARD_PATH, PAST_TX_PATH, PLANNED_TX_PATH, BUDGET_PATH, TEMPLATES_PATH];
 		if (paths.some((p) => refCachePathMatches(update.path, p))) {
 			scheduleBackgroundLoadAll();
