@@ -12,7 +12,7 @@
 	import PageTabs from '$lib/components/PageTabs.svelte';
 	import SectionHeader from '$lib/components/SectionHeader.svelte';
 	import { user } from '$lib/stores/auth';
-	import { refCacheReady, refCacheReadyAny, refCacheUpdate } from '$lib/offline/ref-cache';
+	import { refCacheReady, refCacheUpdate } from '$lib/offline/ref-cache';
 	import { refCachePathMatches } from '$lib/offline/ref-cache-watch';
 	import { dataRefreshTick } from '$lib/offline/sync';
 	import { assignIfChanged } from '$lib/state-utils';
@@ -24,7 +24,7 @@
 	let tab = $state<'active' | 'closed'>('active');
 	let credits = $state<Credit[]>([]);
 	let banks = $state<Bank[]>([]);
-	let loading = $state(!refCacheReadyAny([creditsPath('active'), '/api/v1/banks']));
+	let loading = $state(!refCacheReady(creditsPath('active')));
 	let filterLoading = $state(false);
 	let loadError = $state<string | null>(null);
 	let ready = $state(false);
@@ -54,7 +54,7 @@
 		const listPath = creditsPath(status as 'active' | 'closed');
 		if (opts?.tabChange) {
 			if (!opts.background && !refCacheReady(listPath)) filterLoading = true;
-		} else if (!opts?.background && !refCacheReadyAny([listPath, '/api/v1/banks'])) {
+		} else if (!opts?.background && !refCacheReady(listPath)) {
 			loading = true;
 		}
 		try {

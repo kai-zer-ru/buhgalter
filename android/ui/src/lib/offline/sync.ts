@@ -82,9 +82,10 @@ import {
 	shouldTryServer
 } from '$lib/offline/server-connectivity';
 import {
+	flushRefCacheDisk,
+	runWithForcedRefCacheNetwork,
 	runWithSuppressedRefCacheNotifications,
-	setWarmRefCacheActive,
-	flushRefCacheDisk
+	setWarmRefCacheActive
 } from '$lib/offline/ref-cache';
 import { debugLogError, debugLogInfo, debugLogWarn } from '$lib/platform/debug-log';
 
@@ -510,10 +511,17 @@ async function warmRefCacheBody(opts: WarmRefCacheOptions): Promise<void> {
 	debugLogInfo('sync', 'warmRefCache started');
 	setWarmRefCacheActive(true);
 	try {
-		await runWithSuppressedRefCacheNotifications(warmRefCacheCore);
+		const run = async () => {
+			await runWithSuppressedRefCacheNotifications(warmRefCacheCore);
+			if (opts.force) {
+				notifyServerDataChanged();
+				await runWithSuppressedRefCacheNotifications(warmRefCacheHeavy);
+			}
+		};
 		if (opts.force) {
-			notifyServerDataChanged();
-			await runWithSuppressedRefCacheNotifications(warmRefCacheHeavy);
+			await runWithForcedRefCacheNetwork(run);
+		} else {
+			await run();
 		}
 		// Credit details / tx-index / subcategories: only on manual sync (force).
 		// Automatic deferred warm was causing scroll freezes ~60s after unlock.

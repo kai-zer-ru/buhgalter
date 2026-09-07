@@ -56,7 +56,23 @@ describe('credit outbox keys', () => {
 });
 
 describe('credit / recurring ref-cache mutations', () => {
-	it('onCreditUpdated writes detail and list caches', () => {
+	it('onCreditUpdated writes detail and patches an existing list without dropping siblings', () => {
+		const credit = {
+			id: 'c1',
+			status: 'active',
+			name: 'Кредит'
+		} as Credit;
+		const sibling = { id: 'c2', status: 'active', name: 'Ипотека' } as Credit;
+		writeRefCache('/api/v1/credits?status=active', [sibling, credit]);
+		onCreditUpdated({ ...credit, name: 'Обновлён' });
+		expect(readRefCache('/api/v1/credits/c1')).toMatchObject({ id: 'c1', name: 'Обновлён' });
+		expect(readRefCache<Credit[]>('/api/v1/credits?status=active')?.map((c) => c.id)).toEqual([
+			'c1',
+			'c2'
+		]);
+	});
+
+	it('onCreditUpdated does not seed a singleton list when lists were cleared', () => {
 		const credit = {
 			id: 'c1',
 			status: 'active',
@@ -64,7 +80,7 @@ describe('credit / recurring ref-cache mutations', () => {
 		} as Credit;
 		onCreditUpdated(credit);
 		expect(readRefCache('/api/v1/credits/c1')).toEqual(credit);
-		expect(readRefCache<Credit[]>('/api/v1/credits?status=active')?.[0]?.id).toBe('c1');
+		expect(readRefCache('/api/v1/credits?status=active')).toBeNull();
 	});
 
 	it('onCreditDeleted removes detail and lists', () => {

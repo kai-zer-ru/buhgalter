@@ -456,12 +456,17 @@ export function onBudgetDeleted(id: string, month?: string): void {
 
 export function onCreditUpdated(credit: Credit): void {
 	publishRefCachePath(creditDetailPath(credit.id), credit);
-	removeRefCacheListItem<Credit>(CREDITS_ACTIVE, credit.id);
-	removeRefCacheListItem<Credit>(CREDITS_CLOSED, credit.id);
-	if (credit.status === 'closed') {
-		prependRefCacheList(CREDITS_CLOSED, credit);
-	} else {
-		prependRefCacheList(CREDITS_ACTIVE, credit);
+	// After an online write, clearRefCache wipes list GETs. Never seed [this credit]
+	// as a full list — SWR/warm would treat it as complete and skip the network
+	// (manual sync could not repair; only re-login helped).
+	const target = credit.status === 'closed' ? CREDITS_CLOSED : CREDITS_ACTIVE;
+	const other = credit.status === 'closed' ? CREDITS_ACTIVE : CREDITS_CLOSED;
+	if (readRefCache<Credit[]>(other) !== null) {
+		removeRefCacheListItem<Credit>(other, credit.id);
+	}
+	if (readRefCache<Credit[]>(target) !== null) {
+		removeRefCacheListItem<Credit>(target, credit.id);
+		prependRefCacheList(target, credit);
 	}
 }
 

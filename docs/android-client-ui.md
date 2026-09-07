@@ -101,7 +101,7 @@
 | Счета | `/accounts`, `/accounts/new`, `/accounts/[id]` — редактирование: поле «Начальный баланс» из `initial_balance`, не `balance_display` ([data-model.md](data-model.md)) |
 | Операции | `/transactions`, `/transactions/new`, `/transactions/[id]/edit`, `/transfers/new`, `/transfers/[groupId]/edit` |
 | Долги | `/debts`, `/debts/[id]/settle`, `/debtors/[id]` |
-| Кредиты | `/credits`, `/credits/new/*` (мастер), `/credits/[id]` и подмаршруты действий. Деталь кредита в SWR (`GET /credits/{id}`); слушает **path-aware** `refCacheUpdate` (+ `dataRefreshTick`), **не** `refCacheTick` — иначе без `assignIfChanged` залипал «Обновляем данные…». Фоновый soft-refresh через `assignIfChanged` |
+| Кредиты | `/credits`, `/credits/new/*` (мастер), `/credits/[id]` и подмаршруты действий. Деталь кредита в SWR (`GET /credits/{id}`); слушает **path-aware** `refCacheUpdate` (+ `dataRefreshTick`), **не** `refCacheTick` — иначе без `assignIfChanged` залипал «Обновляем данные…». Фоновый soft-refresh через `assignIfChanged`. После оплаты список активных не подменяется одним кредитом (`onCreditUpdated` патчит только уже лежащий GET) |
 | Подписки | `/subscriptions`, `/subscriptions/new`, `/subscriptions/[id]/edit`, `/subscriptions/[id]/find-transactions` (find/attach — online-only); create/update через offline outbox |
 | Периодические операции | `/recurring-operations` (`?from_tx=` — префилл); крошки `Главная → Периодические операции` |
 | Категории | `/categories` (`?type=income` — фильтр); крошки `Главная → Категории` |

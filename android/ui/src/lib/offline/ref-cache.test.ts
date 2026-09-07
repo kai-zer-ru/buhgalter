@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+	clearRefCache,
 	fetchWithRefCache,
 	readRefCache,
 	refCacheReady,
 	refCacheTick,
 	refCacheUpdate,
 	resetRefCacheForTests,
+	runWithForcedRefCacheNetwork,
 	shouldPersistRefCache,
 	writeRefCache
 } from './ref-cache';
@@ -170,6 +172,39 @@ describe('fetchWithRefCache SWR', () => {
 		const value = await fetchWithRefCache('/api/v1/credits/c1', fetcher);
 		expect(value).toEqual(detail);
 		expect(fetcher).not.toHaveBeenCalled();
+	});
+
+	it('forced network refresh overwrites a poisoned list cache', async () => {
+		writeRefCache('/api/v1/credits?status=active', [{ id: 'c1' }]);
+		const fetcher = vi.fn().mockResolvedValue([{ id: 'c1' }, { id: 'c2' }]);
+
+		const value = await runWithForcedRefCacheNetwork(() =>
+			fetchWithRefCache('/api/v1/credits?status=active', fetcher)
+		);
+
+		expect(fetcher).toHaveBeenCalledOnce();
+		expect(value).toEqual([{ id: 'c1' }, { id: 'c2' }]);
+		expect(readRefCache('/api/v1/credits?status=active')).toEqual([{ id: 'c1' }, { id: 'c2' }]);
+	});
+
+	it('clearRefCache resets SWR cooldown so a list can refetch after a write', async () => {
+		const path = '/api/v1/credits?status=active';
+		writeRefCache(path, [{ id: 'c1' }]);
+		const first = vi.fn().mockResolvedValue([{ id: 'c1' }]);
+		await fetchWithRefCache(path, first);
+		await vi.waitFor(() => expect(first).toHaveBeenCalledOnce());
+
+		const blocked = vi.fn().mockResolvedValue([{ id: 'c1' }, { id: 'c2' }]);
+		await fetchWithRefCache(path, blocked);
+		await new Promise((r) => setTimeout(r, 20));
+		expect(blocked).not.toHaveBeenCalled();
+
+		clearRefCache();
+		writeRefCache(path, [{ id: 'c1' }]);
+		const afterClear = vi.fn().mockResolvedValue([{ id: 'c1' }, { id: 'c2' }]);
+		await fetchWithRefCache(path, afterClear);
+		await vi.waitFor(() => expect(afterClear).toHaveBeenCalledOnce());
+		await vi.waitFor(() => expect(readRefCache(path)).toEqual([{ id: 'c1' }, { id: 'c2' }]));
 	});
 
 	it('reuses cached data from another configured origin after active url switch', async () => {

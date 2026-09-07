@@ -420,9 +420,21 @@ export function publishRefCachePath<T>(path: string, value: T): void {
 }
 
 let suppressNotifyDepth = 0;
+/** Nested: fetchWithRefCache must hit the network (manual sync / force warm). */
+let forceNetworkRefCacheDepth = 0;
 /** Skip SWR revalidate while warmRefCache is writing many paths at once. */
 let warmRefCacheActive = false;
 let warmRefCacheGraceUntil = 0;
+
+/** Manual sync must not serve a poisoned SWR snapshot (e.g. 1-item credit list). */
+export async function runWithForcedRefCacheNetwork<T>(fn: () => Promise<T>): Promise<T> {
+	forceNetworkRefCacheDepth++;
+	try {
+		return await fn();
+	} finally {
+		forceNetworkRefCacheDepth--;
+	}
+}
 
 export function setWarmRefCacheActive(active: boolean): void {
 	warmRefCacheActive = active;
@@ -506,6 +518,22 @@ export async function fetchWithRefCache<T>(path: string, fetcher: () => Promise<
 		throw new OfflineCacheMissError(path);
 	}
 
+	if (forceNetworkRefCacheDepth > 0) {
+		try {
+			const value = await fetcher();
+			markServerOnline();
+			writeRefCache(path, value);
+			return value;
+		} catch (err) {
+			if (isOfflineFetchError(err)) {
+				markServerOffline();
+				const stale = readRefCache<T>(path);
+				if (stale !== null) return stale;
+			}
+			throw err;
+		}
+	}
+
 	const cached = readRefCache<T>(path);
 	if (cached !== null) {
 		debugLogInfo('cache', `SWR cache hit ${path}`);
@@ -552,6 +580,9 @@ export function clearRefCache(opts?: { preserveAuthMe?: boolean }): void {
 		memoryStore.delete(key);
 	}
 	inflightRevalidate.clear();
+	lastRevalidatedAt.clear();
+	for (const timer of revalidateTimers.values()) clearTimeout(timer);
+	revalidateTimers.clear();
 	if (preserveAuthMe) {
 		const meta =
 			readRefCache<UIMeta>(UI_META_PATH) ??
@@ -577,6 +608,7 @@ export function resetRefCacheForTests(): void {
 		diskFlushTimer = null;
 	}
 	suppressNotifyDepth = 0;
+	forceNetworkRefCacheDepth = 0;
 	warmRefCacheActive = false;
 	warmRefCacheGraceUntil = 0;
 	stableCatalogMemory = null;
