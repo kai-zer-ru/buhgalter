@@ -90,6 +90,14 @@ erDiagram
         TEXT merchant_id
     }
 
+    user_change_events {
+        INTEGER id PK
+        TEXT entity_type "transaction"
+        TEXT entity_id
+        TEXT action "created|updated|deleted"
+        TEXT occurred_at
+    }
+
     transaction_tags {
         TEXT transaction_id
         TEXT tag_id
@@ -254,6 +262,7 @@ erDiagram
     subcategories ||--o{ transactions : subcategory_id
     merchants ||--o{ transactions : merchant_id
     transactions ||--o{ transaction_tags : has
+    users ||--o{ user_change_events : owns
     tags ||--o{ transaction_tags : has
     users ||--o{ transaction_templates : owns
     transaction_templates ||--o{ transaction_template_tags : has
@@ -294,6 +303,7 @@ erDiagram
 - **Комиссия (v1.1 / v1.4.1):** опциональное поле `commission` при создании/изменении перевода; отдельная нога `expense` на счёте-источнике в системной категории «Комиссия». В списках нога скрыта; сумма агрегируется в `commission` / `commission_display` на ногах перевода. Самостоятельные UPDATE/DELETE ноги комиссии — `ERR_COMMISSION_LINKED`.
 - В API-ответах: `transfer_account_name`, `transfer_is_out`, `commission`, `commission_display` (вычисляемые/агрегированные поля).
 - UI: [transactions-display.md](transactions-display.md).
+- **Лента изменений (v1.5.2):** таблица `user_change_events` (триггеры на INSERT/UPDATE/DELETE `transactions`). Android при sync запрашивает `GET /sync/transaction-changes?since_id=` и патчит кеш списков по id — добавление, правку и удаление операции, в том числе старой, которую полный прогрев страницы 1 не перечитывает.
 
 ## Долги и операции
 
@@ -391,7 +401,7 @@ erDiagram
 | accounts | `internal/account` | `accounts.sql` | sqlc |
 | banks | `internal/bank` | `banks.sql` | sqlc |
 | categories | `internal/category` | `categories.sql` | sqlc |
-| transactions | `internal/transaction` | `transactions.sql` | sqlc |
+| transactions | `internal/transaction` | `transactions.sql`, `user_change_events.sql` | sqlc |
 | debtors, debts | `internal/debt` | `debts.sql` | sqlc |
 | credits | `internal/credit` | `credits.sql` | sqlc |
 | stats / search | `internal/stats` | `stats.sql` | sqlc |
@@ -440,5 +450,6 @@ erDiagram
   - `034_budgets.sql` … `039_budget_scope_unique.sql` — бюджет (см. [budget.md](budget.md))
   - `040_account_deleted_status.sql`, `041_account_auto_topup.sql` — удаление счетов, автопополнение
   - `042_primary_not_credit_card.sql` — кредитная карта не может быть основным счётом
+  - `052_user_change_events.sql` — лента изменений операций для Android-sync
 
 Уже применённые миграции **не переписывать** — только новые файлы в конец цепочки. После каждой миграции обновлять `server/schema.sql` и при необходимости запускать `make sqlc`.

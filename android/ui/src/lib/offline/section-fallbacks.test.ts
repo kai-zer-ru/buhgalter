@@ -73,9 +73,7 @@ describe('section-fallbacks', () => {
 			]
 		};
 		writeRefCache('/api/v1/debtors/person-1', cached);
-		writeRefCache('/api/v1/debts?settled=false', [
-			debt({ direction: 'borrowed', amount: 80_000 })
-		]);
+		writeRefCache('/api/v1/debts?settled=false', [debt({ direction: 'borrowed', amount: 80_000 })]);
 
 		const next = resolveDebtorDetailOffline('person-1');
 		expect(next?.i_owe).toBe(80_000);

@@ -44,7 +44,13 @@ vi.mock('$lib/api/client', async (importOriginal) => {
 		listDebts: vi.fn().mockResolvedValue([]),
 		listMerchants: vi.fn().mockResolvedValue([]),
 		listTags: vi.fn().mockResolvedValue([]),
-		listTransactions: vi.fn().mockResolvedValue({ data: [], meta: { total: 0 } })
+		listTransactions: vi.fn().mockResolvedValue({ data: [], meta: { total: 0 } }),
+		listTransactionChanges: vi.fn().mockResolvedValue({
+			server_time: '2026-01-01 00:00:00',
+			since_id: 0,
+			has_more: false,
+			changes: []
+		})
 	};
 });
 
@@ -54,9 +60,13 @@ beforeEach(() => {
 	vi.mocked(client.listCredits).mockReset();
 	vi.mocked(client.getCredit).mockReset();
 	vi.mocked(client.listDebtors).mockReset().mockResolvedValue([]);
-	vi.mocked(client.getDebtor).mockReset().mockResolvedValue({ id: 'd1' } as client.DebtorDetail);
+	vi.mocked(client.getDebtor)
+		.mockReset()
+		.mockResolvedValue({ id: 'd1' } as client.DebtorDetail);
 	vi.mocked(client.listDebts).mockReset().mockResolvedValue([]);
-	vi.mocked(client.getStatsContext).mockReset().mockResolvedValue({} as client.StatsContext);
+	vi.mocked(client.getStatsContext)
+		.mockReset()
+		.mockResolvedValue({} as client.StatsContext);
 	vi.mocked(client.listBanks).mockReset().mockResolvedValue([]);
 	vi.mocked(client.listCredits).mockImplementation(async (params?: { status?: string }) => {
 		if (params?.status === 'closed') {
@@ -127,8 +137,10 @@ describe('warmRefCache credit details', () => {
 	it('skips background warm within cooldown', async () => {
 		await warmRefCache();
 		vi.mocked(client.getDashboard).mockClear();
+		vi.mocked(client.listTransactionChanges).mockClear();
 		await warmRefCache({ background: true });
 		expect(client.getDashboard).not.toHaveBeenCalled();
+		expect(client.listTransactionChanges).toHaveBeenCalled();
 	});
 
 	it('runs background warm after cooldown', async () => {

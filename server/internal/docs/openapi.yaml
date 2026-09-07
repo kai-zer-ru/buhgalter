@@ -10,7 +10,9 @@ info:
 
     **Серверный кеш (in-memory):** успешные ответы `GET` кешируются в процессе сервера (справочники — 5 мин,
     остальное — 1 мин); при любой мутации кеш пользователя сбрасывается.
-    **Клиент (web / Android):** SWR ref-cache в `localStorage` для `GET /api/v1/*` (кроме health, export, preview, version, `GET /setup/status`).
+    Не кешируются: `/health`, `/version/check`, `/export`, preview, import jobs,
+    `GET /sync/transaction-changes`.
+    **Клиент (web / Android):** SWR ref-cache в `localStorage` для `GET /api/v1/*` (кроме health, export, preview, version, `GET /setup/status`, `GET /sync/transaction-changes`).
     Подробнее — [ui-api-cache.md](../ui-api-cache.md).
 
     **Счета (UI):** на `/accounts` меню «⋯» вызывает inline-редактирование (`PUT /accounts/{id}`),
@@ -1295,6 +1297,50 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Dashboard'
+  /sync/transaction-changes:
+    get:
+      summary: Изменения операций с момента последней синхронизации
+      description: |
+        Лента create/update/delete по таблице `transactions` (доход, расход, перевод,
+        операции долгов и кредитов — это тоже строки `transactions`).
+        Клиент передаёт курсор `since_id` (и опционально `since`) из прошлого ответа
+        и применяет события к локальному кешу по `entity_id`.
+        Несколько событий по одной операции схлопываются: в ответе одна запись
+        с актуальным телом (`upsert`) или `deleted`, если строки уже нет.
+        Эндпоинт не кешируется (серверный GET-кеш и клиентский ref-cache).
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: since_id
+          in: query
+          description: Исключающий курсор — id последнего обработанного события (`0` с начала)
+          schema:
+            type: integer
+            format: int64
+            default: 0
+        - name: since
+          in: query
+          description: Опционально — нижняя граница `occurred_at` (UTC, `YYYY-MM-DD HH:MM:SS` или RFC3339)
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Размер страницы сырых событий до схлопывания (по умолчанию 200, максимум 500)
+          schema:
+            type: integer
+            default: 200
+      responses:
+        '200':
+          description: Пакет изменений
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionChanges'
+        '400':
+          description: Некорректный формат `since`
+        '401':
+          description: Не авторизован
   /version/check:
     get:
       summary: Проверка доступного обновления
@@ -4522,6 +4568,45 @@ components:
               type: integer
             total:
               type: integer
+    TransactionChanges:
+      type: object
+      required: [server_time, since_id, has_more, changes]
+      properties:
+        server_time:
+          type: string
+          description: Время сервера UTC (`YYYY-MM-DD HH:MM:SS`)
+        since_id:
+          type: integer
+          format: int64
+          description: Курсор для следующего запроса (id последнего сырого события в странице)
+        has_more:
+          type: boolean
+        changes:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransactionChange'
+    TransactionChange:
+      type: object
+      required: [id, action, entity_id, occurred_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Id события в `user_change_events`
+        action:
+          type: string
+          enum: [upsert, deleted]
+        entity_id:
+          type: string
+          description: Id операции
+        occurred_at:
+          type: string
+          description: UTC, `YYYY-MM-DD HH:MM:SS`
+        transaction:
+          allOf:
+            - $ref: '#/components/schemas/Transaction'
+          nullable: true
+          description: Тело операции для `upsert`; отсутствует при `deleted`
     TransactionCreate:
       type: object
       required: [account_id, type, amount, transaction_date]

@@ -540,5 +540,6 @@ describe('isPreservedOfflineRefPath', () => {
 		expect(isPreservedOfflineRefPath('/api/v1/transactions')).toBe(true);
 		expect(isPreservedOfflineRefPath('/api/v1/debtors/abc')).toBe(true);
 		expect(isPreservedOfflineRefPath('/api/v1/setup/status')).toBe(false);
+		expect(isPreservedOfflineRefPath('/api/v1/sync/transaction-changes')).toBe(false);
 	});
 });

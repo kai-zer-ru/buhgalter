@@ -14,7 +14,8 @@ const REF_CACHE_VERSION = 'buhgalter.ref_cache.web.v1';
 const REF_CACHE_SKIP = new Set([
 	'/api/v1/health',
 	// Bootstrap flag (registration_enabled) — must not serve a pre-mutation snapshot on /login.
-	'/api/v1/setup/status'
+	'/api/v1/setup/status',
+	'/api/v1/sync/transaction-changes'
 ]);
 
 const memoryStore = new Map<string, string>();

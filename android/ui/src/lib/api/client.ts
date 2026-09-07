@@ -1261,6 +1261,34 @@ export function getTransaction(id: string) {
 	});
 }
 
+export type TransactionChange = {
+	id: number;
+	action: 'upsert' | 'deleted';
+	entity_id: string;
+	occurred_at: string;
+	transaction?: Transaction;
+};
+
+export type TransactionChanges = {
+	server_time: string;
+	since_id: number;
+	has_more: boolean;
+	changes: TransactionChange[];
+};
+
+export function listTransactionChanges(params?: {
+	since_id?: number;
+	since?: string;
+	limit?: number;
+}) {
+	const sp = new URLSearchParams();
+	if (params?.since_id != null) sp.set('since_id', String(params.since_id));
+	if (params?.since) sp.set('since', params.since);
+	if (params?.limit != null) sp.set('limit', String(params.limit));
+	const q = sp.toString();
+	return request<TransactionChanges>(`/api/v1/sync/transaction-changes${q ? `?${q}` : ''}`);
+}
+
 export type TransactionWritePayload = {
 	account_id: string;
 	type: 'income' | 'expense';

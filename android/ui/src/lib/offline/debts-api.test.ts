@@ -1,11 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Debt } from '$lib/api/client';
 import { createDebt, deleteDebt, settleDebt } from '$lib/offline/debts-api';
-import {
-	readRefCache,
-	resetRefCacheForTests,
-	writeRefCache
-} from '$lib/offline/ref-cache';
+import { readRefCache, resetRefCacheForTests, writeRefCache } from '$lib/offline/ref-cache';
 import { getOutboxEntries, resetOutboxForTests } from '$lib/offline/store';
 import { isLocalEntityKey } from '$lib/offline/types';
 import * as client from '$lib/api/client';

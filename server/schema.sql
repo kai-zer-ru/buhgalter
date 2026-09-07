@@ -210,6 +210,16 @@ CREATE INDEX idx_tx_transfer_group ON transactions(transfer_group_id);
 CREATE INDEX idx_tx_kind ON transactions(kind);
 CREATE INDEX idx_tx_subscription ON transactions(subscription_id);
 CREATE INDEX idx_tx_merchant ON transactions(merchant_id);
+
+CREATE TABLE user_change_events (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    entity_type  TEXT NOT NULL CHECK (entity_type IN ('transaction')),
+    entity_id    TEXT NOT NULL,
+    action       TEXT NOT NULL CHECK (action IN ('created', 'updated', 'deleted')),
+    occurred_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_user_change_events_user_id ON user_change_events(user_id, id);
 CREATE INDEX idx_tx_user_account_balance ON transactions(user_id, account_id, kind, type, transaction_date);
 
 CREATE TABLE transaction_tags (

@@ -99,6 +99,7 @@ import {
 	setWarmRefCacheActive
 } from '$lib/offline/ref-cache';
 import { debugLogError, debugLogInfo, debugLogWarn } from '$lib/platform/debug-log';
+import { pullTransactionChanges } from '$lib/offline/transaction-changes';
 
 export const syncState = writable<'idle' | 'syncing'>('idle');
 
@@ -431,8 +432,8 @@ async function warmupCreditDetails(): Promise<void> {
 	for (let i = 0; i < unique.length; i += 4) {
 		const slice = unique.slice(i, i + 4);
 		batches.push(
-			slice.map((c) => () =>
-				Promise.allSettled([getCredit(c.id), getStatsContext({ credit_id: c.id })])
+			slice.map(
+				(c) => () => Promise.allSettled([getCredit(c.id), getStatsContext({ credit_id: c.id })])
 			)
 		);
 	}
@@ -547,8 +548,8 @@ async function warmupDebtorDetails(): Promise<void> {
 	for (let i = 0; i < list.length; i += 4) {
 		const slice = list.slice(i, i + 4);
 		batches.push(
-			slice.map((id) => () =>
-				Promise.allSettled([getDebtor(id), getStatsContext({ debtor_id: id })])
+			slice.map(
+				(id) => () => Promise.allSettled([getDebtor(id), getStatsContext({ debtor_id: id })])
 			)
 		);
 	}
@@ -574,12 +575,13 @@ async function warmupAccountDetails(): Promise<void> {
 	for (let i = 0; i < unique.length; i += 3) {
 		const slice = unique.slice(i, i + 3);
 		batches.push(
-			slice.map((row) => () =>
-				Promise.allSettled([
-					getAccount(row.id),
-					getAccountBalance(row.id),
-					getStatsContext({ account_id: row.id })
-				])
+			slice.map(
+				(row) => () =>
+					Promise.allSettled([
+						getAccount(row.id),
+						getAccountBalance(row.id),
+						getStatsContext({ account_id: row.id })
+					])
 			)
 		);
 	}
@@ -618,6 +620,11 @@ async function warmRefCacheBody(opts: WarmRefCacheOptions): Promise<void> {
 		const { scheduleWidgetSnapshotPublish } = await import('$lib/widgets/publish');
 		scheduleWidgetSnapshotPublish();
 	}
+	try {
+		await pullTransactionChanges();
+	} catch (err) {
+		debugLogWarn('sync', 'transaction changes pull failed', { error: String(err) });
+	}
 }
 
 export async function warmRefCache(opts: WarmRefCacheOptions = {}): Promise<void> {
@@ -628,6 +635,7 @@ export async function warmRefCache(opts: WarmRefCacheOptions = {}): Promise<void
 		Date.now() - lastWarmFinishedAt < WARM_BACKGROUND_COOLDOWN_MS
 	) {
 		debugLogInfo('sync', 'warmRefCache skipped (background cooldown)');
+		await pullTransactionChanges();
 		return;
 	}
 	if (warmRefCacheInflight) return warmRefCacheInflight;

@@ -45,6 +45,35 @@ export function lookupServerTransaction(entityKey: string): Transaction | null {
 	return readRefCache<Transaction>(`/api/v1/transactions/${entityKey}`);
 }
 
+export function upsertIndexedTransaction(tx: Transaction): void {
+	const index = readRefCache<Record<string, Transaction>>(TX_INDEX_KEY) ?? {};
+	index[tx.id] = tx;
+	if (tx.transfer_group_id) {
+		index[`tg:${tx.transfer_group_id}`] = tx;
+	}
+	writeRefCache(TX_INDEX_KEY, index);
+}
+
+export function removeIndexedTransaction(id: string): void {
+	const index = readRefCache<Record<string, Transaction>>(TX_INDEX_KEY);
+	if (!index) return;
+	const existing = index[id];
+	delete index[id];
+	if (existing?.transfer_group_id) {
+		const tgKey = `tg:${existing.transfer_group_id}`;
+		if (index[tgKey]?.id === id) {
+			delete index[tgKey];
+			for (const tx of Object.values(index)) {
+				if (tx.transfer_group_id === existing.transfer_group_id) {
+					index[tgKey] = tx;
+					break;
+				}
+			}
+		}
+	}
+	writeRefCache(TX_INDEX_KEY, index);
+}
+
 export function listIndexedTransferLegs(groupId: string): Transaction[] {
 	const index = readRefCache<Record<string, Transaction>>(TX_INDEX_KEY);
 	if (!index) return [];

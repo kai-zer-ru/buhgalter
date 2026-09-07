@@ -23,17 +23,32 @@ vi.mock('$lib/api/client', async (importOriginal) => {
 		getUIMeta: ok,
 		getDebtsSummary: ok,
 		getBudgetSummary: ok,
-		listAccounts: ok,
-		listCredits: ok,
-		getCredit: ok,
-		listBanks: ok,
-		listRecurringOperations: ok,
-		listSubscriptions: ok,
-		getSubscriptionsSummary: ok,
-		listDebts: ok,
-		listMerchants: ok,
-		listTags: ok,
-		listTransactions: ok
+		listAccounts: vi.fn().mockResolvedValue([]),
+		listCredits: vi.fn().mockResolvedValue([]),
+		getCredit: vi.fn().mockResolvedValue({ id: 'c1' }),
+		listBanks: vi.fn().mockResolvedValue([]),
+		listRecurringOperations: vi.fn().mockResolvedValue([]),
+		listSubscriptions: vi.fn().mockResolvedValue([]),
+		getSubscriptionsSummary: vi.fn().mockResolvedValue({}),
+		listDebts: vi.fn().mockResolvedValue([]),
+		listDebtors: vi.fn().mockResolvedValue([]),
+		getDebtor: vi.fn().mockResolvedValue({ id: 'd1' }),
+		getAccount: vi.fn().mockResolvedValue({ id: 'a1' }),
+		getAccountBalance: vi.fn().mockResolvedValue({ id: 'a1', balance: 0 }),
+		getStatsSummary: vi.fn().mockResolvedValue({}),
+		getStatsByCategory: vi.fn().mockResolvedValue({ items: [] }),
+		getStatsByPeriod: vi.fn().mockResolvedValue({ items: [] }),
+		getStatsContext: vi.fn().mockResolvedValue({}),
+		listMerchants: vi.fn().mockResolvedValue([]),
+		listTags: vi.fn().mockResolvedValue([]),
+		listTransactions: vi.fn().mockResolvedValue({ data: [], meta: { total: 0 } }),
+		warmAllSubcategoriesCache: vi.fn().mockResolvedValue(undefined),
+		listTransactionChanges: vi.fn().mockResolvedValue({
+			server_time: '2026-01-01 00:00:00',
+			since_id: 0,
+			has_more: false,
+			changes: []
+		})
 	};
 });
 

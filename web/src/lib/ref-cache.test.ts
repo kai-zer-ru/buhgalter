@@ -24,6 +24,10 @@ describe('shouldPersistRefCache', () => {
 	it('skips setup status (registration flag for public pages)', () => {
 		expect(shouldPersistRefCache('/api/v1/setup/status')).toBe(false);
 	});
+
+	it('skips transaction change feed', () => {
+		expect(shouldPersistRefCache('/api/v1/sync/transaction-changes')).toBe(false);
+	});
 });
 
 describe('web fetchWithRefCache SWR', () => {

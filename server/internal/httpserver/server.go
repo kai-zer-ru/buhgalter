@@ -158,6 +158,7 @@ func (s *Server) Handler() http.Handler {
 			ar.Put("/transactions/{id}", transactionHandler.Update)
 			ar.Delete("/transactions/{id}", transactionHandler.Delete)
 			ar.Post("/transactions/{id}/activate", transactionHandler.Activate)
+			ar.Get("/sync/transaction-changes", transactionHandler.Changes)
 
 			ar.Group(func(mod chi.Router) {
 				mod.Use(features.RequireFeature(dbHandle, features.Recurring))

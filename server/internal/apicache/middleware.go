@@ -140,6 +140,7 @@ func cacheKey(r *http.Request) (string, time.Duration, bool) {
 	if strings.HasPrefix(path, "/api/v1/health") ||
 		path == "/api/v1/version/check" ||
 		path == "/api/v1/export" ||
+		path == "/api/v1/sync/transaction-changes" ||
 		strings.Contains(path, "/preview") ||
 		strings.HasPrefix(path, "/api/v1/import/jobs/") {
 		return "", 0, false

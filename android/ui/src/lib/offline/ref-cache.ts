@@ -24,7 +24,8 @@ const REF_CACHE_VERSION = 'buhgalter.ref_cache.v1';
 const REF_CACHE_SKIP = new Set([
 	'/api/v1/health',
 	// Bootstrap flag (registration_enabled) — must not serve a pre-mutation snapshot on /login.
-	'/api/v1/setup/status'
+	'/api/v1/setup/status',
+	'/api/v1/sync/transaction-changes'
 ]);
 
 /** Kept across mutation clears so offline cold start can unlock (PIN/biometrics). */
@@ -375,6 +376,26 @@ export function writeRefCache<T>(path: string, value: T): boolean {
 
 export function invalidateRefCache(path: string): void {
 	storageRemove(storageKey(path));
+}
+
+/** Paths currently stored for the active server URL (memory + localStorage). */
+export function listRefCachePaths(): string[] {
+	const prefix = `${REF_CACHE_VERSION}::${getServerUrl() || '_no_server'}::`;
+	const paths = new Set<string>();
+	for (const key of memoryStore.keys()) {
+		if (key.startsWith(prefix)) paths.add(key.slice(prefix.length));
+	}
+	if (typeof localStorage !== 'undefined') {
+		try {
+			for (let i = 0; i < localStorage.length; i++) {
+				const key = localStorage.key(i);
+				if (key?.startsWith(prefix)) paths.add(key.slice(prefix.length));
+			}
+		} catch {
+			// ignore
+		}
+	}
+	return [...paths];
 }
 
 export function invalidateRefCachePrefix(pathPrefix: string): void {

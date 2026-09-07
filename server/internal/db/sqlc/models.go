@@ -424,3 +424,12 @@ type User struct {
 	CreatedAt    string  `json:"created_at"`
 	UpdatedAt    string  `json:"updated_at"`
 }
+
+type UserChangeEvent struct {
+	ID         int64  `json:"id"`
+	UserID     string `json:"user_id"`
+	EntityType string `json:"entity_type"`
+	EntityID   string `json:"entity_id"`
+	Action     string `json:"action"`
+	OccurredAt string `json:"occurred_at"`
+}
