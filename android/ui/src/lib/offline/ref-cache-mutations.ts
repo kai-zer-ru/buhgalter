@@ -22,6 +22,11 @@ import {
 	subcategoriesRefPath
 } from '$lib/offline/ref-cache';
 import { makeLocalKey } from '$lib/offline/types';
+import {
+	debtorDetailPath,
+	recomputeDebtsSummaryFromCache,
+	resolveDebtorDetailOffline
+} from '$lib/offline/section-fallbacks';
 
 const UI_META_PATH = '/api/v1/ui/meta';
 const DEBTORS_PATH = '/api/v1/debtors';
@@ -214,8 +219,9 @@ export function onDebtCreated(debt: Debt): void {
 	} else {
 		prependRefCacheList('/api/v1/debts?settled=true', debt);
 	}
-	invalidateRefCache('/api/v1/debts/summary');
+	refreshDebtsSummaryCache();
 	ensureDebtorInCache(debt);
+	refreshDebtorDetailCache(debt.debtor_id);
 }
 
 function ensureDebtorInCache(debt: Debt): void {
@@ -228,6 +234,8 @@ function ensureDebtorInCache(debt: Debt): void {
 	const list = readRefCache<Debtor[]>(DEBTORS_PATH);
 	if (list !== null && !list.some((row) => row.id === debtor.id)) {
 		prependRefCacheList(DEBTORS_PATH, debtor);
+	} else if (list === null) {
+		publishRefCachePath(DEBTORS_PATH, [debtor]);
 	}
 	const meta = readRefCache<{ debtors: Debtor[] } & Record<string, unknown>>(UI_META_PATH);
 	if (meta && !meta.debtors.some((row) => row.id === debtor.id)) {
@@ -336,18 +344,38 @@ export function onDebtUpdated(debt: Debt): void {
 	} else {
 		prependRefCacheList(activePath, debt);
 	}
-	invalidateRefCache('/api/v1/debts/summary');
+	refreshDebtsSummaryCache();
+	refreshDebtorDetailCache(debt.debtor_id);
 }
 
 export function onDebtDeleted(id: string): void {
+	const previous =
+		readRefCache<Debt[]>('/api/v1/debts?settled=false')?.find((row) => row.id === id) ??
+		readRefCache<Debt[]>('/api/v1/debts?settled=true')?.find((row) => row.id === id);
 	removeRefCacheListItem<Debt>('/api/v1/debts?settled=false', id);
 	removeRefCacheListItem<Debt>('/api/v1/debts?settled=true', id);
+	refreshDebtsSummaryCache();
+	if (previous?.debtor_id) refreshDebtorDetailCache(previous.debtor_id);
+}
+
+function refreshDebtsSummaryCache(): void {
+	const summary = recomputeDebtsSummaryFromCache();
+	if (summary) {
+		publishRefCachePath('/api/v1/debts/summary', summary);
+		return;
+	}
 	invalidateRefCache('/api/v1/debts/summary');
+}
+
+function refreshDebtorDetailCache(debtorId: string): void {
+	if (!debtorId) return;
+	const next = resolveDebtorDetailOffline(debtorId);
+	if (next) publishRefCachePath(debtorDetailPath(debtorId), next);
 }
 
 /** Optimistic summary bump when exact totals are unknown offline. */
 export function touchDebtsSummary(): void {
-	invalidateRefCache('/api/v1/debts/summary');
+	refreshDebtsSummaryCache();
 }
 
 function toAccountRef(account: Account): UIMetaAccountRef {
@@ -456,9 +484,9 @@ export function onBudgetDeleted(id: string, month?: string): void {
 
 export function onCreditUpdated(credit: Credit): void {
 	publishRefCachePath(creditDetailPath(credit.id), credit);
-	// After an online write, clearRefCache wipes list GETs. Never seed [this credit]
-	// as a full list — SWR/warm would treat it as complete and skip the network
-	// (manual sync could not repair; only re-login helped).
+	// Never seed [this credit] as a full list when the list key is missing —
+	// SWR/warm would treat a singleton as complete (manual sync used to be unable
+	// to repair until force-network warm).
 	const target = credit.status === 'closed' ? CREDITS_CLOSED : CREDITS_ACTIVE;
 	const other = credit.status === 'closed' ? CREDITS_ACTIVE : CREDITS_CLOSED;
 	if (readRefCache<Credit[]>(other) !== null) {

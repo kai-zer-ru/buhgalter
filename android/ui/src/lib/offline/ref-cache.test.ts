@@ -223,17 +223,28 @@ describe('clearRefCache preserveAuthMe', () => {
 		resetRefCacheForTests();
 	});
 
-	it('keeps /auth/me and account lists when preserveAuthMe is set', async () => {
+	it('keeps /auth/me, account lists and section snapshots when preserveAuthMe is set', async () => {
 		const { clearRefCache, readRefCache, writeRefCache } = await import('./ref-cache');
 		writeRefCache('/api/v1/auth/me', { id: 'u1' });
 		writeRefCache('/api/v1/accounts', [{ id: 'a1' }]);
 		writeRefCache('/api/v1/accounts?status=active', [{ id: 'a1' }]);
 		writeRefCache('/api/v1/dashboard', { total: 1 });
+		writeRefCache('/api/v1/debtors/d1', { id: 'd1', name: 'Иван' });
 		clearRefCache({ preserveAuthMe: true });
 		expect(readRefCache('/api/v1/auth/me')).toEqual({ id: 'u1' });
 		expect(readRefCache('/api/v1/accounts')).toEqual([{ id: 'a1' }]);
 		expect(readRefCache('/api/v1/accounts?status=active')).toEqual([{ id: 'a1' }]);
-		expect(readRefCache('/api/v1/dashboard')).toBeNull();
+		expect(readRefCache('/api/v1/dashboard')).toEqual({ total: 1 });
+		expect(readRefCache('/api/v1/debtors/d1')).toEqual({ id: 'd1', name: 'Иван' });
+	});
+
+	it('forces the next online GET after a mutation clear instead of serving SWR', async () => {
+		const { clearRefCache, fetchWithRefCache, writeRefCache } = await import('./ref-cache');
+		writeRefCache('/api/v1/dashboard', { total: 1 });
+		clearRefCache({ preserveAuthMe: true });
+		const fetcher = vi.fn().mockResolvedValue({ total: 2 });
+		await expect(fetchWithRefCache('/api/v1/dashboard', fetcher)).resolves.toEqual({ total: 2 });
+		expect(fetcher).toHaveBeenCalledOnce();
 	});
 
 	it('keeps category dictionaries so offline forms survive a write', async () => {
@@ -250,7 +261,7 @@ describe('clearRefCache preserveAuthMe', () => {
 		expect(readRefCache('/api/v1/categories/c1/subcategories')).toEqual(subs);
 		expect(readRefCache('/api/v1/ui/meta')).toEqual({ expense_categories: cats });
 		expect(readRefCache('/api/v1/merchants')).toEqual([{ id: 'm1' }]);
-		expect(readRefCache('/api/v1/dashboard')).toBeNull();
+		expect(readRefCache('/api/v1/dashboard')).toEqual({ total: 1 });
 	});
 
 	it('seedDictionariesFromUIMeta overwrites dictionaries without clearing other keys', async () => {
@@ -290,7 +301,7 @@ describe('clearRefCache preserveAuthMe', () => {
 		});
 		writeRefCache('/api/v1/dashboard', { total: 1, accounts: [] });
 		clearRefCache({ preserveAuthMe: true });
-		expect(readRefCache('/api/v1/dashboard')).toBeNull();
+		expect(readRefCache('/api/v1/dashboard')).toEqual({ total: 1, accounts: [] });
 		expect(readRefCache('/api/v1/accounts?status=active')).toMatchObject([
 			{ id: 'a1', name: 'Наличные', type: 'cash', status: 'active' }
 		]);
@@ -523,9 +534,11 @@ describe('isPreservedOfflineRefPath', () => {
 		expect(isPreservedOfflineRefPath('/api/v1/categories?type=income')).toBe(true);
 		expect(isPreservedOfflineRefPath('/api/v1/categories/abc/subcategories')).toBe(true);
 		expect(isPreservedOfflineRefPath('/api/v1/transaction-templates')).toBe(true);
-		expect(isPreservedOfflineRefPath('/api/v1/dashboard')).toBe(false);
+		expect(isPreservedOfflineRefPath('/api/v1/dashboard')).toBe(true);
 		expect(isPreservedOfflineRefPath('/api/v1/accounts?status=active')).toBe(true);
 		expect(isPreservedOfflineRefPath('/api/v1/accounts')).toBe(true);
-		expect(isPreservedOfflineRefPath('/api/v1/transactions')).toBe(false);
+		expect(isPreservedOfflineRefPath('/api/v1/transactions')).toBe(true);
+		expect(isPreservedOfflineRefPath('/api/v1/debtors/abc')).toBe(true);
+		expect(isPreservedOfflineRefPath('/api/v1/setup/status')).toBe(false);
 	});
 });

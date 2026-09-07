@@ -17,7 +17,6 @@ import {
 	categoriesRefPath,
 	publishRefCachePath,
 	readRefCache,
-	refCacheReady,
 	refCacheTick,
 	resetRefCacheForTests,
 	subcategoriesRefPath,
@@ -104,7 +103,7 @@ describe('ref-cache-mutations debts', () => {
 		resetRefCacheForTests();
 	});
 
-	it('prepends active debt and invalidates summary', () => {
+	it('prepends active debt and recomputes summary', () => {
 		writeRefCache('/api/v1/debts?settled=false', [activeDebt('d-old')]);
 		writeRefCache('/api/v1/debts/summary', { total_lent: 1 });
 
@@ -112,7 +111,11 @@ describe('ref-cache-mutations debts', () => {
 
 		const list = readRefCache<Debt[]>('/api/v1/debts?settled=false');
 		expect(list?.map((d) => d.id)).toEqual(['d-new', 'd-old']);
-		expect(refCacheReady('/api/v1/debts/summary')).toBe(false);
+		expect(readRefCache('/api/v1/debts/summary')).toMatchObject({
+			owed_to_me: 200_000,
+			active_count: 2
+		});
+		expect(readRefCache('/api/v1/debtors/d1')).toMatchObject({ id: 'd1', name: 'Иван' });
 	});
 
 	it('adds new debtor to debtors list and ui/meta when debt is created', () => {

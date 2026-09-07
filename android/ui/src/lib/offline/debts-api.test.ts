@@ -3,7 +3,6 @@ import type { Debt } from '$lib/api/client';
 import { createDebt, deleteDebt, settleDebt } from '$lib/offline/debts-api';
 import {
 	readRefCache,
-	refCacheReady,
 	resetRefCacheForTests,
 	writeRefCache
 } from '$lib/offline/ref-cache';
@@ -100,7 +99,10 @@ describe('debts-api offline', () => {
 		expect(getOutboxEntries()).toHaveLength(1);
 		expect(getOutboxEntries()[0].kind).toBe('debt');
 		expect(readRefCache<Debt[]>('/api/v1/debts?settled=false')?.[0]?.id).toBe(debt.id);
-		expect(refCacheReady('/api/v1/debts/summary')).toBe(false);
+		expect(readRefCache('/api/v1/debts/summary')).toMatchObject({
+			owed_to_me: debt.amount,
+			active_count: 1
+		});
 	});
 
 	it('createDebt with new debtor name patches debtors list', async () => {

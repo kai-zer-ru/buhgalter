@@ -40,7 +40,7 @@ TTL — страховка; при любой мутации кеш пользо
 | `POST .../preview`, `GET .../preview` | Разовые расчёты (в т.ч. `GET /budgets/spent-preview`) |
 | `GET /import/jobs/{id}` | Статус меняется |
 
-На **клиенте** (ref-cache) дополнительно не кладутся в SWR: `GET /setup/status` (флаг регистрации на /login — иначе pre-mutation snapshot). `GET /credits/{id}` (тело с графиком) **кешируется** — нужен офлайн-просмотр карточки кредита в Android. Серверный кеш `GET /setup/status` остаётся; сброс при `PUT /admin/settings` и `PUT /admin/features`.
+На **клиенте** (ref-cache) дополнительно не кладутся в SWR: `GET /setup/status` (флаг регистрации на /login — иначе pre-mutation snapshot). `GET /credits/{id}` и `GET /debtors/{id}` **кешируются** — офлайн-карточки в Android. Серверный кеш `GET /setup/status` остаётся; сброс при `PUT /admin/settings` и `PUT /admin/features`.
 
 ## Инвалидация
 
@@ -55,13 +55,13 @@ TTL — страховка; при любой мутации кеш пользо
 | Слой | Что | TTL / поведение |
 |------|-----|-----------------|
 | In-memory | `GET /api/v1/banks` | 24 ч (`web/src/lib/api/cache.ts`) |
-| **ref-cache (localStorage)** | `GET /api/v1/*` (кроме health, **setup/status**, export, preview, version) | **Stale-while-revalidate:** экран сразу из кеша, сеть в фоне. Включая `GET /credits/{id}` с графиком (офлайн-карточка в Android). |
+| **ref-cache (localStorage)** | `GET /api/v1/*` (кроме health, **setup/status**, export, preview, version) | **Stale-while-revalidate:** экран сразу из кеша, сеть в фоне. Включая `GET /credits/{id}` и `GET /debtors/{id}` (офлайн-карточки в Android). |
 
 Ключ ref-cache: `buhgalter.ref_cache.web.v1::{user_id}::{path}` — при смене пользователя старый кеш не читается. Очистка при logout и session expired.
 
 Фоновое обновление: `refCacheUpdate` (path-aware) → страницы перезагружают только затронутый блок; `assignIfChanged` не триггерит лишний re-render при идентичном JSON. `writeRefCache` **не пишет** и не уведомляет UI, если `JSON.stringify(next) ===` уже лежащая в памяти строка; для `/api/v1/dashboard` дополнительно сравнение по стабильному отпечатку **без** полей `*_display` (шум форматирования).
 
-**Инвалидация на клиенте:** любой успешный `POST` / `PUT` / `PATCH` / `DELETE` через `client.ts` сбрасывает ref-cache и in-memory TTL (`clearRefCache` + `invalidateApiCache`), чтобы последующий `load()` на странице шёл в сеть, а не рисовал pre-mutation snapshot. In-flight SWR revalidate после сброса не записывает устаревший ответ (epoch). То же правило в **Android** (`android/ui/src/lib/api/client.ts`) — с `clearRefCache({ preserveAuthMe: true })`: сбрасываются дашборд и операции; **словари** (categories/subcategories, merchants, tags, banks, debtors, templates, `ui/meta`), **списки счетов** и `/auth/me` остаются. Списки кредитов после write **не** засеваются одним обновлённым кредитом (`onCreditUpdated` патчит только уже лежащий список); ручной sync обходит SWR и перечитывает GET с сервера. Если `/accounts` пуст — заполнение из `ui/meta` (`seedAccountsFromUIMetaIfEmpty`), иначе офлайн нельзя выбрать счёт в форме операции. Словари только перезаписываются свежим GET / `seedDictionariesFromUIMeta`. Дополнительно Android хранит профиль в `buhgalter.last_user.v1` (не привязан к URL сервера).
+**Инвалидация на клиенте:** любой успешный `POST` / `PUT` / `PATCH` / `DELETE` через `client.ts` сбрасывает in-memory TTL (`invalidateApiCache`). **Web** — `clearRefCache` (последующий `load()` идёт в сеть, не pre-mutation snapshot). **Android** — `clearRefCache({ preserveAuthMe: true })` **оставляет** все persistable GET (дашборд, операции, долги, карточки должников/кредитов/счетов, статистика, словари, `/auth/me`); следующий онлайн-GET по этим путям форсирует сеть (`pendingNetworkRefresh`), офлайн продолжает читать снимок. Списки кредитов после write **не** засеваются одним обновлённым кредитом (`onCreditUpdated` патчит только уже лежащий список); ручной sync обходит SWR и перечитывает GET с сервера. Если `/accounts` пуст — заполнение из `ui/meta` (`seedAccountsFromUIMetaIfEmpty`), иначе офлайн нельзя выбрать счёт в форме операции. Словари только перезаписываются свежим GET / `seedDictionariesFromUIMeta`. Дополнительно Android хранит профиль в `buhgalter.last_user.v1` (не привязан к URL сервера). `GET /debtors/{id}` кешируется и при miss собирается из списков долгов.
 
 Прогрев при входе: `warmRefCache()` в фоне после `loadUser()`.
 

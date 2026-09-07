@@ -58,6 +58,8 @@ const inflightRevalidate = new Map<string, Promise<void>>();
 const pendingDiskWrites = new Map<string, string>();
 const lastRevalidatedAt = new Map<string, number>();
 const revalidateTimers = new Map<string, ReturnType<typeof setTimeout>>();
+/** Paths that must hit the network on the next online GET (after a write). */
+const pendingNetworkRefresh = new Set<string>();
 let diskFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
 /** Wait before background GET so taps/scroll are not competing with revalidate. */
@@ -111,23 +113,12 @@ function pathFromStorageKey(key: string): string {
 }
 
 /**
- * Dictionary paths never wiped on mutation clears (`preserveAuthMe`).
- * They stay on device and are only overwritten by fresh GET / seed helpers.
+ * Persistable GET snapshots never wiped on mutation clears (`preserveAuthMe`).
+ * Online follow-up GETs still hit the network (`pendingNetworkRefresh`).
  * Full clear (logout / disconnect server) still removes everything.
  */
 export function isPreservedOfflineRefPath(path: string): boolean {
-	const pathOnly = path.split('?')[0] ?? path;
-	if (pathOnly === AUTH_ME_PATH) return true;
-	if (pathOnly === UI_META_PATH) return true;
-	if (pathOnly === '/api/v1/categories') return true;
-	if (pathOnly === '/api/v1/merchants') return true;
-	if (pathOnly === '/api/v1/tags') return true;
-	if (pathOnly === '/api/v1/banks') return true;
-	if (pathOnly === '/api/v1/debtors') return true;
-	if (pathOnly === '/api/v1/transaction-templates') return true;
-	// Form catalogs: wiping this on write left empty account/category selects offline.
-	if (pathOnly === '/api/v1/accounts') return true;
-	return /^\/api\/v1\/categories\/[^/]+\/subcategories$/.test(pathOnly);
+	return shouldPersistRefCache(path);
 }
 
 function isPreservedOfflineRefKey(key: string): boolean {
@@ -518,11 +509,13 @@ export async function fetchWithRefCache<T>(path: string, fetcher: () => Promise<
 		throw new OfflineCacheMissError(path);
 	}
 
-	if (forceNetworkRefCacheDepth > 0) {
+	const forceNetwork = forceNetworkRefCacheDepth > 0 || pendingNetworkRefresh.has(path);
+	if (forceNetwork) {
 		try {
 			const value = await fetcher();
 			markServerOnline();
 			writeRefCache(path, value);
+			pendingNetworkRefresh.delete(path);
 			return value;
 		} catch (err) {
 			if (isOfflineFetchError(err)) {
@@ -559,6 +552,9 @@ export async function fetchWithRefCache<T>(path: string, fetcher: () => Promise<
 export function clearRefCache(opts?: { preserveAuthMe?: boolean }): void {
 	const preserveAuthMe = opts?.preserveAuthMe === true;
 	const prefix = `${REF_CACHE_VERSION}::`;
+	if (!preserveAuthMe) {
+		pendingNetworkRefresh.clear();
+	}
 	if (typeof localStorage !== 'undefined') {
 		try {
 			const keys: string[] = [];
@@ -567,7 +563,10 @@ export function clearRefCache(opts?: { preserveAuthMe?: boolean }): void {
 				if (key?.startsWith(prefix)) keys.push(key);
 			}
 			for (const key of keys) {
-				if (preserveAuthMe && isPreservedOfflineRefKey(key)) continue;
+				if (preserveAuthMe && isPreservedOfflineRefKey(key)) {
+					pendingNetworkRefresh.add(pathFromStorageKey(key));
+					continue;
+				}
 				localStorage.removeItem(key);
 			}
 		} catch {
@@ -576,7 +575,10 @@ export function clearRefCache(opts?: { preserveAuthMe?: boolean }): void {
 	}
 	for (const key of [...memoryStore.keys()]) {
 		if (!key.startsWith(prefix)) continue;
-		if (preserveAuthMe && isPreservedOfflineRefKey(key)) continue;
+		if (preserveAuthMe && isPreservedOfflineRefKey(key)) {
+			pendingNetworkRefresh.add(pathFromStorageKey(key));
+			continue;
+		}
 		memoryStore.delete(key);
 	}
 	inflightRevalidate.clear();
@@ -601,6 +603,7 @@ export function resetRefCacheForTests(): void {
 	inflightRevalidate.clear();
 	pendingDiskWrites.clear();
 	lastRevalidatedAt.clear();
+	pendingNetworkRefresh.clear();
 	for (const t of revalidateTimers.values()) clearTimeout(t);
 	revalidateTimers.clear();
 	if (diskFlushTimer !== null) {

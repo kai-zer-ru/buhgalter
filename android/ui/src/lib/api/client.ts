@@ -16,6 +16,13 @@ import {
 	seedDictionariesFromUIMeta,
 	shouldPersistRefCache
 } from '$lib/offline/ref-cache';
+import {
+	findCachedAccount,
+	findCachedAccountBalance,
+	findCachedCredit,
+	findCachedDebt,
+	resolveDebtorDetailOffline
+} from '$lib/offline/section-fallbacks';
 import { indexTransactions } from '$lib/offline/transaction-index';
 import { transactionsListPath } from '$lib/api/transactions-path';
 import { shouldUseOfflineQueue } from '$lib/offline/network';
@@ -225,8 +232,8 @@ async function request<T>(path: string, init?: RequestInit, opts?: { auth?: bool
 	}
 	const result = await fetcher();
 	if (method !== 'GET') {
-		// Wipe dashboard/txs. Dictionaries + account lists stay so offline forms
-		// still have счёт/категория after a write (seeded from ui/meta if empty).
+		// Keep persistable GET snapshots (offline sections stay open). Next online
+		// GET hits the network. Dictionaries + accounts still seed from ui/meta if empty.
 		invalidateApiCache();
 		clearRefCache({ preserveAuthMe: true });
 	}
@@ -810,7 +817,14 @@ export function listAccounts(status?: 'active' | 'archived' | 'deleted') {
 }
 
 export function getAccount(id: string) {
-	return request<Account>(`/api/v1/accounts/${id}`).then(enrichAccountWithCachedBalances);
+	return request<Account>(`/api/v1/accounts/${id}`)
+		.then(enrichAccountWithCachedBalances)
+		.catch((err) => {
+			if (!isOfflineFetchError(err)) throw err;
+			const found = findCachedAccount(id);
+			if (found) return enrichAccountWithCachedBalances(found);
+			throw err;
+		});
 }
 
 export function createAccount(payload: {
@@ -1696,7 +1710,12 @@ export function getAccountsSummary() {
 }
 
 export function getAccountBalance(id: string) {
-	return request<AccountBalanceSummary>(`/api/v1/accounts/${id}/balance`);
+	return request<AccountBalanceSummary>(`/api/v1/accounts/${id}/balance`).catch((err) => {
+		if (!isOfflineFetchError(err)) throw err;
+		const found = findCachedAccountBalance(id);
+		if (found) return found;
+		throw err;
+	});
 }
 
 export function listMerchants() {
@@ -1817,7 +1836,17 @@ export function listDebtors() {
 }
 
 export function getDebtor(id: string) {
-	return request<DebtorDetail>(`/api/v1/debtors/${id}`);
+	return request<DebtorDetail>(`/api/v1/debtors/${id}`)
+		.then((detail) => {
+			if (!isServerOfflineMode()) return detail;
+			return resolveDebtorDetailOffline(id) ?? detail;
+		})
+		.catch((err) => {
+			if (!isOfflineFetchError(err)) throw err;
+			const built = resolveDebtorDetailOffline(id);
+			if (built) return built;
+			throw err;
+		});
 }
 
 export function createDebtor(name: string) {
@@ -1833,7 +1862,12 @@ export function listDebts(params?: { settled?: string }) {
 }
 
 export function getDebt(id: string) {
-	return request<Debt>(`/api/v1/debts/${id}`);
+	return request<Debt>(`/api/v1/debts/${id}`).catch((err) => {
+		if (!isOfflineFetchError(err)) throw err;
+		const found = findCachedDebt(id);
+		if (found) return found;
+		throw err;
+	});
 }
 
 export function createDebt(payload: {
@@ -1944,7 +1978,12 @@ export function listCredits(params?: { status?: string }) {
 }
 
 export function getCredit(id: string) {
-	return request<Credit>(`/api/v1/credits/${id}`);
+	return request<Credit>(`/api/v1/credits/${id}`).catch((err) => {
+		if (!isOfflineFetchError(err)) throw err;
+		const found = findCachedCredit(id);
+		if (found) return found;
+		throw err;
+	});
 }
 
 export function createCredit(payload: Record<string, unknown>) {

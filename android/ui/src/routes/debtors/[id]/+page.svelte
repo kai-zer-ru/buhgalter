@@ -12,6 +12,11 @@
 		type Transaction
 	} from '$lib/api/client';
 	import { deleteDebt } from '$lib/offline/debts-api';
+	import { resolveDebtorDetailOffline } from '$lib/offline/section-fallbacks';
+	import { refCacheReady, refCacheUpdate } from '$lib/offline/ref-cache';
+	import { refCachePathMatches } from '$lib/offline/ref-cache-watch';
+	import { dataRefreshTick } from '$lib/offline/sync';
+	import { assignIfChanged } from '$lib/state-utils';
 	import { debtNewPath, debtSettlePath } from '$lib/android/form-routes';
 	import BackLink from '$lib/components/BackLink.svelte';
 	import DebtList from '$lib/components/DebtList.svelte';
@@ -31,8 +36,10 @@
 	let loading = $state(true);
 	let loadError = $state<string | null>(null);
 	let tab = $state<'active' | 'settled'>('active');
+	let ready = $state(false);
 
 	const debtorId = $derived($page.params.id ?? '');
+	const debtorApiPath = $derived(`/api/v1/debtors/${debtorId}`);
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
 	const currency = $derived($user?.currency ?? 'RUB');
 
@@ -49,14 +56,44 @@
 
 	onMount(() => void load());
 
-	async function load() {
+	$effect(() => {
+		const refresh = $dataRefreshTick;
+		if (refresh === 0 || !ready) return;
+		void load({ background: true });
+	});
+
+	$effect(() => {
+		const update = $refCacheUpdate;
+		if (!update || !ready || !debtorId) return;
+		if (
+			refCachePathMatches(update.path, [
+				debtorApiPath,
+				'/api/v1/debts?settled=false',
+				'/api/v1/debts?settled=true',
+				'/api/v1/debtors'
+			])
+		) {
+			void load({ background: true });
+		}
+	});
+
+	async function load(opts: { background?: boolean } = {}) {
 		if (!debtorId) return;
-		loading = true;
+		if (!opts.background && !detail && !refCacheReady(debtorApiPath)) {
+			const cached = resolveDebtorDetailOffline(debtorId);
+			if (cached) detail = cached;
+		}
+		if (!opts.background && !detail) loading = true;
 		try {
-			detail = await getDebtor(debtorId);
+			const next = await getDebtor(debtorId);
+			detail = opts.background ? assignIfChanged(detail, next) : next;
 			loadError = null;
+			ready = true;
 		} catch (err) {
-			const msg = reportPageLoadFailure(err, { hasData: !!detail });
+			const msg = reportPageLoadFailure(err, {
+				background: opts.background,
+				hasData: !!detail
+			});
 			if (msg) loadError = msg;
 		} finally {
 			loading = false;
@@ -110,7 +147,7 @@
 		items={[
 			{ href: '/', label: $_('nav.home') },
 			{ href: '/debts', label: $_('debts.title') },
-			{ href: '/debts', label: detail?.name ?? $_('debtors.title') }
+			{ href: '/debts', label: detail?.name ?? $_('debts.title') }
 		]}
 	/>
 

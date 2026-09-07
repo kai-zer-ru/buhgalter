@@ -29,6 +29,14 @@ vi.mock('$lib/api/client', async (importOriginal) => {
 		listAccounts: vi.fn().mockResolvedValue([]),
 		listCredits: vi.fn(),
 		getCredit: vi.fn(),
+		getDebtor: vi.fn().mockResolvedValue({ id: 'd1' }),
+		listDebtors: vi.fn().mockResolvedValue([]),
+		getAccount: vi.fn().mockResolvedValue({ id: 'a1' }),
+		getAccountBalance: vi.fn().mockResolvedValue({ id: 'a1', balance: 0 }),
+		getStatsSummary: vi.fn().mockResolvedValue({}),
+		getStatsByCategory: vi.fn().mockResolvedValue({ items: [] }),
+		getStatsByPeriod: vi.fn().mockResolvedValue({ items: [] }),
+		getStatsContext: vi.fn().mockResolvedValue({}),
 		listBanks: vi.fn().mockResolvedValue([]),
 		listRecurringOperations: vi.fn().mockResolvedValue([]),
 		listSubscriptions: vi.fn().mockResolvedValue([]),
@@ -45,6 +53,10 @@ beforeEach(() => {
 	resetOutboxForTests();
 	vi.mocked(client.listCredits).mockReset();
 	vi.mocked(client.getCredit).mockReset();
+	vi.mocked(client.listDebtors).mockReset().mockResolvedValue([]);
+	vi.mocked(client.getDebtor).mockReset().mockResolvedValue({ id: 'd1' } as client.DebtorDetail);
+	vi.mocked(client.listDebts).mockReset().mockResolvedValue([]);
+	vi.mocked(client.getStatsContext).mockReset().mockResolvedValue({} as client.StatsContext);
 	vi.mocked(client.listBanks).mockReset().mockResolvedValue([]);
 	vi.mocked(client.listCredits).mockImplementation(async (params?: { status?: string }) => {
 		if (params?.status === 'closed') {
@@ -71,6 +83,25 @@ describe('warmRefCache credit details', () => {
 		expect(client.getCredit).toHaveBeenCalledWith('c-closed');
 		expect(client.getCredit).toHaveBeenCalledWith('c-dup');
 		expect(client.getCredit).toHaveBeenCalledTimes(3);
+	});
+
+	it('warms debtor cards on automatic warm, not only manual sync', async () => {
+		vi.mocked(client.listDebtors).mockResolvedValue([
+			{ id: 'd1', name: 'Иван', created_at: '2026-01-01T00:00:00Z' }
+		]);
+		vi.mocked(client.listDebts).mockImplementation(async (params?: { settled?: string }) => {
+			if (params?.settled === 'false') {
+				return [{ id: 'debt-1', debtor_id: 'd2' } as client.Debt];
+			}
+			return [{ id: 'debt-2', debtor_id: 'd1' } as client.Debt];
+		});
+
+		await warmRefCache();
+
+		expect(client.getDebtor).toHaveBeenCalledWith('d1');
+		expect(client.getDebtor).toHaveBeenCalledWith('d2');
+		expect(client.getStatsContext).toHaveBeenCalledWith({ debtor_id: 'd1' });
+		expect(client.getStatsContext).toHaveBeenCalledWith({ debtor_id: 'd2' });
 	});
 
 	it('deduplicates concurrent warmRefCache calls', async () => {

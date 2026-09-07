@@ -2,6 +2,7 @@
 	import { _ } from 'svelte-i18n';
 	import { getStatsContext, type StatsContext } from '$lib/api/client';
 	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
+	import { isOfflineFetchError } from '$lib/offline/ref-cache';
 	import { reportPageLoadFailure } from '$lib/page-load';
 	import { user } from '$lib/stores/auth';
 
@@ -31,14 +32,19 @@
 			loadError = null;
 		} catch (err) {
 			summary = null;
-			const msg = reportPageLoadFailure(err, { hasData: false });
-			if (msg) loadError = msg;
+			if (isOfflineFetchError(err)) {
+				loadError = null;
+			} else {
+				const msg = reportPageLoadFailure(err, { hasData: false });
+				if (msg) loadError = msg;
+			}
 		} finally {
 			loading = false;
 		}
 	}
 </script>
 
+{#if loading || loadError || summary}
 <div class="card">
 	{#if loading}
 		<p class="text-sm" style:color="var(--text-muted)">{$_('common.loading')}</p>
@@ -102,3 +108,4 @@
 		</div>
 	{/if}
 </div>
+{/if}

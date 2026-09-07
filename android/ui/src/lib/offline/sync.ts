@@ -1,20 +1,31 @@
 import { get, writable } from 'svelte/store';
 import { invalidateApiCache } from '$lib/api/cache';
 import {
+	getAccount,
+	getAccountBalance,
 	getCredit,
 	getDashboard,
+	getDebtor,
 	getDebtsSummary,
+	getStatsByCategory,
+	getStatsByPeriod,
+	getStatsContext,
+	getStatsSummary,
 	getUIMeta,
 	getBudgetSummary,
 	listAccounts,
 	listBanks,
 	listCredits,
+	listDebtors,
 	listDebts,
 	listRecurringOperations,
 	listSubscriptions,
 	getSubscriptionsSummary,
 	listTransactions,
+	type Account,
 	type Credit,
+	type Debt,
+	type Debtor,
 	createTransaction as apiCreateTransaction,
 	createTransfer as apiCreateTransfer,
 	createCategory as apiCreateCategory,
@@ -411,13 +422,21 @@ async function warmupCreditDetails(): Promise<void> {
 		}
 	}
 	const seen = new Set<string>();
-	await Promise.allSettled(
-		credits.map((c) => {
-			if (seen.has(c.id)) return Promise.resolve();
-			seen.add(c.id);
-			return getCredit(c.id);
-		})
-	);
+	const unique = credits.filter((c) => {
+		if (seen.has(c.id)) return false;
+		seen.add(c.id);
+		return true;
+	});
+	const batches: Array<Array<() => Promise<unknown>>> = [];
+	for (let i = 0; i < unique.length; i += 4) {
+		const slice = unique.slice(i, i + 4);
+		batches.push(
+			slice.map((c) => () =>
+				Promise.allSettled([getCredit(c.id), getStatsContext({ credit_id: c.id })])
+			)
+		);
+	}
+	await runWarmBatches(batches);
 }
 
 /** Prefetch main GET endpoints into ref-cache (startup / manual sync). */
@@ -462,7 +481,7 @@ async function runWarmBatches(batches: Array<Array<() => Promise<unknown>>>): Pr
 }
 
 /**
- * Core warm: home + dictionaries only.
+ * Core warm: home, dictionaries, and every section list.
  * Merchants/tags come from getUIMeta (seedDictionariesFromUIMeta) — no separate GETs.
  * Accounts list without status is redundant with active+archived.
  */
@@ -493,18 +512,86 @@ async function warmRefCacheCore(): Promise<void> {
 			() => getSubscriptionsSummary({ upcoming_days: 14 }),
 			() => getDebtsSummary(),
 			() => listDebts({ settled: 'false' }),
-			() => listDebts({ settled: 'true' })
+			() => listDebts({ settled: 'true' }),
+			() => listDebtors(),
+			() => listCredits({ status: 'active' }),
+			() => listCredits({ status: 'closed' })
+		],
+		[
+			() => getStatsSummary(),
+			() => getStatsByCategory(),
+			() => getStatsByPeriod(),
+			() => getStatsContext()
 		]
 	]);
 }
 
+async function warmupDebtorDetails(): Promise<void> {
+	const [debtorsRes, activeRes, settledRes] = await Promise.allSettled([
+		listDebtors(),
+		listDebts({ settled: 'false' }),
+		listDebts({ settled: 'true' })
+	]);
+	const ids = new Set<string>();
+	if (debtorsRes.status === 'fulfilled') {
+		for (const row of debtorsRes.value as Debtor[]) ids.add(row.id);
+	}
+	for (const result of [activeRes, settledRes]) {
+		if (result.status !== 'fulfilled') continue;
+		for (const debt of result.value as Debt[]) {
+			if (debt.debtor_id) ids.add(debt.debtor_id);
+		}
+	}
+	const batches: Array<Array<() => Promise<unknown>>> = [];
+	const list = [...ids];
+	for (let i = 0; i < list.length; i += 4) {
+		const slice = list.slice(i, i + 4);
+		batches.push(
+			slice.map((id) => () =>
+				Promise.allSettled([getDebtor(id), getStatsContext({ debtor_id: id })])
+			)
+		);
+	}
+	await runWarmBatches(batches);
+}
+
+async function warmupAccountDetails(): Promise<void> {
+	const [activeRes, archivedRes] = await Promise.allSettled([
+		listAccounts('active'),
+		listAccounts('archived')
+	]);
+	const accounts: Account[] = [];
+	for (const result of [activeRes, archivedRes]) {
+		if (result.status === 'fulfilled') accounts.push(...result.value);
+	}
+	const seen = new Set<string>();
+	const batches: Array<Array<() => Promise<unknown>>> = [];
+	const unique = accounts.filter((row) => {
+		if (seen.has(row.id)) return false;
+		seen.add(row.id);
+		return true;
+	});
+	for (let i = 0; i < unique.length; i += 3) {
+		const slice = unique.slice(i, i + 3);
+		batches.push(
+			slice.map((row) => () =>
+				Promise.allSettled([
+					getAccount(row.id),
+					getAccountBalance(row.id),
+					getStatsContext({ account_id: row.id })
+				])
+			)
+		);
+	}
+	await runWarmBatches(batches);
+}
+
 async function warmRefCacheHeavy(): Promise<void> {
 	const { warmAllSubcategoriesCache } = await import('$lib/api/client');
-	await Promise.allSettled([
-		warmupCreditDetails(),
-		warmupTransactionIndex(),
-		warmAllSubcategoriesCache()
-	]);
+	await warmupCreditDetails();
+	await warmupDebtorDetails();
+	await warmupAccountDetails();
+	await Promise.allSettled([warmupTransactionIndex(), warmAllSubcategoriesCache()]);
 }
 
 async function warmRefCacheBody(opts: WarmRefCacheOptions): Promise<void> {
@@ -513,18 +600,16 @@ async function warmRefCacheBody(opts: WarmRefCacheOptions): Promise<void> {
 	try {
 		const run = async () => {
 			await runWithSuppressedRefCacheNotifications(warmRefCacheCore);
-			if (opts.force) {
-				notifyServerDataChanged();
-				await runWithSuppressedRefCacheNotifications(warmRefCacheHeavy);
-			}
+			if (opts.force) notifyServerDataChanged();
+			await runWithSuppressedRefCacheNotifications(warmRefCacheHeavy);
 		};
 		if (opts.force) {
 			await runWithForcedRefCacheNetwork(run);
 		} else {
 			await run();
 		}
-		// Credit details / tx-index / subcategories: only on manual sync (force).
-		// Automatic deferred warm was causing scroll freezes ~60s after unlock.
+		// Section lists + every entity card (credits, debtors, accounts) so offline
+		// navigation never depends on the user having opened that screen online.
 	} finally {
 		setWarmRefCacheActive(false);
 		flushRefCacheDisk();
