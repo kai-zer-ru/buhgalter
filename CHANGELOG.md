@@ -7,9 +7,47 @@
 внутри — **Добавлено** / **Изменено** / **Исправлено** / **Удалено** (и при необходимости **Техническое**).
 Исторические секции до этого соглашения не переписываются.
 
-Подробные release notes для пользователей: [docs/release-notes-v1.5.1.md](docs/release-notes-v1.5.1.md).
+Подробные release notes для пользователей: [docs/release-notes-v1.5.2.md](docs/release-notes-v1.5.2.md).
 
 ## [Unreleased]
+
+## [v1.5.2] — 2026-09-08
+
+> **ОБЯЗАТЕЛЬНО СДЕЛАЙТЕ БЕКАП!** Перед обновлением сохраните копию базы (`data/buhgalter.db`) и каталога `backups/`. Новые миграции: `052`.
+
+### Android
+
+#### Добавлено
+
+**Лента изменений операций**
+
+- При sync Android запрашивает `GET /sync/transaction-changes` и патчит кеш списков по id: добавление, правка и удаление доходов и расходов (в т.ч. долги и кредиты), включая старые операции, которые полный прогрев страницы 1 не перечитывает
+- Документация: [android-client-platform.md](docs/android-client-platform.md), [ui-api-cache.md](docs/ui-api-cache.md)
+
+#### Исправлено
+
+- После правки операции на web (разбиение) на главной оставалась одна операция, пока несколько sync/перезапусков — список всех операций и счёта уже показывали две
+- После оплаты кредита в списке оставался только один (синхронизация не чинила, помогал перелогин) — `onCreditUpdated` больше не засевает одноэлементный список; ручной sync обходит SWR-кеш
+- Офлайн нельзя открыть должника (и другие карточки разделов) — снимки GET больше не стираются после write; прогрев тянет списки и карточки; `getDebtor` собирает деталь из локальных долгов
+
+### Web
+
+#### Исправлено
+
+- Календарь в подписках (и везде с выбранной датой) не перелистывал месяцы: `$effect` в `DateTimePicker` сбрасывал `viewMonth` при навигации
+
+### Server
+
+#### Добавлено
+
+- `GET /sync/transaction-changes` — курсорная лента create/update/delete по `transactions` (таблица `user_change_events`, миграция `052`)
+
+#### Техническое
+
+- CI/act: тесты SQLite — шаблон мигрированной БД + `synchronous=OFF`; `go test -timeout 30m`
+- OpenAPI `1.5.2` (`GET /sync/transaction-changes`)
+- [docs/release-notes-v1.5.2.md](docs/release-notes-v1.5.2.md)
+- Версия `1.5.2`
 
 ## [v1.5.1] — 2026-09-03
 
@@ -969,6 +1007,8 @@
 - Стек: Go 1.26+, SQLite, SvelteKit, встроенный статический фронтенд (`embedstatic`)
 - Команда `make version vX.Y.Z` — единая простановка semver во всех артефактах (`VERSION`, OpenAPI, Dockerfile, …)
 
+[v1.5.2]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.5.2
+[v1.5.1]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.5.1
 [v1.5.0]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.5.0
 [v1.4.1]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.4.1
 [v1.4.0]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.4.0

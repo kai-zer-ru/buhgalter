@@ -258,6 +258,7 @@
 - [x] БАГ. Android: после оплаты кредита в списке оставался только один (синхронизация не чинила, помогал перелогин) — `onCreditUpdated` больше не засевает одноэлементный список; ручной sync обходит SWR-кеш
 - [x] БАГ. Android: офлайн нельзя открыть должника (и другие карточки разделов) — снимки GET больше не стираются после write; прогрев тянет списки и карточки; `getDebtor` собирает деталь из локальных долгов
 - [x] Доработка синхронизации — лента изменений операций (`GET /sync/transaction-changes`): добавление/правка/удаление доходов и расходов (в т.ч. долги и кредиты) подтягивается в Android-кеш по id
+- [x] [Release notes](docs/release-notes-v1.5.2.md) · [android-client-platform.md](docs/android-client-platform.md) · [ui-api-cache.md](docs/ui-api-cache.md) · [data-model.md](docs/data-model.md)
 
 ## Общие планы
 
