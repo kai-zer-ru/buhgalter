@@ -40,7 +40,7 @@ describe('shouldNotifySessionExpired', () => {
 describe('shouldLogoutOnApi401', () => {
 	const norm = (u: string) => u.replace(/\/$/, '');
 
-	it('does not logout when token origin differs from active server (dual-app clone)', () => {
+	it('does not logout when token origin differs from active server', () => {
 		expect(
 			shouldLogoutOnApi401(
 				'/api/v1/dashboard',

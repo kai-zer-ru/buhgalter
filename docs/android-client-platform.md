@@ -96,8 +96,9 @@ BUHGALTER_ALLOWED_HOSTS=192.168.1.176
 4. Есть токен → **сразу** экран PIN / биометрии (`unlockWithExistingSession`), даже без кэша `/auth/me`. Профиль берётся из `buhgalter.last_user.v1` (не привязан к URL), затем ref-cache (любой origin LAN/remote), иначе минимальный stub. Офлайн до ответа `/health`; probe + `loadUser` + версии / remote i18n — **только в фоне**. Health **никогда** не блокирует ввод PIN при наличии сессии
 5. Нет токена → `prepareBootstrapConnectivity` (может ждать probe) и дальше login / «Сервер недоступен»
 6. После мутаций ref-cache **не стирает** сохранённые GET-снимки разделов (дашборд, операции, долги, должники, кредиты, счета, статистика и т.д.) — офлайн-экраны остаются открываемыми. Следующий онлайн-GET по этим путям идёт в сеть (`pendingNetworkRefresh`), а не рисует SWR как источник истины. **Балансы** в списках счетов всегда берутся из последнего `GET /dashboard` (`enrichAccountsWithCachedBalances` в `listAccounts` / `getAccount`; при записи dashboard — патч сохранённых `/accounts*`). Если список счетов пуст, его заполняют из `ui/meta` (`seedAccountsFromUIMetaIfEmpty`) — иначе офлайн-форма расхода открывается без счёта и категории. Полный сброс — logout / отключение сервера. Профиль также в `last_user` при логине и успешном `loadUser`
-7. **401 → logout** только если в запросе был Bearer **и** активный URL сервера совпадает с origin, на котором выдан токен (`shouldLogoutOnApi401`); иначе 401 не сбрасывает Secure Storage (важно для OEM-клона приложения с другим сервером)
-8. **OEM dual-app clone** (MIUI/HyperOS «Клонировать приложение»): у основного и клона один `applicationId`, но разный UID процесса. Токен и PIN в Secure Storage **namespaced** по UID (`AppInstancePlugin` → `secure-store.ts`), чтобы вход в демо-клон не перезаписывал сессию основного приложения. Для демо надёжнее клон ОС + отдельный сервер; альтернатива — release-сборка с другим `applicationId`
+7. **401 → logout** только если в запросе был Bearer **и** активный URL сервера совпадает с origin, на котором выдан токен (`shouldLogoutOnApi401`); иначе 401 не сбрасывает Secure Storage (другой сервер в том же клиенте)
+8. **OEM dual-app clone не поддерживается** (MIUI/HyperOS Dual Apps, user **999**). Лаунчер — `MainActivity`. Android 12 сплэш: `installSplashScreen` + `keepOnScreen=false` + фон в night (`values-night-v31`). WebView: непрозрачный фон, `RENDERER_PRIORITY_IMPORTANT` (иначе Xiaomi SmartPower уводит renderer под сплэшем). HTML не грузит Google Fonts блокирующим CSS (после `pm clear webview` это ~30 с чёрного экрана). Тема Capacitor — `AppTheme.NoActionBar` с непрозрачным `windowBackground`. В клоне — `CloneBlockedActivity`
+9. **Удаление приложения сбрасывает сессию.** `allowBackup=false`, cloud/device-transfer исключены (`backup_rules` / `data_extraction_rules`). Маркер `install.stamp` в `no_backup`: если ОС восстановила WebView/prefs без маркера (или с чужим `firstInstallTime`) — локальные данные стираются до старта WebView. Обновление APK (`firstInstallTime` старше `lastUpdateTime`) маркер только записывает, кеш не трогает. Скрытие сумм в виджетах и PIN — как раньше; после честного uninstall пользователь снова на `/server-setup`
 
 ## Офлайн (outbox)
 
@@ -265,6 +266,7 @@ Self-hosted API обычно на `http://` в LAN. Нужно три уровн
 - LAN discovery (mDNS + subnet scan); `external_url` в health для подписи домена в списке
 - Два URL + SSID, HTTPS TOFU, офлайн outbox (в т.ч. счета и бюджет) и ref-cache SWR
 - Создание кредита (пошаговый мастер); home-screen виджеты; share-intent; перехват push банков; static shortcuts
+- OEM Dual Apps не поддерживается (`CloneBlockedActivity`); uninstall не восстанавливает сессию из бэкапа ОС
 - Тема `light` | `dark` | `system` (default); SystemBars по resolved теме; themed icon `<monochrome>`
 - Remote i18n при `app < server` (`GET /ui/i18n/{lang}`)
 - Блокировка PIN/биометрия; настраиваемый таймаут в фоне; сброс при выходе и отключении сервера

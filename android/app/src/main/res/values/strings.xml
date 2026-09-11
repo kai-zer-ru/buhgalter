@@ -39,6 +39,10 @@
     <string name="widget_account_configure_hint">Выберите счёт для виджета</string>
     <string name="widget_account_configure_empty">Нет счетов. Откройте приложение и синхронизируйте данные.</string>
 
+    <string name="clone_blocked_title">Клонирование отключено</string>
+    <string name="clone_blocked_message">Разработчик отключил создание клонов этого приложения.\n\nПодробности — в документации.</string>
+    <string name="clone_blocked_close">Понятно</string>
+
     <string name="widget_need_login">Откройте приложение и войдите</string>
     <string name="widget_locked">Заблокировано</string>
     <string name="widget_amount_hidden">••••</string>

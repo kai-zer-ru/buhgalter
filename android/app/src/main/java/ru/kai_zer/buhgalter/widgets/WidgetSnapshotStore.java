@@ -2,32 +2,88 @@ package ru.kai_zer.buhgalter.widgets;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.os.Looper;
 
 import androidx.security.crypto.EncryptedSharedPreferences;
 import androidx.security.crypto.MasterKeys;
 
 import org.json.JSONObject;
 
+/**
+ * Widget snapshot + token. {@link MasterKeys#getOrCreate} on Xiaomi Keystore can block
+ * ~30s after Dual Apps — never call it on the main thread (widget {@code onUpdate}
+ * and cold start share that thread with the activity).
+ */
 public final class WidgetSnapshotStore {
     private static final String PREFS = "buhgalter_widget_bridge";
     private static final String KEY_BASE_URL = "base_url";
     private static final String KEY_TOKEN = "token";
     private static final String KEY_LOCK = "lock_enabled";
     private static final String KEY_SNAPSHOT = "snapshot_json";
+    private static final Object LOCK = new Object();
+
+    private static volatile SharedPreferences cached;
 
     private WidgetSnapshotStore() {}
 
-    private static SharedPreferences prefs(Context context) {
+    /** Open encrypted prefs off the UI thread so later widget binds are instant. */
+    public static void warmup(Context context) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            throw new IllegalStateException("warmup must not run on the main thread");
+        }
+        prefs(context);
+    }
+
+    static SharedPreferences resolvePrefs(
+            SharedPreferences cachedPrefs,
+            SharedPreferences fallback,
+            SharedPreferences encrypted,
+            boolean mainThread) {
+        if (cachedPrefs != null) {
+            return cachedPrefs;
+        }
+        if (mainThread) {
+            return fallback;
+        }
+        return encrypted != null ? encrypted : fallback;
+    }
+
+    private static SharedPreferences fallbackPrefs(Context context) {
+        return context.getApplicationContext()
+                .getSharedPreferences(PREFS + "_fallback", Context.MODE_PRIVATE);
+    }
+
+    private static SharedPreferences openEncrypted(Context context) {
         try {
             String masterKeyAlias = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC);
             return EncryptedSharedPreferences.create(
                     PREFS,
                     masterKeyAlias,
-                    context,
+                    context.getApplicationContext(),
                     EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
                     EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM);
         } catch (Exception e) {
-            return context.getSharedPreferences(PREFS + "_fallback", Context.MODE_PRIVATE);
+            return null;
+        }
+    }
+
+    private static SharedPreferences prefs(Context context) {
+        SharedPreferences hit = cached;
+        if (hit != null) {
+            return hit;
+        }
+        SharedPreferences fallback = fallbackPrefs(context);
+        boolean mainThread = Looper.myLooper() == Looper.getMainLooper();
+        if (mainThread) {
+            return resolvePrefs(null, fallback, null, true);
+        }
+        synchronized (LOCK) {
+            if (cached != null) {
+                return cached;
+            }
+            SharedPreferences encrypted = openEncrypted(context);
+            cached = resolvePrefs(null, fallback, encrypted, false);
+            return cached;
         }
     }
 

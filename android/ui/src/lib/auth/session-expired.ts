@@ -34,7 +34,7 @@ export function shouldNotifySessionExpired(apiPath: string, hasAuthToken: boolea
 
 /**
  * Logout on 401 only when the active server URL matches the origin the token was issued for.
- * Prevents a dual-app clone (demo server) from invalidating the main app's session and vice versa.
+ * Prevents a 401 on a different server origin from wiping the session for the active URL.
  */
 export function shouldLogoutOnApi401(
 	apiPath: string,

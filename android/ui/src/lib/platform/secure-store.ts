@@ -1,10 +1,13 @@
 import { isNativeApp } from '$lib/platform/native';
+import { withTimeout } from '$lib/platform/plugin-timeout';
+
+const NATIVE_PLUGIN_TIMEOUT_MS = 4000;
 
 const memory = new Map<string, string>();
 /** Persist across reloads in browser / Playwright (Capacitor SecureStorage is native-only). */
 const WEB_PREFIX = 'buhgalter.secure.';
 
-/** e.g. `u10123.` — separates main app vs OEM dual-app clone in shared keystore. */
+/** e.g. `u10123.` — work profile / secondary user; OEM Dual Apps are blocked natively. */
 let namespacePrefix = '';
 let namespaceReady: Promise<void> | null = null;
 
@@ -19,7 +22,7 @@ export function initStorageNamespace(): Promise<void> {
 			if (!isNativeApp()) return;
 			try {
 				const { getAppStorageNamespace } = await import('$lib/platform/app-instance');
-				const ns = await getAppStorageNamespace();
+				const ns = await withTimeout(getAppStorageNamespace(), NATIVE_PLUGIN_TIMEOUT_MS, '');
 				namespacePrefix = ns ? `${ns}.` : '';
 			} catch {
 				namespacePrefix = '';
@@ -72,7 +75,7 @@ function webDelete(physicalKey: string): void {
 async function nativeGet(key: string): Promise<string | null> {
 	try {
 		const { SecureStorage } = await import('@aparajita/capacitor-secure-storage');
-		const value = await SecureStorage.get(key);
+		const value = await withTimeout(SecureStorage.get(key), NATIVE_PLUGIN_TIMEOUT_MS, null);
 		return typeof value === 'string' ? value : null;
 	} catch {
 		return memory.get(key) ?? null;
@@ -82,7 +85,7 @@ async function nativeGet(key: string): Promise<string | null> {
 async function nativeSet(key: string, value: string): Promise<void> {
 	try {
 		const { SecureStorage } = await import('@aparajita/capacitor-secure-storage');
-		await SecureStorage.set(key, value);
+		await withTimeout(SecureStorage.set(key, value), NATIVE_PLUGIN_TIMEOUT_MS, undefined);
 	} catch {
 		memory.set(key, value);
 	}
@@ -91,7 +94,7 @@ async function nativeSet(key: string, value: string): Promise<void> {
 async function nativeRemove(key: string): Promise<void> {
 	try {
 		const { SecureStorage } = await import('@aparajita/capacitor-secure-storage');
-		await SecureStorage.remove(key);
+		await withTimeout(SecureStorage.remove(key), NATIVE_PLUGIN_TIMEOUT_MS, undefined);
 	} catch {
 		memory.delete(key);
 	}
@@ -107,7 +110,8 @@ async function readPhysical(physicalKey: string, legacyKey: string): Promise<str
 	const legacy = await nativeGet(legacyKey);
 	if (legacy === null) return null;
 	await nativeSet(physicalKey, legacy);
-	await nativeRemove(legacyKey);
+	// Do not delete the unprefixed key: Xiaomi Dual Apps can share the Keystore
+	// with the main install; removing it here logs the original out.
 	return legacy;
 }
 
@@ -118,7 +122,6 @@ async function writePhysical(physicalKey: string, legacyKey: string, value: stri
 		return;
 	}
 	await nativeSet(physicalKey, value);
-	if (legacyKey !== physicalKey) await nativeRemove(legacyKey);
 }
 
 async function removePhysical(physicalKey: string, legacyKey: string): Promise<void> {

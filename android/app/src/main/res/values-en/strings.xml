@@ -37,6 +37,10 @@
     <string name="widget_account_configure_hint">Choose an account for the widget</string>
     <string name="widget_account_configure_empty">No accounts. Open the app and sync data.</string>
 
+    <string name="clone_blocked_title">Cloning is disabled</string>
+    <string name="clone_blocked_message">The developer has disabled cloning of this app.\n\nSee the documentation for details.</string>
+    <string name="clone_blocked_close">OK</string>
+
     <string name="widget_need_login">Open the app and sign in</string>
     <string name="widget_locked">Locked</string>
     <string name="widget_amount_hidden">••••</string>

@@ -7,8 +7,8 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
 /**
- * Identifies this app install (main vs OEM dual-app clone). Used to namespace secure
- * storage keys so parallel instances with the same package name do not overwrite each other.
+ * Identifies this process (UID). Namespaces secure-storage keys for work profile /
+ * secondary users. OEM Dual Apps clones are blocked in {@link CloneBlockedActivity}.
  */
 @CapacitorPlugin(name = "AppInstance")
 public class AppInstancePlugin extends Plugin {
