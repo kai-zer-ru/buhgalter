@@ -22,6 +22,7 @@ type TransferInput struct {
 	Commission      int64
 	Description     *string
 	TransactionDate time.Time
+	CreatedAt       time.Time // outgoing leg; zero = now
 }
 
 type Transfer struct {
@@ -78,7 +79,7 @@ func CreateTransfer(ctx context.Context, db *sql.DB, userID string, in TransferI
 	commissionDesc := transferCommissionDescription(fromType, toType)
 
 	groupID := uuid.NewString()
-	outNow := time.Now().UTC()
+	outNow := transferCreatedAt(in)
 	inNow := outNow.Add(time.Millisecond)
 	commissionNow := inNow.Add(time.Millisecond)
 	outCreated := outNow.Format(time.RFC3339Nano)
@@ -499,6 +500,13 @@ func updateTransferAccountID(ctx context.Context, q *sqlcdb.Queries, id, userID,
 		ID:                id,
 		UserID:            userID,
 	})
+}
+
+func transferCreatedAt(in TransferInput) time.Time {
+	if !in.CreatedAt.IsZero() {
+		return in.CreatedAt.UTC()
+	}
+	return time.Now().UTC()
 }
 
 func accountTypes(ctx context.Context, db *sql.DB, userID, fromID, toID string) (string, string, error) {

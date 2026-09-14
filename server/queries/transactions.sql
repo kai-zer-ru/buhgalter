@@ -109,6 +109,15 @@ LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
 WHERE t.transfer_group_id = ? AND t.user_id = ?
 ORDER BY t.created_at ASC, t.id ASC;
 
+-- name: GetLatestTransactionCreatedAtForAccount :one
+SELECT created_at
+FROM transactions
+WHERE user_id = ?
+  AND account_id = ?
+  AND transaction_date = ?
+ORDER BY created_at DESC, id DESC
+LIMIT 1;
+
 -- name: InsertTransaction :exec
 INSERT INTO transactions (
     id, user_id, account_id, type, kind, amount, description,

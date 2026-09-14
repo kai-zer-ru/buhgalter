@@ -272,6 +272,29 @@ func (q *Queries) GetCategoryByNameAndType(ctx context.Context, arg GetCategoryB
 	return i, err
 }
 
+const getLatestTransactionCreatedAtForAccount = `-- name: GetLatestTransactionCreatedAtForAccount :one
+SELECT created_at
+FROM transactions
+WHERE user_id = ?
+  AND account_id = ?
+  AND transaction_date = ?
+ORDER BY created_at DESC, id DESC
+LIMIT 1
+`
+
+type GetLatestTransactionCreatedAtForAccountParams struct {
+	UserID          string `json:"user_id"`
+	AccountID       string `json:"account_id"`
+	TransactionDate string `json:"transaction_date"`
+}
+
+func (q *Queries) GetLatestTransactionCreatedAtForAccount(ctx context.Context, arg GetLatestTransactionCreatedAtForAccountParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, getLatestTransactionCreatedAtForAccount, arg.UserID, arg.AccountID, arg.TransactionDate)
+	var created_at string
+	err := row.Scan(&created_at)
+	return created_at, err
+}
+
 const getTransactionByID = `-- name: GetTransactionByID :one
 SELECT
     t.id,

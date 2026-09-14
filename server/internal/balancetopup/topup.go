@@ -89,7 +89,7 @@ func ApplyIfNeeded(ctx context.Context, db *sql.DB, userID, beneficiaryID string
 	}
 
 	desc := Description
-	txDate := normalizeTopupDate(asOf)
+	txDate := topupTransactionDate(asOf)
 	_, err = transaction.CreateTransfer(ctx, db, userID, transaction.TransferInput{
 		FromAccountID:   source.id,
 		ToAccountID:     beneficiary.id,
@@ -97,6 +97,7 @@ func ApplyIfNeeded(ctx context.Context, db *sql.DB, userID, beneficiaryID string
 		Commission:      0,
 		Description:     &desc,
 		TransactionDate: txDate,
+		CreatedAt:       createdAtAfterTrigger(ctx, db, userID, beneficiary.id, asOf),
 	})
 	if err != nil {
 		return false, err
@@ -111,6 +112,48 @@ func normalizeTopupDate(asOf time.Time) time.Time {
 		return now
 	}
 	return asOf
+}
+
+// topupTransactionDate is the trigger instant plus one second so the top-up
+// is later in time. date_desc (newest first) then shows it above the trigger.
+// If +1s would be in the future, keep the trigger date (created_at still sorts after).
+func topupTransactionDate(asOf time.Time) time.Time {
+	base := normalizeTopupDate(asOf)
+	if asOf.IsZero() {
+		return base
+	}
+	now := timeutil.NowUTC()
+	next := asOf.Add(time.Second)
+	if next.After(now) {
+		return base
+	}
+	return next
+}
+
+// createdAtAfterTrigger is 1s after the trigger's created_at so string/DESC
+// sort treats the top-up as newer. RFC3339Nano of the same second sorts
+// *before* the trigger's RFC3339 "...Z" and made the top-up look older.
+func createdAtAfterTrigger(ctx context.Context, db *sql.DB, userID, accountID string, asOf time.Time) time.Time {
+	if asOf.IsZero() {
+		return time.Time{}
+	}
+	created, err := sqlcdb.New(db).GetLatestTransactionCreatedAtForAccount(ctx, sqlcdb.GetLatestTransactionCreatedAtForAccountParams{
+		UserID:          userID,
+		AccountID:       accountID,
+		TransactionDate: timeutil.FormatUTC(asOf),
+	})
+	if err != nil {
+		return time.Time{}
+	}
+	t, err := timeutil.ParseFlexibleUTC(created)
+	if err != nil {
+		return time.Time{}
+	}
+	t = t.Add(time.Second)
+	if t.Nanosecond() == 0 {
+		t = t.Add(time.Millisecond)
+	}
+	return t
 }
 
 func loadAccount(ctx context.Context, db *sql.DB, userID, accountID string) (accountSnap, error) {
