@@ -269,6 +269,7 @@
 - [x] После удаления приложения сессия и кеш не восстанавливаются из бэкапа ОС (`allowBackup=false`, исключение cloud/device-transfer, маркер в `no_backup`)
 - [x] Холодный старт не висит на чёрном экране: системный сплэш сразу отпускается (в т.ч. night); WebView непрозрачный + important renderer; без блокирующих Google Fonts; Keystore виджетов не на UI-потоке; WorkManager initializer отключён; wipe только если ОС восстановила данные
 - [x] БАГ. Автопополнение в `date_desc` оказывалось ниже триггера (выглядело старше операции); должно быть позже триггера и выше в ленте
+- [x] [Release notes](docs/release-notes-v1.5.3.md) · [balance-maintenance.md](docs/balance-maintenance.md) · [android-client.md](docs/android-client.md) · [android-client-platform.md](docs/android-client-platform.md)
 
 ## Общие планы
 

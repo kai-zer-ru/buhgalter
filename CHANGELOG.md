@@ -7,9 +7,13 @@
 внутри — **Добавлено** / **Изменено** / **Исправлено** / **Удалено** (и при необходимости **Техническое**).
 Исторические секции до этого соглашения не переписываются.
 
-Подробные release notes для пользователей: [docs/release-notes-v1.5.2.md](docs/release-notes-v1.5.2.md).
+Подробные release notes для пользователей: [docs/release-notes-v1.5.3.md](docs/release-notes-v1.5.3.md).
 
 ## [Unreleased]
+
+## [v1.5.3] — 2026-09-14
+
+> **ОБЯЗАТЕЛЬНО СДЕЛАЙТЕ БЕКАП!** Перед обновлением сохраните копию базы (`data/buhgalter.db`) и каталога `backups/`. Новых миграций БД нет.
 
 ### Android
 
@@ -18,6 +22,18 @@
 - OEM-клон (Xiaomi Dual Apps / «клонировать приложение») больше не поднимает WebView: нативный экран «не поддерживается», основная копия не зависает на чёрном экране
 - После удаления приложения сессия и кеш не возвращаются из бэкапа ОС (`allowBackup=false`, исключение cloud/device-transfer, маркер в `no_backup`)
 - Холодный старт на HyperOS: системный сплэш сразу отпускается (в т.ч. night, не #000); WebView непрозрачный и не уходит в background; HTML без блокирующих Google Fonts (~30 с чёрного после сброса WebView); Keystore виджетов не на UI-потоке; тема Capacitor без `@null` фона
+
+### Server
+
+#### Исправлено
+
+- Автопополнение: перевод позже триггерной операции (`transaction_date` +1 с, если не в будущем; `created_at` после триггера). В ленте `date_desc` (новые сверху) автопополнение выше расхода
+
+#### Техническое
+
+- OpenAPI `1.5.3` (версия спецификации; новых эндпоинтов нет)
+- [docs/release-notes-v1.5.3.md](docs/release-notes-v1.5.3.md)
+- Версия `1.5.3`
 
 ## [v1.5.2] — 2026-09-08
 
@@ -1015,6 +1031,7 @@
 - Стек: Go 1.26+, SQLite, SvelteKit, встроенный статический фронтенд (`embedstatic`)
 - Команда `make version vX.Y.Z` — единая простановка semver во всех артефактах (`VERSION`, OpenAPI, Dockerfile, …)
 
+[v1.5.3]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.5.3
 [v1.5.2]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.5.2
 [v1.5.1]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.5.1
 [v1.5.0]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.5.0
