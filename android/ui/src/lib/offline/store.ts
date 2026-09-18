@@ -69,7 +69,7 @@ function load() {
 
 load();
 
-export function resetOutboxForTests() {
+export function clearOutbox() {
 	entries = [];
 	nextSeq = 1;
 	if (typeof localStorage !== 'undefined') {
@@ -80,6 +80,10 @@ export function resetOutboxForTests() {
 		}
 	}
 	bump();
+}
+
+export function resetOutboxForTests() {
+	clearOutbox();
 }
 
 function findEntry(entityKey: string): OutboxEntry | undefined {

@@ -1,17 +1,21 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { _ } from 'svelte-i18n';
-	import { getUserSettings, putUserSettings } from '$lib/api/client';
+	import { deleteUserData, getUserSettings, putUserSettings } from '$lib/api/client';
 	import { user } from '$lib/stores/auth';
 	import { applyThemePreference, isThemePreference, type ThemePreference } from '$lib/theme';
 	import { setLocale } from '$lib/i18n';
 	import TimezonePicker from '$lib/components/TimezonePicker.svelte';
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
 	import Select from '$lib/components/Select.svelte';
+	import { confirm } from '$lib/confirm';
 	import { reportPageLoadFailure } from '$lib/page-load';
 	import { toast } from '$lib/toast';
 
 	let loading = $state(false);
+	let wiping = $state(false);
 	let pageLoading = $state(true);
 	let loadError = $state<string | null>(null);
 	let displayName = $state('');
@@ -65,6 +69,33 @@
 			toast.fromError(err);
 		} finally {
 			loading = false;
+		}
+	}
+
+	async function wipeData() {
+		const first = await confirm({
+			title: $_('settings.data.confirm.title'),
+			message: $_('settings.data.confirm.message'),
+			confirmLabel: $_('settings.data.confirm.continue'),
+			danger: true
+		});
+		if (!first) return;
+		const second = await confirm({
+			title: $_('settings.data.confirm.finalTitle'),
+			message: $_('settings.data.confirm.finalMessage'),
+			confirmLabel: $_('settings.data.title'),
+			danger: true
+		});
+		if (!second) return;
+		wiping = true;
+		try {
+			await deleteUserData();
+			toast($_('settings.data.success'));
+			await goto(resolve('/'));
+		} catch (err) {
+			toast.fromError(err);
+		} finally {
+			wiping = false;
 		}
 	}
 </script>
@@ -124,6 +155,18 @@
 				{ value: 'dark', label: $_('settings.theme.dark') }
 			]}
 		/>
-		<button type="submit" class="btn-primary" disabled={loading}>{$_('settings.save')}</button>
+		<button type="submit" class="btn-primary" disabled={loading || wiping}
+			>{$_('settings.save')}</button
+		>
 	</form>
+	<div class="card mt-4 max-w-lg space-y-3">
+		<h2 class="font-medium">{$_('settings.data.title')}</h2>
+		<p class="text-sm" style:color="var(--text-muted)">{$_('settings.data.hint')}</p>
+		<button
+			type="button"
+			class="btn-danger"
+			disabled={loading || wiping}
+			onclick={() => void wipeData()}>{$_('settings.data.title')}</button
+		>
+	</div>
 </PageLoadGate>

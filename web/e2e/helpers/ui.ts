@@ -25,7 +25,10 @@ export async function dismissBlockingModals(page: Page) {
 }
 
 export async function confirmDialog(page: Page, confirmLabel = 'Удалить') {
-	const dialog = page.getByRole('alertdialog');
+	// Sequential confirms reuse role=alertdialog; pin this step by its button.
+	const dialog = page.getByRole('alertdialog').filter({
+		has: page.getByRole('button', { name: confirmLabel, exact: true })
+	});
 	await expect(dialog).toBeVisible();
 	await dialog.getByRole('button', { name: confirmLabel, exact: true }).click();
 	await expect(dialog).toHaveCount(0, { timeout: 15_000 });

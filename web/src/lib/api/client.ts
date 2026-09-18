@@ -87,8 +87,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 		// Match server apicache: any write invalidates client SWR so subsequent load() hits network.
 		// Dictionaries + account lists stay so offline/PWA forms still have catalogs after a write.
 		invalidateApiCache();
-		clearRefCache({ preserveAuthMe: true });
-		invalidateRefCacheAfterWrite(path);
+		if (path.split('?')[0] === '/api/v1/user/data') {
+			clearRefCache();
+		} else {
+			clearRefCache({ preserveAuthMe: true });
+			invalidateRefCacheAfterWrite(path);
+		}
 	}
 	return result;
 }
@@ -387,6 +391,10 @@ export function putUserSettings(settings: UserSettings) {
 		method: 'PUT',
 		body: JSON.stringify(settings)
 	});
+}
+
+export function deleteUserData() {
+	return request<void>('/api/v1/user/data', { method: 'DELETE' });
 }
 
 export function getNotificationSettings() {

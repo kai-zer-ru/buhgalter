@@ -145,6 +145,7 @@ async function remove() {
 - `admin.backups.confirm.restore`
 - `credits.confirm.delete`, `credits.confirm.deletePayment`, `credits.confirm.deleteAppliedPayment`
 - `credits.complete.payFromAccount` (плейсхолдеры `{amount}`, `{account}`)
+- `settings.data.confirm.title`, `settings.data.confirm.message`, `settings.data.confirm.continue`, `settings.data.confirm.finalTitle`, `settings.data.confirm.finalMessage` — сброс учёта в профиле (два шага `confirm({ danger: true })`)
 
 Новые destructive-действия — добавлять ключ `*.confirm.*` и вызывать через `confirm()`.
 
@@ -182,6 +183,7 @@ API: `POST /api/v1/admin/backups/restore` (multipart `file` + `confirm`). См. 
 - Отзыв API-токена
 - Удаление пользователя (админка)
 - Восстановление БД из бэкапа — см. [Восстановление БД](#восстановление-бд)
+- **Профиль** — «Удалить данные»: два подтверждения (`settings.data.confirm.*`), затем `DELETE /api/v1/user/data`
 - **Кредиты** (`/credits`): … подтверждение **«Удалить платёж»** (для оплаченных — `credits.confirm.deleteAppliedPayment`) и удаления кредита — `$lib/confirm`
 
 ## Требование для новых экранов

@@ -211,21 +211,17 @@ export function removeDraftMatchingCancel(cancel: ParsedPurchase, userId?: strin
 	return 1;
 }
 
-export function clearInterceptDraftsForTests(userId?: string): void {
+export function clearInterceptDrafts(userId?: string | null): void {
 	const id = userId ?? get(user)?.id;
 	if (id) {
-		memoryDrafts.delete(storageKey(id));
-		parsedDraftsCache.delete(id);
-		try {
-			if (typeof localStorage !== 'undefined') {
-				localStorage.removeItem(storageKey(id));
-			}
-		} catch {
-			// ignore
-		}
-	} else {
-		memoryDrafts.clear();
-		parsedDraftsCache.clear();
+		writeDrafts(id, []);
+		return;
 	}
+	memoryDrafts.clear();
+	parsedDraftsCache.clear();
 	bump();
+}
+
+export function clearInterceptDraftsForTests(userId?: string): void {
+	clearInterceptDrafts(userId);
 }

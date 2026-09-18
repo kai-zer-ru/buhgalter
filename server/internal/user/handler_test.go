@@ -102,6 +102,11 @@ func TestHandlerUnauthorized(t *testing.T) {
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("GetSettings status %d", rec.Code)
 	}
+	delRec := httptest.NewRecorder()
+	h.DeleteData(delRec, httptest.NewRequest(http.MethodDelete, "/user/data", nil))
+	if delRec.Code != http.StatusUnauthorized {
+		t.Fatalf("DeleteData status %d", delRec.Code)
+	}
 }
 
 func TestHandlerGetPutSettings(t *testing.T) {

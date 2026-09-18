@@ -307,6 +307,7 @@ func (s *Server) Handler() http.Handler {
 			ur.Use(apiCacheMW)
 			ur.Get("/settings", userHandler.GetSettings)
 			ur.Put("/settings", userHandler.PutSettings)
+			ur.Delete("/data", userHandler.DeleteData)
 			ur.Group(func(mod chi.Router) {
 				mod.Use(features.RequireFeature(dbHandle, features.Notifications))
 				mod.Get("/notifications", userHandler.GetNotifications)

@@ -104,7 +104,7 @@ BUHGALTER_ALLOWED_HOSTS=192.168.1.176
 
 Каталог: `android/ui/src/lib/offline/`.
 
-- Очередь create / update / delete для **`transaction` | `transfer` | `category` | `debt` | `account` | `budget` | `credit` | `recurring` | `subscription`** (`EntityKind` в `types.ts`). Wrappers: `transactions-api`, `categories-api`, `debts-api` (в т.ч. settle), `accounts-api`, `budgets-api`, `credits-api` (pay/complete/update/schedule/delete payment/delete; **без** create), `recurring-api`, `subscription-api`. Ещё онлайн-only: создание кредита (мастер), удаление счёта насовсем, primary/reorder категорий, подкатегории, настройки профиля, attach/find/convert подписок — UI блокирует через `requireOnline()` (toast «только онлайн»).
+- Очередь create / update / delete для **`transaction` | `transfer` | `category` | `debt` | `account` | `budget` | `credit` | `recurring` | `subscription`** (`EntityKind` в `types.ts`). Wrappers: `transactions-api`, `categories-api`, `debts-api` (в т.ч. settle), `accounts-api`, `budgets-api`, `credits-api` (pay/complete/update/schedule/delete payment/delete; **без** create), `recurring-api`, `subscription-api`. Ещё онлайн-only: создание кредита (мастер), удаление счёта насовсем, primary/reorder категорий, подкатегории, настройки профиля, **сброс учёта** (`DELETE /user/data` — полный `clearRefCache` без preserve, очистка outbox и привязок перехвата), attach/find/convert подписок — UI блокирует через `requireOnline()` (toast «только онлайн»).
 - **Coalescing** (create→edit→delete на одной сущности)
 - При появлении сети: `scheduleSyncOutbox()` → FIFO replay через существующие API
 - Синхронизация не стартует без настроенного URL сервера

@@ -335,6 +335,31 @@ paths:
       responses:
         '200':
           description: Настройки обновлены
+  /user/data:
+    delete:
+      summary: Удалить учётные данные пользователя
+      description: |
+        Сбрасывает учёт к состоянию нового пользователя: удаляет операции, счета, долги, кредиты,
+        бюджеты, подписки, периодические операции, магазины, теги, шаблоны, категории,
+        журнал уведомлений и задания импорта, затем заново создаёт категории по умолчанию.
+
+        Не изменяет логин, пароль, имя, язык, валюту, часовой пояс, тему, статус,
+        сессии, API-токены и настройки каналов уведомлений.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Данные удалены
+        '401':
+          description: Не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                unauthorized:
+                  $ref: '#/components/examples/ApiErrorUnauthorized'
   /user/password:
     put:
       summary: Смена пароля

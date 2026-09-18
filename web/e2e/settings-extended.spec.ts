@@ -1,6 +1,13 @@
 import { test, expect } from '@playwright/test';
-import { ADMIN, waitAppReady } from './helpers/auth';
-import { confirmDialog, rowMenuAction } from './helpers/ui';
+import {
+	ADMIN,
+	apiJSON,
+	deleteAdminUserByLogin,
+	restoreAdminSession,
+	waitAppReady
+} from './helpers/auth';
+import { createCashAccount } from './helpers/setup-data';
+import { confirmDialog, expectToast, rowMenuAction } from './helpers/ui';
 
 test('profile: change display name', async ({ page }) => {
 	const newName = `E2E Display ${Date.now()}`;
@@ -16,6 +23,43 @@ test('profile: change display name', async ({ page }) => {
 
 	await page.locator('#display').fill(ADMIN.displayName);
 	await page.getByRole('button', { name: 'Сохранить' }).click();
+});
+
+test('profile: delete all ledger data', async ({ page }) => {
+	const tag = Date.now();
+	const loginName = `e2ewipe${tag}`;
+	await restoreAdminSession(page);
+	await apiJSON(page, 'POST', '/api/v1/admin/users', {
+		login: loginName,
+		password: 'Wipepass1',
+		password_confirm: 'Wipepass1',
+		display_name: 'Wipe User',
+		is_admin: false
+	});
+	try {
+		await page.context().clearCookies();
+		await page.goto('/login');
+		await waitAppReady(page);
+		await page.locator('#login').fill(loginName);
+		await page.locator('#password').fill('Wipepass1');
+		await page.getByRole('button', { name: 'Войти' }).click();
+		await expect(page).toHaveURL(/\/(\?.*)?$/, { timeout: 15_000 });
+		await waitAppReady(page);
+
+		await createCashAccount(page, `Wipe Acc ${tag}`);
+		await page.goto('/settings');
+		await waitAppReady(page);
+		await page.getByRole('button', { name: 'Удалить данные' }).click();
+		await confirmDialog(page, 'Продолжить');
+		await confirmDialog(page, 'Удалить данные');
+		await expectToast(page, 'success', 'Данные удалены');
+
+		const accounts = await apiJSON<unknown[]>(page, 'GET', '/api/v1/accounts');
+		expect(accounts).toEqual([]);
+	} finally {
+		await restoreAdminSession(page);
+		await deleteAdminUserByLogin(page, loginName);
+	}
 });
 
 test('password tab loads form fields', async ({ page }) => {

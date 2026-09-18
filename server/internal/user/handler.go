@@ -159,6 +159,29 @@ func (h *Handler) PutSettings(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *Handler) DeleteData(w http.ResponseWriter, r *http.Request) {
+	info, ok := auth.FromContext(r.Context())
+	if !ok {
+		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
+		return
+	}
+
+	if err := ResetUserData(r.Context(), h.Store.DB(), info.User.ID); err != nil {
+		if db.IsBusy(err) {
+			slog.Warn("delete user data: database busy", "user_id", info.User.ID, "err", err)
+			apperror.WriteR(w, r, http.StatusServiceUnavailable, apperror.ServiceUnavailable)
+			return
+		}
+		slog.Warn("delete user data failed", "user_id", info.User.ID, "err", err)
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	}
+
+	ip := auth.ClientIP(r)
+	_ = h.Audit.Log("user.data.delete", info.User.ID, info.User.Login, ip, nil)
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *Handler) GetNotifications(w http.ResponseWriter, r *http.Request) {
 	info, ok := auth.FromContext(r.Context())
 	if !ok {

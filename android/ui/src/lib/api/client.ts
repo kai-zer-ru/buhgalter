@@ -235,7 +235,11 @@ async function request<T>(path: string, init?: RequestInit, opts?: { auth?: bool
 		// Keep persistable GET snapshots (offline sections stay open). Next online
 		// GET hits the network. Dictionaries + accounts still seed from ui/meta if empty.
 		invalidateApiCache();
-		clearRefCache({ preserveAuthMe: true });
+		if (path.split('?')[0] === '/api/v1/user/data') {
+			clearRefCache();
+		} else {
+			clearRefCache({ preserveAuthMe: true });
+		}
 	}
 	return result;
 }
@@ -524,6 +528,10 @@ export function putUserSettings(settings: UserSettings) {
 		method: 'PUT',
 		body: JSON.stringify(settings)
 	});
+}
+
+export function deleteUserData() {
+	return request<void>('/api/v1/user/data', { method: 'DELETE' });
 }
 
 export function getNotificationSettings() {
