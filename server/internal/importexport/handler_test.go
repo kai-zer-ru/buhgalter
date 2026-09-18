@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/kai-zer-ru/buhgalter/internal/audit"
@@ -61,6 +62,28 @@ func TestHandlerExport(t *testing.T) {
 	}
 	if rec.Header().Get("Content-Type") == "" {
 		t.Fatal("expected content type")
+	}
+}
+
+func TestHandlerExportBuhgalterFormat(t *testing.T) {
+	ctx, handle, userID := seedImportHandle(t)
+	data := sampleCSVRows()
+	if _, err := Import(ctx, handle.DB(), userID, "sample.csv", data, ImportOptions{
+		Preset: "cubux", Deduplicate: true, Confirm: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	h := &Handler{Store: handle, Audit: audit.New(filepath.Join(t.TempDir(), "audit")), Logger: slog.Default()}
+	req := importAuthRequest(userID, httptest.NewRequest(http.MethodGet, "/export?format=buhgalter", nil))
+	rec := httptest.NewRecorder()
+	h.Export(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("export %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Время") || !strings.Contains(body, "Магазин") {
+		t.Fatalf("expected buhgalter headers: %s", body[:min(180, len(body))])
 	}
 }
 

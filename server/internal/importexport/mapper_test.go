@@ -69,3 +69,52 @@ func TestCollectFileAccountsAndCategories(t *testing.T) {
 		t.Fatalf("categories: %v", cats)
 	}
 }
+
+func TestMapBuhgalterRowExtraColumns(t *testing.T) {
+	headers := BuhgalterHeaders
+	row := RawRow{
+		RowNum: 2,
+		Values: []string{
+			"Расходы", "18.09.2026", "150.00", "RUB", "Наличные",
+			"", "", "", "Транспорт", "Автобус", "поездка", "", "User",
+			"09:15:00", "Пятёрочка", "дом, еда",
+		},
+	}
+	m, err := MapBuhgalterRow(headers, row)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !m.HasTime || m.Date.Hour() != 9 || m.Date.Minute() != 15 {
+		t.Fatalf("time: %v hasTime=%v", m.Date, m.HasTime)
+	}
+	if m.Merchant != "Пятёрочка" {
+		t.Fatalf("merchant %q", m.Merchant)
+	}
+	if len(m.Tags) != 2 || m.Tags[0] != "дом" || m.Tags[1] != "еда" {
+		t.Fatalf("tags %#v", m.Tags)
+	}
+}
+
+func TestMapTableBuhgalterPreset(t *testing.T) {
+	table := RawTable{
+		Headers: BuhgalterHeaders,
+		Rows: []RawRow{{
+			RowNum: 2,
+			Values: []string{
+				"Доходы", "01.02.2025", "", "", "",
+				"200.00", "RUB", "Яндекс", "Зарплата", "", "", "", "User",
+				"08:00:00", "", "работа",
+			},
+		}},
+	}
+	mapped, errs := MapTable(table, ImportOptions{Preset: "buhgalter"})
+	if len(errs) > 0 {
+		t.Fatalf("errs: %v", errs)
+	}
+	if len(mapped) != 1 || !mapped[0].HasTime || mapped[0].CreditAmount != 20000 {
+		t.Fatalf("mapped: %+v", mapped)
+	}
+	if len(mapped[0].Tags) != 1 || mapped[0].Tags[0] != "работа" {
+		t.Fatalf("tags %#v", mapped[0].Tags)
+	}
+}

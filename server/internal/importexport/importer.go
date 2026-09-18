@@ -31,6 +31,7 @@ type resolver struct {
 	catNames          map[string]string
 	subcategories     map[string]string
 	subByCategoryID   map[string]map[string]category.Subcategory
+	catIsSystem       map[string]bool
 	createdAccounts   map[string]struct{}
 	createdCategories map[string]struct{}
 	accountMap        map[string]AccountMapEntry
@@ -61,6 +62,7 @@ func newResolver(
 		catNames:          make(map[string]string),
 		subcategories:     make(map[string]string),
 		subByCategoryID:   make(map[string]map[string]category.Subcategory),
+		catIsSystem:       make(map[string]bool),
 		createdAccounts:   make(map[string]struct{}),
 		createdCategories: make(map[string]struct{}),
 		accountMap:        accountMap,
@@ -89,13 +91,17 @@ func newResolver(
 	for _, c := range cats {
 		r.categories[catKey(c.Name, c.Type)] = c.ID
 		r.catNames[catKey(c.Name, c.Type)] = c.Name
-		if _, ok := r.subByCategoryID[c.ID]; !ok {
-			r.subByCategoryID[c.ID] = make(map[string]category.Subcategory)
+		r.catIsSystem[c.ID] = c.IsSystem
+		byCategory := make(map[string]category.Subcategory)
+		subs, err := category.ListSubcategories(ctx, db, userID, c.ID)
+		if err != nil {
+			return nil, err
 		}
-		for _, sub := range c.Subcategories {
+		for _, sub := range subs {
 			r.subcategories[subKey(c.Name, sub.Name)] = sub.ID
-			r.subByCategoryID[c.ID][strings.ToLower(strings.TrimSpace(sub.Name))] = sub
+			byCategory[strings.ToLower(strings.TrimSpace(sub.Name))] = sub
 		}
+		r.subByCategoryID[c.ID] = byCategory
 	}
 	return r, nil
 }
@@ -297,6 +303,9 @@ func (r *resolver) resolveSubcategoryInput(
 				id := entry.SubcategoryID
 				return &id, nil, nil
 			case "create", "":
+				if r.catIsSystem[*catID] {
+					return nil, nil, nil
+				}
 				name := subName
 				return nil, &name, nil
 			default:
@@ -313,6 +322,9 @@ func (r *resolver) resolveSubcategoryInput(
 	}
 	if id, ok := r.subcategories[subKey(catName, subName)]; ok {
 		return &id, nil, nil
+	}
+	if r.catIsSystem[*catID] {
+		return nil, nil, nil
 	}
 	name := subName
 	return nil, &name, nil
@@ -667,8 +679,9 @@ func isSQLiteBusyError(err error) bool {
 }
 
 func importRow(ctx context.Context, db *sql.DB, userID string, res *resolver, m MappedRow) error {
-	txDate := time.Date(m.Date.Year(), m.Date.Month(), m.Date.Day(), 12, 0, 0, 0, time.UTC)
+	txDate := importTxDate(m)
 	desc := strPtr(m.Description)
+	merchantName := strPtr(m.Merchant)
 
 	switch m.CubuxType {
 	case "Расходы":
@@ -687,6 +700,7 @@ func importRow(ctx context.Context, db *sql.DB, userID string, res *resolver, m 
 		created, err := transaction.Create(ctx, db, userID, transaction.CreateInput{
 			AccountID: accID, Type: "expense", Amount: m.DebitAmount,
 			Description: desc, CategoryID: catID, SubcategoryID: subID, SubcategoryName: subName,
+			MerchantName: merchantName, TagNames: m.Tags,
 			TransactionDate: txDate,
 		})
 		if err != nil {
@@ -710,6 +724,7 @@ func importRow(ctx context.Context, db *sql.DB, userID string, res *resolver, m 
 		created, err := transaction.Create(ctx, db, userID, transaction.CreateInput{
 			AccountID: accID, Type: "income", Amount: m.CreditAmount,
 			Description: desc, CategoryID: catID, SubcategoryID: subID, SubcategoryName: subName,
+			MerchantName: merchantName, TagNames: m.Tags,
 			TransactionDate: txDate,
 		})
 		if err != nil {
@@ -734,6 +749,13 @@ func importRow(ctx context.Context, db *sql.DB, userID string, res *resolver, m 
 	default:
 		return fmt.Errorf("неизвестный тип")
 	}
+}
+
+func importTxDate(m MappedRow) time.Time {
+	if m.HasTime {
+		return m.Date.UTC()
+	}
+	return time.Date(m.Date.Year(), m.Date.Month(), m.Date.Day(), 12, 0, 0, 0, time.UTC)
 }
 
 func (r *resolver) rememberCreatedSubcategory(catID *string, catName string, subName *string, subID *string) {

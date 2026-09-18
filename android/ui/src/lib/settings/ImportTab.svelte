@@ -65,7 +65,7 @@
 	let tab = $state<Tab>('import');
 	let step = $state<Step>('upload');
 	let file = $state<File | null>(null);
-	let preset = $state<'cubux' | 'custom'>('cubux');
+	let preset = $state<'buhgalter' | 'cubux' | 'custom'>('buhgalter');
 	let deduplicate = $state(true);
 	let dragOver = $state(false);
 	let loading = $state(false);
@@ -89,6 +89,7 @@
 	let exportTo = $state(new Date().toISOString().slice(0, 10));
 	let exportAccountId = $state('');
 	let exportCategoryId = $state('');
+	let exportFormat = $state<'buhgalter' | 'cubux'>('buhgalter');
 
 	onMount(async () => {
 		try {
@@ -842,6 +843,17 @@
 				bind:value={exportCategoryId}
 				options={exportCategoryOptions}
 			/>
+			<div class="space-y-2">
+				<p class="text-sm font-medium">{$_('import.export.format')}</p>
+				<label class="flex items-center gap-2">
+					<input type="radio" bind:group={exportFormat} value="buhgalter" />
+					<span>{$_('import.export.format_buhgalter')}</span>
+				</label>
+				<label class="flex items-center gap-2">
+					<input type="radio" bind:group={exportFormat} value="cubux" />
+					<span>{$_('import.export.format_cubux')}</span>
+				</label>
+			</div>
 			<button
 				type="button"
 				class="btn-primary inline-flex"
@@ -850,7 +862,8 @@
 						from: exportFrom.split('T')[0],
 						to: exportTo.split('T')[0],
 						account_id: exportAccountId || undefined,
-						category_id: exportCategoryId || undefined
+						category_id: exportCategoryId || undefined,
+						format: exportFormat
 					});
 				}}
 			>
@@ -886,6 +899,10 @@
 		{:else if step === 'settings'}
 			<div class="card space-y-4">
 				<p class="text-sm" style:color="var(--text-muted)">{file?.name}</p>
+				<label class="flex items-center gap-2">
+					<input type="radio" bind:group={preset} value="buhgalter" />
+					<span>{$_('import.settings.preset_buhgalter')}</span>
+				</label>
 				<label class="flex items-center gap-2">
 					<input type="radio" bind:group={preset} value="cubux" />
 					<span>{$_('import.settings.preset_cubux')}</span>

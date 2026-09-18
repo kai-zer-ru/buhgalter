@@ -31,6 +31,9 @@ const (
 	ColUser           = "user"
 	ColDebitCurrency  = "debit_currency"
 	ColCreditCurrency = "credit_currency"
+	ColTime           = "time"
+	ColMerchant       = "merchant"
+	ColTags           = "tags"
 )
 
 // MappedRow is a normalized row ready for resolution.
@@ -49,6 +52,9 @@ type MappedRow struct {
 	User           string
 	DebitCurrency  string
 	CreditCurrency string
+	Merchant       string
+	Tags           []string
+	HasTime        bool
 }
 
 // TxAction describes what will be created.
@@ -166,4 +172,5 @@ type ExportFilters struct {
 	To         string
 	AccountID  string
 	CategoryID string
+	Format     string // cubux | buhgalter
 }

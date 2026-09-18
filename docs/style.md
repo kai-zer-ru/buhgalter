@@ -63,6 +63,7 @@
 | [ui-toast.md](ui-toast.md) | In-app toast |
 | [ui-sveltekit-checks.md](ui-sveltekit-checks.md) | Typed `resolve`, vitest-моки |
 | [import/cubux.md](import/cubux.md) | Импорт формата Cubux |
+| [import/buhgalter.md](import/buhgalter.md) | Нативный импорт / экспорт Бухгалтер |
 | [api/openapi.yaml](api/openapi.yaml) | OpenAPI v1 |
 | [api/authentication.md](api/authentication.md) | Авторизация, сессии, API-токены |
 | [api/user-status.md](api/user-status.md) | Статус пользователя |

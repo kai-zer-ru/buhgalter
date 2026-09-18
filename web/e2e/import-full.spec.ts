@@ -22,6 +22,8 @@ test('import CSV wizard reaches mapping step', async ({ page }) => {
 	const fileInput = page.locator('input[type="file"]');
 	await fileInput.setInputFiles(path.join(__dirname, 'fixtures', 'sample.csv'));
 	await expect(page.getByText('sample.csv')).toBeVisible({ timeout: 10_000 });
+	await expect(page.getByText('Бухгалтер', { exact: true })).toBeVisible();
+	await expect(page.getByText('Пресет Cubux')).toBeVisible();
 	await page.getByRole('button', { name: 'Далее' }).click();
 
 	await expect(
@@ -42,4 +44,6 @@ test('export CSV download button is enabled with filters', async ({ page }) => {
 	const downloadBtn = page.getByRole('button', { name: 'Скачать CSV' });
 	await expect(downloadBtn).toBeVisible();
 	await expect(downloadBtn).toBeEnabled();
+	await expect(page.getByText('Бухгалтер', { exact: true })).toBeVisible();
+	await expect(page.getByText('Cubux', { exact: true })).toBeVisible();
 });

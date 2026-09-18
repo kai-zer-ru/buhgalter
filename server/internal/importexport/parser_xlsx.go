@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/xuri/excelize/v2"
 )
@@ -111,6 +112,14 @@ var CubuxHeaders = []string{
 	"Категория", "Subcategory", "Описание", "Проект", "Пользователь",
 }
 
+// BuhgalterHeaders is Cubux layout plus native columns for instance-to-instance transfer.
+var BuhgalterHeaders = []string{
+	"Тип", "Дата", "Сумма списания", "Валюта списания", "Счет списания",
+	"Сумма пополнения", "Валюта назначения", "Счет пополнения",
+	"Категория", "Subcategory", "Описание", "Проект", "Пользователь",
+	"Время", "Магазин", "Теги",
+}
+
 func cubuxFieldIndex(headers []string) map[string]int {
 	idx := make(map[string]int, len(headers))
 	for i, h := range headers {
@@ -190,4 +199,73 @@ func MapCubuxRow(headers []string, row RawRow) (MappedRow, error) {
 		return m, fmt.Errorf("неизвестный тип: %s", m.CubuxType)
 	}
 	return m, nil
+}
+
+// MapBuhgalterRow maps a Cubux-layout row plus optional native columns (time, merchant, tags).
+func MapBuhgalterRow(headers []string, row RawRow) (MappedRow, error) {
+	m, err := MapCubuxRow(headers, row)
+	if err != nil {
+		return m, err
+	}
+	idx := cubuxFieldIndex(headers)
+	m.Merchant = cellAt(row, idx, "Магазин", "merchant")
+	m.Tags = parseTagList(cellAt(row, idx, "Теги", "tags"))
+	timeStr := cellAt(row, idx, "Время", "time")
+	if timeStr == "" {
+		return m, nil
+	}
+	combined, err := applyImportTime(m.Date, timeStr)
+	if err != nil {
+		return m, err
+	}
+	m.Date = combined
+	m.HasTime = true
+	return m, nil
+}
+
+func parseTagList(s string) []string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil
+	}
+	parts := strings.FieldsFunc(s, func(r rune) bool {
+		return r == ',' || r == ';'
+	})
+	out := make([]string, 0, len(parts))
+	seen := make(map[string]struct{}, len(parts))
+	for _, p := range parts {
+		name := strings.TrimSpace(p)
+		if name == "" {
+			continue
+		}
+		key := strings.ToLower(name)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, name)
+	}
+	return out
+}
+
+func applyImportTime(date time.Time, timeStr string) (time.Time, error) {
+	timeStr = strings.TrimSpace(timeStr)
+	layouts := []string{"15:04:05", "15:04"}
+	var parsed time.Time
+	var err error
+	ok := false
+	for _, layout := range layouts {
+		parsed, err = time.Parse(layout, timeStr)
+		if err == nil {
+			ok = true
+			break
+		}
+	}
+	if !ok {
+		return time.Time{}, fmt.Errorf("некорректное время %q", timeStr)
+	}
+	return time.Date(
+		date.Year(), date.Month(), date.Day(),
+		parsed.Hour(), parsed.Minute(), parsed.Second(), 0, time.UTC,
+	), nil
 }

@@ -2171,7 +2171,7 @@ export type AccountMapEntry = {
 
 export type ImportOptions = {
 	file: File;
-	preset?: 'cubux' | 'custom';
+	preset?: 'buhgalter' | 'cubux' | 'custom';
 	deduplicate?: boolean;
 	confirm?: boolean;
 	column_map?: Record<string, string>;
@@ -2185,7 +2185,7 @@ export type ImportOptions = {
 function importFormData(opts: ImportOptions): FormData {
 	const form = new FormData();
 	form.append('file', opts.file);
-	form.append('preset', opts.preset ?? 'cubux');
+	form.append('preset', opts.preset ?? 'buhgalter');
 	form.append('deduplicate', String(opts.deduplicate ?? true));
 	form.append('auto_subcategory', String(opts.auto_subcategory ?? true));
 	if (opts.confirm) form.append('confirm', 'true');
@@ -2241,12 +2241,14 @@ export function exportCSVUrl(params: {
 	to?: string;
 	account_id?: string;
 	category_id?: string;
+	format?: 'buhgalter' | 'cubux';
 }) {
 	const q = new URLSearchParams();
 	if (params.from) q.set('from', params.from);
 	if (params.to) q.set('to', params.to);
 	if (params.account_id) q.set('account_id', params.account_id);
 	if (params.category_id) q.set('category_id', params.category_id);
+	if (params.format) q.set('format', params.format);
 	const qs = q.toString();
 	return `/api/v1/export${qs ? `?${qs}` : ''}`;
 }

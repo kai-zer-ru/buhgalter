@@ -94,6 +94,8 @@ func MapTable(table RawTable, opts ImportOptions) ([]MappedRow, []RowError) {
 		switch opts.Preset {
 		case "custom":
 			m, err = ApplyColumnMap(table.Headers, row, opts.ColumnMap)
+		case "buhgalter":
+			m, err = MapBuhgalterRow(table.Headers, row)
 		default:
 			m, err = MapCubuxRow(table.Headers, row)
 		}

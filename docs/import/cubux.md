@@ -50,7 +50,7 @@ Buhgalter поддерживает импорт и экспорт операци
 
 API:
 
-- `POST /api/v1/import/preview` — dry-run (multipart: `file`, `preset=cubux`, `deduplicate`)
+- `POST /api/v1/import/preview` — dry-run (multipart: `file`, `preset=cubux|buhgalter|custom`, `deduplicate`)
 - `POST /api/v1/import` — commit (`confirm=true`, опционально `account_map`, `category_map`, `subcategory_map`, `auto_subcategory`, заголовок `Idempotency-Key`)
 - `POST /api/v1/import/jobs` — фоновый commit (возвращает `job_id`, статус `queued`)
 - `GET /api/v1/import/jobs/{id}` — статус фонового импорта (`queued|running|done|failed`) и итоговый `report`
@@ -83,6 +83,7 @@ UI: `/settings/import` — wizard:
 - **Подкатегории**:
   - если `auto_subcategory=true` (по умолчанию) — подбираются автоматически внутри выбранной категории; при отсутствии создаются;
   - если `auto_subcategory=false` — появляется шаг «Сопоставление подкатегорий» (уникальные), можно выбрать existing/create вручную.
+- **Системные категории** («Кредиты», «Подписки», «Долги», «Комиссия», «Перевод») не принимают новые подкатегории. Импорт не падает с `system category is read-only`: существующая подкатегория переиспользуется, иначе строка импортируется только с категорией. Для переноса между инстансами удобнее пресет [Бухгалтер](buhgalter.md).
 
 ### Дедупликация
 
@@ -92,7 +93,7 @@ UI: `/settings/import` — wizard:
 
 ## Экспорт
 
-`GET /api/v1/export?from=2025-01-01&to=2025-12-31&account_id=uuid`
+`GET /api/v1/export?from=2025-01-01&to=2025-12-31&account_id=uuid` (`format=cubux` по умолчанию; `format=buhgalter` — [нативный формат](buhgalter.md))
 
 - Content-Type: `text/csv; charset=utf-8`
 - Content-Disposition: `attachment; filename="buhgalter_export_YYYY.csv"`

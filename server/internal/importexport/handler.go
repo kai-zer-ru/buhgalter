@@ -106,6 +106,7 @@ func (h *Handler) Export(w http.ResponseWriter, r *http.Request) {
 		To:         strings.TrimSpace(q.Get("to")),
 		AccountID:  strings.TrimSpace(q.Get("account_id")),
 		CategoryID: strings.TrimSpace(q.Get("category_id")),
+		Format:     strings.TrimSpace(q.Get("format")),
 	}
 
 	displayName := info.User.DisplayName
@@ -121,7 +122,7 @@ func (h *Handler) Export(w http.ResponseWriter, r *http.Request) {
 
 	ip := auth.ClientIP(r)
 	_ = h.Audit.Log("export.csv", info.User.ID, info.User.Login, ip, map[string]any{
-		"from": filters.From, "to": filters.To, "account_id": filters.AccountID,
+		"from": filters.From, "to": filters.To, "account_id": filters.AccountID, "format": filters.Format,
 	})
 
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
