@@ -185,6 +185,13 @@ VALUES (?, ?, ?);
 DELETE FROM debt_transactions
 WHERE transaction_id = ?;
 
+-- name: ListDebtLinksByUser :many
+SELECT dtx.debt_id, dtx.transaction_id, dtx.role
+FROM debt_transactions dtx
+INNER JOIN debts d ON d.id = dtx.debt_id
+WHERE d.user_id = ?
+ORDER BY dtx.debt_id, dtx.role;
+
 -- name: ListTransactionIDsByDebt :many
 SELECT transaction_id
 FROM debt_transactions

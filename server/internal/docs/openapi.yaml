@@ -3494,8 +3494,8 @@ paths:
         - name: format
           in: query
           description: |
-            `cubux` — совместимость с Cubux (по умолчанию).
-            `buhgalter` — нативный формат для переноса между инстансами (колонки Cubux плюс Время, Магазин, Теги).
+            `cubux` — совместимость с Cubux (по умолчанию); `from`/`to`/`account_id`/`category_id` сужают список операций.
+            `buhgalter` — секционный CSV `#BUHGALTER,1` для полного переноса между инстансами (профиль с timezone, счета, справочники, операции, кредиты, долги, подписки и остальное). Фильтры даты, счёта и категории игнорируются.
           schema:
             type: string
             enum: [cubux, buhgalter]
@@ -5936,6 +5936,13 @@ components:
           description: Сколько строк уже обработано (для async progress)
         valid_rows:
           type: integer
+          description: Строк операций в файле (перевод — одна строка)
+        transfer_rows:
+          type: integer
+          description: Сколько из valid_rows — переводы
+        list_rows:
+          type: integer
+          description: Сколько записей будет в GET /transactions (valid_rows + вторая нога каждого перевода)
         skipped_duplicates:
           type: integer
         created_transactions:
@@ -5997,6 +6004,9 @@ components:
               credit_limit:
                 type: string
                 description: Лимит карты, рубли; обязателен при account_type=credit_card и mode=create
+              initial_balance:
+                type: string
+                description: Начальный остаток при mode=create (из секции accounts нативного CSV)
         categories_to_create:
           type: array
           items:

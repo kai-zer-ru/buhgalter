@@ -128,12 +128,14 @@ func sumSubscriptionCharges(
 	}
 	var total int64
 	var prev, last time.Time
+	beyondMonth := false
 	for _, raw := range queue {
 		t, err := timeutil.ParseUTC(raw)
 		if err != nil {
 			continue
 		}
 		if t.After(monthEnd) {
+			beyondMonth = true
 			break
 		}
 		if !t.Before(monthStart) || !t.After(now) {
@@ -145,6 +147,10 @@ func sumSubscriptionCharges(
 		last = t
 	}
 	if last.IsZero() {
+		return total, nil
+	}
+	// Next stored date is already next month: do not invent another run from time_local/TZ.
+	if beyondMonth {
 		return total, nil
 	}
 	// Continue past stored queue (e.g. weekly within month) via learned interval or period.

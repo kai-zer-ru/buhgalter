@@ -51,18 +51,84 @@ func isEmptyRow(cells []string) bool {
 
 // ParseFile detects format by extension and parses CSV or XLSX.
 func ParseFile(filename string, data []byte) (RawTable, error) {
+	table, _, err := ParseImportFile(filename, data)
+	return table, err
+}
+
+func ParseImportFile(filename string, data []byte) (RawTable, *NativeFile, error) {
+	data = decodeImportText(data)
+	if IsNativeCSV(data) {
+		return nativeImportTables(data)
+	}
 	lower := strings.ToLower(filename)
+	var table RawTable
+	var err error
 	switch {
 	case strings.HasSuffix(lower, ".xlsx"):
-		return ParseXLSX(data)
+		table, err = ParseXLSX(data)
 	case strings.HasSuffix(lower, ".csv"):
-		return ParseCSV(data)
+		table, err = ParseCSV(data)
 	default:
 		if len(data) > 2 && data[0] == 'P' && data[1] == 'K' {
-			return ParseXLSX(data)
+			table, err = ParseXLSX(data)
+		} else {
+			table, err = ParseCSV(data)
 		}
-		return ParseCSV(data)
 	}
+	if err != nil {
+		return RawTable{}, nil, err
+	}
+	if looksLikeNativeTable(table) {
+		nf, nerr := nativeFileFromFlatTable(table)
+		if nerr != nil {
+			return RawTable{}, nil, nerr
+		}
+		return nativeTxTable(nf)
+	}
+	return table, nil, nil
+}
+
+func nativeImportTables(data []byte) (RawTable, *NativeFile, error) {
+	nf, err := ParseNativeCSV(data)
+	if err != nil {
+		return RawTable{}, nil, err
+	}
+	return nativeTxTable(nf)
+}
+
+func nativeTxTable(nf NativeFile) (RawTable, *NativeFile, error) {
+	tx, ok := nf.Sections[sectionTx]
+	if !ok || len(tx.Headers) == 0 {
+		return RawTable{}, &nf, fmt.Errorf("в файле нет секции transactions")
+	}
+	return tx, &nf, nil
+}
+
+func looksLikeNativeTable(table RawTable) bool {
+	if len(table.Headers) > 0 && strings.EqualFold(strings.Trim(table.Headers[0], "\"'"), nativeMagic) {
+		return true
+	}
+	for _, row := range table.Rows {
+		if len(row.Values) == 0 {
+			continue
+		}
+		cell0 := strings.TrimSpace(row.Values[0])
+		if strings.EqualFold(strings.Trim(cell0, "\"'"), nativeMagic) || strings.EqualFold(cell0, "#SECTION") {
+			return true
+		}
+	}
+	return false
+}
+
+func nativeFileFromFlatTable(table RawTable) (NativeFile, error) {
+	all := make([][]string, 0, 1+len(table.Rows))
+	if len(table.Headers) > 0 {
+		all = append(all, table.Headers)
+	}
+	for _, row := range table.Rows {
+		all = append(all, row.Values)
+	}
+	return parseNativeRecords(all)
 }
 
 // ReadAll reads the upload body with a size cap.

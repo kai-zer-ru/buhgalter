@@ -47,6 +47,31 @@ LEFT JOIN banks b ON b.id = a.bank_id
 WHERE a.user_id = ? AND a.status = 'active'
 ORDER BY a.name;
 
+-- name: ListAccountsForExport :many
+SELECT
+    a.id,
+    a.name,
+    a.type,
+    a.bank_id,
+    a.initial_balance,
+    a.credit_limit,
+    a.payment_account_id,
+    pa.name AS payment_account_name,
+    a.auto_topup_enabled,
+    a.auto_topup_threshold,
+    a.auto_topup_target,
+    a.auto_topup_source_account_id,
+    src.name AS auto_topup_source_name,
+    a.status,
+    a.is_primary,
+    b.name AS bank_name
+FROM accounts a
+LEFT JOIN banks b ON b.id = a.bank_id
+LEFT JOIN accounts pa ON pa.id = a.payment_account_id
+LEFT JOIN accounts src ON src.id = a.auto_topup_source_account_id
+WHERE a.user_id = ? AND a.status IN ('active', 'archived')
+ORDER BY CASE a.type WHEN 'cash' THEN 0 WHEN 'bank' THEN 1 ELSE 2 END, a.name;
+
 -- name: ListAccountsByUserAndStatus :many
 SELECT
     a.id,

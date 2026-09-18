@@ -1398,6 +1398,29 @@ func (q *Queries) ReassignTransactionsCategoryByFilter(ctx context.Context, arg 
 	return err
 }
 
+const setTransactionSubscriptionID = `-- name: SetTransactionSubscriptionID :exec
+UPDATE transactions
+SET subscription_id = ?, updated_at = ?
+WHERE id = ? AND user_id = ?
+`
+
+type SetTransactionSubscriptionIDParams struct {
+	SubscriptionID *string `json:"subscription_id"`
+	UpdatedAt      string  `json:"updated_at"`
+	ID             string  `json:"id"`
+	UserID         string  `json:"user_id"`
+}
+
+func (q *Queries) SetTransactionSubscriptionID(ctx context.Context, arg SetTransactionSubscriptionIDParams) error {
+	_, err := q.db.ExecContext(ctx, setTransactionSubscriptionID,
+		arg.SubscriptionID,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
+	return err
+}
+
 const sumExpenseManual = `-- name: SumExpenseManual :one
 SELECT COALESCE(SUM(amount), 0) AS total
 FROM transactions

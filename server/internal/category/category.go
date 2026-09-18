@@ -460,6 +460,18 @@ func ListSubcategories(ctx context.Context, db *sql.DB, userID, categoryID strin
 	return out, nil
 }
 
+func ListSubcategoriesByUser(ctx context.Context, db *sql.DB, userID string) ([]Subcategory, error) {
+	rows, err := queries(db).ListSubcategoriesByUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Subcategory, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, subcategoryFromRow(row.ID, row.CategoryID, row.Name, row.Icon, row.CreatedAt, row.SortOrder))
+	}
+	return out, nil
+}
+
 func ReorderSubcategories(ctx context.Context, db *sql.DB, userID, categoryID string, ids []string) ([]Subcategory, error) {
 	if _, err := GetByID(ctx, db, userID, categoryID); err != nil {
 		return nil, err

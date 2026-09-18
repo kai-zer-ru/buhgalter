@@ -27,7 +27,17 @@
 		type SubcategoryMappingSuggestion,
 		type ImportReport
 	} from '$lib/api/client';
+	import { invalidateApiCache } from '$lib/api/cache';
 	import { confirm } from '$lib/confirm';
+	import {
+		clearStoredImportJob,
+		isRetriableImportJobPollError,
+		readStoredImportJobSnapshot,
+		restoreStepFromSnapshot,
+		writeStoredImportJob,
+		type StoredImportJobSnapshot
+	} from '$lib/import-job-poll';
+	import { clearRefCache } from '$lib/ref-cache';
 	import { randomId } from '$lib/random-id';
 	import { toast } from '$lib/toast';
 	import {
@@ -60,10 +70,22 @@
 		| 'importing'
 		| 'done';
 	type Tab = 'import' | 'export';
-	const ACTIVE_IMPORT_JOB_ID_KEY = 'buhgalter.active_import_job_id';
 
+	function jobFromSnapshot(s: StoredImportJobSnapshot): ImportJob {
+		return {
+			id: s.id,
+			filename: s.filename,
+			status: s.status,
+			created_at: s.created_at,
+			started_at: s.started_at,
+			error_message: s.error_message,
+			report: s.report as ImportReport | undefined
+		};
+	}
+
+	const storedImport = readStoredImportJobSnapshot();
 	let tab = $state<Tab>('import');
-	let step = $state<Step>('upload');
+	let step = $state<Step>(restoreStepFromSnapshot(storedImport));
 	let file = $state<File | null>(null);
 	let preset = $state<'buhgalter' | 'cubux' | 'custom'>('buhgalter');
 	let deduplicate = $state(true);
@@ -71,7 +93,7 @@
 	let loading = $state(false);
 	let report = $state<ImportReport | null>(null);
 	let finalReport = $state<ImportReport | null>(null);
-	let importJob = $state<ImportJob | null>(null);
+	let importJob = $state<ImportJob | null>(storedImport ? jobFromSnapshot(storedImport) : null);
 	let importPollingToken = 0;
 	let accounts = $state<Account[]>([]);
 	let banks = $state<Bank[]>([]);
@@ -91,7 +113,15 @@
 	let exportCategoryId = $state('');
 	let exportFormat = $state<'buhgalter' | 'cubux'>('buhgalter');
 
-	onMount(async () => {
+	onMount(() => {
+		void restoreActiveImportJob();
+		void loadExportCatalogs();
+		return () => {
+			importPollingToken++;
+		};
+	});
+
+	async function loadExportCatalogs() {
 		try {
 			[accounts, banks] = await Promise.all([listAccounts(), listBanks()]);
 			const [expense, income] = await Promise.all([
@@ -102,15 +132,10 @@
 		} catch {
 			// optional for filters
 		}
-		void restoreActiveImportJob();
-	});
-
-	function saveActiveImportJobID(jobID: string) {
-		localStorage.setItem(ACTIVE_IMPORT_JOB_ID_KEY, jobID);
 	}
 
-	function clearActiveImportJobID() {
-		localStorage.removeItem(ACTIVE_IMPORT_JOB_ID_KEY);
+	function persistImportJob(job: ImportJob) {
+		writeStoredImportJob(job);
 	}
 
 	function emptyReport(): ImportReport {
@@ -130,12 +155,28 @@
 		};
 	}
 
+	function journalRows(r: ImportReport | null | undefined): number {
+		if (!r) return 0;
+		if ((r.list_rows ?? 0) > 0) return r.list_rows ?? 0;
+		return (r.valid_rows ?? 0) + (r.transfer_rows ?? 0);
+	}
+
+	function confirmImportMessage(r: ImportReport | null): string {
+		const rows = r?.valid_rows ?? 0;
+		const journal = journalRows(r);
+		if (journal > rows) {
+			return $_('import.confirm.message_journal', { values: { rows, journal } });
+		}
+		return $_('import.confirm.message', { values: { count: rows } });
+	}
+
 	async function restoreActiveImportJob() {
-		const jobID = localStorage.getItem(ACTIVE_IMPORT_JOB_ID_KEY);
+		const jobID = readStoredImportJobSnapshot()?.id;
 		if (!jobID) return;
 		try {
 			const current = await getImportJob(jobID);
 			importJob = current;
+			persistImportJob(current);
 			if (current.status === 'queued' || current.status === 'running') {
 				step = 'importing';
 				void pollImportJob(jobID);
@@ -144,14 +185,23 @@
 			if (current.status === 'done') {
 				finalReport = normalizeImportReport(current.report ?? emptyReport());
 				step = 'done';
+				return;
 			}
 			if (current.status === 'failed') {
 				toast.error(current.error_message ?? $_('common.error'));
+				step = 'importing';
 			}
-		} catch {
-			// stale or unavailable job id, ignore and reset persisted state
-		} finally {
-			clearActiveImportJobID();
+		} catch (err) {
+			if (isRetriableImportJobPollError(err)) {
+				step = 'importing';
+				void pollImportJob(jobID);
+				return;
+			}
+			clearStoredImportJob();
+			if (step === 'importing') {
+				importJob = null;
+				step = 'upload';
+			}
 		}
 	}
 
@@ -361,7 +411,8 @@
 				account_id: m.account_id,
 				account_type: m.account_type ?? 'cash',
 				bank_id: m.bank_id,
-				credit_limit: m.credit_limit
+				credit_limit: m.credit_limit,
+				initial_balance: m.initial_balance
 			};
 		}
 		accountMap = next;
@@ -376,7 +427,9 @@
 				[fileName]: {
 					mode: 'create',
 					account_type: prev?.account_type ?? suggestion?.account_type ?? 'cash',
-					bank_id: prev?.bank_id ?? suggestion?.bank_id
+					bank_id: prev?.bank_id ?? suggestion?.bank_id,
+					credit_limit: prev?.credit_limit ?? suggestion?.credit_limit,
+					initial_balance: prev?.initial_balance ?? suggestion?.initial_balance
 				}
 			};
 			return;
@@ -402,7 +455,8 @@
 				mode: 'create',
 				account_type: accountType,
 				bank_id: bankDefault,
-				credit_limit: accountType === 'credit_card' ? prev?.credit_limit : undefined
+				credit_limit: accountType === 'credit_card' ? prev?.credit_limit : undefined,
+				initial_balance: prev?.initial_balance ?? suggestion?.initial_balance
 			}
 		};
 	}
@@ -415,7 +469,8 @@
 				mode: 'create',
 				account_type: prev?.account_type ?? 'bank',
 				bank_id: bankId,
-				credit_limit: prev?.credit_limit
+				credit_limit: prev?.credit_limit,
+				initial_balance: prev?.initial_balance
 			}
 		};
 	}
@@ -428,7 +483,8 @@
 				mode: 'create',
 				account_type: 'credit_card',
 				bank_id: prev?.bank_id ?? banks[0]?.id ?? '',
-				credit_limit: creditLimit
+				credit_limit: creditLimit,
+				initial_balance: prev?.initial_balance
 			}
 		};
 	}
@@ -440,7 +496,8 @@
 			account_id: entry?.account_id ?? m.account_id ?? '',
 			account_type: entry?.account_type ?? m.account_type ?? 'cash',
 			bank_id: entry?.bank_id ?? m.bank_id ?? '',
-			credit_limit: entry?.credit_limit ?? m.credit_limit ?? ''
+			credit_limit: entry?.credit_limit ?? m.credit_limit ?? '',
+			initial_balance: entry?.initial_balance ?? m.initial_balance ?? ''
 		};
 	}
 
@@ -457,7 +514,8 @@
 								entry.account_type === 'bank' || entry.account_type === 'credit_card'
 									? entry.bank_id
 									: undefined,
-							credit_limit: entry.account_type === 'credit_card' ? entry.credit_limit : undefined
+							credit_limit: entry.account_type === 'credit_card' ? entry.credit_limit : undefined,
+							initial_balance: entry.initial_balance
 						}
 					: { mode: 'existing', account_id: entry.account_id };
 		}
@@ -651,36 +709,42 @@
 			try {
 				const current = await getImportJob(jobId);
 				importJob = current;
+				persistImportJob(current);
 				if (current.status === 'done') {
 					finalReport = normalizeImportReport(current.report ?? emptyReport());
-					clearActiveImportJobID();
+					invalidateAfterImport();
 					step = 'done';
 					toast($_('import.done.title'));
 					return;
 				}
 				if (current.status === 'failed') {
-					clearActiveImportJobID();
+					invalidateAfterImport();
 					toast.error(current.error_message ?? $_('common.error'));
-					step = 'preview';
+					step = file ? 'preview' : 'importing';
 					return;
 				}
 			} catch (err) {
-				clearActiveImportJobID();
-				toast.fromError(err);
-				step = 'preview';
-				return;
+				if (!isRetriableImportJobPollError(err)) {
+					clearStoredImportJob();
+					toast.fromError(err);
+					step = file ? 'preview' : 'upload';
+					return;
+				}
 			}
 			await sleep(1200);
 		}
+	}
+
+	function invalidateAfterImport() {
+		invalidateApiCache();
+		clearRefCache({ preserveAuthMe: true });
 	}
 
 	async function runImport() {
 		if (!file) return;
 		const ok = await confirm({
 			title: $_('import.confirm.title'),
-			message: $_('import.confirm.message', {
-				values: { count: report?.valid_rows ?? 0 }
-			}),
+			message: confirmImportMessage(report),
 			confirmLabel: $_('import.confirm.apply')
 		});
 		if (!ok) return;
@@ -694,7 +758,7 @@
 				...importOpts(),
 				idempotencyKey: importAttemptKey
 			});
-			saveActiveImportJobID(importJob.id);
+			persistImportJob(importJob);
 			step = 'importing';
 			loading = false;
 			void pollImportJob(importJob.id);
@@ -711,7 +775,7 @@
 		finalReport = null;
 		importJob = null;
 		importPollingToken++;
-		clearActiveImportJobID();
+		clearStoredImportJob();
 		fileHeaders = [];
 		columnMap = {};
 		accountMap = {};
@@ -825,24 +889,6 @@
 	{#if tab === 'export'}
 		<div class="card space-y-4">
 			<h2 class="text-lg font-medium">{$_('import.export.title')}</h2>
-			<div class="grid gap-4 sm:grid-cols-2">
-				<DateTimePicker
-					label={$_('import.export.from')}
-					bind:value={exportFrom}
-					{...dateOnlyPicker}
-				/>
-				<DateTimePicker label={$_('import.export.to')} bind:value={exportTo} {...dateOnlyPicker} />
-			</div>
-			<Select
-				label={$_('import.export.account')}
-				bind:value={exportAccountId}
-				options={exportAccountOptions}
-			/>
-			<Select
-				label={$_('import.export.category')}
-				bind:value={exportCategoryId}
-				options={exportCategoryOptions}
-			/>
 			<div class="space-y-2">
 				<p class="text-sm font-medium">{$_('import.export.format')}</p>
 				<label class="flex items-center gap-2">
@@ -854,6 +900,32 @@
 					<span>{$_('import.export.format_cubux')}</span>
 				</label>
 			</div>
+			{#if exportFormat === 'buhgalter'}
+				<p class="text-sm" style:color="var(--text-muted)">{$_('import.export.buhgalter_full')}</p>
+			{:else}
+				<div class="grid gap-4 sm:grid-cols-2">
+					<DateTimePicker
+						label={$_('import.export.from')}
+						bind:value={exportFrom}
+						{...dateOnlyPicker}
+					/>
+					<DateTimePicker
+						label={$_('import.export.to')}
+						bind:value={exportTo}
+						{...dateOnlyPicker}
+					/>
+				</div>
+				<Select
+					label={$_('import.export.account')}
+					bind:value={exportAccountId}
+					options={exportAccountOptions}
+				/>
+				<Select
+					label={$_('import.export.category')}
+					bind:value={exportCategoryId}
+					options={exportCategoryOptions}
+				/>
+			{/if}
 			<button
 				type="button"
 				class="btn-primary inline-flex"
@@ -1343,6 +1415,10 @@
 				>
 					<span>{$_('import.preview.total')}: {report.total_rows}</span>
 					<span>{$_('import.preview.valid')}: {report.valid_rows}</span>
+					<span>{$_('import.preview.journal')}: {journalRows(report)}</span>
+					{#if (report.transfer_rows ?? 0) > 0}
+						<span>{$_('import.preview.transfers')}: {report.transfer_rows}</span>
+					{/if}
 					<span>{$_('import.preview.duplicates')}: {report.skipped_duplicates}</span>
 					<span>{$_('import.preview.errors')}: {(report.errors ?? []).length}</span>
 				</div>
@@ -1396,12 +1472,21 @@
 				>
 					<span>{$_('import.preview.total')}: {finalReport.total_rows}</span>
 					<span>{$_('import.preview.valid')}: {finalReport.valid_rows}</span>
+					<span>{$_('import.preview.journal')}: {journalRows(finalReport)}</span>
+					{#if (finalReport.transfer_rows ?? 0) > 0}
+						<span>{$_('import.preview.transfers')}: {finalReport.transfer_rows}</span>
+					{/if}
 					<span>{$_('import.preview.duplicates')}: {finalReport.skipped_duplicates}</span>
 					<span>{$_('import.preview.errors')}: {(finalReport.errors ?? []).length}</span>
 				</div>
 				<p>
 					{$_('import.done.created', { values: { count: finalReport.created_transactions ?? 0 } })}
 				</p>
+				{#if journalRows(finalReport) > (finalReport.created_transactions ?? finalReport.valid_rows)}
+					<p class="text-sm" style:color="var(--text-muted)">
+						{$_('import.done.journal', { values: { count: journalRows(finalReport) } })}
+					</p>
+				{/if}
 				<p class="text-sm" style:color="var(--text-muted)">
 					{$_('import.done.skipped', { values: { count: finalReport.skipped_duplicates } })}
 				</p>

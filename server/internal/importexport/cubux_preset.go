@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"unicode"
+	"unicode/utf16"
 	"unicode/utf8"
 
 	"github.com/kai-zer-ru/buhgalter/internal/money"
@@ -16,6 +17,34 @@ func StripUTF8BOM(data []byte) []byte {
 		return data[3:]
 	}
 	return data
+}
+
+func decodeImportText(data []byte) []byte {
+	if len(data) >= 2 && data[0] == 0xFF && data[1] == 0xFE {
+		return utf16LEToUTF8(data[2:])
+	}
+	if len(data) >= 2 && data[0] == 0xFE && data[1] == 0xFF {
+		return utf16BEToUTF8(data[2:])
+	}
+	return data
+}
+
+func utf16LEToUTF8(b []byte) []byte {
+	n := len(b) / 2
+	u := make([]uint16, n)
+	for i := 0; i < n; i++ {
+		u[i] = uint16(b[2*i]) | uint16(b[2*i+1])<<8
+	}
+	return []byte(string(utf16.Decode(u)))
+}
+
+func utf16BEToUTF8(b []byte) []byte {
+	n := len(b) / 2
+	u := make([]uint16, n)
+	for i := 0; i < n; i++ {
+		u[i] = uint16(b[2*i])<<8 | uint16(b[2*i+1])
+	}
+	return []byte(string(utf16.Decode(u)))
 }
 
 // ParseCubuxAmount parses Cubux amount strings like "50.00_-₽" or "31024.46_-₽".

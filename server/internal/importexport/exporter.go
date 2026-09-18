@@ -23,9 +23,14 @@ func exportFormat(f ExportFilters) string {
 
 // ExportCSV returns CSV bytes for the given filters (Cubux or native Buhgalter).
 func ExportCSV(ctx context.Context, db *sql.DB, userID, displayName string, f ExportFilters) ([]byte, string, error) {
+	format := exportFormat(f)
+	if format == "buhgalter" {
+		// Full ledger: date/account/category filters are Cubux-only.
+		return exportNative(ctx, db, userID, displayName, ExportFilters{Format: "buhgalter"})
+	}
+
 	from := normalizeExportDate(f.From, false)
 	to := normalizeExportDate(f.To, true)
-	format := exportFormat(f)
 
 	var all []transaction.Transaction
 	page := 1
@@ -50,9 +55,6 @@ func ExportCSV(ctx context.Context, db *sql.DB, userID, displayName string, f Ex
 	}
 
 	headers := CubuxHeaders
-	if format == "buhgalter" {
-		headers = BuhgalterHeaders
-	}
 
 	var buf bytes.Buffer
 	buf.Write([]byte{0xEF, 0xBB, 0xBF}) // UTF-8 BOM
@@ -70,7 +72,7 @@ func ExportCSV(ctx context.Context, db *sql.DB, userID, displayName string, f Ex
 			}
 			seenTransfers[*tx.TransferGroupID] = true
 		}
-		line := txToExportLine(tx, displayName, format)
+		line := txToExportLine(tx, displayName, format, nil)
 		if line == nil {
 			continue
 		}
@@ -87,7 +89,7 @@ func ExportCSV(ctx context.Context, db *sql.DB, userID, displayName string, f Ex
 	return buf.Bytes(), filename, nil
 }
 
-func txToExportLine(tx transaction.Transaction, displayName, format string) []string {
+func txToExportLine(tx transaction.Transaction, displayName, format string, subNameByID map[string]string) []string {
 	line := txToCubuxLine(tx, displayName)
 	if line == nil || format != "buhgalter" {
 		return line
@@ -96,7 +98,15 @@ func txToExportLine(tx transaction.Transaction, displayName, format string) []st
 	if tx.MerchantName != nil {
 		merchant = *tx.MerchantName
 	}
-	return append(line, formatExportTime(tx.TransactionDate), merchant, joinExportTags(tx))
+	commission := ""
+	if tx.Type == "transfer" && tx.Commission > 0 {
+		commission = FormatCubuxAmount(tx.Commission)
+	}
+	subName := ""
+	if tx.SubscriptionID != nil && subNameByID != nil {
+		subName = subNameByID[*tx.SubscriptionID]
+	}
+	return append(line, formatExportTime(tx.TransactionDate), merchant, joinExportTags(tx), commission, tx.ID, subName)
 }
 
 func txToCubuxLine(tx transaction.Transaction, displayName string) []string {

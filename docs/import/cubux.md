@@ -18,7 +18,7 @@ Buhgalter поддерживает импорт и экспорт операци
 | `Доходы` | income: счёт = «Счет пополнения», сумма = «Сумма пополнения» |
 | `Перевод` | transfer: from = «Счет списания», to = «Счет пополнения» |
 
-Важно: в файле Cubux `Перевод` — одна строка операции, но в БД создаются две связанные записи (`transfer` out/in с одним `transfer_group_id`).
+Важно: в файле Cubux `Перевод` — одна строка операции, но в БД создаются две связанные записи (`transfer` out/in с одним `transfer_group_id`). В превью импорта `valid_rows` — строки файла, `list_rows` — сколько записей будет в журнале (`valid_rows` + число переводов).
 
 ## Формат значений
 
@@ -62,14 +62,16 @@ API:
 - `total_rows` — строк в файле;
 - `processed_rows` — сколько уже обработано;
 - `created_transactions`, `skipped_duplicates`, `errors` — текущая сводка;
-- `logs[]` — построчный лог обработки (импорт, skip duplicate, mapping error, error).
+- полный `logs[]` — в итоговом report после `done` (промежуточный progress без полного лога, чтобы не блокировать SQLite).
 
-Фронтенд `/settings/import` на основе этого показывает прогресс-бар, ETA и спойлер «Полный лог».
+Фронтенд `/settings/import` показывает прогресс-бар и ETA; полный лог — на экране завершения. Опрос статуса при `SQLITE_BUSY` / 5xx не бросает экран прогресса. При уходе со страницы последний снимок job пишется в `localStorage`: возврат сразу показывает прогресс, справочники грузятся параллельно.
+
+`POST /api/v1/import/jobs` не сбрасывает API-кеш (job только ставится в очередь). Кеш пользователя сбрасывается, когда job завершается.
 
 ### Устойчивость фонового импорта
 
 - При рестарте сервера старые job в `queued/running` автоматически переводятся в `failed` с причиной `import interrupted: server restarted`.
-- На коротких блокировках SQLite (`SQLITE_BUSY` / `database is locked`) применяется retry с backoff, чтобы импорт не терял пачки строк.
+- На коротких блокировках SQLite (`SQLITE_BUSY` / `database is locked`) применяется retry с backoff, чтобы импорт не терял пачки строк. `GET /import/jobs/{id}` в этом случае отвечает `503 SERVICE_UNAVAILABLE`.
 
 UI: `/settings/import` — wizard:
 загрузка → настройки → сопоставление счетов (уникальные) → сопоставление категорий (уникальные) →
@@ -93,7 +95,7 @@ UI: `/settings/import` — wizard:
 
 ## Экспорт
 
-`GET /api/v1/export?from=2025-01-01&to=2025-12-31&account_id=uuid` (`format=cubux` по умолчанию; `format=buhgalter` — [нативный формат](buhgalter.md))
+`GET /api/v1/export?from=2025-01-01&to=2025-12-31&account_id=uuid` (`format=cubux` по умолчанию). `format=buhgalter` — [полный перенос учёта](buhgalter.md), без фильтров даты/счёта/категории.
 
 - Content-Type: `text/csv; charset=utf-8`
 - Content-Disposition: `attachment; filename="buhgalter_export_YYYY.csv"`

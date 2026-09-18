@@ -70,12 +70,17 @@ func insertSubscription(t *testing.T, database *sql.DB, userID, accountID string
 		timeutil.FormatUTC(mustParseUTC(t, nextRunAt).AddDate(0, 1, 0)),
 		timeutil.FormatUTC(mustParseUTC(t, nextRunAt).AddDate(0, 2, 0)),
 	})
+	insertSubscriptionWithUpcoming(t, database, userID, accountID, amount, period, weekday, dayOfMonth, startDate, timeLocal, nextRunAt, string(upcoming), active)
+}
+
+func insertSubscriptionWithUpcoming(t *testing.T, database *sql.DB, userID, accountID string, amount int64, period string, weekday, dayOfMonth *int64, startDate, timeLocal, nextRunAt, upcoming string, active int) {
+	t.Helper()
 	_, err := database.ExecContext(context.Background(), `
 		INSERT INTO subscriptions (
 			id, user_id, name, amount, account_id, period, weekday, day_of_month,
 			start_date, time_local, next_run_at, upcoming_run_ats, active, created_at, updated_at
 		) VALUES (?, ?, 'Sub', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
-		"sub-1", userID, amount, accountID, period, weekday, dayOfMonth, startDate, timeLocal, nextRunAt, string(upcoming), active)
+		"sub-1", userID, amount, accountID, period, weekday, dayOfMonth, startDate, timeLocal, nextRunAt, upcoming, active)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -212,8 +217,13 @@ func TestScheduledEffects_WeeklyMultiple(t *testing.T) {
 		weekday = 7
 	}
 	start := timeutil.FormatUTC(first.AddDate(0, 0, -14))
-	insertSubscription(t, database, userID, accountID, 1000, "week", &weekday, nil,
-		start, "12:00", timeutil.FormatUTC(first), 1)
+	upcoming, _ := json.Marshal([]string{
+		timeutil.FormatUTC(first),
+		timeutil.FormatUTC(first.AddDate(0, 0, 7)),
+		timeutil.FormatUTC(first.AddDate(0, 0, 14)),
+	})
+	insertSubscriptionWithUpcoming(t, database, userID, accountID, 1000, "week", &weekday, nil,
+		start, "12:00", timeutil.FormatUTC(first), string(upcoming), 1)
 
 	effects, err := ScheduledEffectsByUser(context.Background(), database, userID, "UTC", now)
 	if err != nil {
@@ -247,6 +257,27 @@ func TestScheduledEffects_NextMonthIgnored(t *testing.T) {
 	}
 	if _, ok := effects.HasSubscription[accountID]; ok {
 		t.Fatal("expected no HasSubscription")
+	}
+}
+
+func TestScheduledEffects_TimeLocalAheadOfNextRunDoesNotDoubleMonth(t *testing.T) {
+	database := scheduledTestDB(t)
+	userID, accountID := seedUserAcc(t, database)
+	now := time.Date(2026, 9, 18, 12, 0, 0, 0, time.UTC)
+	day := int64(29)
+	nextRun := "2026-09-29 00:15:00"
+	upcoming, _ := json.Marshal([]string{nextRun, "2026-10-29 00:15:00", "2026-11-28 00:15:00"})
+	insertSubscriptionWithUpcoming(t, database, userID, accountID, 19900, "month", nil, &day,
+		"2026-06-28 16:00:00", "08:15", nextRun, string(upcoming), 1)
+
+	for _, tz := range []string{"Europe/Moscow", "Asia/Irkutsk"} {
+		effects, err := ScheduledEffectsByUser(context.Background(), database, userID, tz, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if effects.Deltas[accountID] != -19900 {
+			t.Fatalf("tz %s: expected -19900 (one September run), got %d", tz, effects.Deltas[accountID])
+		}
 	}
 }
 

@@ -8,6 +8,7 @@ import {
 	refCacheUpdate,
 	resetRefCacheForTests,
 	runWithForcedRefCacheNetwork,
+	shouldInvalidateRefCacheOnWrite,
 	shouldPersistRefCache,
 	writeRefCache
 } from './ref-cache';
@@ -37,6 +38,14 @@ describe('shouldPersistRefCache', () => {
 		expect(shouldPersistRefCache('/api/v1/banks')).toBe(true);
 		expect(shouldPersistRefCache('/api/v1/health')).toBe(false);
 		expect(shouldPersistRefCache('/api/v1/setup/status')).toBe(false);
+	});
+});
+
+describe('shouldInvalidateRefCacheOnWrite', () => {
+	it('does not bust cache when queuing a background import job', () => {
+		expect(shouldInvalidateRefCacheOnWrite('/api/v1/import/jobs')).toBe(false);
+		expect(shouldInvalidateRefCacheOnWrite('/api/v1/import')).toBe(true);
+		expect(shouldInvalidateRefCacheOnWrite('/api/v1/transactions')).toBe(true);
 	});
 });
 

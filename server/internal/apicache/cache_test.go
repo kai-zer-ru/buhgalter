@@ -69,6 +69,38 @@ func TestMiddlewareInvalidatesUserCacheOnWrite(t *testing.T) {
 	}
 }
 
+func TestMiddlewareDoesNotInvalidateOnImportJobCreate(t *testing.T) {
+	cache := New()
+	calls := 0
+	handler := Middleware(cache)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, `{"n":%d}`, calls)
+	}))
+
+	userID := "user-1"
+	withUser := func(r *http.Request) *http.Request {
+		ctx := context.WithValue(r.Context(), auth.AuthContextKey, auth.AuthInfo{
+			User: auth.User{ID: userID},
+		})
+		return r.WithContext(ctx)
+	}
+
+	handler.ServeHTTP(httptest.NewRecorder(), withUser(httptest.NewRequest(http.MethodGet, "/api/v1/dashboard", nil)))
+	postReq := withUser(httptest.NewRequest(http.MethodPost, "/api/v1/import/jobs", nil))
+	handler.ServeHTTP(httptest.NewRecorder(), postReq)
+	handler.ServeHTTP(httptest.NewRecorder(), withUser(httptest.NewRequest(http.MethodGet, "/api/v1/dashboard", nil)))
+	if calls != 2 {
+		t.Fatalf("import job create should not drop GET cache, calls=%d", calls)
+	}
+
+	cache.InvalidateUser(userID)
+	handler.ServeHTTP(httptest.NewRecorder(), withUser(httptest.NewRequest(http.MethodGet, "/api/v1/dashboard", nil)))
+	if calls != 3 {
+		t.Fatalf("expected miss after job-done invalidation, calls=%d", calls)
+	}
+}
+
 func TestCacheExpires(t *testing.T) {
 	cache := New()
 	cache.Set("k", Response{Status: http.StatusOK, Body: []byte("x")}, time.Millisecond)

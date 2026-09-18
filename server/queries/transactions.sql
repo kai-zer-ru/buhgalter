@@ -136,6 +136,11 @@ UPDATE transactions
 SET affects_balance = ?, updated_at = ?
 WHERE id = ? AND user_id = ?;
 
+-- name: SetTransactionSubscriptionID :exec
+UPDATE transactions
+SET subscription_id = ?, updated_at = ?
+WHERE id = ? AND user_id = ?;
+
 -- name: UpdateTransferLeg :exec
 UPDATE transactions
 SET account_id = ?, amount = ?, description = ?, transaction_date = ?,

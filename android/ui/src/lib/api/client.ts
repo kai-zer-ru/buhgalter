@@ -1,6 +1,7 @@
 import { get } from 'svelte/store';
 import { locale } from 'svelte-i18n';
 import { cachedGet, invalidateApiCache, seedStaticRef } from '$lib/api/cache';
+import { exportCSVUrl } from '$lib/api/export-url';
 import { notifySessionExpired, shouldLogoutOnApi401 } from '$lib/auth/session-expired';
 import { authHeaders, getAuthServerOrigin, getAuthToken } from '$lib/platform/auth-token';
 import {
@@ -14,6 +15,7 @@ import {
 	enrichAccountWithCachedBalances,
 	readRefCache,
 	seedDictionariesFromUIMeta,
+	shouldInvalidateRefCacheOnWrite,
 	shouldPersistRefCache
 } from '$lib/offline/ref-cache';
 import {
@@ -231,7 +233,7 @@ async function request<T>(path: string, init?: RequestInit, opts?: { auth?: bool
 		}
 	}
 	const result = await fetcher();
-	if (method !== 'GET') {
+	if (method !== 'GET' && shouldInvalidateRefCacheOnWrite(path)) {
 		// Keep persistable GET snapshots (offline sections stay open). Next online
 		// GET hits the network. Dictionaries + accounts still seed from ui/meta if empty.
 		invalidateApiCache();
@@ -2113,6 +2115,7 @@ export type AccountMappingSuggestion = {
 	account_type?: AccountType;
 	bank_id?: string;
 	credit_limit?: string;
+	initial_balance?: string;
 };
 
 export type CategoryMappingSuggestion = {
@@ -2146,6 +2149,8 @@ export type ImportReport = {
 	total_rows: number;
 	processed_rows?: number;
 	valid_rows: number;
+	transfer_rows?: number;
+	list_rows?: number;
 	skipped_duplicates: number;
 	created_transactions?: number;
 	errors: ImportRowError[];
@@ -2175,6 +2180,7 @@ export type AccountMapEntry = {
 	account_type?: AccountType;
 	bank_id?: string;
 	credit_limit?: string;
+	initial_balance?: string;
 };
 
 export type ImportOptions = {
@@ -2244,19 +2250,4 @@ export function getImportJob(id: string) {
 	return request<ImportJob>(`/api/v1/import/jobs/${encodeURIComponent(id)}`);
 }
 
-export function exportCSVUrl(params: {
-	from?: string;
-	to?: string;
-	account_id?: string;
-	category_id?: string;
-	format?: 'buhgalter' | 'cubux';
-}) {
-	const q = new URLSearchParams();
-	if (params.from) q.set('from', params.from);
-	if (params.to) q.set('to', params.to);
-	if (params.account_id) q.set('account_id', params.account_id);
-	if (params.category_id) q.set('category_id', params.category_id);
-	if (params.format) q.set('format', params.format);
-	const qs = q.toString();
-	return `/api/v1/export${qs ? `?${qs}` : ''}`;
-}
+export { exportCSVUrl };

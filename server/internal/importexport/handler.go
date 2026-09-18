@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/kai-zer-ru/buhgalter/internal/apicache"
 	"github.com/kai-zer-ru/buhgalter/internal/apperror"
 	"github.com/kai-zer-ru/buhgalter/internal/audit"
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
@@ -17,6 +18,7 @@ type Handler struct {
 	Store  *db.Handle
 	Audit  *audit.Logger
 	Logger *slog.Logger
+	Cache  *apicache.Cache
 }
 
 func (h *Handler) Headers(w http.ResponseWriter, r *http.Request) {

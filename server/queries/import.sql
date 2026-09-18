@@ -12,16 +12,41 @@ SELECT
     t.type,
     t.amount,
     substr(t.transaction_date, 1, 10) AS tx_date,
+    CAST(COALESCE(substr(t.transaction_date, 12, 8), '') AS TEXT) AS tx_time,
     a.name AS account_name,
-    COALESCE(c.name, '') AS category_name
+    COALESCE(ta.name, '') AS transfer_account_name,
+    COALESCE(c.name, '') AS category_name,
+    COALESCE(s.name, '') AS subcategory_name,
+    COALESCE(t.description, '') AS description,
+    COALESCE(m.name, '') AS merchant_name,
+    CAST(COALESCE((
+        SELECT group_concat(tg.name, ',')
+        FROM transaction_tags tt
+        JOIN tags tg ON tg.id = tt.tag_id
+        WHERE tt.transaction_id = t.id
+    ), '') AS TEXT) AS tag_names,
+    CASE
+        WHEN t.type = 'transfer' AND t.transfer_group_id IS NOT NULL THEN (
+            SELECT COALESCE(SUM(x.amount), 0)
+            FROM transactions x
+            WHERE x.transfer_group_id = t.transfer_group_id
+              AND x.type = 'expense'
+        )
+        ELSE 0
+    END AS commission
 FROM transactions t
 JOIN accounts a ON a.id = t.account_id
+LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
 LEFT JOIN categories c ON c.id = t.category_id
+LEFT JOIN subcategories s ON s.id = t.subcategory_id
+LEFT JOIN merchants m ON m.id = t.merchant_id
 WHERE t.user_id = ?
   AND t.type IN ('income', 'expense', 'transfer')
+  AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL)
   AND (t.transfer_group_id IS NULL OR t.id = (
       SELECT x.id FROM transactions x
       WHERE x.transfer_group_id = t.transfer_group_id
+        AND x.type = 'transfer'
       ORDER BY x.created_at ASC, x.id ASC
       LIMIT 1
   ));

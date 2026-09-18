@@ -46,4 +46,8 @@ test('export CSV download button is enabled with filters', async ({ page }) => {
 	await expect(downloadBtn).toBeEnabled();
 	await expect(page.getByRole('radio', { name: 'Бухгалтер', exact: true })).toBeVisible();
 	await expect(page.getByRole('radio', { name: 'Cubux', exact: true })).toBeVisible();
+	await expect(page.getByText(/весь учёт/)).toBeVisible();
+
+	await page.getByRole('radio', { name: 'Cubux', exact: true }).click();
+	await expect(page.getByRole('button', { name: 'Скачать CSV' })).toBeEnabled();
 });

@@ -59,6 +59,10 @@ func (h *Handler) GetJob(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
 		return
 	}
+	if isSQLiteBusyError(err) {
+		apperror.WriteR(w, r, http.StatusServiceUnavailable, apperror.ServiceUnavailable)
+		return
+	}
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
@@ -97,6 +101,7 @@ func (h *Handler) runImportJob(
 	)
 	if err != nil {
 		_ = setImportJobFailed(ctx, h.Store.DB(), userID, jobID, err)
+		h.Cache.InvalidateUser(userID)
 		_ = h.Audit.Log("import.job.failed", userID, login, ip, map[string]any{
 			"filename": filename,
 			"job_id":   jobID,
@@ -111,6 +116,7 @@ func (h *Handler) runImportJob(
 	if err := setImportJobDone(ctx, h.Store.DB(), userID, jobID, report); err != nil && h.Logger != nil {
 		h.Logger.Error("import job set done failed", "job_id", jobID, "err", err)
 	}
+	h.Cache.InvalidateUser(userID)
 	_ = h.Audit.Log("import.job.done", userID, login, ip, map[string]any{
 		"filename":             filename,
 		"job_id":               jobID,

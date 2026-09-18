@@ -79,8 +79,9 @@
 | [notifications.md](notifications.md) | Уведомления: настройки, периоды, шаблоны, блокировка UI/API |
 | [../roadmap/balance-shortfall-notifications.md](../roadmap/balance-shortfall-notifications.md) | Недостаток средств в тексте уведомлений |
 | [ui-api-cache.md](ui-api-cache.md) | In-memory кеш GET на сервере и справочники в браузере |
+| [../roadmap/realtime-updates.md](../roadmap/realtime-updates.md) | (план) Живые обновления UI: WebSocket/SSE вместо фонового шторма GET |
 | [import/cubux.md](import/cubux.md) | Импорт и экспорт формата Cubux |
-| [import/buhgalter.md](import/buhgalter.md) | Нативный импорт и экспорт между инстансами |
+| [import/buhgalter.md](import/buhgalter.md) | Нативный секционный CSV: полный перенос учёта между инстансами |
 | [../roadmap/category-rules-inbox.md](../roadmap/category-rules-inbox.md) | (план) Правила категорий и inbox неразнесённого |
 | [feature-toggles.md](feature-toggles.md) | Флаги модулей в админке; чеклист для новых фич |
 | [subscriptions.md](subscriptions.md) | Подписки: API, UI, уведомления, плановый остаток |

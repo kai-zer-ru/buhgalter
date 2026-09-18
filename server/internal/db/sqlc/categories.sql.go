@@ -431,6 +431,44 @@ func (q *Queries) ListSubcategoriesByCategory(ctx context.Context, categoryID st
 	return items, nil
 }
 
+const listSubcategoriesByUser = `-- name: ListSubcategoriesByUser :many
+SELECT s.id, s.category_id, s.name, s.icon, s.sort_order, s.created_at
+FROM subcategories s
+INNER JOIN categories c ON c.id = s.category_id
+WHERE c.user_id = ?
+ORDER BY s.category_id, s.sort_order, s.name
+`
+
+func (q *Queries) ListSubcategoriesByUser(ctx context.Context, userID string) ([]Subcategory, error) {
+	rows, err := q.db.QueryContext(ctx, listSubcategoriesByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Subcategory{}
+	for rows.Next() {
+		var i Subcategory
+		if err := rows.Scan(
+			&i.ID,
+			&i.CategoryID,
+			&i.Name,
+			&i.Icon,
+			&i.SortOrder,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const maxCategorySortOrder = `-- name: MaxCategorySortOrder :one
 SELECT COALESCE(MAX(sort_order), 0)
 FROM categories

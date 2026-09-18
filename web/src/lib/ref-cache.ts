@@ -84,6 +84,12 @@ export function shouldPersistRefCache(path: string): boolean {
 	return true;
 }
 
+/** POST /import/jobs only queues work; bust caches when the job finishes. */
+export function shouldInvalidateRefCacheOnWrite(path: string): boolean {
+	const pathOnly = path.split('?')[0] ?? path;
+	return pathOnly !== '/api/v1/import/jobs';
+}
+
 export function isStaleFetchError(err: unknown): boolean {
 	if (err instanceof OfflineCacheMissError) return true;
 	if (err instanceof TypeError) return true;

@@ -89,7 +89,7 @@ func Middleware(cache *Cache) func(http.Handler) http.Handler {
 
 			rec := &responseRecorder{ResponseWriter: w}
 			next.ServeHTTP(rec, r)
-			if isMutating(r.Method) {
+			if isMutating(r.Method) && shouldInvalidateAfterWrite(r.URL.Path) {
 				invalidateForRequest(cache, r)
 			}
 			rec.flush()
@@ -104,6 +104,12 @@ func isMutating(method string) bool {
 	default:
 		return false
 	}
+}
+
+// shouldInvalidateAfterWrite reports whether a mutating request should drop GET cache.
+// POST /import/jobs only queues work; ledger changes happen in the background job.
+func shouldInvalidateAfterWrite(path string) bool {
+	return path != "/api/v1/import/jobs"
 }
 
 func invalidateForRequest(cache *Cache, r *http.Request) {

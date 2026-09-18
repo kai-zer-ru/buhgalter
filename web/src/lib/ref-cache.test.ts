@@ -11,6 +11,7 @@ import {
 	resetRefCacheForTests,
 	setRefCacheUserId,
 	shouldPersistRefCache,
+	shouldInvalidateRefCacheOnWrite,
 	writeRefCache
 } from './ref-cache';
 
@@ -27,6 +28,14 @@ describe('shouldPersistRefCache', () => {
 
 	it('skips transaction change feed', () => {
 		expect(shouldPersistRefCache('/api/v1/sync/transaction-changes')).toBe(false);
+	});
+});
+
+describe('shouldInvalidateRefCacheOnWrite', () => {
+	it('does not bust cache when queuing a background import job', () => {
+		expect(shouldInvalidateRefCacheOnWrite('/api/v1/import/jobs')).toBe(false);
+		expect(shouldInvalidateRefCacheOnWrite('/api/v1/import')).toBe(true);
+		expect(shouldInvalidateRefCacheOnWrite('/api/v1/transactions')).toBe(true);
 	});
 });
 

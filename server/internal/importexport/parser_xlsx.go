@@ -117,7 +117,7 @@ var BuhgalterHeaders = []string{
 	"Тип", "Дата", "Сумма списания", "Валюта списания", "Счет списания",
 	"Сумма пополнения", "Валюта назначения", "Счет пополнения",
 	"Категория", "Subcategory", "Описание", "Проект", "Пользователь",
-	"Время", "Магазин", "Теги",
+	"Время", "Магазин", "Теги", "Комиссия", "ID", "Подписка",
 }
 
 func cubuxFieldIndex(headers []string) map[string]int {
@@ -210,6 +210,15 @@ func MapBuhgalterRow(headers []string, row RawRow) (MappedRow, error) {
 	idx := cubuxFieldIndex(headers)
 	m.Merchant = cellAt(row, idx, "Магазин", "merchant")
 	m.Tags = parseTagList(cellAt(row, idx, "Теги", "tags"))
+	m.ExportID = cellAt(row, idx, "ID", "id")
+	m.Subscription = cellAt(row, idx, "Подписка", "subscription")
+	if comm := cellAt(row, idx, "Комиссия", "commission"); comm != "" {
+		v, err := ParseCubuxAmount(comm)
+		if err != nil {
+			return m, err
+		}
+		m.Commission = v
+	}
 	timeStr := cellAt(row, idx, "Время", "time")
 	if timeStr == "" {
 		return m, nil

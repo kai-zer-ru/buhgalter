@@ -589,6 +589,91 @@ func (q *Queries) ListAccountsByUserAndStatus(ctx context.Context, arg ListAccou
 	return items, nil
 }
 
+const listAccountsForExport = `-- name: ListAccountsForExport :many
+SELECT
+    a.id,
+    a.name,
+    a.type,
+    a.bank_id,
+    a.initial_balance,
+    a.credit_limit,
+    a.payment_account_id,
+    pa.name AS payment_account_name,
+    a.auto_topup_enabled,
+    a.auto_topup_threshold,
+    a.auto_topup_target,
+    a.auto_topup_source_account_id,
+    src.name AS auto_topup_source_name,
+    a.status,
+    a.is_primary,
+    b.name AS bank_name
+FROM accounts a
+LEFT JOIN banks b ON b.id = a.bank_id
+LEFT JOIN accounts pa ON pa.id = a.payment_account_id
+LEFT JOIN accounts src ON src.id = a.auto_topup_source_account_id
+WHERE a.user_id = ? AND a.status IN ('active', 'archived')
+ORDER BY CASE a.type WHEN 'cash' THEN 0 WHEN 'bank' THEN 1 ELSE 2 END, a.name
+`
+
+type ListAccountsForExportRow struct {
+	ID                       string  `json:"id"`
+	Name                     string  `json:"name"`
+	Type                     string  `json:"type"`
+	BankID                   *string `json:"bank_id"`
+	InitialBalance           int64   `json:"initial_balance"`
+	CreditLimit              *int64  `json:"credit_limit"`
+	PaymentAccountID         *string `json:"payment_account_id"`
+	PaymentAccountName       *string `json:"payment_account_name"`
+	AutoTopupEnabled         int64   `json:"auto_topup_enabled"`
+	AutoTopupThreshold       *int64  `json:"auto_topup_threshold"`
+	AutoTopupTarget          *int64  `json:"auto_topup_target"`
+	AutoTopupSourceAccountID *string `json:"auto_topup_source_account_id"`
+	AutoTopupSourceName      *string `json:"auto_topup_source_name"`
+	Status                   string  `json:"status"`
+	IsPrimary                int64   `json:"is_primary"`
+	BankName                 *string `json:"bank_name"`
+}
+
+func (q *Queries) ListAccountsForExport(ctx context.Context, userID string) ([]ListAccountsForExportRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAccountsForExport, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAccountsForExportRow{}
+	for rows.Next() {
+		var i ListAccountsForExportRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Type,
+			&i.BankID,
+			&i.InitialBalance,
+			&i.CreditLimit,
+			&i.PaymentAccountID,
+			&i.PaymentAccountName,
+			&i.AutoTopupEnabled,
+			&i.AutoTopupThreshold,
+			&i.AutoTopupTarget,
+			&i.AutoTopupSourceAccountID,
+			&i.AutoTopupSourceName,
+			&i.Status,
+			&i.IsPrimary,
+			&i.BankName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listActiveAccountNames = `-- name: ListActiveAccountNames :many
 SELECT name
 FROM accounts

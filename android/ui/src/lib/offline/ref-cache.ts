@@ -164,7 +164,14 @@ export function shouldPersistRefCache(path: string): boolean {
 	const pathOnly = path.split('?')[0] ?? path;
 	if (REF_CACHE_SKIP.has(pathOnly)) return false;
 	if (pathOnly.includes('/preview')) return false;
+	if (pathOnly.includes('/import/jobs/')) return false;
 	return true;
+}
+
+/** POST /import/jobs only queues work; bust caches when the job finishes. */
+export function shouldInvalidateRefCacheOnWrite(path: string): boolean {
+	const pathOnly = path.split('?')[0] ?? path;
+	return pathOnly !== '/api/v1/import/jobs';
 }
 
 /** Network / server errors where a cached GET response is acceptable. */

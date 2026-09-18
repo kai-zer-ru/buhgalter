@@ -107,12 +107,12 @@ func (s *Server) Handler() http.Handler {
 	recurringHandler := &recurring.Handler{Store: dbHandle, Audit: s.audit}
 	subscriptionHandler := &subscription.Handler{Store: dbHandle, Audit: s.audit}
 	budgetHandler := &budget.Handler{Store: dbHandle, Audit: s.audit}
-	importHandler := &importexport.Handler{Store: dbHandle, Audit: s.audit, Logger: s.logger}
 	statsHandler := &stats.Handler{Store: dbHandle}
 	uiHandler := &ui.Handler{Store: dbHandle, Version: s.cfg.Version}
 	versionHandler := &versioncheck.Handler{Checker: versioncheck.NewChecker(s.cfg.Version)}
 	apiCache := apicache.New()
 	apiCacheMW := apicache.Middleware(apiCache)
+	importHandler := &importexport.Handler{Store: dbHandle, Audit: s.audit, Logger: s.logger, Cache: apiCache}
 
 	r.Get("/docs", docs.RedocHandler())
 	r.Get("/docs/", docs.RedocHandler())

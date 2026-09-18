@@ -82,7 +82,7 @@ func TestHandlerExportBuhgalterFormat(t *testing.T) {
 		t.Fatalf("export %d", rec.Code)
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "Время") || !strings.Contains(body, "Магазин") {
+	if !strings.Contains(body, "#BUHGALTER") || !strings.Contains(body, "Время") || !strings.Contains(body, "Магазин") {
 		t.Fatalf("expected buhgalter headers: %s", body[:min(180, len(body))])
 	}
 }

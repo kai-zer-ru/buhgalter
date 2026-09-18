@@ -2,6 +2,7 @@ package importexport
 
 import (
 	"testing"
+	"time"
 )
 
 func TestApplyColumnMapCustom(t *testing.T) {
@@ -117,4 +118,30 @@ func TestMapTableBuhgalterPreset(t *testing.T) {
 	if len(mapped[0].Tags) != 1 || mapped[0].Tags[0] != "работа" {
 		t.Fatalf("tags %#v", mapped[0].Tags)
 	}
+}
+
+func TestPreviewFromMappedCountsJournalRows(t *testing.T) {
+	report, _, _ := PreviewFromMapped([]MappedRow{
+		{RowNum: 1, CubuxType: "Расходы", DebitAccount: "Cash", DebitAmount: 100, Date: parseISODateForTest(t, "2025-01-01")},
+		{RowNum: 2, CubuxType: "Доходы", CreditAccount: "Bank", CreditAmount: 200, Date: parseISODateForTest(t, "2025-01-02")},
+		{RowNum: 3, CubuxType: "Перевод", DebitAccount: "Cash", CreditAccount: "Bank", DebitAmount: 300, Date: parseISODateForTest(t, "2025-01-03")},
+	})
+	if report.ValidRows != 3 {
+		t.Fatalf("valid %d", report.ValidRows)
+	}
+	if report.TransferRows != 1 {
+		t.Fatalf("transfers %d", report.TransferRows)
+	}
+	if report.ListRows != 4 {
+		t.Fatalf("list %d", report.ListRows)
+	}
+}
+
+func parseISODateForTest(t *testing.T, iso string) time.Time {
+	t.Helper()
+	d, err := parseISODate(iso)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d
 }

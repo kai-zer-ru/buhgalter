@@ -43,6 +43,7 @@ vi.mock('$lib/offline/ref-cache', () => ({
 	readCategoriesFromUIMetaCache: vi.fn(),
 	seedCategoriesFromUIMeta: vi.fn(),
 	seedDictionariesFromUIMeta: vi.fn(),
+	shouldInvalidateRefCacheOnWrite: () => true,
 	shouldPersistRefCache: () => false
 }));
 

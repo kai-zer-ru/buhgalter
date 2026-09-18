@@ -125,6 +125,9 @@ func PreviewFromMapped(rows []MappedRow) (Report, map[string]struct{}, map[strin
 			continue
 		}
 		report.ValidRows++
+		if m.CubuxType == "Перевод" {
+			report.TransferRows++
+		}
 		for _, a := range accts {
 			accounts[a] = struct{}{}
 		}
@@ -135,6 +138,7 @@ func PreviewFromMapped(rows []MappedRow) (Report, map[string]struct{}, map[strin
 			report.Preview = append(report.Preview, item)
 		}
 	}
+	report.ListRows = report.ValidRows + report.TransferRows
 	return report, accounts, categories
 }
 

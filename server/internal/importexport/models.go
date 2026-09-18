@@ -55,6 +55,9 @@ type MappedRow struct {
 	Merchant       string
 	Tags           []string
 	HasTime        bool
+	Commission     int64
+	ExportID       string
+	Subscription   string
 }
 
 // TxAction describes what will be created.
@@ -87,22 +90,24 @@ type RowError struct {
 
 // AccountMapEntry maps a file account name to create or existing account.
 type AccountMapEntry struct {
-	Mode        string `json:"mode"` // create | existing
-	AccountID   string `json:"account_id,omitempty"`
-	AccountType string `json:"account_type,omitempty"` // cash | bank | credit_card (create)
-	BankID      string `json:"bank_id,omitempty"`      // bank / credit_card
-	CreditLimit string `json:"credit_limit,omitempty"` // credit_card create
+	Mode           string `json:"mode"` // create | existing
+	AccountID      string `json:"account_id,omitempty"`
+	AccountType    string `json:"account_type,omitempty"`    // cash | bank | credit_card (create)
+	BankID         string `json:"bank_id,omitempty"`         // bank / credit_card
+	CreditLimit    string `json:"credit_limit,omitempty"`    // credit_card create
+	InitialBalance string `json:"initial_balance,omitempty"` // create
 }
 
 // AccountMappingSuggestion is a proposed mapping for one account name from the file.
 type AccountMappingSuggestion struct {
-	FileName    string  `json:"file_name"`
-	Mode        string  `json:"mode"` // existing | create
-	AccountID   *string `json:"account_id,omitempty"`
-	AccountName *string `json:"account_name,omitempty"`
-	AccountType *string `json:"account_type,omitempty"` // cash | bank | credit_card (create)
-	BankID      *string `json:"bank_id,omitempty"`
-	CreditLimit *string `json:"credit_limit,omitempty"`
+	FileName       string  `json:"file_name"`
+	Mode           string  `json:"mode"` // existing | create
+	AccountID      *string `json:"account_id,omitempty"`
+	AccountName    *string `json:"account_name,omitempty"`
+	AccountType    *string `json:"account_type,omitempty"` // cash | bank | credit_card (create)
+	BankID         *string `json:"bank_id,omitempty"`
+	CreditLimit    *string `json:"credit_limit,omitempty"`
+	InitialBalance *string `json:"initial_balance,omitempty"`
 }
 
 // CategoryMapEntry maps a file category to create or existing category.
@@ -154,6 +159,8 @@ type Report struct {
 	TotalRows           int                            `json:"total_rows"`
 	ProcessedRows       int                            `json:"processed_rows,omitempty"`
 	ValidRows           int                            `json:"valid_rows"`
+	TransferRows        int                            `json:"transfer_rows,omitempty"`
+	ListRows            int                            `json:"list_rows,omitempty"`
 	SkippedDuplicates   int                            `json:"skipped_duplicates"`
 	CreatedTransactions int                            `json:"created_transactions,omitempty"`
 	Errors              []RowError                     `json:"errors"`

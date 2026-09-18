@@ -54,6 +54,13 @@ func (c *Cache) DeletePrefix(prefix string) {
 	}
 }
 
+func (c *Cache) InvalidateUser(userID string) {
+	if c == nil || userID == "" {
+		return
+	}
+	c.DeletePrefix("u:" + userID + ":")
+}
+
 func (c *Cache) DeleteContaining(substr string) {
 	if substr == "" {
 		return
