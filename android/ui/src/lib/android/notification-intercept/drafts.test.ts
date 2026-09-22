@@ -63,6 +63,50 @@ describe('intercept drafts', () => {
 		expect(listInterceptDrafts('user-1')).toHaveLength(0);
 	});
 
+	it('dedupes bank push vs wallet push for the same purchase', () => {
+		addInterceptDraft(purchase, { merchantName: 'Shop' }, 'user-1');
+		const fromWallet: ParsedPurchase = {
+			...purchase,
+			bankId: 'mir_pay',
+			packageName: 'ru.nspk.mirpay',
+			rawHash: 'wallet-hash',
+			occurredAt: new Date(Date.now() + 30_000).toISOString()
+		};
+		expect(addInterceptDraft(fromWallet, { merchantName: 'Shop' }, 'user-1')).toBeNull();
+		expect(listInterceptDrafts('user-1')).toHaveLength(1);
+	});
+
+	it('removes wallet cancel matching bank purchase draft', () => {
+		addInterceptDraft(
+			{
+				bankId: 'tinkoff',
+				packageName: 'com.idamob.tinkoff.android',
+				amount: '155.00',
+				occurredAt: new Date().toISOString(),
+				merchantText: 'Поехали!',
+				last4: '3349',
+				rawHash: 'purchase-wallet-pair',
+				kind: 'purchase'
+			},
+			{ merchantName: 'Поехали!' },
+			'user-1'
+		);
+		const removed = removeDraftMatchingCancel(
+			{
+				bankId: 'mir_pay',
+				packageName: 'ru.nspk.mirpay',
+				amount: '155.00',
+				occurredAt: new Date().toISOString(),
+				merchantText: 'Поехали!',
+				rawHash: 'cancel-wallet',
+				kind: 'cancel'
+			},
+			'user-1'
+		);
+		expect(removed).toBe(1);
+		expect(listInterceptDrafts('user-1')).toHaveLength(0);
+	});
+
 	it('removes draft matching cancel by amount and merchant', () => {
 		addInterceptDraft(
 			{

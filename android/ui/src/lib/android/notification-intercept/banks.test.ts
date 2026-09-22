@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
 	KNOWN_BANK_APPS,
+	KNOWN_WALLET_APPS,
 	allKnownPackages,
 	allKnownSmsSenderEntries,
 	bankIdForPackage,
 	bankIdForSmsSender,
+	inferBankIdFromText,
+	isAllowlistedPackage,
 	normalizeSmsSender,
-	resolveRawBankNotification
+	resolveRawBankNotification,
+	walletIdForPackage
 } from './banks';
 
 describe('KNOWN_BANK_APPS', () => {
@@ -27,8 +31,43 @@ describe('KNOWN_BANK_APPS', () => {
 		expect(bankIdForPackage('com.yandex.bank')).toBe('yandex');
 		expect(bankIdForPackage('com.wildberries.ru')).toBe('wbbank');
 		expect(bankIdForPackage('com.unknown')).toBeNull();
+		expect(bankIdForPackage('ru.nspk.mirpay')).toBeNull();
+	});
+});
+
+describe('KNOWN_WALLET_APPS', () => {
+	it('covers wallets with unique packages', () => {
+		expect(KNOWN_WALLET_APPS.length).toBeGreaterThanOrEqual(7);
+		const packages = allKnownPackages();
+		expect(new Set(packages).size).toBe(packages.length);
+		const ids = KNOWN_WALLET_APPS.map((w) => w.walletId);
+		expect(new Set(ids).size).toBe(ids.length);
+		for (const w of KNOWN_WALLET_APPS) {
+			expect(w.packageNames.length).toBeGreaterThan(0);
+		}
 	});
 
+	it('resolves wallet packages and allowlist', () => {
+		expect(walletIdForPackage('ru.nspk.mirpay')).toBe('mir_pay');
+		expect(walletIdForPackage('ru.nspk.sbpay')).toBe('sbp_pay');
+		expect(walletIdForPackage('com.samsung.android.spay')).toBe('samsung_pay');
+		expect(walletIdForPackage('com.samsung.android.spaymini')).toBe('samsung_pay');
+		expect(walletIdForPackage('ru.yandex.money')).toBe('yoomoney');
+		expect(walletIdForPackage('ru.sberbankmobile')).toBeNull();
+		expect(isAllowlistedPackage('ru.nspk.mirpay')).toBe(true);
+		expect(isAllowlistedPackage('com.idamob.tinkoff.android')).toBe(true);
+		expect(isAllowlistedPackage('com.unknown')).toBe(false);
+	});
+
+	it('infers issuer bank from wallet text, not marketplace brands', () => {
+		expect(inferBankIdFromText('Оплата 500 ₽ карта *1234 Т-Банк')).toBe('tinkoff');
+		expect(inferBankIdFromText('Samsung Pay. Сбербанк *4321')).toBe('sberbank');
+		expect(inferBankIdFromText('Оплата 990 ₽ OZON')).toBeNull();
+		expect(inferBankIdFromText('Покупка WB')).toBeNull();
+	});
+});
+
+describe('SMS senders', () => {
 	it('resolves SMS senders to bankId', () => {
 		expect(bankIdForSmsSender('900')).toBe('sberbank');
 		expect(bankIdForSmsSender('T-Bank')).toBe('tinkoff');

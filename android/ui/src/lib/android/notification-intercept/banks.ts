@@ -143,6 +143,79 @@ export const KNOWN_BANK_APPS: KnownBankApp[] = [
 	}
 ];
 
+/** NFC / in-app wallets that post their own purchase push (not a bank app). */
+export type KnownWalletApp = {
+	walletId: string;
+	packageNames: string[];
+	labelKey: string;
+};
+
+/**
+ * RF-relevant tap-to-pay / wallet apps. Keep packages in sync with Java
+ * {@code DEFAULT_BANK_PACKAGES}. Not shown in «счёт → банк» — resolve via last4
+ * or a bank name in the notification text.
+ */
+export const KNOWN_WALLET_APPS: KnownWalletApp[] = [
+	{
+		walletId: 'mir_pay',
+		packageNames: ['ru.nspk.mirpay'],
+		labelKey: 'bankNotifications.wallet.mir_pay'
+	},
+	{
+		walletId: 'sbp_pay',
+		packageNames: ['ru.nspk.sbpay'],
+		labelKey: 'bankNotifications.wallet.sbp_pay'
+	},
+	{
+		walletId: 'samsung_pay',
+		packageNames: ['com.samsung.android.spay', 'com.samsung.android.spaymini'],
+		labelKey: 'bankNotifications.wallet.samsung_pay'
+	},
+	{
+		walletId: 'google_wallet',
+		packageNames: ['com.google.android.apps.walletnfcrelay'],
+		labelKey: 'bankNotifications.wallet.google_wallet'
+	},
+	{
+		walletId: 'huawei_wallet',
+		packageNames: ['com.huawei.wallet'],
+		labelKey: 'bankNotifications.wallet.huawei_wallet'
+	},
+	{
+		walletId: 'xiaomi_wallet',
+		packageNames: ['com.mipay.wallet', 'com.xiaomi.payment'],
+		labelKey: 'bankNotifications.wallet.xiaomi_wallet'
+	},
+	{
+		walletId: 'yoomoney',
+		packageNames: ['ru.yandex.money'],
+		labelKey: 'bankNotifications.wallet.yoomoney'
+	}
+];
+
+/** Bank names as card issuer in wallet push — not marketplace brands (Ozon, WB). */
+const BANK_TEXT_ALIASES: { bankId: string; re: RegExp }[] = [
+	{ bankId: 'tinkoff', re: /т-?банк|тинькофф|t-?bank|tinkoff/i },
+	{ bankId: 'sberbank', re: /сбер(?:банк|пей|\s*pay)?|\bsber(?:bank|pay)?\b/i },
+	{ bankId: 'alfabank', re: /альфа[-\s]?банк|alfa[-\s]?bank|\balfabank\b/i },
+	{ bankId: 'gazprombank', re: /газпромбанк|gazprombank/i },
+	{ bankId: 'raiffeisen', re: /райффайзен|raiffeisen/i },
+	{ bankId: 'rosbank', re: /росбанк|rosbank/i },
+	{ bankId: 'rshb', re: /россельхоз(?:банк)?|\brshb\b/i },
+	{ bankId: 'open', re: /открытие|otkritie/i },
+	{ bankId: 'sovcombank', re: /совкомбанк|sovcombank|\bхалва\b|\bhalva\b/i },
+	{ bankId: 'uralsib', re: /уралсиб|uralsib/i },
+	{ bankId: 'homecredit', re: /хоум\s*кредит|home\s*credit/i },
+	{ bankId: 'vtb', re: /\bвтб\b|\bvtb\b/i },
+	{ bankId: 'mkb', re: /\bмкб\b|\bmkb\b/i },
+	{ bankId: 'psb', re: /\bпсб\b|\bpsb\b|промсвязьбанк/i },
+	{ bankId: 'otpbank', re: /отп\s*банк|otp\s*bank/i },
+	{ bankId: 'atb', re: /\bатб\b/i },
+	{ bankId: 'ozon', re: /озон\s*банк|ozon\s*bank/i },
+	{ bankId: 'yandex', re: /яндекс\s*банк|yandex\s*bank/i },
+	{ bankId: 'wbbank', re: /wb\s*банк|wildberries\s*банк/i }
+];
+
 /** Normalize SMS originator the same way as native {@code NotificationInterceptStore}. */
 export function normalizeSmsSender(raw: string): string {
 	let s = raw.trim().toLowerCase();
@@ -190,6 +263,33 @@ export function bankIdForPackage(packageName: string): string | null {
 	return hit?.bankId ?? null;
 }
 
+export function walletIdForPackage(packageName: string): string | null {
+	const hit = KNOWN_WALLET_APPS.find((w) => w.packageNames.includes(packageName));
+	return hit?.walletId ?? null;
+}
+
+export function isWalletPackage(packageName: string): boolean {
+	return walletIdForPackage(packageName) != null;
+}
+
+export function isWalletId(id: string): boolean {
+	return KNOWN_WALLET_APPS.some((w) => w.walletId === id);
+}
+
+/** Bank app or wallet — native allowlist / history. */
+export function isAllowlistedPackage(packageName: string): boolean {
+	return bankIdForPackage(packageName) != null || walletIdForPackage(packageName) != null;
+}
+
+/** Issuer bank mentioned in wallet (or other) notification text. */
+export function inferBankIdFromText(text: string): string | null {
+	if (!text.trim()) return null;
+	for (const { bankId, re } of BANK_TEXT_ALIASES) {
+		if (re.test(text)) return bankId;
+	}
+	return null;
+}
+
 export function bankIdForSmsSender(sender: string): string | null {
 	const key = normalizeSmsSender(sender);
 	if (!key) return null;
@@ -211,6 +311,11 @@ export function allKnownPackages(): string[] {
 	const out: string[] = [];
 	for (const b of KNOWN_BANK_APPS) {
 		for (const pkg of b.packageNames) {
+			if (!out.includes(pkg)) out.push(pkg);
+		}
+	}
+	for (const w of KNOWN_WALLET_APPS) {
+		for (const pkg of w.packageNames) {
 			if (!out.includes(pkg)) out.push(pkg);
 		}
 	}

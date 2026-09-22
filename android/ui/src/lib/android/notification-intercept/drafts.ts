@@ -1,6 +1,18 @@
 import { get, writable } from 'svelte/store';
 import { user } from '$lib/stores/auth';
+import { isWalletId, isWalletPackage } from './banks';
 import type { InterceptDraft, ParsedPurchase } from './types';
+
+function isWalletSource(parsed: ParsedPurchase): boolean {
+	return isWalletId(parsed.bankId) || isWalletPackage(parsed.packageName);
+}
+
+/** Same purchase from bank app and wallet (or matching last4). */
+function samePurchaseSource(a: ParsedPurchase, b: ParsedPurchase): boolean {
+	if (a.bankId === b.bankId) return true;
+	if (a.last4 && b.last4 && a.last4 === b.last4) return true;
+	return isWalletSource(a) || isWalletSource(b);
+}
 
 const STORAGE_PREFIX = 'buhgalter.notification_intercept.drafts.v1:';
 const MAX_DRAFTS = 50;
@@ -89,7 +101,7 @@ function isSemanticDuplicate(
 	incoming: ParsedPurchase,
 	extraMerchantName?: string
 ): boolean {
-	if (existing.parsed.bankId !== incoming.bankId) return false;
+	if (!samePurchaseSource(existing.parsed, incoming)) return false;
 	if (existing.parsed.amount !== incoming.amount) return false;
 	const existingKind = existing.parsed.kind ?? 'purchase';
 	const incomingKind = incoming.kind ?? 'purchase';
@@ -173,7 +185,7 @@ export function removeDraftMatchingCancel(cancel: ParsedPurchase, userId?: strin
 	let bestScore = -1;
 	for (let i = 0; i < drafts.length; i++) {
 		const d = drafts[i];
-		if (d.parsed.bankId !== cancel.bankId) continue;
+		if (!samePurchaseSource(d.parsed, cancel)) continue;
 		if (d.parsed.amount !== cancel.amount) continue;
 		// Only purchase drafts are cancelled by refund pushes — not income.
 		if (d.parsed.kind === 'cancel' || d.parsed.kind === 'income') continue;

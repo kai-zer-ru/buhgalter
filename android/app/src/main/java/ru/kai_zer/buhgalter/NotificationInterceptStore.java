@@ -39,7 +39,7 @@ final class NotificationInterceptStore {
 
     /**
      * Fallback when WebView has not synced the allowlist yet (cold start / MIUI kill).
-     * Keep in sync with {@code banks.ts} KNOWN_BANK_APPS packages.
+     * Keep in sync with {@code banks.ts} KNOWN_BANK_APPS + KNOWN_WALLET_APPS packages.
      */
     private static final Set<String> DEFAULT_BANK_PACKAGES =
             Collections.unmodifiableSet(
@@ -67,7 +67,16 @@ final class NotificationInterceptStore {
                                     "ru.wildberries.fintech",
                                     "com.wildberries.ru",
                                     "ru.otpbank.mobile",
-                                    "ru.atb.mobilbank")));
+                                    "ru.atb.mobilbank",
+                                    "ru.nspk.mirpay",
+                                    "ru.nspk.sbpay",
+                                    "com.samsung.android.spay",
+                                    "com.samsung.android.spaymini",
+                                    "com.google.android.apps.walletnfcrelay",
+                                    "com.huawei.wallet",
+                                    "com.mipay.wallet",
+                                    "com.xiaomi.payment",
+                                    "ru.yandex.money")));
 
     /** Default sender → package map (mirror of banks.ts smsSenders). */
     private static final String DEFAULT_SMS_SENDERS_JSON =

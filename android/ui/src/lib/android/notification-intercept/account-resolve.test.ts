@@ -59,4 +59,40 @@ describe('resolveAccountId', () => {
 			resolveAccountId(parsed, { enabled: true, bankBindings: [], cardBindings: [] })
 		).toBeUndefined();
 	});
+
+	it('uses bank binding when wallet text inferred the issuer bank', () => {
+		const inferred: ParsedPurchase = {
+			...parsed,
+			bankId: 'tinkoff',
+			packageName: 'ru.nspk.mirpay',
+			last4: undefined
+		};
+		expect(resolveAccountId(inferred, settings)).toBe('acc-bank');
+	});
+
+	it('matches unique last4 on wallet push when bankId is wallet id', () => {
+		const walletParsed: ParsedPurchase = {
+			...parsed,
+			bankId: 'mir_pay',
+			packageName: 'ru.nspk.mirpay'
+		};
+		expect(resolveAccountId(walletParsed, settings)).toBe('acc-card');
+	});
+
+	it('does not guess last4 when several cards share the same digits', () => {
+		const walletParsed: ParsedPurchase = {
+			...parsed,
+			bankId: 'samsung_pay',
+			packageName: 'com.samsung.android.spay'
+		};
+		const ambiguous: InterceptSettings = {
+			enabled: true,
+			bankBindings: [],
+			cardBindings: [
+				{ bankId: 'tinkoff', last4: '4321', accountId: 'acc-card' },
+				{ bankId: 'sberbank', last4: '4321', accountId: 'acc-sber' }
+			]
+		};
+		expect(resolveAccountId(walletParsed, ambiguous)).toBeUndefined();
+	});
 });

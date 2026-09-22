@@ -5,7 +5,7 @@ import { resolveAccountId } from './account-resolve';
 import {
 	allKnownPackages,
 	allKnownSmsSenderEntries,
-	bankIdForPackage,
+	isAllowlistedPackage,
 	resolveRawBankNotification
 } from './banks';
 import { addInterceptDraft, removeDraftMatchingCancel } from './drafts';
@@ -55,7 +55,7 @@ export async function processPendingBankNotificationsDetailed(): Promise<Process
 		for (const raw of pending) {
 			const resolved = resolveRawBankNotification(raw);
 			appendLocalHistoryFromRaw(raw, {
-				inAllowlist: Boolean(bankIdForPackage(resolved.packageName)),
+				inAllowlist: isAllowlistedPackage(resolved.packageName),
 				queued: false
 			});
 		}
@@ -82,7 +82,7 @@ export async function processPendingBankNotificationsDetailed(): Promise<Process
 		const parsed = parseBankNotification(raw);
 		// Always mirror into JS history — native history prefs were empty on some OEM builds.
 		appendLocalHistoryFromRaw(raw, {
-			inAllowlist: Boolean(bankIdForPackage(resolved.packageName)),
+			inAllowlist: isAllowlistedPackage(resolved.packageName),
 			queued: Boolean(parsed)
 		});
 		if (!parsed) {

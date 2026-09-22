@@ -4,7 +4,7 @@
 	import { _ } from 'svelte-i18n';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
 	import { toast } from '$lib/toast';
-	import { bankIdForPackage } from '$lib/android/notification-intercept/banks';
+	import { bankIdForPackage, walletIdForPackage } from '$lib/android/notification-intercept/banks';
 	import { parseBankNotification } from '$lib/android/notification-intercept/parsers';
 	import {
 		clearNotificationHistory,
@@ -87,6 +87,12 @@
 		}
 	}
 
+	function walletLabel(packageName: string): string | null {
+		const id = walletIdForPackage(packageName);
+		if (!id) return null;
+		return $_(`bankNotifications.wallet.${id}`);
+	}
+
 	function formatWhen(ms: number): string {
 		if (!ms) return '—';
 		try {
@@ -165,6 +171,10 @@
 					{#if bankIdForPackage(row.packageName)}
 						<p style:color="var(--text-muted)">
 							{$_('bankNotifications.history.bankId')}: {bankIdForPackage(row.packageName)}
+						</p>
+					{:else if walletLabel(row.packageName)}
+						<p style:color="var(--text-muted)">
+							{$_('bankNotifications.history.walletId')}: {walletLabel(row.packageName)}
 						</p>
 					{/if}
 					{#if row.channel}

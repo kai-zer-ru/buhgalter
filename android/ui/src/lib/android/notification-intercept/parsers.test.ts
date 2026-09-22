@@ -248,6 +248,65 @@ describe('parseBankNotification', () => {
 		expect(parsed!.amount).toBe('3535.96');
 	});
 
+	it('parses MIR Pay purchase and infers T-Bank from text', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'ru.nspk.mirpay',
+				title: 'MIR Pay',
+				text: 'Оплата 1 250,00 ₽. Пятёрочка. Карта *4321 Т-Банк'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.kind).toBe('purchase');
+		expect(parsed!.bankId).toBe('tinkoff');
+		expect(parsed!.amount).toBe('1250.00');
+		expect(parsed!.last4).toBe('4321');
+		expect(parsed!.merchantText.toLowerCase()).toContain('пят');
+		expect(parsed!.packageName).toBe('ru.nspk.mirpay');
+	});
+
+	it('parses Samsung Pay purchase without issuer bank as wallet id', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'com.samsung.android.spay',
+				title: 'Samsung Pay',
+				text: 'Paid 89.90 RUB MAGNIT'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.kind).toBe('purchase');
+		expect(parsed!.bankId).toBe('samsung_pay');
+		expect(parsed!.amount).toBe('89.90');
+		expect(parsed!.merchantText.toUpperCase()).toContain('MAGNIT');
+	});
+
+	it('parses СБПэй purchase', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'ru.nspk.sbpay',
+				title: 'СБПэй',
+				text: 'Оплата 500 ₽ Кофейня'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.bankId).toBe('sbp_pay');
+		expect(parsed!.amount).toBe('500.00');
+		expect(parsed!.merchantText.toLowerCase()).toContain('кофейн');
+	});
+
+	it('does not treat Ozon shop name as Ozon Bank on wallet push', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'ru.nspk.mirpay',
+				title: 'OZON',
+				text: 'Оплата 990 ₽'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.bankId).toBe('mir_pay');
+		expect(parsed!.merchantText).toBe('OZON');
+	});
+
 	it('ignores OTP SMS', () => {
 		expect(
 			parseBankNotification(

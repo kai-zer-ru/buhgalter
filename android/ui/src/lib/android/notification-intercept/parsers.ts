@@ -1,4 +1,10 @@
-import { bankIdForPackage, resolveRawBankNotification } from './banks';
+import {
+	bankIdForPackage,
+	inferBankIdFromText,
+	isAllowlistedPackage,
+	resolveRawBankNotification,
+	walletIdForPackage
+} from './banks';
 import type { ParsedPurchase, RawBankNotification } from './types';
 
 // Avoid \\b with Cyrillic — JS word boundaries are ASCII-oriented.
@@ -12,11 +18,12 @@ const INCOME_RE =
 const CANCEL_RE =
 	/(отмена\s+покупки|отмен[аы]\s+операц|отменена?\s+покупк|возврат\s+средств|возврат\s+покупк|purchase\s+cancel|canceled?\s+purchase|refund)/i;
 
-const PURCHASE_HINT_RE = /(покупк|оплат|списан|трата|платёж|платеж|purchase|payment|spent|оплата)/i;
+const PURCHASE_HINT_RE =
+	/(покупк|оплат|списан|трата|платёж|платеж|purchase|payment|spent|оплата|\bpaid\b)/i;
 
 /** Titles that are bank/card chrome, not a merchant (Yandex cancel uses «Карта Пэй»). */
 const GENERIC_TITLE_RE =
-	/^(карта(\s+пэй)?|card(\s+pay)?|пэй|pay|яндекс(\s+пэй)?|yandex(\s+pay)?|тинькофф|т-?банк|сбер(банк)?|wb\s*банк)$/i;
+	/^(карта(\s+пэй)?|card(\s+pay)?|пэй|pay|яндекс(\s+пэй)?|yandex(\s+pay)?|тинькофф|т-?банк|сбер(банк)?|wb\s*банк|mir(\s*pay)?|мир(\s*пэй|\s*pay)?|samsung(\s*(pay|wallet))?|google(\s*(pay|wallet))?|сбпэй|сбп|huawei(\s*(pay|wallet))?|mi(\s*pay)?|xiaomi(\s*(pay|wallet))?|юmoney|юмани|yoomoney)$/i;
 
 const AMOUNT_RE =
 	/(?:^|[^\d])(\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*(?:₽|руб\.?|р\.|RUB|rub)?(?!\d)/i;
@@ -24,7 +31,7 @@ const AMOUNT_RE =
 const LAST4_RE = /(?:\*|⁎|•|∙|●|○|∗|карты?\s*|карта\s*|card\s*)(\d{4})\b/i;
 
 const PURCHASE_WORD_RE =
-	/\b(покупка|оплата|оплат|списание|списан|трата|платёж|платеж|purchase|payment|spent)\b/gi;
+	/\b(покупка|оплата|оплат|списание|списан|трата|платёж|платеж|purchase|payment|spent|paid)\b/gi;
 
 /** T-Bank SMS: «Покупка, карта *2552. 56 RUB. STOLOVAYA. Доступно …» */
 const TBANK_SMS_MERCHANT_RE =
@@ -99,7 +106,10 @@ function extractMerchant(raw: RawBankNotification, amount: string): string {
 	}
 
 	let t = [raw.text, raw.bigText].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
-	t = t.replace(/^(сбер|сбербанк|тинькофф|т-?банк|tinkoff|яндекс)\s*[:.]?\s*/i, '');
+	t = t.replace(
+		/^(сбер|сбербанк|тинькофф|т-?банк|tinkoff|яндекс|mir\s*pay|мир\s*пэй|samsung\s*(pay|wallet)|google\s*(pay|wallet)|сбпэй|huawei\s*(pay|wallet)|mi\s*pay|юmoney|yoomoney)\s*[:.]?\s*/i,
+		''
+	);
 	t = t.replace(CANCEL_RE, ' ');
 	t = t.replace(INCOME_RE, ' ');
 	t = t.replace(PURCHASE_WORD_RE, ' ').replace(/\s+/g, ' ').trim();
@@ -159,8 +169,9 @@ function hashRaw(raw: RawBankNotification): string {
 
 export function parseBankNotification(raw: RawBankNotification): ParsedPurchase | null {
 	const resolved = resolveRawBankNotification(raw);
-	const bankId = bankIdForPackage(resolved.packageName);
-	if (!bankId) return null;
+	if (!isAllowlistedPackage(resolved.packageName)) return null;
+	const packageBankId = bankIdForPackage(resolved.packageName);
+	const walletId = walletIdForPackage(resolved.packageName);
 
 	const text = combinedText(resolved);
 	if (!text.trim()) return null;
@@ -173,6 +184,8 @@ export function parseBankNotification(raw: RawBankNotification): ParsedPurchase 
 	if (!amount) return null;
 
 	const last4 = extractLast4(text);
+	const bankId = packageBankId ?? inferBankIdFromText(text) ?? walletId;
+	if (!bankId) return null;
 	let merchantText = extractMerchant(resolved, amount);
 	if (isIncome && !merchantText) {
 		merchantText = extractIncomeLabel(resolved);
