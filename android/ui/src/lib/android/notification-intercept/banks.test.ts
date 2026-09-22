@@ -6,6 +6,7 @@ import {
 	allKnownSmsSenderEntries,
 	bankIdForPackage,
 	bankIdForSmsSender,
+	bankOrWalletLabelKey,
 	inferBankIdFromText,
 	isAllowlistedPackage,
 	normalizeSmsSender,
@@ -57,6 +58,12 @@ describe('KNOWN_WALLET_APPS', () => {
 		expect(isAllowlistedPackage('ru.nspk.mirpay')).toBe(true);
 		expect(isAllowlistedPackage('com.idamob.tinkoff.android')).toBe(true);
 		expect(isAllowlistedPackage('com.unknown')).toBe(false);
+	});
+
+	it('resolves i18n label keys for banks and wallets', () => {
+		expect(bankOrWalletLabelKey('tinkoff')).toBe('bankNotifications.bank.tinkoff');
+		expect(bankOrWalletLabelKey('mir_pay')).toBe('bankNotifications.wallet.mir_pay');
+		expect(bankOrWalletLabelKey('unknown')).toBeNull();
 	});
 
 	it('infers issuer bank from wallet text, not marketplace brands', () => {

@@ -1,7 +1,9 @@
+import { transferNewPath } from '$lib/android/form-routes';
 import { suggestCategoryFromMerchant } from './category-suggest';
-import type { InterceptDraft, TransactionCreatePrefill } from './types';
+import type { InterceptDraft, TransactionCreatePrefill, TransferCreatePrefill } from './types';
 
 let pendingPrefill: TransactionCreatePrefill | null = null;
+let pendingTransferPrefill: TransferCreatePrefill | null = null;
 
 export function draftTxType(draft: InterceptDraft): 'expense' | 'income' {
 	return draft.parsed.kind === 'income' ? 'income' : 'expense';
@@ -28,8 +30,26 @@ export function takeInterceptPrefill(): TransactionCreatePrefill | null {
 	return v;
 }
 
+export function setInterceptTransferPrefill(prefill: TransferCreatePrefill): void {
+	pendingTransferPrefill = {
+		fromAccountId: prefill.fromAccountId || undefined,
+		toAccountId: prefill.toAccountId || undefined,
+		amount: prefill.amount,
+		description: prefill.description?.trim().slice(0, 2000) || undefined,
+		occurredAt: prefill.occurredAt,
+		draftIds: prefill.draftIds?.filter(Boolean)
+	};
+}
+
+export function takeInterceptTransferPrefill(): TransferCreatePrefill | null {
+	const v = pendingTransferPrefill;
+	pendingTransferPrefill = null;
+	return v;
+}
+
 export function resetInterceptPrefillForTests(): void {
 	pendingPrefill = null;
+	pendingTransferPrefill = null;
 }
 
 export function prefillFromDraft(draft: InterceptDraft): TransactionCreatePrefill {
@@ -66,6 +86,10 @@ export async function prefillFromDraftWithSuggestions(
 
 export function interceptCreateRoute(type: 'expense' | 'income' = 'expense'): string {
 	return `/transactions/new?type=${type}&from=/settings/bank-notifications/drafts`;
+}
+
+export function interceptTransferRoute(): string {
+	return transferNewPath({ from: '/settings/bank-notifications/drafts' });
 }
 
 /** @deprecated use interceptCreateRoute('expense') */

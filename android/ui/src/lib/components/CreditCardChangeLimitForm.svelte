@@ -19,8 +19,15 @@
 
 	let { backHref = '/accounts', account, onclose, onsaved }: Props = $props();
 
-	let newLimit = $state(account.credit_limit_display ?? '');
+	let newLimit = $state('');
 	let saving = $state(false);
+	let seededForId = $state('');
+
+	$effect.pre(() => {
+		if (seededForId === account.id) return;
+		newLimit = account.credit_limit_display ?? '';
+		seededForId = account.id;
+	});
 
 	const currency = $derived($user?.currency ?? 'RUB');
 	const decreaseBlocked = $derived.by(() => {

@@ -23,6 +23,14 @@
 	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
 
+	type CreatePrefill = {
+		fromAccountId?: string;
+		toAccountId?: string;
+		amount?: string;
+		description?: string;
+		occurredAt?: string;
+	};
+
 	type Props = {
 		variant?: 'modal' | 'page';
 		open?: boolean;
@@ -32,6 +40,8 @@
 		editTx?: Transaction | null;
 		repeatFrom?: Transaction | null;
 		siblings?: Transaction[];
+		/** Prefill from bank-notification drafts (transfer between own accounts). */
+		createPrefill?: CreatePrefill | null;
 		onclose: () => void;
 		onsaved: () => void;
 	};
@@ -45,6 +55,7 @@
 		editTx = null,
 		repeatFrom = null,
 		siblings = [],
+		createPrefill = null,
 		onclose,
 		onsaved
 	}: Props = $props();
@@ -88,7 +99,7 @@
 
 	$effect(() => {
 		if (variant === 'modal' && !open) return;
-		void init(editTx, repeatFrom, siblings, accountId, creditCardPay);
+		void init(editTx, repeatFrom, siblings, accountId, creditCardPay, createPrefill);
 	});
 
 	$effect(() => {
@@ -97,15 +108,40 @@
 		toAccount = pickOtherAccountId(accounts, fromAccount);
 	});
 
+	function applyCreatePrefill(
+		prefill: CreatePrefill,
+		list: Account[],
+		contextAccountId: string
+	): void {
+		const has = (id: string | undefined) => Boolean(id) && list.some((a) => a.id === id);
+		if (!prefill.fromAccountId && has(prefill.toAccountId)) {
+			toAccount = prefill.toAccountId ?? '';
+			fromAccount = pickOtherAccountId(list, toAccount);
+			return;
+		}
+		fromAccount = has(prefill.fromAccountId)
+			? (prefill.fromAccountId ?? '')
+			: defaultAccountId(list, contextAccountId);
+		if (has(prefill.toAccountId) && prefill.toAccountId !== fromAccount) {
+			toAccount = prefill.toAccountId ?? '';
+		} else {
+			toAccount = pickOtherAccountId(list, fromAccount);
+		}
+	}
+
 	async function init(
 		editSource: Transaction | null | undefined,
 		repeatSource: Transaction | null | undefined,
 		related: Transaction[],
 		contextAccountId: string,
-		payCard: Account | null | undefined
+		payCard: Account | null | undefined,
+		prefill: CreatePrefill | null
 	) {
 		const preserveSelection =
-			formInitialized && !editSource?.transfer_group_id && repeatSource?.type !== 'transfer';
+			formInitialized &&
+			!editSource?.transfer_group_id &&
+			repeatSource?.type !== 'transfer' &&
+			!prefill;
 		const savedFrom = preserveSelection ? fromAccount : '';
 		const savedTo = preserveSelection ? toAccount : '';
 		if (editSource?.transfer_group_id) {
@@ -144,10 +180,18 @@
 			groupId = '';
 			fromAccount = '';
 			toAccount = '';
-			amount = '';
+			amount = prefill?.amount ? formatMoneyForInput(prefill.amount) : '';
 			commission = '';
-			description = '';
-			dateTimeValue = nowDatetimeLocal(tz);
+			description = prefill?.description ?? '';
+			if (prefill?.occurredAt) {
+				try {
+					dateTimeValue = toDatetimeLocalValue(prefill.occurredAt, tz);
+				} catch {
+					dateTimeValue = nowDatetimeLocal(tz);
+				}
+			} else {
+				dateTimeValue = nowDatetimeLocal(tz);
+			}
 		}
 		accountsBase = (await listAccounts('active').catch(() => [] as Account[])) ?? [];
 		accounts = applyOutboxToAccounts(accountsBase, tz);
@@ -155,6 +199,8 @@
 			if (payCard) {
 				fromAccount = resolvePaymentAccountId(payCard, accounts) ?? '';
 				toAccount = payCard.id;
+			} else if (prefill) {
+				applyCreatePrefill(prefill, accounts, contextAccountId);
 			} else if (!preserveSelection) {
 				const from = defaultAccountId(accounts, contextAccountId);
 				fromAccount = from;

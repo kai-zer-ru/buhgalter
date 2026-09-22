@@ -181,6 +181,7 @@
 	<div
 		bind:this={keypadHostEl}
 		class="money-keypad-host"
+		role="presentation"
 		use:portal={typeof document !== 'undefined' ? document.body : null}
 		onpointerdown={onKeypadPointerDown}
 		onpointerup={onKeypadPointerUp}

@@ -71,3 +71,14 @@ export type TransactionCreatePrefill = {
 	/** Remove this intercept draft after successful create. */
 	draftId?: string;
 };
+
+export type TransferCreatePrefill = {
+	fromAccountId?: string;
+	toAccountId?: string;
+	amount?: string;
+	description?: string;
+	/** ISO datetime */
+	occurredAt?: string;
+	/** Remove these intercept drafts after successful create. */
+	draftIds?: string[];
+};

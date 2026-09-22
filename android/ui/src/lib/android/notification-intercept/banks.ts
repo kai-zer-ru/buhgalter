@@ -342,3 +342,12 @@ export function allKnownSmsSenderEntries(): { sender: string; packageName: strin
 export function allKnownSmsSenders(): string[] {
 	return allKnownSmsSenderEntries().map((e) => e.sender);
 }
+
+/** i18n key for a catalog bank or wallet id. */
+export function bankOrWalletLabelKey(id: string): string | null {
+	return (
+		KNOWN_BANK_APPS.find((b) => b.bankId === id)?.labelKey ??
+		KNOWN_WALLET_APPS.find((w) => w.walletId === id)?.labelKey ??
+		null
+	);
+}

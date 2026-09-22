@@ -151,13 +151,20 @@ export function addInterceptDraft(
 
 /** Remove draft without creating a transaction (subscriptions / false positives). */
 export function deleteInterceptDraft(draftId: string, userId?: string | null): boolean {
+	return deleteInterceptDrafts([draftId], userId) > 0;
+}
+
+/** Drop several drafts (e.g. expense+income pair after creating a transfer). */
+export function deleteInterceptDrafts(draftIds: string[], userId?: string | null): number {
 	const id = userId ?? get(user)?.id;
-	if (!id) return false;
+	if (!id || draftIds.length === 0) return 0;
+	const drop = new Set(draftIds);
 	const drafts = readDrafts(id);
-	const next = drafts.filter((d) => d.id !== draftId);
-	if (next.length === drafts.length) return false;
+	const next = drafts.filter((d) => !drop.has(d.id));
+	const removed = drafts.length - next.length;
+	if (removed === 0) return 0;
 	writeDrafts(id, next);
-	return true;
+	return removed;
 }
 
 function normMerchant(s: string): string {

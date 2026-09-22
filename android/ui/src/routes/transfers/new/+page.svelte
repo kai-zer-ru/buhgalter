@@ -5,10 +5,15 @@
 	import { leaveForm } from '$lib/android/form-nav';
 	import { parseFormReturnPath } from '$lib/android/form-routes';
 	import {
+		deleteInterceptDrafts,
+		takeInterceptTransferPrefill
+	} from '$lib/android/notification-intercept';
+	import {
 		hasTemplatePrefillWarnings,
 		loadTemplateRepeatFrom
 	} from '$lib/android/template-prefill';
 	import { listIndexedTransferLegs, lookupServerTransaction } from '$lib/offline/transaction-index';
+	import { user } from '$lib/stores/auth';
 	import { toast } from '$lib/toast';
 	import { _ } from 'svelte-i18n';
 
@@ -19,6 +24,8 @@
 	const repeatId = $derived($page.url.searchParams.get('repeat'));
 	const templateId = $derived($page.url.searchParams.get('template'));
 	const returnTo = $derived(parseFormReturnPath($page.url.searchParams.get('from'), '/'));
+	const interceptOnce = takeInterceptTransferPrefill();
+	const interceptDraftIds = interceptOnce?.draftIds ?? [];
 
 	let creditCardPay = $state<Account | null>(null);
 	let repeatFrom = $state<Transaction | null>(null);
@@ -65,7 +72,10 @@
 		ready = true;
 	}
 
-	function finish() {
+	function finish(saved: boolean) {
+		if (saved && interceptDraftIds.length) {
+			deleteInterceptDrafts(interceptDraftIds, $user?.id);
+		}
 		dataRefreshTick.update((n) => n + 1);
 		void leaveForm(returnTo);
 	}
@@ -79,7 +89,8 @@
 		{creditCardPay}
 		{repeatFrom}
 		{siblings}
-		onclose={finish}
-		onsaved={finish}
+		createPrefill={interceptOnce}
+		onclose={() => finish(false)}
+		onsaved={() => finish(true)}
 	/>
 {/if}

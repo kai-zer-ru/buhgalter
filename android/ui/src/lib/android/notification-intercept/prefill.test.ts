@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
+	interceptTransferRoute,
 	prefillFromDraft,
 	resetInterceptPrefillForTests,
 	setInterceptPrefill,
-	takeInterceptPrefill
+	setInterceptTransferPrefill,
+	takeInterceptPrefill,
+	takeInterceptTransferPrefill
 } from './prefill';
 import type { InterceptDraft } from './types';
 
@@ -64,6 +67,30 @@ describe('intercept prefill', () => {
 		expect(prefill.description).toBeUndefined();
 		expect(prefill.categoryId).toBeUndefined();
 		expect(prefill.type).toBe('expense');
+	});
+
+	it('builds transfer create route back to drafts', () => {
+		expect(interceptTransferRoute()).toContain('/transfers/new');
+		expect(interceptTransferRoute()).toContain('from=');
+	});
+
+	it('set/take transfer prefill once', () => {
+		setInterceptTransferPrefill({
+			fromAccountId: 'a1',
+			toAccountId: 'a2',
+			amount: '10.00',
+			description: '  move  ',
+			draftIds: ['d1', 'd2']
+		});
+		expect(takeInterceptTransferPrefill()).toEqual({
+			fromAccountId: 'a1',
+			toAccountId: 'a2',
+			amount: '10.00',
+			description: 'move',
+			occurredAt: undefined,
+			draftIds: ['d1', 'd2']
+		});
+		expect(takeInterceptTransferPrefill()).toBeNull();
 	});
 
 	it('income draft uses label as description, not merchant', () => {

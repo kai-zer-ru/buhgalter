@@ -13,6 +13,7 @@ export * from './types';
 export * from './banks';
 export * from './settings';
 export * from './drafts';
+export * from './draft-transfer';
 export * from './prefill';
 export * from './plugin';
 export * from './process';

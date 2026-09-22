@@ -3,6 +3,7 @@ import {
 	addInterceptDraft,
 	clearInterceptDraftsForTests,
 	deleteInterceptDraft,
+	deleteInterceptDrafts,
 	listInterceptDrafts,
 	removeDraftMatchingCancel
 } from './drafts';
@@ -60,6 +61,14 @@ describe('intercept drafts', () => {
 	it('deletes draft without creating transaction', () => {
 		const d = addInterceptDraft(purchase, {}, 'user-1');
 		expect(deleteInterceptDraft(d!.id, 'user-1')).toBe(true);
+		expect(listInterceptDrafts('user-1')).toHaveLength(0);
+	});
+
+	it('deletes several drafts at once', () => {
+		const a = addInterceptDraft(purchase, {}, 'user-1');
+		const b = addInterceptDraft({ ...purchase, rawHash: 'hash-2', amount: '10.00' }, {}, 'user-1');
+		expect(a && b).toBeTruthy();
+		expect(deleteInterceptDrafts([a!.id, b!.id], 'user-1')).toBe(2);
 		expect(listInterceptDrafts('user-1')).toHaveLength(0);
 	});
 
