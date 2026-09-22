@@ -1,6 +1,7 @@
 import { get, writable } from 'svelte/store';
 import { user } from '$lib/stores/auth';
 import { isWalletId, isWalletPackage } from './banks';
+import { countVisibleInterceptItems } from './draft-transfer';
 import type { InterceptDraft, ParsedPurchase } from './types';
 
 function isWalletSource(parsed: ParsedPurchase): boolean {
@@ -86,7 +87,7 @@ export function listInterceptDrafts(userId?: string | null): InterceptDraft[] {
 }
 
 export function countInterceptDrafts(userId?: string | null): number {
-	return listInterceptDrafts(userId).length;
+	return countVisibleInterceptItems(listInterceptDrafts(userId));
 }
 
 export function getInterceptDraft(draftId: string, userId?: string | null): InterceptDraft | null {

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import { listAccounts, type Account, type Transaction } from '$lib/api/client';
 	import { createTransfer, updateTransfer } from '$lib/offline/transactions-api';
@@ -99,13 +100,20 @@
 
 	$effect(() => {
 		if (variant === 'modal' && !open) return;
-		void init(editTx, repeatFrom, siblings, accountId, creditCardPay, createPrefill);
+		const editSource = editTx;
+		const repeatSource = repeatFrom;
+		const related = siblings;
+		const contextAccountId = accountId;
+		const payCard = creditCardPay;
+		const prefill = createPrefill;
+		void untrack(() => init(editSource, repeatSource, related, contextAccountId, payCard, prefill));
 	});
 
 	$effect(() => {
 		if (variant === 'modal' && !open) return;
 		if (!fromAccount || !toAccount || fromAccount !== toAccount) return;
-		toAccount = pickOtherAccountId(accounts, fromAccount);
+		const next = pickOtherAccountId(accounts, fromAccount);
+		if (next && next !== toAccount) toAccount = next;
 	});
 
 	function applyCreatePrefill(

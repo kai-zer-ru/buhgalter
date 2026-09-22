@@ -23,6 +23,7 @@
 - [v1.5.2](#v152)
 - [v1.5.3](#v153)
 - [v1.5.4](#v154)
+- [v1.5.5](#v155)
 - [Общие планы](#общие-планы)
 - [На подумать](#на-подумать)
 
@@ -283,6 +284,14 @@
 - [x] Android: из черновиков перехвата — перевод между счетами (пара расход + пополнение, одна сумма) ([notification-intercept.md](roadmap/notification-intercept.md))
 - [x] CI: GitHub Actions на Node 24; Node.js для сборки UI по-прежнему 22
 - [x] [Release notes](docs/release-notes-v1.5.4.md) · [import/buhgalter.md](docs/import/buhgalter.md) · [import/cubux.md](docs/import/cubux.md) · [android-client.md](docs/android-client.md) · [android-client-platform.md](docs/android-client-platform.md) · [notification-intercept.md](roadmap/notification-intercept.md) · [data-model.md](docs/data-model.md)
+
+## v1.5.5
+
+- [x] БАГ. Android: после перевода между счетами в черновиках пара списание+пополнение показывалась как три карточки; чекбоксы ничего не делали; создание и удаление зависали
+- [x] БАГ. Android: черновики перевода — «Создать перевод» без стиля кнопки и кривая вёрстка; в меню счётчик 2 при одной карточке пары
+- [x] [Release notes](docs/release-notes-v1.5.5.md) · [android-client.md](docs/android-client.md) · [android-client-ui.md](docs/android-client-ui.md) · [android-client-platform.md](docs/android-client-platform.md) · [notification-intercept.md](roadmap/notification-intercept.md)
+
+## v1.5.6
 
 ## Общие планы
 

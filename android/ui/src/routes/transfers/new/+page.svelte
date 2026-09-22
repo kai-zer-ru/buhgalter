@@ -33,11 +33,18 @@
 	let ready = $state(false);
 
 	$effect(() => {
+		const pay = payCardId;
+		const tpl = templateId;
+		const repeat = repeatId;
 		ready = false;
-		void init();
+		void init(pay, tpl, repeat);
 	});
 
-	async function init() {
+	async function init(
+		payCardId: string | null,
+		templateId: string | null,
+		repeatId: string | null
+	) {
 		creditCardPay = null;
 		repeatFrom = null;
 		siblings = [];

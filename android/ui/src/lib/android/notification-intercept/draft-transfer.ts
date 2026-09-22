@@ -62,6 +62,26 @@ export function listUniqueTransferPairs(drafts: InterceptDraft[]): InterceptTran
 	return pairs;
 }
 
+export function pairedDraftIds(pairs: InterceptTransferPair[]): Set<string> {
+	const ids = new Set<string>();
+	for (const pair of pairs) {
+		ids.add(pair.from.id);
+		ids.add(pair.to.id);
+	}
+	return ids;
+}
+
+/** Drafts that are not already shown as a unique transfer pair. */
+export function unpairedInterceptDrafts(drafts: InterceptDraft[]): InterceptDraft[] {
+	const paired = pairedDraftIds(listUniqueTransferPairs(drafts));
+	return drafts.filter((d) => !paired.has(d.id));
+}
+
+/** Cards the user sees: each unique pair counts as one, plus unpaired drafts. */
+export function countVisibleInterceptItems(drafts: InterceptDraft[]): number {
+	return listUniqueTransferPairs(drafts).length + unpairedInterceptDrafts(drafts).length;
+}
+
 export function resolveTransferDraftSides(
 	a: InterceptDraft,
 	b?: InterceptDraft | null

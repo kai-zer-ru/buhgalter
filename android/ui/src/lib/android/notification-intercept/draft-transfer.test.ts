@@ -3,6 +3,8 @@ import {
 	canPairDraftsAsTransfer,
 	findUniqueTransferComplement,
 	listUniqueTransferPairs,
+	unpairedInterceptDrafts,
+	countVisibleInterceptItems,
 	transferPrefillFromDrafts,
 	transferPrefillFromSelection,
 	TRANSFER_PAIR_WINDOW_MS
@@ -113,6 +115,18 @@ describe('draft transfer pairing', () => {
 		expect(listUniqueTransferPairs([expense, income, noise])).toEqual([
 			{ from: expense, to: income }
 		]);
+	});
+
+	it('hides unique pair members from the unpaired list', () => {
+		const noise = draft('e3', 'purchase', {
+			bankId: 'yandex',
+			accountId: 'acc-y',
+			amount: '80.00'
+		});
+		expect(unpairedInterceptDrafts([expense, income, noise])).toEqual([noise]);
+		expect(unpairedInterceptDrafts([expense, income])).toEqual([]);
+		expect(countVisibleInterceptItems([expense, income])).toBe(1);
+		expect(countVisibleInterceptItems([expense, income, noise])).toBe(2);
 	});
 
 	it('builds transfer prefill from a pair', () => {

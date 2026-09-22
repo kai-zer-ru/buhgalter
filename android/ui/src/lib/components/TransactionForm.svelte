@@ -42,6 +42,7 @@
 	} from '$lib/select-options';
 	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
+	import { suggestCategoryFromMerchant } from '$lib/android/notification-intercept/category-suggest';
 
 	type CreatePrefill = {
 		description?: string;
@@ -269,6 +270,13 @@
 			optionalDetailsOpen = Boolean(
 				merchantId || merchantQuery.trim() || description.trim() || selectedTags.length
 			);
+			if (prefill?.merchantId && !prefill.categoryId) {
+				const suggest = await suggestCategoryFromMerchant(prefill.merchantId, createType);
+				if (suggest) {
+					categoryId = suggest.categoryId;
+					subcategoryId = suggest.subcategoryId ?? '';
+				}
+			}
 		}
 		accountsBase = (await listAccounts('active').catch(() => [] as Account[])) ?? [];
 		accounts = applyOutboxToAccounts(accountsBase, tz);

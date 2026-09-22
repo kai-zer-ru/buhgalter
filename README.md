@@ -392,7 +392,7 @@ docker compose up -d
 
 ## Документация
 
-Справочники по установке, данным, UI и API — [docs/README.md](docs/README.md). История изменений — [CHANGELOG.md](CHANGELOG.md). Последний релиз — [v1.5.4](docs/release-notes-v1.5.4.md).
+Справочники по установке, данным, UI и API — [docs/README.md](docs/README.md). История изменений — [CHANGELOG.md](CHANGELOG.md). Последний релиз — [v1.5.5](docs/release-notes-v1.5.5.md).
 
 ## API-документация
 

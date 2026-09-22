@@ -4,24 +4,22 @@
 	import { resolve } from '$app/paths';
 	import { _ } from 'svelte-i18n';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
-	import { resolveAppPath } from '$lib/android/form-nav';
+	import { transactionNewPath, transferNewPath } from '$lib/android/form-routes';
 	import { formatMoneyDisplay } from '$lib/money';
 	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
 	import { listAccounts, listBanks, type Account, type Bank } from '$lib/api/client';
 	import {
 		bankOrWalletLabelKey,
-		deleteInterceptDraft,
+		deleteInterceptDrafts,
 		draftTxType,
-		findUniqueTransferComplement,
 		getCurrentInterceptSettings,
 		getNotificationListenerState,
-		interceptCreateRoute,
 		interceptDraftsTick,
-		interceptTransferRoute,
 		listInterceptDrafts,
 		listUniqueTransferPairs,
-		prefillFromDraftWithSuggestions,
+		pairedDraftIds,
+		prefillFromDraft,
 		processPendingBankNotifications,
 		processPendingBankNotificationsDetailed,
 		reconnectNotificationListener,
@@ -37,27 +35,30 @@
 	} from '$lib/android/notification-intercept';
 	import { isNativeApp } from '$lib/platform/native';
 
-	let drafts = $state<InterceptDraft[]>([]);
-	let enabled = $state(false);
 	let scanning = $state(false);
 	let listenerConnected = $state<boolean | null>(null);
 	let accounts = $state<Account[]>([]);
 	let banks = $state<Bank[]>([]);
 	let selectedIds = $state<string[]>([]);
+	let splitPairIds = $state<string[]>([]);
 
-	const transferPairs = $derived(listUniqueTransferPairs(drafts));
-	const selectedDrafts = $derived(drafts.filter((d) => selectedIds.includes(d.id)));
-
-	function refresh() {
+	const drafts = $derived.by(() => {
 		void $interceptDraftsTick;
-		drafts = listInterceptDrafts($user?.id);
-		enabled = getCurrentInterceptSettings().enabled;
-		const alive = new Set(drafts.map((d) => d.id));
-		const nextSelected = selectedIds.filter((id) => alive.has(id));
-		if (nextSelected.length !== selectedIds.length) {
-			selectedIds = nextSelected;
-		}
-	}
+		return listInterceptDrafts($user?.id);
+	});
+	const enabled = $derived.by(() => {
+		void $interceptDraftsTick;
+		return getCurrentInterceptSettings().enabled;
+	});
+	const allPairs = $derived(listUniqueTransferPairs(drafts));
+	const splitSet = $derived(new Set(splitPairIds));
+	const transferPairs = $derived(
+		allPairs.filter((pair) => !splitSet.has(pair.from.id) && !splitSet.has(pair.to.id))
+	);
+	const hiddenPairedIds = $derived(pairedDraftIds(transferPairs));
+	const visibleDrafts = $derived(drafts.filter((d) => !hiddenPairedIds.has(d.id)));
+	const selectedDrafts = $derived(visibleDrafts.filter((d) => selectedIds.includes(d.id)));
+	const selectedTransferPrefill = $derived(transferPrefillFromSelection(selectedDrafts));
 
 	async function refreshListenerState() {
 		if (!isNativeApp()) {
@@ -68,31 +69,29 @@
 		listenerConnected = st ? Boolean(st.listenerConnected) : false;
 	}
 
-	$effect(() => {
-		void $interceptDraftsTick;
-		void $user?.id;
-		refresh();
-	});
-
 	onMount(() => {
+		void loadCatalogs();
 		void (async () => {
 			if (isNativeApp() && $user?.id) {
 				await syncInterceptNativeFromSettings($user.id);
 				const re = await reconnectNotificationListener();
 				listenerConnected = re.listenerConnected;
 			}
-			try {
-				accounts = await listAccounts('active');
-				banks = await listBanks();
-			} catch {
-				accounts = [];
-				banks = [];
-			}
 			await processPendingBankNotifications();
-			refresh();
 			await refreshListenerState();
 		})();
 	});
+
+	async function loadCatalogs() {
+		try {
+			const [acc, bk] = await Promise.all([listAccounts('active'), listBanks()]);
+			accounts = acc;
+			banks = bk;
+		} catch {
+			accounts = [];
+			banks = [];
+		}
+	}
 
 	function sideLabel(draft: InterceptDraft): string {
 		const acc = draft.accountId ? accounts.find((a) => a.id === draft.accountId) : undefined;
@@ -102,10 +101,17 @@
 		return banks.find((b) => b.id === draft.parsed.bankId)?.name || draft.parsed.bankId;
 	}
 
-	async function openDraft(draft: InterceptDraft) {
-		const prefill = await prefillFromDraftWithSuggestions(draft);
+	function openDraft(draft: InterceptDraft) {
+		const prefill = prefillFromDraft(draft);
 		setInterceptPrefill(prefill);
-		void goto(resolveAppPath(interceptCreateRoute(prefill.type ?? draftTxType(draft))));
+		void goto(
+			resolve(
+				transactionNewPath({
+					type: prefill.type ?? draftTxType(draft),
+					from: '/settings/bank-notifications/drafts'
+				})
+			)
+		);
 	}
 
 	function openTransfer(prefill: TransferCreatePrefill | null) {
@@ -114,12 +120,7 @@
 			return;
 		}
 		setInterceptTransferPrefill(prefill);
-		void goto(resolveAppPath(interceptTransferRoute()));
-	}
-
-	function openDraftTransfer(draft: InterceptDraft) {
-		const complement = findUniqueTransferComplement(draft, drafts);
-		openTransfer(transferPrefillFromDrafts(draft, complement));
+		void goto(resolve(transferNewPath({ from: '/settings/bank-notifications/drafts' })));
 	}
 
 	function openPairTransfer(pair: InterceptTransferPair) {
@@ -127,21 +128,32 @@
 	}
 
 	function openSelectedTransfer() {
-		openTransfer(transferPrefillFromSelection(selectedDrafts));
+		openTransfer(selectedTransferPrefill);
 	}
 
-	function toggleSelected(draftId: string) {
-		if (selectedIds.includes(draftId)) {
-			selectedIds = selectedIds.filter((id) => id !== draftId);
+	function setSelected(draftId: string, on: boolean) {
+		const has = selectedIds.includes(draftId);
+		if (on && !has) {
+			selectedIds = [...selectedIds, draftId];
 			return;
 		}
-		selectedIds = [...selectedIds, draftId];
+		if (!on && has) {
+			selectedIds = selectedIds.filter((id) => id !== draftId);
+		}
 	}
 
-	function removeDraft(draft: InterceptDraft) {
-		deleteInterceptDraft(draft.id, $user?.id);
-		refresh();
-		toast($_('bankNotifications.drafts.deleted'));
+	function removeDrafts(ids: string[]) {
+		if (!ids.length) return;
+		const n = deleteInterceptDrafts(ids, $user?.id);
+		if (n === 0) return;
+		splitPairIds = splitPairIds.filter((id) => !ids.includes(id));
+		toast(
+			n === 1 ? $_('bankNotifications.drafts.deleted') : $_('bankNotifications.drafts.deletedMany')
+		);
+	}
+
+	function showAsSeparate(pair: InterceptTransferPair) {
+		splitPairIds = [...splitPairIds, pair.from.id, pair.to.id];
 	}
 
 	function formatWhen(iso: string): string {
@@ -171,7 +183,6 @@
 				return;
 			}
 			const { added, cancelled } = await processPendingBankNotificationsDetailed();
-			refresh();
 			const parts = [$_('bankNotifications.history.scanResult', { values: { n: result.scanned } })];
 			if (added > 0) {
 				parts.push($_('bankNotifications.drafts.toastNew', { values: { n: added } }));
@@ -195,7 +206,12 @@
 		</p>
 	{/if}
 	<div class="mb-4 space-y-2">
-		<button type="button" class="btn w-full" disabled={scanning} onclick={() => void scanActive()}>
+		<button
+			type="button"
+			class="btn-primary w-full"
+			disabled={scanning}
+			onclick={() => void scanActive()}
+		>
 			{$_('bankNotifications.history.scanActive')}
 		</button>
 		<p class="text-xs" style:color="var(--text-muted)">
@@ -208,14 +224,28 @@
 		<p class="mb-3 text-xs" style:color="var(--text-muted)">
 			{$_('bankNotifications.drafts.transferHint')}
 		</p>
-		{#if selectedIds.length > 0}
-			<div class="card mb-3 flex items-center justify-between gap-3">
+		{#if selectedDrafts.length > 0}
+			<div class="card mb-3 space-y-2">
 				<p class="text-sm">
-					{$_('bankNotifications.drafts.selected', { values: { n: selectedIds.length } })}
+					{$_('bankNotifications.drafts.selected', { values: { n: selectedDrafts.length } })}
 				</p>
-				<button type="button" class="btn" onclick={openSelectedTransfer}>
-					{$_('bankNotifications.drafts.createTransfer')}
-				</button>
+				<div class="btn-pair-row">
+					<button
+						type="button"
+						class="btn-primary"
+						disabled={!selectedTransferPrefill}
+						onclick={openSelectedTransfer}
+					>
+						{$_('bankNotifications.drafts.createTransfer')}
+					</button>
+					<button
+						type="button"
+						class="btn-ghost"
+						onclick={() => removeDrafts(selectedDrafts.map((d) => d.id))}
+					>
+						{$_('bankNotifications.drafts.deleteSelected')}
+					</button>
+				</div>
 			</div>
 		{/if}
 		{#if transferPairs.length > 0}
@@ -234,66 +264,90 @@
 						<p class="text-sm" style:color="var(--text-muted)">
 							{formatWhen(pair.from.parsed.occurredAt)}
 						</p>
-						<button type="button" class="btn" onclick={() => openPairTransfer(pair)}>
-							{$_('bankNotifications.drafts.createTransfer')}
-						</button>
+						<div class="space-y-2">
+							<button
+								type="button"
+								class="btn-primary w-full"
+								onclick={() => openPairTransfer(pair)}
+							>
+								{$_('bankNotifications.drafts.createTransfer')}
+							</button>
+							<div class="btn-pair-row">
+								<button type="button" class="btn-ghost" onclick={() => showAsSeparate(pair)}>
+									{$_('bankNotifications.drafts.showSeparate')}
+								</button>
+								<button
+									type="button"
+									class="btn-ghost"
+									onclick={() => removeDrafts([pair.from.id, pair.to.id])}
+								>
+									{$_('bankNotifications.drafts.deletePair')}
+								</button>
+							</div>
+						</div>
 					</li>
 				{/each}
 			</ul>
 		{/if}
-		<ul class="space-y-3">
-			{#each drafts as draft (draft.id)}
-				{@const complement = findUniqueTransferComplement(draft, drafts)}
-				<li class="card space-y-2">
-					<label class="flex items-start gap-3">
-						<input
-							type="checkbox"
-							class="mt-1.5"
-							checked={selectedIds.includes(draft.id)}
-							onchange={() => toggleSelected(draft.id)}
-						/>
-						<div class="min-w-0 flex-1">
-							<p class="text-sm" style:color="var(--text-muted)">
-								{draftTxType(draft) === 'income'
-									? $_('bankNotifications.drafts.kindIncome')
-									: $_('bankNotifications.drafts.kindExpense')}
-							</p>
-							<p class="text-lg font-semibold">
-								{formatMoneyDisplay(draft.parsed.amount)} ₽
-							</p>
-							<p class="truncate font-medium">
-								{draft.merchantName ||
-									draft.parsed.merchantText ||
-									$_('bankNotifications.drafts.noMerchant')}
-							</p>
-							<p class="text-sm" style:color="var(--text-muted)">
-								{sideLabel(draft)}
-								{#if draft.parsed.last4}
-									· *{draft.parsed.last4}
-								{/if}
-								· {formatWhen(draft.parsed.occurredAt)}
-							</p>
-							{#if complement}
-								<p class="text-xs" style:color="var(--text-muted)">
-									{$_('bankNotifications.drafts.pairHint')}
+		{#if visibleDrafts.length > 0}
+			<ul class="space-y-3">
+				{#each visibleDrafts as draft (draft.id)}
+					<li class="card space-y-2">
+						<div class="flex items-start gap-3">
+							<input
+								type="checkbox"
+								class="mt-1.5"
+								checked={selectedIds.includes(draft.id)}
+								onchange={(e) => setSelected(draft.id, e.currentTarget.checked)}
+							/>
+							<div class="min-w-0 flex-1">
+								<p class="text-sm" style:color="var(--text-muted)">
+									{draftTxType(draft) === 'income'
+										? $_('bankNotifications.drafts.kindIncome')
+										: $_('bankNotifications.drafts.kindExpense')}
 								</p>
-							{/if}
+								<p class="text-lg font-semibold">
+									{formatMoneyDisplay(draft.parsed.amount)} ₽
+								</p>
+								<p class="truncate font-medium">
+									{draft.merchantName ||
+										draft.parsed.merchantText ||
+										$_('bankNotifications.drafts.noMerchant')}
+								</p>
+								<p class="text-sm" style:color="var(--text-muted)">
+									{sideLabel(draft)}
+									{#if draft.parsed.last4}
+										· *{draft.parsed.last4}
+									{/if}
+									· {formatWhen(draft.parsed.occurredAt)}
+								</p>
+							</div>
 						</div>
-					</label>
-					<div class="flex flex-wrap gap-2">
-						<button type="button" class="btn" onclick={() => openDraft(draft)}>
-							{$_('bankNotifications.drafts.create')}
-						</button>
-						<button type="button" class="btn" onclick={() => openDraftTransfer(draft)}>
-							{$_('bankNotifications.drafts.createTransfer')}
-						</button>
-						<button type="button" class="btn-ghost" onclick={() => removeDraft(draft)}>
-							{$_('bankNotifications.drafts.delete')}
-						</button>
-					</div>
-				</li>
-			{/each}
-		</ul>
+						<div class="space-y-2">
+							<div class="btn-pair-row">
+								<button type="button" class="btn-primary" onclick={() => openDraft(draft)}>
+									{$_('bankNotifications.drafts.create')}
+								</button>
+								<button
+									type="button"
+									class="btn-ghost"
+									onclick={() => openTransfer(transferPrefillFromDrafts(draft))}
+								>
+									{$_('bankNotifications.drafts.createTransfer')}
+								</button>
+							</div>
+							<button
+								type="button"
+								class="btn-ghost w-full"
+								onclick={() => removeDrafts([draft.id])}
+							>
+								{$_('bankNotifications.drafts.delete')}
+							</button>
+						</div>
+					</li>
+				{/each}
+			</ul>
+		{/if}
 	{/if}
 {/if}
 

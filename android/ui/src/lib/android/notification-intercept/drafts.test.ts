@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
 	addInterceptDraft,
 	clearInterceptDraftsForTests,
+	countInterceptDrafts,
 	deleteInterceptDraft,
 	deleteInterceptDrafts,
 	listInterceptDrafts,
@@ -28,6 +29,29 @@ describe('intercept drafts', () => {
 		const d = addInterceptDraft(purchase, { accountId: 'a1' }, 'user-1');
 		expect(d).not.toBeNull();
 		expect(listInterceptDrafts('user-1')).toHaveLength(1);
+		expect(countInterceptDrafts('user-1')).toBe(1);
+	});
+
+	it('counts a unique transfer pair as one item', () => {
+		addInterceptDraft(
+			{ ...purchase, rawHash: 'exp', kind: 'purchase', bankId: 'tinkoff' },
+			{ accountId: 'acc-t' },
+			'user-1'
+		);
+		addInterceptDraft(
+			{
+				...purchase,
+				rawHash: 'inc',
+				kind: 'income',
+				bankId: 'sberbank',
+				packageName: 'ru.sberbankmobile',
+				merchantText: 'Пополнение'
+			},
+			{ accountId: 'acc-s' },
+			'user-1'
+		);
+		expect(listInterceptDrafts('user-1')).toHaveLength(2);
+		expect(countInterceptDrafts('user-1')).toBe(1);
 	});
 
 	it('dedupes by rawHash', () => {
