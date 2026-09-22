@@ -231,7 +231,7 @@ Launcher-виджеты (не карточки на главной в WebView). 
 | `make android-install` | Debug-сборка + `adb install -r` |
 | `make android-install-release` | Release-сборка + `adb install -r` для `app-universal-release.apk` |
 
-Требования: **Android 8.0+** (API 26), JDK 21, Android SDK, Node 20+, **Pillow** (`pip3 install --user Pillow` — для `make android-icons`). Окружение: `scripts/setup-android-dev.sh`, `scripts/android-env.sh`.
+Требования: **Android 8.0+** (API 26), JDK 21, Android SDK, **Node.js 22+**, **Pillow** (`pip3 install --user Pillow` — для `make android-icons`). Окружение: `scripts/setup-android-dev.sh`, `scripts/android-env.sh`.
 
 Debug APK: `android/app/build/outputs/apk/debug/app-debug.apk`.  
 Release APK (`make android-apk-release` → `android/app/build/outputs/apk/release/`):
@@ -245,7 +245,7 @@ Release APK (`make android-apk-release` → `android/app/build/outputs/apk/relea
 
 На GitHub Release: `buhgalter-android-{version}.apk` (universal) и `buhgalter-android-{version}-{abi}.apk`.
 
-CI (`.github/workflows/release.yml`): job `android-apk` ставит SDK (`platforms;android-36`, `build-tools;36.0.0`), пишет `android/local.properties`, Pillow, собирает `make android-apk-release`, проверяет все четыре APK (`scripts/verify-android-release-apks.sh`), заливает каталог `release/` артефактом; job `goreleaser` скачивает артефакт в тот же путь и прикрепляет файлы через `release.extra_files` в `.goreleaser.yaml`. Без всех APK релиз падает.
+CI (`.github/workflows/release.yml`): Node 22 (`setup-node@v7`) для сборки UI; экшены GitHub Actions — на Node 24. Job `android-apk` ставит SDK (`platforms;android-36`, `build-tools;36.0.0`), пишет `android/local.properties`, Pillow, собирает `make android-apk-release`, проверяет все четыре APK (`scripts/verify-android-release-apks.sh`), заливает каталог `release/` артефактом; job `goreleaser` скачивает артефакт в тот же путь и прикрепляет файлы через `release.extra_files` в `.goreleaser.yaml`. Без всех APK релиз падает.
 
 Подпись release APK: `keystore.properties` / GitHub Secrets; `*.jks` в `.gitignore` (см. [android/README.md](../android/README.md)).
 

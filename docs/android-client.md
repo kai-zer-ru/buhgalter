@@ -9,7 +9,7 @@
 | [android-client-ui.md](android-client-ui.md) | Интерфейс: оболочка, навигация, экраны |
 | [android-client-platform.md](android-client-platform.md) | Платформа: авторизация, сервер, офлайн, сборка |
 
-Сборка APK: [android/README.md](../android/README.md). Дорожная карта: [roadmap/android-client.md](../roadmap/android-client.md).
+Сборка APK: [android/README.md](../android/README.md) (**Node.js 22+**, JDK 21, Android SDK). Дорожная карта: [roadmap/android-client.md](../roadmap/android-client.md).
 
 **Application ID:** `ru.kai_zer.buhgalter` (дефис в `kai-zer` → `_` по требованию Android).
 

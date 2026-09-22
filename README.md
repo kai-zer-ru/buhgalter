@@ -102,7 +102,7 @@ Self-hosted учёт финансов: один бинарник с веб-ин�
 - При сбое загрузки экрана — сообщение и «Повторить».
 - Если APK отстаёт от сервера — при необходимости подтягиваются строки интерфейса (`GET /api/v1/ui/i18n/{lang}`).
 
-**Сборка:** `make android-sync`, `make android-apk`, `make android-install`. Документация: [docs/android-client.md](docs/android-client.md), [android/README.md](android/README.md).
+**Сборка:** нужны **Node.js 22+**, JDK 21 и Android SDK. Команды: `make android-sync`, `make android-apk`, `make android-install`. Документация: [docs/android-client.md](docs/android-client.md), [android/README.md](android/README.md).
 
 Сервер для discovery публикует mDNS (`BUHGALTER_MDNS_ENABLED`, по умолчанию `true`). Для доступа по LAN-IP добавьте хост в `BUHGALTER_ALLOWED_HOSTS` или настройте внешний URL в админке.
 
@@ -405,6 +405,8 @@ OpenAPI доступна без авторизации:
 В режиме разработки (`make dev-server` + `make dev-web`) — также [http://localhost:5173/docs](http://localhost:5173/docs) (прокси на API).
 
 ## Разработка
+
+Нужны **Go 1.26+** и **Node.js 22+** (web и `android/ui`). В GitHub Actions для сборки UI тот же Node 22 (`setup-node`); сами экшены (`checkout`, `setup-node` и остальные) работают на Node 24.
 
 ```bash
 make dev-server   # API без встроенного фронта

@@ -12,7 +12,7 @@
 
 ## Требования
 
-- Node.js 20+
+- Node.js 22+
 - JDK 21+ (для Gradle)
 - Android SDK: platform 36, build-tools 36.0.0
 - **Минимальная версия Android: 8.0 (API 26)**
