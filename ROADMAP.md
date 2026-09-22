@@ -282,6 +282,7 @@
 - [x] Android: перехват уведомлений платёжных приложений (MIR Pay, Samsung Pay, СБПэй, Google Wallet, Huawei Wallet, Mi Pay, ЮMoney) — тот же пайплайн черновиков; счёт по last4 / банку в тексте ([notification-intercept.md](roadmap/notification-intercept.md))
 - [x] Android: из черновиков перехвата — перевод между счетами (пара расход + пополнение, одна сумма) ([notification-intercept.md](roadmap/notification-intercept.md))
 - [x] CI: GitHub Actions на Node 24; Node.js для сборки UI по-прежнему 22
+- [x] [Release notes](docs/release-notes-v1.5.4.md) · [import/buhgalter.md](docs/import/buhgalter.md) · [import/cubux.md](docs/import/cubux.md) · [android-client.md](docs/android-client.md) · [android-client-platform.md](docs/android-client-platform.md) · [notification-intercept.md](roadmap/notification-intercept.md) · [data-model.md](docs/data-model.md)
 
 ## Общие планы
 

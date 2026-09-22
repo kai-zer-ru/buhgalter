@@ -4,7 +4,7 @@
 
 **Спецификация API:** [api/openapi.yaml](api/openapi.yaml) (интерактивно — `/docs` на запущенном сервере).
 
-История изменений по версиям — [CHANGELOG.md](../CHANGELOG.md). Последний релиз: [release-notes-v1.5.3.md](release-notes-v1.5.3.md).
+История изменений по версиям — [CHANGELOG.md](../CHANGELOG.md). Последний релиз: [release-notes-v1.5.4.md](release-notes-v1.5.4.md).
 
 ---
 
@@ -17,7 +17,7 @@
 | [install/nginx.md](install/nginx.md) | Reverse proxy и HTTPS |
 | [android-client.md](android-client.md) | Android-приложение: обзор |
 | [android-client-ui.md](android-client-ui.md) | Android: интерфейс и навигация |
-| [android-client-platform.md](android-client-platform.md) | Android: вход, офлайн, виджеты, i18n, discovery, логи, сборка |
+| [android-client-platform.md](android-client-platform.md) | Android: вход, офлайн, виджеты, перехват уведомлений, i18n, discovery, логи, сборка |
 
 Краткий обзор и переменные окружения — в [README.md](../README.md) в корне репозитория.
 
@@ -85,4 +85,4 @@
 | [../roadmap/category-rules-inbox.md](../roadmap/category-rules-inbox.md) | (план) Правила категорий и inbox неразнесённого |
 | [feature-toggles.md](feature-toggles.md) | Флаги модулей в админке; чеклист для новых фич |
 | [subscriptions.md](subscriptions.md) | Подписки: API, UI, уведомления, плановый остаток |
-| [release-notes-v1.5.3.md](release-notes-v1.5.3.md) | Release notes v1.5.3 |
+| [release-notes-v1.5.4.md](release-notes-v1.5.4.md) | Release notes v1.5.4 |

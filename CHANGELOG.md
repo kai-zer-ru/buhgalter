@@ -7,9 +7,13 @@
 внутри — **Добавлено** / **Изменено** / **Исправлено** / **Удалено** (и при необходимости **Техническое**).
 Исторические секции до этого соглашения не переписываются.
 
-Подробные release notes для пользователей: [docs/release-notes-v1.5.3.md](docs/release-notes-v1.5.3.md).
+Подробные release notes для пользователей: [docs/release-notes-v1.5.4.md](docs/release-notes-v1.5.4.md).
 
 ## [Unreleased]
+
+## [v1.5.4] — 2026-09-22
+
+> **ОБЯЗАТЕЛЬНО СДЕЛАЙТЕ БЕКАП!** Перед обновлением сохраните копию базы (`data/buhgalter.db`) и каталога `backups/`. Новых миграций БД нет.
 
 ### Android
 
@@ -17,6 +21,8 @@
 
 - Импорт/экспорт **Бухгалтер**: полный перенос учёта между серверами (счета, справочники, операции, кредиты, долги, подписки); Cubux — только операции
 - Профиль: кнопка **«Удалить данные»** — сброс учёта к состоянию нового пользователя (логин и профиль сохраняются)
+- Перехват уведомлений платёжных приложений (MIR Pay, Samsung Pay, СБПэй, Google Wallet, Huawei Wallet, Mi Pay, ЮMoney) — тот же пайплайн черновиков, что у банков; счёт по last4 / банку в тексте
+- Из черновиков перехвата — перевод между счетами (пара расход + пополнение, одна сумма)
 
 #### Изменено
 
@@ -64,7 +70,10 @@
 
 #### Техническое
 
+- OpenAPI `1.5.4`: `DELETE /user/data`, экспорт `format=buhgalter`, импорт `preset=buhgalter`, ImportReport `transfer_rows` / `list_rows`
 - CI: экшены GitHub Actions на Node 24 (`checkout@v7`, `setup-node@v7` и остальные); Node.js для сборки UI по-прежнему 22
+- [docs/release-notes-v1.5.4.md](docs/release-notes-v1.5.4.md)
+- Версия `1.5.4`
 
 ## [v1.5.3] — 2026-09-14
 
@@ -1086,6 +1095,7 @@
 - Стек: Go 1.26+, SQLite, SvelteKit, встроенный статический фронтенд (`embedstatic`)
 - Команда `make version vX.Y.Z` — единая простановка semver во всех артефактах (`VERSION`, OpenAPI, Dockerfile, …)
 
+[v1.5.4]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.5.4
 [v1.5.3]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.5.3
 [v1.5.2]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.5.2
 [v1.5.1]: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.5.1

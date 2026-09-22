@@ -96,11 +96,11 @@ Badge-метки и спойлеры графика на `/credits` — [ui-cred
 
 | URL | Раздел |
 |-----|--------|
-| `/settings` | Профиль |
+| `/settings` | Профиль (в т.ч. «Удалить данные») |
 | `/settings/password` | Пароль |
 | `/settings/tokens` | API-токены |
 | `/settings/notifications` | Уведомления |
-| `/settings/import` | Импорт / экспорт |
+| `/settings/import` | Импорт / экспорт (Cubux и «Бухгалтер») |
 
 Layout настроек: `web/src/routes/settings/+layout.svelte` — крошки и `h1` для подстраниц.
 
