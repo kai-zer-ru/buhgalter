@@ -28,7 +28,6 @@
 		setInterceptTransferPrefill,
 		syncInterceptNativeFromSettings,
 		transferPrefillFromDrafts,
-		transferPrefillFromSelection,
 		type InterceptDraft,
 		type InterceptTransferPair,
 		type TransferCreatePrefill
@@ -39,7 +38,6 @@
 	let listenerConnected = $state<boolean | null>(null);
 	let accounts = $state<Account[]>([]);
 	let banks = $state<Bank[]>([]);
-	let selectedIds = $state<string[]>([]);
 	let splitPairIds = $state<string[]>([]);
 
 	const drafts = $derived.by(() => {
@@ -57,8 +55,6 @@
 	);
 	const hiddenPairedIds = $derived(pairedDraftIds(transferPairs));
 	const visibleDrafts = $derived(drafts.filter((d) => !hiddenPairedIds.has(d.id)));
-	const selectedDrafts = $derived(visibleDrafts.filter((d) => selectedIds.includes(d.id)));
-	const selectedTransferPrefill = $derived(transferPrefillFromSelection(selectedDrafts));
 
 	async function refreshListenerState() {
 		if (!isNativeApp()) {
@@ -125,21 +121,6 @@
 
 	function openPairTransfer(pair: InterceptTransferPair) {
 		openTransfer(transferPrefillFromDrafts(pair.from, pair.to));
-	}
-
-	function openSelectedTransfer() {
-		openTransfer(selectedTransferPrefill);
-	}
-
-	function setSelected(draftId: string, on: boolean) {
-		const has = selectedIds.includes(draftId);
-		if (on && !has) {
-			selectedIds = [...selectedIds, draftId];
-			return;
-		}
-		if (!on && has) {
-			selectedIds = selectedIds.filter((id) => id !== draftId);
-		}
 	}
 
 	function removeDrafts(ids: string[]) {
@@ -224,30 +205,6 @@
 		<p class="mb-3 text-xs" style:color="var(--text-muted)">
 			{$_('bankNotifications.drafts.transferHint')}
 		</p>
-		{#if selectedDrafts.length > 0}
-			<div class="card mb-3 space-y-2">
-				<p class="text-sm">
-					{$_('bankNotifications.drafts.selected', { values: { n: selectedDrafts.length } })}
-				</p>
-				<div class="btn-pair-row">
-					<button
-						type="button"
-						class="btn-primary"
-						disabled={!selectedTransferPrefill}
-						onclick={openSelectedTransfer}
-					>
-						{$_('bankNotifications.drafts.createTransfer')}
-					</button>
-					<button
-						type="button"
-						class="btn-ghost"
-						onclick={() => removeDrafts(selectedDrafts.map((d) => d.id))}
-					>
-						{$_('bankNotifications.drafts.deleteSelected')}
-					</button>
-				</div>
-			</div>
-		{/if}
 		{#if transferPairs.length > 0}
 			<ul class="mb-3 space-y-3">
 				{#each transferPairs as pair (`${pair.from.id}:${pair.to.id}`)}
@@ -272,18 +229,16 @@
 							>
 								{$_('bankNotifications.drafts.createTransfer')}
 							</button>
-							<div class="btn-pair-row">
-								<button type="button" class="btn-ghost" onclick={() => showAsSeparate(pair)}>
-									{$_('bankNotifications.drafts.showSeparate')}
-								</button>
-								<button
-									type="button"
-									class="btn-ghost"
-									onclick={() => removeDrafts([pair.from.id, pair.to.id])}
-								>
-									{$_('bankNotifications.drafts.deletePair')}
-								</button>
-							</div>
+							<button type="button" class="btn-ghost w-full" onclick={() => showAsSeparate(pair)}>
+								{$_('bankNotifications.drafts.showSeparate')}
+							</button>
+							<button
+								type="button"
+								class="btn-ghost w-full"
+								onclick={() => removeDrafts([pair.from.id, pair.to.id])}
+							>
+								{$_('bankNotifications.drafts.delete')}
+							</button>
 						</div>
 					</li>
 				{/each}
@@ -293,35 +248,27 @@
 			<ul class="space-y-3">
 				{#each visibleDrafts as draft (draft.id)}
 					<li class="card space-y-2">
-						<div class="flex items-start gap-3">
-							<input
-								type="checkbox"
-								class="mt-1.5"
-								checked={selectedIds.includes(draft.id)}
-								onchange={(e) => setSelected(draft.id, e.currentTarget.checked)}
-							/>
-							<div class="min-w-0 flex-1">
-								<p class="text-sm" style:color="var(--text-muted)">
-									{draftTxType(draft) === 'income'
-										? $_('bankNotifications.drafts.kindIncome')
-										: $_('bankNotifications.drafts.kindExpense')}
-								</p>
-								<p class="text-lg font-semibold">
-									{formatMoneyDisplay(draft.parsed.amount)} ₽
-								</p>
-								<p class="truncate font-medium">
-									{draft.merchantName ||
-										draft.parsed.merchantText ||
-										$_('bankNotifications.drafts.noMerchant')}
-								</p>
-								<p class="text-sm" style:color="var(--text-muted)">
-									{sideLabel(draft)}
-									{#if draft.parsed.last4}
-										· *{draft.parsed.last4}
-									{/if}
-									· {formatWhen(draft.parsed.occurredAt)}
-								</p>
-							</div>
+						<div class="min-w-0">
+							<p class="text-sm" style:color="var(--text-muted)">
+								{draftTxType(draft) === 'income'
+									? $_('bankNotifications.drafts.kindIncome')
+									: $_('bankNotifications.drafts.kindExpense')}
+							</p>
+							<p class="text-lg font-semibold">
+								{formatMoneyDisplay(draft.parsed.amount)} ₽
+							</p>
+							<p class="truncate font-medium">
+								{draft.merchantName ||
+									draft.parsed.merchantText ||
+									$_('bankNotifications.drafts.noMerchant')}
+							</p>
+							<p class="text-sm" style:color="var(--text-muted)">
+								{sideLabel(draft)}
+								{#if draft.parsed.last4}
+									· *{draft.parsed.last4}
+								{/if}
+								· {formatWhen(draft.parsed.occurredAt)}
+							</p>
 						</div>
 						<div class="space-y-2">
 							<div class="btn-pair-row">

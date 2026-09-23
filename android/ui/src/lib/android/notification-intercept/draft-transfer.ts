@@ -114,12 +114,3 @@ export function transferPrefillFromDrafts(
 		draftIds
 	};
 }
-
-/** One draft (one side) or two complementary drafts. */
-export function transferPrefillFromSelection(
-	selected: InterceptDraft[]
-): TransferCreatePrefill | null {
-	if (selected.length === 1) return transferPrefillFromDrafts(selected[0]);
-	if (selected.length === 2) return transferPrefillFromDrafts(selected[0], selected[1]);
-	return null;
-}

@@ -6,7 +6,6 @@ import {
 	unpairedInterceptDrafts,
 	countVisibleInterceptItems,
 	transferPrefillFromDrafts,
-	transferPrefillFromSelection,
 	TRANSFER_PAIR_WINDOW_MS
 } from './draft-transfer';
 import type { InterceptDraft, ParsedPurchase } from './types';
@@ -168,12 +167,8 @@ describe('draft transfer pairing', () => {
 		);
 	});
 
-	it('returns null prefill for an invalid two-draft selection', () => {
+	it('returns null prefill for drafts that are not a transfer pair', () => {
 		const otherExpense = draft('e2', 'purchase', { bankId: 'sberbank', accountId: 'acc-s' });
-		expect(transferPrefillFromSelection([expense, otherExpense])).toBeNull();
-	});
-
-	it('accepts a single selected draft', () => {
-		expect(transferPrefillFromSelection([income])?.toAccountId).toBe('acc-s');
+		expect(transferPrefillFromDrafts(expense, otherExpense)).toBeNull();
 	});
 });
