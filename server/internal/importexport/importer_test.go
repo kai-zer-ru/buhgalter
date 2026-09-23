@@ -67,7 +67,7 @@ func TestPreviewAndImportCubux(t *testing.T) {
 	if report.TotalRows != 4 || report.ValidRows != 4 {
 		t.Fatalf("preview: %+v", report)
 	}
-	if report.TransferRows != 1 || report.ListRows != 5 {
+	if report.TransferRows != 1 || report.ListRows != 4 {
 		t.Fatalf("preview journal: transfers=%d list=%d", report.TransferRows, report.ListRows)
 	}
 	if len(report.AccountsToCreate) < 3 {
@@ -83,7 +83,7 @@ func TestPreviewAndImportCubux(t *testing.T) {
 	if committed.CreatedTransactions != 4 {
 		t.Fatalf("created %d", committed.CreatedTransactions)
 	}
-	if committed.TransferRows != 1 || committed.ListRows != 5 {
+	if committed.TransferRows != 1 || committed.ListRows != 4 {
 		t.Fatalf("import journal: transfers=%d list=%d", committed.TransferRows, committed.ListRows)
 	}
 

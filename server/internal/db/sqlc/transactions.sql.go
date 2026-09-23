@@ -148,6 +148,20 @@ WHERE t.user_id = ?
     WHERE tt.transaction_id = t.id AND tt.tag_id = ?
   ))
   AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL)
+  -- One journal operation per transfer, unless the list is scoped to a single account
+  -- (that account keeps its own leg). Commission stays inside the transfer.
+  AND (
+    ? != ''
+    OR t.type != 'transfer'
+    OR t.transfer_group_id IS NULL
+    OR t.id = (
+      SELECT x.id FROM transactions x
+      WHERE x.transfer_group_id = t.transfer_group_id
+        AND x.type = 'transfer'
+      ORDER BY x.created_at ASC, x.id ASC
+      LIMIT 1
+    )
+  )
 `
 
 type CountTransactionsFilteredParams struct {
@@ -170,6 +184,7 @@ type CountTransactionsFilteredParams struct {
 	MerchantID        *string     `json:"merchant_id"`
 	Column18          interface{} `json:"column_18"`
 	TagID             string      `json:"tag_id"`
+	Column20          interface{} `json:"column_20"`
 }
 
 func (q *Queries) CountTransactionsFiltered(ctx context.Context, arg CountTransactionsFilteredParams) (int64, error) {
@@ -193,6 +208,7 @@ func (q *Queries) CountTransactionsFiltered(ctx context.Context, arg CountTransa
 		arg.MerchantID,
 		arg.Column18,
 		arg.TagID,
+		arg.Column20,
 	)
 	var count int64
 	err := row.Scan(&count)
@@ -670,6 +686,17 @@ LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
 LEFT JOIN credit_payments cp ON cp.transaction_id = t.id
 WHERE t.user_id = ?
   AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL)
+  AND (
+    t.type != 'transfer'
+    OR t.transfer_group_id IS NULL
+    OR t.id = (
+      SELECT x.id FROM transactions x
+      WHERE x.transfer_group_id = t.transfer_group_id
+        AND x.type = 'transfer'
+      ORDER BY x.created_at ASC, x.id ASC
+      LIMIT 1
+    )
+  )
 ORDER BY t.transaction_date DESC, t.created_at DESC
 LIMIT ?
 `
@@ -975,6 +1002,20 @@ WHERE t.user_id = ?
     WHERE tt.transaction_id = t.id AND tt.tag_id = ?
   ))
   AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL)
+  -- One journal operation per transfer, unless the list is scoped to a single account
+  -- (that account keeps its own leg). Commission stays inside the transfer.
+  AND (
+    ? != ''
+    OR t.type != 'transfer'
+    OR t.transfer_group_id IS NULL
+    OR t.id = (
+      SELECT x.id FROM transactions x
+      WHERE x.transfer_group_id = t.transfer_group_id
+        AND x.type = 'transfer'
+      ORDER BY x.created_at ASC, x.id ASC
+      LIMIT 1
+    )
+  )
 ORDER BY t.transaction_date ASC, t.created_at ASC
 LIMIT ? OFFSET ?
 `
@@ -999,6 +1040,7 @@ type ListTransactionsFilteredDateAscParams struct {
 	MerchantID        *string     `json:"merchant_id"`
 	Column18          interface{} `json:"column_18"`
 	TagID             string      `json:"tag_id"`
+	Column20          interface{} `json:"column_20"`
 	Limit             int64       `json:"limit"`
 	Offset            int64       `json:"offset"`
 }
@@ -1057,6 +1099,7 @@ func (q *Queries) ListTransactionsFilteredDateAsc(ctx context.Context, arg ListT
 		arg.MerchantID,
 		arg.Column18,
 		arg.TagID,
+		arg.Column20,
 		arg.Limit,
 		arg.Offset,
 	)
@@ -1183,6 +1226,20 @@ WHERE t.user_id = ?
     WHERE tt.transaction_id = t.id AND tt.tag_id = ?
   ))
   AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL)
+  -- One journal operation per transfer, unless the list is scoped to a single account
+  -- (that account keeps its own leg). Commission stays inside the transfer.
+  AND (
+    ? != ''
+    OR t.type != 'transfer'
+    OR t.transfer_group_id IS NULL
+    OR t.id = (
+      SELECT x.id FROM transactions x
+      WHERE x.transfer_group_id = t.transfer_group_id
+        AND x.type = 'transfer'
+      ORDER BY x.created_at ASC, x.id ASC
+      LIMIT 1
+    )
+  )
 ORDER BY t.transaction_date DESC, t.created_at DESC
 LIMIT ? OFFSET ?
 `
@@ -1207,6 +1264,7 @@ type ListTransactionsFilteredDateDescParams struct {
 	MerchantID        *string     `json:"merchant_id"`
 	Column18          interface{} `json:"column_18"`
 	TagID             string      `json:"tag_id"`
+	Column20          interface{} `json:"column_20"`
 	Limit             int64       `json:"limit"`
 	Offset            int64       `json:"offset"`
 }
@@ -1265,6 +1323,7 @@ func (q *Queries) ListTransactionsFilteredDateDesc(ctx context.Context, arg List
 		arg.MerchantID,
 		arg.Column18,
 		arg.TagID,
+		arg.Column20,
 		arg.Limit,
 		arg.Offset,
 	)

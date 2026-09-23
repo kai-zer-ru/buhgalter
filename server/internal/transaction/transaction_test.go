@@ -319,18 +319,31 @@ func TestTransferCommissionLinkedAndHiddenFromList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if list.Meta.Total != 1 {
+		t.Fatalf("transfer with commission counts as 1 operation, got %d", list.Meta.Total)
+	}
 	var transferOut *Transaction
 	for i := range list.Data {
 		tx := &list.Data[i]
 		if tx.Type == "expense" && tx.TransferGroupID != nil && *tx.TransferGroupID == tr.GroupID {
 			t.Fatalf("commission expense must not appear in list: %+v", tx)
 		}
-		if tx.Type == "transfer" && tx.TransferGroupID != nil && *tx.TransferGroupID == tr.GroupID && tx.TransferIsOut {
+		if tx.Type == "transfer" && tx.TransferGroupID != nil && *tx.TransferGroupID == tr.GroupID {
+			if !tx.TransferIsOut {
+				t.Fatalf("incoming transfer leg must not be a separate journal row: %+v", tx)
+			}
 			transferOut = tx
 		}
 	}
 	if transferOut == nil {
 		t.Fatal("expected transfer out leg in list")
+	}
+	byDest, err := List(ctx, database, env.userID, ListFilters{AccountID: env.account2, Page: 1, Limit: 50})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if byDest.Meta.Total != 1 || len(byDest.Data) != 1 || byDest.Data[0].TransferIsOut {
+		t.Fatalf("destination account keeps its incoming leg, got total=%d data=%+v", byDest.Meta.Total, byDest.Data)
 	}
 	if transferOut.Commission != 500 {
 		t.Fatalf("list commission %d, want 500", transferOut.Commission)

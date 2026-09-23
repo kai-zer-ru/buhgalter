@@ -115,6 +115,86 @@ describe('applyTransactionChanges', () => {
 		expect(readRefCache<TransactionList>(HOME_PAST_TRANSACTIONS_PATH)?.data[0]?.amount).toBe(2500);
 	});
 
+	it('does not recount an older operation already covered by meta.total', () => {
+		const path = '/api/v1/transactions?kind=manual&limit=1&page=1&sort=date_desc';
+		const recent = tx({ id: 'new', transaction_date: '2026-09-01 10:00:00' });
+		writeRefCache(path, { data: [recent], meta: { page: 1, limit: 1, total: 10 } });
+		const older = tx({ id: 'old', transaction_date: '2020-01-01 10:00:00' });
+		applyTransactionChanges([
+			{
+				id: 8,
+				action: 'upsert',
+				entity_id: older.id,
+				occurred_at: '2020-01-01 10:00:00',
+				transaction: older
+			}
+		]);
+		const cached = readRefCache<TransactionList>(path);
+		expect(cached?.meta.total).toBe(10);
+		expect(cached?.data.map((row) => row.id)).toEqual(['new']);
+	});
+
+	it('counts a transfer once and skips the incoming leg on the journal list', () => {
+		writeRefCache(HOME_PAST_TRANSACTIONS_PATH, {
+			data: [],
+			meta: { page: 1, limit: 10, total: 5 }
+		});
+		applyTransactionChanges([
+			{
+				id: 9,
+				action: 'upsert',
+				entity_id: 'out',
+				occurred_at: '2026-09-07 10:00:00',
+				transaction: tx({
+					id: 'out',
+					type: 'transfer',
+					transfer_group_id: 'g',
+					transfer_is_out: true,
+					transaction_date: '2026-09-07 10:00:00'
+				})
+			},
+			{
+				id: 10,
+				action: 'upsert',
+				entity_id: 'in',
+				occurred_at: '2026-09-07 10:00:01',
+				transaction: tx({
+					id: 'in',
+					type: 'transfer',
+					transfer_group_id: 'g',
+					transfer_is_out: false,
+					transaction_date: '2026-09-07 10:00:01'
+				})
+			}
+		]);
+		const cached = readRefCache<TransactionList>(HOME_PAST_TRANSACTIONS_PATH);
+		expect(cached?.data.map((row) => row.id)).toEqual(['out']);
+		expect(cached?.meta.total).toBe(6);
+	});
+
+	it('keeps the incoming transfer leg on that account list', () => {
+		const path = '/api/v1/transactions?account_id=acc-2&limit=10&page=1&sort=date_desc';
+		writeRefCache(path, { data: [], meta: { page: 1, limit: 10, total: 0 } });
+		applyTransactionChanges([
+			{
+				id: 11,
+				action: 'upsert',
+				entity_id: 'in',
+				occurred_at: '2026-09-07 10:00:00',
+				transaction: tx({
+					id: 'in',
+					account_id: 'acc-2',
+					type: 'transfer',
+					transfer_group_id: 'g',
+					transfer_is_out: false
+				})
+			}
+		]);
+		const cached = readRefCache<TransactionList>(path);
+		expect(cached?.data.map((row) => row.id)).toEqual(['in']);
+		expect(cached?.meta.total).toBe(1);
+	});
+
 	it('does not add transfer commission expense to visible lists', () => {
 		writeRefCache(HOME_PAST_TRANSACTIONS_PATH, listOf([]));
 		applyTransactionChanges([

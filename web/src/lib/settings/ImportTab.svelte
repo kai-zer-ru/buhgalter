@@ -158,7 +158,7 @@
 	function journalRows(r: ImportReport | null | undefined): number {
 		if (!r) return 0;
 		if ((r.list_rows ?? 0) > 0) return r.list_rows ?? 0;
-		return (r.valid_rows ?? 0) + (r.transfer_rows ?? 0);
+		return r.valid_rows ?? 0;
 	}
 
 	function confirmImportMessage(r: ImportReport | null): string {

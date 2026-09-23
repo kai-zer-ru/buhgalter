@@ -715,6 +715,7 @@ func (fp filterParams) count() sqlcdb.CountTransactionsFilteredParams {
 		MerchantID:        merchantPtr,
 		Column18:          fp.tagID,
 		TagID:             fp.tagID,
+		Column20:          fp.accountID,
 	}
 }
 
@@ -740,6 +741,7 @@ func (fp filterParams) listDesc(limit, offset int64) sqlcdb.ListTransactionsFilt
 		MerchantID:        p.MerchantID,
 		Column18:          p.Column18,
 		TagID:             p.TagID,
+		Column20:          p.Column20,
 		Limit:             limit,
 		Offset:            offset,
 	}
@@ -767,6 +769,7 @@ func (fp filterParams) listAsc(limit, offset int64) sqlcdb.ListTransactionsFilte
 		MerchantID:        p.MerchantID,
 		Column18:          p.Column18,
 		TagID:             p.TagID,
+		Column20:          p.Column20,
 		Limit:             limit,
 		Offset:            offset,
 	}

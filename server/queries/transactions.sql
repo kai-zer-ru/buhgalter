@@ -224,7 +224,21 @@ WHERE t.user_id = ?
     SELECT 1 FROM transaction_tags tt
     WHERE tt.transaction_id = t.id AND tt.tag_id = ?
   ))
-  AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL);
+  AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL)
+  -- One journal operation per transfer, unless the list is scoped to a single account
+  -- (that account keeps its own leg). Commission stays inside the transfer.
+  AND (
+    ? != ''
+    OR t.type != 'transfer'
+    OR t.transfer_group_id IS NULL
+    OR t.id = (
+      SELECT x.id FROM transactions x
+      WHERE x.transfer_group_id = t.transfer_group_id
+        AND x.type = 'transfer'
+      ORDER BY x.created_at ASC, x.id ASC
+      LIMIT 1
+    )
+  );
 
 -- name: ListTransactionsFilteredDateDesc :many
 SELECT
@@ -297,6 +311,20 @@ WHERE t.user_id = ?
     WHERE tt.transaction_id = t.id AND tt.tag_id = ?
   ))
   AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL)
+  -- One journal operation per transfer, unless the list is scoped to a single account
+  -- (that account keeps its own leg). Commission stays inside the transfer.
+  AND (
+    ? != ''
+    OR t.type != 'transfer'
+    OR t.transfer_group_id IS NULL
+    OR t.id = (
+      SELECT x.id FROM transactions x
+      WHERE x.transfer_group_id = t.transfer_group_id
+        AND x.type = 'transfer'
+      ORDER BY x.created_at ASC, x.id ASC
+      LIMIT 1
+    )
+  )
 ORDER BY t.transaction_date DESC, t.created_at DESC
 LIMIT ? OFFSET ?;
 
@@ -371,6 +399,20 @@ WHERE t.user_id = ?
     WHERE tt.transaction_id = t.id AND tt.tag_id = ?
   ))
   AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL)
+  -- One journal operation per transfer, unless the list is scoped to a single account
+  -- (that account keeps its own leg). Commission stays inside the transfer.
+  AND (
+    ? != ''
+    OR t.type != 'transfer'
+    OR t.transfer_group_id IS NULL
+    OR t.id = (
+      SELECT x.id FROM transactions x
+      WHERE x.transfer_group_id = t.transfer_group_id
+        AND x.type = 'transfer'
+      ORDER BY x.created_at ASC, x.id ASC
+      LIMIT 1
+    )
+  )
 ORDER BY t.transaction_date ASC, t.created_at ASC
 LIMIT ? OFFSET ?;
 
@@ -433,6 +475,17 @@ LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
 LEFT JOIN credit_payments cp ON cp.transaction_id = t.id
 WHERE t.user_id = ?
   AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL)
+  AND (
+    t.type != 'transfer'
+    OR t.transfer_group_id IS NULL
+    OR t.id = (
+      SELECT x.id FROM transactions x
+      WHERE x.transfer_group_id = t.transfer_group_id
+        AND x.type = 'transfer'
+      ORDER BY x.created_at ASC, x.id ASC
+      LIMIT 1
+    )
+  )
 ORDER BY t.transaction_date DESC, t.created_at DESC
 LIMIT ?;
 

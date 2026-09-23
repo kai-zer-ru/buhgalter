@@ -699,7 +699,7 @@ func importWithProgress(
 		if m.CubuxType == "Перевод" {
 			report.TransferRows++
 		}
-		report.ListRows = report.ValidRows + report.TransferRows
+		report.ListRows = report.ValidRows
 		report.CreatedTransactions++
 		report.ProcessedRows++
 		report.Logs = append(report.Logs, fmt.Sprintf("row %d: imported", m.RowNum))

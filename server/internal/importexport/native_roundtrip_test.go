@@ -236,7 +236,7 @@ func TestNativeExportImportPreservesLedger(t *testing.T) {
 	if len(rep.Errors) != 0 {
 		t.Fatalf("import errors: %+v", rep.Errors)
 	}
-	if rep.ValidRows != 2 || rep.TransferRows != 1 || rep.ListRows != 3 {
+	if rep.ValidRows != 2 || rep.TransferRows != 1 || rep.ListRows != 2 {
 		t.Fatalf("import counts valid=%d transfers=%d list=%d", rep.ValidRows, rep.TransferRows, rep.ListRows)
 	}
 

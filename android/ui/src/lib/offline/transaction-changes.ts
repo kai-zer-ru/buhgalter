@@ -51,8 +51,14 @@ function listPage(params: URLSearchParams): number {
 	return Number.isFinite(page) && page > 0 ? page : 1;
 }
 
+/** Incoming transfer leg is the same operation as the outgoing one, except on a single-account list. */
+function isCollapsedTransferInLeg(tx: Transaction, params: URLSearchParams): boolean {
+	if (params.get('account_id')) return false;
+	return tx.type === 'transfer' && !!tx.transfer_group_id && tx.transfer_is_out === false;
+}
+
 function transactionMatchesListQuery(tx: Transaction, params: URLSearchParams): boolean {
-	if (isHiddenCommission(tx)) return false;
+	if (isHiddenCommission(tx) || isCollapsedTransferInLeg(tx, params)) return false;
 	const accountId = params.get('account_id');
 	if (accountId && tx.account_id !== accountId) return false;
 	const type = params.get('type');
@@ -77,6 +83,12 @@ function transactionMatchesListQuery(tx: Transaction, params: URLSearchParams): 
 function sortList(txs: Transaction[], params: URLSearchParams): Transaction[] {
 	const sorted = sortTransactionsDateDesc(txs);
 	return params.get('sort') === 'date_asc' ? sorted.reverse() : sorted;
+}
+
+function pageLimit(params: URLSearchParams, fallback: number): number {
+	const limit = Number.parseInt(params.get('limit') || '', 10);
+	if (Number.isFinite(limit) && limit > 0) return limit;
+	return fallback;
 }
 
 function patchTransactionList(
@@ -119,9 +131,14 @@ function patchTransactionList(
 		return;
 	}
 	if (page > 1) return;
-	data.push(tx);
+	// A row older than this page is already inside meta.total from the list GET.
+	// Counting it again is how Android drifted above the web journal (replay of
+	// transfer legs and older operations after warm).
+	const cap = pageLimit(params, data.length);
+	const kept = sortList([...data, tx], params).slice(0, cap > 0 ? cap : undefined);
+	if (!kept.some((row) => row.id === tx.id)) return;
 	publishRefCachePath(path, {
-		data: sortList(data, params),
+		data: kept,
 		meta: { ...cached.meta, total: total + 1 }
 	});
 }

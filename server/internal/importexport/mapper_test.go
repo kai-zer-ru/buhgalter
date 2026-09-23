@@ -132,7 +132,7 @@ func TestPreviewFromMappedCountsJournalRows(t *testing.T) {
 	if report.TransferRows != 1 {
 		t.Fatalf("transfers %d", report.TransferRows)
 	}
-	if report.ListRows != 4 {
+	if report.ListRows != 3 {
 		t.Fatalf("list %d", report.ListRows)
 	}
 }

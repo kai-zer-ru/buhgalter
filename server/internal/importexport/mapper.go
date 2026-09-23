@@ -138,7 +138,7 @@ func PreviewFromMapped(rows []MappedRow) (Report, map[string]struct{}, map[strin
 			report.Preview = append(report.Preview, item)
 		}
 	}
-	report.ListRows = report.ValidRows + report.TransferRows
+	report.ListRows = report.ValidRows
 	return report, accounts, categories
 }
 

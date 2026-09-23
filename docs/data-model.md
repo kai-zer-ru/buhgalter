@@ -304,7 +304,7 @@ erDiagram
 - **Комиссия (v1.1 / v1.4.1):** опциональное поле `commission` при создании/изменении перевода; отдельная нога `expense` на счёте-источнике в системной категории «Комиссия». В списках нога скрыта; сумма агрегируется в `commission` / `commission_display` на ногах перевода. Самостоятельные UPDATE/DELETE ноги комиссии — `ERR_COMMISSION_LINKED`.
 - В API-ответах: `transfer_account_name`, `transfer_is_out`, `commission`, `commission_display` (вычисляемые/агрегированные поля).
 - UI: [transactions-display.md](transactions-display.md).
-- **Лента изменений (v1.5.2):** таблица `user_change_events` (триггеры на INSERT/UPDATE/DELETE `transactions`). Android при sync запрашивает `GET /sync/transaction-changes?since_id=` и патчит кеш списков по id — добавление, правку и удаление операции, в том числе старой, которую полный прогрев страницы 1 не перечитывает.
+- **Лента изменений (v1.5.2):** таблица `user_change_events` (триггеры на INSERT/UPDATE/DELETE `transactions`). Android при sync запрашивает `GET /sync/transaction-changes?since_id=` и патчит кеш списков по id — добавление, правку и удаление операции, в том числе старой, которую полный прогрев страницы 1 не перечитывает. Счётчик `meta.total` эта лента не увеличивает для строки старше страницы и для входящей ноги перевода.
 
 ## Долги и операции
 
