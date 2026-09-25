@@ -11,4 +11,11 @@ declare global {
 	const __APP_VERSION__: string;
 }
 
+/** Virtual Keyboard API — not yet in all DOM/Svelte typings. */
+declare module 'svelte/elements' {
+	export interface HTMLAttributes<T> {
+		virtualkeyboardpolicy?: 'auto' | 'manual' | undefined | null;
+	}
+}
+
 export {};

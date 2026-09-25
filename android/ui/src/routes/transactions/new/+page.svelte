@@ -49,7 +49,7 @@
 	);
 	let initialDescription = $state(interceptOnce?.description ?? shareOnce?.description ?? '');
 	let createPrefill = $state(interceptOnce);
-	const interceptDraftId = interceptOnce?.draftId ?? interceptDraftParam;
+	const interceptDraftId = $derived(interceptOnce?.draftId ?? interceptDraftParam);
 	let repeatFrom = $state<Transaction | null>(null);
 	let ready = $state(true);
 
