@@ -13,6 +13,7 @@ func testBanks() []bank.Bank {
 		{ID: "yandex", Name: "Яндекс Банк"},
 		{ID: "sberbank", Name: "Сбербанк"},
 		{ID: "tinkoff", Name: "Т-Банк"},
+		{ID: "vbrr", Name: "ВБРР"},
 	}
 }
 
@@ -30,6 +31,8 @@ func TestMatchBank(t *testing.T) {
 		{"Яндекс Банк", "yandex"},
 		{"Сбер", "sberbank"},
 		{"Тинькофф", "tinkoff"},
+		{"ВБРР", "vbrr"},
+		{"vbrr", "vbrr"},
 		{"Наличные", ""},
 		{"Кредитка", ""},
 		{"Мой кошелёк", ""},

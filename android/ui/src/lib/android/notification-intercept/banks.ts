@@ -140,6 +140,12 @@ export const KNOWN_BANK_APPS: KnownBankApp[] = [
 		packageNames: ['ru.atb.mobilbank'],
 		smsSenders: ['ATB'],
 		labelKey: 'bankNotifications.bank.atb'
+	},
+	{
+		bankId: 'vbrr',
+		packageNames: ['com.bssys.vbrrretail'],
+		smsSenders: ['VBRR', 'ВБРР'],
+		labelKey: 'bankNotifications.bank.vbrr'
 	}
 ];
 
@@ -211,6 +217,7 @@ const BANK_TEXT_ALIASES: { bankId: string; re: RegExp }[] = [
 	{ bankId: 'psb', re: /\bпсб\b|\bpsb\b|промсвязьбанк/i },
 	{ bankId: 'otpbank', re: /отп\s*банк|otp\s*bank/i },
 	{ bankId: 'atb', re: /\bатб\b/i },
+	{ bankId: 'vbrr', re: /\bвбрр\b|\bvbrr\b/i },
 	{ bankId: 'ozon', re: /озон\s*банк|ozon\s*bank/i },
 	{ bankId: 'yandex', re: /яндекс\s*банк|yandex\s*bank/i },
 	{ bankId: 'wbbank', re: /wb\s*банк|wildberries\s*банк/i }

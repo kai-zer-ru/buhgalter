@@ -101,6 +101,7 @@
 	"bankNotifications.bank.wbbank": "WB Банк",
 	"bankNotifications.bank.otpbank": "ОТП Банк",
 	"bankNotifications.bank.atb": "АТБ",
+	"bankNotifications.bank.vbrr": "ВБРР",
 	"bankNotifications.wallet.mir_pay": "MIR Pay",
 	"bankNotifications.wallet.sbp_pay": "СБПэй",
 	"bankNotifications.wallet.samsung_pay": "Samsung Pay",

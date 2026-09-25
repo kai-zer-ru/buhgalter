@@ -68,6 +68,7 @@ final class NotificationInterceptStore {
                                     "com.wildberries.ru",
                                     "ru.otpbank.mobile",
                                     "ru.atb.mobilbank",
+                                    "com.bssys.vbrrretail",
                                     "ru.nspk.mirpay",
                                     "ru.nspk.sbpay",
                                     "com.samsung.android.spay",
@@ -108,7 +109,9 @@ final class NotificationInterceptStore {
                     + "\"wb\":\"ru.wildberries.fintech\","
                     + "\"wbbank\":\"ru.wildberries.fintech\","
                     + "\"otpbank\":\"ru.otpbank.mobile\","
-                    + "\"atb\":\"ru.atb.mobilbank\""
+                    + "\"atb\":\"ru.atb.mobilbank\","
+                    + "\"vbrr\":\"com.bssys.vbrrretail\","
+                    + "\"вбрр\":\"com.bssys.vbrrretail\""
                     + "}";
 
     private NotificationInterceptStore() {}

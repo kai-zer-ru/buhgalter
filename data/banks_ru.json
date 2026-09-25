@@ -131,5 +131,12 @@
     "bic": "041012765",
     "icon_path": "banks/atb.svg",
     "sort_order": 19
+  },
+  {
+    "id": "vbrr",
+    "name": "ВБРР",
+    "bic": "044525880",
+    "icon_path": "banks/vbrr.svg",
+    "sort_order": 20
   }
 ]

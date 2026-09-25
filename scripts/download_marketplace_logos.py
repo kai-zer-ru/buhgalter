@@ -294,6 +294,10 @@ OFFICIAL_URLS: dict[str, list[str]] = {
     "atb": [
         "https://favicon.yandex.net/favicon/v2/https://www.atb.su?size=120",
     ],
+    "vbrr": [
+        "https://static.rustore.ru/apk/848879807/content/ICON/b9d63d12-3724-4446-ac4f-9ab399e9fed8.png",
+        "https://favicon.yandex.net/favicon/v2/https://www.vbrr.ru?size=120",
+    ],
 }
 
 
