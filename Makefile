@@ -1,4 +1,4 @@
-VERSION ?= 1.5.6
+VERSION ?= 1.5.7
 INSTALL_METHOD ?= manual
 BUILD_COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILD_TIME ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -9,7 +9,7 @@ OPENAPI_DST := server/internal/docs/openapi.yaml
 UI_I18N_SRC := android/ui/src/lib/i18n
 UI_I18N_DST := server/ui_locales
 
-.PHONY: dev dev-server dev-web build build-arm web-build category-icons-json copy-static copy-openapi check-openapi-examples openapi-check copy-ui-i18n ui-i18n-check inline-sql-check server-build server-build-arm fix-build-perms test test-unit test-e2e test-e2e-web test-coverage lint lint-go prepare prepare-go prepare-web prepare-android prepare-gen prepare-sql-check docker-build act-push act-release tag-release migrate ci sqlc sqlc-check download-bank-logos download-marketplace-logos clear version android-icons android-ui-build android-sync android-apk android-apk-release android-install android-install-release android-ensure-sdk
+.PHONY: dev dev-server dev-web build build-arm web-build category-icons-json copy-static copy-openapi check-openapi-examples openapi-check copy-ui-i18n ui-i18n-check inline-sql-check server-build server-build-arm fix-build-perms test test-unit test-e2e test-e2e-web test-coverage lint lint-go prepare prepare-go prepare-web prepare-android prepare-gen prepare-sql-check docker-build act-push act-release act-keep-image act-prune tag-release migrate ci sqlc sqlc-check download-bank-logos download-marketplace-logos clear version android-icons android-ui-build android-sync android-apk android-apk-release android-install android-install-release android-ensure-sdk
 
 DOCKER_COMPOSE := docker compose -f docker/docker-compose.yml
 
@@ -95,7 +95,11 @@ lint-go:
 	@test -n "$(GOLANGCI_LINT)" || (echo "golangci-lint not found" >&2; exit 1)
 	cd server && $(GOLANGCI_LINT) run ./...
 
-ACT_PLATFORM := -P ubuntu-latest=catthehacker/ubuntu:full-latest
+ACT_IMAGE ?= catthehacker/ubuntu:full-latest
+ACT_PLATFORM := -P ubuntu-latest=$(ACT_IMAGE)
+# Keeper: label + stopped-контейнер, чтобы prune не сносил тяжёлый образ act.
+ACT_KEEP_LABEL ?= keep=true
+ACT_KEEP_CONTAINER ?= buhgalter-act-keep
 # act по умолчанию: concurrent-jobs=CPU и --pull=true (каждый раз тянет образ).
 ACT_CONCURRENT_JOBS ?= 2
 # Без --artifact-server-path upload/download-artifact падают с ACTIONS_RUNTIME_TOKEN.
@@ -124,6 +128,39 @@ act-release:
 	jobs="$${jobs:-$(ACT_CONCURRENT_JOBS)}"; \
 	case "$$jobs" in ''|*[!0-9]*|0*) echo "act-release: concurrent jobs must be a positive integer (got '$$jobs')"; exit 1;; esac; \
 	act push $(ACT_PLATFORM) $(ACT_FLAGS) $$jobs -W .github/workflows/release.yml -e .github/act/tag-push.json -s GITHUB_TOKEN=$$GITHUB_TOKEN
+
+# Пометить образ act (LABEL keep=true) и создать stopped-контейнер-keeper.
+# После этого: make act-prune  или  docker system prune -a --filter 'label!=keep=true'
+act-keep-image:
+	@command -v docker >/dev/null || (echo "act-keep-image: docker not found" && exit 1)
+	@img='$(ACT_IMAGE)'; \
+	keep='$(ACT_KEEP_CONTAINER)'; \
+	label='$(ACT_KEEP_LABEL)'; \
+	docker image inspect "$$img" >/dev/null 2>&1 || docker pull "$$img"; \
+	cur=$$(docker image inspect -f '{{index .Config.Labels "keep"}}' "$$img" 2>/dev/null || true); \
+	if [ "$$cur" != "true" ]; then \
+		echo "act-keep-image: labeling $$img ($$label)"; \
+		cid=$$(docker create "$$img"); \
+		docker commit --change "LABEL $$label" "$$cid" "$$img" >/dev/null; \
+		docker rm "$$cid" >/dev/null; \
+	else \
+		echo "act-keep-image: $$img already labeled"; \
+	fi; \
+	want=$$(docker image inspect -f '{{.Id}}' "$$img"); \
+	have=$$(docker inspect -f '{{.Image}}' "$$keep" 2>/dev/null || true); \
+	if [ "$$have" != "$$want" ]; then \
+		docker rm -f "$$keep" >/dev/null 2>&1 || true; \
+		docker create --name "$$keep" --label "$$label" "$$img" >/dev/null; \
+		echo "act-keep-image: keeper $$keep → $$img"; \
+	else \
+		echo "act-keep-image: keeper $$keep already up to date"; \
+	fi; \
+	echo "act-keep-image: prune safely with: make act-prune"
+
+# system prune -a, не трогая образы/контейнеры с LABEL keep=true (см. act-keep-image).
+act-prune:
+	@command -v docker >/dev/null || (echo "act-prune: docker not found" && exit 1)
+	docker system prune -af --filter 'label!=$(ACT_KEEP_LABEL)'
 
 # Secondary goals for `make act-push 1` / `make act-release 2` (make иначе ищет target с таким именем).
 .PHONY: 1 2 3 4 5 6 7 8 9 10 12 16 32
