@@ -358,6 +358,10 @@
 		void goto(resolve(`/subscriptions?attach_tx=${encodeURIComponent(tx.id)}`));
 	}
 
+	function openAttachCredit(tx: Transaction) {
+		void goto(resolve(`/credits?attach_tx=${encodeURIComponent(tx.id)}`));
+	}
+
 	async function removeTx(tx: Transaction) {
 		const msg =
 			tx.type === 'transfer' && tx.transfer_group_id
@@ -741,6 +745,7 @@
 												onmakeRecurring={openMakeRecurring}
 												onmakeSubscription={openMakeSubscription}
 												onattachSubscription={openAttachSubscription}
+												onattachCredit={openAttachCredit}
 												onedit={openEdit}
 												ondelete={(tx) => void removeTx(tx)}
 											/>
@@ -779,6 +784,7 @@
 												onmakeRecurring={openMakeRecurring}
 												onmakeSubscription={openMakeSubscription}
 												onattachSubscription={openAttachSubscription}
+												onattachCredit={openAttachCredit}
 												onedit={openEdit}
 												ondelete={(tx) => void removeTx(tx)}
 											/>

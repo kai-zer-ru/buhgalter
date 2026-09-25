@@ -105,6 +105,8 @@
 
 - Операции, связанные с платежами кредита (`credit_payment_linked`), не редактируются через общий `PUT /transactions/{id}`.
 - Для обновления сумм графика используется `PATCH /api/v1/credits/{id}/schedule`.
+- Привязка обычного расхода к платежу (форма «Кредиты» / «Сделать платежом по кредиту») — [credit-payment-link.md](../roadmap/credit-payment-link.md); API: `POST /credits/{id}/payments` с опциональным `transaction_id`.
+- При старте сервера операции с `credit_payments.transaction_id` выравниваются на системную категорию «Кредиты».
 
 ---
 

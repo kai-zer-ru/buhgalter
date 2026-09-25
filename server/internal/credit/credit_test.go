@@ -2,6 +2,7 @@ package credit
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"path/filepath"
 	"testing"
@@ -1145,6 +1146,191 @@ func TestCreatePrincipalIncomeNotAllowedForInstallment(t *testing.T) {
 	})
 	if !errors.Is(err, ErrInvalidPrincipalIncome) {
 		t.Fatalf("expected ErrInvalidPrincipalIncome, got %v", err)
+	}
+}
+
+func TestPayNextScheduledAttachExistingTransaction(t *testing.T) {
+	ctx, handle, userID, accountID := seedCreditEnv(t)
+	sqlDB := handle.DB()
+
+	issue := timeutil.NowUTC().AddDate(0, 1, 0)
+	c, err := Create(ctx, sqlDB, userID, CreateInput{
+		PrincipalAmount: 60_000,
+		IssueDate:       issue,
+		TermMonths:      6,
+		PaymentInterval: IntervalMonth,
+		DebitAccountID:  accountID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var otherCat string
+	if err := sqlDB.QueryRowContext(ctx, `
+		SELECT id FROM categories WHERE user_id = ? AND is_system = 0 AND type = 'expense' LIMIT 1`,
+		userID).Scan(&otherCat); err != nil {
+		t.Fatal(err)
+	}
+	txID := "tx-attach-credit"
+	now := timeutil.FormatUTC(timeutil.NowUTC())
+	desc := "Мой платёж"
+	_, err = sqlDB.ExecContext(ctx, `
+		INSERT INTO transactions (
+			id, user_id, account_id, type, kind, amount, description, category_id,
+			transaction_date, affects_balance, created_at, updated_at
+		) VALUES (?, ?, ?, 'expense', 'manual', ?, ?, ?, ?, 1, ?, ?)`,
+		txID, userID, accountID, c.MonthlyPayment, desc, otherCat, now, now, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	paid, err := PayNextScheduled(ctx, sqlDB, userID, c.ID, PayPaymentInput{
+		TransactionID: txID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var linked bool
+	for _, p := range paid.Schedule {
+		if p.IsApplied && p.TransactionID != nil && *p.TransactionID == txID {
+			linked = true
+			break
+		}
+	}
+	if !linked {
+		t.Fatal("expected attached transaction on applied payment")
+	}
+
+	var catName, gotDesc string
+	var subID sql.NullString
+	if err := sqlDB.QueryRowContext(ctx, `
+		SELECT c.name, t.description, t.subcategory_id
+		FROM transactions t
+		JOIN categories c ON c.id = t.category_id
+		WHERE t.id = ?`, txID).Scan(&catName, &gotDesc, &subID); err != nil {
+		t.Fatal(err)
+	}
+	if catName != "Кредиты" {
+		t.Fatalf("expected category Кредиты, got %q", catName)
+	}
+	if gotDesc != desc {
+		t.Fatalf("expected description preserved %q, got %q", desc, gotDesc)
+	}
+	if subID.Valid {
+		t.Fatalf("expected null subcategory, got %v", subID.String)
+	}
+}
+
+func TestPayNextScheduledAttachForbidden(t *testing.T) {
+	ctx, handle, userID, accountID := seedCreditEnv(t)
+	sqlDB := handle.DB()
+
+	issue := timeutil.NowUTC().AddDate(0, 1, 0)
+	c, err := Create(ctx, sqlDB, userID, CreateInput{
+		PrincipalAmount: 60_000,
+		IssueDate:       issue,
+		TermMonths:      6,
+		PaymentInterval: IntervalMonth,
+		DebitAccountID:  accountID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = PayNextScheduled(ctx, sqlDB, userID, c.ID, PayPaymentInput{
+		TransactionID: "missing-tx",
+	})
+	if !errors.Is(err, ErrTransactionNotFound) {
+		t.Fatalf("expected ErrTransactionNotFound, got %v", err)
+	}
+
+	paid, err := PayNextScheduled(ctx, sqlDB, userID, c.ID, PayPaymentInput{
+		Amount: c.MonthlyPayment, PaymentDate: timeutil.NowUTC(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var linkedID string
+	for _, p := range paid.Schedule {
+		if p.IsApplied && p.TransactionID != nil {
+			linkedID = *p.TransactionID
+			break
+		}
+	}
+	if linkedID == "" {
+		t.Fatal("expected linked payment tx")
+	}
+
+	_, err = PayNextScheduled(ctx, sqlDB, userID, c.ID, PayPaymentInput{
+		TransactionID: linkedID,
+	})
+	if !errors.Is(err, ErrAttachForbidden) {
+		t.Fatalf("expected ErrAttachForbidden for already linked tx, got %v", err)
+	}
+}
+
+func TestEnsureCreditPaymentCategories(t *testing.T) {
+	ctx, handle, userID, accountID := seedCreditEnv(t)
+	sqlDB := handle.DB()
+
+	issue := timeutil.NowUTC().AddDate(0, 1, 0)
+	c, err := Create(ctx, sqlDB, userID, CreateInput{
+		PrincipalAmount: 60_000,
+		IssueDate:       issue,
+		TermMonths:      6,
+		PaymentInterval: IntervalMonth,
+		DebitAccountID:  accountID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	paid, err := PayNextScheduled(ctx, sqlDB, userID, c.ID, PayPaymentInput{
+		Amount: c.MonthlyPayment, PaymentDate: timeutil.NowUTC(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var txID string
+	for _, p := range paid.Schedule {
+		if p.IsApplied && p.TransactionID != nil {
+			txID = *p.TransactionID
+			break
+		}
+	}
+	if txID == "" {
+		t.Fatal("expected payment tx")
+	}
+
+	var otherCat string
+	if err := sqlDB.QueryRowContext(ctx, `
+		SELECT id FROM categories WHERE user_id = ? AND is_system = 0 AND type = 'expense' LIMIT 1`,
+		userID).Scan(&otherCat); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.ExecContext(ctx, `
+		UPDATE transactions SET category_id = ?, subcategory_id = NULL WHERE id = ?`,
+		otherCat, txID); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := EnsureCreditPaymentCategories(ctx, sqlDB); err != nil {
+		t.Fatal(err)
+	}
+	var catName string
+	if err := sqlDB.QueryRowContext(ctx, `
+		SELECT c.name FROM transactions t
+		JOIN categories c ON c.id = t.category_id
+		WHERE t.id = ?`, txID).Scan(&catName); err != nil {
+		t.Fatal(err)
+	}
+	if catName != "Кредиты" {
+		t.Fatalf("expected backfill to Кредиты, got %q", catName)
+	}
+
+	// idempotent
+	if err := EnsureCreditPaymentCategories(ctx, sqlDB); err != nil {
+		t.Fatal(err)
 	}
 }
 

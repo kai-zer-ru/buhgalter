@@ -670,6 +670,8 @@
 													void goto(
 														resolve(`/subscriptions?attach_tx=${encodeURIComponent(tx.id)}`)
 													)}
+												onattachCredit={(tx) =>
+													void goto(resolve(`/credits?attach_tx=${encodeURIComponent(tx.id)}`))}
 												onrepeat={openRepeat}
 												onsaveAsTemplate={(tx) => void saveAsTemplate(tx)}
 												onedit={openEdit}
@@ -715,6 +717,8 @@
 													void goto(
 														resolve(`/subscriptions?attach_tx=${encodeURIComponent(tx.id)}`)
 													)}
+												onattachCredit={(tx) =>
+													void goto(resolve(`/credits?attach_tx=${encodeURIComponent(tx.id)}`))}
 												onrepeat={openRepeat}
 												onsaveAsTemplate={(tx) => void saveAsTemplate(tx)}
 												onedit={openEdit}

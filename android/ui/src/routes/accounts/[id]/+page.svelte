@@ -575,6 +575,10 @@
 		void goto(resolve(`/subscriptions?attach_tx=${encodeURIComponent(tx.id)}`));
 	}
 
+	function openAttachCredit(tx: Transaction) {
+		void goto(resolve(`/credits?attach_tx=${encodeURIComponent(tx.id)}`));
+	}
+
 	async function resetFilters() {
 		fromLocal = '';
 		toLocal = '';
@@ -816,6 +820,7 @@
 						onmakeRecurring={openMakeRecurring}
 						onmakeSubscription={openMakeSubscription}
 						onattachSubscription={openAttachSubscription}
+						onattachCredit={accountTxReadOnly ? undefined : openAttachCredit}
 						onedit={accountTxReadOnly ? undefined : openEdit}
 						ondelete={accountTxReadOnly ? undefined : (tx) => void removeTx(tx)}
 					/>

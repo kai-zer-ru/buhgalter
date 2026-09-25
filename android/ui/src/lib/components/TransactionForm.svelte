@@ -4,11 +4,13 @@
 	import {
 		listAccounts,
 		listCategories,
+		listCredits,
 		listMerchants,
 		listSubcategories,
 		listTags,
 		type Account,
 		type Category,
+		type Credit,
 		type Merchant,
 		type Subcategory,
 		type Tag,
@@ -16,6 +18,7 @@
 		type Transaction
 	} from '$lib/api/client';
 	import { createTransaction, updateTransaction } from '$lib/offline/transactions-api';
+	import { addCreditPayment } from '$lib/offline/credits-api';
 	import { applyOutboxToAccounts } from '$lib/offline/local-state';
 	import { outboxTick } from '$lib/offline/store';
 	import { invalidateRefCache, subcategoriesRefPath } from '$lib/offline/ref-cache';
@@ -34,7 +37,7 @@
 	import Select from '$lib/components/Select.svelte';
 	import { defaultAccountId } from '$lib/accounts';
 	import { creditCardExpenseWarning, isCreditCard } from '$lib/credit-card';
-	import { formatMoneyForInput, toAPIAmount, toCents } from '$lib/money';
+	import { formatMoneyForInput, fromCents, toAPIAmount, toCents } from '$lib/money';
 	import {
 		accountSelectOptions,
 		categorySelectOptions,
@@ -43,6 +46,10 @@
 	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
 	import { suggestCategoryFromMerchant } from '$lib/android/notification-intercept/category-suggest';
+
+	function isCreditsExpenseCategory(cat: Category | undefined): boolean {
+		return Boolean(cat?.is_system && cat.name === 'Кредиты');
+	}
 
 	type CreatePrefill = {
 		description?: string;
@@ -91,6 +98,8 @@
 	let categoryId = $state('');
 	let subcategoryId = $state('');
 	let subcategoryQuery = $state('');
+	let creditId = $state('');
+	let activeCredits = $state<Credit[]>([]);
 	let merchantId = $state('');
 	let merchantQuery = $state('');
 	let selectedTags = $state<TagRef[]>([]);
@@ -119,15 +128,30 @@
 	const accountOptions = $derived(accountSelectOptions(accounts));
 	const pickableCategories = $derived.by(() => {
 		const userCats = categories.filter((cat) => !cat.is_system);
-		if ((!editing && !repeatFrom) || !categoryId) return userCats;
-		const current = categories.find((cat) => cat.id === categoryId);
-		if (current?.is_system && !userCats.some((cat) => cat.id === categoryId)) {
-			return [...userCats, current];
+		const creditsCat = categories.find((cat) => isCreditsExpenseCategory(cat));
+		let list = userCats;
+		if (txType === 'expense' && creditsCat && !editing) {
+			list = [...userCats, creditsCat];
 		}
-		return userCats;
+		if ((!editing && !repeatFrom) || !categoryId) return list;
+		const current = categories.find((cat) => cat.id === categoryId);
+		if (current?.is_system && !list.some((cat) => cat.id === categoryId)) {
+			return [...list, current];
+		}
+		return list;
 	});
 	const categoryOptions = $derived(categorySelectOptions(pickableCategories));
+	const selectedCategory = $derived(categories.find((c) => c.id === categoryId));
+	const isCreditPaymentMode = $derived(
+		!editing && txType === 'expense' && isCreditsExpenseCategory(selectedCategory)
+	);
 	const subcategoryOptions = $derived(subcategorySelectOptions(subcategories));
+	const creditOptions = $derived(
+		activeCredits.map((c) => ({
+			value: c.id,
+			label: c.name?.trim() || $_('credits.unnamed')
+		}))
+	);
 	const merchantOptions = $derived(
 		merchants.map((m) => ({
 			value: m.id,
@@ -296,13 +320,26 @@
 		} catch {
 			categories = [];
 		}
-		const selectable = categories.filter((c) => !c.is_system);
+		const selectable = pickableCategories;
 		if (!categoryId && selectable.length) {
 			categoryId = selectable.find((c) => c.is_primary)?.id ?? selectable[0].id;
 		}
 		if (categoryId && !categories.some((c) => c.id === categoryId)) {
 			categoryId = selectable.find((c) => c.is_primary)?.id ?? selectable[0]?.id ?? '';
 		}
+		const cat = categories.find((c) => c.id === categoryId);
+		if (!editing && txType === 'expense' && isCreditsExpenseCategory(cat)) {
+			subcategories = [];
+			creditId = '';
+			try {
+				activeCredits = await listCredits({ status: 'active' });
+			} catch {
+				activeCredits = [];
+			}
+			return;
+		}
+		activeCredits = [];
+		creditId = '';
 		if (categoryId) {
 			try {
 				subcategories = await loadSubcategoriesForCategory(categoryId, subcategoryId);
@@ -322,8 +359,20 @@
 	}
 
 	async function onCategoryChange(nextCategoryId: string) {
+		creditId = '';
+		activeCredits = [];
 		subcategoryId = '';
 		subcategoryQuery = '';
+		const cat = categories.find((c) => c.id === nextCategoryId);
+		if (!editing && txType === 'expense' && isCreditsExpenseCategory(cat)) {
+			subcategories = [];
+			try {
+				activeCredits = await listCredits({ status: 'active' });
+			} catch {
+				activeCredits = [];
+			}
+			return;
+		}
 		if (!nextCategoryId) {
 			subcategories = [];
 			return;
@@ -332,6 +381,22 @@
 			subcategories = await loadSubcategoriesForCategory(nextCategoryId);
 		} catch {
 			subcategories = [];
+		}
+	}
+
+	function onCreditChange(nextCreditId: string) {
+		const credit = activeCredits.find((c) => c.id === nextCreditId);
+		if (!credit) return;
+		if (credit.next_payment_amount != null && credit.next_payment_amount > 0) {
+			amount = formatMoneyForInput(fromCents(credit.next_payment_amount));
+		} else if (credit.monthly_payment > 0) {
+			amount = formatMoneyForInput(fromCents(credit.monthly_payment));
+		}
+		if (credit.next_payment_date) {
+			dateTimeValue = toDatetimeLocalValue(credit.next_payment_date, tz);
+		}
+		if (credit.debit_account_id && accounts.some((a) => a.id === credit.debit_account_id)) {
+			selectedAccount = credit.debit_account_id;
 		}
 	}
 
@@ -347,6 +412,21 @@
 		e.preventDefault();
 		saving = true;
 		try {
+			if (isCreditPaymentMode) {
+				if (!creditId) {
+					toast.error($_('credits.error.pickCredit'));
+					return;
+				}
+				await addCreditPayment(creditId, {
+					amount: toAPIAmount(amount),
+					payment_date: fromDatetimeLocalValue(dateTimeValue, tz),
+					account_id: selectedAccount || undefined
+				});
+				if (variant === 'modal') open = false;
+				toast($_('common.saved'));
+				onsaved();
+				return;
+			}
 			const tagIds = selectedTags.filter((t) => t.id).map((t) => t.id);
 			const tagNames = selectedTags.filter((t) => !t.id).map((t) => t.name);
 			const payload = {
@@ -443,20 +523,34 @@
 			onchange={(next) => void onCategoryChange(next)}
 		/>
 
-		<Combobox
-			id="tx-sub"
-			label={$_('transactions.field.subcategory')}
-			bind:value={subcategoryId}
-			bind:query={subcategoryQuery}
-			options={subcategoryOptions}
-			usePortal
-			allowCreate
-			placeholder={$_('transactions.field.newSubcategory')}
-			createLabel={$_('transactions.field.createNamed', {
-				values: { name: subcategoryQuery.trim() || '…' }
-			})}
-			emptyLabel={$_('common.notFound')}
-		/>
+		{#if isCreditPaymentMode}
+			<Select
+				id="tx-credit"
+				label={$_('credits.field.credit')}
+				bind:value={creditId}
+				options={creditOptions}
+				usePortal
+				onchange={(next) => onCreditChange(next)}
+			/>
+			{#if activeCredits.length === 0}
+				<p class="text-sm" style:color="var(--text-muted)">{$_('credits.empty')}</p>
+			{/if}
+		{:else}
+			<Combobox
+				id="tx-sub"
+				label={$_('transactions.field.subcategory')}
+				bind:value={subcategoryId}
+				bind:query={subcategoryQuery}
+				options={subcategoryOptions}
+				usePortal
+				allowCreate
+				placeholder={$_('transactions.field.newSubcategory')}
+				createLabel={$_('transactions.field.createNamed', {
+					values: { name: subcategoryQuery.trim() || '…' }
+				})}
+				emptyLabel={$_('common.notFound')}
+			/>
+		{/if}
 
 		<div>
 			<label class="mb-1 block text-sm font-medium" for="tx-amount"

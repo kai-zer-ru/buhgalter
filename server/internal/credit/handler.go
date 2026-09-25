@@ -62,9 +62,10 @@ type updateCreditRequest struct {
 }
 
 type payPaymentRequest struct {
-	Amount      json.RawMessage `json:"amount"`
-	PaymentDate string          `json:"payment_date"`
-	AccountID   *string         `json:"account_id"`
+	Amount        json.RawMessage `json:"amount"`
+	PaymentDate   string          `json:"payment_date"`
+	AccountID     *string         `json:"account_id"`
+	TransactionID *string         `json:"transaction_id"`
 }
 
 type completeCreditRequest struct {
@@ -205,14 +206,32 @@ func (h *Handler) AddPayment(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_INVALID_JSON")
 		return
 	}
-	amount, err := money.ParseAmount(req.Amount)
-	if err != nil {
+	attachID := ""
+	if req.TransactionID != nil {
+		attachID = strings.TrimSpace(*req.TransactionID)
+	}
+	var amount int64
+	if len(req.Amount) > 0 && string(req.Amount) != "null" {
+		parsed, err := money.ParseAmount(req.Amount)
+		if err != nil {
+			apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_INVALID_AMOUNT")
+			return
+		}
+		amount = parsed
+	} else if attachID == "" {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_INVALID_AMOUNT")
 		return
 	}
-	payDate, err := timeutil.ParseUTC(req.PaymentDate)
-	if err != nil {
-		apperror.WriteDetail(w, r, http.StatusBadRequest, apperror.ValidationError, apperror.ValidationError, err.Error())
+	var payDate time.Time
+	if strings.TrimSpace(req.PaymentDate) != "" {
+		parsed, err := timeutil.ParseUTC(req.PaymentDate)
+		if err != nil {
+			apperror.WriteDetail(w, r, http.StatusBadRequest, apperror.ValidationError, apperror.ValidationError, err.Error())
+			return
+		}
+		payDate = parsed
+	} else if attachID == "" {
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_INVALID_JSON")
 		return
 	}
 	accountID := ""
@@ -220,12 +239,14 @@ func (h *Handler) AddPayment(w http.ResponseWriter, r *http.Request) {
 		accountID = strings.TrimSpace(*req.AccountID)
 	}
 	c, err := PayNextScheduled(r.Context(), h.Store.DB(), info.User.ID, id, PayPaymentInput{
-		Amount: amount, PaymentDate: payDate, AccountID: accountID,
+		Amount: amount, PaymentDate: payDate, AccountID: accountID, TransactionID: attachID,
 	})
 	if writeCreditError(w, r, err) {
 		return
 	}
-	_ = h.Audit.Log("credit.pay", info.User.ID, info.User.Login, clientIP(r), map[string]any{"credit_id": id, "amount": amount})
+	_ = h.Audit.Log("credit.pay", info.User.ID, info.User.Login, clientIP(r), map[string]any{
+		"credit_id": id, "amount": amount, "transaction_id": attachID,
+	})
 	writeJSON(w, http.StatusOK, c)
 }
 
@@ -626,6 +647,10 @@ func writeCreditError(w http.ResponseWriter, r *http.Request, err error) bool {
 		apperror.WriteR(w, r, http.StatusConflict, apperror.Conflict, "CONFLICT_CREDIT_BANK_LOCKED")
 	case errors.Is(err, ErrNoPendingPayment):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_NO_PENDING_PAYMENT")
+	case errors.Is(err, ErrAttachForbidden):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_ATTACH_FORBIDDEN")
+	case errors.Is(err, ErrTransactionNotFound):
+		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound, "ERR_TRANSACTION_NOT_FOUND")
 	case errors.Is(err, ErrCannotRemoveRetroactive):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_CANNOT_REMOVE_RETRO")
 	case errors.Is(err, ErrOnlyLatestPaymentDelete):

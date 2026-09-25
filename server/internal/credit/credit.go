@@ -111,9 +111,10 @@ type UpdateInput struct {
 }
 
 type PayPaymentInput struct {
-	Amount      int64
-	PaymentDate time.Time
-	AccountID   string
+	Amount        int64
+	PaymentDate   time.Time
+	AccountID     string
+	TransactionID string // optional: reuse existing expense as this payment
 }
 
 type CompleteInput struct {
@@ -144,6 +145,8 @@ var (
 	ErrInvalidMortgageFields      = errors.New("invalid mortgage fields")
 	ErrPrincipalIncomePastPayment = errors.New("principal income not allowed when schedule has past payment")
 	ErrInvalidPrincipalIncome     = errors.New("principal income not allowed for this credit type")
+	ErrAttachForbidden            = errors.New("transaction cannot be attached")
+	ErrTransactionNotFound        = errors.New("transaction not found")
 )
 
 const (
@@ -657,6 +660,28 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in UpdateInput) 
 }
 
 func PayNextScheduled(ctx context.Context, db *sql.DB, userID, creditID string, in PayPaymentInput) (Credit, error) {
+	attachID := strings.TrimSpace(in.TransactionID)
+	var attachDesc *string
+	if attachID != "" {
+		row, err := loadAttachableExpense(ctx, db, userID, attachID)
+		if err != nil {
+			return Credit{}, err
+		}
+		if in.Amount <= 0 {
+			in.Amount = row.Amount
+		}
+		if in.PaymentDate.IsZero() {
+			payDate, err := timeutil.ParseUTC(row.TransactionDate)
+			if err != nil {
+				return Credit{}, ErrInvalidPaymentDate
+			}
+			in.PaymentDate = payDate
+		}
+		if in.AccountID == "" {
+			in.AccountID = row.AccountID
+		}
+		attachDesc = row.Description
+	}
 	if in.Amount <= 0 {
 		return Credit{}, ErrInvalidAmount
 	}
@@ -709,11 +734,43 @@ func PayNextScheduled(ctx context.Context, db *sql.DB, userID, creditID string, 
 	if err != nil {
 		return Credit{}, err
 	}
-	desc := creditDescription(c.Name)
-	descPtr := &desc
+	descPtr := paymentDescription(c.Name, attachDesc)
 
 	var txID string
-	if existingTxID != nil {
+	switch {
+	case attachID != "":
+		if existingTxID != nil && *existingTxID != "" && *existingTxID != attachID {
+			if _, err := q.DeleteTransaction(ctx, sqlcdb.DeleteTransactionParams{
+				ID: *existingTxID, UserID: userID,
+			}); err != nil {
+				return Credit{}, err
+			}
+		}
+		txID = attachID
+		if err := q.UpdateTransaction(ctx, sqlcdb.UpdateTransactionParams{
+			AccountID:       debitAccountID,
+			Type:            "expense",
+			Kind:            txKind,
+			Amount:          in.Amount,
+			Description:     descPtr,
+			CategoryID:      &catID,
+			SubcategoryID:   nil,
+			TransactionDate: payDate,
+			UpdatedAt:       nowStr,
+			ID:              txID,
+			UserID:          userID,
+		}); err != nil {
+			return Credit{}, err
+		}
+		if _, err := q.UpdateTransactionAffectsBalance(ctx, sqlcdb.UpdateTransactionAffectsBalanceParams{
+			AffectsBalance: 1,
+			UpdatedAt:      nowStr,
+			ID:             txID,
+			UserID:         userID,
+		}); err != nil {
+			return Credit{}, err
+		}
+	case existingTxID != nil && *existingTxID != "":
 		txID = *existingTxID
 		if err := q.UpdateTransaction(ctx, sqlcdb.UpdateTransactionParams{
 			AccountID:       debitAccountID,
@@ -738,7 +795,7 @@ func PayNextScheduled(ctx context.Context, db *sql.DB, userID, creditID string, 
 		}); err != nil {
 			return Credit{}, err
 		}
-	} else {
+	default:
 		txID, err = insertCreditExpenseTransaction(ctx, dbTx, userID, debitAccountID, c.Name, in.Amount, in.PaymentDate, true)
 		if err != nil {
 			return Credit{}, err
@@ -779,6 +836,38 @@ func PayNextScheduled(ctx context.Context, db *sql.DB, userID, creditID string, 
 	}
 	syncAccountBalances(ctx, db, userID, in.PaymentDate, debitAccountID)
 	return GetByID(ctx, db, userID, creditID, true)
+}
+
+func paymentDescription(creditName *string, existing *string) *string {
+	if existing != nil && strings.TrimSpace(*existing) != "" {
+		d := strings.TrimSpace(*existing)
+		return &d
+	}
+	d := creditDescription(creditName)
+	return &d
+}
+
+func loadAttachableExpense(ctx context.Context, db *sql.DB, userID, txID string) (sqlcdb.GetTransactionByIDRow, error) {
+	row, err := queries(db).GetTransactionByID(ctx, sqlcdb.GetTransactionByIDParams{ID: txID, UserID: userID})
+	if errors.Is(err, sql.ErrNoRows) {
+		return sqlcdb.GetTransactionByIDRow{}, ErrTransactionNotFound
+	}
+	if err != nil {
+		return sqlcdb.GetTransactionByIDRow{}, err
+	}
+	if row.Type != "expense" {
+		return sqlcdb.GetTransactionByIDRow{}, ErrAttachForbidden
+	}
+	if row.TransferGroupID != nil {
+		return sqlcdb.GetTransactionByIDRow{}, ErrAttachForbidden
+	}
+	if row.SubscriptionID != nil {
+		return sqlcdb.GetTransactionByIDRow{}, ErrAttachForbidden
+	}
+	if row.CreditPaymentLinked != 0 {
+		return sqlcdb.GetTransactionByIDRow{}, ErrAttachForbidden
+	}
+	return row, nil
 }
 
 func Complete(ctx context.Context, db *sql.DB, userID, id string, in CompleteInput) (Credit, error) {

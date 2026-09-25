@@ -1105,5 +1105,10 @@
 	"budget.widget.all_expense": "Расходы: {percent}% от плана",
 	"budget.widget.categories": "По категориям ({count})",
 	"budget.stats.planned": "Бюджет",
-	"budget.stats.remaining": "Остаток"
+	"budget.stats.remaining": "Остаток",
+	"credits.unnamed": "Без названия",
+	"credits.attachFromTransaction": "Сделать платежом по кредиту",
+	"credits.selectToAttach": "Выберите кредит для привязки",
+	"credits.attached": "Операция привязана к кредиту",
+	"credits.error.pickCredit": "Выберите кредит"
 }

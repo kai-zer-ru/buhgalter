@@ -1362,5 +1362,10 @@
 	"features.disabled.title": "Module disabled",
 	"features.disabled.body": "This section was disabled by the instance administrator.",
 	"features.disabled.home": "Go home",
-	"admin.tab.features": "Modules"
+	"admin.tab.features": "Modules",
+	"credits.unnamed": "Untitled",
+	"credits.attachFromTransaction": "Make credit payment",
+	"credits.selectToAttach": "Select a credit to attach",
+	"credits.attached": "Transaction attached to credit",
+	"credits.error.pickCredit": "Select a credit"
 }

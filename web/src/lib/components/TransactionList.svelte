@@ -36,6 +36,7 @@
 		onmakeRecurring,
 		onmakeSubscription,
 		onattachSubscription,
+		onattachCredit,
 		descriptionExtra
 	}: {
 		transactions: Transaction[];
@@ -55,6 +56,7 @@
 		onmakeRecurring?: (tx: Transaction) => void;
 		onmakeSubscription?: (tx: Transaction) => void;
 		onattachSubscription?: (tx: Transaction) => void;
+		onattachCredit?: (tx: Transaction) => void;
 		descriptionExtra?: Snippet<[Transaction]>;
 	} = $props();
 
@@ -70,7 +72,8 @@
 			(onsaveAsTemplate && templatesEnabled) ||
 			(onmakeRecurring && recurringEnabled) ||
 			(onmakeSubscription && subscriptionsEnabled) ||
-			(onattachSubscription && subscriptionsEnabled)
+			(onattachSubscription && subscriptionsEnabled) ||
+			onattachCredit
 		)
 	);
 
@@ -84,6 +87,16 @@
 
 	function canAttachSubscription(tx: Transaction): boolean {
 		return Boolean(onattachSubscription && tx.type === 'expense');
+	}
+
+	function canAttachCredit(tx: Transaction): boolean {
+		return Boolean(
+			onattachCredit &&
+			tx.type === 'expense' &&
+			!tx.credit_payment_linked &&
+			!tx.subscription_id &&
+			!tx.transfer_group_id
+		);
 	}
 
 	function rowActions(tx: Transaction): RowAction[] {
@@ -121,6 +134,13 @@
 				icon: 'add',
 				label: $_('subscriptions.attachToSubscription'),
 				onclick: () => onattachSubscription?.(tx)
+			});
+		}
+		if (canAttachCredit(tx)) {
+			actions.push({
+				icon: 'pay',
+				label: $_('credits.attachFromTransaction'),
+				onclick: () => onattachCredit?.(tx)
 			});
 		}
 		if (showEdit && onedit && canEditTransaction(tx)) {

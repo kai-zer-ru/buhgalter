@@ -773,6 +773,9 @@
 						onattachSubscription={accountTxReadOnly
 							? undefined
 							: (tx) => void goto(resolve(`/subscriptions?attach_tx=${encodeURIComponent(tx.id)}`))}
+						onattachCredit={accountTxReadOnly
+							? undefined
+							: (tx) => void goto(resolve(`/credits?attach_tx=${encodeURIComponent(tx.id)}`))}
 						onrepeat={openRepeat}
 						onsaveAsTemplate={(tx) => void saveAsTemplate(tx)}
 						onedit={accountTxReadOnly ? undefined : openEdit}

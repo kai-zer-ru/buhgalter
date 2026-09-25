@@ -336,6 +336,7 @@ erDiagram
 - При старте: `RepairShortSchedules` дополняет неполные графики (миграция-маркер `020`)
 - `transactions.affects_balance` — `0` при завершении кредита «без учёта в балансе»
 - Автосписание: `server/internal/scheduler` по `debit_time_local` в `users.timezone`; `transactions.transaction_date` — дата платежа + это время (UTC в БД)
+- При старте: `EnsureCreditPaymentCategories` выравнивает категорию связанных с графиком операций на системную «Кредиты» (см. [credit-payment-link.md](../roadmap/credit-payment-link.md))
 
 Подробнее: [ui-credits.md](ui-credits.md).
 

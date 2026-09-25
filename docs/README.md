@@ -30,7 +30,7 @@
 | [data-model.md](data-model.md) | Схема БД, миграции, связи сущностей |
 | [sql-access.md](sql-access.md) | Где писать SQL: sqlc vs inline, исключения, миграция legacy |
 | [subscriptions.md](subscriptions.md) | Подписки |
-| [../roadmap/credit-payment-link.md](../roadmap/credit-payment-link.md) | (план) Привязка операции к оплате кредита |
+| [../roadmap/credit-payment-link.md](../roadmap/credit-payment-link.md) | Привязка операции к оплате кредита |
 | [categories-and-icons.md](categories-and-icons.md) | Категории, подкатегории, иконки |
 | [budget.md](budget.md) | Бюджет: помесячные лимиты, копирование, план vs факт, API |
 | [../roadmap/budget-post-mvp.md](../roadmap/budget-post-mvp.md) | (план) Бюджет: rollover и прогноз из recurring |

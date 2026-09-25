@@ -304,3 +304,49 @@ JOIN credits c ON c.id = cp.credit_id
 WHERE cp.is_applied = 0 AND cp.kind = 'scheduled'
   AND c.status = 'active' AND c.user_id = ?;
 
+-- name: ListUsersWithLinkedCreditPayments :many
+SELECT DISTINCT c.user_id
+FROM credits c
+JOIN credit_payments cp ON cp.credit_id = c.id
+WHERE cp.transaction_id IS NOT NULL;
+
+-- name: RelinkCreditPaymentExpenseCategories :execrows
+UPDATE transactions
+SET category_id = ?,
+    subcategory_id = NULL,
+    updated_at = ?
+WHERE transactions.user_id = ?
+  AND transactions.type = 'expense'
+  AND transactions.id IN (
+    SELECT cp.transaction_id
+    FROM credit_payments cp
+    JOIN credits c ON c.id = cp.credit_id
+    WHERE c.user_id = ?
+      AND cp.transaction_id IS NOT NULL
+  )
+  AND (
+    transactions.category_id IS NULL
+    OR transactions.category_id != ?
+    OR transactions.subcategory_id IS NOT NULL
+  );
+
+-- name: RelinkCreditPaymentIncomeCategories :execrows
+UPDATE transactions
+SET category_id = ?,
+    subcategory_id = NULL,
+    updated_at = ?
+WHERE transactions.user_id = ?
+  AND transactions.type = 'income'
+  AND transactions.id IN (
+    SELECT cp.transaction_id
+    FROM credit_payments cp
+    JOIN credits c ON c.id = cp.credit_id
+    WHERE c.user_id = ?
+      AND cp.transaction_id IS NOT NULL
+  )
+  AND (
+    transactions.category_id IS NULL
+    OR transactions.category_id != ?
+    OR transactions.subcategory_id IS NOT NULL
+  );
+

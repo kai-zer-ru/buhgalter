@@ -2499,6 +2499,8 @@ paths:
       description: |
         Обновляет ближайший неоплаченный `scheduled` (не создаёт новую строку).
         Если у строки уже есть `transaction_id` (создан при `create_transactions`) — переиспользует операцию.
+        Опциональный `transaction_id` в теле — привязать уже существующий расход: категория «Кредиты»,
+        связь с платежом; `amount` / `payment_date` / `account_id` можно не передавать (берутся из операции).
         После оплаты удаляются дубликаты на тот же календарный день (`early`, лишние `scheduled`).
         Если `payment_date` в будущем, связанная операция остаётся `kind=future`
         до наступления даты операции и учитывается в прогнозе баланса.
@@ -5291,18 +5293,23 @@ components:
           description: kind связанной операции (future, manual, …)
     PayCreditPaymentRequest:
       type: object
-      required: [amount, payment_date]
       properties:
         amount:
           oneOf:
             - type: string
             - type: integer
+          description: Обязателен без `transaction_id`; с `transaction_id` можно опустить (сумма операции)
         payment_date:
           type: string
-          description: UTC, YYYY-MM-DD HH:MM:SS
+          description: UTC, YYYY-MM-DD HH:MM:SS; обязателен без `transaction_id`
         account_id:
           type: string
-          description: Счёт для данной оплаты; если не указан — основной счёт кредита (debit_account_id)
+          description: Счёт для данной оплаты; если не указан — основной счёт кредита или счёт операции
+        transaction_id:
+          type: string
+          description: |
+            Существующий расход пользователя для привязки к ближайшему платежу.
+            Не перевод/комиссия, без `subscription_id`, ещё не связанный с кредитом.
     UpdateCreditScheduleRequest:
       type: object
       required: [payments]

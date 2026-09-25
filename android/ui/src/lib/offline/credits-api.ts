@@ -39,6 +39,7 @@ import type {
 } from '$lib/offline/types';
 import { readRefCache } from '$lib/offline/ref-cache';
 import { afterOnlineWrite } from '$lib/offline/after-online-write';
+import { OnlineOnlyError, requireOnline } from '$lib/offline/require-online';
 import { fromCents, formatMoneyForInput } from '$lib/money';
 
 function isOfflineError(err: unknown): boolean {
@@ -181,17 +182,43 @@ export async function updateCredit(
 
 export async function addCreditPayment(
 	id: string,
-	body: { amount: string; payment_date: string; account_id?: string }
+	body: { amount?: string; payment_date?: string; account_id?: string; transaction_id?: string }
 ): Promise<Credit> {
-	const payload: CreditPayPayload = { action: 'pay', credit_id: id, ...body };
-	if (!shouldUseOfflineQueue()) {
+	if (body.transaction_id) {
+		if (!requireOnline()) {
+			throw new OnlineOnlyError();
+		}
 		const credit = await apiAddCreditPayment(id, body);
+		onCreditUpdated(credit);
+		touchBalancesAfterCreditMutation();
+		afterOnlineWrite();
+		return credit;
+	}
+	const payload: CreditPayPayload = {
+		action: 'pay',
+		credit_id: id,
+		amount: body.amount ?? '',
+		payment_date: body.payment_date ?? '',
+		account_id: body.account_id
+	};
+	if (!shouldUseOfflineQueue()) {
+		const credit = await apiAddCreditPayment(id, {
+			amount: payload.amount,
+			payment_date: payload.payment_date,
+			account_id: payload.account_id
+		});
 		onCreditUpdated(credit);
 		touchBalancesAfterCreditMutation();
 		return credit;
 	}
 	if (await shouldTryServer()) {
-		const res = await tryOnline(() => apiAddCreditPayment(id, body));
+		const res = await tryOnline(() =>
+			apiAddCreditPayment(id, {
+				amount: payload.amount,
+				payment_date: payload.payment_date,
+				account_id: payload.account_id
+			})
+		);
 		if (res) {
 			onCreditUpdated(res);
 			touchBalancesAfterCreditMutation();

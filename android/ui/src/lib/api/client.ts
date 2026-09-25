@@ -1013,6 +1013,7 @@ export type Transaction = {
 	transfer_account_id?: string | null;
 	transfer_is_out?: boolean;
 	credit_payment_linked?: boolean;
+	subscription_id?: string | null;
 	transaction_date: string;
 	created_at: string;
 	updated_at: string;
@@ -2040,7 +2041,7 @@ export function updateCredit(id: string, payload: Record<string, unknown>) {
 
 export function addCreditPayment(
 	id: string,
-	payload: { amount: string; payment_date: string; account_id?: string }
+	payload: { amount?: string; payment_date?: string; account_id?: string; transaction_id?: string }
 ) {
 	return request<Credit>(`/api/v1/credits/${id}/payments`, {
 		method: 'POST',

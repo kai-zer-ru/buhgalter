@@ -1362,5 +1362,10 @@
 	"features.disabled.title": "Модуль отключён",
 	"features.disabled.body": "Этот раздел отключён администратором инстанса.",
 	"features.disabled.home": "На главную",
-	"admin.tab.features": "Модули"
+	"admin.tab.features": "Модули",
+	"credits.unnamed": "Без названия",
+	"credits.attachFromTransaction": "Сделать платежом по кредиту",
+	"credits.selectToAttach": "Выберите кредит для привязки",
+	"credits.attached": "Операция привязана к кредиту",
+	"credits.error.pickCredit": "Выберите кредит"
 }

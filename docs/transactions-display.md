@@ -60,6 +60,7 @@ UI показывает строку прогноза, если `forecast_balanc
 | `isTransferCommission(tx)` | `expense` с `transfer_group_id` — нога комиссии |
 | `canEditTransaction(tx)` | `false` при `credit_payment_linked` или ноге комиссии — скрыть «Изменить» |
 | `canRepeatTransaction(tx)` | `false` при `credit_payment_linked` или системной категории (доход/расход); переводы — без ограничения по категории |
+| «Сделать платежом по кредиту» | Расход без `credit_payment_linked` / `subscription_id` / перевода → `/credits?attach_tx=` (web и Android) |
 | `canDeleteTransaction(tx)` | `false` при ноге комиссии или `deletable === false` |
 | `formatTransactionAccount(tx, siblings, mode)` | Текст колонки «Счёт» |
 | `transactionAmountSign(tx, opts?)` | Префикс суммы: `+`, `−` или пусто |

@@ -1105,5 +1105,10 @@
 	"budget.widget.all_expense": "Expenses: {percent}% of plan",
 	"budget.widget.categories": "By category ({count})",
 	"budget.stats.planned": "Budget",
-	"budget.stats.remaining": "Remaining"
+	"budget.stats.remaining": "Remaining",
+	"credits.unnamed": "Untitled",
+	"credits.attachFromTransaction": "Make credit payment",
+	"credits.selectToAttach": "Select a credit to attach",
+	"credits.attached": "Transaction attached to credit",
+	"credits.error.pickCredit": "Select a credit"
 }
