@@ -1,19 +1,31 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { get } from 'svelte/store';
 	import { _ } from 'svelte-i18n';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
+	import { transactionNewPath, transferNewPath } from '$lib/android/form-routes';
 	import { toast } from '$lib/toast';
+	import { listMerchants } from '$lib/api/client';
 	import { bankIdForPackage, walletIdForPackage } from '$lib/android/notification-intercept/banks';
 	import { parseBankNotification } from '$lib/android/notification-intercept/parsers';
 	import {
+		canCreateFromHistory,
 		clearNotificationHistory,
+		getCurrentInterceptSettings,
 		getNativeListenerDebugState,
 		getNotificationListenerState,
+		HISTORY_CREATE_FROM,
+		historyTransferComplement,
+		prefillFromHistoryItem,
 		processPendingBankNotifications,
 		readNotificationHistorySync,
 		reconnectNotificationListener,
 		scanActiveNotifications,
+		setInterceptPrefill,
+		setInterceptTransferPrefill,
+		transferPrefillFromHistory,
 		type NativeListenerDebugState,
 		type NotificationHistoryItem
 	} from '$lib/android/notification-intercept';
@@ -21,7 +33,9 @@
 
 	let items = $state<NotificationHistoryItem[]>([]);
 	let scanning = $state(false);
+	let creatingKey = $state<string | null>(null);
 	let debug = $state<NativeListenerDebugState | null>(null);
+	let merchants = $state<{ id: string; name: string }[]>([]);
 
 	function refresh() {
 		if (!isNativeApp()) {
@@ -37,6 +51,13 @@
 
 	onMount(() => {
 		refresh();
+		void listMerchants()
+			.then((rows) => {
+				merchants = rows.map((m) => ({ id: m.id, name: m.name }));
+			})
+			.catch(() => {
+				merchants = [];
+			});
 	});
 
 	async function clear() {
@@ -114,12 +135,71 @@
 	function body(row: NotificationHistoryItem): string {
 		return [row.text, row.bigText].filter(Boolean).join('\n').trim() || '—';
 	}
+
+	function rowKey(row: NotificationHistoryItem): string {
+		return row.dedupeKey || `${row.packageName}|${row.postedAt}|${row.title}|${row.text}`;
+	}
+
+	function isTransferPair(row: NotificationHistoryItem): boolean {
+		return Boolean(historyTransferComplement(row, items, getCurrentInterceptSettings(), merchants));
+	}
+
+	async function createOperation(row: NotificationHistoryItem) {
+		const key = rowKey(row);
+		creatingKey = key;
+		try {
+			const prefill = await prefillFromHistoryItem(row, getCurrentInterceptSettings(), merchants);
+			if (!prefill) {
+				toast.error($_('bankNotifications.history.createFailed'));
+				return;
+			}
+			setInterceptPrefill(prefill);
+			await goto(
+				resolve(
+					transactionNewPath({
+						type: prefill.type ?? 'expense',
+						from: HISTORY_CREATE_FROM
+					})
+				)
+			);
+		} finally {
+			creatingKey = null;
+		}
+	}
+
+	async function createTransfer(row: NotificationHistoryItem) {
+		const key = rowKey(row);
+		creatingKey = key;
+		try {
+			if (!isTransferPair(row)) {
+				toast.error($_('bankNotifications.drafts.pairInvalid'));
+				return;
+			}
+			const prefill = transferPrefillFromHistory(
+				row,
+				items,
+				getCurrentInterceptSettings(),
+				merchants
+			);
+			if (!prefill) {
+				toast.error($_('bankNotifications.drafts.pairInvalid'));
+				return;
+			}
+			setInterceptTransferPrefill(prefill);
+			await goto(resolve(transferNewPath({ from: HISTORY_CREATE_FROM })));
+		} finally {
+			creatingKey = null;
+		}
+	}
 </script>
 
 {#if !isNativeApp()}
 	<p class="text-sm" style:color="var(--text-muted)">{$_('bankNotifications.nativeOnly')}</p>
 {:else}
 	<p class="mb-4 text-sm" style:color="var(--text-muted)">{$_('bankNotifications.history.hint')}</p>
+	<p class="mb-4 text-sm" style:color="var(--text-muted)">
+		{$_('bankNotifications.history.createHint')}
+	</p>
 	<p class="mb-4 text-sm" style:color="var(--text-muted)">
 		{$_('bankNotifications.history.scanActiveHint')}
 	</p>
@@ -160,7 +240,7 @@
 		<EmptyStateCard message={$_('bankNotifications.history.empty')} />
 	{:else}
 		<ul class="space-y-3">
-			{#each items as row (row.dedupeKey + String(row.postedAt))}
+			{#each items as row (rowKey(row))}
 				<li class="card space-y-1.5 text-sm">
 					<div class="flex flex-wrap items-baseline justify-between gap-2">
 						<p class="font-semibold break-all">{row.packageName}</p>
@@ -200,6 +280,29 @@
 					>
 						{statusLabel(row)}
 					</p>
+					{#if canCreateFromHistory(row)}
+						<div class="pt-1">
+							{#if isTransferPair(row)}
+								<button
+									type="button"
+									class="btn-primary"
+									disabled={creatingKey === rowKey(row)}
+									onclick={() => void createTransfer(row)}
+								>
+									{$_('bankNotifications.drafts.createTransfer')}
+								</button>
+							{:else}
+								<button
+									type="button"
+									class="btn-primary"
+									disabled={creatingKey === rowKey(row)}
+									onclick={() => void createOperation(row)}
+								>
+									{$_('bankNotifications.drafts.create')}
+								</button>
+							{/if}
+						</div>
+					{/if}
 				</li>
 			{/each}
 		</ul>

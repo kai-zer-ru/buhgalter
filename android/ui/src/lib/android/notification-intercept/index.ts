@@ -25,6 +25,7 @@ export * from './prefill';
 export * from './plugin';
 export * from './process';
 export * from './history-local';
+export * from './history-create';
 export { parseBankNotification } from './parsers';
 export { resolveAccountId } from './account-resolve';
 export { matchMerchant } from './merchant-match';
