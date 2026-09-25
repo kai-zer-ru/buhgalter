@@ -4,7 +4,11 @@
 	import { page } from '$app/stores';
 	import { _ } from 'svelte-i18n';
 	import { portal } from '$lib/actions/portal';
-	import { actionMenuStyle } from '$lib/dropdown-position';
+	import {
+		actionMenuStyle,
+		dropdownPlacementFor,
+		type DropdownPlacement
+	} from '$lib/dropdown-position';
 	import type { BackLinkHref } from '$lib/components/BackLink.svelte';
 
 	export type NavDropdownItem = {
@@ -27,6 +31,7 @@
 	let triggerEl: HTMLButtonElement | undefined = $state();
 	let menuEl: HTMLDivElement | undefined = $state();
 	let menuStyle = $state('');
+	let placement = $state<DropdownPlacement | null>(null);
 
 	const pathname = $derived($page.url.pathname);
 	const groupActive = $derived(isGroupActive(pathname));
@@ -35,16 +40,19 @@
 		if (!triggerEl) return;
 		const rowHeight = 40;
 		const menuHeight = Math.min(320, Math.max(items.length, 1) * rowHeight + 8);
-		menuStyle = actionMenuStyle(triggerEl, menuHeight, 'end', menuEl?.offsetWidth);
+		if (!placement) placement = dropdownPlacementFor(triggerEl, menuHeight);
+		menuStyle = actionMenuStyle(triggerEl, menuHeight, 'end', menuEl?.offsetWidth, placement);
 	}
 
 	function close() {
 		open = false;
+		placement = null;
 	}
 
 	function toggle(event: MouseEvent) {
 		event.stopPropagation();
-		open = !open;
+		if (open) close();
+		else open = true;
 	}
 
 	function itemActive(item: NavDropdownItem) {

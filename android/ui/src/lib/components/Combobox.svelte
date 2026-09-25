@@ -1,7 +1,11 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { portal } from '$lib/actions/portal';
-	import { dropdownListStyle } from '$lib/dropdown-position';
+	import {
+		dropdownListStyle,
+		dropdownPlacementFor,
+		type DropdownPlacement
+	} from '$lib/dropdown-position';
 	import SelectOptionIcon from '$lib/components/SelectOptionIcon.svelte';
 	import type { SelectOptionIcon as SelectOptionIconType } from '$lib/select-options';
 
@@ -51,6 +55,7 @@
 	let listEl: HTMLUListElement | undefined = $state();
 	let highlighted = $state(0);
 	let listStyle = $state('');
+	let placement = $state<DropdownPlacement | null>(null);
 
 	const listId = $derived(`${id}-list`);
 	const CREATE_VALUE = '__create__';
@@ -93,11 +98,13 @@
 	function positionList() {
 		if (!inputEl) return;
 		const listHeight = Math.min(224, Math.max(visibleOptions.length, 1) * 40);
-		listStyle = dropdownListStyle(inputEl, listHeight, usePortal);
+		if (!placement) placement = dropdownPlacementFor(inputEl, listHeight);
+		listStyle = dropdownListStyle(inputEl, listHeight, usePortal, placement);
 	}
 
 	function close() {
 		open = false;
+		placement = null;
 		if (allowCreate && !value) {
 			query = trimmedQuery;
 			return;
@@ -127,6 +134,7 @@
 			query = trimmedQuery;
 			onchange?.('');
 			open = false;
+			placement = null;
 			return;
 		}
 		value = next;

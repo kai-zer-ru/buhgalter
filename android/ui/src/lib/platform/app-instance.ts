@@ -2,6 +2,7 @@ import { registerPlugin } from '@capacitor/core';
 
 type AppInstancePlugin = {
 	getStorageNamespace(): Promise<{ namespace: string }>;
+	hideSoftKeyboard(): Promise<void>;
 };
 
 const plugin = registerPlugin<AppInstancePlugin>('AppInstance', {
@@ -15,5 +16,14 @@ export async function getAppStorageNamespace(): Promise<string> {
 		return typeof namespace === 'string' ? namespace.trim() : '';
 	} catch {
 		return '';
+	}
+}
+
+/** Hide the system soft keyboard without blurring the focused field. */
+export async function hideSoftKeyboard(): Promise<void> {
+	try {
+		await plugin.hideSoftKeyboard();
+	} catch {
+		// no-op in browser / older APK
 	}
 }

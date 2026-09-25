@@ -5,7 +5,11 @@
 	 */
 	import { untrack } from 'svelte';
 	import { portal } from '$lib/actions/portal';
-	import { dropdownListStyle } from '$lib/dropdown-position';
+	import {
+		dropdownListStyle,
+		dropdownPlacementFor,
+		type DropdownPlacement
+	} from '$lib/dropdown-position';
 	import FieldHint from '$lib/components/FieldHint.svelte';
 	import { _ } from 'svelte-i18n';
 	import { todayDateLocal } from '$lib/dates';
@@ -60,6 +64,7 @@
 	let triggerEl: HTMLButtonElement | undefined = $state();
 	let panelEl: HTMLDivElement | undefined = $state();
 	let panelStyle = $state('');
+	let placement = $state<DropdownPlacement | null>(null);
 	let timeValue = $state('');
 	let viewYear = $state(new Date().getFullYear());
 	let viewMonth = $state(new Date().getMonth() + 1);
@@ -235,8 +240,12 @@
 
 	function positionPanel() {
 		if (!triggerEl) return;
-		const height = panelEl?.offsetHeight ?? PANEL_HEIGHT_ESTIMATE;
-		panelStyle = dropdownListStyle(triggerEl, height, usePortal);
+		const measured = panelEl?.offsetHeight ?? 0;
+		const height = measured || PANEL_HEIGHT_ESTIMATE;
+		if (!placement) {
+			placement = dropdownPlacementFor(triggerEl, Math.max(height, PANEL_HEIGHT_ESTIMATE));
+		}
+		panelStyle = dropdownListStyle(triggerEl, height, usePortal, placement);
 	}
 
 	function schedulePositionPanel() {
@@ -257,6 +266,7 @@
 
 	function close() {
 		open = false;
+		placement = null;
 		panelView = 'days';
 	}
 

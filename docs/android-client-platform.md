@@ -125,7 +125,7 @@ BUHGALTER_ALLOWED_HOSTS=192.168.1.176
 - **SystemBars:** Capacitor 8 `SystemBars.setStyle` из `applyTheme` (`system-bars.ts`) — contrast иконок status/nav bar следует **resolved** теме SPA, не только OS night. Cold start до JS может кратко совпадать с device night.
 - **Доступность сервера:** `server-connectivity.ts` — отдельно от «есть Wi‑Fi». При недоступности API (в т.ч. Capacitor `Failed to connect`) включается офлайн-режим: запросы не уходят на сервер, GET берутся из ref-cache, мутации — в outbox. Полоска внизу показывает «Нет соединения» и при наличии очереди — число операций; фоновая проверка `/health` раз в **180 с**; при смене сети / resume приложения — внеочередной probe; кнопка «Синхронизировать» тоже форсирует probe. Опциональный fallback LAN→remote на домашнем SSID.
 
-Плагины: `@capacitor/network`, `@capacitor/preferences`, `@capacitor/app` (кнопка «Назад», блокировка в фоне), встроенный `SystemBars` (стиль status/nav), native `WifiSubnet`, `SslTrust`, `ShareTarget`, `NotificationIntercept`, `WidgetBridge`, `DebugExport`, `LanDiscovery`, `AppInstance`; `@aparajita/capacitor-biometric-auth`, `@aparajita/capacitor-secure-storage` (PIN и API-токен).
+Плагины: `@capacitor/network`, `@capacitor/preferences`, `@capacitor/app` (кнопка «Назад», блокировка в фоне), встроенный `SystemBars` (стиль status/nav), native `WifiSubnet`, `SslTrust`, `ShareTarget`, `NotificationIntercept`, `WidgetBridge`, `DebugExport`, `LanDiscovery`, `AppInstance` (namespace + `hideSoftKeyboard` для MoneyInput); `@aparajita/capacitor-biometric-auth`, `@aparajita/capacitor-secure-storage` (PIN и API-токен).
 ## Блокировка приложения
 
 Настройки → **Безопасность** (`/settings/security`).

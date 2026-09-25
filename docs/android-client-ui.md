@@ -270,18 +270,19 @@
 
 Поэтому `MoneyInput` в Android UI:
 
-- открывает **свою цифровую клавиатуру** (`MoneyKeypad`) при фокусе (`inputmode="none"`, без системной soft keyboard);
+- открывает **свою цифровую клавиатуру** (`MoneyKeypad`) при фокусе (`inputmode="none"`, `virtualkeyboardpolicy="manual"`, без системной soft keyboard);
+- при фокусе и после возврата из другого приложения системная IME принудительно скрывается (`AppInstance.hideSoftKeyboard`);
 - сетка 4×4: `1 2 3 +` / `4 5 6 −` / `7 8 9 ⌫` / `. 0 ✓✓` («Готово» на две колонки; нормализация через `formatMoneyInput`);
 - клавиатура фиксируется внизу экрана (portal на `body`, `z-index: 55`);
 - системная «Назад» / Escape сначала скрывают клавиатуру (`pushModalEscape`, как у модалок) — не уходят с формы;
-- высота клавиатуры пишется в `--money-keypad-inset`: `FormPageShell` и `android-shell-main` поднимают контент, скролл и footer остаются доступны;
+- высота клавиатуры пишется в `--money-keypad-inset`: `FormPageShell` и `android-shell-main` поднимают контент, скролл и footer остаются доступны; выпадающие списки учитывают inset как нижнюю преграду;
 - логика нажатий — `applyMoneyKeypadKey` в `money.ts` (покрыта vitest).
 
-Код: `MoneyInput.svelte`, `MoneyKeypad.svelte`, `money-keypad-inset.ts`, `money.ts`.
+Код: `MoneyInput.svelte`, `MoneyKeypad.svelte`, `money-keypad-inset.ts`, `money.ts`, `suppress-system-keyboard.ts`.
 
 ## Select / Combobox / DateTimePicker
 
-Те же компоненты, что в веб-UI: без `usePortal` список якорится через `top/bottom: 100%` на обёртку **только поля** (label и hint — снаружи `.relative`). Иначе на узком экране панель открывается вверх и «отрывается» от контрола (раньше — профиль: тема, часовой пояс). Общие правила — [ui-dialogs.md](ui-dialogs.md).
+Те же компоненты, что в веб-UI: без `usePortal` список якорится через `top/bottom: 100%` на обёртку **только поля** (label и hint — снаружи `.relative`). Направление открытия выбирается **один раз** при открытии (вниз по умолчанию; вверх только если снизу не хватает места с учётом `--money-keypad-inset`) и **не меняется** при скролле/resize. Общие правила — [ui-dialogs.md](ui-dialogs.md).
 
 ## Стили и тема оформления
 

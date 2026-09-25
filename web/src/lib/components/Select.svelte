@@ -1,7 +1,11 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { portal } from '$lib/actions/portal';
-	import { dropdownListStyle } from '$lib/dropdown-position';
+	import {
+		dropdownListStyle,
+		dropdownPlacementFor,
+		type DropdownPlacement
+	} from '$lib/dropdown-position';
 	import SelectOptionIcon from '$lib/components/SelectOptionIcon.svelte';
 	import type { SelectOption } from '$lib/select-options';
 
@@ -41,6 +45,7 @@
 	let searchEl: HTMLInputElement | undefined = $state();
 	let highlighted = $state(0);
 	let listStyle = $state('');
+	let placement = $state<DropdownPlacement | null>(null);
 	let query = $state('');
 
 	const listId = $derived(`${id}-list`);
@@ -62,11 +67,13 @@
 		if (!triggerEl) return;
 		const searchH = searchable ? 48 : 0;
 		const listHeight = Math.min(224, Math.max(visibleOptions.length, 1) * 40) + searchH;
-		listStyle = dropdownListStyle(triggerEl, listHeight, usePortal);
+		if (!placement) placement = dropdownPlacementFor(triggerEl, listHeight);
+		listStyle = dropdownListStyle(triggerEl, listHeight, usePortal, placement);
 	}
 
 	function close() {
 		open = false;
+		placement = null;
 		query = '';
 	}
 

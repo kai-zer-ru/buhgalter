@@ -11,6 +11,10 @@
 		mapMoneyInputCursor,
 		type MoneyKeypadKey
 	} from '$lib/money';
+	import {
+		suppressSystemKeyboard,
+		watchSuppressSystemKeyboard
+	} from '$lib/platform/suppress-system-keyboard';
 
 	type Props = {
 		value?: string;
@@ -61,8 +65,10 @@
 	function openKeypad() {
 		keypadOpen = true;
 		syncCursorFromInput();
+		suppressSystemKeyboard(inputEl);
 		void tick().then(() => {
 			inputEl?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+			suppressSystemKeyboard(inputEl);
 		});
 	}
 
@@ -89,6 +95,7 @@
 			void tick().then(() => {
 				inputEl?.focus();
 				inputEl?.setSelectionRange(cursor, cursor);
+				suppressSystemKeyboard(inputEl);
 			});
 			return;
 		}
@@ -115,6 +122,7 @@
 		await tick();
 		inputEl?.focus();
 		inputEl?.setSelectionRange(cursor, cursor);
+		suppressSystemKeyboard(inputEl);
 	}
 
 	function onKeypadDone() {
@@ -125,6 +133,16 @@
 	$effect(() => {
 		if (!keypadOpen) return;
 		return pushModalEscape(dismissKeypad);
+	});
+
+	// Block system IME while the in-app keypad is visible (incl. after app switch).
+	$effect(() => {
+		if (!keypadOpen) return;
+		suppressSystemKeyboard(inputEl);
+		return watchSuppressSystemKeyboard(
+			() => keypadOpen,
+			() => inputEl
+		);
 	});
 
 	// Keep page scroll area above the fixed keypad.
@@ -165,6 +183,7 @@
 	class={className}
 	type="text"
 	inputmode="none"
+	virtualkeyboardpolicy="manual"
 	autocomplete="off"
 	{required}
 	{placeholder}
