@@ -2,7 +2,7 @@
 
 Единые правила отображения кредитов на `/credits` и `/credits/[id]`: бейджи, график платежей, действия и ограничения.
 
-Связанные документы: [data-model.md](data-model.md), [ui-dialogs.md](ui-dialogs.md), [ui-stable-layout.md](ui-stable-layout.md), [ui-navigation.md](ui-navigation.md). План: привязка обычной операции к платежу — [credit-payment-link.md](../roadmap/credit-payment-link.md).
+Связанные документы: [data-model.md](data-model.md), [ui-dialogs.md](ui-dialogs.md), [ui-stable-layout.md](ui-stable-layout.md), [ui-navigation.md](ui-navigation.md). Привязка обычной операции к платежу — [credit-payment-link.md](../roadmap/credit-payment-link.md) (реализовано в v1.6.0).
 
 ---
 

@@ -304,6 +304,7 @@
 - [x] БАГ. Android UI: выпадающие списки (подкатегории и остальные) — при открытии сначала раскрываются вниз, потом прыгают вверх. Держать направление: вниз по умолчанию; вверх только если у низа экрана нет места. После открытия положение не менять при скролле
 - [x] БАГ. Android UI: при возврате из другого приложения (фокус в поле суммы, видна своя клавиатура) всплывает системная — полностью запретить системную клавиатуру там, где используется своя
 - [x] Каталог банков: ВБРР (привязка счёта + перехват push/SMS)
+- [x] [Release notes](docs/release-notes-v1.6.0.md) · [credit-payment-link.md](roadmap/credit-payment-link.md) · [ui-credits.md](docs/ui-credits.md) · [android-client.md](docs/android-client.md) · [android-client-platform.md](docs/android-client-platform.md) · [notification-intercept.md](roadmap/notification-intercept.md) · [import/buhgalter.md](docs/import/buhgalter.md)
 
 ## Общие планы
 

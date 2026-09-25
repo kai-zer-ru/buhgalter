@@ -4,7 +4,7 @@
 
 **Спецификация API:** [api/openapi.yaml](api/openapi.yaml) (интерактивно — `/docs` на запущенном сервере).
 
-История изменений по версиям — [CHANGELOG.md](../CHANGELOG.md). Последний релиз: [release-notes-v1.5.5.md](release-notes-v1.5.5.md).
+История изменений по версиям — [CHANGELOG.md](../CHANGELOG.md). Последний релиз: [release-notes-v1.6.0.md](release-notes-v1.6.0.md).
 
 ---
 
@@ -86,4 +86,4 @@
 | [../roadmap/category-rules-inbox.md](../roadmap/category-rules-inbox.md) | (план) Правила категорий и inbox неразнесённого |
 | [feature-toggles.md](feature-toggles.md) | Флаги модулей в админке; чеклист для новых фич |
 | [subscriptions.md](subscriptions.md) | Подписки: API, UI, уведомления, плановый остаток |
-| [release-notes-v1.5.5.md](release-notes-v1.5.5.md) | Release notes v1.5.5 |
+| [release-notes-v1.6.0.md](release-notes-v1.6.0.md) | Release notes v1.6.0 |
