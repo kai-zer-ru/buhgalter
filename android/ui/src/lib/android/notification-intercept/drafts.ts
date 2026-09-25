@@ -126,7 +126,13 @@ function isSemanticDuplicate(
 
 export function addInterceptDraft(
 	parsed: ParsedPurchase,
-	extra: { accountId?: string; merchantId?: string; merchantName?: string },
+	extra: {
+		accountId?: string;
+		merchantId?: string;
+		merchantName?: string;
+		categoryId?: string;
+		subcategoryId?: string;
+	},
 	userId?: string | null
 ): InterceptDraft | null {
 	const id = userId ?? get(user)?.id;
@@ -144,10 +150,35 @@ export function addInterceptDraft(
 		parsed,
 		accountId: extra.accountId,
 		merchantId: extra.merchantId,
-		merchantName: extra.merchantName
+		merchantName: extra.merchantName,
+		categoryId: extra.categoryId,
+		subcategoryId: extra.subcategoryId
 	};
 	writeDrafts(id, [draft, ...drafts]);
 	return draft;
+}
+
+/** Patch fields on an existing draft (e.g. category after async suggest). */
+export function updateInterceptDraft(
+	draftId: string,
+	patch: Partial<
+		Pick<
+			InterceptDraft,
+			'accountId' | 'merchantId' | 'merchantName' | 'categoryId' | 'subcategoryId'
+		>
+	>,
+	userId?: string | null
+): InterceptDraft | null {
+	const id = userId ?? get(user)?.id;
+	if (!id || !draftId) return null;
+	const drafts = readDrafts(id);
+	const idx = drafts.findIndex((d) => d.id === draftId);
+	if (idx < 0) return null;
+	const next = { ...drafts[idx], ...patch };
+	const list = [...drafts];
+	list[idx] = next;
+	writeDrafts(id, list);
+	return next;
 }
 
 /** Remove draft without creating a transaction (subscriptions / false positives). */

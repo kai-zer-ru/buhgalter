@@ -45,7 +45,6 @@ public class BankSmsReceiver extends BroadcastReceiver {
             return;
         }
         String format = bundle.getString("format");
-        boolean anyQueued = false;
         for (Object pdu : pdus) {
             if (!(pdu instanceof byte[])) {
                 continue;
@@ -100,13 +99,10 @@ public class BankSmsReceiver extends BroadcastReceiver {
                 item.put("dedupeKey", dedupeKey);
                 item.put("channel", "sms");
                 NotificationInterceptStore.append(app, item);
-                anyQueued = true;
+                InterceptPendingWake.onQueued(app, dedupeKey, sender.trim(), body, "");
             } catch (JSONException ignored) {
                 // ignore malformed row
             }
-        }
-        if (anyQueued) {
-            NotificationInterceptPlugin.emitPendingAvailable();
         }
     }
 

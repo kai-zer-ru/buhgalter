@@ -293,7 +293,7 @@ public class BankNotificationListenerService extends NotificationListenerService
             item.put("channel", channel);
             NotificationInterceptStore.append(context, item);
             if (!forceHistory) {
-                NotificationInterceptPlugin.emitPendingAvailable();
+                InterceptPendingWake.onQueued(context, dedupeKey, title, text, bigText);
             }
         } catch (JSONException ignored) {
             // ignore

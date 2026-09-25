@@ -48,6 +48,24 @@ interface NotificationInterceptPlugin {
 		eventName: 'pendingAvailable',
 		listenerFunc: () => void
 	): Promise<{ remove: () => void }>;
+	addListener(
+		eventName: 'draftsChanged',
+		listenerFunc: () => void
+	): Promise<{ remove: () => void }>;
+	setShadeNotificationsEnabled(opts: { enabled: boolean }): Promise<void>;
+	getShadeNotificationsState(): Promise<{ enabled: boolean; canPost: boolean }>;
+	getPostNotificationsPermission(): Promise<{ granted: boolean }>;
+	requestPostNotificationsPermission(): Promise<{ granted: boolean }>;
+	syncDraftNotifications(opts: { drafts: Record<string, unknown>[] }): Promise<void>;
+	removeDraftNotification(opts: { draftId: string }): Promise<void>;
+	clearDraftNotifications(): Promise<void>;
+	consumeDraftNotifySync(): Promise<{
+		rejectedIds?: string[];
+		acceptedIds?: string[];
+		offlineAcceptsJson?: string;
+	}>;
+	finishQuietWake(): Promise<{ quiet: boolean }>;
+	isQuietWake(): Promise<{ quiet: boolean }>;
 }
 
 const Native = registerPlugin<NotificationInterceptPlugin>('NotificationIntercept');
@@ -341,5 +359,130 @@ export async function addPendingAvailableListener(onEvent: () => void): Promise<
 		return () => void handle.remove();
 	} catch {
 		return () => undefined;
+	}
+}
+
+export async function addDraftsChangedListener(onEvent: () => void): Promise<() => void> {
+	if (!isNativeApp()) return () => undefined;
+	try {
+		const handle = await Native.addListener('draftsChanged', onEvent);
+		return () => void handle.remove();
+	} catch {
+		return () => undefined;
+	}
+}
+
+export async function setShadeNotificationsEnabled(enabled: boolean): Promise<void> {
+	if (!isNativeApp()) return;
+	try {
+		await Native.setShadeNotificationsEnabled({ enabled });
+	} catch {
+		// ignore
+	}
+}
+
+export async function getShadeNotificationsState(): Promise<{
+	enabled: boolean;
+	canPost: boolean;
+} | null> {
+	if (!isNativeApp()) return null;
+	try {
+		const r = await Native.getShadeNotificationsState();
+		return { enabled: Boolean(r.enabled), canPost: Boolean(r.canPost) };
+	} catch {
+		return null;
+	}
+}
+
+export async function getPostNotificationsGranted(): Promise<boolean> {
+	if (!isNativeApp()) return false;
+	try {
+		const r = await Native.getPostNotificationsPermission();
+		return Boolean(r.granted);
+	} catch {
+		return false;
+	}
+}
+
+export async function requestPostNotificationsPermission(): Promise<boolean> {
+	if (!isNativeApp()) return false;
+	try {
+		const r = await Native.requestPostNotificationsPermission();
+		return Boolean(r.granted);
+	} catch {
+		return false;
+	}
+}
+
+export async function syncDraftNotifications(drafts: Record<string, unknown>[]): Promise<void> {
+	if (!isNativeApp()) return;
+	try {
+		await Native.syncDraftNotifications({ drafts });
+	} catch {
+		// ignore
+	}
+}
+
+export async function removeDraftNotification(draftId: string): Promise<void> {
+	if (!isNativeApp() || !draftId) return;
+	try {
+		await Native.removeDraftNotification({ draftId });
+	} catch {
+		// ignore
+	}
+}
+
+export async function clearDraftNotifications(): Promise<void> {
+	if (!isNativeApp()) return;
+	try {
+		await Native.clearDraftNotifications();
+	} catch {
+		// ignore
+	}
+}
+
+export type DraftNotifySyncResult = {
+	rejectedIds: string[];
+	acceptedIds: string[];
+	offlineAccepts: Record<string, unknown>[];
+};
+
+export async function consumeDraftNotifySync(): Promise<DraftNotifySyncResult | null> {
+	if (!isNativeApp()) return null;
+	try {
+		const r = await Native.consumeDraftNotifySync();
+		let offlineAccepts: Record<string, unknown>[] = [];
+		try {
+			const parsed: unknown = JSON.parse(r.offlineAcceptsJson || '[]');
+			offlineAccepts = Array.isArray(parsed) ? (parsed as Record<string, unknown>[]) : [];
+		} catch {
+			offlineAccepts = [];
+		}
+		return {
+			rejectedIds: Array.isArray(r.rejectedIds) ? r.rejectedIds.filter(Boolean) : [],
+			acceptedIds: Array.isArray(r.acceptedIds) ? r.acceptedIds.filter(Boolean) : [],
+			offlineAccepts
+		};
+	} catch {
+		return null;
+	}
+}
+
+export async function isQuietWake(): Promise<boolean> {
+	if (!isNativeApp()) return false;
+	try {
+		const r = await Native.isQuietWake();
+		return Boolean(r.quiet);
+	} catch {
+		return false;
+	}
+}
+
+export async function finishQuietWake(): Promise<void> {
+	if (!isNativeApp()) return;
+	try {
+		await Native.finishQuietWake();
+	} catch {
+		// ignore
 	}
 }

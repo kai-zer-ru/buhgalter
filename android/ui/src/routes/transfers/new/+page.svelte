@@ -6,7 +6,11 @@
 	import { parseFormReturnPath } from '$lib/android/form-routes';
 	import {
 		deleteInterceptDrafts,
-		takeInterceptTransferPrefill
+		getInterceptDraft,
+		setInterceptTransferPrefill,
+		syncDraftNotifyToNative,
+		takeInterceptTransferPrefill,
+		transferPrefillFromDrafts
 	} from '$lib/android/notification-intercept';
 	import {
 		hasTemplatePrefillWarnings,
@@ -24,7 +28,26 @@
 	const repeatId = $derived($page.url.searchParams.get('repeat'));
 	const templateId = $derived($page.url.searchParams.get('template'));
 	const returnTo = $derived(parseFormReturnPath($page.url.searchParams.get('from'), '/'));
-	const interceptOnce = takeInterceptTransferPrefill();
+	const interceptOnce =
+		takeInterceptTransferPrefill() ??
+		(() => {
+			const raw =
+				typeof window !== 'undefined'
+					? new URLSearchParams(window.location.search).get('intercept_drafts')
+					: null;
+			if (!raw) return null;
+			const ids = raw
+				.split(',')
+				.map((s) => s.trim())
+				.filter(Boolean);
+			if (ids.length < 2) return null;
+			const a = getInterceptDraft(ids[0]);
+			const b = getInterceptDraft(ids[1]);
+			if (!a || !b) return null;
+			const prefill = transferPrefillFromDrafts(a, b);
+			if (prefill) setInterceptTransferPrefill(prefill);
+			return prefill;
+		})();
 	const interceptDraftIds = interceptOnce?.draftIds ?? [];
 
 	let creditCardPay = $state<Account | null>(null);
@@ -82,6 +105,7 @@
 	function finish(saved: boolean) {
 		if (saved && interceptDraftIds.length) {
 			deleteInterceptDrafts(interceptDraftIds, $user?.id);
+			void syncDraftNotifyToNative($user?.id);
 		}
 		dataRefreshTick.update((n) => n + 1);
 		void leaveForm(returnTo);

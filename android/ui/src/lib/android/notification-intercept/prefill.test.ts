@@ -69,6 +69,29 @@ describe('intercept prefill', () => {
 		expect(prefill.type).toBe('expense');
 	});
 
+	it('uses category stored on draft', () => {
+		const draft: InterceptDraft = {
+			id: 'd-cat',
+			createdAt: new Date().toISOString(),
+			parsed: {
+				bankId: 'tinkoff',
+				packageName: 'com.idamob.tinkoff.android',
+				amount: '5.00',
+				occurredAt: '2024-01-01T10:00:00.000Z',
+				merchantText: 'Cafe',
+				rawHash: 'h-cat'
+			},
+			accountId: 'a1',
+			merchantId: 'm1',
+			categoryId: 'cat-stored',
+			subcategoryId: 'sub-stored'
+		};
+		expect(prefillFromDraft(draft)).toMatchObject({
+			categoryId: 'cat-stored',
+			subcategoryId: 'sub-stored'
+		});
+	});
+
 	it('builds transfer create route back to drafts', () => {
 		expect(interceptTransferRoute()).toContain('/transfers/new');
 		expect(interceptTransferRoute()).toContain('from=');

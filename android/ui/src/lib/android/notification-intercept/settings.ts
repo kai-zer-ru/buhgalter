@@ -6,6 +6,7 @@ const STORAGE_PREFIX = 'buhgalter.notification_intercept.settings.v1:';
 
 const DEFAULT_SETTINGS: InterceptSettings = {
 	enabled: false,
+	shadeNotifications: true,
 	bankBindings: [],
 	cardBindings: []
 };
@@ -35,6 +36,7 @@ function normalizeLast4(value: string): string {
 export function emptyInterceptSettings(): InterceptSettings {
 	return {
 		enabled: false,
+		shadeNotifications: true,
 		bankBindings: [],
 		cardBindings: []
 	};
@@ -83,6 +85,8 @@ export function loadInterceptSettings(userId: string | null | undefined): Interc
 		const parsed = JSON.parse(raw) as Partial<InterceptSettings>;
 		return {
 			enabled: Boolean(parsed.enabled),
+			// Default on for existing installs (field missing → true).
+			shadeNotifications: parsed.shadeNotifications !== false,
 			bankBindings: Array.isArray(parsed.bankBindings) ? parsed.bankBindings : [],
 			cardBindings: Array.isArray(parsed.cardBindings)
 				? parsed.cardBindings.map((c) => ({
@@ -99,6 +103,7 @@ export function loadInterceptSettings(userId: string | null | undefined): Interc
 export function saveInterceptSettings(userId: string, settings: InterceptSettings): void {
 	const normalized: InterceptSettings = {
 		enabled: Boolean(settings.enabled),
+		shadeNotifications: settings.shadeNotifications !== false,
 		bankBindings: settings.bankBindings.map((b) => ({
 			packageName: b.packageName,
 			bankId: b.bankId,

@@ -64,6 +64,8 @@ export function prefillFromDraft(draft: InterceptDraft): TransactionCreatePrefil
 		merchantName: draft.merchantId ? undefined : type === 'income' ? undefined : draft.merchantName,
 		description: useAsDescription ? label.slice(0, 2000) : undefined,
 		occurredAt: draft.parsed.occurredAt,
+		categoryId: draft.categoryId,
+		subcategoryId: draft.subcategoryId,
 		type,
 		draftId: draft.id
 	};
@@ -74,7 +76,7 @@ export async function prefillFromDraftWithSuggestions(
 	draft: InterceptDraft
 ): Promise<TransactionCreatePrefill> {
 	const base = prefillFromDraft(draft);
-	if (!draft.merchantId) return base;
+	if (base.categoryId || !draft.merchantId) return base;
 	const suggest = await suggestCategoryFromMerchant(draft.merchantId, base.type ?? 'expense');
 	if (!suggest) return base;
 	return {

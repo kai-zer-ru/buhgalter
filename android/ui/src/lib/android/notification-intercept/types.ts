@@ -29,6 +29,8 @@ export type CardBinding = {
 
 export type InterceptSettings = {
 	enabled: boolean;
+	/** Shade quick-actions for drafts (default on). Only active while intercept is enabled. */
+	shadeNotifications: boolean;
 	bankBindings: BankBinding[];
 	cardBindings: CardBinding[];
 };
@@ -53,6 +55,9 @@ export type InterceptDraft = {
 	accountId?: string;
 	merchantId?: string;
 	merchantName?: string;
+	/** Filled at draft creation so shade Accept does not need WebView. */
+	categoryId?: string;
+	subcategoryId?: string;
 };
 
 export type TransactionCreatePrefill = {

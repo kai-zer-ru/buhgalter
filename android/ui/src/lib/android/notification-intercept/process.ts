@@ -8,7 +8,9 @@ import {
 	isAllowlistedPackage,
 	resolveRawBankNotification
 } from './banks';
-import { addInterceptDraft, removeDraftMatchingCancel } from './drafts';
+import { suggestCategoryFromMerchant } from './category-suggest';
+import { applyNativeDraftNotifySync, syncDraftNotifyToNative } from './draft-notify';
+import { addInterceptDraft, removeDraftMatchingCancel, updateInterceptDraft } from './drafts';
 import { appendLocalHistoryFromRaw } from './history-local';
 import { matchMerchant } from './merchant-match';
 import { parseBankNotification } from './parsers';
@@ -18,8 +20,9 @@ import {
 	peekNativePending,
 	syncNativeCapture
 } from './plugin';
+import { draftTxType } from './prefill';
 import { getCurrentInterceptSettings, loadInterceptSettings } from './settings';
-import type { RawBankNotification } from './types';
+import type { InterceptDraft, RawBankNotification } from './types';
 
 /** Push current user's enabled flag + allowlist into native store. */
 export async function syncInterceptNativeFromSettings(userId?: string | null): Promise<void> {
@@ -30,6 +33,7 @@ export async function syncInterceptNativeFromSettings(userId?: string | null): P
 		packages: allKnownPackages(),
 		smsSenders: allKnownSmsSenderEntries()
 	});
+	await syncDraftNotifyToNative(id);
 }
 
 export type ProcessPendingResult = {
@@ -60,11 +64,15 @@ export async function processPendingBankNotificationsDetailed(): Promise<Process
 			});
 		}
 		await consumeNativePending();
+		await syncDraftNotifyToNative(u.id);
 		return { added: 0, cancelled: 0 };
 	}
 
 	const items = await peekNativePending();
-	if (!items.length) return { added: 0, cancelled: 0 };
+	if (!items.length) {
+		await syncDraftNotifyToNative(u.id);
+		return { added: 0, cancelled: 0 };
+	}
 
 	let merchants: { id: string; name: string }[];
 	try {
@@ -94,7 +102,7 @@ export async function processPendingBankNotificationsDetailed(): Promise<Process
 			ackKeys.push(key);
 			continue;
 		}
-		if (ingestRawNotification(raw, settings, merchants, u.id)) {
+		if (await ingestRawNotification(raw, settings, merchants, u.id)) {
 			added += 1;
 		}
 		ackKeys.push(key);
@@ -102,15 +110,16 @@ export async function processPendingBankNotificationsDetailed(): Promise<Process
 	if (ackKeys.length) {
 		await acknowledgeNativePending(ackKeys);
 	}
+	await syncDraftNotifyToNative(u.id);
 	return { added, cancelled };
 }
 
-export function ingestRawNotification(
+export async function ingestRawNotification(
 	raw: RawBankNotification,
 	settings: ReturnType<typeof loadInterceptSettings>,
 	merchants: { id: string; name: string }[],
 	userId: string
-): boolean {
+): Promise<boolean> {
 	const parsed = parseBankNotification(raw);
 	if (!parsed || parsed.kind === 'cancel') return false;
 	const accountId = resolveAccountId(parsed, settings);
@@ -124,5 +133,29 @@ export function ingestRawNotification(
 		},
 		userId
 	);
-	return Boolean(draft);
+	if (!draft) return false;
+	await attachCategorySuggestion(draft, userId);
+	return true;
+}
+
+async function attachCategorySuggestion(draft: InterceptDraft, userId: string): Promise<void> {
+	if (!draft.merchantId) return;
+	const suggest = await suggestCategoryFromMerchant(draft.merchantId, draftTxType(draft));
+	if (!suggest) return;
+	updateInterceptDraft(
+		draft.id,
+		{ categoryId: suggest.categoryId, subcategoryId: suggest.subcategoryId },
+		userId
+	);
+}
+
+/** Pull shade Accept/Reject results, then refresh native draft mirror. */
+export async function syncDraftNotifyFromNative(userId?: string | null): Promise<{
+	removed: number;
+	created: number;
+}> {
+	const id = userId ?? get(user)?.id;
+	const result = await applyNativeDraftNotifySync(id);
+	await syncDraftNotifyToNative(id);
+	return result;
 }

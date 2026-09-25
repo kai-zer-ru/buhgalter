@@ -41,7 +41,10 @@ import java.util.WeakHashMap;
         permissions = {
             @Permission(
                     strings = {Manifest.permission.RECEIVE_SMS},
-                    alias = "sms")
+                    alias = "sms"),
+            @Permission(
+                    strings = {Manifest.permission.POST_NOTIFICATIONS},
+                    alias = "notifications")
         })
 public class NotificationInterceptPlugin extends Plugin {
 
@@ -50,12 +53,30 @@ public class NotificationInterceptPlugin extends Plugin {
     @Override
     public void load() {
         INSTANCES.put(this, Boolean.TRUE);
+        DraftNotifyHelper.ensureChannel(getContext());
+    }
+
+    /** True when Capacitor WebView bridge is alive (can receive pendingAvailable). */
+    static boolean hasLiveBridge() {
+        for (NotificationInterceptPlugin plugin : INSTANCES.keySet()) {
+            if (plugin != null) return true;
+        }
+        return false;
     }
 
     static void emitPendingAvailable() {
         for (NotificationInterceptPlugin plugin : INSTANCES.keySet()) {
             if (plugin != null) {
                 plugin.notifyListeners("pendingAvailable", new JSObject());
+            }
+        }
+    }
+
+    /** Fired after shade Accept/Reject so WebView can sync localStorage drafts. */
+    static void emitDraftsChanged() {
+        for (NotificationInterceptPlugin plugin : INSTANCES.keySet()) {
+            if (plugin != null) {
+                plugin.notifyListeners("draftsChanged", new JSObject());
             }
         }
     }
@@ -135,6 +156,11 @@ public class NotificationInterceptPlugin extends Plugin {
             return;
         }
         NotificationInterceptStore.setCaptureEnabled(getContext(), enabled);
+        if (!enabled) {
+            DraftNotifyHelper.cancelAll(getContext());
+        } else {
+            DraftNotifyHelper.refreshAll(getContext());
+        }
         call.resolve();
         if (enabled) {
             // Permission may already be granted while the service is unbound (common on MIUI).
@@ -357,6 +383,179 @@ public class NotificationInterceptPlugin extends Plugin {
         ret.put("captureEnabled", NotificationInterceptStore.isCaptureEnabled(getContext()));
         ret.put("smsPermission", hasSmsPermission());
         call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void setShadeNotificationsEnabled(PluginCall call) {
+        Boolean enabled = call.getBoolean("enabled");
+        if (enabled == null) {
+            call.reject("enabled required");
+            return;
+        }
+        DraftNotifyStore.setShadeEnabled(getContext(), enabled);
+        if (!enabled) {
+            DraftNotifyHelper.cancelAll(getContext());
+        } else {
+            DraftNotifyHelper.refreshAll(getContext());
+        }
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void getShadeNotificationsState(PluginCall call) {
+        JSObject ret = new JSObject();
+        ret.put("enabled", DraftNotifyStore.isShadeEnabled(getContext()));
+        ret.put("canPost", DraftNotifyHelper.canPostNotifications(getContext()));
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void getPostNotificationsPermission(PluginCall call) {
+        JSObject ret = new JSObject();
+        ret.put("granted", DraftNotifyHelper.canPostNotifications(getContext()));
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void requestPostNotificationsPermission(PluginCall call) {
+        if (android.os.Build.VERSION.SDK_INT < 33) {
+            JSObject ret = new JSObject();
+            ret.put("granted", DraftNotifyHelper.canPostNotifications(getContext()));
+            call.resolve(ret);
+            return;
+        }
+        if (DraftNotifyHelper.canPostNotifications(getContext())) {
+            JSObject ret = new JSObject();
+            ret.put("granted", true);
+            call.resolve(ret);
+            return;
+        }
+        requestPermissionForAlias("notifications", call, "notificationsPermissionCallback");
+    }
+
+    @PermissionCallback
+    private void notificationsPermissionCallback(PluginCall call) {
+        boolean granted = getPermissionState("notifications") == PermissionState.GRANTED;
+        JSObject ret = new JSObject();
+        ret.put("granted", granted);
+        if (granted) {
+            DraftNotifyHelper.refreshAll(getContext());
+        }
+        call.resolve(ret);
+    }
+
+    /**
+     * Sync draft mirror from JS and refresh shade notifications.
+     * Payload: {@code drafts: [{id, type, amount, ...}, ...]}.
+     */
+    @PluginMethod
+    public void syncDraftNotifications(PluginCall call) {
+        JSArray drafts = call.getArray("drafts");
+        JSONArray arr = new JSONArray();
+        if (drafts != null) {
+            try {
+                for (int i = 0; i < drafts.length(); i++) {
+                    JSONObject row = drafts.getJSONObject(i);
+                    if (row != null) arr.put(row);
+                }
+            } catch (JSONException e) {
+                call.reject(e.getMessage());
+                return;
+            }
+        }
+        // Cancel notifications for drafts that disappeared before replacing mirror.
+        java.util.Set<String> nextIds = new java.util.HashSet<>();
+        for (int i = 0; i < arr.length(); i++) {
+            JSONObject o = arr.optJSONObject(i);
+            if (o != null) {
+                String id = o.optString("id", "");
+                if (!id.isEmpty()) nextIds.add(id);
+            }
+        }
+        for (String prevId : DraftNotifyStore.draftIds(getContext())) {
+            if (!nextIds.contains(prevId)) {
+                DraftNotifyHelper.cancelDraft(getContext(), prevId);
+            }
+        }
+        DraftNotifyStore.replaceDrafts(getContext(), arr);
+        DraftNotifyProvisional.cancelAll(getContext());
+        DraftNotifyHelper.refreshAll(getContext());
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void removeDraftNotification(PluginCall call) {
+        String draftId = call.getString("draftId");
+        if (draftId == null || draftId.trim().isEmpty()) {
+            call.reject("draftId required");
+            return;
+        }
+        DraftNotifyStore.removeDraft(getContext(), draftId);
+        DraftNotifyHelper.cancelDraft(getContext(), draftId);
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void clearDraftNotifications(PluginCall call) {
+        DraftNotifyHelper.cancelAll(getContext());
+        DraftNotifyProvisional.cancelAll(getContext());
+        DraftNotifyStore.clearDrafts(getContext());
+        call.resolve();
+    }
+
+    /**
+     * After quiet background wake processed pending drafts: drop task to back.
+     * No-op when the user opened the app themselves.
+     */
+    @PluginMethod
+    public void finishQuietWake(PluginCall call) {
+        boolean quiet = InterceptPendingWake.isQuietWakeActive();
+        InterceptPendingWake.clearQuietWake();
+        if (quiet) {
+            android.app.Activity activity = getActivity();
+            if (activity != null) {
+                activity.runOnUiThread(() -> {
+                    try {
+                        activity.moveTaskToBack(true);
+                    } catch (RuntimeException ignored) {
+                        // ignore
+                    }
+                });
+            }
+        }
+        JSObject ret = new JSObject();
+        ret.put("quiet", quiet);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void isQuietWake(PluginCall call) {
+        JSObject ret = new JSObject();
+        ret.put("quiet", InterceptPendingWake.isQuietWakeActive());
+        call.resolve(ret);
+    }
+
+    /** Pull Accept/Reject side-effects from native for JS localStorage sync. */
+    @PluginMethod
+    public void consumeDraftNotifySync(PluginCall call) {
+        JSONObject raw = DraftNotifyStore.consumeSync(getContext());
+        JSObject ret = new JSObject();
+        ret.put("rejectedIds", jsonStringArrayToJs(raw.optJSONArray("rejectedIds")));
+        ret.put("acceptedIds", jsonStringArrayToJs(raw.optJSONArray("acceptedIds")));
+        ret.put("offlineAcceptsJson", raw.optJSONArray("offlineAccepts") != null
+                ? raw.optJSONArray("offlineAccepts").toString()
+                : "[]");
+        call.resolve(ret);
+    }
+
+    private static JSArray jsonStringArrayToJs(JSONArray arr) {
+        JSArray out = new JSArray();
+        if (arr == null) return out;
+        for (int i = 0; i < arr.length(); i++) {
+            String s = arr.optString(i, "");
+            if (!s.isEmpty()) out.put(s);
+        }
+        return out;
     }
 
     private JSObject wrapItems(JSONArray arr) {

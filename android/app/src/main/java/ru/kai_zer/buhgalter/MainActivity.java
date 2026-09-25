@@ -3,6 +3,8 @@ package ru.kai_zer.buhgalter;
 import android.content.Intent;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.webkit.WebView;
 
 import androidx.core.splashscreen.SplashScreen;
@@ -14,6 +16,8 @@ import ru.kai_zer.buhgalter.widgets.WidgetRefreshScheduler;
 
 public class MainActivity extends BridgeActivity {
     private boolean skipCapacitor;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private Runnable quietWakeFallback;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -44,6 +48,37 @@ public class MainActivity extends BridgeActivity {
         WidgetRefreshScheduler.ensurePeriodicAsync(this);
         prepareWebView();
         attachHistoryBridge();
+        handleQuietWakeIntent(getIntent());
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleQuietWakeIntent(intent);
+    }
+
+    private void handleQuietWakeIntent(Intent intent) {
+        InterceptPendingWake.markQuietWakeFromIntent(intent);
+        if (!InterceptPendingWake.isQuietWakeActive()) {
+            return;
+        }
+        // Fallback if JS never calls finishQuietWake (slow load / no session).
+        if (quietWakeFallback != null) {
+            mainHandler.removeCallbacks(quietWakeFallback);
+        }
+        quietWakeFallback =
+                () -> {
+                    if (InterceptPendingWake.isQuietWakeActive()) {
+                        InterceptPendingWake.clearQuietWake();
+                        try {
+                            moveTaskToBack(true);
+                        } catch (RuntimeException ignored) {
+                            // ignore
+                        }
+                    }
+                };
+        mainHandler.postDelayed(quietWakeFallback, 12_000L);
     }
 
     @Override
@@ -75,6 +110,15 @@ public class MainActivity extends BridgeActivity {
                     "nls-resume-rebind")
                     .start();
         }
+    }
+
+    @Override
+    public void onDestroy() {
+        if (quietWakeFallback != null) {
+            mainHandler.removeCallbacks(quietWakeFallback);
+            quietWakeFallback = null;
+        }
+        super.onDestroy();
     }
 
     private void prepareWebView() {

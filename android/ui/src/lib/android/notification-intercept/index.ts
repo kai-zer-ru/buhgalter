@@ -3,9 +3,15 @@ import { _ } from 'svelte-i18n';
 import { isNativeApp } from '$lib/platform/native';
 import { toast } from '$lib/toast';
 import { user } from '$lib/stores/auth';
-import { addPendingAvailableListener } from './plugin';
+import {
+	addDraftsChangedListener,
+	addPendingAvailableListener,
+	finishQuietWake,
+	isQuietWake
+} from './plugin';
 import {
 	processPendingBankNotificationsDetailed,
+	syncDraftNotifyFromNative,
 	syncInterceptNativeFromSettings
 } from './process';
 
@@ -14,6 +20,7 @@ export * from './banks';
 export * from './settings';
 export * from './drafts';
 export * from './draft-transfer';
+export * from './draft-notify';
 export * from './prefill';
 export * from './plugin';
 export * from './process';
@@ -34,20 +41,29 @@ export async function initNotificationIntercept(): Promise<() => void> {
 
 	const run = () => {
 		if (!get(user)?.id) return;
-		void syncInterceptNativeFromSettings();
-		void processPendingBankNotificationsDetailed().then(({ added, cancelled }) => {
-			if (added > 0) {
-				toast(get(_)('bankNotifications.drafts.toastNew', { values: { n: added } }));
+		void (async () => {
+			const quiet = await isQuietWake();
+			await syncDraftNotifyFromNative();
+			await syncInterceptNativeFromSettings();
+			const { added, cancelled } = await processPendingBankNotificationsDetailed();
+			if (!quiet) {
+				if (added > 0) {
+					toast(get(_)('bankNotifications.drafts.toastNew', { values: { n: added } }));
+				}
+				if (cancelled > 0) {
+					toast(get(_)('bankNotifications.drafts.toastCancelled', { values: { n: cancelled } }));
+				}
 			}
-			if (cancelled > 0) {
-				toast(get(_)('bankNotifications.drafts.toastCancelled', { values: { n: cancelled } }));
+			if (quiet) {
+				await finishQuietWake();
 			}
-		});
+		})();
 	};
 
 	run();
 
 	const removePending = await addPendingAvailableListener(run);
+	const removeDrafts = await addDraftsChangedListener(run);
 
 	let removeResume: (() => void) | undefined;
 	try {
@@ -66,6 +82,7 @@ export async function initNotificationIntercept(): Promise<() => void> {
 
 	return () => {
 		removePending();
+		removeDrafts();
 		removeResume?.();
 		unsubUser();
 	};

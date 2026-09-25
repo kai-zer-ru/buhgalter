@@ -26,6 +26,7 @@
 		scanActiveNotifications,
 		setInterceptPrefill,
 		setInterceptTransferPrefill,
+		syncDraftNotifyToNative,
 		syncInterceptNativeFromSettings,
 		transferPrefillFromDrafts,
 		type InterceptDraft,
@@ -128,6 +129,7 @@
 		const n = deleteInterceptDrafts(ids, $user?.id);
 		if (n === 0) return;
 		splitPairIds = splitPairIds.filter((id) => !ids.includes(id));
+		void syncDraftNotifyToNative($user?.id);
 		toast(
 			n === 1 ? $_('bankNotifications.drafts.deleted') : $_('bankNotifications.drafts.deletedMany')
 		);

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
 	clearInterceptSettingsForTests,
+	emptyInterceptSettings,
 	loadInterceptSettings,
 	saveInterceptSettings,
 	normalizeLast4,
@@ -20,6 +21,7 @@ describe('intercept settings', () => {
 	it('persists enabled independently of bindings', () => {
 		saveInterceptSettings('u1', {
 			enabled: true,
+			shadeNotifications: true,
 			bankBindings: [
 				{
 					bankId: 'tinkoff',
@@ -35,13 +37,57 @@ describe('intercept settings', () => {
 		});
 		const again = loadInterceptSettings('u1');
 		expect(again.enabled).toBe(false);
+		expect(again.shadeNotifications).toBe(true);
 		expect(again.bankBindings).toHaveLength(1);
 		expect(again.cardBindings[0].last4).toBe('4321');
+	});
+
+	it('defaults shadeNotifications to on for new settings', () => {
+		expect(loadInterceptSettings('never-saved').shadeNotifications).toBe(true);
+		expect(emptyInterceptSettings().shadeNotifications).toBe(true);
+	});
+
+	it('treats missing shadeNotifications as on when loading legacy JSON', () => {
+		// writeStorage falls back to memory when localStorage is absent (vitest node).
+		const key = 'buhgalter.notification_intercept.settings.v1:u-shade';
+		const g = globalThis as { localStorage?: Storage; __mem?: Map<string, string> };
+		const mem = new Map<string, string>();
+		mem.set(key, JSON.stringify({ enabled: true, bankBindings: [], cardBindings: [] }));
+		const prev = g.localStorage;
+		g.localStorage = {
+			getItem: (k: string) => mem.get(k) ?? null,
+			setItem: (k: string, v: string) => {
+				mem.set(k, v);
+			},
+			removeItem: (k: string) => {
+				mem.delete(k);
+			},
+			clear: () => mem.clear(),
+			key: () => null,
+			length: 0
+		} as Storage;
+		try {
+			expect(loadInterceptSettings('u-shade').shadeNotifications).toBe(true);
+		} finally {
+			if (prev === undefined) delete g.localStorage;
+			else g.localStorage = prev;
+		}
+	});
+
+	it('persists shadeNotifications off', () => {
+		saveInterceptSettings('u1', {
+			enabled: true,
+			shadeNotifications: false,
+			bankBindings: [],
+			cardBindings: []
+		});
+		expect(loadInterceptSettings('u1').shadeNotifications).toBe(false);
 	});
 
 	it('isolates users', () => {
 		saveInterceptSettings('u1', {
 			enabled: true,
+			shadeNotifications: true,
 			bankBindings: [],
 			cardBindings: []
 		});

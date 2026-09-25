@@ -11,6 +11,7 @@
 		KNOWN_BANK_APPS,
 		getCurrentInterceptSettings,
 		getNotificationListenerState,
+		getPostNotificationsGranted,
 		getSmsPermissionGranted,
 		isNotificationAccessEnabled,
 		openAppPermissionSettings,
@@ -18,6 +19,7 @@
 		openNotificationAccessSettings,
 		packageForBankId,
 		reconnectNotificationListener,
+		requestPostNotificationsPermission,
 		requestSmsPermission,
 		saveInterceptSettings,
 		setAccountBankBinding,
@@ -35,8 +37,10 @@
 	let accessEnabled = $state(false);
 	let listenerConnected = $state(false);
 	let smsPermission = $state(false);
+	let postNotifications = $state(false);
 	let reconnecting = $state(false);
 	let requestingSms = $state(false);
+	let requestingPost = $state(false);
 	let loading = $state(true);
 	let newCardBankId = $state('tinkoff');
 	let newCardLast4 = $state('');
@@ -74,6 +78,7 @@
 		}
 		accessEnabled = await isNotificationAccessEnabled();
 		smsPermission = await getSmsPermissionGranted();
+		postNotifications = await getPostNotificationsGranted();
 		const listener = await getNotificationListenerState();
 		listenerConnected = Boolean(listener?.listenerConnected);
 		if (listener?.smsPermission != null) {
@@ -145,6 +150,38 @@
 				listenerConnected = Boolean(listener?.listenerConnected);
 			})();
 		}, 800);
+	}
+
+	async function toggleShadeNotifications() {
+		if (!isNativeApp()) {
+			toast($_('bankNotifications.nativeOnly'));
+			return;
+		}
+		const next = !settings.shadeNotifications;
+		persist({ ...settings, shadeNotifications: next });
+		if (next && settings.enabled) {
+			postNotifications = await getPostNotificationsGranted();
+			if (!postNotifications) {
+				await grantPostNotifications();
+			}
+		}
+		toast($_('common.saved'));
+	}
+
+	async function grantPostNotifications() {
+		requestingPost = true;
+		try {
+			postNotifications = await requestPostNotificationsPermission();
+			if (!postNotifications) {
+				toast($_('bankNotifications.shade.needPermission'));
+				await openAppPermissionSettings();
+			} else {
+				toast($_('common.saved'));
+			}
+		} finally {
+			requestingPost = false;
+			postNotifications = await getPostNotificationsGranted();
+		}
 	}
 
 	async function grantSms() {
@@ -257,6 +294,40 @@
 				disabled={!isNativeApp() || !$user}
 				onchange={() => void toggleEnabled()}
 			/>
+		</div>
+
+		<div class="space-y-2 border-t pt-4" style:border-color="var(--border)">
+			<div class="flex items-center justify-between gap-4">
+				<div>
+					<p class="font-medium">{$_('bankNotifications.shade.enable')}</p>
+					<p class="text-sm" style:color="var(--text-muted)">
+						{$_('bankNotifications.shade.enableHint')}
+					</p>
+				</div>
+				<ToggleSwitch
+					label={$_('bankNotifications.shade.enable')}
+					checked={settings.shadeNotifications !== false}
+					disabled={!isNativeApp() || !$user || !settings.enabled}
+					onchange={() => void toggleShadeNotifications()}
+				/>
+			</div>
+			{#if settings.enabled && settings.shadeNotifications !== false}
+				<p class="text-sm" style:color={postNotifications ? 'var(--primary)' : 'var(--text-muted)'}>
+					{postNotifications
+						? $_('bankNotifications.shade.permissionOn')
+						: $_('bankNotifications.shade.permissionOff')}
+				</p>
+				{#if !postNotifications}
+					<button
+						type="button"
+						class="btn-ghost"
+						disabled={!isNativeApp() || requestingPost}
+						onclick={() => void grantPostNotifications()}
+					>
+						{$_('bankNotifications.shade.requestPermission')}
+					</button>
+				{/if}
+			{/if}
 		</div>
 
 		<div class="space-y-2 border-t pt-4" style:border-color="var(--border)">

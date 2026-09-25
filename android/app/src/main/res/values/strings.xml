@@ -2,6 +2,18 @@
 <resources>
     <string name="app_name">Бухгалтер</string>
     <string name="notification_intercept_service_label">Бухгалтер — уведомления банков</string>
+    <string name="draft_notify_channel_name">Черновики из уведомлений</string>
+    <string name="draft_notify_channel_desc">Подтверждение или отклонение черновиков без открытия приложения</string>
+    <string name="draft_notify_title_expense">Расход из банка</string>
+    <string name="draft_notify_title_income">Доход из банка</string>
+    <string name="draft_notify_title_transfer">Возможный перевод</string>
+    <string name="draft_notify_body_amount">%1$s ₽</string>
+    <string name="draft_notify_body_fallback">Черновик операции</string>
+    <string name="draft_notify_action_accept">Принять</string>
+    <string name="draft_notify_action_reject">Отклонить</string>
+    <string name="draft_notify_provisional_title">Банковское уведомление</string>
+    <string name="draft_notify_provisional_body">Обрабатываем черновик…</string>
+    <string name="draft_notify_provisional_open">Открыть</string>
     <string name="title_activity_main">Бухгалтер</string>
     <string name="package_name">ru.kai_zer.buhgalter</string>
     <string name="custom_url_scheme">ru.kai_zer.buhgalter</string>
