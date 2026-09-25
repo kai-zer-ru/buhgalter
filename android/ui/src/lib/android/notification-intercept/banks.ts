@@ -212,12 +212,13 @@ const BANK_TEXT_ALIASES: { bankId: string; re: RegExp }[] = [
 	{ bankId: 'sovcombank', re: /совкомбанк|sovcombank|\bхалва\b|\bhalva\b/i },
 	{ bankId: 'uralsib', re: /уралсиб|uralsib/i },
 	{ bankId: 'homecredit', re: /хоум\s*кредит|home\s*credit/i },
-	{ bankId: 'vtb', re: /\bвтб\b|\bvtb\b/i },
-	{ bankId: 'mkb', re: /\bмкб\b|\bmkb\b/i },
-	{ bankId: 'psb', re: /\bпсб\b|\bpsb\b|промсвязьбанк/i },
+	// Cyrillic: no \b (JS \b is ASCII-only). Latin keep \b.
+	{ bankId: 'vtb', re: /втб|\bvtb\b/i },
+	{ bankId: 'mkb', re: /мкб|\bmkb\b/i },
+	{ bankId: 'psb', re: /псб|\bpsb\b|промсвязьбанк/i },
 	{ bankId: 'otpbank', re: /отп\s*банк|otp\s*bank/i },
-	{ bankId: 'atb', re: /\bатб\b/i },
-	{ bankId: 'vbrr', re: /\bвбрр\b|\bvbrr\b/i },
+	{ bankId: 'atb', re: /атб/i },
+	{ bankId: 'vbrr', re: /вбрр|\bvbrr\b/i },
 	{ bankId: 'ozon', re: /озон\s*банк|ozon\s*bank/i },
 	{ bankId: 'yandex', re: /яндекс\s*банк|yandex\s*bank/i },
 	{ bankId: 'wbbank', re: /wb\s*банк|wildberries\s*банк/i }

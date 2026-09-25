@@ -280,6 +280,15 @@
 		}
 	}
 
+	function clearOptionalDetails() {
+		merchantId = '';
+		merchantQuery = '';
+		selectedTags = [];
+		tagInput = '';
+		description = '';
+		optionalDetailsOpen = false;
+	}
+
 	async function onCategoryChange() {
 		creditId = '';
 		activeCredits = [];
@@ -288,6 +297,7 @@
 		const cat = categories.find((c) => c.id === categoryId);
 		if (!editing && txType === 'expense' && isCreditsExpenseCategory(cat)) {
 			subcategories = [];
+			clearOptionalDetails();
 			try {
 				activeCredits = await listCredits({ status: 'active' });
 			} catch {
@@ -490,91 +500,99 @@
 			</div>
 		{/if}
 
-		<details bind:open={optionalDetailsOpen}>
-			<summary class="cursor-pointer text-sm" style:color="var(--text-muted)">
-				{$_('transactions.field.optionalDetails')}
-			</summary>
-			<div class="mt-3 space-y-4">
-				<div>
-					<label class="mb-1 block text-sm font-medium" for="tx-time"
-						>{$_('transactions.field.timeOptional')}</label
-					>
-					<input
-						id="tx-time"
-						type="time"
-						class="input w-full"
-						bind:value={timeInput}
-						onchange={applyOperationTime}
-					/>
-					<FieldHint text={$_('transactions.field.timeHint')} />
-				</div>
-
-				<div>
-					<label class="mb-1 block text-sm font-medium" for="tx-desc"
-						>{$_('transactions.field.description')}</label
-					>
-					<input id="tx-desc" class="input w-full" bind:value={description} />
-				</div>
-
-				<Combobox
-					id="tx-merchant"
-					label={$_('transactions.field.merchant')}
-					bind:value={merchantId}
-					bind:query={merchantQuery}
-					options={merchantOptions}
-					usePortal
-					allowCreate
-					placeholder={$_('transactions.field.newMerchant')}
-					createLabel={$_('transactions.field.createNamed', {
-						values: { name: merchantQuery.trim() || '…' }
-					})}
-					emptyLabel={$_('common.notFound')}
+		{#snippet timeField()}
+			<div>
+				<label class="mb-1 block text-sm font-medium" for="tx-time"
+					>{$_('transactions.field.timeOptional')}</label
+				>
+				<input
+					id="tx-time"
+					type="time"
+					class="input w-full"
+					bind:value={timeInput}
+					onchange={applyOperationTime}
 				/>
+				<FieldHint text={$_('transactions.field.timeHint')} />
+			</div>
+		{/snippet}
 
-				<div>
-					<span class="mb-1 block text-sm font-medium">{$_('transactions.field.tags')}</span>
-					{#if selectedTags.length}
-						<div class="mb-2 flex flex-wrap gap-2">
-							{#each selectedTags as t (t.name)}
-								<button
-									type="button"
-									class="rounded-md px-2 py-1 text-sm"
-									style:background="var(--surface-2)"
-									onclick={() => removeTag(t.name)}
-								>
-									{t.name} ×
-								</button>
-							{/each}
-						</div>
-					{/if}
-					<input
-						id="tx-tags"
-						class="input w-full"
-						placeholder={$_('transactions.field.tagsHint')}
-						bind:value={tagInput}
-						onkeydown={onTagKeydown}
-					/>
-					{#if tagInput.trim() && tagSuggestions.length}
-						<ul
-							class="mt-1 max-h-40 overflow-auto rounded-md border text-sm"
-							style:border-color="var(--border)"
+		{#if isCreditPaymentMode}
+			{@render timeField()}
+		{:else}
+			<details bind:open={optionalDetailsOpen}>
+				<summary class="cursor-pointer text-sm" style:color="var(--text-muted)">
+					{$_('transactions.field.optionalDetails')}
+				</summary>
+				<div class="mt-3 space-y-4">
+					{@render timeField()}
+
+					<div>
+						<label class="mb-1 block text-sm font-medium" for="tx-desc"
+							>{$_('transactions.field.description')}</label
 						>
-							{#each tagSuggestions as sug (sug.id)}
-								<li>
+						<input id="tx-desc" class="input w-full" bind:value={description} />
+					</div>
+
+					<Combobox
+						id="tx-merchant"
+						label={$_('transactions.field.merchant')}
+						bind:value={merchantId}
+						bind:query={merchantQuery}
+						options={merchantOptions}
+						usePortal
+						allowCreate
+						placeholder={$_('transactions.field.newMerchant')}
+						createLabel={$_('transactions.field.createNamed', {
+							values: { name: merchantQuery.trim() || '…' }
+						})}
+						emptyLabel={$_('common.notFound')}
+					/>
+
+					<div>
+						<span class="mb-1 block text-sm font-medium">{$_('transactions.field.tags')}</span>
+						{#if selectedTags.length}
+							<div class="mb-2 flex flex-wrap gap-2">
+								{#each selectedTags as t (t.name)}
 									<button
 										type="button"
-										class="block w-full px-3 py-2 text-left hover:opacity-80"
-										onclick={() => addTag(sug.name, sug.id)}
+										class="rounded-md px-2 py-1 text-sm"
+										style:background="var(--surface-2)"
+										onclick={() => removeTag(t.name)}
 									>
-										{sug.name}
+										{t.name} ×
 									</button>
-								</li>
-							{/each}
-						</ul>
-					{/if}
+								{/each}
+							</div>
+						{/if}
+						<input
+							id="tx-tags"
+							class="input w-full"
+							placeholder={$_('transactions.field.tagsHint')}
+							bind:value={tagInput}
+							onkeydown={onTagKeydown}
+						/>
+						{#if tagInput.trim() && tagSuggestions.length}
+							<ul
+								class="mt-1 max-h-40 overflow-auto rounded-md border text-sm"
+								style:border-color="var(--border)"
+							>
+								{#each tagSuggestions as sug (sug.id)}
+									<li>
+										<button
+											type="button"
+											class="block w-full px-3 py-2 text-left hover:opacity-80"
+											onclick={() => addTag(sug.name, sug.id)}
+										>
+											{sug.name}
+										</button>
+									</li>
+								{/each}
+							</ul>
+						{/if}
+					</div>
 				</div>
-			</div>
-		</details>
+			</details>
+		{/if}
 
 		{#if creditCardNegativeWarning}
 			<p class="text-sm" style:color="var(--warning)">
