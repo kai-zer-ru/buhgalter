@@ -3,6 +3,7 @@ module github.com/kai-zer-ru/buhgalter
 go 1.26.4
 
 require (
+	github.com/coder/websocket v1.8.14
 	github.com/go-chi/chi/v5 v5.3.0
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/mdns v1.0.6

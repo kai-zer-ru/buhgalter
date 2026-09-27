@@ -38,6 +38,7 @@
 		type StoredImportJobSnapshot
 	} from '$lib/import-job-poll';
 	import { clearRefCache } from '$lib/ref-cache';
+	import { importRealtimeEvent, peekImportRealtimeEvent } from '$lib/realtime';
 	import { randomId } from '$lib/random-id';
 	import { toast } from '$lib/toast';
 	import {
@@ -121,6 +122,12 @@
 		};
 	});
 
+	$effect(() => {
+		const ev = $importRealtimeEvent;
+		if (!ev) return;
+		handleImportRealtime(ev);
+	});
+
 	async function loadExportCatalogs() {
 		try {
 			[accounts, banks] = await Promise.all([listAccounts(), listBanks()]);
@@ -179,7 +186,7 @@
 			persistImportJob(current);
 			if (current.status === 'queued' || current.status === 'running') {
 				step = 'importing';
-				void pollImportJob(jobID);
+				watchImportJob(jobID);
 				return;
 			}
 			if (current.status === 'done') {
@@ -194,7 +201,7 @@
 		} catch (err) {
 			if (isRetriableImportJobPollError(err)) {
 				step = 'importing';
-				void pollImportJob(jobID);
+				watchImportJob(jobID);
 				return;
 			}
 			clearStoredImportJob();
@@ -703,6 +710,73 @@
 		return new Promise<void>((resolve) => setTimeout(resolve, ms));
 	}
 
+	function watchedImportJobID(): string | null {
+		return importJob?.id ?? readStoredImportJobSnapshot()?.id ?? null;
+	}
+
+	function handleImportRealtime(ev: {
+		type: string;
+		job_id: string;
+		status: ImportJob['status'];
+		report?: ImportReport;
+		error_message?: string;
+	}) {
+		if (ev.job_id !== watchedImportJobID()) return;
+
+		if (ev.type === 'import.progress') {
+			const base =
+				importJob ??
+				(readStoredImportJobSnapshot() ? jobFromSnapshot(readStoredImportJobSnapshot()!) : null);
+			if (!base) return;
+			importJob = {
+				...base,
+				status: 'running',
+				report: ev.report ?? base.report
+			};
+			persistImportJob(importJob);
+			if (step !== 'importing') step = 'importing';
+			return;
+		}
+
+		if (ev.type === 'import.done') {
+			if (step === 'done') return;
+			importPollingToken++;
+			const base =
+				importJob ??
+				(readStoredImportJobSnapshot() ? jobFromSnapshot(readStoredImportJobSnapshot()!) : null);
+			if (!base) return;
+			importJob = {
+				...base,
+				status: 'done',
+				report: ev.report ?? base.report
+			};
+			persistImportJob(importJob);
+			finalReport = normalizeImportReport(ev.report ?? base.report ?? emptyReport());
+			invalidateAfterImport();
+			step = 'done';
+			toast($_('import.done.title'));
+			return;
+		}
+
+		if (ev.type === 'import.failed') {
+			importPollingToken++;
+			const base =
+				importJob ??
+				(readStoredImportJobSnapshot() ? jobFromSnapshot(readStoredImportJobSnapshot()!) : null);
+			if (base) {
+				importJob = {
+					...base,
+					status: 'failed',
+					error_message: ev.error_message ?? base.error_message
+				};
+				persistImportJob(importJob);
+			}
+			invalidateAfterImport();
+			toast.error(ev.error_message ?? $_('common.error'));
+			step = file ? 'preview' : 'importing';
+		}
+	}
+
 	async function pollImportJob(jobId: string) {
 		const token = ++importPollingToken;
 		while (token === importPollingToken) {
@@ -711,6 +785,7 @@
 				importJob = current;
 				persistImportJob(current);
 				if (current.status === 'done') {
+					if (step === 'done') return;
 					finalReport = normalizeImportReport(current.report ?? emptyReport());
 					invalidateAfterImport();
 					step = 'done';
@@ -718,6 +793,7 @@
 					return;
 				}
 				if (current.status === 'failed') {
+					if (step === 'preview' || step === 'upload') return;
 					invalidateAfterImport();
 					toast.error(current.error_message ?? $_('common.error'));
 					step = file ? 'preview' : 'importing';
@@ -731,6 +807,7 @@
 					return;
 				}
 			}
+			// Socket pushes progress; poll remains the reliable completion fallback (1.2s).
 			await sleep(1200);
 		}
 	}
@@ -738,6 +815,17 @@
 	function invalidateAfterImport() {
 		invalidateApiCache();
 		clearRefCache({ preserveAuthMe: true });
+	}
+
+	function watchImportJob(jobId: string) {
+		const pending = peekImportRealtimeEvent(jobId);
+		if (pending) {
+			handleImportRealtime(pending);
+		}
+		if (importJob?.status === 'done' || importJob?.status === 'failed' || step === 'done') {
+			return;
+		}
+		void pollImportJob(jobId);
 	}
 
 	async function runImport() {
@@ -761,7 +849,7 @@
 			persistImportJob(importJob);
 			step = 'importing';
 			loading = false;
-			void pollImportJob(importJob.id);
+			watchImportJob(importJob.id);
 		} catch (err) {
 			toast.fromError(err);
 			loading = false;

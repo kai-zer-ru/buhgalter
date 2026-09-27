@@ -4,7 +4,7 @@
 
 **Спецификация API:** [api/openapi.yaml](api/openapi.yaml) (интерактивно — `/docs` на запущенном сервере).
 
-История изменений по версиям — [CHANGELOG.md](../CHANGELOG.md). Последний релиз: [release-notes-v1.6.0.md](release-notes-v1.6.0.md).
+История изменений по версиям — [CHANGELOG.md](../CHANGELOG.md). Последний релиз: [release-notes-v1.7.0.md](release-notes-v1.7.0.md).
 
 ---
 
@@ -80,10 +80,10 @@
 | [notifications.md](notifications.md) | Уведомления: настройки, периоды, шаблоны, блокировка UI/API |
 | [../roadmap/balance-shortfall-notifications.md](../roadmap/balance-shortfall-notifications.md) | Недостаток средств в тексте уведомлений |
 | [ui-api-cache.md](ui-api-cache.md) | In-memory кеш GET на сервере и справочники в браузере |
-| [../roadmap/realtime-updates.md](../roadmap/realtime-updates.md) | (план) Живые обновления UI: WebSocket/SSE вместо фонового шторма GET |
+| [../roadmap/realtime-updates.md](../roadmap/realtime-updates.md) | Живые обновления UI: WebSocket на вебе (v1.7.0); Android — SWR |
 | [import/cubux.md](import/cubux.md) | Импорт и экспорт формата Cubux |
 | [import/buhgalter.md](import/buhgalter.md) | Нативный секционный CSV: полный перенос учёта между инстансами |
 | [../roadmap/category-rules-inbox.md](../roadmap/category-rules-inbox.md) | (план) Правила категорий и inbox неразнесённого |
 | [feature-toggles.md](feature-toggles.md) | Флаги модулей в админке; чеклист для новых фич |
 | [subscriptions.md](subscriptions.md) | Подписки: API, UI, уведомления, плановый остаток |
-| [release-notes-v1.6.0.md](release-notes-v1.6.0.md) | Release notes v1.6.0 |
+| [release-notes-v1.7.0.md](release-notes-v1.7.0.md) | Release notes v1.7.0 |

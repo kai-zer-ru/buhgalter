@@ -10,6 +10,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/credit"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/features"
+	"github.com/kai-zer-ru/buhgalter/internal/realtime"
 	"github.com/kai-zer-ru/buhgalter/internal/recurring"
 	"github.com/kai-zer-ru/buhgalter/internal/subscription"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
@@ -140,6 +141,7 @@ func (s *Scheduler) runCreditPayments(now time.Time) {
 		}
 		if applied > 0 {
 			s.Logger.Info("credit auto-payments applied", "user_id", u.ID, "count", applied)
+			realtime.NotifyUserDataChanged(u.ID)
 			if s.Credit.Audit != nil {
 				_ = s.Credit.Audit("credit.auto_payment", u.ID, "", "", map[string]any{"count": applied})
 			}
@@ -182,6 +184,7 @@ func (s *Scheduler) runRecurring(now time.Time) {
 		}
 		if applied > 0 {
 			s.Logger.Info("recurring operations applied", "user_id", u.ID, "count", applied)
+			realtime.NotifyUserDataChanged(u.ID)
 		}
 	}
 }
@@ -221,6 +224,7 @@ func (s *Scheduler) runSubscriptions(now time.Time) {
 		}
 		if applied > 0 {
 			s.Logger.Info("subscriptions applied", "user_id", u.ID, "count", applied)
+			realtime.NotifyUserDataChanged(u.ID)
 		}
 	}
 }

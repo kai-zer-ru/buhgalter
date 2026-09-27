@@ -16,6 +16,7 @@
 		isFeatureEnabled
 	} from '$lib/features';
 	import { clearRefCache, setRefCacheUserId } from '$lib/ref-cache';
+	import { disconnectRealtime } from '$lib/realtime';
 	import { registerServiceWorker } from '$lib/pwa';
 	import { initTheme, syncThemeFromUser } from '$lib/stores/theme';
 	import { setLocale } from '$lib/i18n';
@@ -69,6 +70,7 @@
 
 	$effect(() => {
 		if ($sessionExpiredTick === 0) return;
+		disconnectRealtime();
 		clearSessionHint();
 		clearRefCache();
 		clearFeatureFlags();

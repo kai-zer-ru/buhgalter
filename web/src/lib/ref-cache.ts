@@ -20,19 +20,55 @@ const REF_CACHE_SKIP = new Set([
 
 const memoryStore = new Map<string, string>();
 const inflightRevalidate = new Map<string, Promise<void>>();
+const lastRevalidatedAt = new Map<string, number>();
+const revalidateTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+/** Match Android: skip redundant background GET within this window when socket is down. */
+export const REVALIDATE_COOLDOWN_MS = 60_000;
+const REVALIDATE_DEFER_MS = 3_000;
 
 let cacheUserId = '_anonymous';
 /** Bumped on clear/invalidate so in-flight SWR revalidates don't rewrite stale data. */
 let cacheEpoch = 0;
 
+/** Wall time of last successful client mutation — ignore echo invalidate briefly. */
+let lastLocalMutationAt = 0;
+const LOCAL_MUTATION_ECHO_MS = 1_500;
+
+/** True while WebSocket realtime channel is live (set from realtime.ts). */
+let realtimeLiveFlag = false;
+
 /** Bumped when a background revalidate writes new data — pages reload softly. */
 export const refCacheTick = writable(0);
 
-/** Path-aware notification after SWR revalidate. */
+/** Path-aware notification after SWR revalidate. `path: '*'` = coarse realtime invalidate. */
 export const refCacheUpdate = writable<{ path: string; seq: number } | null>(null);
 
 export function setRefCacheUserId(userId: string | null): void {
 	cacheUserId = userId || '_anonymous';
+}
+
+export function setRealtimeLive(live: boolean): void {
+	realtimeLiveFlag = live;
+}
+
+export function isRealtimeLive(): boolean {
+	return realtimeLiveFlag;
+}
+
+/** Call after a successful mutating API request from this tab. */
+export function markLocalMutation(): void {
+	lastLocalMutationAt = Date.now();
+}
+
+export function wasRecentLocalMutation(): boolean {
+	return Date.now() - lastLocalMutationAt < LOCAL_MUTATION_ECHO_MS;
+}
+
+/** Coarse invalidate from WebSocket — pages watching any path soft-reload. */
+export function notifyRealtimeInvalidate(): void {
+	refCacheUpdate.set({ path: '*', seq: Date.now() });
+	refCacheTick.update((n) => n + 1);
 }
 
 function storageKey(path: string): string {
@@ -81,6 +117,7 @@ export function shouldPersistRefCache(path: string): boolean {
 	if (pathOnly.includes('/import/jobs/')) return false;
 	if (pathOnly.startsWith('/api/v1/export')) return false;
 	if (pathOnly.startsWith('/api/v1/version')) return false;
+	if (pathOnly === '/api/v1/realtime') return false;
 	return true;
 }
 
@@ -208,22 +245,41 @@ function notifyRefCacheUpdated(path: string): void {
 }
 
 function scheduleRevalidate<T>(path: string, fetcher: () => Promise<T>): void {
+	if (realtimeLiveFlag) return;
+	if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
 	if (inflightRevalidate.has(path)) return;
+
+	const last = lastRevalidatedAt.get(path) ?? 0;
+	if (Date.now() - last < REVALIDATE_COOLDOWN_MS) return;
+
+	const existing = revalidateTimers.get(path);
+	if (existing !== undefined) clearTimeout(existing);
+
 	const epoch = cacheEpoch;
-	const job = (async () => {
-		try {
-			const value = await fetcher();
-			if (epoch !== cacheEpoch) return;
-			if (writeRefCache(path, value)) {
-				notifyRefCacheUpdated(path);
+	const timer = setTimeout(() => {
+		revalidateTimers.delete(path);
+		if (realtimeLiveFlag) return;
+		if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+		if (inflightRevalidate.has(path)) return;
+
+		const job = (async () => {
+			try {
+				const value = await fetcher();
+				if (epoch !== cacheEpoch) return;
+				lastRevalidatedAt.set(path, Date.now());
+				if (writeRefCache(path, value)) {
+					notifyRefCacheUpdated(path);
+				}
+			} catch {
+				// background refresh failed — keep stale on screen
+			} finally {
+				inflightRevalidate.delete(path);
 			}
-		} catch {
-			// background refresh failed — keep stale on screen
-		} finally {
-			inflightRevalidate.delete(path);
-		}
-	})();
-	inflightRevalidate.set(path, job);
+		})();
+		inflightRevalidate.set(path, job);
+	}, REVALIDATE_DEFER_MS);
+
+	revalidateTimers.set(path, timer);
 }
 
 export async function fetchWithRefCache<T>(path: string, fetcher: () => Promise<T>): Promise<T> {
@@ -271,6 +327,9 @@ export function clearRefCache(opts?: { preserveAuthMe?: boolean }): void {
 		memoryStore.delete(key);
 	}
 	inflightRevalidate.clear();
+	for (const timer of revalidateTimers.values()) clearTimeout(timer);
+	revalidateTimers.clear();
+	lastRevalidatedAt.clear();
 	if (preserveAuthMe) {
 		const meta = readRefCache<UIMeta>(UI_META_PATH);
 		if (meta) seedAccountsFromUIMetaIfEmpty(meta);
@@ -281,10 +340,15 @@ export function resetRefCacheForTests(): void {
 	clearRefCache();
 	memoryStore.clear();
 	inflightRevalidate.clear();
+	for (const timer of revalidateTimers.values()) clearTimeout(timer);
+	revalidateTimers.clear();
+	lastRevalidatedAt.clear();
 	refCacheTick.set(0);
 	refCacheUpdate.set(null);
 	cacheUserId = '_anonymous';
 	cacheEpoch = 0;
+	lastLocalMutationAt = 0;
+	realtimeLiveFlag = false;
 }
 
 const UI_META_PATH = '/api/v1/ui/meta';

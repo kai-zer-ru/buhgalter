@@ -30,6 +30,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/importexport"
 	"github.com/kai-zer-ru/buhgalter/internal/merchant"
 	appmw "github.com/kai-zer-ru/buhgalter/internal/middleware"
+	"github.com/kai-zer-ru/buhgalter/internal/realtime"
 	"github.com/kai-zer-ru/buhgalter/internal/recurring"
 	"github.com/kai-zer-ru/buhgalter/internal/settingscache"
 	"github.com/kai-zer-ru/buhgalter/internal/setup"
@@ -67,7 +68,7 @@ func (s *Server) Handler() http.Handler {
 	r.Use(appmw.Logger(s.logger, verboseLogs))
 	r.Use(appmw.CORS(s.cfg.CORSOrigins))
 	r.Use(appmw.ExternalAccess(dbHandle, s.cfg.AllowedHosts))
-	r.Use(chimw.Compress(5))
+	r.Use(compressExceptWebSocket(5))
 
 	setupHandler := &setup.Handler{DataDir: s.cfg.DataDir, Store: dbHandle, Audit: s.audit, Backup: s.backup}
 	loginLimit := 5
@@ -111,7 +112,12 @@ func (s *Server) Handler() http.Handler {
 	uiHandler := &ui.Handler{Store: dbHandle, Version: s.cfg.Version}
 	versionHandler := &versioncheck.Handler{Checker: versioncheck.NewChecker(s.cfg.Version)}
 	apiCache := apicache.New()
+	realtimeHub := realtime.NewHub()
+	apiCache.OnInvalidate = realtimeHub.PublishInvalidate
+	realtime.SetUserDataChangedHandler(apiCache.InvalidateUser)
+	realtime.SetPublisher(realtimeHub.Publish)
 	apiCacheMW := apicache.Middleware(apiCache)
+	realtimeHandler := &realtime.Handler{Hub: realtimeHub}
 	importHandler := &importexport.Handler{Store: dbHandle, Audit: s.audit, Logger: s.logger, Cache: apiCache}
 
 	r.Get("/docs", docs.RedocHandler())
@@ -138,6 +144,7 @@ func (s *Server) Handler() http.Handler {
 		api.Group(func(ar chi.Router) {
 			ar.Use(auth.RequireAuth(dbHandle))
 			ar.Use(apiCacheMW)
+			ar.Get("/realtime", realtimeHandler.ServeHTTP)
 			ar.Get("/features", adminHandler.GetFeaturesSnapshot)
 
 			ar.Get("/accounts", accountHandler.List)
@@ -387,6 +394,20 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, httpStatus, payload)
+}
+
+func compressExceptWebSocket(level int) func(http.Handler) http.Handler {
+	compress := chimw.Compress(level)
+	return func(next http.Handler) http.Handler {
+		compressed := compress(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
+				next.ServeHTTP(w, r)
+				return
+			}
+			compressed.ServeHTTP(w, r)
+		})
+	}
 }
 
 func BackupDir(dataDir string) string {

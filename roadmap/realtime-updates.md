@@ -1,8 +1,8 @@
 # Живые обновления UI (WebSocket)
 
-Не входит в текущий релиз. Черновик для обсуждения.
+**Реализовано** в **v1.7.0** ([ROADMAP](../ROADMAP.md#v170)): веб — постоянный канал + cooldown SWR. Android пока без сокета (SWR ~1 мин).
 
-Сейчас веб и Android узнают об изменениях только если сами сходят в REST: фоновый SWR, прогрев кеша, опрос джобы импорта. Идея — **держать одно постоянное соединение** и получать с сервера сигнал «данные изменились», а CRUD оставить на `GET/POST /api/v1/...`.
+Веб держит **одно постоянное соединение** и получает с сервера сигнал «данные изменились»; CRUD остаётся на `GET/POST /api/v1/...`. Без сокета (прокси без Upgrade, старый сервер) — тихий откат на SWR с cooldown.
 
 Связанные документы: [ui-api-cache.md](../docs/ui-api-cache.md), [webhooks.md](webhooks.md), [android-client-platform.md](../docs/android-client-platform.md), [install/nginx.md](../docs/install/nginx.md), [team-collaboration.md](team-collaboration.md).
 
@@ -227,29 +227,29 @@ Caddy обычно проксирует Upgrade сам; Cloudflare — WebSocket
 
 Имеет смысл **сделать до** WebSocket: часто этого хватает против «сотен GET».
 
-- [ ] Cooldown фонового SWR на вебе, как на Android (`REVALIDATE_COOLDOWN_MS` 60 с, отложенный старт).
-- [ ] Не revalidate скрытую вкладку (`document.hidden`).
+- [x] Cooldown фонового SWR на вебе, как на Android (`REVALIDATE_COOLDOWN_MS` 60 с, отложенный старт).
+- [x] Не revalidate скрытую вкладку (`document.hidden`).
 - [ ] Свести дубли `load()` после записи (один refetch экрана, не N эффектов).
 - [ ] Замерить: access-лог / Network при открытой главной, после сохранения операции, две вкладки. Зафиксировать «было / стало» в release notes, когда дойдут руки.
 
 ### 1. Шина на сервере
 
-- [ ] Пакет `realtime`: Hub, `Publish`, лимит соединений, ping.
-- [ ] Хук из apicache-middleware (успешная мутация) и из import job / scheduler.
-- [ ] Юнит-тесты хаба: два клиента одного user, изоляция чужого user, медленный клиент.
+- [x] Пакет `realtime`: Hub, `Publish`, лимит соединений, ping.
+- [x] Хук из apicache-middleware (успешная мутация) и из import job / scheduler.
+- [x] Юнит-тесты хаба: два клиента одного user, изоляция чужого user, медленный клиент.
 
 ### 2. WebSocket + веб
 
-- [ ] `GET /api/v1/realtime`, OpenAPI (описание handshake; WS в OpenAPI ограничен — текстом).
-- [ ] Клиент `web/src/lib/realtime.ts`: connect, backoff, fallback на SWR.
-- [ ] Событие `invalidate` → refetch открытой страницы; при живом сокете выключить «revalidate на каждый GET».
-- [ ] Документация nginx.
-- [ ] E2E: две вкладки (или два контекста Playwright) — операция в одной, баланс во второй без ручного reload.
+- [x] `GET /api/v1/realtime`, OpenAPI (описание handshake; WS в OpenAPI ограничен — текстом).
+- [x] Клиент `web/src/lib/realtime.ts`: connect, backoff, fallback на SWR.
+- [x] Событие `invalidate` → refetch открытой страницы; при живом сокете выключить «revalidate на каждый GET».
+- [x] Документация nginx.
+- [x] E2E: две вкладки (или два контекста Playwright) — операция в одной, баланс во второй без ручного reload.
 
 ### 3. Импорт и догон
 
-- [ ] `import.progress` / `done` / `failed` вместо poll 1,2 с.
-- [ ] После reconnect — `GET /sync/transaction-changes` и на вебе.
+- [x] `import.progress` / `done` / `failed` вместо poll 1,2 с.
+- [x] После reconnect — `GET /sync/transaction-changes` и на вебе.
 
 ### 4. Тонкая инвалидация и Android
 
@@ -262,12 +262,12 @@ Caddy обычно проксирует Upgrade сам; Cloudflare — WebSocket
 
 ## Критерии приёмки (когда возьмём в релиз)
 
-- [ ] Открытая главная при живом сокете **не** долбит `GET /dashboard` в фоне без события и без своего действия пользователя.
-- [ ] Операция, созданная во второй вкладке (или в Android), появляется на первой без F5; спойлеры и скролл не сбрасываются ([android-incremental-ui-updates.md](android-incremental-ui-updates.md)).
+- [x] Открытая главная при живом сокете **не** долбит `GET /dashboard` в фоне без события и без своего действия пользователя.
+- [x] Операция, созданная во второй вкладке (или в Android), появляется на первой без F5; спойлеры и скролл не сбрасываются ([android-incremental-ui-updates.md](android-incremental-ui-updates.md)).
 - [ ] Автосписание / future на сервере обновляет открытый веб.
-- [ ] Импорт показывает прогресс без цикла GET каждые 1,2 с.
+- [x] Импорт показывает прогресс без цикла GET каждые 1,2 с.
 - [ ] Прокси без `Upgrade`: UI живой, режим как сегодня (SWR), без вечной «Загрузка…».
-- [ ] Обрыв сети → reconnect → нет дыр в списке операций (догон лентой или refetch).
+- [x] Обрыв сети → reconnect → нет дыр в списке операций (догон лентой или refetch).
 - [ ] Чужой пользователь не получает чужие события (интеграционный тест).
 
 ---

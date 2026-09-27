@@ -63,10 +63,20 @@ func writeCached(w http.ResponseWriter, item Response) {
 	_, _ = w.Write(item.Body)
 }
 
+func isWebSocketUpgrade(r *http.Request) bool {
+	return strings.EqualFold(r.Header.Get("Upgrade"), "websocket")
+}
+
 // Middleware caches successful GET responses and invalidates user cache on writes.
 func Middleware(cache *Cache) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// WebSocket upgrade must use the raw ResponseWriter (Hijack).
+			if isWebSocketUpgrade(r) {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			if r.Method == http.MethodGet {
 				if key, ttl, ok := cacheKey(r); ok {
 					if item, hit := cache.Get(key); hit {
@@ -124,7 +134,7 @@ func invalidateForRequest(cache *Cache, r *http.Request) {
 		return
 	}
 	if info, ok := auth.FromContext(r.Context()); ok {
-		cache.DeletePrefix("u:" + info.User.ID + ":")
+		cache.InvalidateUser(info.User.ID)
 		if strings.HasPrefix(path, "/api/v1/admin/settings") || strings.HasPrefix(path, "/api/v1/admin/features") {
 			cache.DeletePrefix("g:setup:")
 			cache.Clear()
@@ -147,6 +157,7 @@ func cacheKey(r *http.Request) (string, time.Duration, bool) {
 		path == "/api/v1/version/check" ||
 		path == "/api/v1/export" ||
 		path == "/api/v1/sync/transaction-changes" ||
+		path == "/api/v1/realtime" ||
 		strings.Contains(path, "/preview") ||
 		strings.HasPrefix(path, "/api/v1/import/jobs/") {
 		return "", 0, false

@@ -25,6 +25,7 @@
 - [v1.5.4](#v154)
 - [v1.5.5](#v155)
 - [v1.6.0](#v160)
+- [v1.7.0](#v170)
 - [Общие планы](#общие-планы)
 - [На подумать](#на-подумать)
 
@@ -306,9 +307,19 @@
 - [x] Каталог банков: ВБРР (привязка счёта + перехват push/SMS)
 - [x] [Release notes](docs/release-notes-v1.6.0.md) · [credit-payment-link.md](roadmap/credit-payment-link.md) · [ui-credits.md](docs/ui-credits.md) · [android-client.md](docs/android-client.md) · [android-client-platform.md](docs/android-client-platform.md) · [notification-intercept.md](roadmap/notification-intercept.md) · [import/buhgalter.md](docs/import/buhgalter.md)
 
+## v1.7.0
+
+- [x] [Живые обновления UI](roadmap/realtime-updates.md) — **веб:** WebSocket (запасной SWR с cooldown); сервер пушит `invalidate`, вкладка не долбит GET; REST остаётся для CRUD. **Android:** пока без сокета — SWR cooldown ~1 мин, как сейчас
+- [x] Cooldown фонового SWR на вебе (60 с) + не revalidate скрытую вкладку; при живом сокете — без фонового revalidate на каждый GET
+- [x] `GET /api/v1/realtime` + hub на сервере; публикация после мутаций, import job и scheduler
+- [x] Документация nginx (`Upgrade` для `/api/v1/realtime`)
+- [x] `import.progress` / `done` / `failed` по WebSocket (веб: буфер события по job_id + poll 1,2 с как fallback)
+- [x] После reconnect — догон `GET /sync/transaction-changes` + soft-reload открытого экрана
+- [x] E2E: две вкладки — операция в одной, баланс во второй без F5
+- [x] [Release notes](docs/release-notes-v1.7.0.md) · [realtime-updates.md](roadmap/realtime-updates.md) · [ui-api-cache.md](docs/ui-api-cache.md) · [install/nginx.md](docs/install/nginx.md)
+
 ## Общие планы
 
-- [ ] [Живые обновления UI](roadmap/realtime-updates.md) — WebSocket (запасной SSE): сервер пушит инвалидацию кеша, веб не долбит GET; REST остаётся для CRUD
 - [ ] [Цели накопления](roadmap/savings-goals.md) — копилки, прогресс, напоминания
 - [ ] [Разбивка операции на несколько счетов](roadmap/transaction-split-accounts.md)
 - [ ] [Семья / команда](roadmap/team-collaboration.md) — личные + семейные счета; owner invite (ссылка/QR/код); спецификация зафиксирована, реализация отложена

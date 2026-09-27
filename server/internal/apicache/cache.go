@@ -16,8 +16,9 @@ type Response struct {
 
 // Cache is an in-memory store of serialized GET responses.
 type Cache struct {
-	mu    sync.RWMutex
-	items map[string]Response
+	mu           sync.RWMutex
+	items        map[string]Response
+	OnInvalidate func(userID string) // optional: realtime publish after user cache drop
 }
 
 func New() *Cache {
@@ -59,6 +60,9 @@ func (c *Cache) InvalidateUser(userID string) {
 		return
 	}
 	c.DeletePrefix("u:" + userID + ":")
+	if c.OnInvalidate != nil {
+		c.OnInvalidate(userID)
+	}
 }
 
 func (c *Cache) DeleteContaining(substr string) {

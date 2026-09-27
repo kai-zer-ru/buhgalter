@@ -16,6 +16,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/debt"
 	"github.com/kai-zer-ru/buhgalter/internal/merchant"
 	"github.com/kai-zer-ru/buhgalter/internal/money"
+	"github.com/kai-zer-ru/buhgalter/internal/realtime"
 	"github.com/kai-zer-ru/buhgalter/internal/tag"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
 )
@@ -559,6 +560,7 @@ func ActivateAllDueFutureTransactions(ctx context.Context, db *sql.DB) (users in
 		if n > 0 {
 			users++
 			transactions += n
+			realtime.NotifyUserDataChanged(userID)
 		}
 	}
 	return users, transactions, nil

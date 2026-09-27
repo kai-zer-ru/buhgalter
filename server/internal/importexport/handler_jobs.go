@@ -2,12 +2,14 @@ package importexport
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/kai-zer-ru/buhgalter/internal/apperror"
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
+	"github.com/kai-zer-ru/buhgalter/internal/realtime"
 )
 
 func (h *Handler) CreateJob(w http.ResponseWriter, r *http.Request) {
@@ -97,15 +99,18 @@ func (h *Handler) runImportJob(
 			if err := setImportJobProgress(ctx, h.Store.DB(), userID, jobID, progress); err != nil && h.Logger != nil {
 				h.Logger.Warn("import job progress update failed", "job_id", jobID, "err", err)
 			}
+			publishImportProgress(userID, jobID, progress)
 		},
 	)
 	if err != nil {
 		_ = setImportJobFailed(ctx, h.Store.DB(), userID, jobID, err)
+		errMsg := err.Error()
+		realtime.Publish(userID, realtime.NewImportFailed(jobID, errMsg))
 		h.Cache.InvalidateUser(userID)
 		_ = h.Audit.Log("import.job.failed", userID, login, ip, map[string]any{
 			"filename": filename,
 			"job_id":   jobID,
-			"error":    err.Error(),
+			"error":    errMsg,
 		})
 		if h.Logger != nil {
 			h.Logger.Warn("import job failed", "job_id", jobID, "err", err)
@@ -116,6 +121,7 @@ func (h *Handler) runImportJob(
 	if err := setImportJobDone(ctx, h.Store.DB(), userID, jobID, report); err != nil && h.Logger != nil {
 		h.Logger.Error("import job set done failed", "job_id", jobID, "err", err)
 	}
+	publishImportDone(userID, jobID, report)
 	h.Cache.InvalidateUser(userID)
 	_ = h.Audit.Log("import.job.done", userID, login, ip, map[string]any{
 		"filename":             filename,
@@ -124,4 +130,21 @@ func (h *Handler) runImportJob(
 		"created_transactions": report.CreatedTransactions,
 		"skipped_duplicates":   report.SkippedDuplicates,
 	})
+}
+
+func publishImportProgress(userID, jobID string, report Report) {
+	raw, err := json.Marshal(report)
+	if err != nil {
+		return
+	}
+	realtime.Publish(userID, realtime.NewImportProgress(jobID, raw))
+}
+
+func publishImportDone(userID, jobID string, report Report) {
+	raw, err := json.Marshal(report)
+	if err != nil {
+		realtime.Publish(userID, realtime.NewImportDone(jobID, nil))
+		return
+	}
+	realtime.Publish(userID, realtime.NewImportDone(jobID, raw))
 }

@@ -5,6 +5,7 @@ import { resetSessionExpiredSignal } from '$lib/auth/session-expired';
 import { clearFeatureFlags, loadFeatureFlags } from '$lib/features';
 import { clearRefCache, setRefCacheUserId } from '$lib/ref-cache';
 import { warmRefCache } from '$lib/ref-cache-warm';
+import { connectRealtime, disconnectRealtime } from '$lib/realtime';
 
 export const user = writable<User | null>(null);
 export const authReady = writable(false);
@@ -58,6 +59,7 @@ export async function loadUser(): Promise<LoadUserResult> {
 			markSessionHint();
 			await loadFeatureFlags();
 			void warmRefCache();
+			connectRealtime();
 			return 'ok';
 		} catch (err) {
 			const retryable =
@@ -71,6 +73,7 @@ export async function loadUser(): Promise<LoadUserResult> {
 			}
 
 			if (err instanceof ApiError && err.status === 401) {
+				disconnectRealtime();
 				clearSessionHint();
 				clearRefCache();
 				clearFeatureFlags();
@@ -91,6 +94,7 @@ export async function logout() {
 	} catch {
 		// ignore
 	}
+	disconnectRealtime();
 	clearSessionHint();
 	clearRefCache();
 	clearFeatureFlags();

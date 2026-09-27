@@ -8,6 +8,7 @@ import {
 	fetchWithRefCache,
 	invalidateRefCacheAfterWrite,
 	isStaleFetchError,
+	markLocalMutation,
 	readAccountsFromOfflineCache,
 	readCategoriesFromOfflineCache,
 	readRefCache,
@@ -88,6 +89,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 	if (method !== 'GET' && shouldInvalidateRefCacheOnWrite(path)) {
 		// Match server apicache: any write invalidates client SWR so subsequent load() hits network.
 		// Dictionaries + account lists stay so offline/PWA forms still have catalogs after a write.
+		markLocalMutation();
 		invalidateApiCache();
 		if (path.split('?')[0] === '/api/v1/user/data') {
 			clearRefCache();
@@ -1115,6 +1117,34 @@ export type Transfer = {
 export function listTransactions(params?: Record<string, string>) {
 	const q = params ? '?' + new URLSearchParams(params).toString() : '';
 	return request<TransactionList>(`/api/v1/transactions${q}`);
+}
+
+export type TransactionChange = {
+	id: number;
+	action: 'upsert' | 'deleted';
+	entity_id: string;
+	occurred_at: string;
+	transaction?: Transaction;
+};
+
+export type TransactionChanges = {
+	server_time: string;
+	since_id: number;
+	has_more: boolean;
+	changes: TransactionChange[];
+};
+
+export function listTransactionChanges(params?: {
+	since_id?: number;
+	since?: string;
+	limit?: number;
+}) {
+	const sp = new URLSearchParams();
+	if (params?.since_id != null) sp.set('since_id', String(params.since_id));
+	if (params?.since) sp.set('since', params.since);
+	if (params?.limit != null) sp.set('limit', String(params.limit));
+	const q = sp.toString();
+	return request<TransactionChanges>(`/api/v1/sync/transaction-changes${q ? `?${q}` : ''}`);
 }
 
 export function getTransaction(id: string) {

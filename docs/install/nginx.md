@@ -29,6 +29,27 @@ server {
 
 ---
 
+## WebSocket (`/api/v1/realtime`)
+
+Веб держит постоянное соединение для инвалидации кеша. Без `Upgrade` клиент тихо откатывается на SWR с cooldown.
+
+```nginx
+location /api/v1/realtime {
+    proxy_pass http://127.0.0.1:8765;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 3600s;
+}
+```
+
+Остальной трафик — как в примере выше (`location /`).
+
+---
+
 ## external_url в админке
 
 После настройки HTTPS укажите в **Настройки → Админка** поле **внешний URL**, например:

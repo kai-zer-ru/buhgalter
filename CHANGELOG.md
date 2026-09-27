@@ -7,9 +7,38 @@
 внутри — **Добавлено** / **Изменено** / **Исправлено** / **Удалено** (и при необходимости **Техническое**).
 Исторические секции до этого соглашения не переписываются.
 
-Подробные release notes для пользователей: [docs/release-notes-v1.6.0.md](docs/release-notes-v1.6.0.md).
+Подробные release notes для пользователей: [docs/release-notes-v1.7.0.md](docs/release-notes-v1.7.0.md).
 
 ## [Unreleased]
+
+## [v1.7.0] — 2026-09-27
+
+> **ОБЯЗАТЕЛЬНО СДЕЛАЙТЕ БЕКАП!** Перед обновлением сохраните копию базы (`data/buhgalter.db`) и каталога `backups/`. Новых миграций БД нет.
+
+### Web
+
+#### Добавлено
+
+- Живые обновления по WebSocket (`GET /api/v1/realtime`): другая вкладка, телефон и фоновые джобы сервера сразу отражаются на открытом экране без F5
+- Прогресс импорта по сокету (`import.progress` / `done` / `failed`); poll 1,2 с остаётся запасным вариантом
+
+#### Изменено
+
+- При живом сокете фоновый SWR-revalidate на каждый GET выключен; без сокета — cooldown 60 с, скрытая вкладка не revalidate
+- После reconnect — догон `GET /sync/transaction-changes` и soft-reload открытого экрана
+
+### Server
+
+#### Добавлено
+
+- `GET /api/v1/realtime` — WebSocket-хаб по `user_id`; события `invalidate` после мутаций, import job и scheduler
+- Документация nginx: `Upgrade` / `Connection` и длинный `proxy_read_timeout` для `/api/v1/realtime` ([install/nginx.md](docs/install/nginx.md), [docker/nginx.conf.example](docker/nginx.conf.example))
+
+#### Техническое
+
+- [docs/release-notes-v1.7.0.md](docs/release-notes-v1.7.0.md)
+- Версия `1.7.0` (новых миграций БД нет)
+- Android в этом релизе без сокета: SWR cooldown ~1 мин, как раньше
 
 ## [v1.6.0] — 2026-09-25
 

@@ -9,6 +9,7 @@ import {
 	refCacheReady,
 	refCacheUpdate,
 	resetRefCacheForTests,
+	setRealtimeLive,
 	setRefCacheUserId,
 	shouldPersistRefCache,
 	shouldInvalidateRefCacheOnWrite,
@@ -43,9 +44,11 @@ describe('web fetchWithRefCache SWR', () => {
 	beforeEach(() => {
 		resetRefCacheForTests();
 		setRefCacheUserId('user-1');
+		vi.useFakeTimers();
 	});
 
 	afterEach(() => {
+		vi.useRealTimers();
 		vi.restoreAllMocks();
 	});
 
@@ -61,6 +64,9 @@ describe('web fetchWithRefCache SWR', () => {
 
 		const first = await fetchWithRefCache('/api/v1/dashboard', fetcher);
 		expect(first).toEqual({ total_balance: 100 });
+		expect(fetcher).not.toHaveBeenCalled();
+
+		await vi.advanceTimersByTimeAsync(3_000);
 		expect(fetcher).toHaveBeenCalledOnce();
 
 		resolveFetch({ total_balance: 200 });
@@ -69,12 +75,24 @@ describe('web fetchWithRefCache SWR', () => {
 		);
 	});
 
+	it('skips background revalidate while realtime socket is live', async () => {
+		writeRefCache('/api/v1/dashboard', { total_balance: 100 });
+		setRealtimeLive(true);
+		const fetcher = vi.fn(async () => ({ total_balance: 200 }));
+
+		const first = await fetchWithRefCache('/api/v1/dashboard', fetcher);
+		expect(first).toEqual({ total_balance: 100 });
+		await vi.advanceTimersByTimeAsync(65_000);
+		expect(fetcher).not.toHaveBeenCalled();
+	});
+
 	it('emits refCacheUpdate with path when background data changes', async () => {
 		writeRefCache('/api/v1/accounts', [{ id: 'a1' }]);
 		let last: { path: string; seq: number } | null = null;
 		const unsub = refCacheUpdate.subscribe((v) => (last = v));
 
 		await fetchWithRefCache('/api/v1/accounts', async () => [{ id: 'a1' }, { id: 'a2' }]);
+		await vi.advanceTimersByTimeAsync(3_000);
 		await vi.waitFor(() => expect(last?.path).toBe('/api/v1/accounts'));
 		unsub();
 	});
@@ -96,6 +114,7 @@ describe('web fetchWithRefCache SWR', () => {
 		);
 
 		await fetchWithRefCache('/api/v1/debts?settled=false', fetcher);
+		await vi.advanceTimersByTimeAsync(3_000);
 		clearRefCache();
 		expect(refCacheReady('/api/v1/debts?settled=false')).toBe(false);
 

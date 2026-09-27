@@ -10,4 +10,9 @@ describe('refCachePathMatches', () => {
 	it('does not match unrelated path', () => {
 		expect(refCachePathMatches('/api/v1/accounts', '/api/v1/dashboard')).toBe(false);
 	});
+
+	it('matches wildcard realtime invalidate', () => {
+		expect(refCachePathMatches('*', '/api/v1/dashboard')).toBe(true);
+		expect(refCachePathMatches('*', ['/api/v1/accounts', '/api/v1/budget'])).toBe(true);
+	});
 });

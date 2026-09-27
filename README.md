@@ -61,7 +61,7 @@ Self-hosted учёт финансов: один бинарник с веб-ин�
 - **Уведомления** — Telegram и MAX: напоминания о долгах, кредитах, плановых операциях, подписках и бюджете; предупреждение о нехватке средств; ссылки на разделы в тексте. Для official API MAX нужны [сертификаты Минцифры](#уведомления-max--сертификаты-минцифры).
 - **Админка** — пользователи (модерация регистрации, блокировка), сброс пароля, бэкапы, диагностика, внешний URL для reverse proxy, **включение/отключение модулей** (долги, кредиты, бюджет, подписки и др.).
 - **Android-клиент** — приложение к вашему инстансу: вход по логину/паролю или API-токену, офлайн-очередь, синхронизация операций с сервером (в т.ч. правок из веба), виджеты, share-intent, поиск сервера в LAN (mDNS), PIN и биометрия, **перехват push и SMS банков и платёжных приложений** → черновик операции или перевод (в т.ч. Принять/Отклонить в шторке). APK — в [GitHub Releases](https://github.com/kai-zer-ru/buhgalter/releases). Подробнее — [Android-клиент](#android-клиент) и [docs/android-client.md](docs/android-client.md).
-- **Интерфейс** — светлая / тёмная / «Как на устройстве»; веб и Android со stale-while-revalidate кешем справочников.
+- **Интерфейс** — светлая / тёмная / «Как на устройстве»; веб и Android со stale-while-revalidate кешем справочников. На **вебе** — живые обновления по WebSocket (другая вкладка / телефон / автосписание без F5); без сокета — SWR с cooldown.
 
 Детали интерфейса, API и модели данных — в [документации](docs/README.md).
 
@@ -209,6 +209,17 @@ make build
 server {
     server_name buhgalter.my-site.ru;
 
+    location /api/v1/realtime {
+        proxy_pass http://127.0.0.1:8765;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 3600s;
+    }
+
     location / {
         proxy_pass http://127.0.0.1:8765;
         proxy_set_header Host $host;
@@ -221,6 +232,8 @@ server {
     ssl_certificate_key /etc/ssl/privkey.pem;
 }
 ```
+
+Блок `/api/v1/realtime` нужен для живых обновлений веба (WebSocket). Без `Upgrade` клиент тихо откатывается на SWR.
 
 В **Настройки → Админка** укажите **внешний URL** — например `https://buhgalter.my-site.ru` — для ссылок в уведомлениях и доступа из интернета.
 
@@ -392,7 +405,7 @@ docker compose up -d
 
 ## Документация
 
-Справочники по установке, данным, UI и API — [docs/README.md](docs/README.md). История изменений — [CHANGELOG.md](CHANGELOG.md). Последний релиз — [v1.6.0](docs/release-notes-v1.6.0.md).
+Справочники по установке, данным, UI и API — [docs/README.md](docs/README.md). История изменений — [CHANGELOG.md](CHANGELOG.md). Последний релиз — [v1.7.0](docs/release-notes-v1.7.0.md).
 
 ## API-документация
 
