@@ -34,11 +34,16 @@
 		isRetriableImportJobPollError,
 		readStoredImportJobSnapshot,
 		restoreStepFromSnapshot,
+		shouldApplyImportProgress,
 		writeStoredImportJob,
 		type StoredImportJobSnapshot
 	} from '$lib/import-job-poll';
-	import { clearRefCache } from '$lib/ref-cache';
-	import { importRealtimeEvent, peekImportRealtimeEvent } from '$lib/realtime';
+	import { clearRefCache, markLocalMutation } from '$lib/ref-cache';
+	import {
+		clearImportRealtimeEvent,
+		importRealtimeEvent,
+		peekImportRealtimeEvent
+	} from '$lib/realtime';
 	import { randomId } from '$lib/random-id';
 	import { toast } from '$lib/toast';
 	import {
@@ -714,6 +719,17 @@
 		return importJob?.id ?? readStoredImportJobSnapshot()?.id ?? null;
 	}
 
+	function finishImportDone(report: ImportReport | undefined | null) {
+		if (step === 'done' && finalReport) return;
+		importPollingToken++;
+		finalReport = normalizeImportReport(report ?? emptyReport());
+		// Server PublishInvalidate follows import.done — ignore that echo.
+		markLocalMutation();
+		invalidateAfterImport();
+		step = 'done';
+		toast($_('import.done.title'));
+	}
+
 	function handleImportRealtime(ev: {
 		type: string;
 		job_id: string;
@@ -724,6 +740,7 @@
 		if (ev.job_id !== watchedImportJobID()) return;
 
 		if (ev.type === 'import.progress') {
+			if (!shouldApplyImportProgress({ step, jobStatus: importJob?.status })) return;
 			const base =
 				importJob ??
 				(readStoredImportJobSnapshot() ? jobFromSnapshot(readStoredImportJobSnapshot()!) : null);
@@ -739,11 +756,10 @@
 		}
 
 		if (ev.type === 'import.done') {
-			if (step === 'done') return;
-			importPollingToken++;
 			const base =
 				importJob ??
 				(readStoredImportJobSnapshot() ? jobFromSnapshot(readStoredImportJobSnapshot()!) : null);
+			// Do not cancel poll until we can apply done — otherwise UI stays on «importing».
 			if (!base) return;
 			importJob = {
 				...base,
@@ -751,15 +767,12 @@
 				report: ev.report ?? base.report
 			};
 			persistImportJob(importJob);
-			finalReport = normalizeImportReport(ev.report ?? base.report ?? emptyReport());
-			invalidateAfterImport();
-			step = 'done';
-			toast($_('import.done.title'));
+			finishImportDone(ev.report ?? base.report);
+			clearImportRealtimeEvent(ev.job_id);
 			return;
 		}
 
 		if (ev.type === 'import.failed') {
-			importPollingToken++;
 			const base =
 				importJob ??
 				(readStoredImportJobSnapshot() ? jobFromSnapshot(readStoredImportJobSnapshot()!) : null);
@@ -771,9 +784,12 @@
 				};
 				persistImportJob(importJob);
 			}
+			importPollingToken++;
+			markLocalMutation();
 			invalidateAfterImport();
 			toast.error(ev.error_message ?? $_('common.error'));
 			step = file ? 'preview' : 'importing';
+			clearImportRealtimeEvent(ev.job_id);
 		}
 	}
 
@@ -785,18 +801,18 @@
 				importJob = current;
 				persistImportJob(current);
 				if (current.status === 'done') {
-					if (step === 'done') return;
-					finalReport = normalizeImportReport(current.report ?? emptyReport());
-					invalidateAfterImport();
-					step = 'done';
-					toast($_('import.done.title'));
+					finishImportDone(current.report);
+					clearImportRealtimeEvent(jobId);
 					return;
 				}
 				if (current.status === 'failed') {
-					if (step === 'preview' || step === 'upload') return;
+					if (step === 'preview' || step === 'upload' || step === 'done') return;
+					importPollingToken++;
+					markLocalMutation();
 					invalidateAfterImport();
 					toast.error(current.error_message ?? $_('common.error'));
 					step = file ? 'preview' : 'importing';
+					clearImportRealtimeEvent(jobId);
 					return;
 				}
 			} catch (err) {
@@ -807,7 +823,7 @@
 					return;
 				}
 			}
-			// Socket pushes progress; poll remains the reliable completion fallback (1.2s).
+			// Socket accelerates progress; poll stays the reliable completion path (1.2s).
 			await sleep(1200);
 		}
 	}
@@ -822,9 +838,8 @@
 		if (pending) {
 			handleImportRealtime(pending);
 		}
-		if (importJob?.status === 'done' || importJob?.status === 'failed' || step === 'done') {
-			return;
-		}
+		// Always poll: WS may deliver done before importJob is set (peek no-op) or drop events.
+		if (step === 'done' && finalReport) return;
 		void pollImportJob(jobId);
 	}
 

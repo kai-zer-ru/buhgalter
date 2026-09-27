@@ -27,6 +27,10 @@
 - При живом сокете фоновый SWR-revalidate на каждый GET выключен; без сокета — cooldown 60 с, скрытая вкладка не revalidate
 - После reconnect — догон `GET /sync/transaction-changes` и soft-reload открытого экрана
 
+#### Исправлено
+
+- Импорт: завершение по WebSocket больше не глушит poll до показа «Импорт завершён»; поздний `import.progress` не откатывает экран с done на importing
+
 ### Server
 
 #### Добавлено

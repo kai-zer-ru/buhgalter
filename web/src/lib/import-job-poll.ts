@@ -37,6 +37,16 @@ export function isRetriableImportJobPollError(err: unknown): boolean {
 	return status >= 500 || status === 408 || status === 429;
 }
 
+/** Progress must not reopen the importing UI after a terminal result (WS reorder / late event). */
+export function shouldApplyImportProgress(opts: {
+	step: string;
+	jobStatus?: ImportJobStatus | string | null;
+}): boolean {
+	if (opts.step === 'done') return false;
+	const status = opts.jobStatus;
+	return status !== 'done' && status !== 'failed';
+}
+
 function storageGet(key: string): string | null {
 	if (typeof localStorage === 'undefined') return null;
 	try {

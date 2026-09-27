@@ -316,6 +316,7 @@
 - [x] `import.progress` / `done` / `failed` по WebSocket (веб: буфер события по job_id + poll 1,2 с как fallback)
 - [x] После reconnect — догон `GET /sync/transaction-changes` + soft-reload открытого экрана
 - [x] E2E: две вкладки — операция в одной, баланс во второй без F5
+- [x] БАГ. Импорт CSV в e2e: WebSocket `import.done` мог отменить poll до показа «Импорт завершён» (CI flake); progress после done не должен возвращать UI на «importing»
 - [x] [Release notes](docs/release-notes-v1.7.0.md) · [realtime-updates.md](roadmap/realtime-updates.md) · [ui-api-cache.md](docs/ui-api-cache.md) · [install/nginx.md](docs/install/nginx.md)
 
 ## Общие планы

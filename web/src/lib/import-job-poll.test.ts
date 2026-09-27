@@ -6,6 +6,7 @@ import {
 	isRetriableImportJobPollError,
 	readStoredImportJobSnapshot,
 	restoreStepFromSnapshot,
+	shouldApplyImportProgress,
 	writeStoredImportJob
 } from './import-job-poll';
 
@@ -19,6 +20,19 @@ describe('isRetriableImportJobPollError', () => {
 	it('stops on missing job or session', () => {
 		expect(isRetriableImportJobPollError({ status: 404 })).toBe(false);
 		expect(isRetriableImportJobPollError({ status: 401 })).toBe(false);
+	});
+});
+
+describe('shouldApplyImportProgress', () => {
+	it('ignores progress after the import UI is done', () => {
+		expect(shouldApplyImportProgress({ step: 'done', jobStatus: 'running' })).toBe(false);
+		expect(shouldApplyImportProgress({ step: 'importing', jobStatus: 'done' })).toBe(false);
+		expect(shouldApplyImportProgress({ step: 'importing', jobStatus: 'failed' })).toBe(false);
+	});
+
+	it('allows progress while the job is still running', () => {
+		expect(shouldApplyImportProgress({ step: 'importing', jobStatus: 'running' })).toBe(true);
+		expect(shouldApplyImportProgress({ step: 'preview', jobStatus: 'queued' })).toBe(true);
 	});
 });
 
