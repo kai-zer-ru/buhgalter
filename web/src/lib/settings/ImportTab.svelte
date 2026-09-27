@@ -41,8 +41,8 @@
 	import { clearRefCache, markLocalMutation } from '$lib/ref-cache';
 	import {
 		clearImportRealtimeEvent,
-		importRealtimeEvent,
-		peekImportRealtimeEvent
+		peekImportRealtimeEvent,
+		subscribeImportRealtime
 	} from '$lib/realtime';
 	import { randomId } from '$lib/random-id';
 	import { toast } from '$lib/toast';
@@ -120,17 +120,14 @@
 	let exportFormat = $state<'buhgalter' | 'cubux'>('buhgalter');
 
 	onMount(() => {
+		// Sync (not $effect): import.done must apply before the next WS frame (invalidate).
+		const unsubImport = subscribeImportRealtime((ev) => handleImportRealtime(ev));
 		void restoreActiveImportJob();
 		void loadExportCatalogs();
 		return () => {
+			unsubImport();
 			importPollingToken++;
 		};
-	});
-
-	$effect(() => {
-		const ev = $importRealtimeEvent;
-		if (!ev) return;
-		handleImportRealtime(ev);
 	});
 
 	async function loadExportCatalogs() {
@@ -721,10 +718,10 @@
 
 	function finishImportDone(report: ImportReport | undefined | null) {
 		if (step === 'done' && finalReport) return;
-		importPollingToken++;
 		finalReport = normalizeImportReport(report ?? emptyReport());
-		// Server PublishInvalidate follows import.done — ignore that echo.
+		// Mark before invalidateAfterImport / before the next WS invalidate frame.
 		markLocalMutation();
+		importPollingToken++;
 		invalidateAfterImport();
 		step = 'done';
 		toast($_('import.done.title'));
@@ -759,7 +756,6 @@
 			const base =
 				importJob ??
 				(readStoredImportJobSnapshot() ? jobFromSnapshot(readStoredImportJobSnapshot()!) : null);
-			// Do not cancel poll until we can apply done — otherwise UI stays on «importing».
 			if (!base) return;
 			importJob = {
 				...base,
@@ -784,8 +780,8 @@
 				};
 				persistImportJob(importJob);
 			}
-			importPollingToken++;
 			markLocalMutation();
+			importPollingToken++;
 			invalidateAfterImport();
 			toast.error(ev.error_message ?? $_('common.error'));
 			step = file ? 'preview' : 'importing';
@@ -807,8 +803,8 @@
 				}
 				if (current.status === 'failed') {
 					if (step === 'preview' || step === 'upload' || step === 'done') return;
-					importPollingToken++;
 					markLocalMutation();
+					importPollingToken++;
 					invalidateAfterImport();
 					toast.error(current.error_message ?? $_('common.error'));
 					step = file ? 'preview' : 'importing';
@@ -823,7 +819,7 @@
 					return;
 				}
 			}
-			// Socket accelerates progress; poll stays the reliable completion path (1.2s).
+			// Socket accelerates completion; poll remains fallback (1.2s).
 			await sleep(1200);
 		}
 	}
@@ -838,8 +834,8 @@
 		if (pending) {
 			handleImportRealtime(pending);
 		}
-		// Always poll: WS may deliver done before importJob is set (peek no-op) or drop events.
 		if (step === 'done' && finalReport) return;
+		if (importJob?.status === 'failed') return;
 		void pollImportJob(jobId);
 	}
 

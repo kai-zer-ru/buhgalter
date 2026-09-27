@@ -28,12 +28,15 @@ const (
 	TypeImportFailed   = "import.failed"
 )
 
-// NewInvalidate builds a coarse user-wide invalidate event (MVP).
-func NewInvalidate() Event {
+// NewInvalidate builds an invalidate event.
+// Empty hintPaths → coarse client refresh (full clear). Non-empty → path-aware soft-reload.
+func NewInvalidate(hintPaths []string, entities []string) Event {
 	return Event{
-		V:    1,
-		Type: TypeInvalidate,
-		At:   time.Now().UTC().Format(time.RFC3339),
+		V:         1,
+		Type:      TypeInvalidate,
+		At:        time.Now().UTC().Format(time.RFC3339),
+		HintPaths: hintPaths,
+		Entities:  entities,
 	}
 }
 

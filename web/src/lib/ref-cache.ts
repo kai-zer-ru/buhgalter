@@ -41,8 +41,9 @@ let realtimeLiveFlag = false;
 /** Bumped when a background revalidate writes new data — pages reload softly. */
 export const refCacheTick = writable(0);
 
-/** Path-aware notification after SWR revalidate. `path: '*'` = coarse realtime invalidate. */
-export const refCacheUpdate = writable<{ path: string; seq: number } | null>(null);
+/** Path-aware notification after SWR revalidate. `path: '*'` = coarse realtime invalidate.
+ *  Optional `paths` — targeted invalidate from WebSocket hint_paths. */
+export const refCacheUpdate = writable<{ path: string; paths?: string[]; seq: number } | null>(null);
 
 export function setRefCacheUserId(userId: string | null): void {
 	cacheUserId = userId || '_anonymous';
@@ -68,6 +69,20 @@ export function wasRecentLocalMutation(): boolean {
 /** Coarse invalidate from WebSocket — pages watching any path soft-reload. */
 export function notifyRealtimeInvalidate(): void {
 	refCacheUpdate.set({ path: '*', seq: Date.now() });
+	refCacheTick.update((n) => n + 1);
+}
+
+/** Targeted invalidate — only pages watching these API paths soft-reload. */
+export function notifyRealtimeInvalidatePaths(paths: string[]): void {
+	const cleaned = [...new Set(paths.map((p) => (p.split('?')[0] ?? p).trim()).filter(Boolean))];
+	if (cleaned.length === 0) {
+		notifyRealtimeInvalidate();
+		return;
+	}
+	for (const path of cleaned) {
+		invalidateRefCachePrefix(path);
+	}
+	refCacheUpdate.set({ path: cleaned[0]!, paths: cleaned, seq: Date.now() });
 	refCacheTick.update((n) => n + 1);
 }
 

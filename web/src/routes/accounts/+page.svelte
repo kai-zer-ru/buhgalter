@@ -44,7 +44,7 @@
 	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
 	import { refCacheReady, refCacheReadyAny, refCacheUpdate } from '$lib/ref-cache';
-	import { refCachePathMatches } from '$lib/ref-cache-watch';
+	import { refCacheUpdateMatches } from '$lib/ref-cache-watch';
 	import { reportPageLoadFailure } from '$lib/page-load';
 	import { assignIfChanged } from '$lib/state-utils';
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
@@ -94,7 +94,7 @@
 		const update = $refCacheUpdate;
 		if (!update || !ready) return;
 		const listPath = accountsPath(filter);
-		if (refCachePathMatches(update.path, [listPath, accountsPath('active'), '/api/v1/banks'])) {
+		if (refCacheUpdateMatches(update, [listPath, accountsPath('active'), '/api/v1/banks'])) {
 			void load({ silent: true });
 		}
 	});

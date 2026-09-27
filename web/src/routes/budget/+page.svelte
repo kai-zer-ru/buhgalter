@@ -41,7 +41,7 @@
 	} from '$lib/budget-display';
 	import { reportPageLoadFailure } from '$lib/page-load';
 	import { refCacheReady, refCacheUpdate } from '$lib/ref-cache';
-	import { refCachePathMatches } from '$lib/ref-cache-watch';
+	import { refCacheUpdateMatches } from '$lib/ref-cache-watch';
 	import { assignIfChanged } from '$lib/state-utils';
 	import {
 		accountRefSelectOption,
@@ -345,7 +345,7 @@
 		const update = $refCacheUpdate;
 		if (!update || !ready) return;
 		const summaryPath = `/api/v1/budgets/summary?month=${encodeURIComponent(month)}`;
-		if (refCachePathMatches(update.path, [summaryPath, '/api/v1/ui/meta'])) {
+		if (refCacheUpdateMatches(update, [summaryPath, '/api/v1/ui/meta', '/api/v1/budgets'])) {
 			void loadAll({ background: true });
 		}
 	});

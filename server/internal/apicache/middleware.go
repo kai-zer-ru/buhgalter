@@ -134,7 +134,7 @@ func invalidateForRequest(cache *Cache, r *http.Request) {
 		return
 	}
 	if info, ok := auth.FromContext(r.Context()); ok {
-		cache.InvalidateUser(info.User.ID)
+		cache.InvalidateUserHints(info.User.ID, HintsForMutation(path))
 		if strings.HasPrefix(path, "/api/v1/admin/settings") || strings.HasPrefix(path, "/api/v1/admin/features") {
 			cache.DeletePrefix("g:setup:")
 			cache.Clear()

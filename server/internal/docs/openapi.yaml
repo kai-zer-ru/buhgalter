@@ -60,8 +60,9 @@ paths:
       summary: Живой канал обновлений (WebSocket)
       description: |
         Upgrade до WebSocket. Сервер шлёт JSON-события (`hello`, `ping`, `invalidate`,
-        `import.progress` / `import.done` / `import.failed`);
-        клиент (веб) сбрасывает ref-cache и перечитывает открытый экран.
+        `import.progress` / `import.done` / `import.failed`).
+        `invalidate` содержит `hint_paths` / `entities` — клиент сбрасывает только эти пути
+        ref-cache и soft-reload совпадающих блоков экрана (без `hint_paths` — грубый сброс).
         CRUD остаётся на REST. Эндпоинт не кешируется.
         Android в v1.7.0 сокет не использует (SWR cooldown ~1 мин).
         Прокси: нужны заголовки `Upgrade` / `Connection` и длинный `proxy_read_timeout`

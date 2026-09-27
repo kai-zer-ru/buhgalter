@@ -44,7 +44,7 @@
 	import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
 	import { refCacheReady, refCacheUpdate, readRefCache } from '$lib/ref-cache';
-	import { refCachePathMatches } from '$lib/ref-cache-watch';
+	import { refCacheUpdateMatches } from '$lib/ref-cache-watch';
 	import { reportPageLoadFailure } from '$lib/page-load';
 	import { assignIfChanged } from '$lib/state-utils';
 	import { featureFlags, isFeatureEnabled } from '$lib/features';
@@ -119,19 +119,19 @@
 	$effect(() => {
 		const update = $refCacheUpdate;
 		if (!update || !dash) return;
-		if (refCachePathMatches(update.path, DASHBOARD_PATH)) {
+		if (refCacheUpdateMatches(update, DASHBOARD_PATH)) {
 			void loadDashboard({ silent: true });
 		}
-		if (refCachePathMatches(update.path, PAST_TX_PATH)) {
+		if (refCacheUpdateMatches(update, PAST_TX_PATH)) {
 			void loadPastTx({ silent: true });
 		}
-		if (refCachePathMatches(update.path, PLANNED_TX_PATH)) {
+		if (refCacheUpdateMatches(update, PLANNED_TX_PATH)) {
 			void loadPlannedTx({ silent: true });
 		}
-		if (refCachePathMatches(update.path, BUDGET_PATH)) {
+		if (refCacheUpdateMatches(update, BUDGET_PATH)) {
 			void loadBudget({ silent: true });
 		}
-		if (refCachePathMatches(update.path, TEMPLATES_PATH)) {
+		if (refCacheUpdateMatches(update, TEMPLATES_PATH)) {
 			void loadTemplates({ silent: true });
 		}
 	});

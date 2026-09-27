@@ -60,7 +60,7 @@
 	import { dedupeTransferLegs } from '$lib/transaction-display';
 	import { user } from '$lib/stores/auth';
 	import { refCacheReadyAny, refCacheUpdate } from '$lib/ref-cache';
-	import { refCachePathMatches } from '$lib/ref-cache-watch';
+	import { refCacheUpdateMatches } from '$lib/ref-cache-watch';
 	import { reportPageLoadFailure } from '$lib/page-load';
 	import { assignIfChanged } from '$lib/state-utils';
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
@@ -120,9 +120,9 @@
 	$effect(() => {
 		const update = $refCacheUpdate;
 		if (!update || !acc || loadedForID !== id) return;
-		if (refCachePathMatches(update.path, `/api/v1/accounts/${id}`)) {
+		if (refCacheUpdateMatches(update, `/api/v1/accounts/${id}`)) {
 			void load({ silent: true });
-		} else if (refCachePathMatches(update.path, '/api/v1/transactions')) {
+		} else if (refCacheUpdateMatches(update, '/api/v1/transactions')) {
 			void loadTransactions({ silent: true });
 		}
 	});

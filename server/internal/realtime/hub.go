@@ -109,9 +109,14 @@ func (h *Hub) Publish(userID string, ev Event) {
 	}
 }
 
-// PublishInvalidate is a convenience for coarse cache bust events.
+// PublishInvalidate publishes a coarse (no hint_paths) invalidate event.
 func (h *Hub) PublishInvalidate(userID string) {
-	h.Publish(userID, NewInvalidate())
+	h.Publish(userID, NewInvalidate(nil, nil))
+}
+
+// PublishInvalidateHints publishes a path-aware invalidate event.
+func (h *Hub) PublishInvalidateHints(userID string, hintPaths, entities []string) {
+	h.Publish(userID, NewInvalidate(hintPaths, entities))
 }
 
 func (h *Hub) drop(c *Conn) {

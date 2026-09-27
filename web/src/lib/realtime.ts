@@ -5,6 +5,7 @@ import type { ImportJob, ImportReport } from '$lib/api/client';
 import {
 	clearRefCache,
 	notifyRealtimeInvalidate,
+	notifyRealtimeInvalidatePaths,
 	setRealtimeLive,
 	wasRecentLocalMutation
 } from '$lib/ref-cache';
@@ -25,11 +26,15 @@ export const realtimeLive = writable(false);
 
 export const realtimeStatus = writable<RealtimeStatus>('idle');
 
-/** Last import.* event from the socket (ImportTab subscribes). */
+/** Last import.* event from the socket (optional store for debugging / peek). */
 export const importRealtimeEvent = writable<ImportRealtimeEvent | null>(null);
 
 /** Buffer terminal/progress events by job id — job can finish before createImportJob returns. */
 const importEventsByJob = new Map<string, ImportRealtimeEvent>();
+
+/** Sync listeners — must run inside onmessage before the next WS frame (invalidate). */
+type ImportRealtimeListener = (ev: ImportRealtimeEvent) => void;
+const importListeners = new Set<ImportRealtimeListener>();
 
 const REALTIME_PATH = '/api/v1/realtime';
 
@@ -64,6 +69,28 @@ function scheduleReconnect(): void {
 	}, delay);
 }
 
+/**
+ * Subscribe to import.* events synchronously from the WebSocket onmessage path.
+ * ImportTab must apply `import.done` here (not via `$effect`) so it runs before
+ * the following `invalidate` frame and can markLocalMutation to ignore that echo.
+ */
+export function subscribeImportRealtime(listener: ImportRealtimeListener): () => void {
+	importListeners.add(listener);
+	return () => {
+		importListeners.delete(listener);
+	};
+}
+
+function notifyImportListeners(ev: ImportRealtimeEvent): void {
+	for (const listener of importListeners) {
+		try {
+			listener(ev);
+		} catch {
+			// one bad subscriber must not break the socket loop
+		}
+	}
+}
+
 function handleImportMessage(data: {
 	type?: string;
 	job_id?: string;
@@ -87,6 +114,7 @@ function handleImportMessage(data: {
 	};
 	importEventsByJob.set(jobId, ev);
 	importRealtimeEvent.set(ev);
+	notifyImportListeners(ev);
 }
 
 /** Latest buffered import.* event for a job (survives race before ImportTab knows the id). */
@@ -109,6 +137,8 @@ function handleMessage(raw: string): void {
 		status?: string;
 		report?: ImportReport;
 		error_message?: string;
+		hint_paths?: string[];
+		entities?: string[];
 	};
 	try {
 		data = JSON.parse(raw) as typeof data;
@@ -117,8 +147,13 @@ function handleMessage(raw: string): void {
 	}
 	if (data.type === 'invalidate') {
 		if (wasRecentLocalMutation()) return;
-		clearRefCache();
-		notifyRealtimeInvalidate();
+		const hints = (data.hint_paths ?? []).map((p) => p.trim()).filter(Boolean);
+		if (hints.length === 0) {
+			clearRefCache();
+			notifyRealtimeInvalidate();
+			return;
+		}
+		notifyRealtimeInvalidatePaths(hints);
 		return;
 	}
 	if (data.type?.startsWith('import.')) {
@@ -216,6 +251,7 @@ export function disconnectRealtime(): void {
 	realtimeStatus.set('idle');
 	importRealtimeEvent.set(null);
 	importEventsByJob.clear();
+	importListeners.clear();
 	if (ws && ws.readyState < WebSocket.CLOSING) {
 		ws.close();
 	}
@@ -224,4 +260,9 @@ export function disconnectRealtime(): void {
 /** Test helper. */
 export function resetRealtimeForTests(): void {
 	disconnectRealtime();
+}
+
+/** Test helper: drive handleMessage without a socket. */
+export function deliverRealtimeMessageForTests(raw: string): void {
+	handleMessage(raw);
 }

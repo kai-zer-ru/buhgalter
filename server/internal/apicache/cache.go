@@ -18,7 +18,7 @@ type Response struct {
 type Cache struct {
 	mu           sync.RWMutex
 	items        map[string]Response
-	OnInvalidate func(userID string) // optional: realtime publish after user cache drop
+	OnInvalidate func(userID string, hints InvalidateHints) // optional: realtime publish after user cache drop
 }
 
 func New() *Cache {
@@ -55,13 +55,19 @@ func (c *Cache) DeletePrefix(prefix string) {
 	}
 }
 
+// InvalidateUser drops the user's GET cache and publishes a coarse realtime invalidate.
 func (c *Cache) InvalidateUser(userID string) {
+	c.InvalidateUserHints(userID, InvalidateHints{})
+}
+
+// InvalidateUserHints drops the user's GET cache and publishes a targeted realtime invalidate.
+func (c *Cache) InvalidateUserHints(userID string, hints InvalidateHints) {
 	if c == nil || userID == "" {
 		return
 	}
 	c.DeletePrefix("u:" + userID + ":")
 	if c.OnInvalidate != nil {
-		c.OnInvalidate(userID)
+		c.OnInvalidate(userID, hints)
 	}
 }
 

@@ -30,7 +30,7 @@
 	import { dedupeTransferLegs } from '$lib/transaction-display';
 	import { saveTransactionAsTemplate } from '$lib/save-transaction-template';
 	import { refCacheReady, refCacheUpdate } from '$lib/ref-cache';
-	import { refCachePathMatches } from '$lib/ref-cache-watch';
+	import { refCacheUpdateMatches } from '$lib/ref-cache-watch';
 	import { reportPageLoadFailure } from '$lib/page-load';
 	import { assignIfChanged } from '$lib/state-utils';
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
@@ -157,8 +157,8 @@
 		const update = $refCacheUpdate;
 		if (!update || !filtersAutoApplyReady) return;
 		if (
-			refCachePathMatches(update.path, UI_META_PATH) ||
-			refCachePathMatches(update.path, '/api/v1/transactions')
+			refCacheUpdateMatches(update, UI_META_PATH) ||
+			refCacheUpdateMatches(update, '/api/v1/transactions')
 		) {
 			void load(false, { silent: true });
 		}

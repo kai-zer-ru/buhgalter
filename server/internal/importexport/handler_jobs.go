@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/kai-zer-ru/buhgalter/internal/apicache"
 	"github.com/kai-zer-ru/buhgalter/internal/apperror"
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	"github.com/kai-zer-ru/buhgalter/internal/realtime"
@@ -106,7 +107,7 @@ func (h *Handler) runImportJob(
 		_ = setImportJobFailed(ctx, h.Store.DB(), userID, jobID, err)
 		errMsg := err.Error()
 		realtime.Publish(userID, realtime.NewImportFailed(jobID, errMsg))
-		h.Cache.InvalidateUser(userID)
+		h.Cache.InvalidateUserHints(userID, apicache.LedgerHints())
 		_ = h.Audit.Log("import.job.failed", userID, login, ip, map[string]any{
 			"filename": filename,
 			"job_id":   jobID,
@@ -122,7 +123,7 @@ func (h *Handler) runImportJob(
 		h.Logger.Error("import job set done failed", "job_id", jobID, "err", err)
 	}
 	publishImportDone(userID, jobID, report)
-	h.Cache.InvalidateUser(userID)
+	h.Cache.InvalidateUserHints(userID, apicache.LedgerHints())
 	_ = h.Audit.Log("import.job.done", userID, login, ip, map[string]any{
 		"filename":             filename,
 		"job_id":               jobID,

@@ -124,6 +124,8 @@ REST остаётся единственным способом **изменит
 
 MVP можно упростить до одного грубого `invalidate` без `hint_paths`: открытая страница одна, лишний GET по её путям дешевле нынешнего прогрева всего кеша. Тонкие `entities`/`ids` — вторая очередь, стыкуется с уже существующей лентой `user_change_events`.
 
+**С v1.7.0:** сервер шлёт `hint_paths` + `entities` по типу мутации (`apicache.HintsForMutation`); клиент сбрасывает только эти пути и soft-reload совпадающих блоков. Пустые `hint_paths` — грубый invalidate (scheduler без контекста пути, неизвестный write).
+
 Клиент → сервер (опционально, не в первом срезе):
 
 ```json
@@ -253,7 +255,7 @@ Caddy обычно проксирует Upgrade сам; Cloudflare — WebSocket
 
 ### 4. Тонкая инвалидация и Android
 
-- [ ] `hint_paths` / `entities` + path-aware `refCacheUpdate` без полного `load()`.
+- [x] `hint_paths` / `entities` + path-aware `refCacheUpdate` (не полный `clearRefCache` / не `path: '*'` на каждую мутацию).
 - [ ] Расширить `user_change_events` за операции (если патч списков по id нужен и на вебе).
 - [ ] Android **foreground**: native OkHttp WebSocket (SslTrust / тот же TOFU, что REST), не `new WebSocket` из WebView.
 - [ ] Фон, виджеты, офлайн — без сокета; resume по-прежнему probe + `transaction-changes`.

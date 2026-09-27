@@ -314,9 +314,11 @@
 - [x] `GET /api/v1/realtime` + hub на сервере; публикация после мутаций, import job и scheduler
 - [x] Документация nginx (`Upgrade` для `/api/v1/realtime`)
 - [x] `import.progress` / `done` / `failed` по WebSocket (веб: буфер события по job_id + poll 1,2 с как fallback)
+- [x] Точечный `invalidate`: `hint_paths` / `entities` по типу мутации — клиент не перечитывает весь экран
 - [x] После reconnect — догон `GET /sync/transaction-changes` + soft-reload открытого экрана
 - [x] E2E: две вкладки — операция в одной, баланс во второй без F5
-- [x] БАГ. Импорт CSV в e2e: WebSocket `import.done` мог отменить poll до показа «Импорт завершён» (CI flake); progress после done не должен возвращать UI на «importing»
+- [x] БАГ. Импорт CSV: `import.done` через `$effect` опаздывал относительно следующего WS-кадра `invalidate` — экран не доходил до «Импорт завершён». Фикс: sync-подписка `subscribeImportRealtime` в onmessage + `markLocalMutation` на done до echo-invalidate; poll остаётся fallback
+- [x] Точечный realtime `invalidate` (`hint_paths` / `entities`) — без refetch всего экрана на каждое событие
 - [x] [Release notes](docs/release-notes-v1.7.0.md) · [realtime-updates.md](roadmap/realtime-updates.md) · [ui-api-cache.md](docs/ui-api-cache.md) · [install/nginx.md](docs/install/nginx.md)
 
 ## Общие планы

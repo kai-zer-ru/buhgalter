@@ -113,8 +113,12 @@ func (s *Server) Handler() http.Handler {
 	versionHandler := &versioncheck.Handler{Checker: versioncheck.NewChecker(s.cfg.Version)}
 	apiCache := apicache.New()
 	realtimeHub := realtime.NewHub()
-	apiCache.OnInvalidate = realtimeHub.PublishInvalidate
-	realtime.SetUserDataChangedHandler(apiCache.InvalidateUser)
+	apiCache.OnInvalidate = func(userID string, hints apicache.InvalidateHints) {
+		realtimeHub.PublishInvalidateHints(userID, hints.Paths, hints.Entities)
+	}
+	realtime.SetUserDataChangedHandler(func(userID string) {
+		apiCache.InvalidateUserHints(userID, apicache.LedgerHints())
+	})
 	realtime.SetPublisher(realtimeHub.Publish)
 	apiCacheMW := apicache.Middleware(apiCache)
 	realtimeHandler := &realtime.Handler{Hub: realtimeHub}
