@@ -324,6 +324,7 @@
 - [x] БАГ. Уже привязанная к подписке операция в меню строки всё ещё предлагала «Сделать подпиской» / «Прикрепить к подписке» — скрыты при наличии `subscription_id` (web и Android)
 - [x] БАГ. Android: SMS «Ваш Т-Банк» (и др.) не попадали в историю / скан шторки — Messages пишет тело в MessagingStyle `EXTRA_MESSAGES`, а не в `EXTRA_TEXT`; пустые extras отбрасывались. Фикс: разбор MessagingStyle + Unicode-дефисы в нормализации отправителя + расширенный allowlist SMS-приложений ([notification-intercept.md](roadmap/notification-intercept.md))
 - [x] БАГ. Привязка операции к подписке не сдвигала очередь `upcoming_run_ats`: раннее списание банка оставалось «лишним», а ближайший платёж (завтра) всё ещё планировался. Фикс: attach закрывает ближайший слот, если дата операции в его окне; история вне окна только линкуется
+- [x] БАГ. Веб: после создания операции `/accounts` показывал балансы `0.00` (e2e `create account → add expense → see balance`). Причина: `preserveAuthMe` + seed счетов из `ui/meta` без балансов в SWR при живом WebSocket (revalidate выключен). Фикс: полный `clearRefCache` на мутациях веба; seed `/accounts*` из meta отключён ([ui-api-cache.md](docs/ui-api-cache.md))
 - [x] [Release notes](docs/release-notes-v1.7.0.md) · [realtime-updates.md](roadmap/realtime-updates.md) · [ui-api-cache.md](docs/ui-api-cache.md) · [install/nginx.md](docs/install/nginx.md)
 
 ## Общие планы

@@ -6,7 +6,6 @@ import { notifySessionExpired, shouldRedirectApi401 } from '$lib/auth/session-ex
 import {
 	clearRefCache,
 	fetchWithRefCache,
-	invalidateRefCacheAfterWrite,
 	isStaleFetchError,
 	markLocalMutation,
 	readAccountsFromOfflineCache,
@@ -88,15 +87,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 	const result = await fetcher();
 	if (method !== 'GET' && shouldInvalidateRefCacheOnWrite(path)) {
 		// Match server apicache: any write invalidates client SWR so subsequent load() hits network.
-		// Dictionaries + account lists stay so offline/PWA forms still have catalogs after a write.
+		// Web: full clear (not preserveAuthMe). Preserving /accounts after a transaction left a
+		// ui/meta seed (balances 0.00) in SWR; with a live WebSocket background revalidate is
+		// skipped, so /accounts froze on zeros until F5 (e2e: create account → expense → balance).
 		markLocalMutation();
 		invalidateApiCache();
-		if (path.split('?')[0] === '/api/v1/user/data') {
-			clearRefCache();
-		} else {
-			clearRefCache({ preserveAuthMe: true });
-			invalidateRefCacheAfterWrite(path);
-		}
+		clearRefCache();
 	}
 	return result;
 }

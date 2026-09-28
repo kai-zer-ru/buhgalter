@@ -21,7 +21,6 @@ export function refCacheUpdateMatches(
 	update: { path: string; paths?: string[] },
 	watch: string | string[]
 ): boolean {
-	const candidates =
-		update.paths && update.paths.length > 0 ? update.paths : [update.path];
+	const candidates = update.paths && update.paths.length > 0 ? update.paths : [update.path];
 	return candidates.some((p) => refCachePathMatches(p, watch));
 }

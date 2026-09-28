@@ -134,7 +134,7 @@ describe('web fetchWithRefCache SWR', () => {
 		expect(readRefCache('/api/v1/debts?settled=false')).toEqual([{ id: 'new' }]);
 	});
 
-	it('preserveAuthMe keeps dictionaries and seeds accounts from ui/meta', () => {
+	it('preserveAuthMe keeps dictionaries but does not seed zero-balance accounts into SWR', () => {
 		writeRefCache('/api/v1/ui/meta', {
 			accounts: [{ id: 'a1', name: 'Наличные', type: 'cash', status: 'active' }],
 			banks: [],
@@ -146,11 +146,47 @@ describe('web fetchWithRefCache SWR', () => {
 			active_credits: [],
 			closed_credits: []
 		});
+		writeRefCache('/api/v1/categories?type=expense', [{ id: 'c1', name: 'Еда' }]);
+		writeRefCache('/api/v1/accounts?status=active', [
+			{ id: 'a1', name: 'Наличные', balance: 100, balance_display: '1.00' }
+		]);
 		writeRefCache('/api/v1/dashboard', { total_balance: 1 });
 		clearRefCache({ preserveAuthMe: true });
 		expect(readRefCache('/api/v1/dashboard')).toBeNull();
 		expect(readRefCache('/api/v1/categories?type=expense')).toMatchObject([{ id: 'c1' }]);
-		expect(readRefCache('/api/v1/accounts?status=active')).toMatchObject([{ id: 'a1' }]);
+		// Preserved real accounts list stays; ui/meta must not overwrite it with 0.00 stubs.
+		expect(readRefCache('/api/v1/accounts?status=active')).toMatchObject([
+			{ id: 'a1', balance_display: '1.00' }
+		]);
+	});
+
+	it('seedDictionariesFromUIMeta does not write accounts into SWR keys', async () => {
+		const { seedDictionariesFromUIMeta } = await import('./ref-cache');
+		seedDictionariesFromUIMeta({
+			expense_categories: [{ id: 'c1', name: 'Еда' }],
+			income_categories: [],
+			accounts: [{ id: 'a1', name: 'Наличные', type: 'cash', status: 'active' }],
+			banks: [],
+			merchants: [],
+			tags: [],
+			debtors: [],
+			transaction_templates: []
+		});
+		expect(readRefCache('/api/v1/categories?type=expense')).toMatchObject([{ id: 'c1' }]);
+		expect(readRefCache('/api/v1/accounts')).toBeNull();
+		expect(readRefCache('/api/v1/accounts?status=active')).toBeNull();
+	});
+
+	it('with realtime live, empty accounts cache hits network (no ui/meta SWR stubs)', async () => {
+		setRealtimeLive(true);
+		expect(readRefCache('/api/v1/accounts?status=active')).toBeNull();
+
+		const network = vi.fn(async () => [
+			{ id: 'a1', name: 'Наличные', balance: 75_000, balance_display: '750.00' }
+		]);
+		const rows = await fetchWithRefCache('/api/v1/accounts?status=active', network);
+		expect(network).toHaveBeenCalledOnce();
+		expect(rows).toMatchObject([{ balance_display: '750.00' }]);
 	});
 
 	it('invalidateRefCacheAfterWrite clears preserved dictionary cache for the mutated resource', () => {
@@ -168,6 +204,16 @@ describe('web fetchWithRefCache SWR', () => {
 		invalidateRefCacheAfterWrite('/api/v1/accounts');
 		expect(readRefCache('/api/v1/accounts?status=active')).toBeNull();
 		expect(readRefCache('/api/v1/dashboard')).toBeNull();
+	});
+
+	it('invalidateRefCacheAfterWrite for transactions clears accounts and dashboard', () => {
+		writeRefCache('/api/v1/accounts?status=active', [{ id: 'a1', balance_display: '1000.00' }]);
+		writeRefCache('/api/v1/dashboard', { total_balance: 1 });
+		writeRefCache('/api/v1/transactions?kind=manual', [{ id: 't1' }]);
+		invalidateRefCacheAfterWrite('/api/v1/transactions');
+		expect(readRefCache('/api/v1/accounts?status=active')).toBeNull();
+		expect(readRefCache('/api/v1/dashboard')).toBeNull();
+		expect(readRefCache('/api/v1/transactions?kind=manual')).toBeNull();
 	});
 
 	it('readAccountsFromOfflineCache ignores empty list cache', () => {

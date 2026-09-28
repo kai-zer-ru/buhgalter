@@ -45,7 +45,9 @@ export const refCacheTick = writable(0);
 
 /** Path-aware notification after SWR revalidate. `path: '*'` = coarse realtime invalidate.
  *  Optional `paths` — targeted invalidate from WebSocket hint_paths. */
-export const refCacheUpdate = writable<{ path: string; paths?: string[]; seq: number } | null>(null);
+export const refCacheUpdate = writable<{ path: string; paths?: string[]; seq: number } | null>(
+	null
+);
 
 export function setRefCacheUserId(userId: string | null): void {
 	cacheUserId = userId || '_anonymous';
@@ -227,8 +229,13 @@ export function invalidateRefCacheAfterWrite(apiPath: string): void {
 		invalidateRefCachePrefix('/api/v1/categories');
 		return;
 	}
-	if (pathOnly.startsWith('/api/v1/accounts')) {
+	if (
+		pathOnly.startsWith('/api/v1/accounts') ||
+		pathOnly.startsWith('/api/v1/transactions') ||
+		pathOnly.startsWith('/api/v1/transfers')
+	) {
 		invalidateRefCachePrefix('/api/v1/accounts');
+		invalidateRefCachePrefix('/api/v1/transactions');
 		invalidateRefCache('/api/v1/dashboard');
 		return;
 	}
@@ -347,10 +354,9 @@ export function clearRefCache(opts?: { preserveAuthMe?: boolean }): void {
 	for (const timer of revalidateTimers.values()) clearTimeout(timer);
 	revalidateTimers.clear();
 	lastRevalidatedAt.clear();
-	if (preserveAuthMe) {
-		const meta = readRefCache<UIMeta>(UI_META_PATH);
-		if (meta) seedAccountsFromUIMetaIfEmpty(meta);
-	}
+	// Do not seed /api/v1/accounts* from ui/meta here. Meta refs have no balances (0.00);
+	// writing them into SWR while realtime is live skips revalidate and freezes the accounts UI.
+	// Offline forms still fall back via readAccountsFromOfflineCache → ui/meta.
 }
 
 export function resetRefCacheForTests(): void {
@@ -509,28 +515,6 @@ function accountFromUIMetaRef(
 	};
 }
 
-export function seedAccountsFromUIMetaIfEmpty(meta: {
-	accounts?: UIMetaAccountRef[];
-	banks?: Bank[] | unknown[];
-}): void {
-	const refs = meta.accounts;
-	if (!refs?.length) return;
-	const banks = Array.isArray(meta.banks) ? (meta.banks as Bank[]) : [];
-	const dash = readRefCache<Dashboard>('/api/v1/dashboard');
-	const summaryById = new Map((dash?.accounts ?? []).map((row) => [row.id, row]));
-	const mapped = refs.map((ref) => accountFromUIMetaRef(ref, banks, summaryById.get(ref.id)));
-	const allCached = readRefCache<Account[]>(accountsRefPath());
-	if (!isNonEmptyList(allCached)) {
-		writeRefCache(accountsRefPath(), mapped);
-	}
-	for (const status of ['active', 'archived', 'deleted'] as const) {
-		const statusCached = readRefCache<Account[]>(accountsRefPath(status));
-		if (isNonEmptyList(statusCached)) continue;
-		const rows = mapped.filter((row) => row.status === status);
-		if (rows.length) writeRefCache(accountsRefPath(status), rows);
-	}
-}
-
 export function seedDictionariesFromUIMeta(meta: {
 	expense_categories: unknown[];
 	income_categories: unknown[];
@@ -549,7 +533,7 @@ export function seedDictionariesFromUIMeta(meta: {
 		writeRefCache('/api/v1/transaction-templates', meta.transaction_templates);
 	}
 	if (meta.debtors !== undefined) writeRefCache('/api/v1/debtors', meta.debtors);
-	seedAccountsFromUIMetaIfEmpty(meta);
+	// accounts: do not seed into SWR (balances live only on GET /accounts and dashboard)
 }
 
 export function readAccountsFromOfflineCache(
