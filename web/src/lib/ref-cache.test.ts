@@ -30,6 +30,10 @@ describe('shouldPersistRefCache', () => {
 	it('skips transaction change feed', () => {
 		expect(shouldPersistRefCache('/api/v1/sync/transaction-changes')).toBe(false);
 	});
+
+	it('skips version check (live server build)', () => {
+		expect(shouldPersistRefCache('/api/v1/version/check')).toBe(false);
+	});
 });
 
 describe('shouldInvalidateRefCacheOnWrite', () => {

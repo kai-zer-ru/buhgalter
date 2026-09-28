@@ -31,13 +31,14 @@ vi.mock('$lib/platform/server-profile', () => ({
 }));
 
 describe('shouldPersistRefCache', () => {
-	it('caches credit detail and list paths; skips health and setup/status', () => {
+	it('caches credit detail and list paths; skips health, setup/status, version/check', () => {
 		expect(shouldPersistRefCache('/api/v1/credits/abc-123')).toBe(true);
 		expect(shouldPersistRefCache('/api/v1/credits?status=active')).toBe(true);
 		expect(shouldPersistRefCache('/api/v1/credits/abc-123/payments')).toBe(true);
 		expect(shouldPersistRefCache('/api/v1/banks')).toBe(true);
 		expect(shouldPersistRefCache('/api/v1/health')).toBe(false);
 		expect(shouldPersistRefCache('/api/v1/setup/status')).toBe(false);
+		expect(shouldPersistRefCache('/api/v1/version/check')).toBe(false);
 	});
 });
 

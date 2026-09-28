@@ -42,7 +42,7 @@ TTL — страховка; при любой мутации кеш пользо
 | `GET /sync/transaction-changes` | Курсорная лента изменений операций; не должна отдавать устаревший пустой пакет |
 | `GET /realtime` | WebSocket upgrade |
 
-На **клиенте** (ref-cache) дополнительно не кладутся в SWR: `GET /setup/status` (флаг регистрации на /login — иначе pre-mutation snapshot), `GET /sync/transaction-changes` (курсор обрабатывается отдельно и патчит уже лежащие списки операций), `GET /realtime`. `GET /credits/{id}` и `GET /debtors/{id}` **кешируются** — офлайн-карточки в Android. Серверный кеш `GET /setup/status` остаётся; сброс при `PUT /admin/settings` и `PUT /admin/features`.
+На **клиенте** (ref-cache) дополнительно не кладутся в SWR: `GET /setup/status` (флаг регистрации на /login — иначе pre-mutation snapshot), `GET /version/check` (версия сборки сервера — иначе stale SWR + суточный throttle клиента фиксировали старый `current_version`), `GET /sync/transaction-changes` (курсор обрабатывается отдельно и патчит уже лежащие списки операций), `GET /realtime`. `GET /credits/{id}` и `GET /debtors/{id}` **кешируются** — офлайн-карточки в Android. Серверный кеш `GET /setup/status` остаётся; сброс при `PUT /admin/settings` и `PUT /admin/features`.
 
 ## Инвалидация
 

@@ -84,10 +84,17 @@
 		return active ? 'android-drawer-link active' : 'android-drawer-link';
 	}
 
-	async function refreshAppVersionInfo() {
-		const info = await fetchAppVersionInfo(APP_VERSION);
+	async function refreshAppVersionInfo(opts: { force?: boolean } = {}) {
+		const info = await fetchAppVersionInfo(APP_VERSION, opts);
 		appVersionInfo = info;
 		applyVersionBlock(info);
+	}
+
+	function openVersionsModal() {
+		closeDrawer();
+		showUpdateModal = true;
+		// Explicit tap — bypass 24h cache so the modal shows the live server version.
+		void refreshAppVersionInfo({ force: true });
 	}
 
 	onMount(() => {
@@ -184,13 +191,7 @@
 				>
 					{$_('nav.logout')}
 				</button>
-				<AndroidDrawerVersion
-					info={appVersionInfo}
-					onshowUpdate={() => {
-						closeDrawer();
-						showUpdateModal = true;
-					}}
-				/>
+				<AndroidDrawerVersion info={appVersionInfo} onshowUpdate={openVersionsModal} />
 			</div>
 		</div>
 	</aside>

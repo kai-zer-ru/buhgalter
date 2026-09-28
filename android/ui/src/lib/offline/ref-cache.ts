@@ -25,7 +25,9 @@ const REF_CACHE_SKIP = new Set([
 	'/api/v1/health',
 	// Bootstrap flag (registration_enabled) — must not serve a pre-mutation snapshot on /login.
 	'/api/v1/setup/status',
-	'/api/v1/sync/transaction-changes'
+	'/api/v1/sync/transaction-changes',
+	// Live server build version — SWR stale + daily throttle re-locked the old current_version.
+	'/api/v1/version/check'
 ]);
 
 /** Kept across mutation clears so offline cold start can unlock (PIN/biometrics). */
