@@ -26,7 +26,6 @@
 - [v1.5.5](#v155)
 - [v1.6.0](#v160)
 - [v1.7.0](#v170)
-- [v1.7.1](#v171)
 - [Общие планы](#общие-планы)
 - [На подумать](#на-подумать)
 
@@ -320,12 +319,10 @@
 - [x] E2E: две вкладки — операция в одной, баланс во второй без F5
 - [x] БАГ. Импорт CSV: `import.done` через `$effect` опаздывал относительно следующего WS-кадра `invalidate` — экран не доходил до «Импорт завершён». Фикс: sync-подписка `subscribeImportRealtime` в onmessage + `markLocalMutation` на done до echo-invalidate; poll остаётся fallback
 - [x] Точечный realtime `invalidate` (`hint_paths` / `entities`) — без refetch всего экрана на каждое событие
-- [x] [Release notes](docs/release-notes-v1.7.0.md) · [realtime-updates.md](roadmap/realtime-updates.md) · [ui-api-cache.md](docs/ui-api-cache.md) · [install/nginx.md](docs/install/nginx.md)
-
-## v1.7.1
-
 - [x] Веб-главная: empty-state под общим балансом, если нет ближайших подписок/периодических (прогноз совпадает с балансом)
 - [x] Android: попап «Версии» показывал старый `current_version` после апгрейда сервера — `GET /version/check` попадал в SWR ref-cache (синхронный stale + суточный throttle); исключён из кеша, клик по версии форсирует сеть
+- [x] БАГ. Уже привязанная к подписке операция в меню строки всё ещё предлагала «Сделать подпиской» / «Прикрепить к подписке» — скрыты при наличии `subscription_id` (web и Android)
+- [x] [Release notes](docs/release-notes-v1.7.0.md) · [realtime-updates.md](roadmap/realtime-updates.md) · [ui-api-cache.md](docs/ui-api-cache.md) · [install/nginx.md](docs/install/nginx.md)
 
 ## Общие планы
 

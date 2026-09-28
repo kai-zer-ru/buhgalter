@@ -64,6 +64,7 @@ UI показывает строку прогноза, если `forecast_balanc
 | `canRepeatTransaction(tx)` | `false` при `credit_payment_linked` или системной категории (доход/расход); переводы — без ограничения по категории |
 | «Сделать платежом по кредиту» | Расход без `credit_payment_linked` / `subscription_id` / перевода → `/credits?attach_tx=` (web и Android) |
 | `canDeleteTransaction(tx)` | `false` при ноге комиссии или `deletable === false` |
+| `canLinkToSubscription(tx)` | Расход без `subscription_id` — пункты «Сделать подпиской» / «Прикрепить к подписке» в меню строки |
 | `formatTransactionAccount(tx, siblings, mode)` | Текст колонки «Счёт» |
 | `transactionAmountSign(tx, opts?)` | Префикс суммы: `+`, `−` или пусто |
 

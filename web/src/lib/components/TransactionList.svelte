@@ -12,7 +12,8 @@
 		transferCommissionDisplay,
 		canEditTransaction,
 		canRepeatTransaction,
-		canDeleteTransaction
+		canDeleteTransaction,
+		canLinkToSubscription
 	} from '$lib/transaction-display';
 	import TransactionCategoryCell from '$lib/components/TransactionCategoryCell.svelte';
 	import TransactionMerchantTags from '$lib/components/TransactionMerchantTags.svelte';
@@ -82,11 +83,11 @@
 	}
 
 	function canMakeSubscription(tx: Transaction): boolean {
-		return Boolean(onmakeSubscription && tx.type === 'expense');
+		return Boolean(onmakeSubscription && canLinkToSubscription(tx));
 	}
 
 	function canAttachSubscription(tx: Transaction): boolean {
-		return Boolean(onattachSubscription && tx.type === 'expense');
+		return Boolean(onattachSubscription && canLinkToSubscription(tx));
 	}
 
 	function canAttachCredit(tx: Transaction): boolean {

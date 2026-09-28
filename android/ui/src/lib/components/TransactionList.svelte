@@ -14,7 +14,8 @@
 		transferCommissionDisplay,
 		canEditTransaction,
 		canRepeatTransaction,
-		canDeleteTransaction
+		canDeleteTransaction,
+		canLinkToSubscription
 	} from '$lib/transaction-display';
 	import { isPendingTransaction, pendingSyncFailed } from '$lib/offline/pending-display';
 	import TransactionCategoryCell from '$lib/components/TransactionCategoryCell.svelte';
@@ -87,11 +88,11 @@
 	}
 
 	function canMakeSubscription(tx: Transaction): boolean {
-		return Boolean(onmakeSubscription && tx.type === 'expense');
+		return Boolean(onmakeSubscription && canLinkToSubscription(tx));
 	}
 
 	function canAttachSubscription(tx: Transaction): boolean {
-		return Boolean(onattachSubscription && tx.type === 'expense');
+		return Boolean(onattachSubscription && canLinkToSubscription(tx));
 	}
 
 	function rowActions(tx: Transaction): RowAction[] {

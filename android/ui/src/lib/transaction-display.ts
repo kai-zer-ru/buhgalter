@@ -161,6 +161,11 @@ export function canDeleteTransaction(tx: Transaction): boolean {
 	return tx.deletable !== false;
 }
 
+/** Expense not already linked to a subscription — show «Сделать подпиской» / «Прикрепить к подписке». */
+export function canLinkToSubscription(tx: Transaction): boolean {
+	return tx.type === 'expense' && !tx.subscription_id;
+}
+
 export function transferGroupLegs(tx: Transaction, siblings: Transaction[]): Transaction[] {
 	if (!tx.transfer_group_id) return [tx];
 	return siblings.filter((item) => item.transfer_group_id === tx.transfer_group_id);

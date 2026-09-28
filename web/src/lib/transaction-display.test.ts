@@ -3,6 +3,7 @@ import type { Transaction } from '$lib/api/client';
 import {
 	canDeleteTransaction,
 	canEditTransaction,
+	canLinkToSubscription,
 	canRepeatTransaction,
 	dedupeTransferLegs,
 	isTransferCommission,
@@ -71,6 +72,20 @@ describe('canDeleteTransaction', () => {
 		expect(isTransferCommission(commission)).toBe(true);
 		expect(canEditTransaction(commission)).toBe(false);
 		expect(canDeleteTransaction(commission)).toBe(false);
+	});
+});
+
+describe('canLinkToSubscription', () => {
+	it('allows expense without subscription_id', () => {
+		expect(canLinkToSubscription(tx({ type: 'expense' }))).toBe(true);
+	});
+
+	it('blocks income, transfer, and already linked expense', () => {
+		expect(canLinkToSubscription(tx({ type: 'income' }))).toBe(false);
+		expect(canLinkToSubscription(tx({ type: 'transfer', transfer_group_id: 'grp-1' }))).toBe(
+			false
+		);
+		expect(canLinkToSubscription(tx({ type: 'expense', subscription_id: 'sub-1' }))).toBe(false);
 	});
 });
 
