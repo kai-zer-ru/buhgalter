@@ -12,33 +12,7 @@ permissions:
   actions: write
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          clean: false
-      - uses: actions/setup-go@v7
-        with:
-          go-version: '1.26.4'
-          cache-dependency-path: server/go.sum
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-      - run: go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1
-      - run: make sqlc-check inline-sql-check openapi-check
-      - run: python3 scripts/build_category_icons_json.py
-      - run: npm ci
-        working-directory: web
-      - run: npm run lint && npm run check
-        working-directory: web
-      - run: go test -timeout 30m ./...
-        working-directory: server
-
   android-apk:
-    needs: [test]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -104,46 +78,7 @@ jobs:
           path: android/app/build/outputs/apk/release/
           if-no-files-found: error
 
-  goreleaser:
-    needs: [test, android-apk]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - uses: actions/download-artifact@v8
-        with:
-          name: android-apk-release
-          path: android/app/build/outputs/apk/release/
-      - name: Verify downloaded APKs for goreleaser
-        run: bash scripts/verify-android-release-apks.sh
-      - uses: actions/setup-go@v7
-        with:
-          go-version: '1.26.4'
-          cache-dependency-path: server/go.sum
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-      - name: Changelog section for release header
-        run: |
-          NOTES="$(bash scripts/extract-release-notes.sh --stdout)"
-          {
-            echo 'RELEASE_CHANGELOG<<EOF'
-            printf '%s\n' "$NOTES"
-            echo 'EOF'
-          } >> "$GITHUB_ENV"
-      - uses: goreleaser/goreleaser-action@v7
-        with:
-          distribution: goreleaser
-          version: '~> v2'
-          args: release --clean
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   docker:
-    needs: [test]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -193,3 +128,41 @@ jobs:
             BUILD_TIME=${{ steps.build.outputs.time }}
           labels: ${{ steps.meta.outputs.labels }}
           tags: ${{ steps.meta.outputs.tags }}
+
+  goreleaser:
+    needs: [android-apk, docker]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v8
+        with:
+          name: android-apk-release
+          path: android/app/build/outputs/apk/release/
+      - name: Verify downloaded APKs for goreleaser
+        run: bash scripts/verify-android-release-apks.sh
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.4'
+          cache-dependency-path: server/go.sum
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Changelog section for release header
+        run: |
+          NOTES="$(bash scripts/extract-release-notes.sh --stdout)"
+          {
+            echo 'RELEASE_CHANGELOG<<EOF'
+            printf '%s\n' "$NOTES"
+            echo 'EOF'
+          } >> "$GITHUB_ENV"
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

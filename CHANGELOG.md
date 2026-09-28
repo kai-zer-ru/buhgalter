@@ -11,6 +11,12 @@
 
 ## [Unreleased]
 
+### Server
+
+#### Техническое
+
+- Release workflow: `goreleaser` зависит от `android-apk` и `docker`; повторный CI на теге `v*` убран (`ci.yml` + job `test` в `release.yml`)
+
 ## [v1.7.0] — 2026-09-28
 
 > **ОБЯЗАТЕЛЬНО СДЕЛАЙТЕ БЕКАП!** Перед обновлением сохраните копию базы (`data/buhgalter.db`) и каталога `backups/`. Новых миграций БД нет.

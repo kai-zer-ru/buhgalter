@@ -2,6 +2,9 @@ name: ci
 
 on:
   push:
+    # Tag push already ran CI on the commit; release.yml only builds artifacts.
+    tags-ignore:
+      - 'v*'
   pull_request:
 
 jobs:

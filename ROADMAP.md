@@ -26,6 +26,7 @@
 - [v1.5.5](#v155)
 - [v1.6.0](#v160)
 - [v1.7.0](#v170)
+- [v1.7.1](#v171)
 - [Общие планы](#общие-планы)
 - [На подумать](#на-подумать)
 
@@ -326,6 +327,10 @@
 - [x] БАГ. Привязка операции к подписке не сдвигала очередь `upcoming_run_ats`: раннее списание банка оставалось «лишним», а ближайший платёж (завтра) всё ещё планировался. Фикс: attach закрывает ближайший слот, если дата операции в его окне; история вне окна только линкуется
 - [x] БАГ. Веб: после создания операции `/accounts` показывал балансы `0.00` (e2e `create account → add expense → see balance`). Причина: `preserveAuthMe` + seed счетов из `ui/meta` без балансов в SWR при живом WebSocket (revalidate выключен). Фикс: полный `clearRefCache` на мутациях веба; seed `/accounts*` из meta отключён ([ui-api-cache.md](docs/ui-api-cache.md))
 - [x] [Release notes](docs/release-notes-v1.7.0.md) · [realtime-updates.md](roadmap/realtime-updates.md) · [ui-api-cache.md](docs/ui-api-cache.md) · [install/nginx.md](docs/install/nginx.md)
+
+## v1.7.1
+
+- [x] CI/release: `goreleaser` ждёт и `android-apk`, и `docker`; на теге не гоняем повторный `test` / `ci.yml` (только сборка релиза)
 
 ## Общие планы
 
