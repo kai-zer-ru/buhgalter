@@ -322,6 +322,7 @@
 - [x] Веб-главная: empty-state под общим балансом, если нет ближайших подписок/периодических (прогноз совпадает с балансом)
 - [x] Android: попап «Версии» показывал старый `current_version` после апгрейда сервера — `GET /version/check` попадал в SWR ref-cache (синхронный stale + суточный throttle); исключён из кеша, клик по версии форсирует сеть
 - [x] БАГ. Уже привязанная к подписке операция в меню строки всё ещё предлагала «Сделать подпиской» / «Прикрепить к подписке» — скрыты при наличии `subscription_id` (web и Android)
+- [x] БАГ. Android: SMS «Ваш Т-Банк» (и др.) не попадали в историю / скан шторки — Messages пишет тело в MessagingStyle `EXTRA_MESSAGES`, а не в `EXTRA_TEXT`; пустые extras отбрасывались. Фикс: разбор MessagingStyle + Unicode-дефисы в нормализации отправителя + расширенный allowlist SMS-приложений ([notification-intercept.md](roadmap/notification-intercept.md))
 - [x] [Release notes](docs/release-notes-v1.7.0.md) · [realtime-updates.md](roadmap/realtime-updates.md) · [ui-api-cache.md](docs/ui-api-cache.md) · [install/nginx.md](docs/install/nginx.md)
 
 ## Общие планы

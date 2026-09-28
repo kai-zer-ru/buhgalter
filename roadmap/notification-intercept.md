@@ -124,10 +124,11 @@ sequenceDiagram
 
 | Тема | Решение |
 |------|---------|
-| Захват | `BroadcastReceiver` + runtime `RECEIVE_SMS` |
+| Захват | `BroadcastReceiver` + runtime `RECEIVE_SMS`; **и** NLS по уведомлениям SMS-приложений в шторке |
 | Opt-in | Тот же per-user `enabled` + блок permission SMS на `/settings/bank-notifications` |
 | Банк | `smsSenders[]` в каталоге → `bankId` → primary `packageName` (bindings / `bankIdForPackage`) |
-| Нормализация | `title`=отправитель, `text`=тело, `packageName`=primary package, `channel`=`sms`, `dedupeKey`=`sms\|sender\|ts\|hash(body)` |
+| Нормализация | `title`=отправитель (в т.ч. «Ваш Т-Банк», Unicode-дефисы), `text`=тело, `packageName`=primary package, `channel`=`sms`, `dedupeKey`=`sms\|sender\|ts\|hash(body)` |
+| Шторка Messages | Тело часто в MessagingStyle `EXTRA_MESSAGES`, не в `EXTRA_TEXT` — NLS читает оба; иначе скан «текущих» пропускал SMS как пустые |
 | Дедуп push↔SMS | Помимо `rawHash`: `bankId+amount+kind+(last4)+(norm merchant)` в окне **2 ч** |
 | Сырые SMS | Только на устройстве |
 | Пустой `smsSenders` | SMS этого банка не ловим |

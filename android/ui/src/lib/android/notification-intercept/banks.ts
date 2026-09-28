@@ -1,10 +1,18 @@
 import type { RawBankNotification } from './types';
 
-/** SMS apps whose notifications mirror bank SMS (not bank push). */
+/** SMS apps whose notifications mirror bank SMS (not bank push). Keep in sync with Java NLS. */
 export const MESSAGING_APP_PACKAGES = [
 	'com.google.android.apps.messaging',
 	'com.samsung.android.messaging',
-	'com.android.mms'
+	'com.android.mms',
+	'com.android.messaging',
+	'com.miui.sms',
+	'com.xiaomi.mms',
+	'com.huawei.message',
+	'com.hihonor.message',
+	'com.oneplus.mms',
+	'com.coloros.mms',
+	'com.oplus.mms'
 ] as const;
 
 /** Known RF bank apps for notification intercept (ids match `banks_ru.json`). */
@@ -36,7 +44,7 @@ export const KNOWN_BANK_APPS: KnownBankApp[] = [
 	{
 		bankId: 'tinkoff',
 		packageNames: ['com.idamob.tinkoff.android'],
-		smsSenders: ['T-Bank', 'TBank', 'Tinkoff', '7555'],
+		smsSenders: ['T-Bank', 'TBank', 'TBANK', 'Tinkoff', '7555', 'Ваш Т-Банк'],
 		labelKey: 'bankNotifications.bank.tinkoff'
 	},
 	{
@@ -227,10 +235,11 @@ const BANK_TEXT_ALIASES: { bankId: string; re: RegExp }[] = [
 /** Normalize SMS originator the same way as native {@code NotificationInterceptStore}. */
 export function normalizeSmsSender(raw: string): string {
 	let s = raw.trim().toLowerCase();
-	s = s.replace(/^(ваш|your)\s+/i, '');
-	s = s.replace(/т-?банк/g, 'tbank');
+	s = s.replace(/^(ваш|your)\s+/iu, '');
+	// Unicode dashes (Messages UI: «Т‑Банк») then spaces — before alias replace.
+	s = s.replace(/[\s\p{Pd}]+/gu, '');
+	s = s.replace(/тбанк/g, 'tbank');
 	s = s.replace(/тинькофф/g, 'tinkoff');
-	s = s.replace(/[\s-]/g, '');
 	if (s.startsWith('+7') && s.length > 2) {
 		s = s.slice(2);
 	} else if (s.startsWith('8') && s.length === 11 && /^\d+$/.test(s)) {

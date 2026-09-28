@@ -66,29 +66,37 @@ public class BankSmsReceiver extends BroadcastReceiver {
                 continue;
             }
             String packageName = NotificationInterceptStore.packageForSmsSender(app, sender);
-            if (packageName == null || packageName.isEmpty()) {
+            boolean allowed = packageName != null && !packageName.isEmpty();
+            String senderNorm = NotificationInterceptStore.normalizeSmsSender(sender);
+            // Skip personal phone SMS in history; keep short codes / alphanumeric (banks).
+            if (!allowed && !looksBankSmsOriginator(senderNorm)) {
                 continue;
             }
             long postedAt = msg.getTimestampMillis();
             if (postedAt <= 0) {
                 postedAt = System.currentTimeMillis();
             }
-            String senderNorm = NotificationInterceptStore.normalizeSmsSender(sender);
             String dedupeKey =
                     "sms|" + senderNorm + "|" + postedAt + "|" + Integer.toHexString(body.hashCode());
             try {
+                // Record unmatched bank-like senders too — otherwise history stays empty and
+                // OEM display names / new originators are impossible to debug.
                 JSONObject historyItem = new JSONObject();
-                historyItem.put("packageName", packageName);
+                historyItem.put("packageName", allowed ? packageName : "sms:" + sender.trim());
                 historyItem.put("title", sender.trim());
                 historyItem.put("text", body);
                 historyItem.put("bigText", "");
                 historyItem.put("postedAt", postedAt);
                 historyItem.put("dedupeKey", dedupeKey);
                 historyItem.put("channel", "sms");
-                historyItem.put("inAllowlist", true);
-                historyItem.put("queued", true);
+                historyItem.put("inAllowlist", allowed);
+                historyItem.put("queued", allowed);
                 NotificationInterceptStore.appendHistory(app, historyItem);
                 NotificationHistoryStore.append(app, historyItem);
+
+                if (!allowed) {
+                    continue;
+                }
 
                 JSONObject item = new JSONObject();
                 item.put("packageName", packageName);
@@ -104,6 +112,17 @@ public class BankSmsReceiver extends BroadcastReceiver {
                 // ignore malformed row
             }
         }
+    }
+
+    private static boolean looksBankSmsOriginator(String senderNorm) {
+        if (senderNorm == null || senderNorm.isEmpty()) {
+            return false;
+        }
+        // Short codes (900, 7555) or alphanumeric (T-Bank, ВашТБанк → tbank).
+        if (senderNorm.chars().allMatch(Character::isDigit)) {
+            return senderNorm.length() <= 6;
+        }
+        return true;
     }
 
     private static SmsMessage createSmsMessage(byte[] pdu, String format) {

@@ -91,6 +91,11 @@ describe('SMS senders', () => {
 		expect(normalizeSmsSender('+79001234567')).toBe('9001234567');
 		expect(normalizeSmsSender('T-Bank')).toBe('tbank');
 		expect(normalizeSmsSender('Ваш Т-Банк')).toBe('tbank');
+		// Google Messages / OEM titles often use Unicode dash U+2011
+		expect(normalizeSmsSender('Ваш Т‑Банк')).toBe('tbank');
+		expect(normalizeSmsSender('Ваш Т–Банк')).toBe('tbank');
+		expect(bankIdForSmsSender('Ваш Т‑Банк')).toBe('tinkoff');
+		expect(bankIdForSmsSender('TBANK')).toBe('tinkoff');
 		expect(allKnownSmsSenderEntries().some((e) => e.sender === '900')).toBe(true);
 	});
 
@@ -102,6 +107,19 @@ describe('SMS senders', () => {
 			bigText: '',
 			postedAt: 1,
 			dedupeKey: 'k'
+		});
+		expect(resolved.packageName).toBe('com.idamob.tinkoff.android');
+		expect(resolved.channel).toBe('sms');
+	});
+
+	it('resolves OEM Messages package with Unicode-dash T-Bank title', () => {
+		const resolved = resolveRawBankNotification({
+			packageName: 'com.oplus.mms',
+			title: 'Ваш Т‑Банк',
+			text: 'Покупка 120,00 ₽. Магнит. Карта *1234',
+			bigText: '',
+			postedAt: 1,
+			dedupeKey: 'k2'
 		});
 		expect(resolved.packageName).toBe('com.idamob.tinkoff.android');
 		expect(resolved.channel).toBe('sms');

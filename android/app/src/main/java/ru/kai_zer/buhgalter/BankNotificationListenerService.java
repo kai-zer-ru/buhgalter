@@ -6,6 +6,7 @@ import android.content.Context;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Parcelable;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
 
@@ -33,14 +34,25 @@ public class BankNotificationListenerService extends NotificationListenerService
     private static volatile BankNotificationListenerService instance;
     private static final AtomicReference<CountDownLatch> connectLatch = new AtomicReference<>();
 
-    /** SMS apps that mirror bank SMS in the notification shade (Google Messages, etc.). */
+    /**
+     * SMS apps that mirror bank SMS in the notification shade. Keep in sync with
+     * {@code MESSAGING_APP_PACKAGES} in banks.ts.
+     */
     private static final Set<String> MESSAGING_PACKAGES =
             Collections.unmodifiableSet(
                     new HashSet<>(
                             Arrays.asList(
                                     "com.google.android.apps.messaging",
                                     "com.samsung.android.messaging",
-                                    "com.android.mms")));
+                                    "com.android.mms",
+                                    "com.android.messaging",
+                                    "com.miui.sms",
+                                    "com.xiaomi.mms",
+                                    "com.huawei.message",
+                                    "com.hihonor.message",
+                                    "com.oneplus.mms",
+                                    "com.coloros.mms",
+                                    "com.oplus.mms")));
 
     @Override
     public void onListenerConnected() {
@@ -201,6 +213,114 @@ public class BankNotificationListenerService extends NotificationListenerService
         return n;
     }
 
+    private static String trimCs(CharSequence cs) {
+        return cs != null ? cs.toString().trim() : "";
+    }
+
+    /** Prefer the longest non-empty body among EXTRA_TEXT / BIG_TEXT / TEXT_LINES / MESSAGES. */
+    private static String preferLonger(String current, String candidate) {
+        if (candidate == null || candidate.isEmpty()) {
+            return current != null ? current : "";
+        }
+        if (current == null || current.isEmpty() || candidate.length() > current.length()) {
+            return candidate;
+        }
+        return current;
+    }
+
+    private static String joinCharSequences(CharSequence[] lines) {
+        if (lines == null || lines.length == 0) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (CharSequence line : lines) {
+            String s = trimCs(line);
+            if (s.isEmpty()) {
+                continue;
+            }
+            if (sb.length() > 0) {
+                sb.append('\n');
+            }
+            sb.append(s);
+        }
+        return sb.toString();
+    }
+
+    private static String messagesBodyAndSender(Parcelable[] messages, String[] outSender) {
+        if (messages == null || messages.length == 0) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        String lastSender = "";
+        for (Parcelable p : messages) {
+            if (!(p instanceof Bundle)) {
+                continue;
+            }
+            Bundle msg = (Bundle) p;
+            String msgText = trimCs(msg.getCharSequence("text"));
+            if (msgText.isEmpty()) {
+                continue;
+            }
+            if (sb.length() > 0) {
+                sb.append('\n');
+            }
+            sb.append(msgText);
+            String sender = trimCs(msg.getCharSequence("sender"));
+            if (sender.isEmpty()) {
+                Parcelable person = msg.getParcelable("sender_person");
+                if (person instanceof Bundle) {
+                    sender = trimCs(((Bundle) person).getCharSequence("name"));
+                }
+            }
+            if (!sender.isEmpty()) {
+                lastSender = sender;
+            }
+        }
+        if (outSender != null && outSender.length > 0) {
+            outSender[0] = lastSender;
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Collect body from {@code EXTRA_TEXT}, {@code EXTRA_BIG_TEXT}, {@code EXTRA_TEXT_LINES},
+     * and MessagingStyle {@code EXTRA_MESSAGES} — look in all of them, keep the longest.
+     * Title may come from conversation/sender when {@code EXTRA_TITLE} is empty.
+     */
+    static void fillFromMessagingExtras(Bundle extras, String[] titleTextBig) {
+        if (extras == null || titleTextBig == null || titleTextBig.length < 3) {
+            return;
+        }
+        String title = titleTextBig[0] != null ? titleTextBig[0] : "";
+        String text = titleTextBig[1] != null ? titleTextBig[1] : "";
+        String bigText = titleTextBig[2] != null ? titleTextBig[2] : "";
+
+        // Always merge TEXT_LINES + EXTRA_MESSAGES with EXTRA_TEXT / BIG_TEXT (not only on empty).
+        String best = preferLonger(text, bigText);
+        best = preferLonger(best, joinCharSequences(extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)));
+
+        String[] senderOut = new String[] {""};
+        best = preferLonger(best, messagesBodyAndSender(extras.getParcelableArray(Notification.EXTRA_MESSAGES), senderOut));
+
+        if (title.isEmpty() && senderOut[0] != null && !senderOut[0].isEmpty()) {
+            title = senderOut[0];
+        }
+        if (title.isEmpty()) {
+            title = trimCs(extras.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE));
+        }
+        if (title.isEmpty()) {
+            title = trimCs(extras.getCharSequence(Notification.EXTRA_TITLE_BIG));
+        }
+        if (title.isEmpty()) {
+            title = trimCs(extras.getCharSequence(Notification.EXTRA_SUB_TEXT));
+        }
+
+        titleTextBig[0] = title;
+        // Consolidated body (TEXT + BIG_TEXT + TEXT_LINES + MESSAGES) — longest wins.
+        titleTextBig[1] = best;
+        titleTextBig[2] = "";
+    }
+
     /**
      * @param forceHistory write history even when capture is off (manual scan)
      * @return 0 skipped, 1 history only, 2 queued for JS
@@ -219,14 +339,23 @@ public class BankNotificationListenerService extends NotificationListenerService
         if (notification == null) {
             return 0;
         }
-        Bundle extras = notification.extras;
-        CharSequence titleCs = extras != null ? extras.getCharSequence(Notification.EXTRA_TITLE) : null;
-        CharSequence textCs = extras != null ? extras.getCharSequence(Notification.EXTRA_TEXT) : null;
-        CharSequence bigCs = extras != null ? extras.getCharSequence(Notification.EXTRA_BIG_TEXT) : null;
+        // Group summaries are empty shells — children carry the SMS body.
+        if ((notification.flags & Notification.FLAG_GROUP_SUMMARY) != 0) {
+            return 0;
+        }
 
-        String title = titleCs != null ? titleCs.toString().trim() : "";
-        String text = textCs != null ? textCs.toString().trim() : "";
-        String bigText = bigCs != null ? bigCs.toString().trim() : "";
+        Bundle extras = notification.extras;
+        String title = trimCs(extras != null ? extras.getCharSequence(Notification.EXTRA_TITLE) : null);
+        String text = trimCs(extras != null ? extras.getCharSequence(Notification.EXTRA_TEXT) : null);
+        String bigText =
+                trimCs(extras != null ? extras.getCharSequence(Notification.EXTRA_BIG_TEXT) : null);
+
+        String[] fields = new String[] {title, text, bigText};
+        fillFromMessagingExtras(extras, fields);
+        title = fields[0];
+        text = fields[1];
+        bigText = fields[2];
+
         if (title.isEmpty() && text.isEmpty() && bigText.isEmpty()) {
             return 0;
         }
@@ -239,9 +368,13 @@ public class BankNotificationListenerService extends NotificationListenerService
             String bankPkg = NotificationInterceptStore.packageForSmsSender(context, title);
             if (bankPkg == null || bankPkg.isEmpty()) {
                 String firstLine = text;
-                int dot = text.indexOf('.');
+                int nl = text.indexOf('\n');
+                if (nl > 0) {
+                    firstLine = text.substring(0, nl);
+                }
+                int dot = firstLine.indexOf('.');
                 if (dot > 0) {
-                    firstLine = text.substring(0, dot);
+                    firstLine = firstLine.substring(0, dot);
                 }
                 bankPkg = NotificationInterceptStore.packageForSmsSender(context, firstLine);
             }

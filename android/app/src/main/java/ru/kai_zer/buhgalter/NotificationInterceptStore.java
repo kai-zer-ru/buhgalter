@@ -178,7 +178,10 @@ final class NotificationInterceptStore {
         return out;
     }
 
-    /** Normalize SMS originator for allowlist lookup (trim, lower, strip +7/8 prefixes). */
+    /**
+     * Normalize SMS originator for allowlist lookup (trim, lower, strip «Ваш»/dashes/+7/8).
+     * Keep in sync with {@code normalizeSmsSender} in banks.ts.
+     */
     static String normalizeSmsSender(String raw) {
         if (raw == null) {
             return "";
@@ -189,9 +192,10 @@ final class NotificationInterceptStore {
         } else if (s.startsWith("your ")) {
             s = s.substring(5).trim();
         }
-        s = s.replace("т-банк", "tbank").replace("тбанк", "tbank");
+        // Unicode dashes (Messages UI often uses en/em dash in «Т‑Банк») then spaces.
+        s = s.replaceAll("\\p{Pd}+", "").replace(" ", "");
+        s = s.replace("тбанк", "tbank");
         s = s.replace("тинькофф", "tinkoff");
-        s = s.replace(" ", "").replace("-", "");
         if (s.startsWith("+7") && s.length() > 2) {
             s = s.substring(2);
         } else if (s.startsWith("8") && s.length() == 11 && s.chars().allMatch(Character::isDigit)) {
