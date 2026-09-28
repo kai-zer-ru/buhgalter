@@ -53,6 +53,10 @@
 - `GET /api/v1/realtime` — WebSocket-хаб по `user_id`; события `invalidate` после мутаций, import job и scheduler
 - Документация nginx: `Upgrade` / `Connection` и длинный `proxy_read_timeout` для `/api/v1/realtime` ([install/nginx.md](docs/install/nginx.md), [docker/nginx.conf.example](docker/nginx.conf.example))
 
+#### Исправлено
+
+- Привязка операции к подписке закрывает ближайший платёж в очереди (`upcoming_run_ats`), если дата операции попадает в его окно — раннее списание банка больше не оставляет «ещё одно списание завтра»
+
 #### Техническое
 
 - [docs/release-notes-v1.7.0.md](docs/release-notes-v1.7.0.md)

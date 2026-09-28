@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -401,7 +402,12 @@ func AttachTransactions(ctx context.Context, db *sql.DB, userID, subscriptionID 
 	if err != nil {
 		return AttachResult{}, err
 	}
-	attached := make([]string, 0, len(txIDs))
+	type attachedTx struct {
+		id   string
+		date time.Time
+		ok   bool
+	}
+	attached := make([]attachedTx, 0, len(txIDs))
 	now := timeutil.FormatUTC(timeutil.NowUTC())
 	q := queries(db)
 	for _, txID := range txIDs {
@@ -435,9 +441,70 @@ func AttachTransactions(ctx context.Context, db *sql.DB, userID, subscriptionID 
 		if err != nil || n == 0 {
 			continue
 		}
-		attached = append(attached, txID)
+		item := attachedTx{id: txID}
+		if txDate, err := timeutil.ParseUTC(row.TransactionDate); err == nil {
+			item.date = txDate
+			item.ok = true
+		}
+		attached = append(attached, item)
 	}
-	return AttachResult{AttachedCount: len(attached), AttachedIDs: attached}, nil
+	ids := make([]string, len(attached))
+	for i, a := range attached {
+		ids[i] = a.id
+	}
+	if len(attached) == 0 {
+		return AttachResult{}, nil
+	}
+
+	// Consume nearest upcoming slots covered by attached txs (early charge, overdue manual).
+	sort.SliceStable(attached, func(i, j int) bool {
+		if !attached[i].ok {
+			return false
+		}
+		if !attached[j].ok {
+			return true
+		}
+		return attached[i].date.Before(attached[j].date)
+	})
+	tz, err := userTimezone(ctx, db, userID)
+	if err != nil {
+		tz = "Europe/Moscow"
+	}
+	upcoming := append([]string(nil), sub.UpcomingRunAts...)
+	if err := ValidateUpcoming(upcoming); err != nil {
+		return AttachResult{AttachedCount: len(attached), AttachedIDs: ids}, nil
+	}
+	lastRun := sub.LastRunAt
+	sched := schedule.Input{
+		Period: sub.Period, Weekday: sub.Weekday, DayOfMonth: sub.DayOfMonth,
+		StartDate: mustParse(sub.StartDate), TimeLocal: sub.TimeLocal,
+	}
+	for _, a := range attached {
+		if !a.ok {
+			continue
+		}
+		if !coversNextRun(a.date, upcoming, lastRun, sub.Period) {
+			continue
+		}
+		consumed := upcoming[0]
+		advanced, err := AdvanceUpcoming(upcoming, sched, tz)
+		if err != nil {
+			break
+		}
+		encoded, err := encodeUpcoming(advanced)
+		if err != nil {
+			break
+		}
+		if _, err := q.MarkSubscriptionRan(ctx, sqlcdb.MarkSubscriptionRanParams{
+			NextRunAt: advanced[0], UpcomingRunAts: encoded, LastRunAt: strPtr(consumed),
+			SubcategoryID: &subCatID, UpdatedAt: now, ID: sub.ID, UserID: userID,
+		}); err != nil {
+			break
+		}
+		upcoming = advanced
+		lastRun = strPtr(consumed)
+	}
+	return AttachResult{AttachedCount: len(attached), AttachedIDs: ids}, nil
 }
 
 func ConvertFromRecurring(ctx context.Context, db *sql.DB, userID, recurringID, name string, description *string, icon *string, websiteURL *string) (ConvertResult, error) {

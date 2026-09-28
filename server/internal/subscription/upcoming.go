@@ -103,6 +103,57 @@ func AdvanceUpcoming(current []string, in schedule.Input, tz string) ([]string, 
 	return out, nil
 }
 
+// coversNextRun reports whether txDate should consume upcoming[0] (nearest charge).
+// Window: after last_run_at (or one period before next), and before upcoming[1].
+func coversNextRun(txDate time.Time, upcoming []string, lastRunAt *string, period string) bool {
+	if err := ValidateUpcoming(upcoming); err != nil {
+		return false
+	}
+	next, err := timeutil.ParseUTC(upcoming[0])
+	if err != nil {
+		return false
+	}
+	second, err := timeutil.ParseUTC(upcoming[1])
+	if err != nil {
+		return false
+	}
+	var earliest time.Time
+	if lastRunAt != nil && strings.TrimSpace(*lastRunAt) != "" {
+		last, err := timeutil.ParseUTC(*lastRunAt)
+		if err != nil {
+			return false
+		}
+		earliest = last.Add(time.Second)
+	} else {
+		earliest = next.Add(-periodLookback(period))
+	}
+	// Exclusive upper bound: next scheduled slot after the nearest one.
+	latest := second.Add(-time.Second)
+	if !latest.After(earliest) {
+		return false
+	}
+	return !txDate.Before(earliest) && !txDate.After(latest)
+}
+
+func periodLookback(period string) time.Duration {
+	switch period {
+	case "week":
+		return 7 * 24 * time.Hour
+	case "two_weeks":
+		return 14 * 24 * time.Hour
+	case "month":
+		return 31 * 24 * time.Hour
+	case "quarter":
+		return 92 * 24 * time.Hour
+	case "half_year":
+		return 183 * 24 * time.Hour
+	case "year":
+		return 366 * 24 * time.Hour
+	default:
+		return 31 * 24 * time.Hour
+	}
+}
+
 func appendNextUpcoming(prev, last string, in schedule.Input, tz string) (string, error) {
 	prevT, err := timeutil.ParseUTC(prev)
 	if err != nil {
