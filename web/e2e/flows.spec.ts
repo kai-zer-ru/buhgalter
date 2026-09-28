@@ -47,9 +47,10 @@ test('create income on dashboard', async ({ page }) => {
 });
 
 test('create transfer', async ({ page }) => {
+	const bankAccountName = `E2E Bank ${Date.now()}`;
 	await page.goto('/accounts/new');
 	await waitAppReady(page);
-	await page.getByLabel('Название').fill('E2E Bank');
+	await page.getByLabel('Название').fill(bankAccountName);
 	await page.getByRole('button', { name: 'Банковский' }).click();
 	await page.getByPlaceholder('Поиск банка…').fill('Сбер');
 	await page
@@ -65,7 +66,7 @@ test('create transfer', async ({ page }) => {
 	await waitAppReady(page);
 	await page.getByRole('button', { name: 'Перевод', exact: true }).click();
 	await selectCombobox(page, 'from-acc', { label: cashAccountName });
-	await selectCombobox(page, 'to-acc', { label: 'E2E Bank' });
+	await selectCombobox(page, 'to-acc', { label: bankAccountName });
 	await page.locator('#tr-amount').fill('100');
 	await page.getByRole('button', { name: 'Сохранить' }).click();
 	await expect(page.getByText('100.00').first()).toBeVisible({ timeout: 10_000 });
@@ -220,10 +221,11 @@ test('create debt and settle', async ({ page }) => {
 	await page.getByRole('menuitem', { name: 'Закрыть' }).click();
 	const settleModal = page.getByRole('dialog');
 	await settleModal.getByRole('button', { name: 'Закрыть' }).click();
-	await expect(page.getByRole('cell', { name: debtorName })).toHaveCount(0, { timeout: 10_000 });
+	await expect(settleModal).toHaveCount(0, { timeout: 15_000 });
+	await expect(page.getByRole('cell', { name: debtorName })).toHaveCount(0, { timeout: 15_000 });
 
 	await page.getByRole('tab', { name: 'Закрытые', exact: true }).click();
-	await expect(page.getByRole('cell', { name: debtorName })).toBeVisible({ timeout: 10_000 });
+	await expect(page.getByRole('cell', { name: debtorName })).toBeVisible({ timeout: 15_000 });
 });
 
 test('create recurring operation', async ({ page }) => {

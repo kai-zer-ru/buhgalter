@@ -20,7 +20,7 @@
 		open: boolean;
 		debt: Debt | null;
 		onclose: () => void;
-		onsaved: () => void;
+		onsaved: () => void | Promise<void>;
 	};
 
 	let { open = $bindable(), debt = $bindable(), onclose, onsaved }: Props = $props();
@@ -71,7 +71,7 @@
 			open = false;
 			debt = null;
 			toast($_('common.saved'));
-			onsaved();
+			await onsaved();
 		} catch (err) {
 			toast.fromError(err);
 		} finally {
