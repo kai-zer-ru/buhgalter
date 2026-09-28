@@ -46,6 +46,8 @@ UI показывает строку прогноза, если `forecast_balanc
 | только subscriptions | «С учётом подписок» |
 | оба | «С учётом плановых и подписок» |
 
+На **веб**-главной в карточке «Общий баланс», если `total_forecast === total_balance` (нет вклада в прогноз), под суммой показывается текст «Нет ближайших подписок и периодических» (`dashboard.noUpcomingSubscriptionsOrRecurring`). На Android — без этого empty-state.
+
 Хелпер: `$lib/forecast-label.ts` (`forecastWithLabelKey`, `aggregateForecastLabelFlags`).
 
 ## Модуль `$lib/transaction-display.ts`

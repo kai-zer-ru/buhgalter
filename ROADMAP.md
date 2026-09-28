@@ -26,6 +26,7 @@
 - [v1.5.5](#v155)
 - [v1.6.0](#v160)
 - [v1.7.0](#v170)
+- [v1.7.1](#v171)
 - [Общие планы](#общие-планы)
 - [На подумать](#на-подумать)
 
@@ -320,6 +321,10 @@
 - [x] БАГ. Импорт CSV: `import.done` через `$effect` опаздывал относительно следующего WS-кадра `invalidate` — экран не доходил до «Импорт завершён». Фикс: sync-подписка `subscribeImportRealtime` в onmessage + `markLocalMutation` на done до echo-invalidate; poll остаётся fallback
 - [x] Точечный realtime `invalidate` (`hint_paths` / `entities`) — без refetch всего экрана на каждое событие
 - [x] [Release notes](docs/release-notes-v1.7.0.md) · [realtime-updates.md](roadmap/realtime-updates.md) · [ui-api-cache.md](docs/ui-api-cache.md) · [install/nginx.md](docs/install/nginx.md)
+
+## v1.7.1
+
+- [x] Веб-главная: empty-state под общим балансом, если нет ближайших подписок/периодических (прогноз совпадает с балансом)
 
 ## Общие планы
 

@@ -442,6 +442,10 @@
 									{$_(forecastWithLabelKey(ownForecastFlags))}:
 									<MoneyDisplay cents={dash.total_forecast} {currency} class="" />
 								</p>
+							{:else}
+								<p class="mt-1 text-sm" style:color="var(--text-muted)">
+									{$_('dashboard.noUpcomingSubscriptionsOrRecurring')}
+								</p>
 							{/if}
 						</div>
 						<div class="card">
@@ -510,6 +514,10 @@
 							<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
 								{$_(forecastWithLabelKey(ownForecastFlags))}:
 								<MoneyDisplay cents={dash.total_forecast} {currency} class="" />
+							</p>
+						{:else}
+							<p class="mt-1 text-sm" style:color="var(--text-muted)">
+								{$_('dashboard.noUpcomingSubscriptionsOrRecurring')}
 							</p>
 						{/if}
 					</div>

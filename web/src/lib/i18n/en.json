@@ -321,6 +321,7 @@
 	"dashboard.withPlans": "Including planned",
 	"dashboard.withSubscriptions": "Including subscriptions",
 	"dashboard.withPlansAndSubscriptions": "Including planned and subscriptions",
+	"dashboard.noUpcomingSubscriptionsOrRecurring": "No upcoming subscriptions or recurring",
 	"dashboard.recent": "Recent transactions",
 	"dashboard.accountsSection": "Accounts",
 	"dashboard.group.past": "Past transactions",
