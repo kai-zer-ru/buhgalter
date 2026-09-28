@@ -79,11 +79,11 @@
 | [api/user-status.md](api/user-status.md) | Статус пользователя, модерация, блокировка |
 | [notifications.md](notifications.md) | Уведомления: настройки, периоды, шаблоны, блокировка UI/API |
 | [../roadmap/balance-shortfall-notifications.md](../roadmap/balance-shortfall-notifications.md) | Недостаток средств в тексте уведомлений |
-| [ui-api-cache.md](ui-api-cache.md) | In-memory кеш GET на сервере и справочники в браузере |
+| [ui-api-cache.md](ui-api-cache.md) | Кеш GET на сервере; SWR ref-cache на вебе/Android; мутации и realtime |
 | [../roadmap/realtime-updates.md](../roadmap/realtime-updates.md) | Живые обновления UI: WebSocket на вебе (v1.7.0); Android — SWR |
 | [import/cubux.md](import/cubux.md) | Импорт и экспорт формата Cubux |
 | [import/buhgalter.md](import/buhgalter.md) | Нативный секционный CSV: полный перенос учёта между инстансами |
 | [../roadmap/category-rules-inbox.md](../roadmap/category-rules-inbox.md) | (план) Правила категорий и inbox неразнесённого |
 | [feature-toggles.md](feature-toggles.md) | Флаги модулей в админке; чеклист для новых фич |
-| [subscriptions.md](subscriptions.md) | Подписки: API, UI, уведомления, плановый остаток |
-| [release-notes-v1.7.0.md](release-notes-v1.7.0.md) | Release notes v1.7.0 |
+| [subscriptions.md](subscriptions.md) | Подписки: API, UI, уведомления, плановый остаток, привязка и очередь |
+| [release-notes-v1.7.0.md](release-notes-v1.7.0.md) | Release notes v1.7.0: realtime, подписки, Android SMS/версии |
