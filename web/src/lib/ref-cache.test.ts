@@ -240,4 +240,182 @@ describe('web fetchWithRefCache SWR', () => {
 		writeRefCache('/api/v1/categories?type=expense', []);
 		expect(readCategoriesFromOfflineCache('expense')).toMatchObject([{ id: 'c1', name: 'Еда' }]);
 	});
+
+	it('writing dashboard patches account list and balance caches', () => {
+		writeRefCache('/api/v1/accounts?status=active', [
+			{
+				id: 'a1',
+				name: 'Ozon',
+				type: 'bank',
+				bank_id: null,
+				initial_balance: 0,
+				balance: 0,
+				balance_display: '0.00',
+				status: 'active',
+				is_primary: false,
+				created_at: '',
+				updated_at: ''
+			}
+		]);
+		writeRefCache('/api/v1/dashboard', {
+			total_balance: 44100,
+			total_forecast: 44100,
+			accounts: [
+				{
+					id: 'a1',
+					name: 'Ozon',
+					type: 'bank',
+					balance: 44100,
+					balance_display: '441.00',
+					forecast_balance: 44100,
+					forecast_display: '441.00',
+					has_future_this_month: false,
+					is_primary: false
+				}
+			],
+			recent_transactions: [],
+			debts_summary: {
+				i_owe: 0,
+				owed_to_me: 0,
+				overdue_i_owe: 0,
+				overdue_owed_to_me: 0,
+				active_count: 0
+			}
+		});
+		expect(readRefCache('/api/v1/accounts?status=active')).toMatchObject([
+			{ id: 'a1', balance: 44100, balance_display: '441.00' }
+		]);
+		expect(readRefCache('/api/v1/accounts/a1/balance')).toMatchObject({
+			id: 'a1',
+			balance: 44100,
+			balance_display: '441.00'
+		});
+	});
+
+	it('notifyRealtimeInvalidate clears stale dashboard under live socket', async () => {
+		const { notifyRealtimeInvalidate } = await import('./ref-cache');
+		writeRefCache('/api/v1/dashboard', {
+			total_balance: 0,
+			total_forecast: 0,
+			accounts: [
+				{
+					id: 'a1',
+					name: 'Ozon',
+					type: 'bank',
+					balance: 0,
+					balance_display: '0.00',
+					forecast_balance: 0,
+					forecast_display: '0.00',
+					has_future_this_month: false,
+					is_primary: false
+				}
+			],
+			recent_transactions: [],
+			debts_summary: {
+				i_owe: 0,
+				owed_to_me: 0,
+				overdue_i_owe: 0,
+				overdue_owed_to_me: 0,
+				active_count: 0
+			}
+		});
+		setRealtimeLive(true);
+		notifyRealtimeInvalidate();
+		expect(readRefCache('/api/v1/dashboard')).toBeNull();
+	});
+
+	it('enrichAccountsWithCachedBalances overlays dashboard balances', async () => {
+		const { enrichAccountsWithCachedBalances } = await import('./ref-cache');
+		const rows = enrichAccountsWithCachedBalances(
+			[
+				{
+					id: 'a1',
+					name: 'Ozon',
+					type: 'bank',
+					bank_id: null,
+					initial_balance: 0,
+					balance: 0,
+					balance_display: '0.00',
+					status: 'active',
+					is_primary: false,
+					created_at: '',
+					updated_at: ''
+				}
+			],
+			{
+				total_balance: 44100,
+				total_forecast: 44100,
+				accounts: [
+					{
+						id: 'a1',
+						name: 'Ozon',
+						type: 'bank',
+						balance: 44100,
+						balance_display: '441.00',
+						forecast_balance: 44100,
+						forecast_display: '441.00',
+						has_future_this_month: false,
+						is_primary: false
+					}
+				],
+				recent_transactions: [],
+				debts_summary: {
+					i_owe: 0,
+					owed_to_me: 0,
+					overdue_i_owe: 0,
+					overdue_owed_to_me: 0,
+					active_count: 0
+				}
+			}
+		);
+		expect(rows[0]).toMatchObject({ balance: 44100, balance_display: '441.00' });
+	});
+
+	it('unchanged dashboard write still patches lagging account list', () => {
+		const dash = {
+			total_balance: 44100,
+			total_forecast: 44100,
+			accounts: [
+				{
+					id: 'a1',
+					name: 'Ozon',
+					type: 'bank',
+					balance: 44100,
+					balance_display: '441.00',
+					forecast_balance: 44100,
+					forecast_display: '441.00',
+					has_future_this_month: false,
+					is_primary: false
+				}
+			],
+			recent_transactions: [],
+			debts_summary: {
+				i_owe: 0,
+				owed_to_me: 0,
+				overdue_i_owe: 0,
+				overdue_owed_to_me: 0,
+				active_count: 0
+			}
+		};
+		writeRefCache('/api/v1/dashboard', dash);
+		writeRefCache('/api/v1/accounts?status=active', [
+			{
+				id: 'a1',
+				name: 'Ozon',
+				type: 'bank',
+				bank_id: null,
+				initial_balance: 0,
+				balance: 0,
+				balance_display: '0.00',
+				status: 'active',
+				is_primary: false,
+				created_at: '',
+				updated_at: ''
+			}
+		]);
+		expect(writeRefCache('/api/v1/dashboard', dash)).toBe(false);
+		expect(readRefCache('/api/v1/accounts?status=active')).toMatchObject([
+			{ id: 'a1', balance: 44100, balance_display: '441.00' }
+		]);
+	});
 });

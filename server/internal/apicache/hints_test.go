@@ -25,6 +25,26 @@ func TestHintsForMutation_accountDetail(t *testing.T) {
 	}
 }
 
+func TestHintsForMutation_transfers(t *testing.T) {
+	h := HintsForMutation("/api/v1/transfers")
+	wantPaths := []string{
+		"/api/v1/transactions",
+		"/api/v1/dashboard",
+		"/api/v1/accounts",
+		"/api/v1/accounts/summary",
+		"/api/v1/stats",
+		"/api/v1/budgets",
+	}
+	for _, p := range wantPaths {
+		if !contains(h.Paths, p) {
+			t.Fatalf("missing path %s in %v", p, h.Paths)
+		}
+	}
+	if !contains(h.Entities, "transaction") || !contains(h.Entities, "account") {
+		t.Fatalf("entities=%v", h.Entities)
+	}
+}
+
 func TestHintsForMutation_unknownIsCoarse(t *testing.T) {
 	h := HintsForMutation("/api/v1/auth/logout")
 	if len(h.Paths) != 0 {

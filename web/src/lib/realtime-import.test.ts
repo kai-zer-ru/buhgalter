@@ -53,13 +53,11 @@ describe('import realtime sync vs invalidate', () => {
 
 		deliverRealtimeMessageForTests(JSON.stringify({ v: 1, type: 'invalidate' }));
 		expect(notifyRealtimeInvalidate).not.toHaveBeenCalled();
-		expect(clearRefCache).not.toHaveBeenCalled();
 	});
 
 	it('invalidates when there was no recent local mutation', async () => {
 		const { deliverRealtimeMessageForTests } = await import('./realtime');
 		deliverRealtimeMessageForTests(JSON.stringify({ v: 1, type: 'invalidate' }));
 		expect(notifyRealtimeInvalidate).toHaveBeenCalled();
-		expect(clearRefCache).toHaveBeenCalled();
 	});
 });

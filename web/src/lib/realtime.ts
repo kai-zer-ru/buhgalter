@@ -3,7 +3,7 @@
 import { get, writable } from 'svelte/store';
 import type { ImportJob, ImportReport } from '$lib/api/client';
 import {
-	clearRefCache,
+	LEDGER_BALANCE_HINT_PATHS,
 	notifyRealtimeInvalidate,
 	notifyRealtimeInvalidatePaths,
 	setRealtimeLive,
@@ -149,7 +149,6 @@ function handleMessage(raw: string): void {
 		if (wasRecentLocalMutation()) return;
 		const hints = (data.hint_paths ?? []).map((p) => p.trim()).filter(Boolean);
 		if (hints.length === 0) {
-			clearRefCache();
 			notifyRealtimeInvalidate();
 			return;
 		}
@@ -215,6 +214,9 @@ export function connectRealtime(): void {
 			void catchUpAfterReconnect();
 		} else {
 			void seedTransactionChangesCursor();
+			// Previous-session SWR can keep wrong balances while the live socket
+			// disables background revalidate — drop ledger paths once on first open.
+			notifyRealtimeInvalidatePaths([...LEDGER_BALANCE_HINT_PATHS]);
 		}
 	};
 

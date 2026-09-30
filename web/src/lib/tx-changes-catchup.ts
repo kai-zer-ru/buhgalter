@@ -1,7 +1,7 @@
 /** Advance / sync GET /sync/transaction-changes cursor for web after reconnect. */
 
 import { listTransactionChanges } from '$lib/api/client';
-import { clearRefCache, notifyRealtimeInvalidate } from '$lib/ref-cache';
+import { notifyRealtimeInvalidate } from '$lib/ref-cache';
 
 export const TX_CHANGES_CURSOR_KEY = 'buhgalter.web_tx_changes_cursor';
 
@@ -72,7 +72,7 @@ export async function catchUpAfterReconnect(): Promise<void> {
 		// still soft-refetch below
 	}
 	// Soft-refetch open page after outage (balances / non-tx entities).
-	clearRefCache();
+	// notifyRealtimeInvalidate clears SWR (coarse contract) then soft-reloads.
 	notifyRealtimeInvalidate();
 }
 

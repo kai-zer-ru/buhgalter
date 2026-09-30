@@ -48,3 +48,9 @@ futures.md
 *.keystore
 # nektos/act local artifact server (make act-push / act-release)
 .artifacts/
+
+
+# BMad Method
+/_bmad/
+/bmad_docs/
+/.agents/

@@ -13,7 +13,6 @@ vi.mock('$lib/api/client', () => ({
 }));
 
 vi.mock('$lib/ref-cache', () => ({
-	clearRefCache: vi.fn(),
 	notifyRealtimeInvalidate: vi.fn()
 }));
 
@@ -41,7 +40,7 @@ describe('tx-changes-catchup', () => {
 	});
 
 	it('catch-up advances cursor and invalidates', async () => {
-		const { clearRefCache, notifyRealtimeInvalidate } = await import('$lib/ref-cache');
+		const { notifyRealtimeInvalidate } = await import('$lib/ref-cache');
 		localStorage.setItem(TX_CHANGES_CURSOR_KEY, '10');
 		listMock.mockResolvedValueOnce({
 			server_time: '',
@@ -51,7 +50,6 @@ describe('tx-changes-catchup', () => {
 		});
 		await catchUpAfterReconnect();
 		expect(localStorage.getItem(TX_CHANGES_CURSOR_KEY)).toBe('15');
-		expect(clearRefCache).toHaveBeenCalled();
 		expect(notifyRealtimeInvalidate).toHaveBeenCalled();
 	});
 });

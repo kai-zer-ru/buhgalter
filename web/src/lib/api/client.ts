@@ -5,6 +5,8 @@ import { exportCSVUrl } from '$lib/api/export-url';
 import { notifySessionExpired, shouldRedirectApi401 } from '$lib/auth/session-expired';
 import {
 	clearRefCache,
+	enrichAccountWithCachedBalances,
+	enrichAccountsWithCachedBalances,
 	fetchWithRefCache,
 	isStaleFetchError,
 	markLocalMutation,
@@ -672,10 +674,11 @@ export async function getUIMeta() {
 export function listAccounts(status?: 'active' | 'archived' | 'deleted') {
 	const q = status ? `?status=${status}` : '';
 	const path = `/api/v1/accounts${q}`;
+	const finalize = (rows: Account[]) => enrichAccountsWithCachedBalances(rows);
 	return request<Account[]>(path)
 		.then((rows) => {
-			if (rows.length > 0) return rows;
-			return readAccountsFromOfflineCache(status) ?? rows;
+			if (rows.length > 0) return finalize(rows);
+			return finalize(readAccountsFromOfflineCache(status) ?? rows);
 		})
 		.catch((err) => {
 			if (!isStaleFetchError(err)) throw err;
@@ -686,7 +689,7 @@ export function listAccounts(status?: 'active' | 'archived' | 'deleted') {
 }
 
 export function getAccount(id: string) {
-	return request<Account>(`/api/v1/accounts/${id}`);
+	return request<Account>(`/api/v1/accounts/${id}`).then(enrichAccountWithCachedBalances);
 }
 
 export function createAccount(payload: {

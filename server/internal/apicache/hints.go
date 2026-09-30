@@ -25,6 +25,18 @@ func HintsForMutation(apiPath string) InvalidateHints {
 			},
 			Entities: []string{"transaction", "account", "budget"},
 		}
+	case strings.HasPrefix(path, "/api/v1/transfers"):
+		return InvalidateHints{
+			Paths: []string{
+				"/api/v1/transactions",
+				"/api/v1/dashboard",
+				"/api/v1/accounts",
+				"/api/v1/accounts/summary",
+				"/api/v1/stats",
+				"/api/v1/budgets",
+			},
+			Entities: []string{"transaction", "account", "budget"},
+		}
 	case strings.HasPrefix(path, "/api/v1/accounts"):
 		hints := InvalidateHints{
 			Paths: []string{

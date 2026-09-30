@@ -70,8 +70,11 @@ export function wasRecentLocalMutation(): boolean {
 	return Date.now() - lastLocalMutationAt < LOCAL_MUTATION_ECHO_MS;
 }
 
-/** Coarse invalidate from WebSocket — pages watching any path soft-reload. */
+/** Coarse invalidate from WebSocket — drop SWR then soft-reload open screens.
+ *  Empty `hint_paths` means full refresh; returning cached GETs under a live socket
+ *  would freeze balances until F5. */
 export function notifyRealtimeInvalidate(): void {
+	clearRefCache();
 	refCacheUpdate.set({ path: '*', seq: Date.now() });
 	refCacheTick.update((n) => n + 1);
 }
@@ -178,13 +181,19 @@ export function refCacheReadyAny(paths: string[]): boolean {
 export function writeRefCache<T>(path: string, value: T): boolean {
 	try {
 		const key = storageKey(path);
-		const prevRaw = memoryStore.get(key) ?? null;
+		const prevRaw = memoryStore.get(key) ?? storageGet(key);
 		const nextRaw = JSON.stringify(value);
-		if (prevRaw === nextRaw) return false;
+		const isDash = isDashboardRefPath(path) && isDashboardShape(value);
+		if (prevRaw === nextRaw) {
+			// Still sync sibling account caches — they may lag behind an unchanged dashboard blob.
+			if (isDash) patchAccountListCachesFromDashboard(value as Dashboard);
+			return false;
+		}
 		if (isDashboardRefPath(path) && prevRaw !== null) {
 			try {
 				const prev = JSON.parse(prevRaw) as unknown;
 				if (isDashboardShape(prev) && isDashboardShape(value) && stableEqual(prev, value)) {
+					if (isDash) patchAccountListCachesFromDashboard(value as Dashboard);
 					return false;
 				}
 			} catch {
@@ -192,6 +201,10 @@ export function writeRefCache<T>(path: string, value: T): boolean {
 			}
 		}
 		storageSet(key, nextRaw);
+		memoryStore.set(key, nextRaw);
+		if (isDash) {
+			patchAccountListCachesFromDashboard(value as Dashboard);
+		}
 		return true;
 	} catch {
 		return false;
@@ -536,17 +549,93 @@ export function seedDictionariesFromUIMeta(meta: {
 	// accounts: do not seed into SWR (balances live only on GET /accounts and dashboard)
 }
 
+/** Overlay cached dashboard balances onto account rows (single source of truth). */
+export function enrichAccountsWithCachedBalances(
+	accounts: Account[],
+	dashboard?: Dashboard | null
+): Account[] {
+	const dash = dashboard ?? readRefCache<Dashboard>('/api/v1/dashboard');
+	if (!dash?.accounts?.length) return accounts;
+	const summaryById = new Map(dash.accounts.map((row) => [row.id, row]));
+	return accounts.map((acc) => applyBalanceSummary(acc, summaryById.get(acc.id)));
+}
+
+/** @deprecated Use enrichAccountsWithCachedBalances */
+export const mergeAccountsWithDashboard = enrichAccountsWithCachedBalances;
+
+export function enrichAccountWithCachedBalances(
+	account: Account,
+	dashboard?: Dashboard | null
+): Account {
+	const dash = dashboard ?? readRefCache<Dashboard>('/api/v1/dashboard');
+	const summary = dash?.accounts.find((row) => row.id === account.id);
+	return summary ? applyBalanceSummary(account, summary) : account;
+}
+
+function applyBalanceSummary(account: Account, summary?: AccountBalanceSummary): Account {
+	if (!summary) return account;
+	return {
+		...account,
+		balance: summary.balance,
+		balance_display: summary.balance_display,
+		is_primary: summary.is_primary ?? account.is_primary,
+		credit_limit: summary.credit_limit ?? account.credit_limit,
+		credit_limit_display: summary.credit_limit_display ?? account.credit_limit_display,
+		auto_topup_enabled: summary.auto_topup_enabled ?? account.auto_topup_enabled,
+		auto_topup_threshold: summary.auto_topup_threshold ?? account.auto_topup_threshold,
+		auto_topup_threshold_display:
+			summary.auto_topup_threshold_display ?? account.auto_topup_threshold_display,
+		auto_topup_target: summary.auto_topup_target ?? account.auto_topup_target,
+		auto_topup_target_display:
+			summary.auto_topup_target_display ?? account.auto_topup_target_display,
+		auto_topup_source_account_id:
+			summary.auto_topup_source_account_id ?? account.auto_topup_source_account_id
+	};
+}
+
+/** Keep `/accounts*` and `/balance` in sync when dashboard is refreshed. */
+export function patchAccountListCachesFromDashboard(dashboard: Dashboard): void {
+	if (!dashboard.accounts?.length) return;
+	const paths = [
+		'/api/v1/accounts',
+		'/api/v1/accounts?status=active',
+		'/api/v1/accounts?status=archived',
+		'/api/v1/accounts?status=deleted'
+	] as const;
+	for (const path of paths) {
+		const rows = readRefCache<Account[]>(path);
+		if (!isNonEmptyList(rows)) continue;
+		writeRefCache(path, enrichAccountsWithCachedBalances(rows, dashboard));
+	}
+	for (const summary of dashboard.accounts) {
+		const acc = readRefCache<Account>(`/api/v1/accounts/${summary.id}`);
+		if (acc) {
+			writeRefCache(`/api/v1/accounts/${summary.id}`, applyBalanceSummary(acc, summary));
+		}
+		writeRefCache(`/api/v1/accounts/${summary.id}/balance`, summary);
+	}
+}
+
+/** Paths whose stale SWR freezes balances while the realtime socket skips revalidate. */
+export const LEDGER_BALANCE_HINT_PATHS = [
+	'/api/v1/dashboard',
+	'/api/v1/accounts',
+	'/api/v1/accounts/summary',
+	'/api/v1/transactions',
+	'/api/v1/budgets'
+] as const;
+
 export function readAccountsFromOfflineCache(
 	status?: 'active' | 'archived' | 'deleted'
 ): Account[] | null {
 	const path = accountsRefPath(status);
 	const direct = readRefCache<Account[]>(path);
-	if (isNonEmptyList(direct)) return direct;
+	if (isNonEmptyList(direct)) return enrichAccountsWithCachedBalances(direct);
 
 	const all = readRefCache<Account[]>('/api/v1/accounts');
 	if (isNonEmptyList(all)) {
 		const filtered = status ? all.filter((row) => row.status === status) : all;
-		if (isNonEmptyList(filtered)) return filtered;
+		if (isNonEmptyList(filtered)) return enrichAccountsWithCachedBalances(filtered);
 	}
 
 	if (!status || status === 'active') {
@@ -563,5 +652,7 @@ export function readAccountsFromOfflineCache(
 	let refs = meta.accounts;
 	if (status) refs = refs.filter((row) => row.status === status);
 	if (!refs.length) return null;
-	return refs.map((ref) => accountFromUIMetaRef(ref, meta.banks, summaryById.get(ref.id)));
+	return enrichAccountsWithCachedBalances(
+		refs.map((ref) => accountFromUIMetaRef(ref, meta.banks, summaryById.get(ref.id)))
+	);
 }
