@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -788,6 +789,54 @@ func TestCreditCardPaymentExceedsLimit(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("payment within limit: %v", err)
+	}
+}
+
+func TestCreditCardConcurrentPaymentsDoNotExceedLimit(t *testing.T) {
+	handle, env := seedEnvFull(t)
+	database := handle.DB()
+	ctx := context.Background()
+	past := timeutil.NowUTC().Add(-time.Hour)
+	insertCreditCardAccount(t, ctx, database, env.userID, "cc-1", 200_000, 100_000)
+	if err := accountbalance.Refresh(ctx, database, env.userID); err != nil {
+		t.Fatal(err)
+	}
+
+	const n = 2
+	errs := make([]error, n)
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			_, errs[i] = CreateTransfer(ctx, database, env.userID, TransferInput{
+				FromAccountID: env.accountID, ToAccountID: "cc-1",
+				Amount: 100_000, TransactionDate: past,
+			})
+		}(i)
+	}
+	wg.Wait()
+
+	ok, limited := 0, 0
+	for _, err := range errs {
+		switch {
+		case err == nil:
+			ok++
+		case errors.Is(err, ErrCreditCardPaymentExceedsLimit):
+			limited++
+		default:
+			t.Fatalf("unexpected error: %v", errs)
+		}
+	}
+	if ok != 1 || limited != 1 {
+		t.Fatalf("want 1 success and 1 limit error, got ok=%d limited=%d errs=%v", ok, limited, errs)
+	}
+	var legs int
+	if err := database.QueryRow(`SELECT COUNT(*) FROM transactions WHERE account_id = 'cc-1' AND type = 'transfer'`).Scan(&legs); err != nil {
+		t.Fatal(err)
+	}
+	if legs != 1 {
+		t.Fatalf("credit card transfer legs = %d, want 1", legs)
 	}
 }
 
