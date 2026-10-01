@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"sync"
 	"testing"
 
 	"github.com/kai-zer-ru/buhgalter/internal/bank"
@@ -773,6 +774,199 @@ func TestArchiveAccountRequiresTransferTarget(t *testing.T) {
 	defer archResp.Body.Close()
 	if archResp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("archive without transfer target status %d, want 400", archResp.StatusCode)
+	}
+}
+
+func countAccountTransferLegs(t *testing.T, env *testEnv, accountID string) int {
+	t.Helper()
+	var n int
+	if err := env.db.QueryRow(`SELECT COUNT(*) FROM transactions WHERE account_id = ? AND type = 'transfer'`, accountID).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+func TestArchiveAccountTransferRollsBackIfStatusFails(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+
+	targetID := createTestAccount(t, env, "Целевой")
+	accID := createTestAccount(t, env, "На архив")
+
+	_, err := env.db.Exec(`
+		CREATE TRIGGER test_fail_archive_status
+		BEFORE UPDATE OF status ON accounts
+		WHEN NEW.status = 'archived'
+		BEGIN
+			SELECT RAISE(ABORT, 'test-fail-status');
+		END;
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	archResp, err := env.authedRequest(
+		http.MethodPost,
+		"/api/v1/accounts/"+accID+"/archive?transfer_to_account_id="+targetID,
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer archResp.Body.Close()
+	if archResp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("archive status %d, want 500", archResp.StatusCode)
+	}
+	if n := countAccountTransferLegs(t, env, accID); n != 0 {
+		t.Fatalf("transfer legs after rollback = %d, want 0", n)
+	}
+
+	getResp, err := env.authedRequest(http.MethodGet, "/api/v1/accounts/"+accID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer getResp.Body.Close()
+	var acc struct {
+		Status string `json:"status"`
+	}
+	_ = json.NewDecoder(getResp.Body).Decode(&acc)
+	if acc.Status != "active" {
+		t.Fatalf("status after failed archive %q, want active", acc.Status)
+	}
+}
+
+func TestArchiveAccountConcurrentTransferOnce(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+
+	targetID := createTestAccount(t, env, "Целевой")
+	accID := createTestAccount(t, env, "На архив")
+
+	var wg sync.WaitGroup
+	codes := make([]int, 2)
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			resp, err := env.authedRequest(
+				http.MethodPost,
+				"/api/v1/accounts/"+accID+"/archive?transfer_to_account_id="+targetID,
+				nil,
+			)
+			if err != nil {
+				t.Errorf("archive request: %v", err)
+				return
+			}
+			defer resp.Body.Close()
+			codes[i] = resp.StatusCode
+		}(i)
+	}
+	wg.Wait()
+
+	ok := 0
+	for _, c := range codes {
+		if c == http.StatusOK {
+			ok++
+		}
+	}
+	if ok == 0 {
+		t.Fatalf("expected at least one 200, got %v", codes)
+	}
+	if n := countAccountTransferLegs(t, env, accID); n != 1 {
+		t.Fatalf("transfer legs = %d, want 1 (codes %v)", n, codes)
+	}
+}
+
+func TestArchiveThenDeleteIgnoresStaleStoredBalance(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+
+	targetID := createTestAccount(t, env, "Целевой")
+	accID := createTestAccount(t, env, "На архив")
+
+	archResp, err := env.authedRequest(
+		http.MethodPost,
+		"/api/v1/accounts/"+accID+"/archive?transfer_to_account_id="+targetID,
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	archResp.Body.Close()
+	if archResp.StatusCode != http.StatusOK {
+		t.Fatalf("archive status %d", archResp.StatusCode)
+	}
+	if n := countAccountTransferLegs(t, env, accID); n != 1 {
+		t.Fatalf("after archive transfer legs = %d, want 1", n)
+	}
+
+	if _, err := env.db.Exec(`UPDATE accounts SET current_balance = 100000 WHERE id = ?`, accID); err != nil {
+		t.Fatal(err)
+	}
+
+	arch2, err := env.authedRequest(
+		http.MethodPost,
+		"/api/v1/accounts/"+accID+"/archive?transfer_to_account_id="+targetID,
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	arch2.Body.Close()
+	if arch2.StatusCode != http.StatusOK {
+		t.Fatalf("second archive status %d", arch2.StatusCode)
+	}
+
+	delResp, err := env.authedRequest(
+		http.MethodDelete,
+		"/api/v1/accounts/"+accID+"?transfer_to_account_id="+targetID,
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	delResp.Body.Close()
+	if delResp.StatusCode != http.StatusNoContent {
+		t.Fatalf("delete status %d, want 204", delResp.StatusCode)
+	}
+	if n := countAccountTransferLegs(t, env, accID); n != 1 {
+		t.Fatalf("transfer legs after stale retry = %d, want 1", n)
+	}
+}
+
+func TestDeleteAccountTransferRollsBackIfStatusFails(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+
+	targetID := createTestAccount(t, env, "Целевой")
+	accID := createTestAccount(t, env, "На удаление")
+
+	_, err := env.db.Exec(`
+		CREATE TRIGGER test_fail_delete_status
+		BEFORE UPDATE OF status ON accounts
+		WHEN NEW.status = 'deleted'
+		BEGIN
+			SELECT RAISE(ABORT, 'test-fail-status');
+		END;
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	delResp, err := env.authedRequest(
+		http.MethodDelete,
+		"/api/v1/accounts/"+accID+"?transfer_to_account_id="+targetID,
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer delResp.Body.Close()
+	if delResp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("delete status %d, want 500", delResp.StatusCode)
+	}
+	if n := countAccountTransferLegs(t, env, accID); n != 0 {
+		t.Fatalf("transfer legs after rollback = %d, want 0", n)
 	}
 }
 

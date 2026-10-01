@@ -113,6 +113,11 @@ UPDATE accounts
 SET status = ?, updated_at = ?
 WHERE id = ? AND user_id = ?;
 
+-- name: LockAccountRow :execrows
+UPDATE accounts
+SET updated_at = updated_at
+WHERE id = ? AND user_id = ?;
+
 -- name: CountActiveAccountsByName :one
 SELECT COUNT(*) AS count
 FROM accounts

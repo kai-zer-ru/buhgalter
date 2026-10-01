@@ -12,6 +12,10 @@ import (
 // AfterBalanceRefresh is deprecated; use balancehooks.AfterRefresh from main.
 var AfterBalanceRefresh = balancehooks.NotifyRefresh
 
+func RefreshBalances(ctx context.Context, db *sql.DB, userID string, asOf time.Time, accountIDs ...string) error {
+	return refreshAccountBalances(ctx, db, userID, asOf, accountIDs...)
+}
+
 func refreshAccountBalances(ctx context.Context, db *sql.DB, userID string, asOf time.Time, accountIDs ...string) error {
 	if err := accountbalance.Refresh(ctx, db, userID, accountIDs...); err != nil {
 		return err

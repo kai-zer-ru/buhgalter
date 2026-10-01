@@ -130,6 +130,27 @@ func CreateTransfer(ctx context.Context, db *sql.DB, userID string, in TransferI
 // CreateTransferForAccountDelete moves the full balance when deleting cash/bank accounts.
 // The source account may be active or archived; the target must be active.
 func CreateTransferForAccountDelete(ctx context.Context, db *sql.DB, userID string, in TransferInput) (Transfer, error) {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return Transfer{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	tr, err := CreateTransferForAccountDeleteTx(ctx, tx, userID, in)
+	if err != nil {
+		return Transfer{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return Transfer{}, err
+	}
+	if err := refreshAccountBalances(ctx, db, userID, in.TransactionDate, in.FromAccountID, in.ToAccountID); err != nil {
+		return Transfer{}, err
+	}
+	return tr, nil
+}
+
+// CreateTransferForAccountDeleteTx inserts the archive/delete transfer on an existing transaction.
+// Caller commits and refreshes balances.
+func CreateTransferForAccountDeleteTx(ctx context.Context, db sqlcdb.DBTX, userID string, in TransferInput) (Transfer, error) {
 	if in.FromAccountID == in.ToAccountID {
 		return Transfer{}, ErrSameAccount
 	}
@@ -180,13 +201,7 @@ func CreateTransferForAccountDelete(ctx context.Context, db *sql.DB, userID stri
 	outID := uuid.NewString()
 	inID := uuid.NewString()
 
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return Transfer{}, err
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	q := queries(tx)
+	q := queries(db)
 	if err := q.InsertTransaction(ctx, sqlcdb.InsertTransactionParams{
 		ID: outID, UserID: userID, AccountID: in.FromAccountID,
 		Type: "transfer", Kind: kind, Amount: in.Amount, Description: in.Description,
@@ -206,12 +221,6 @@ func CreateTransferForAccountDelete(ctx context.Context, db *sql.DB, userID stri
 		return Transfer{}, fmt.Errorf("insert transfer in: %w", err)
 	}
 	if err := insertTransferCommission(ctx, q, userID, groupID, in.FromAccountID, commissionCatID, 0, commissionDesc, kind, txDate, commissionCreated, updated); err != nil {
-		return Transfer{}, err
-	}
-	if err := tx.Commit(); err != nil {
-		return Transfer{}, err
-	}
-	if err := refreshAccountBalances(ctx, db, userID, in.TransactionDate, in.FromAccountID, in.ToAccountID); err != nil {
 		return Transfer{}, err
 	}
 	return Transfer{GroupID: groupID}, nil
@@ -509,7 +518,7 @@ func transferCreatedAt(in TransferInput) time.Time {
 	return time.Now().UTC()
 }
 
-func accountTypes(ctx context.Context, db *sql.DB, userID, fromID, toID string) (string, string, error) {
+func accountTypes(ctx context.Context, db sqlcdb.DBTX, userID, fromID, toID string) (string, string, error) {
 	fromRow, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: fromID, UserID: userID})
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", "", ErrInvalidAccount
@@ -539,7 +548,7 @@ func transferCommissionDescription(fromType, toType string) *string {
 	return nil
 }
 
-func validateCreditCardTransferAmount(ctx context.Context, db *sql.DB, userID, toAccountID string, amount int64) error {
+func validateCreditCardTransferAmount(ctx context.Context, db sqlcdb.DBTX, userID, toAccountID string, amount int64) error {
 	row, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: toAccountID, UserID: userID})
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrInvalidAccount

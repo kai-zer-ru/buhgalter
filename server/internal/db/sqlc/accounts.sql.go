@@ -796,6 +796,25 @@ func (q *Queries) ListDistinctAccountUserIDs(ctx context.Context) ([]string, err
 	return items, nil
 }
 
+const lockAccountRow = `-- name: LockAccountRow :execrows
+UPDATE accounts
+SET updated_at = updated_at
+WHERE id = ? AND user_id = ?
+`
+
+type LockAccountRowParams struct {
+	ID     string `json:"id"`
+	UserID string `json:"user_id"`
+}
+
+func (q *Queries) LockAccountRow(ctx context.Context, arg LockAccountRowParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, lockAccountRow, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const setAccountPrimary = `-- name: SetAccountPrimary :exec
 UPDATE accounts
 SET is_primary = 1

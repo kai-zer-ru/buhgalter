@@ -41,7 +41,7 @@ type Account struct {
 	UpdatedAt                 string  `json:"updated_at"`
 }
 
-func queries(db *sql.DB) *sqlcdb.Queries {
+func queries(db sqlcdb.DBTX) *sqlcdb.Queries {
 	return sqlcdb.New(db)
 }
 
@@ -158,7 +158,7 @@ func ListByUser(ctx context.Context, db *sql.DB, userID, status string) ([]Accou
 	return out, nil
 }
 
-func GetByID(ctx context.Context, db *sql.DB, userID, id string) (Account, error) {
+func GetByID(ctx context.Context, db sqlcdb.DBTX, userID, id string) (Account, error) {
 	row, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: id, UserID: userID})
 	if errors.Is(err, sql.ErrNoRows) {
 		return Account{}, ErrNotFound
@@ -167,6 +167,18 @@ func GetByID(ctx context.Context, db *sql.DB, userID, id string) (Account, error
 		return Account{}, err
 	}
 	return accountFromGetRow(row), nil
+}
+
+// LockRow takes a write lock on the account row (SQLite deferred tx → reserved).
+func LockRow(ctx context.Context, db sqlcdb.DBTX, userID, id string) error {
+	n, err := queries(db).LockAccountRow(ctx, sqlcdb.LockAccountRowParams{ID: id, UserID: userID})
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 var ErrNotFound = errors.New("account not found")
@@ -391,7 +403,7 @@ func validateCreditCardFullyPaid(acc Account) error {
 	return nil
 }
 
-func SetStatus(ctx context.Context, db *sql.DB, userID, id, status string) (Account, error) {
+func SetStatus(ctx context.Context, db sqlcdb.DBTX, userID, id, status string) (Account, error) {
 	existing, err := GetByID(ctx, db, userID, id)
 	if err != nil {
 		return Account{}, err
@@ -472,7 +484,7 @@ func SetPrimary(ctx context.Context, db *sql.DB, userID, id string) (Account, er
 	return GetByID(ctx, db, userID, id)
 }
 
-func promoteNextPrimary(ctx context.Context, db *sql.DB, userID string) error {
+func promoteNextPrimary(ctx context.Context, db sqlcdb.DBTX, userID string) error {
 	q := queries(db)
 	nextID, err := q.FirstActiveAccountID(ctx, userID)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -487,7 +499,7 @@ func promoteNextPrimary(ctx context.Context, db *sql.DB, userID string) error {
 	return q.SetAccountPrimary(ctx, sqlcdb.SetAccountPrimaryParams{ID: nextID, UserID: userID})
 }
 
-func Delete(ctx context.Context, db *sql.DB, userID, id string) error {
+func Delete(ctx context.Context, db sqlcdb.DBTX, userID, id string) error {
 	_, err := SetStatus(ctx, db, userID, id, "deleted")
 	return err
 }
@@ -695,7 +707,7 @@ func validateAutoTopupSource(ctx context.Context, db *sql.DB, userID, beneficiar
 	return &sourceID, nil
 }
 
-func disableAutoTopupForInactive(ctx context.Context, db *sql.DB, userID, accountID string) error {
+func disableAutoTopupForInactive(ctx context.Context, db sqlcdb.DBTX, userID, accountID string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	q := queries(db)
 	if err := q.DisableAutoTopupForBeneficiary(ctx, sqlcdb.DisableAutoTopupForBeneficiaryParams{

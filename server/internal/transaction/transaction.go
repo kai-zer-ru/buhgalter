@@ -221,7 +221,7 @@ func txFromFields(
 	return t
 }
 
-func userTimezone(ctx context.Context, db *sql.DB, userID string) (string, error) {
+func userTimezone(ctx context.Context, db sqlcdb.DBTX, userID string) (string, error) {
 	tz, err := queries(db).GetUserTimezone(ctx, userID)
 	if err != nil {
 		return "", err
@@ -232,7 +232,7 @@ func userTimezone(ctx context.Context, db *sql.DB, userID string) (string, error
 	return tz, nil
 }
 
-func resolveKind(ctx context.Context, db *sql.DB, userID string, txDate time.Time) (string, error) {
+func resolveKind(ctx context.Context, db sqlcdb.DBTX, userID string, txDate time.Time) (string, error) {
 	tz, err := userTimezone(ctx, db, userID)
 	if err != nil {
 		return "", err
@@ -795,11 +795,11 @@ func validateDateFilter(s string) error {
 	return nil
 }
 
-func validateActiveAccount(ctx context.Context, db *sql.DB, userID, accountID string) error {
+func validateActiveAccount(ctx context.Context, db sqlcdb.DBTX, userID, accountID string) error {
 	return validateAccountForTransfer(ctx, db, userID, accountID, true)
 }
 
-func validateAccountForTransfer(ctx context.Context, db *sql.DB, userID, accountID string, activeOnly bool) error {
+func validateAccountForTransfer(ctx context.Context, db sqlcdb.DBTX, userID, accountID string, activeOnly bool) error {
 	row, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: accountID, UserID: userID})
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrInvalidAccount
