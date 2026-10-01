@@ -9,6 +9,21 @@ import (
 	"context"
 )
 
+const deleteImportIdempotency = `-- name: DeleteImportIdempotency :exec
+DELETE FROM import_idempotency
+WHERE user_id = ? AND idempotency_key = ?
+`
+
+type DeleteImportIdempotencyParams struct {
+	UserID         string `json:"user_id"`
+	IdempotencyKey string `json:"idempotency_key"`
+}
+
+func (q *Queries) DeleteImportIdempotency(ctx context.Context, arg DeleteImportIdempotencyParams) error {
+	_, err := q.db.ExecContext(ctx, deleteImportIdempotency, arg.UserID, arg.IdempotencyKey)
+	return err
+}
+
 const failInterruptedImportJobs = `-- name: FailInterruptedImportJobs :execrows
 UPDATE import_jobs
 SET status = ?, error_message = ?, finished_at = ?, updated_at = ?
@@ -339,5 +354,22 @@ func (q *Queries) SetImportJobRunning(ctx context.Context, arg SetImportJobRunni
 		arg.ID,
 		arg.UserID,
 	)
+	return err
+}
+
+const updateImportIdempotency = `-- name: UpdateImportIdempotency :exec
+UPDATE import_idempotency
+SET response_json = ?
+WHERE user_id = ? AND idempotency_key = ?
+`
+
+type UpdateImportIdempotencyParams struct {
+	ResponseJson   string `json:"response_json"`
+	UserID         string `json:"user_id"`
+	IdempotencyKey string `json:"idempotency_key"`
+}
+
+func (q *Queries) UpdateImportIdempotency(ctx context.Context, arg UpdateImportIdempotencyParams) error {
+	_, err := q.db.ExecContext(ctx, updateImportIdempotency, arg.ResponseJson, arg.UserID, arg.IdempotencyKey)
 	return err
 }

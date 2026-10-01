@@ -592,14 +592,24 @@ func importWithProgress(
 	if !opts.Confirm {
 		return Report{}, fmt.Errorf("confirm=true required")
 	}
+	claimed := false
 	if opts.IdempotencyKey != "" {
-		if cached, err := getIdempotency(ctx, db, userID, opts.IdempotencyKey); err == nil && cached != nil {
+		cached, err := claimOrAwaitIdempotency(ctx, db, userID, opts.IdempotencyKey)
+		if err != nil && strings.Contains(err.Error(), "idempotency key released") {
+			cached, err = claimOrAwaitIdempotency(ctx, db, userID, opts.IdempotencyKey)
+		}
+		if err != nil {
+			return Report{}, err
+		}
+		if cached != nil {
 			return *cached, nil
 		}
+		claimed = true
 	}
 
 	table, native, err := ParseImportFile(filename, data)
 	if err != nil {
+		releaseIdempotencyClaim(ctx, db, userID, opts.IdempotencyKey, claimed)
 		return Report{}, err
 	}
 	if native != nil && opts.Preset != "custom" {
@@ -620,18 +630,22 @@ func importWithProgress(
 		ctx, db, userID, opts.AccountMap, opts.CategoryMap, opts.SubcategoryMap, opts.AutoSubcategory, false,
 	)
 	if err != nil {
+		releaseIdempotencyClaim(ctx, db, userID, opts.IdempotencyKey, claimed)
 		return Report{}, err
 	}
 	res.loadNativeMeta(native)
 	if err := res.ensureNativeAccounts(ctx); err != nil {
+		releaseIdempotencyClaim(ctx, db, userID, opts.IdempotencyKey, claimed)
 		return Report{}, err
 	}
 	if err := res.importNativeCatalogs(ctx, native); err != nil {
+		releaseIdempotencyClaim(ctx, db, userID, opts.IdempotencyKey, claimed)
 		return Report{}, err
 	}
 
 	existing, err := loadExistingDedup(ctx, db, userID)
 	if err != nil {
+		releaseIdempotencyClaim(ctx, db, userID, opts.IdempotencyKey, claimed)
 		return Report{}, err
 	}
 	dedup := NewDedupBag(existing)
@@ -708,6 +722,13 @@ func importWithProgress(
 
 	importNativeEntities(ctx, db, res, native, &report)
 	if err := res.finalizeNativeAccounts(ctx); err != nil {
+		if claimed {
+			if report.ValidRows > 0 {
+				_ = saveIdempotency(ctx, db, userID, opts.IdempotencyKey, report)
+			} else {
+				releaseIdempotencyClaim(ctx, db, userID, opts.IdempotencyKey, true)
+			}
+		}
 		return Report{}, err
 	}
 
@@ -738,8 +759,10 @@ func importWithProgress(
 		report.CategoriesToCreate = appendUnique(report.CategoriesToCreate, n)
 	}
 
-	if opts.IdempotencyKey != "" {
-		_ = saveIdempotency(ctx, db, userID, opts.IdempotencyKey, report)
+	if claimed {
+		if err := saveIdempotency(ctx, db, userID, opts.IdempotencyKey, report); err != nil {
+			return Report{}, err
+		}
 	}
 	if report.ValidRows > 0 {
 		_ = accountbalance.Refresh(ctx, db, userID)
@@ -764,21 +787,31 @@ func cloneReportForProgress(src Report) Report {
 }
 
 func importRowWithRetry(ctx context.Context, db *sql.DB, userID string, res *resolver, m MappedRow) (string, error) {
+	var id string
+	err := withSQLiteBusyRetry(ctx, func() error {
+		var err error
+		id, err = importRow(ctx, db, userID, res, m)
+		return err
+	})
+	return id, err
+}
+
+func withSQLiteBusyRetry(ctx context.Context, fn func() error) error {
 	const maxBusyRetries = 7
 	backoff := 40 * time.Millisecond
 	for attempt := 0; ; attempt++ {
-		id, err := importRow(ctx, db, userID, res, m)
+		err := fn()
 		if err == nil {
-			return id, nil
+			return nil
 		}
 		if !isSQLiteBusyError(err) || attempt >= maxBusyRetries {
-			return "", err
+			return err
 		}
 		timer := time.NewTimer(backoff)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
-			return "", ctx.Err()
+			return ctx.Err()
 		case <-timer.C:
 		}
 		if backoff < 1200*time.Millisecond {
@@ -929,6 +962,9 @@ func getIdempotency(ctx context.Context, db *sql.DB, userID, key string) (*Repor
 	if err != nil {
 		return nil, err
 	}
+	if strings.TrimSpace(raw) == "" {
+		return nil, errIdempotencyInFlight
+	}
 	var rep Report
 	if err := json.Unmarshal([]byte(raw), &rep); err != nil {
 		return nil, err
@@ -936,16 +972,79 @@ func getIdempotency(ctx context.Context, db *sql.DB, userID, key string) (*Repor
 	return &rep, nil
 }
 
+var errIdempotencyInFlight = errors.New("import idempotency in flight")
+
+func claimOrAwaitIdempotency(ctx context.Context, db *sql.DB, userID, key string) (*Report, error) {
+	now := time.Now().UTC().Format(time.RFC3339)
+	err := sqlcdb.New(db).InsertImportIdempotency(ctx, sqlcdb.InsertImportIdempotencyParams{
+		ID: uuid.NewString(), UserID: userID, IdempotencyKey: key,
+		ResponseJson: "", CreatedAt: now,
+	})
+	if err == nil {
+		return nil, nil
+	}
+	if !isUniqueConstraintError(err) {
+		return nil, err
+	}
+	return awaitIdempotencyReport(ctx, db, userID, key)
+}
+
+func awaitIdempotencyReport(ctx context.Context, db *sql.DB, userID, key string) (*Report, error) {
+	ticker := time.NewTicker(25 * time.Millisecond)
+	defer ticker.Stop()
+	deadline := time.Now().Add(2 * time.Minute)
+	for {
+		rep, err := getIdempotency(ctx, db, userID, key)
+		if err == nil && rep != nil {
+			return rep, nil
+		}
+		if err == nil && rep == nil {
+			return nil, fmt.Errorf("import idempotency key released")
+		}
+		if err != nil && !errors.Is(err, errIdempotencyInFlight) {
+			return nil, err
+		}
+		if time.Now().After(deadline) {
+			return nil, fmt.Errorf("import idempotency wait timeout")
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-ticker.C:
+		}
+	}
+}
+
 func saveIdempotency(ctx context.Context, db *sql.DB, userID, key string, report Report) error {
 	data, err := json.Marshal(report)
 	if err != nil {
 		return err
 	}
-	now := time.Now().UTC().Format(time.RFC3339)
-	return sqlcdb.New(db).InsertImportIdempotency(ctx, sqlcdb.InsertImportIdempotencyParams{
-		ID: uuid.NewString(), UserID: userID, IdempotencyKey: key,
-		ResponseJson: string(data), CreatedAt: now,
+	return withSQLiteBusyRetry(ctx, func() error {
+		return sqlcdb.New(db).UpdateImportIdempotency(ctx, sqlcdb.UpdateImportIdempotencyParams{
+			ResponseJson: string(data), UserID: userID, IdempotencyKey: key,
+		})
 	})
+}
+
+func deleteIdempotency(ctx context.Context, db *sql.DB, userID, key string) error {
+	return sqlcdb.New(db).DeleteImportIdempotency(ctx, sqlcdb.DeleteImportIdempotencyParams{
+		UserID: userID, IdempotencyKey: key,
+	})
+}
+
+func releaseIdempotencyClaim(ctx context.Context, db *sql.DB, userID, key string, claimed bool) {
+	if !claimed || key == "" {
+		return
+	}
+	_ = deleteIdempotency(ctx, db, userID, key)
+}
+
+func isUniqueConstraintError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "UNIQUE constraint failed")
 }
 
 func hasMapErr(errs []RowError, row int) bool {

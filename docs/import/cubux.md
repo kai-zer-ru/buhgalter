@@ -71,7 +71,9 @@ API:
 ### Устойчивость фонового импорта
 
 - При рестарте сервера старые job в `queued/running` автоматически переводятся в `failed` с причиной `import interrupted: server restarted`.
-- На коротких блокировках SQLite (`SQLITE_BUSY` / `database is locked`) применяется retry с backoff, чтобы импорт не терял пачки строк. `GET /import/jobs/{id}` в этом случае отвечает `503 SERVICE_UNAVAILABLE`.
+- На коротких блокировках SQLite (`SQLITE_BUSY` / `database is locked`) применяется retry с backoff, чтобы импорт не терял пачки строк. То же для записи статуса job `done`. `GET /import/jobs/{id}` при busy отвечает `503 SERVICE_UNAVAILABLE`.
+- Если после успешного импорта статус `done` всё же не записался, realtime `import.done` и сброс кеша не публикуются; джоба не помечается `failed`.
+- Заголовок `Idempotency-Key` занимает ключ до записи журнала (`UNIQUE (user_id, idempotency_key)`); повтор с тем же ключом ждёт готовый report и не дублирует операции.
 
 UI: `/settings/import` — wizard:
 загрузка → настройки → сопоставление счетов (уникальные) → сопоставление категорий (уникальные) →

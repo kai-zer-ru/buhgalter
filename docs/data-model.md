@@ -341,6 +341,11 @@ erDiagram
 
 Подробнее: [ui-credits.md](ui-credits.md).
 
+## Импорт
+
+- `import_jobs`: после успешной записи журнала статус `done` пишется с retry на `SQLITE_BUSY`; realtime/кеш — только если `done` сохранился. Неуспешный persist `done` не переводит джобу в `failed`.
+- `import_idempotency`: ключ занимается до импорта (`UNIQUE (user_id, idempotency_key)`); пустой `response_json` — in-flight, затем UPDATE готового report.
+
 ## Счета
 
 | Поле | Описание |

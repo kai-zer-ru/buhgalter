@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/kai-zer-ru/buhgalter/internal/bank"
@@ -122,6 +123,54 @@ func TestImportIdempotencyKey(t *testing.T) {
 	}
 	if second.CreatedTransactions != first.CreatedTransactions {
 		t.Fatalf("cached %d vs first %d", second.CreatedTransactions, first.CreatedTransactions)
+	}
+}
+
+func TestImportIdempotencyKeyConcurrent(t *testing.T) {
+	ctx, sqlDB, userID := seedImportUser(t)
+	data := sampleCSVRows()
+	opts := ImportOptions{Preset: "cubux", Deduplicate: true, Confirm: true}
+
+	solo, err := Import(ctx, sqlDB, userID, "sample.csv", data, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var want int
+	if err := sqlDB.QueryRowContext(ctx, `SELECT COUNT(*) FROM transactions WHERE user_id = ?`, userID).Scan(&want); err != nil {
+		t.Fatal(err)
+	}
+	if solo.CreatedTransactions != 4 || want == 0 {
+		t.Fatalf("baseline created %d txs %d", solo.CreatedTransactions, want)
+	}
+
+	ctx2, sqlDB2, userID2 := seedImportUser(t)
+	key := "idem-key-concurrent"
+	concOpts := opts
+	concOpts.IdempotencyKey = key
+	var err1, err2 error
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		_, err1 = Import(ctx2, sqlDB2, userID2, "sample.csv", data, concOpts)
+	}()
+	go func() {
+		defer wg.Done()
+		_, err2 = Import(ctx2, sqlDB2, userID2, "sample.csv", data, concOpts)
+	}()
+	wg.Wait()
+	if err1 != nil {
+		t.Fatal(err1)
+	}
+	if err2 != nil {
+		t.Fatal(err2)
+	}
+	var got int
+	if err := sqlDB2.QueryRowContext(ctx2, `SELECT COUNT(*) FROM transactions WHERE user_id = ?`, userID2).Scan(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Fatalf("concurrent txs %d want %d (one import)", got, want)
 	}
 }
 

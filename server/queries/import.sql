@@ -7,6 +7,15 @@ WHERE user_id = ? AND idempotency_key = ?;
 INSERT INTO import_idempotency (id, user_id, idempotency_key, response_json, created_at)
 VALUES (?, ?, ?, ?, ?);
 
+-- name: UpdateImportIdempotency :exec
+UPDATE import_idempotency
+SET response_json = ?
+WHERE user_id = ? AND idempotency_key = ?;
+
+-- name: DeleteImportIdempotency :exec
+DELETE FROM import_idempotency
+WHERE user_id = ? AND idempotency_key = ?;
+
 -- name: ListTransactionDedupRows :many
 SELECT
     t.type,

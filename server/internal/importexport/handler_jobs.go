@@ -107,7 +107,9 @@ func (h *Handler) runImportJob(
 		_ = setImportJobFailed(ctx, h.Store.DB(), userID, jobID, err)
 		errMsg := err.Error()
 		realtime.Publish(userID, realtime.NewImportFailed(jobID, errMsg))
-		h.Cache.InvalidateUserHints(userID, apicache.LedgerHints())
+		if h.Cache != nil {
+			h.Cache.InvalidateUserHints(userID, apicache.LedgerHints())
+		}
 		_ = h.Audit.Log("import.job.failed", userID, login, ip, map[string]any{
 			"filename": filename,
 			"job_id":   jobID,
@@ -119,11 +121,16 @@ func (h *Handler) runImportJob(
 		return
 	}
 
-	if err := setImportJobDone(ctx, h.Store.DB(), userID, jobID, report); err != nil && h.Logger != nil {
-		h.Logger.Error("import job set done failed", "job_id", jobID, "err", err)
+	if err := setImportJobDone(ctx, h.Store.DB(), userID, jobID, report); err != nil {
+		if h.Logger != nil {
+			h.Logger.Error("import job set done failed", "job_id", jobID, "err", err)
+		}
+		return
 	}
 	publishImportDone(userID, jobID, report)
-	h.Cache.InvalidateUserHints(userID, apicache.LedgerHints())
+	if h.Cache != nil {
+		h.Cache.InvalidateUserHints(userID, apicache.LedgerHints())
+	}
 	_ = h.Audit.Log("import.job.done", userID, login, ip, map[string]any{
 		"filename":             filename,
 		"job_id":               jobID,
