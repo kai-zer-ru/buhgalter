@@ -192,6 +192,49 @@ func (q *Queries) CreditPaymentsUnappliedByUser(ctx context.Context, userID stri
 	return items, nil
 }
 
+const creditPaymentsUnappliedScheduledInMonth = `-- name: CreditPaymentsUnappliedScheduledInMonth :many
+SELECT c.debit_account_id, cp.amount
+FROM credit_payments cp
+JOIN credits c ON c.id = cp.credit_id
+WHERE cp.is_applied = 0 AND cp.kind = 'scheduled'
+  AND c.status = 'active' AND c.user_id = ?
+  AND cp.payment_date >= ? AND cp.payment_date <= ?
+`
+
+type CreditPaymentsUnappliedScheduledInMonthParams struct {
+	UserID        string `json:"user_id"`
+	PaymentDate   string `json:"payment_date"`
+	PaymentDate_2 string `json:"payment_date_2"`
+}
+
+type CreditPaymentsUnappliedScheduledInMonthRow struct {
+	DebitAccountID string `json:"debit_account_id"`
+	Amount         int64  `json:"amount"`
+}
+
+func (q *Queries) CreditPaymentsUnappliedScheduledInMonth(ctx context.Context, arg CreditPaymentsUnappliedScheduledInMonthParams) ([]CreditPaymentsUnappliedScheduledInMonthRow, error) {
+	rows, err := q.db.QueryContext(ctx, creditPaymentsUnappliedScheduledInMonth, arg.UserID, arg.PaymentDate, arg.PaymentDate_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CreditPaymentsUnappliedScheduledInMonthRow{}
+	for rows.Next() {
+		var i CreditPaymentsUnappliedScheduledInMonthRow
+		if err := rows.Scan(&i.DebitAccountID, &i.Amount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const deleteCredit = `-- name: DeleteCredit :execrows
 DELETE FROM credits WHERE id = ? AND user_id = ?
 `

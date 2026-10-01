@@ -31,7 +31,7 @@ func sumInt64(v interface{}, err error) (int64, error) {
 type Forecast struct {
 	Balance                   int64
 	HasFutureThisMonth        bool // any contribution (compat)
-	HasPlannedThisMonth       bool // kind=future and/or recurring
+	HasPlannedThisMonth       bool // kind=future and/or recurring and/or unpaid credits
 	HasSubscriptionsThisMonth bool
 }
 
@@ -171,7 +171,7 @@ func BackfillAll(ctx context.Context, db *sql.DB) error {
 }
 
 // ForecastsByUser returns month forecast per account in one batch
-// (kind=future txs + pending active subscriptions and recurring).
+// (kind=future txs + pending active subscriptions, recurring, and unpaid credits).
 func ForecastsByUser(ctx context.Context, db *sql.DB, userID, tz string, balances map[string]int64) (map[string]Forecast, error) {
 	monthStart, monthEnd, err := timeutil.MonthBoundsUTC(tz, timeutil.NowUTC())
 	if err != nil {
@@ -262,7 +262,8 @@ func ForecastsByUser(ctx context.Context, db *sql.DB, userID, tz string, balance
 		_, hasFutureTx := futureSet[id]
 		_, hasRecurring := scheduled.HasRecurring[id]
 		_, hasSubs := scheduled.HasSubscription[id]
-		hasPlanned := hasFutureTx || hasRecurring
+		_, hasCredit := scheduled.HasCredit[id]
+		hasPlanned := hasFutureTx || hasRecurring || hasCredit
 		out[id] = Forecast{
 			Balance:                   forecast,
 			HasFutureThisMonth:        hasPlanned || hasSubs,

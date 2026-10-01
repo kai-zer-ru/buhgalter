@@ -14,21 +14,25 @@ import (
 const maxScheduledOccurrences = 64
 
 // ScheduledEffects is the per-account forecast contribution from active
-// subscriptions and recurring operations in the current calendar month.
+// subscriptions, recurring operations, and unpaid scheduled credit payments
+// in the current calendar month.
 type ScheduledEffects struct {
 	Deltas          map[string]int64
 	HasSubscription map[string]struct{}
 	HasRecurring    map[string]struct{}
+	HasCredit       map[string]struct{}
 }
 
-// ScheduledEffectsByUser sums signed balance deltas from active subscriptions
-// and recurring operations that still run in the current calendar month (user TZ).
+// ScheduledEffectsByUser sums signed balance deltas from active subscriptions,
+// recurring operations, and unpaid scheduled payments of active credits
+// that still fall in the current calendar month (user TZ).
 // Positive = income, negative = expense.
 func ScheduledEffectsByUser(ctx context.Context, db *sql.DB, userID, tz string, now time.Time) (ScheduledEffects, error) {
 	out := ScheduledEffects{
 		Deltas:          make(map[string]int64),
 		HasSubscription: make(map[string]struct{}),
 		HasRecurring:    make(map[string]struct{}),
+		HasCredit:       make(map[string]struct{}),
 	}
 	monthStart, monthEnd, err := timeutil.MonthBoundsUTC(tz, now)
 	if err != nil {
@@ -97,6 +101,20 @@ func ScheduledEffectsByUser(ctx context.Context, db *sql.DB, userID, tz string, 
 			out.Deltas[r.AccountID] -= sum
 		}
 		out.HasRecurring[r.AccountID] = struct{}{}
+	}
+
+	pays, err := q.CreditPaymentsUnappliedScheduledInMonth(ctx, sqlcdb.CreditPaymentsUnappliedScheduledInMonthParams{
+		UserID: userID, PaymentDate: monthStart, PaymentDate_2: monthEnd,
+	})
+	if err != nil {
+		return out, err
+	}
+	for _, p := range pays {
+		if p.Amount <= 0 {
+			continue
+		}
+		out.Deltas[p.DebitAccountID] -= p.Amount
+		out.HasCredit[p.DebitAccountID] = struct{}{}
 	}
 
 	return out, nil

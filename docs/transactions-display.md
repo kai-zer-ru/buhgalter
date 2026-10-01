@@ -33,9 +33,9 @@ OpenAPI-схемы: [`Transaction`](api/openapi.yaml#/components/schemas/Transac
 |------|----------|
 | `type` | `cash` \| `bank` |
 | `bank_icon` | Slug логотипа банка (для `AccountIcon` на главной) |
-| `forecast_balance` | Текущий баланс + `kind=future` за месяц + ещё не исполненные активные [подписки](subscriptions.md) и периодические операции (`next_run_at` в текущем месяце, TZ пользователя) |
-| `has_future_this_month` | Есть вклад в прогноз (future-операции и/или подписки/периодические) |
-| `has_planned_this_month` | Вклад от `kind=future` и/или периодических |
+| `forecast_balance` | Текущий баланс + `kind=future` за месяц + ещё не исполненные активные [подписки](subscriptions.md) и периодические операции (`next_run_at` в текущем месяце, TZ пользователя) + неоплаченные `scheduled`-платежи активных [кредитов](ui-credits.md) (`payment_date` в текущем месяце, счёт `debit_account_id`) |
+| `has_future_this_month` | Есть вклад в прогноз (future-операции и/или подписки/периодические и/или кредиты) |
+| `has_planned_this_month` | Вклад от `kind=future` и/или периодических и/или неоплаченных кредитов месяца |
 | `has_subscriptions_this_month` | Вклад от активных подписок |
 
 UI показывает строку прогноза, если `forecast_balance !== balance`. Подпись зависит от флагов:

@@ -304,6 +304,14 @@ JOIN credits c ON c.id = cp.credit_id
 WHERE cp.is_applied = 0 AND cp.kind = 'scheduled'
   AND c.status = 'active' AND c.user_id = ?;
 
+-- name: CreditPaymentsUnappliedScheduledInMonth :many
+SELECT c.debit_account_id, cp.amount
+FROM credit_payments cp
+JOIN credits c ON c.id = cp.credit_id
+WHERE cp.is_applied = 0 AND cp.kind = 'scheduled'
+  AND c.status = 'active' AND c.user_id = ?
+  AND cp.payment_date >= ? AND cp.payment_date <= ?;
+
 -- name: ListUsersWithLinkedCreditPayments :many
 SELECT DISTINCT c.user_id
 FROM credits c
