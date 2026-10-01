@@ -1,5 +1,6 @@
 import { get } from 'svelte/store';
 import { _ } from 'svelte-i18n';
+import { isServerUnavailableForUser } from '$lib/offline/server-connectivity';
 import { ApiError } from './client';
 
 /**
@@ -24,6 +25,9 @@ export function isSilentClientError(err: unknown): boolean {
 /** Map API error code to a client-side i18n message (falls back to server message). */
 export function formatApiError(err: unknown, fallbackKey = 'common.error'): string {
 	const t = get(_);
+	if (isServerUnavailableForUser(err)) {
+		return t('common.server_unavailable');
+	}
 	if (err instanceof ApiError) {
 		const message = err.message?.trim();
 		if (message && GENERIC_API_CODES.has(err.code)) {

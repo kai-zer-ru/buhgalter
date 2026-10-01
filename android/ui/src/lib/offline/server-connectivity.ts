@@ -36,6 +36,28 @@ export function isConnectionError(err: unknown): boolean {
 	return false;
 }
 
+/** Network / cache-miss errors that must not leak URLs or native text to the UI. */
+export function isServerUnavailableForUser(err: unknown): boolean {
+	if (
+		err &&
+		typeof err === 'object' &&
+		'code' in err &&
+		(err as { code: unknown }).code === 'SSL_CERTIFICATE'
+	) {
+		return false;
+	}
+	if (isConnectionError(err)) return true;
+	if (
+		err &&
+		typeof err === 'object' &&
+		'code' in err &&
+		(err as { code: unknown }).code === 'UNREACHABLE'
+	) {
+		return true;
+	}
+	return err instanceof Error && err.name === 'OfflineCacheMissError';
+}
+
 export function markServerOffline(): void {
 	if (get(serverReachability) === 'offline') return;
 	serverReachability.set('offline');

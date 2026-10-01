@@ -4,7 +4,8 @@ import { ApiError } from './client';
 const translations: Record<string, string> = {
 	'errors.CONFLICT': 'Конфликт данных',
 	'errors.PASSWORDS_MISMATCH': 'Пароли не совпадают',
-	'common.error': 'Ошибка'
+	'common.error': 'Ошибка',
+	'common.server_unavailable': 'Сервер недоступен. Сессия сохранена — попробуйте обновить.'
 };
 
 vi.mock('svelte/store', async (importOriginal) => {
@@ -41,5 +42,21 @@ describe('formatApiError', () => {
 	it('falls back to generic CONFLICT label when server message is empty', () => {
 		const err = new ApiError('CONFLICT', '', 409);
 		expect(formatApiError(err)).toBe('Конфликт данных');
+	});
+
+	it('does not leak native connect URL for UNREACHABLE', () => {
+		const err = new ApiError('UNREACHABLE', 'Failed to connect to /192.168.0.10:8766', 0);
+		expect(formatApiError(err)).toBe('Сервер недоступен. Сессия сохранена — попробуйте обновить.');
+	});
+
+	it('does not leak cache-miss path', () => {
+		const err = new Error('No cached data for /api/v1/transactions?page=2&limit=20');
+		err.name = 'OfflineCacheMissError';
+		expect(formatApiError(err)).toBe('Сервер недоступен. Сессия сохранена — попробуйте обновить.');
+	});
+
+	it('keeps SSL certificate text', () => {
+		const err = new ApiError('SSL_CERTIFICATE', 'Untrusted certificate for https://example', 0);
+		expect(formatApiError(err)).toBe('Untrusted certificate for https://example');
 	});
 });

@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 const translations: Record<string, string> = {
 	'common.loadFailed': 'Не удалось загрузить данные',
-	'common.error': 'Ошибка'
+	'common.error': 'Ошибка',
+	'common.server_unavailable': 'Сервер недоступен. Сессия сохранена — попробуйте обновить.'
 };
 
 vi.mock('svelte/store', async (importOriginal) => {
@@ -35,6 +36,21 @@ describe('page-load', () => {
 
 	it('capturePageLoadError falls back for unknown errors', () => {
 		expect(capturePageLoadError(new Error('boom'))).toBe('Не удалось загрузить данные');
+	});
+
+	it('capturePageLoadError hides native connect text', () => {
+		const err = new ApiError('UNREACHABLE', 'Failed to connect to /192.168.0.10:8766', 0);
+		expect(capturePageLoadError(err)).toBe(
+			'Сервер недоступен. Сессия сохранена — попробуйте обновить.'
+		);
+	});
+
+	it('capturePageLoadError hides transaction page cache-miss path', () => {
+		const err = new Error('No cached data for /api/v1/transactions?page=2');
+		err.name = 'OfflineCacheMissError';
+		expect(capturePageLoadError(err)).toBe(
+			'Сервер недоступен. Сессия сохранена — попробуйте обновить.'
+		);
 	});
 
 	it('reportPageLoadFailure toasts on background refresh with data', () => {

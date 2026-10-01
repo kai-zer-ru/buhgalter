@@ -204,7 +204,7 @@
 | `page-load.ts` | `capturePageLoadError()`, `reportPageLoadFailure()` |
 | `EmptyStateCard.svelte` | Карточка для loading/error/пустых списков (используется внутри gate) |
 
-Ключ i18n: `common.loadFailed` — запасной текст, если нет сообщения от API.
+Ключ i18n: `common.loadFailed` — запасной текст, если нет сообщения от API. Ошибки сети, `UNREACHABLE` и офлайн cache-miss (`OfflineCacheMissError`) — всегда `common.server_unavailable` («Сервер недоступен…»), без URL и native-текста; маппинг в `formatApiError` / `toast.fromError`.
 
 ### Правила
 

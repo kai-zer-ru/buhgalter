@@ -60,6 +60,7 @@ import {
 	ApiError,
 	isTransientHttpError
 } from '$lib/api/client';
+import { formatApiError } from '$lib/api/errors';
 import {
 	getOutboxEntries,
 	hasFailedOutbox,
@@ -274,7 +275,7 @@ async function replayEntry(entry: OutboxEntry) {
 		}
 	} catch (err) {
 		if (isRetryable(err)) throw err;
-		const message = err instanceof ApiError ? err.message : String(err);
+		const message = formatApiError(err);
 		markOutboxFailed(entityKey, message);
 	}
 }

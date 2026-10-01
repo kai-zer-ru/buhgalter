@@ -1,6 +1,7 @@
 import { get } from 'svelte/store';
 import { _ } from 'svelte-i18n';
 import { ApiError } from '$lib/api/client';
+import { isServerUnavailableForUser } from '$lib/offline/server-connectivity';
 
 /** Umbrella API codes: specific text is in `error.message` (localized by server). */
 const UMBRELLA_CODES = new Set(['VALIDATION_ERROR', 'CONFLICT']);
@@ -25,6 +26,9 @@ export function formatAuthUserApiError(
 	attachFieldHint = true
 ): string {
 	const t = get(_);
+	if (isServerUnavailableForUser(err)) {
+		return t('common.server_unavailable');
+	}
 	if (!(err instanceof ApiError)) return t(fallbackKey);
 
 	const msg = err.message?.trim() ?? '';

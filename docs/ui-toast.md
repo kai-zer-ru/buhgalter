@@ -16,7 +16,7 @@
 | `toast.error(msg)` | error | Ошибка API, валидация при submit |
 | `toast.warning(msg)` | warning | Предупреждение перед/после действия |
 | `toast.info(msg)` | info | Нейтральная информация |
-| `toast.fromError(err, fallbackKey?)` | error | `catch` с `ApiError` — через `formatApiError` (для `CONFLICT` и др. общих кодов — текст из `error.message` API) |
+| `toast.fromError(err, fallbackKey?)` | error | `catch` с `ApiError` — через `formatApiError` (для `CONFLICT` и др. общих кодов — текст из `error.message` API). **Android:** `isConnectionError` по-прежнему без toast (полоска «Нет соединения»); cache-miss → `common.server_unavailable`, не URL. Веб `fromError` не менялся. |
 | `toast(msg, type?, durationMs?)` | любой | Обратная совместимость |
 
 `type` — только `'success' | 'error' | 'info' | 'warning'` (не `'danger'`). В Android UI — тот же API (`android/ui/src/lib/toast.ts`).

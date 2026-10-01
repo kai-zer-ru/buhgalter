@@ -5,7 +5,6 @@
 	import { page } from '$app/stores';
 	import { _ } from 'svelte-i18n';
 	import {
-		ApiError,
 		copyBudgetsFromPreviousMonth,
 		copyBudgetToNextMonth,
 		getBudgetSummary,
@@ -19,6 +18,7 @@
 		type UIMetaAccountRef,
 		type Bank
 	} from '$lib/api/client';
+	import { formatApiError } from '$lib/api/errors';
 	import { createBudget, deleteBudget, updateBudget } from '$lib/offline/budgets-api';
 	import BackLink from '$lib/components/BackLink.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
@@ -234,7 +234,7 @@
 			resetForm();
 			await loadAll();
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			error = formatApiError(err);
 		} finally {
 			saving = false;
 		}
@@ -256,7 +256,7 @@
 			}
 			await loadAll();
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			error = formatApiError(err);
 		}
 	}
 
@@ -268,7 +268,7 @@
 			toast($_('common.saved'));
 			await loadAll();
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			error = formatApiError(err);
 		} finally {
 			copying = false;
 		}
@@ -282,7 +282,7 @@
 			toast($_('common.saved'));
 			await loadAll();
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			error = formatApiError(err);
 		} finally {
 			copying = false;
 		}
