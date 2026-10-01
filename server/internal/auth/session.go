@@ -146,6 +146,10 @@ func DeleteSessionsByUserID(ctx context.Context, db *sql.DB, userID string) erro
 	return queries(db).DeleteSessionsByUserID(ctx, userID)
 }
 
+func DeleteAPITokensByUserID(ctx context.Context, db *sql.DB, userID string) error {
+	return queries(db).DeleteAPITokensByUserID(ctx, userID)
+}
+
 func VerifyToken(ctx context.Context, db *sql.DB, rawToken string) bool {
 	if _, err := LookupSession(ctx, db, rawToken); err == nil {
 		return true

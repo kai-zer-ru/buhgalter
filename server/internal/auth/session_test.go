@@ -150,3 +150,51 @@ func TestSessionRefreshExtendsExpiry(t *testing.T) {
 	}
 	_ = sqlDB // silence unused in edge builds
 }
+
+func TestDeleteAPITokensByUserID(t *testing.T) {
+	dir := t.TempDir()
+	mgr, err := db.NewManager(filepath.Join(dir, "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mgr.Close()
+	sqlDB := mgr.DB()
+	ctx := context.Background()
+
+	userID, err := CreateUser(ctx, sqlDB, "tokuser", "hash", "Tok", false, UserStatusActive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw := "bhg_banrevoke123456789"
+	hash := HashToken(raw)
+	_, err = sqlDB.Exec(`
+		INSERT INTO api_tokens (id, user_id, name, token_hash, token_prefix)
+		VALUES ('tok-ban', ?, 'test', ?, 'bhg_banr')`, userID, hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !VerifyToken(ctx, sqlDB, raw) {
+		t.Fatal("api token should be valid")
+	}
+	otherID, err := CreateUser(ctx, sqlDB, "othertok", "hash", "Other", false, UserStatusActive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherRaw := "bhg_keepother123456789"
+	otherHash := HashToken(otherRaw)
+	_, err = sqlDB.Exec(`
+		INSERT INTO api_tokens (id, user_id, name, token_hash, token_prefix)
+		VALUES ('tok-keep', ?, 'keep', ?, 'bhg_keep')`, otherID, otherHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := DeleteAPITokensByUserID(ctx, sqlDB, userID); err != nil {
+		t.Fatal(err)
+	}
+	if VerifyToken(ctx, sqlDB, raw) {
+		t.Fatal("api token should be invalid after DeleteAPITokensByUserID")
+	}
+	if !VerifyToken(ctx, sqlDB, otherRaw) {
+		t.Fatal("other user's api token should remain")
+	}
+}

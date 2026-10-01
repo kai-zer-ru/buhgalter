@@ -305,7 +305,7 @@
 	"admin.users.action.activate": "Активировать",
 	"admin.users.action.ban": "Заблокировать",
 	"admin.users.action.unblock": "Разблокировать",
-	"admin.users.confirm.ban": "Заблокировать пользователя «{name}»? Он не сможет войти в систему.",
+	"admin.users.confirm.ban": "Заблокировать пользователя «{name}»? Он не сможет войти, сессии и API-токены будут удалены.",
 	"admin.passwordReset.notice": "Пользователь {name} запросил сброс пароля",
 	"admin.userModeration.notice": "Пользователь {name} ожидает активации администратором",
 	"admin.userModeration.action": "Модерировать",

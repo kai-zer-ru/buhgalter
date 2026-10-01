@@ -803,7 +803,7 @@ paths:
       summary: Изменить статус пользователя
       description: |
         Допустимые переходы: pending→active|banned, active→banned, banned→active.
-        Нельзя менять свой статус. При бане сессии пользователя инвалидируются.
+        Нельзя менять свой статус. При бане сессии и API-токены пользователя удаляются.
       security:
         - sessionCookie: []
       parameters:

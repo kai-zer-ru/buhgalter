@@ -56,7 +56,7 @@
 
 ### Middleware
 
-`RequireAuth` и `RequireAPIToken` отклоняют запросы пользователей со статусом не `active` (коды те же). При бане сессии инвалидируются админским endpoint.
+`RequireAuth` и `RequireAPIToken` отклоняют запросы пользователей со статусом не `active` (коды те же). При бане сессии и API-токены **удаляются** админским endpoint (после снятия бана старые Bearer не оживают — нужны новые токены).
 
 ## Смена статуса (админ)
 
@@ -84,7 +84,7 @@
 - нельзя установить `pending` через API (`400`, `USER_STATUS_INVALID`);
 - недопустимый переход — `400`, `USER_STATUS_TRANSITION`.
 
-При переходе в `banned` все сессии пользователя удаляются. Audit: `admin.user.status`.
+При переходе в `banned` все сессии и API-токены пользователя удаляются. Audit: `admin.user.status`.
 
 Поле `status` возвращается в `GET /admin/users`, `POST /admin/users`, `GET /auth/me`.
 

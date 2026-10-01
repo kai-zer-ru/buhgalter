@@ -8,6 +8,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -1084,6 +1085,123 @@ func TestUserStatusBanInvalidatesSession(t *testing.T) {
 	}
 	if code := apiErrorCode(t, loginResp); code != "USER_BANNED" {
 		t.Fatalf("expected USER_BANNED, got %q", code)
+	}
+}
+
+func TestUserStatusBanInvalidatesAPITokens(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+
+	createBody, _ := json.Marshal(map[string]any{
+		"login": "banme", "password": "userpass1", "password_confirm": "userpass1",
+		"display_name": "Ban", "is_admin": false,
+	})
+	createResp, err := env.authedRequest(http.MethodPost, "/api/v1/admin/users", bytes.NewReader(createBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	createResp.Body.Close()
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create status %d", createResp.StatusCode)
+	}
+
+	env.login(t, "banme", "userpass1")
+	tokBody, _ := json.Marshal(map[string]any{"name": "device", "never_expires": true})
+	tokResp, err := env.authedRequest(http.MethodPost, "/api/v1/user/tokens", bytes.NewReader(tokBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tokResp.StatusCode != http.StatusCreated {
+		tokResp.Body.Close()
+		t.Fatalf("create token status %d", tokResp.StatusCode)
+	}
+	var created struct {
+		Token string `json:"token"`
+	}
+	_ = json.NewDecoder(tokResp.Body).Decode(&created)
+	tokResp.Body.Close()
+	if created.Token == "" {
+		t.Fatal("expected api token")
+	}
+
+	env.login(t, "admin", "secret123")
+	usersResp, err := env.authedRequest(http.MethodGet, "/api/v1/admin/users", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer usersResp.Body.Close()
+	var users []struct {
+		ID    string `json:"id"`
+		Login string `json:"login"`
+	}
+	_ = json.NewDecoder(usersResp.Body).Decode(&users)
+	var banID string
+	for _, u := range users {
+		if u.Login == "banme" {
+			banID = u.ID
+		}
+	}
+	if banID == "" {
+		t.Fatal("banme not found")
+	}
+
+	banBody, _ := json.Marshal(map[string]string{"status": "banned"})
+	banResp, err := env.authedRequest(http.MethodPut, "/api/v1/admin/users/"+banID+"/status", bytes.NewReader(banBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	banResp.Body.Close()
+	if banResp.StatusCode != http.StatusOK {
+		t.Fatalf("ban status %d", banResp.StatusCode)
+	}
+
+	verify, err := http.Get(env.server.URL + "/api/v1/auth/verify?token=" + url.QueryEscape(created.Token))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer verify.Body.Close()
+	var v struct {
+		Valid bool `json:"valid"`
+	}
+	_ = json.NewDecoder(verify.Body).Decode(&v)
+	if v.Valid {
+		t.Fatal("api token should be invalid after ban")
+	}
+
+	meReq := func() *http.Request {
+		r, err := http.NewRequest(http.MethodGet, env.server.URL+"/api/v1/auth/me", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r.Header.Set("Authorization", "Bearer "+created.Token)
+		return r
+	}
+	meResp, err := http.DefaultClient.Do(meReq())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer meResp.Body.Close()
+	if meResp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("me with banned api token %d, want 401", meResp.StatusCode)
+	}
+
+	unbanBody, _ := json.Marshal(map[string]string{"status": "active"})
+	unbanResp, err := env.authedRequest(http.MethodPut, "/api/v1/admin/users/"+banID+"/status", bytes.NewReader(unbanBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	unbanResp.Body.Close()
+	if unbanResp.StatusCode != http.StatusOK {
+		t.Fatalf("unban status %d", unbanResp.StatusCode)
+	}
+
+	meResp2, err := http.DefaultClient.Do(meReq())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer meResp2.Body.Close()
+	if meResp2.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("me after unban with old api token %d, want 401", meResp2.StatusCode)
 	}
 }
 

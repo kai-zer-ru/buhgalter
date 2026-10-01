@@ -334,6 +334,7 @@
 - [x] БАГ. Веб: главная могла показывать устаревшие балансы (`0.00`), страница счёта — актуальные. При живом WebSocket SWR не revalidate; первый connect не сбрасывал ledger-кеш. Фикс: invalidate ledger на первом `onopen`, грубый invalidate чистит ref-cache, dashboard патчит `/accounts*`+`/balance`, `listAccounts`/`getAccount` обогащают из dashboard; `hint_paths` для `/transfers` ([ui-api-cache.md](docs/ui-api-cache.md))
 - [x] Сервер: Host `localhost` / `127.0.0.1` / `::1` не обходит ExternalAccess, если клиент не loopback
 - [x] Сервер: ExternalAccess не доверяет `X-Forwarded-Host`; host берётся из `Host` (как ставит nginx) ([install/nginx.md](docs/install/nginx.md))
+- [x] Сервер: бан пользователя удаляет не только сессии, но и API-токены ([user-status.md](docs/api/user-status.md))
 
 ## Общие планы
 

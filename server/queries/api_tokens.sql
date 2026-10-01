@@ -26,3 +26,6 @@ SELECT name, token_prefix FROM api_tokens WHERE id = ? AND user_id = ?;
 
 -- name: DeleteAPIToken :exec
 DELETE FROM api_tokens WHERE id = ? AND user_id = ?;
+
+-- name: DeleteAPITokensByUserID :exec
+DELETE FROM api_tokens WHERE user_id = ?;

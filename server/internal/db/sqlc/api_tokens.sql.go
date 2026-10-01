@@ -23,6 +23,15 @@ func (q *Queries) DeleteAPIToken(ctx context.Context, arg DeleteAPITokenParams) 
 	return err
 }
 
+const deleteAPITokensByUserID = `-- name: DeleteAPITokensByUserID :exec
+DELETE FROM api_tokens WHERE user_id = ?
+`
+
+func (q *Queries) DeleteAPITokensByUserID(ctx context.Context, userID string) error {
+	_, err := q.db.ExecContext(ctx, deleteAPITokensByUserID, userID)
+	return err
+}
+
 const getAPITokenByHash = `-- name: GetAPITokenByHash :one
 SELECT id, user_id, expires_at FROM api_tokens WHERE token_hash = ?
 `

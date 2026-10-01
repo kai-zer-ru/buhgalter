@@ -436,7 +436,7 @@
 	"admin.users.action.activate": "Activate",
 	"admin.users.action.ban": "Block",
 	"admin.users.action.unblock": "Unblock",
-	"admin.users.confirm.ban": "Block user «{name}»? They will not be able to sign in.",
+	"admin.users.confirm.ban": "Block user «{name}»? They will not be able to sign in; sessions and API tokens will be deleted.",
 	"admin.passwordReset.notice": "User {name} requested a password reset",
 	"admin.userModeration.notice": "User {name} is waiting for administrator activation",
 	"admin.userModeration.action": "Moderate",
