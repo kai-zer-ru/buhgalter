@@ -326,6 +326,7 @@ erDiagram
 ## Кредиты и операции
 
 - `credits.credit_kind`: `consumer` | `mortgage` (ипотека: `property_price`, `down_payment`, сумма кредита = `property_price - down_payment`; потребкредит: опционально `principal_affects_balance` — доход на счёт при создании)
+- `credits.paid_amount` не превышает `principal_amount` при создании, backfill ретро, автосписании и платеже; `repairMissingSchedule` для будущих слотов тратит не больше тела (ретро-прошлые слоты по-прежнему помечаются applied, как при создании)
 - `credits.payment_interval`: `month` | `week` | `two_weeks` | `manual` (для ипотеки — только `month`)
 - `credit_payments.kind`: `scheduled`, `auto`, `retroactive`; `early` — legacy
 - График ипотеки: ежедневное начисление процентов; автоплатёж через `MonthlyPaymentMortgage`, ручной — через `monthly_payment` в create/preview (отдельный алгоритм, без отклонения «слишком высокого» платежа)

@@ -491,10 +491,7 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Cre
 		}
 	}
 
-	paidAmount = in.PaidAmount + retroPaid
-	if paidAmount > principalAmount {
-		paidAmount = principalAmount
-	}
+	paidAmount = capPaidToPrincipal(principalAmount, in.PaidAmount+retroPaid)
 	if paidAmount != in.PaidAmount {
 		if err := q.UpdateCreditPaidAmount(ctx, sqlcdb.UpdateCreditPaidAmountParams{
 			PaidAmount: paidAmount, UpdatedAt: nowStr, ID: id, UserID: userID,
@@ -816,7 +813,7 @@ func PayNextScheduled(ctx context.Context, db *sql.DB, userID, creditID string, 
 		return Credit{}, ErrNoPendingPayment
 	}
 
-	newPaid := c.PaidAmount + in.Amount
+	newPaid := capPaidToPrincipal(c.PrincipalAmount, c.PaidAmount+in.Amount)
 	if err := q.UpdateCreditPaidAmount(ctx, sqlcdb.UpdateCreditPaidAmountParams{
 		PaidAmount: newPaid, UpdatedAt: nowStr, ID: creditID, UserID: userID,
 	}); err != nil {
@@ -1152,7 +1149,7 @@ func processAutoPayment(ctx context.Context, db *sql.DB, row sqlcdb.ListDueCredi
 	if err != nil {
 		return false, err
 	}
-	newPaid := creditRow.PaidAmount + row.Amount
+	newPaid := capPaidToPrincipal(creditRow.PrincipalAmount, creditRow.PaidAmount+row.Amount)
 	nowStr := time.Now().UTC().Format(time.RFC3339)
 	if err := q.UpdateCreditPaidAmount(ctx, sqlcdb.UpdateCreditPaidAmountParams{
 		PaidAmount: newPaid, UpdatedAt: nowStr, ID: row.CreditID, UserID: row.UserID,
@@ -1203,7 +1200,7 @@ func applyPrecreatedPayment(ctx context.Context, db *sql.DB, row sqlcdb.ListDueC
 	if err != nil {
 		return false, err
 	}
-	newPaid := creditRow.PaidAmount + row.Amount
+	newPaid := capPaidToPrincipal(creditRow.PrincipalAmount, creditRow.PaidAmount+row.Amount)
 	if err := q.UpdateCreditPaidAmount(ctx, sqlcdb.UpdateCreditPaidAmountParams{
 		PaidAmount: newPaid, UpdatedAt: nowStr, ID: row.CreditID, UserID: row.UserID,
 	}); err != nil {

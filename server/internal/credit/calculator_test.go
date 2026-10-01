@@ -34,3 +34,15 @@ func TestRemainingAmount(t *testing.T) {
 		t.Fatal("overpaid should be 0")
 	}
 }
+
+func TestCapPaidToPrincipal(t *testing.T) {
+	if capPaidToPrincipal(100000, 150000) != 100000 {
+		t.Fatal("should cap at principal")
+	}
+	if capPaidToPrincipal(100000, -1) != 0 {
+		t.Fatal("should floor at zero")
+	}
+	if capPaidToPrincipal(100000, 40000) != 40000 {
+		t.Fatal("in-range paid should be unchanged")
+	}
+}

@@ -89,9 +89,16 @@ func mortgagePeriodInterestFloat(balance float64, annualRate float64, from, to t
 
 // RemainingAmount returns principal minus paid amount, floored at zero.
 func RemainingAmount(principal, paid int64) int64 {
-	r := principal - paid
-	if r < 0 {
+	return principal - capPaidToPrincipal(principal, paid)
+}
+
+// capPaidToPrincipal clamps paid_amount to [0, principal].
+func capPaidToPrincipal(principal, paid int64) int64 {
+	if paid < 0 {
 		return 0
 	}
-	return r
+	if paid > principal {
+		return principal
+	}
+	return paid
 }

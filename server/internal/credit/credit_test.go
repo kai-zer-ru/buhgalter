@@ -1455,4 +1455,145 @@ func TestEnsureCreditPaymentCategories(t *testing.T) {
 	}
 }
 
+func TestApplyDuePaymentsCapsPaidAtPrincipal(t *testing.T) {
+	ctx, handle, userID, accountID := seedCreditEnv(t)
+	sqlDB := handle.DB()
+	issue := timeutil.NowUTC().AddDate(0, -1, 0)
+	localTime := timeutil.NowUTC().In(time.FixedZone("MSK", 3*3600)).Format("15:04")
+
+	c, err := Create(ctx, sqlDB, userID, CreateInput{
+		PrincipalAmount:    12_000,
+		IssueDate:          issue,
+		TermMonths:         1,
+		PaymentInterval:    IntervalMonth,
+		DebitAccountID:     accountID,
+		DebitTimeLocal:     &localTime,
+		CreateTransactions: false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	overshoot := c.PrincipalAmount + 50_000
+	_, err = sqlDB.ExecContext(ctx, `
+		UPDATE credit_payments SET payment_date = datetime('now', '-1 day'), amount = ?
+		WHERE credit_id = ?`, overshoot, c.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cutoff, err := TodayCutoffUTC("Europe/Moscow", timeutil.NowUTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := ApplyDuePayments(ctx, sqlDB, userID, cutoff, localTime)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n < 1 {
+		t.Fatalf("applied %d", n)
+	}
+	got, err := GetByID(ctx, sqlDB, userID, c.ID, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.PaidAmount != c.PrincipalAmount {
+		t.Fatalf("paid %d want principal %d", got.PaidAmount, c.PrincipalAmount)
+	}
+}
+
+func TestApplyDuePaymentsCapsPaidAtPrincipalPrecreated(t *testing.T) {
+	ctx, handle, userID, accountID := seedCreditEnv(t)
+	sqlDB := handle.DB()
+	issue := timeutil.NowUTC().AddDate(0, -1, 0)
+	localTime := timeutil.NowUTC().In(time.FixedZone("MSK", 3*3600)).Format("15:04")
+
+	c, err := Create(ctx, sqlDB, userID, CreateInput{
+		PrincipalAmount:    12_000,
+		IssueDate:          issue,
+		TermMonths:         1,
+		PaymentInterval:    IntervalMonth,
+		DebitAccountID:     accountID,
+		DebitTimeLocal:     &localTime,
+		CreateTransactions: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	overshoot := c.PrincipalAmount + 50_000
+	_, err = sqlDB.ExecContext(ctx, `
+		UPDATE credit_payments SET payment_date = datetime('now', '-1 day'), amount = ?
+		WHERE credit_id = ?`, overshoot, c.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cutoff, err := TodayCutoffUTC("Europe/Moscow", timeutil.NowUTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := ApplyDuePayments(ctx, sqlDB, userID, cutoff, localTime)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n < 1 {
+		t.Fatalf("applied %d", n)
+	}
+	got, err := GetByID(ctx, sqlDB, userID, c.ID, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.PaidAmount != c.PrincipalAmount {
+		t.Fatalf("paid %d want principal %d", got.PaidAmount, c.PrincipalAmount)
+	}
+}
+
+func TestRepairMissingScheduleCapsPaidApply(t *testing.T) {
+	ctx, handle, userID, accountID := seedCreditEnv(t)
+	sqlDB := handle.DB()
+	issue := timeutil.NowUTC().AddDate(0, 1, 0)
+
+	c, err := Create(ctx, sqlDB, userID, CreateInput{
+		PrincipalAmount:    100_000,
+		IssueDate:          issue,
+		TermMonths:         3,
+		InterestRate:       24,
+		PaymentInterval:    IntervalMonth,
+		DebitAccountID:     accountID,
+		CreateTransactions: false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var schedSum int64
+	for _, p := range c.Schedule {
+		schedSum += p.Amount
+	}
+	if schedSum <= c.PrincipalAmount {
+		t.Fatalf("need interest schedule sum %d > principal %d", schedSum, c.PrincipalAmount)
+	}
+	if _, err := sqlDB.ExecContext(ctx, `DELETE FROM credit_payments WHERE credit_id = ?`, c.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.ExecContext(ctx, `UPDATE credits SET paid_amount = ? WHERE id = ?`, 10*c.PrincipalAmount, c.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := GetByID(ctx, sqlDB, userID, c.ID, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var appliedSum int64
+	appliedN := 0
+	for _, p := range got.Schedule {
+		if p.IsApplied {
+			appliedSum += p.Amount
+			appliedN++
+		}
+	}
+	if appliedN == len(got.Schedule) {
+		t.Fatalf("overpaid repair applied all %d slots (schedule sum %d principal %d)", appliedN, schedSum, c.PrincipalAmount)
+	}
+	if appliedSum > c.PrincipalAmount {
+		t.Fatalf("applied amounts %d exceed principal %d", appliedSum, c.PrincipalAmount)
+	}
+}
+
 func strPtr(s string) *string { return &s }

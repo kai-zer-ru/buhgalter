@@ -120,10 +120,7 @@ func repairCreditSchedule(ctx context.Context, db *sql.DB, c repairCreditRow) er
 		if err != nil {
 			return err
 		}
-		newPaid := creditRow.PaidAmount + retroPaid
-		if newPaid > c.principal {
-			newPaid = c.principal
-		}
+		newPaid := capPaidToPrincipal(c.principal, creditRow.PaidAmount+retroPaid)
 		if newPaid != creditRow.PaidAmount {
 			if err := q.UpdateCreditPaidAmount(ctx, sqlcdb.UpdateCreditPaidAmountParams{
 				PaidAmount: newPaid, UpdatedAt: nowStr, ID: c.id, UserID: c.userID,
