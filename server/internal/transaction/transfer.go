@@ -118,12 +118,13 @@ func CreateTransfer(ctx context.Context, db *sql.DB, userID string, in TransferI
 	if err := insertTransferCommission(ctx, q, userID, groupID, in.FromAccountID, commissionCatID, in.Commission, commissionDesc, kind, txDate, commissionCreated, updated); err != nil {
 		return Transfer{}, err
 	}
+	if err := refreshBalancesOnTx(ctx, tx, userID, in.FromAccountID, in.ToAccountID); err != nil {
+		return Transfer{}, err
+	}
 	if err := tx.Commit(); err != nil {
 		return Transfer{}, err
 	}
-	if err := refreshAccountBalances(ctx, db, userID, in.TransactionDate, in.FromAccountID, in.ToAccountID); err != nil {
-		return Transfer{}, err
-	}
+	notifyBalancesAfterCommit(ctx, db, userID, in.TransactionDate, in.FromAccountID, in.ToAccountID)
 	return GetTransfer(ctx, db, userID, groupID)
 }
 
@@ -316,16 +317,18 @@ func UpdateTransfer(ctx context.Context, db *sql.DB, userID, groupID string, in 
 	if err := syncTransferCommission(ctx, q, userID, groupID, in.FromAccountID, commissionCatID, in.Commission, commissionDesc, kind, txDate, now, commissionCreated, commissionLeg); err != nil {
 		return Transfer{}, err
 	}
-	if err := dbTx.Commit(); err != nil {
-		return Transfer{}, err
-	}
 	accountIDs := uniqueAccountIDs(in.FromAccountID, in.ToAccountID)
 	for _, leg := range transferLegs {
 		accountIDs = append(accountIDs, leg.AccountID)
 	}
-	if err := refreshAccountBalances(ctx, db, userID, in.TransactionDate, uniqueAccountIDs(accountIDs...)...); err != nil {
+	accountIDs = uniqueAccountIDs(accountIDs...)
+	if err := refreshBalancesOnTx(ctx, dbTx, userID, accountIDs...); err != nil {
 		return Transfer{}, err
 	}
+	if err := dbTx.Commit(); err != nil {
+		return Transfer{}, err
+	}
+	notifyBalancesAfterCommit(ctx, db, userID, in.TransactionDate, accountIDs...)
 	return GetTransfer(ctx, db, userID, groupID)
 }
 

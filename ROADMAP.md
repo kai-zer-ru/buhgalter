@@ -340,6 +340,7 @@
 - [x] Сервер: битый `expires_at` у API-токена считается истёкшим (fail-closed), а не бессрочным ([authentication.md](docs/api/authentication.md))
 - [x] Сервер: смена пароля отзывает чужие сессии (текущая сохраняется; через API-токен — все сессии) ([authentication.md](docs/api/authentication.md))
 - [x] Сервер: архивация/удаление cash/bank переводит остаток и меняет статус в одной транзакции ([accounts-archive-delete.md](docs/accounts-archive-delete.md))
+- [x] Сервер: Create/Update/Transfer пишут операцию, теги и current_balance в одной транзакции
 
 ## Общие планы
 

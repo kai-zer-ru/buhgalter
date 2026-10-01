@@ -7,6 +7,7 @@ import (
 
 	"github.com/kai-zer-ru/buhgalter/internal/accountbalance"
 	"github.com/kai-zer-ru/buhgalter/internal/balancehooks"
+	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 )
 
 // AfterBalanceRefresh is deprecated; use balancehooks.AfterRefresh from main.
@@ -17,11 +18,20 @@ func RefreshBalances(ctx context.Context, db *sql.DB, userID string, asOf time.T
 }
 
 func refreshAccountBalances(ctx context.Context, db *sql.DB, userID string, asOf time.Time, accountIDs ...string) error {
-	if err := accountbalance.Refresh(ctx, db, userID, accountIDs...); err != nil {
+	ids := uniqueAccountIDs(accountIDs...)
+	if err := refreshBalancesOnTx(ctx, db, userID, ids...); err != nil {
 		return err
 	}
-	balancehooks.NotifyRefresh(ctx, db, userID, asOf, accountIDs...)
+	balancehooks.NotifyRefresh(ctx, db, userID, asOf, ids...)
 	return nil
+}
+
+func refreshBalancesOnTx(ctx context.Context, db sqlcdb.DBTX, userID string, accountIDs ...string) error {
+	return accountbalance.Refresh(ctx, db, userID, uniqueAccountIDs(accountIDs...)...)
+}
+
+func notifyBalancesAfterCommit(ctx context.Context, db *sql.DB, userID string, asOf time.Time, accountIDs ...string) {
+	balancehooks.NotifyRefresh(ctx, db, userID, asOf, uniqueAccountIDs(accountIDs...)...)
 }
 
 func uniqueAccountIDs(ids ...string) []string {

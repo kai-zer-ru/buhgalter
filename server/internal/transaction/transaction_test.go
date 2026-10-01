@@ -790,3 +790,141 @@ func TestCreditCardPaymentExceedsLimit(t *testing.T) {
 		t.Fatalf("payment within limit: %v", err)
 	}
 }
+
+func countUserTransactions(t *testing.T, database *sql.DB, userID string) int {
+	t.Helper()
+	var n int
+	if err := database.QueryRow(`SELECT COUNT(*) FROM transactions WHERE user_id = ?`, userID).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+func TestCreateRollsBackWhenTagsFail(t *testing.T) {
+	handle, env := seedEnvFull(t)
+	database := handle.DB()
+	ctx := context.Background()
+	if _, err := database.Exec(`
+		CREATE TRIGGER test_fail_tx_tags
+		AFTER INSERT ON transaction_tags
+		BEGIN
+			SELECT RAISE(ABORT, 'test-fail-tags');
+		END;
+	`); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Create(ctx, database, env.userID, CreateInput{
+		AccountID:       env.accountID,
+		Type:            "expense",
+		Amount:          2500,
+		CategoryID:      &env.expenseID,
+		TagNames:        []string{"отпуск"},
+		TransactionDate: timeutil.NowUTC().Add(-time.Hour),
+	})
+	if err == nil {
+		t.Fatal("expected tag insert to fail")
+	}
+	if n := countUserTransactions(t, database, env.userID); n != 0 {
+		t.Fatalf("transactions after tag failure = %d, want 0", n)
+	}
+}
+
+func TestCreateRollsBackWhenBalanceRefreshFails(t *testing.T) {
+	handle, env := seedEnvFull(t)
+	database := handle.DB()
+	ctx := context.Background()
+	if _, err := database.Exec(`
+		CREATE TRIGGER test_fail_balance_refresh
+		AFTER UPDATE OF current_balance ON accounts
+		BEGIN
+			SELECT RAISE(ABORT, 'test-fail-refresh');
+		END;
+	`); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Create(ctx, database, env.userID, CreateInput{
+		AccountID:       env.accountID,
+		Type:            "expense",
+		Amount:          2500,
+		CategoryID:      &env.expenseID,
+		TransactionDate: timeutil.NowUTC().Add(-time.Hour),
+	})
+	if err == nil {
+		t.Fatal("expected balance refresh to fail")
+	}
+	if n := countUserTransactions(t, database, env.userID); n != 0 {
+		t.Fatalf("transactions after refresh failure = %d, want 0", n)
+	}
+}
+
+func TestUpdateRollsBackWhenTagsFail(t *testing.T) {
+	handle, env := seedEnvFull(t)
+	database := handle.DB()
+	ctx := context.Background()
+	past := timeutil.NowUTC().Add(-time.Hour)
+	tx, err := Create(ctx, database, env.userID, CreateInput{
+		AccountID:       env.accountID,
+		Type:            "expense",
+		Amount:          2500,
+		CategoryID:      &env.expenseID,
+		TransactionDate: past,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec(`
+		CREATE TRIGGER test_fail_tx_tags_update
+		AFTER INSERT ON transaction_tags
+		BEGIN
+			SELECT RAISE(ABORT, 'test-fail-tags');
+		END;
+	`); err != nil {
+		t.Fatal(err)
+	}
+	_, err = Update(ctx, database, env.userID, tx.ID, UpdateInput{
+		AccountID:       env.accountID,
+		Type:            "expense",
+		Amount:          9999,
+		CategoryID:      &env.expenseID,
+		TagNames:        []string{"отпуск"},
+		SetTags:         true,
+		TransactionDate: past,
+	})
+	if err == nil {
+		t.Fatal("expected tag update to fail")
+	}
+	got, err := GetByID(ctx, database, env.userID, tx.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Amount != 2500 {
+		t.Fatalf("amount after failed update = %d, want 2500", got.Amount)
+	}
+}
+
+func TestCreateTransferRollsBackWhenBalanceRefreshFails(t *testing.T) {
+	handle, env := seedEnvFull(t)
+	database := handle.DB()
+	ctx := context.Background()
+	if _, err := database.Exec(`
+		CREATE TRIGGER test_fail_transfer_refresh
+		AFTER UPDATE OF current_balance ON accounts
+		BEGIN
+			SELECT RAISE(ABORT, 'test-fail-refresh');
+		END;
+	`); err != nil {
+		t.Fatal(err)
+	}
+	_, err := CreateTransfer(ctx, database, env.userID, TransferInput{
+		FromAccountID:   env.accountID,
+		ToAccountID:     env.account2,
+		Amount:          1000,
+		TransactionDate: timeutil.NowUTC().Add(-time.Hour),
+	})
+	if err == nil {
+		t.Fatal("expected transfer refresh to fail")
+	}
+	if n := countUserTransactions(t, database, env.userID); n != 0 {
+		t.Fatalf("transactions after failed transfer = %d, want 0", n)
+	}
+}

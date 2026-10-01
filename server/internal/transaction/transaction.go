@@ -301,7 +301,12 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Tra
 	id := uuid.NewString()
 	now := time.Now().UTC().Format(time.RFC3339)
 	txDate := timeutil.FormatUTC(in.TransactionDate)
-	if err := queries(db).InsertTransaction(ctx, sqlcdb.InsertTransactionParams{
+	dbTx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return Transaction{}, err
+	}
+	defer func() { _ = dbTx.Rollback() }()
+	if err := queries(dbTx).InsertTransaction(ctx, sqlcdb.InsertTransactionParams{
 		ID:                id,
 		UserID:            userID,
 		AccountID:         in.AccountID,
@@ -321,12 +326,16 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Tra
 	}); err != nil {
 		return Transaction{}, fmt.Errorf("insert transaction: %w", err)
 	}
-	if err := tag.SetForTransaction(ctx, db, id, tagIDs); err != nil {
+	if err := tag.SetForTransaction(ctx, dbTx, id, tagIDs); err != nil {
 		return Transaction{}, err
 	}
-	if err := refreshAccountBalances(ctx, db, userID, in.TransactionDate, in.AccountID); err != nil {
+	if err := refreshBalancesOnTx(ctx, dbTx, userID, in.AccountID); err != nil {
 		return Transaction{}, err
 	}
+	if err := dbTx.Commit(); err != nil {
+		return Transaction{}, err
+	}
+	notifyBalancesAfterCommit(ctx, db, userID, in.TransactionDate, in.AccountID)
 	maybeNotifyBudget(ctx, db, userID, in.Type)
 	return GetByID(ctx, db, userID, id)
 }
@@ -401,7 +410,12 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in UpdateInput) 
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
-	if err := queries(db).UpdateTransaction(ctx, sqlcdb.UpdateTransactionParams{
+	dbTx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return Transaction{}, err
+	}
+	defer func() { _ = dbTx.Rollback() }()
+	if err := queries(dbTx).UpdateTransaction(ctx, sqlcdb.UpdateTransactionParams{
 		AccountID:       in.AccountID,
 		Type:            in.Type,
 		Kind:            kind,
@@ -418,13 +432,17 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in UpdateInput) 
 		return Transaction{}, err
 	}
 	if in.SetTags {
-		if err := tag.SetForTransaction(ctx, db, id, tagIDs); err != nil {
+		if err := tag.SetForTransaction(ctx, dbTx, id, tagIDs); err != nil {
 			return Transaction{}, err
 		}
 	}
-	if err := refreshAccountBalances(ctx, db, userID, in.TransactionDate, uniqueAccountIDs(existing.AccountID, in.AccountID)...); err != nil {
+	if err := refreshBalancesOnTx(ctx, dbTx, userID, uniqueAccountIDs(existing.AccountID, in.AccountID)...); err != nil {
 		return Transaction{}, err
 	}
+	if err := dbTx.Commit(); err != nil {
+		return Transaction{}, err
+	}
+	notifyBalancesAfterCommit(ctx, db, userID, in.TransactionDate, uniqueAccountIDs(existing.AccountID, in.AccountID)...)
 	maybeNotifyBudget(ctx, db, userID, in.Type)
 	return GetByID(ctx, db, userID, id)
 }

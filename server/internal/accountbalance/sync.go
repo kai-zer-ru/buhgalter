@@ -35,11 +35,11 @@ type Forecast struct {
 	HasSubscriptionsThisMonth bool
 }
 
-func queries(db *sql.DB) *sqlcdb.Queries {
+func queries(db sqlcdb.DBTX) *sqlcdb.Queries {
 	return sqlcdb.New(db)
 }
 
-func computeDeltas(ctx context.Context, db *sql.DB, userID, cutoff string) (income, expense, transferOut, transferIn map[string]int64, err error) {
+func computeDeltas(ctx context.Context, db sqlcdb.DBTX, userID, cutoff string) (income, expense, transferOut, transferIn map[string]int64, err error) {
 	q := queries(db)
 	income = make(map[string]int64)
 	expense = make(map[string]int64)
@@ -105,7 +105,7 @@ func computeDeltas(ctx context.Context, db *sql.DB, userID, cutoff string) (inco
 }
 
 // ComputeAll returns current balances for every account of the user.
-func ComputeAll(ctx context.Context, db *sql.DB, userID string) (map[string]int64, error) {
+func ComputeAll(ctx context.Context, db sqlcdb.DBTX, userID string) (map[string]int64, error) {
 	cutoff := timeutil.FormatUTC(timeutil.NowUTC())
 	accounts, err := queries(db).ListAllAccountIDsByUser(ctx, userID)
 	if err != nil {
@@ -125,7 +125,7 @@ func ComputeAll(ctx context.Context, db *sql.DB, userID string) (map[string]int6
 }
 
 // Refresh updates stored current_balance for the given accounts (or all if none specified).
-func Refresh(ctx context.Context, db *sql.DB, userID string, accountIDs ...string) error {
+func Refresh(ctx context.Context, db sqlcdb.DBTX, userID string, accountIDs ...string) error {
 	computed, err := ComputeAll(ctx, db, userID)
 	if err != nil {
 		return err
