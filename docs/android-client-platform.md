@@ -74,7 +74,7 @@ android/
 
 ### Доступ с телефона (middleware ExternalAccess)
 
-Сервер проверяет `Host` запроса. Для LAN без `external_url` в настройках добавьте IP или hostname сервера в `.env`:
+Сервер проверяет `Host` запроса (`X-Forwarded-Host` не учитывается). Для LAN без `external_url` в настройках добавьте IP или hostname сервера в `.env`:
 
 ```env
 BUHGALTER_ALLOWED_HOSTS=192.168.1.176

@@ -25,6 +25,8 @@ server {
 }
 ```
 
+`Host $host` обязателен: ExternalAccess всегда берёт hostname из `Host` (и для `external_url`, и для `BUHGALTER_ALLOWED_HOSTS`). `X-Forwarded-Host` не учитывается — раньше при заданном `external_url` он доверялся. Без `Host` nginx подставит upstream (`127.0.0.1`); с прокси на loopback запрос может пройти как localhost. Иначе **403** `ERR_EXTERNAL_ACCESS_DENIED`.
+
 Если Бухгалтер в Docker с пробросом `8765:8765`, `proxy_pass` остаётся на `http://127.0.0.1:8765` (nginx на том же хосте).
 
 ---
@@ -56,4 +58,4 @@ location /api/v1/realtime {
 
 `https://buhgalter.example.com`
 
-Оно используется для ссылок в уведомлениях (в том числе прямой ссылки на сброс пароля в Telegram/MAX) и разрешения доступа через reverse proxy. Без reverse proxy поле оставьте пустым — в уведомлении о сбросе пароля админ увидит подсказку настроить внешний URL.
+Оно используется для ссылок в уведомлениях (в том числе прямой ссылки на сброс пароля в Telegram/MAX) и разрешения доступа через reverse proxy. Hostname в `Host` запроса должен совпадать с hostname этого URL. Без reverse proxy поле оставьте пустым — в уведомлении о сбросе пароля админ увидит подсказку настроить внешний URL.

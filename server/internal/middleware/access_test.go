@@ -1,12 +1,14 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
 
 	"github.com/kai-zer-ru/buhgalter/internal/db"
+	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/settingscache"
 )
 
@@ -26,16 +28,13 @@ func TestNormalizeHost(t *testing.T) {
 	}
 }
 
-func TestRequestHostTrustProxy(t *testing.T) {
+func TestRequestHostIgnoresForwardedHost(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:8765/api/v1/health", nil)
 	r.Host = "203.0.113.10:8765"
 	r.Header.Set("X-Forwarded-Host", "buhgalter.example.com")
 
-	if got := requestHost(r, false); got != "203.0.113.10" {
-		t.Fatalf("untrusted proxy host = %q", got)
-	}
-	if got := requestHost(r, true); got != "buhgalter.example.com" {
-		t.Fatalf("trusted proxy host = %q", got)
+	if got := requestHost(r); got != "203.0.113.10" {
+		t.Fatalf("host = %q, want 203.0.113.10 (X-Forwarded-Host ignored)", got)
 	}
 }
 
@@ -67,6 +66,45 @@ func TestExternalAccessDeniesSpoofedLocalHostFromRemote(t *testing.T) {
 	h.ServeHTTP(okRec, okReq)
 	if okRec.Code != http.StatusNoContent {
 		t.Fatalf("loopback status = %d, want 204", okRec.Code)
+	}
+}
+
+func TestExternalAccessIgnoresSpoofedForwardedHost(t *testing.T) {
+	settingscache.Invalidate()
+	mgr, err := db.NewManager(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = mgr.Close() })
+
+	ext := "https://buhgalter.example.com"
+	if err := sqlcdb.New(mgr.DB()).UpdateAdminSettings(context.Background(), &ext); err != nil {
+		t.Fatalf("set external_url: %v", err)
+	}
+	settingscache.Invalidate()
+
+	h := ExternalAccess(db.NewHandle(mgr), nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	spoof := httptest.NewRequest(http.MethodGet, "/api/v1/setup/status", nil)
+	spoof.Host = "203.0.113.10"
+	spoof.Header.Set("X-Forwarded-Host", "buhgalter.example.com")
+	spoof.RemoteAddr = "203.0.113.10:54321"
+	spoofRec := httptest.NewRecorder()
+	h.ServeHTTP(spoofRec, spoof)
+	if spoofRec.Code != http.StatusForbidden {
+		t.Fatalf("spoofed X-Forwarded-Host status = %d, want 403", spoofRec.Code)
+	}
+
+	okReq := httptest.NewRequest(http.MethodGet, "/api/v1/setup/status", nil)
+	okReq.Host = "buhgalter.example.com"
+	okReq.Header.Set("X-Forwarded-Host", "evil.example")
+	okReq.RemoteAddr = "127.0.0.1:54321"
+	okRec := httptest.NewRecorder()
+	h.ServeHTTP(okRec, okReq)
+	if okRec.Code != http.StatusNoContent {
+		t.Fatalf("Host match status = %d, want 204", okRec.Code)
 	}
 }
 

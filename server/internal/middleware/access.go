@@ -16,6 +16,7 @@ import (
 // ExternalAccess limits HTTP access by Host based on system_settings.external_url.
 // Host localhost / 127.0.0.1 / ::1 is allowed only when the client IP is loopback.
 // Otherwise: BUHGALTER_ALLOWED_HOSTS in .env; with external_url set — also the URL hostname.
+// X-Forwarded-Host is ignored; reverse proxy must set Host (see docs/install/nginx.md).
 func ExternalAccess(store *db.Handle, allowedHosts []string) func(http.Handler) http.Handler {
 	allowed := allowedHostSet(allowedHosts)
 	return func(next http.Handler) http.Handler {
@@ -62,7 +63,7 @@ func externalAccessAllowed(ctx context.Context, sqlDB *sql.DB, r *http.Request, 
 	}
 
 	configured := externalURL.Valid && strings.TrimSpace(externalURL.String) != ""
-	host := requestHost(r, configured)
+	host := requestHost(r)
 
 	if !configured {
 		return isAccessAllowedHost(r, host, allowed), nil
@@ -94,14 +95,8 @@ func isLocalHost(host string) bool {
 	}
 }
 
-func requestHost(r *http.Request, trustProxy bool) string {
-	raw := r.Host
-	if trustProxy {
-		if fwd := r.Header.Get("X-Forwarded-Host"); fwd != "" {
-			raw = strings.TrimSpace(strings.Split(fwd, ",")[0])
-		}
-	}
-	return normalizeHost(raw)
+func requestHost(r *http.Request) string {
+	return normalizeHost(r.Host)
 }
 
 func normalizeHost(host string) string {

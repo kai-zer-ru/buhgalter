@@ -1,3 +1,4 @@
+# Host $host is required: ExternalAccess ignores X-Forwarded-Host.
 server {
     listen 443 ssl;
     server_name buhgalter.my-site.ru;

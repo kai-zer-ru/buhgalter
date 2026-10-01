@@ -9,7 +9,9 @@ Self-hosted учёт финансов: один бинарник с веб-ин�
 **Стек:** Go (API), SQLite, SvelteKit (веб и Android UI).
 
 [![GitHub](https://img.shields.io/badge/GitHub-kai--zer--ru%2Fbuhgalter-blue?logo=github)](https://github.com/kai-zer-ru/buhgalter)
-[![Поддержать](https://img.shields.io/badge/донат-Tinkoff-FFDD2D.svg)](https://www.tbank.ru/rm/r_wKLcbFgjYa.ncgWMwrHSA/vyQvd5941/)
+[![Т-Банк](https://img.shields.io/badge/донат-Т--Банк-FFDD2D.svg)](https://www.tbank.ru/rm/r_wKLcbFgjYa.ncgWMwrHSA/vyQvd5941/)
+[![Сбербанк](https://img.shields.io/badge/донат-Сбербанк-21A038.svg)](https://messenger.sbrf.ru/sl/fFaIF59ATtVRF1bfa)
+[![Альфа-Банк](https://img.shields.io/badge/донат-Альфа--Банк-EF3124.svg)](https://web.alfabank.ru/public/mrv2/xJAmm7MFwl)
 
 ---
 
@@ -232,6 +234,8 @@ server {
     ssl_certificate_key /etc/ssl/privkey.pem;
 }
 ```
+
+`Host $host` обязателен: доступ сверяется по заголовку `Host`, не по `X-Forwarded-Host` (иначе **403**).
 
 Блок `/api/v1/realtime` нужен для живых обновлений веба (WebSocket, с **v1.7.0**). Без `Upgrade` клиент тихо откатывается на SWR — учёт продолжит работать.
 
