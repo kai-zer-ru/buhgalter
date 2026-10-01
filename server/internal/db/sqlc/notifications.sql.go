@@ -59,6 +59,7 @@ WHERE user_id = ?
   AND channel = ?
   AND entity_id = ?
   AND dedup_date = ?
+  AND status = 'sent'
 `
 
 type ExistsNotificationDedupParams struct {

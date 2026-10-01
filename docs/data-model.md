@@ -202,7 +202,7 @@ erDiagram
         TEXT trigger_type
         TEXT channel
         TEXT dedup_date
-        TEXT status
+        TEXT status "sent|error"
     }
 
     notification_templates {

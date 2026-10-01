@@ -130,4 +130,5 @@ WHERE user_id = ?
   AND trigger_type = ?
   AND channel = ?
   AND entity_id = ?
-  AND dedup_date = ?;
+  AND dedup_date = ?
+  AND status = 'sent';

@@ -140,6 +140,9 @@ func (w *Worker) processPlanned(
 	lookup balanceLookup,
 	externalURL string,
 ) error {
+	if settings.TriggerPlanned != 1 {
+		return nil
+	}
 	rows, err := q.ListDueFutureTransactions(ctx, sqlcdb.ListDueFutureTransactionsParams{
 		UserID:          userID,
 		TransactionDate: cutoff,
@@ -154,9 +157,6 @@ func (w *Worker) processPlanned(
 	})
 	if err != nil {
 		return err
-	}
-	if settings.TriggerPlanned != 1 {
-		return nil
 	}
 	customTemplates, err := q.ListNotificationTemplates(ctx, userID)
 	if err != nil {

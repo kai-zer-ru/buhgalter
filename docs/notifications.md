@@ -142,7 +142,9 @@ Placeholder `{amount}` — недостающая сумма. Формула: `m
 | Пороги бюджета | [`budgetnotify/check.go`](../server/internal/budgetnotify/check.go) |
 | URL в шаблонах | [`urls.go`](../server/internal/notify/urls.go) |
 
-Dedup и `notification_log.trigger_type` — основной триггер (не `balance_shortfall`).
+Dedup: `notification_log` с тем же user/trigger/channel/entity/`dedup_date` и **`status = sent`**. Строка `error` повтор не блокирует (worker после рестарта, `Deliver`, сброс пароля, регистрация). Слот воркера на календарный день в памяти процесса — отдельно: до рестарта очередь в `notification_time_local` не крутится повторно. `trigger_type` — основной триггер (не `balance_shortfall`).
+
+Worker `processPlanned` при включённом `trigger_planned` по-прежнему переводит due `kind=future` → `manual` в момент рассылки. Если toggle выключен — worker future не трогает; фоновый `FutureRunner` активирует всех (~1 мин, в т.ч. при старте).
 
 ---
 
