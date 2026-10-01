@@ -27,3 +27,6 @@ DELETE FROM sessions WHERE id = ?;
 
 -- name: DeleteSessionsByUserID :exec
 DELETE FROM sessions WHERE user_id = ?;
+
+-- name: DeleteSessionsByUserIDExcept :exec
+DELETE FROM sessions WHERE user_id = ? AND id != ?;

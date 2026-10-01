@@ -147,6 +147,16 @@ func DeleteSessionsByUserID(ctx context.Context, db *sql.DB, userID string) erro
 	return queries(db).DeleteSessionsByUserID(ctx, userID)
 }
 
+func DeleteOtherSessions(ctx context.Context, db *sql.DB, userID, keepSessionID string) error {
+	if keepSessionID == "" {
+		return DeleteSessionsByUserID(ctx, db, userID)
+	}
+	return queries(db).DeleteSessionsByUserIDExcept(ctx, sqlcdb.DeleteSessionsByUserIDExceptParams{
+		UserID: userID,
+		ID:     keepSessionID,
+	})
+}
+
 func DeleteAPITokensByUserID(ctx context.Context, db *sql.DB, userID string) error {
 	return queries(db).DeleteAPITokensByUserID(ctx, userID)
 }

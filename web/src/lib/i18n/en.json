@@ -937,7 +937,7 @@
 	"transactions.filters.toggle": "Filters",
 	"nav.menu": "Menu",
 	"nav.back": "Back",
-	"settings.password.changed": "Password changed",
+	"settings.password.changed": "Password changed. Other sessions have been signed out.",
 	"settings.password.current": "Current password",
 	"settings.password.new": "New password",
 	"settings.password.confirm": "Confirm password",

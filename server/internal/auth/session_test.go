@@ -259,3 +259,47 @@ func TestDeleteAPITokensByUserID(t *testing.T) {
 		t.Fatal("other user's api token should remain")
 	}
 }
+
+func TestDeleteOtherSessions(t *testing.T) {
+	dir := t.TempDir()
+	mgr, err := db.NewManager(filepath.Join(dir, "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mgr.Close()
+	sqlDB := mgr.DB()
+	ctx := context.Background()
+
+	userID, err := CreateUser(ctx, sqlDB, "sessuser", "hash", "Sess", false, UserStatusActive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keepTok, err := CreateSession(ctx, sqlDB, userID, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherTok, err := CreateSession(ctx, sqlDB, userID, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	keep, err := LookupSession(ctx, sqlDB, keepTok)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := DeleteOtherSessions(ctx, sqlDB, userID, keep.ID); err != nil {
+		t.Fatal(err)
+	}
+	if !VerifyToken(ctx, sqlDB, keepTok) {
+		t.Fatal("kept session should remain")
+	}
+	if VerifyToken(ctx, sqlDB, otherTok) {
+		t.Fatal("other session should be deleted")
+	}
+
+	if err := DeleteOtherSessions(ctx, sqlDB, userID, ""); err != nil {
+		t.Fatal(err)
+	}
+	if VerifyToken(ctx, sqlDB, keepTok) {
+		t.Fatal("empty keep id should delete remaining sessions")
+	}
+}

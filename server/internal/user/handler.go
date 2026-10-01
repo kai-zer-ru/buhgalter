@@ -359,6 +359,12 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	keepSessionID := info.SessionID
+	if info.APIToken {
+		keepSessionID = ""
+	}
+	_ = auth.DeleteOtherSessions(r.Context(), h.Store.DB(), info.User.ID, keepSessionID)
+
 	ip := auth.ClientIP(r)
 	_ = h.Audit.Log("user.password.change", info.User.ID, info.User.Login, ip, nil)
 	w.WriteHeader(http.StatusNoContent)

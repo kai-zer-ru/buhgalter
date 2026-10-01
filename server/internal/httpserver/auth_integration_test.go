@@ -164,6 +164,48 @@ func TestChangePasswordUnchanged(t *testing.T) {
 	}
 }
 
+func TestChangePasswordRevokesOtherSessions(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+	oldCookie := env.cookie
+	oldToken := env.token
+
+	env.login(t, "admin", "secret123")
+	body, _ := json.Marshal(map[string]string{
+		"current_password":     "secret123",
+		"new_password":         "secret124",
+		"new_password_confirm": "secret124",
+	})
+	resp, err := env.authedRequest(http.MethodPut, "/api/v1/user/password", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("change password status %d", resp.StatusCode)
+	}
+
+	meResp, err := env.authedRequest(http.MethodGet, "/api/v1/auth/me", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	meResp.Body.Close()
+	if meResp.StatusCode != http.StatusOK {
+		t.Fatalf("current session after password change %d, want 200", meResp.StatusCode)
+	}
+
+	env.cookie = oldCookie
+	env.token = oldToken
+	oldMe, err := env.authedRequest(http.MethodGet, "/api/v1/auth/me", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldMe.Body.Close()
+	if oldMe.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("old session after password change %d, want 401", oldMe.StatusCode)
+	}
+}
+
 func TestVerifyToken(t *testing.T) {
 	env := setupConfigured(t)
 	env.login(t, "admin", "secret123")

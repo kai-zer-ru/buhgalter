@@ -275,6 +275,63 @@ func TestHandlerChangePassword(t *testing.T) {
 			t.Fatalf("status %d", rec.Code)
 		}
 	})
+
+	t.Run("revokes other sessions", func(t *testing.T) {
+		ctx := context.Background()
+		keepTok, err := auth.CreateSession(ctx, handle.DB(), user.ID, "", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		otherTok, err := auth.CreateSession(ctx, handle.DB(), user.ID, "", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		keep, err := auth.LookupSession(ctx, handle.DB(), keepTok)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, _ := json.Marshal(map[string]string{
+			"current_password":     "another12",
+			"new_password":         "session12",
+			"new_password_confirm": "session12",
+		})
+		rec := httptest.NewRecorder()
+		req := withUser(t, user, http.MethodPut, "/user/password", body)
+		req = req.WithContext(context.WithValue(req.Context(), auth.AuthContextKey, auth.AuthInfo{User: user, SessionID: keep.ID}))
+		h.ChangePassword(rec, req)
+		if rec.Code != http.StatusNoContent {
+			t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+		}
+		if !auth.VerifyToken(ctx, handle.DB(), keepTok) {
+			t.Fatal("current session should remain")
+		}
+		if auth.VerifyToken(ctx, handle.DB(), otherTok) {
+			t.Fatal("other session should be revoked")
+		}
+	})
+
+	t.Run("api token revokes all sessions", func(t *testing.T) {
+		ctx := context.Background()
+		tok, err := auth.CreateSession(ctx, handle.DB(), user.ID, "", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, _ := json.Marshal(map[string]string{
+			"current_password":     "session12",
+			"new_password":         "apitok12x",
+			"new_password_confirm": "apitok12x",
+		})
+		rec := httptest.NewRecorder()
+		req := withUser(t, user, http.MethodPut, "/user/password", body)
+		req = req.WithContext(context.WithValue(req.Context(), auth.AuthContextKey, auth.AuthInfo{User: user, APIToken: true}))
+		h.ChangePassword(rec, req)
+		if rec.Code != http.StatusNoContent {
+			t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+		}
+		if auth.VerifyToken(ctx, handle.DB(), tok) {
+			t.Fatal("session should be revoked when password changed with API token")
+		}
+	})
 }
 
 func TestHandlerTokenCRUD(t *testing.T) {

@@ -36,6 +36,20 @@ func (q *Queries) DeleteSessionsByUserID(ctx context.Context, userID string) err
 	return err
 }
 
+const deleteSessionsByUserIDExcept = `-- name: DeleteSessionsByUserIDExcept :exec
+DELETE FROM sessions WHERE user_id = ? AND id != ?
+`
+
+type DeleteSessionsByUserIDExceptParams struct {
+	UserID string `json:"user_id"`
+	ID     string `json:"id"`
+}
+
+func (q *Queries) DeleteSessionsByUserIDExcept(ctx context.Context, arg DeleteSessionsByUserIDExceptParams) error {
+	_, err := q.db.ExecContext(ctx, deleteSessionsByUserIDExcept, arg.UserID, arg.ID)
+	return err
+}
+
 const getSessionByTokenHash = `-- name: GetSessionByTokenHash :one
 SELECT id, user_id, last_activity, expires_at
 FROM sessions WHERE token_hash = ?

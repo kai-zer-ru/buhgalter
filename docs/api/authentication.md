@@ -10,6 +10,8 @@
 - **Bearer token** — для API-клиентов и Android (`Authorization: Bearer ...`): session token после `POST /auth/login` или долгоживущий API-токен.
 - **API tokens** — отдельные пользовательские токены, создаются в настройках (в т.ч. вход в Android через `/login/token`).
 
+`PUT /user/password` после успеха удаляет остальные сессии; текущая сессия (cookie или Bearer session) остаётся. Если смена идёт с API-токеном — удаляются все сессии. API-токены не отзываются.
+
 ## Основные endpoints
 
 | Метод | Путь | Описание |
@@ -24,6 +26,7 @@
 | `POST` | `/api/v1/admin/password-reset-requests/{id}/ack` | Скрыть запрос из очереди (админ) |
 | `PUT` | `/api/v1/admin/users/{id}/password` | Задать новый пароль пользователю (админ) |
 | `GET` | `/api/v1/ui/meta` | Агрегированные справочники для старта UI |
+| `PUT` | `/api/v1/user/password` | Смена пароля; остальные сессии отзываются |
 | `GET` | `/api/v1/user/tokens` | Список API-токенов |
 | `POST` | `/api/v1/user/tokens` | Создать API-токен |
 | `DELETE` | `/api/v1/user/tokens/{id}` | Отозвать API-токен (только свой) |

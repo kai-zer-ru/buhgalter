@@ -384,8 +384,12 @@ paths:
   /user/password:
     put:
       summary: Смена пароля
+      description: |
+        После успеха остальные сессии пользователя удаляются; текущая сессия (cookie или Bearer session) сохраняется.
+        Смена через API-токен удаляет все сессии. API-токены не отзываются.
       security:
         - sessionCookie: []
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -409,7 +413,7 @@ paths:
                   description: Должен совпадать с new_password
       responses:
         '204':
-          description: Пароль изменён
+          description: Пароль изменён; остальные сессии отозваны
         '400':
           description: |
             Ошибка валидации. Код ответа `VALIDATION_ERROR`; тексты сообщений по ключам:

@@ -937,7 +937,7 @@
 	"transactions.filters.toggle": "Фильтры",
 	"nav.menu": "Меню",
 	"nav.back": "Назад",
-	"settings.password.changed": "Пароль изменён",
+	"settings.password.changed": "Пароль изменён. Другие сессии завершены.",
 	"settings.password.current": "Текущий пароль",
 	"settings.password.new": "Новый пароль",
 	"settings.password.confirm": "Подтверждение пароля",
