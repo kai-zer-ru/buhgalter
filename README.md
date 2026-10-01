@@ -122,7 +122,7 @@ Self-hosted учёт финансов: один бинарник с веб-ин�
 
 Настройки (порт, allowed hosts) — через `.env`, см. [переменные окружения](#переменные-окружения). Подробнее: [docs/install/docker.md](docs/install/docker.md), [docs/install/manual.md](docs/install/manual.md).
 
-Пока **внешний URL** в админке не задан, доступны **localhost** (всегда) и Host из `BUHGALTER_ALLOWED_HOSTS`.
+Пока **внешний URL** в админке не задан, доступны Host из `BUHGALTER_ALLOWED_HOSTS` и **localhost** / loopback Host — только с loopback-клиента (`127.0.0.1` / `::1`).
 
 ### docker run
 
@@ -275,7 +275,7 @@ BUHGALTER_ALLOWED_HOSTS=["192.168.1.100","example.com"]
 | `BUHGALTER_LOG_MODE`      | `prod`                            | `prod` — редактирование чувствительных заголовков; `dev` — полные request-логи |
 | `BUHGALTER_CORS_ORIGINS`  | `*`                               | CORS: `*` отражает Origin запроса (нужно для cookie-сессий) |
 | `BUHGALTER_ENV_FILE`      | `.env`                            | Путь к файлу `.env` |
-| `BUHGALTER_ALLOWED_HOSTS` | `["127.0.0.1","localhost","::1"]` | Host для прямого доступа (JSON-массив). localhost всегда разрешён |
+| `BUHGALTER_ALLOWED_HOSTS` | `[]` | Host для прямого доступа (JSON-массив). Host localhost/loopback без записи в списке — только с loopback-клиента. Не добавляйте localhost в список: это снова пустит поддельный Host с удалённого IP |
 | `BUHGALTER_STATIC_EMBED`  | `true`                            | Встроенный фронтенд (`false` — отдельный Vite dev) |
 | `BUHGALTER_MDNS_ENABLED`  | `true`                            | Публикация `_buhgalter._tcp` в LAN для Android discovery |
 | `BUHGALTER_MDNS_NAME`     | `Buhgalter`                       | Имя экземпляра в mDNS |

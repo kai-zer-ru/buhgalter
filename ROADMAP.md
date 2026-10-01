@@ -332,6 +332,7 @@
 
 - [x] CI/release: `goreleaser` ждёт и `android-apk`, и `docker`; на теге не гоняем повторный `test` / `ci.yml` (только сборка релиза)
 - [x] БАГ. Веб: главная могла показывать устаревшие балансы (`0.00`), страница счёта — актуальные. При живом WebSocket SWR не revalidate; первый connect не сбрасывал ledger-кеш. Фикс: invalidate ledger на первом `onopen`, грубый invalidate чистит ref-cache, dashboard патчит `/accounts*`+`/balance`, `listAccounts`/`getAccount` обогащают из dashboard; `hint_paths` для `/transfers` ([ui-api-cache.md](docs/ui-api-cache.md))
+- [x] Сервер: Host `localhost` / `127.0.0.1` / `::1` не обходит ExternalAccess, если клиент не loopback
 
 ## Общие планы
 

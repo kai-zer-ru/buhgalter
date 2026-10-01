@@ -14,8 +14,8 @@ import (
 )
 
 // ExternalAccess limits HTTP access by Host based on system_settings.external_url.
-// localhost / loopback is always allowed. Otherwise: BUHGALTER_ALLOWED_HOSTS in .env;
-// with external_url set — also the URL hostname.
+// Host localhost / 127.0.0.1 / ::1 is allowed only when the client IP is loopback.
+// Otherwise: BUHGALTER_ALLOWED_HOSTS in .env; with external_url set — also the URL hostname.
 func ExternalAccess(store *db.Handle, allowedHosts []string) func(http.Handler) http.Handler {
 	allowed := allowedHostSet(allowedHosts)
 	return func(next http.Handler) http.Handler {
@@ -65,21 +65,24 @@ func externalAccessAllowed(ctx context.Context, sqlDB *sql.DB, r *http.Request, 
 	host := requestHost(r, configured)
 
 	if !configured {
-		return isAccessAllowedHost(host, allowed), nil
+		return isAccessAllowedHost(r, host, allowed), nil
 	}
 
 	wantHost, err := hostnameFromExternalURL(externalURL.String)
 	if err != nil {
 		return false, err
 	}
-	if hostMatches(host, wantHost) || isAccessAllowedHost(host, allowed) {
+	if hostMatches(host, wantHost) || isAccessAllowedHost(r, host, allowed) {
 		return true, nil
 	}
 	return false, nil
 }
 
-func isAccessAllowedHost(host string, allowed map[string]struct{}) bool {
-	return isLocalHost(host) || isConfiguredAllowedHost(host, allowed)
+func isAccessAllowedHost(r *http.Request, host string, allowed map[string]struct{}) bool {
+	if isLocalHost(host) && isLoopbackIP(directClientIP(r)) {
+		return true
+	}
+	return isConfiguredAllowedHost(host, allowed)
 }
 
 func isLocalHost(host string) bool {

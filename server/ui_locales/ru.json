@@ -1252,7 +1252,7 @@
 	"setup.registration.aria": "Разрешить регистрацию",
 	"setup.external_url.label": "Внешний URL",
 	"setup.external_url.optional": "(опционально)",
-	"setup.external_url.hint": "Нужен для публичного доступа через nginx с HTTPS и для ссылок в уведомлениях. Пока пусто — localhost всегда доступен; остальные host — в BUHGALTER_ALLOWED_HOSTS (.env).",
+	"setup.external_url.hint": "Нужен для публичного доступа через nginx с HTTPS и для ссылок в уведомлениях. Пока пусто — localhost доступен только с loopback-клиента; остальные host — в BUHGALTER_ALLOWED_HOSTS (.env).",
 	"setup.submit.loading": "Сохранение…",
 	"setup.submit": "Завершить настройку",
 	"setup.error": "Ошибка настройки",

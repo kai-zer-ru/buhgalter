@@ -1252,7 +1252,7 @@
 	"setup.registration.aria": "Allow registration",
 	"setup.external_url.label": "External URL",
 	"setup.external_url.optional": "(optional)",
-	"setup.external_url.hint": "Required for public HTTPS access via nginx and notification links. While empty, localhost is always allowed; other hosts need BUHGALTER_ALLOWED_HOSTS in .env.",
+	"setup.external_url.hint": "Required for public HTTPS access via nginx and notification links. While empty, localhost is allowed only from a loopback client; other hosts need BUHGALTER_ALLOWED_HOSTS in .env.",
 	"setup.submit.loading": "Saving…",
 	"setup.submit": "Complete setup",
 	"setup.error": "Setup failed",
