@@ -64,6 +64,8 @@ const revalidateTimers = new Map<string, ReturnType<typeof setTimeout>>();
 /** Paths that must hit the network on the next online GET (after a write). */
 const pendingNetworkRefresh = new Set<string>();
 let diskFlushTimer: ReturnType<typeof setTimeout> | null = null;
+/** Bumped on clear so in-flight GET/revalidate cannot rewrite a pre-mutation snapshot. */
+let cacheEpoch = 0;
 
 /** Wait before background GET so taps/scroll are not competing with revalidate. */
 const REVALIDATE_DEFER_MS = import.meta.env.MODE === 'test' ? 0 : 3_000;
@@ -152,6 +154,7 @@ function storageSet(key: string, value: string): void {
 }
 
 function storageRemove(key: string): void {
+	pendingDiskWrites.delete(key);
 	if (typeof localStorage !== 'undefined') {
 		try {
 			localStorage.removeItem(key);
@@ -408,6 +411,7 @@ export function listRefCachePaths(): string[] {
 }
 
 export function invalidateRefCachePrefix(pathPrefix: string): void {
+	cacheEpoch++;
 	const needle = `::${pathPrefix}`;
 	const prefix = `${REF_CACHE_VERSION}::`;
 	if (typeof localStorage !== 'undefined') {
@@ -424,6 +428,9 @@ export function invalidateRefCachePrefix(pathPrefix: string): void {
 	}
 	for (const key of [...memoryStore.keys()]) {
 		if (key.startsWith(prefix) && key.includes(needle)) memoryStore.delete(key);
+	}
+	for (const key of [...pendingDiskWrites.keys()]) {
+		if (key.startsWith(prefix) && key.includes(needle)) pendingDiskWrites.delete(key);
 	}
 }
 
@@ -500,6 +507,7 @@ function scheduleRevalidate<T>(path: string, fetcher: () => Promise<T>): void {
 	const existing = revalidateTimers.get(path);
 	if (existing !== undefined) clearTimeout(existing);
 
+	const epoch = cacheEpoch;
 	const timer = setTimeout(() => {
 		revalidateTimers.delete(path);
 		if (inflightRevalidate.has(path) || isWarmOrGracePeriod()) return;
@@ -507,6 +515,7 @@ function scheduleRevalidate<T>(path: string, fetcher: () => Promise<T>): void {
 		const job = (async () => {
 			try {
 				const value = await fetcher();
+				if (epoch !== cacheEpoch) return;
 				markServerOnline();
 				const changed = writeRefCache(path, value);
 				lastRevalidatedAt.set(path, Date.now());
@@ -539,10 +548,12 @@ export async function fetchWithRefCache<T>(path: string, fetcher: () => Promise<
 		throw new OfflineCacheMissError(path);
 	}
 
+	const epoch = cacheEpoch;
 	const forceNetwork = forceNetworkRefCacheDepth > 0 || pendingNetworkRefresh.has(path);
 	if (forceNetwork) {
 		try {
 			const value = await fetcher();
+			if (epoch !== cacheEpoch) return value;
 			markServerOnline();
 			writeRefCache(path, value);
 			pendingNetworkRefresh.delete(path);
@@ -566,6 +577,7 @@ export async function fetchWithRefCache<T>(path: string, fetcher: () => Promise<
 
 	try {
 		const value = await fetcher();
+		if (epoch !== cacheEpoch) return value;
 		markServerOnline();
 		writeRefCache(path, value);
 		return value;
@@ -580,6 +592,7 @@ export async function fetchWithRefCache<T>(path: string, fetcher: () => Promise<
 }
 
 export function clearRefCache(opts?: { preserveAuthMe?: boolean }): void {
+	cacheEpoch++;
 	const preserveAuthMe = opts?.preserveAuthMe === true;
 	const prefix = `${REF_CACHE_VERSION}::`;
 	if (!preserveAuthMe) {
@@ -613,6 +626,11 @@ export function clearRefCache(opts?: { preserveAuthMe?: boolean }): void {
 	}
 	inflightRevalidate.clear();
 	lastRevalidatedAt.clear();
+	pendingDiskWrites.clear();
+	if (diskFlushTimer !== null) {
+		clearTimeout(diskFlushTimer);
+		diskFlushTimer = null;
+	}
 	for (const timer of revalidateTimers.values()) clearTimeout(timer);
 	revalidateTimers.clear();
 	if (preserveAuthMe) {
@@ -642,6 +660,7 @@ export function resetRefCacheForTests(): void {
 	}
 	suppressNotifyDepth = 0;
 	forceNetworkRefCacheDepth = 0;
+	cacheEpoch = 0;
 	warmRefCacheActive = false;
 	warmRefCacheGraceUntil = 0;
 	stableCatalogMemory = null;

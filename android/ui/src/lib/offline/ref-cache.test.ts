@@ -197,6 +197,22 @@ describe('fetchWithRefCache SWR', () => {
 		expect(readRefCache('/api/v1/credits?status=active')).toEqual([{ id: 'c1' }, { id: 'c2' }]);
 	});
 
+	it('clearRefCache ignores in-flight GET writes', async () => {
+		let resolveFetch!: (value: unknown) => void;
+		const fetcher = vi.fn(
+			() =>
+				new Promise<unknown>((resolve) => {
+					resolveFetch = resolve;
+				})
+		);
+
+		const inflight = fetchWithRefCache('/api/v1/transactions', fetcher);
+		clearRefCache();
+		resolveFetch([{ id: 'stale' }]);
+		await inflight;
+		expect(readRefCache('/api/v1/transactions')).toBeNull();
+	});
+
 	it('clearRefCache resets SWR cooldown so a list can refetch after a write', async () => {
 		const path = '/api/v1/credits?status=active';
 		writeRefCache(path, [{ id: 'c1' }]);
@@ -255,6 +271,25 @@ describe('clearRefCache preserveAuthMe', () => {
 		const fetcher = vi.fn().mockResolvedValue({ total: 2 });
 		await expect(fetchWithRefCache('/api/v1/dashboard', fetcher)).resolves.toEqual({ total: 2 });
 		expect(fetcher).toHaveBeenCalledOnce();
+	});
+
+	it('preserveAuthMe clear ignores in-flight force GET writes', async () => {
+		const { clearRefCache, fetchWithRefCache, readRefCache, writeRefCache } =
+			await import('./ref-cache');
+		writeRefCache('/api/v1/dashboard', { total: 1 });
+		clearRefCache({ preserveAuthMe: true });
+		let resolveFetch!: (value: unknown) => void;
+		const fetcher = vi.fn(
+			() =>
+				new Promise<unknown>((resolve) => {
+					resolveFetch = resolve;
+				})
+		);
+		const inflight = fetchWithRefCache('/api/v1/dashboard', fetcher);
+		clearRefCache({ preserveAuthMe: true });
+		resolveFetch({ total: 99 });
+		await inflight;
+		expect(readRefCache('/api/v1/dashboard')).toEqual({ total: 1 });
 	});
 
 	it('keeps category dictionaries so offline forms survive a write', async () => {

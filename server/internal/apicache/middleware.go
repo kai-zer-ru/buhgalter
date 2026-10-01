@@ -83,14 +83,15 @@ func Middleware(cache *Cache) func(http.Handler) http.Handler {
 						writeCached(w, item)
 						return
 					}
+					epoch := cache.Epoch()
 					rec := &responseRecorder{ResponseWriter: w}
 					next.ServeHTTP(rec, r)
 					if rec.status == http.StatusOK && rec.body.Len() > 0 {
-						cache.Set(key, Response{
+						cache.SetIfEpoch(key, Response{
 							Status:      rec.status,
 							Body:        append([]byte(nil), rec.body.Bytes()...),
 							ContentType: rec.Header().Get("Content-Type"),
-						}, ttl)
+						}, ttl, epoch)
 					}
 					rec.flush()
 					return

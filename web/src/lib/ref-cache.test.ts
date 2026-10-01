@@ -107,6 +107,26 @@ describe('web fetchWithRefCache SWR', () => {
 		expect(refCacheReady('/api/v1/dashboard')).toBe(false);
 	});
 
+	it('clearRefCache ignores in-flight foreground GET writes', async () => {
+		let resolveFetch!: (value: unknown) => void;
+		const fetcher = vi.fn(
+			() =>
+				new Promise<unknown>((resolve) => {
+					resolveFetch = resolve;
+				})
+		);
+
+		const inflight = fetchWithRefCache('/api/v1/dashboard', fetcher);
+		clearRefCache();
+		resolveFetch({ total_balance: 0 });
+		await inflight;
+		expect(readRefCache('/api/v1/dashboard')).toBeNull();
+
+		const fresh = await fetchWithRefCache('/api/v1/dashboard', async () => ({ total_balance: 42 }));
+		expect(fresh).toEqual({ total_balance: 42 });
+		expect(readRefCache('/api/v1/dashboard')).toEqual({ total_balance: 42 });
+	});
+
 	it('clearRefCache drops cache and ignores in-flight revalidate writes', async () => {
 		writeRefCache('/api/v1/debts?settled=false', [{ id: 'old' }]);
 		let resolveFetch!: (value: unknown[]) => void;

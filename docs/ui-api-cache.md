@@ -10,8 +10,8 @@
 
 | Файл | Назначение |
 |------|------------|
-| `server/internal/apicache/cache.go` | Хранилище, TTL |
-| `server/internal/apicache/middleware.go` | Кеширование GET, инвалидация при POST/PUT/PATCH/DELETE |
+| `server/internal/apicache/cache.go` | Хранилище, TTL, эпоха |
+| `server/internal/apicache/middleware.go` | Кеширование GET (`SetIfEpoch`), инвалидация при POST/PUT/PATCH/DELETE |
 | `server/internal/httpserver/server.go` | Подключение middleware к маршрутам API |
 
 ## TTL
@@ -22,6 +22,8 @@
 | Остальные GET (счета, дашборд, операции, статистика и т.д.) | 1 мин |
 
 TTL — страховка; при любой мутации кеш пользователя сбрасывается сразу.
+
+GET, начатый **до** мутации, не должен снова заполнить кеш **после** инвалидации: иначе следующий запрос до 1 мин отдаёт старый дашборд/список (операция «есть на одном экране и нет на другом»). У кеша есть **эпоха**: ответ GET кладётся через `SetIfEpoch` только если с момента miss не было `InvalidateUser` / `Clear`. На клиенте то же для in-flight GET и фонового SWR: `writeRefCache` пропускается, если за время запроса выросли `cacheEpoch` (`clearRefCache` или `invalidateRefCachePrefix`).
 
 ## Кешируемые GET
 

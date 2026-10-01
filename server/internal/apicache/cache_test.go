@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -98,6 +99,47 @@ func TestMiddlewareDoesNotInvalidateOnImportJobCreate(t *testing.T) {
 	handler.ServeHTTP(httptest.NewRecorder(), withUser(httptest.NewRequest(http.MethodGet, "/api/v1/dashboard", nil)))
 	if calls != 3 {
 		t.Fatalf("expected miss after job-done invalidation, calls=%d", calls)
+	}
+}
+
+func TestMiddlewareDoesNotCacheGETStartedBeforeWrite(t *testing.T) {
+	cache := New()
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var calls atomic.Int32
+	var blockGet atomic.Bool
+	blockGet.Store(true)
+	handler := Middleware(cache)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := calls.Add(1)
+		if r.Method == http.MethodGet && blockGet.CompareAndSwap(true, false) {
+			close(started)
+			<-release
+		}
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, `{"n":%d}`, n)
+	}))
+
+	userID := "user-1"
+	withUser := func(r *http.Request) *http.Request {
+		ctx := context.WithValue(r.Context(), auth.AuthContextKey, auth.AuthInfo{
+			User: auth.User{ID: userID},
+		})
+		return r.WithContext(ctx)
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		handler.ServeHTTP(httptest.NewRecorder(), withUser(httptest.NewRequest(http.MethodGet, "/api/v1/dashboard", nil)))
+	}()
+	<-started
+	handler.ServeHTTP(httptest.NewRecorder(), withUser(httptest.NewRequest(http.MethodPost, "/api/v1/transactions", nil)))
+	close(release)
+	<-done
+
+	handler.ServeHTTP(httptest.NewRecorder(), withUser(httptest.NewRequest(http.MethodGet, "/api/v1/dashboard", nil)))
+	if got := calls.Load(); got != 3 {
+		t.Fatalf("stale GET must not refill cache after write, calls=%d", got)
 	}
 }
 

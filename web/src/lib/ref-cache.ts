@@ -216,6 +216,7 @@ export function invalidateRefCache(path: string): void {
 }
 
 export function invalidateRefCachePrefix(pathPrefix: string): void {
+	cacheEpoch++;
 	const needle = `::${pathPrefix}`;
 	const prefix = `${REF_CACHE_VERSION}::`;
 	if (typeof localStorage !== 'undefined') {
@@ -326,9 +327,12 @@ export async function fetchWithRefCache<T>(path: string, fetcher: () => Promise<
 		return cached;
 	}
 
+	const epoch = cacheEpoch;
 	try {
 		const value = await fetcher();
-		writeRefCache(path, value);
+		if (epoch === cacheEpoch) {
+			writeRefCache(path, value);
+		}
 		return value;
 	} catch (err) {
 		if (isStaleFetchError(err)) {
