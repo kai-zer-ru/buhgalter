@@ -63,7 +63,7 @@ func ScheduledEffectsByUser(ctx context.Context, db *sql.DB, userID, tz string, 
 			StartDate:  parseScheduleStart(s.StartDate),
 			TimeLocal:  s.TimeLocal,
 		}
-		sum, err := sumSubscriptionCharges(in, tz, s.NextRunAt, s.UpcomingRunAts, s.Amount, monthStartT, monthEndT, now)
+		sum, err := sumSubscriptionCharges(in, tz, s.NextRunAt, s.UpcomingRunAts, s.Amount, monthStartT, monthEndT)
 		if err != nil {
 			continue
 		}
@@ -87,7 +87,7 @@ func ScheduledEffectsByUser(ctx context.Context, db *sql.DB, userID, tz string, 
 			DayOfMonth: r.DayOfMonth,
 			StartDate:  parseScheduleStart(r.StartDate),
 			TimeLocal:  r.TimeLocal,
-		}, tz, r.NextRunAt, r.Amount, monthStartT, monthEndT, now, false)
+		}, tz, r.NextRunAt, r.Amount, monthStartT, monthEndT, false)
 		if err != nil {
 			continue
 		}
@@ -128,11 +128,15 @@ func parseScheduleStart(v string) time.Time {
 	return t
 }
 
+func inForecastMonth(t, monthStart, monthEnd time.Time) bool {
+	return !t.Before(monthStart) && !t.After(monthEnd)
+}
+
 func sumSubscriptionCharges(
 	in schedule.Input,
 	tz, nextRunAt, upcomingJSON string,
 	amount int64,
-	monthStart, monthEnd, now time.Time,
+	monthStart, monthEnd time.Time,
 ) (int64, error) {
 	if amount <= 0 {
 		return 0, nil
@@ -142,7 +146,7 @@ func sumSubscriptionCharges(
 	}
 	queue := decodeUpcomingJSON(upcomingJSON)
 	if len(queue) == 0 {
-		return sumScheduleCharges(in, tz, nextRunAt, amount, monthStart, monthEnd, now, true)
+		return sumScheduleCharges(in, tz, nextRunAt, amount, monthStart, monthEnd, true)
 	}
 	var total int64
 	var prev, last time.Time
@@ -156,7 +160,7 @@ func sumSubscriptionCharges(
 			beyondMonth = true
 			break
 		}
-		if !t.Before(monthStart) || !t.After(now) {
+		if inForecastMonth(t, monthStart, monthEnd) {
 			total += amount
 		}
 		if !last.IsZero() {
@@ -195,7 +199,7 @@ func sumSubscriptionCharges(
 		if nextT.After(monthEnd) {
 			break
 		}
-		if !nextT.Before(monthStart) || !nextT.After(now) {
+		if inForecastMonth(nextT, monthStart, monthEnd) {
 			total += amount
 		}
 		t = nextT
@@ -218,7 +222,7 @@ func sumScheduleCharges(
 	in schedule.Input,
 	tz, nextRunAt string,
 	amount int64,
-	monthStart, monthEnd, now time.Time,
+	monthStart, monthEnd time.Time,
 	allowExtended bool,
 ) (int64, error) {
 	if amount <= 0 {
@@ -236,7 +240,7 @@ func sumScheduleCharges(
 		if t.After(monthEnd) {
 			break
 		}
-		if !t.Before(monthStart) || !t.After(now) {
+		if inForecastMonth(t, monthStart, monthEnd) {
 			total += amount
 		}
 		nextStr, err := schedule.NextRunAt(in, tz, t.Add(time.Second))

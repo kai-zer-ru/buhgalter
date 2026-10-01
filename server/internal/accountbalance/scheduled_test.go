@@ -303,7 +303,18 @@ func TestScheduledEffects_OverdueIncluded(t *testing.T) {
 	database := scheduledTestDB(t)
 	userID, accountID := seedUserAcc(t, database)
 	now := timeutil.NowUTC()
-	overdue := atLocal(now.Add(-48*time.Hour), "10:00")
+	monthStart, _, err := timeutil.MonthBoundsUTC("UTC", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	monthStartT, err := timeutil.ParseUTC(monthStart)
+	if err != nil {
+		t.Fatal(err)
+	}
+	overdue := atLocal(monthStartT.Add(time.Hour), "10:00")
+	if !overdue.Before(now) {
+		t.Skip("month start is not in the past")
+	}
 	day := int64(overdue.Day())
 	insertSubscription(t, database, userID, accountID, 2500, "month", nil, &day,
 		timeutil.FormatUTC(overdue.AddDate(0, -1, 0)), "10:00", timeutil.FormatUTC(overdue), 1)
@@ -312,6 +323,25 @@ func TestScheduledEffects_OverdueIncluded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if effects.Deltas[accountID] != -2500 {
+		t.Fatalf("expected -2500, got %d", effects.Deltas[accountID])
+	}
+}
+
+func TestScheduledEffects_OverduePreviousMonthNotCounted(t *testing.T) {
+	database := scheduledTestDB(t)
+	userID, accountID := seedUserAcc(t, database)
+	now := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+	overdue := time.Date(2026, 9, 29, 10, 0, 0, 0, time.UTC)
+	day := int64(29)
+	insertSubscription(t, database, userID, accountID, 2500, "month", nil, &day,
+		"2026-08-29 10:00:00", "10:00", timeutil.FormatUTC(overdue), 1)
+
+	effects, err := ScheduledEffectsByUser(context.Background(), database, userID, "UTC", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// October run (29th) only; September overdue is outside the current month.
 	if effects.Deltas[accountID] != -2500 {
 		t.Fatalf("expected -2500, got %d", effects.Deltas[accountID])
 	}

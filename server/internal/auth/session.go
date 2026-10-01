@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -214,12 +215,16 @@ func parseTime(value string) (time.Time, error) {
 }
 
 func apiTokenExpired(expiresAt *string) bool {
-	if expiresAt == nil || *expiresAt == "" {
+	if expiresAt == nil {
 		return false
 	}
-	t, err := parseTime(*expiresAt)
-	if err != nil {
+	raw := strings.TrimSpace(*expiresAt)
+	if raw == "" {
 		return false
+	}
+	t, err := parseTime(raw)
+	if err != nil {
+		return true
 	}
 	return time.Now().UTC().After(t)
 }

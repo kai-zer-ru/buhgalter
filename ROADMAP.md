@@ -336,6 +336,8 @@
 - [x] Сервер: ExternalAccess не доверяет `X-Forwarded-Host`; host берётся из `Host` (как ставит nginx) ([install/nginx.md](docs/install/nginx.md))
 - [x] Сервер: бан пользователя удаляет не только сессии, но и API-токены ([user-status.md](docs/api/user-status.md))
 - [x] В балансе отображать ещё с учётом кредитов в текущем месяце
+- [x] БАГ. Плановый остаток: просроченная подписка прошлого месяца плюс списание текущего учитывались оба (`forecast_balance`)
+- [x] Сервер: битый `expires_at` у API-токена считается истёкшим (fail-closed), а не бессрочным ([authentication.md](docs/api/authentication.md))
 
 ## Общие планы
 

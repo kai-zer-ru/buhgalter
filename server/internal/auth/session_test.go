@@ -123,6 +123,67 @@ func TestAPITokenExpiredRejected(t *testing.T) {
 	}
 }
 
+func TestAPITokenExpired(t *testing.T) {
+	future := time.Now().UTC().Add(time.Hour).Format(time.RFC3339)
+	past := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
+	empty := ""
+	space := "  "
+	tests := []struct {
+		name string
+		in   *string
+		want bool
+	}{
+		{"nil never expires", nil, false},
+		{"empty never expires", &empty, false},
+		{"whitespace never expires", &space, false},
+		{"future", &future, false},
+		{"past", &past, true},
+		{"garbage", ptr("not-a-date"), true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := apiTokenExpired(tc.in); got != tc.want {
+				t.Fatalf("apiTokenExpired = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestAPITokenMalformedExpiresAtRejected(t *testing.T) {
+	dir := t.TempDir()
+	mgr, err := db.NewManager(filepath.Join(dir, "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mgr.Close()
+	sqlDB := mgr.DB()
+	ctx := context.Background()
+
+	userID, err := CreateUser(ctx, sqlDB, "badexp", "hash", "Bad", false, UserStatusActive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw := "bhg_malformedexp123456"
+	hash := HashToken(raw)
+	_, err = sqlDB.Exec(`
+		INSERT INTO api_tokens (id, user_id, name, token_hash, token_prefix, expires_at)
+		VALUES ('tok-bad', ?, 'bad', ?, 'bhg_malfo', 'not-a-date')`, userID, hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !apiTokenExpired(ptr("not-a-date")) {
+		t.Fatal("malformed expires_at should be treated as expired")
+	}
+	if VerifyToken(ctx, sqlDB, raw) {
+		t.Fatal("token with malformed expires_at should be invalid")
+	}
+	if _, err := LookupAPIToken(ctx, sqlDB, raw); err == nil {
+		t.Fatal("LookupAPIToken should reject malformed expires_at")
+	}
+}
+
+func ptr(s string) *string { return &s }
+
 func TestSessionRefreshExtendsExpiry(t *testing.T) {
 	dir := t.TempDir()
 	mgr, err := db.NewManager(filepath.Join(dir, "test.db"))
