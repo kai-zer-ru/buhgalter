@@ -9,7 +9,7 @@ import (
 
 func TestGenerateAutoScheduleEqualParts(t *testing.T) {
 	issue, _ := timeutil.ParseUTC("2024-01-15 00:00:00")
-	entries, err := GenerateAutoSchedule(120000, 12, 10000, IntervalMonth, issue, 0)
+	entries, err := GenerateAutoSchedule(120000, 12, 10000, IntervalMonth, issue, 0, CreditKindConsumer)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,7 @@ func TestGenerateScheduleFromSeed(t *testing.T) {
 
 func TestGenerateScheduleWeekInterval(t *testing.T) {
 	issue, _ := timeutil.ParseUTC("2024-01-01 00:00:00")
-	entries, err := GenerateAutoSchedule(40000, 4, 10000, IntervalWeek, issue, 0)
+	entries, err := GenerateAutoSchedule(40000, 4, 10000, IntervalWeek, issue, 0, CreditKindConsumer)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +149,7 @@ func TestGenerateScheduleFullSeedAdjustsLast(t *testing.T) {
 
 func TestGenerateScheduleLastPaymentAdjustment(t *testing.T) {
 	issue, _ := timeutil.ParseUTC("2024-01-01 00:00:00")
-	entries, err := GenerateAutoSchedule(100001, 3, 33333, IntervalMonth, issue, 0)
+	entries, err := GenerateAutoSchedule(100001, 3, 33333, IntervalMonth, issue, 0, CreditKindConsumer)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,6 +159,29 @@ func TestGenerateScheduleLastPaymentAdjustment(t *testing.T) {
 	}
 	if sum != 100001 {
 		t.Fatalf("sum %d", sum)
+	}
+}
+
+func TestGenerateAutoScheduleUsesCreditKind(t *testing.T) {
+	issue, _ := timeutil.ParseUTC("2024-01-15 00:00:00")
+	principal := int64(5_000_000)
+	term := 12
+	rate := 12.0
+	monthlyMortgage := MonthlyPaymentMortgage(principal, rate, term, issue)
+	mortgage, err := GenerateAutoSchedule(principal, term, monthlyMortgage, IntervalMonth, issue, rate, CreditKindMortgage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	monthlyConsumer := MonthlyPayment(principal, rate, term)
+	consumer, err := GenerateAutoSchedule(principal, term, monthlyConsumer, IntervalMonth, issue, rate, CreditKindConsumer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(mortgage) != term || len(consumer) != term {
+		t.Fatalf("len mortgage=%d consumer=%d want %d", len(mortgage), len(consumer), term)
+	}
+	if mortgage[term-1].Amount == consumer[term-1].Amount {
+		t.Fatal("mortgage last payment should differ from consumer annuity")
 	}
 }
 

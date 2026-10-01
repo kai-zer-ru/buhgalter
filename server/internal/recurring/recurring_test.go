@@ -100,3 +100,53 @@ func TestApplyDueUpdatesAccountBalance(t *testing.T) {
 		t.Fatalf("expected balance 95000 after recurring expense 5000, got %d", balance)
 	}
 }
+
+func TestApplyDueRollsBackChargeIfMarkFails(t *testing.T) {
+	ctx, handle, userID, accountID, categoryID := seedRecurringEnv(t)
+	sqlDB := handle.DB()
+
+	startDate := timeutil.NowUTC().AddDate(0, -1, 0)
+	day := int64(startDate.Day())
+	op, err := Create(ctx, sqlDB, userID, Input{
+		Type:       "expense",
+		Amount:     5_000,
+		AccountID:  accountID,
+		CategoryID: categoryID,
+		Period:     "month",
+		DayOfMonth: &day,
+		StartDate:  startDate,
+		TimeLocal:  "08:00",
+		Active:     true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	past := timeutil.FormatUTC(timeutil.NowUTC().Add(-time.Hour))
+	if _, err = sqlDB.ExecContext(ctx, `UPDATE recurring_operations SET next_run_at = ? WHERE id = ?`, past, op.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`
+		CREATE TRIGGER test_fail_recurring_mark
+		AFTER UPDATE OF next_run_at ON recurring_operations
+		BEGIN
+			SELECT RAISE(ABORT, 'test-fail-mark');
+		END;
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	applied, err := ApplyDue(ctx, sqlDB, userID, timeutil.NowUTC(), "UTC")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if applied != 0 {
+		t.Fatalf("applied %d, want 0", applied)
+	}
+	var txs int
+	if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM transactions WHERE user_id = ?`, userID).Scan(&txs); err != nil {
+		t.Fatal(err)
+	}
+	if txs != 0 {
+		t.Fatalf("transactions after failed mark = %d, want 0", txs)
+	}
+}

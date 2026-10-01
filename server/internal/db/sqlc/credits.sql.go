@@ -680,7 +680,7 @@ func (q *Queries) InsertCreditPayment(ctx context.Context, arg InsertCreditPayme
 
 const listActiveCreditsForScheduleRepair = `-- name: ListActiveCreditsForScheduleRepair :many
 SELECT id, user_id, principal_amount, issue_date, term_months, interest_rate,
-       payment_interval, monthly_payment, added_retroactively
+       payment_interval, monthly_payment, added_retroactively, credit_kind
 FROM credits
 WHERE status = 'active' AND payment_interval != 'manual'
 `
@@ -695,6 +695,7 @@ type ListActiveCreditsForScheduleRepairRow struct {
 	PaymentInterval    string  `json:"payment_interval"`
 	MonthlyPayment     int64   `json:"monthly_payment"`
 	AddedRetroactively int64   `json:"added_retroactively"`
+	CreditKind         string  `json:"credit_kind"`
 }
 
 func (q *Queries) ListActiveCreditsForScheduleRepair(ctx context.Context) ([]ListActiveCreditsForScheduleRepairRow, error) {
@@ -716,6 +717,7 @@ func (q *Queries) ListActiveCreditsForScheduleRepair(ctx context.Context) ([]Lis
 			&i.PaymentInterval,
 			&i.MonthlyPayment,
 			&i.AddedRetroactively,
+			&i.CreditKind,
 		); err != nil {
 			return nil, err
 		}

@@ -574,6 +574,69 @@ func TestRepairShortSchedules(t *testing.T) {
 	}
 }
 
+func TestRepairShortSchedulesMortgage(t *testing.T) {
+	ctx, handle, userID, accountID := seedCreditEnv(t)
+	sqlDB := handle.DB()
+	issue := timeutil.NowUTC().AddDate(0, 1, 0)
+	price := int64(6_000_000)
+
+	c, err := Create(ctx, sqlDB, userID, CreateInput{
+		CreditKind:         CreditKindMortgage,
+		PropertyPrice:      &price,
+		DownPayment:        1_000_000,
+		IssueDate:          issue,
+		TermMonths:         12,
+		InterestRate:       12,
+		PaymentInterval:    IntervalMonth,
+		DebitAccountID:     accountID,
+		CreateTransactions: false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	payments, err := queries(sqlDB).ListCreditPayments(ctx, c.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(payments) != 12 {
+		t.Fatalf("setup: expected 12 payments, got %d", len(payments))
+	}
+	origLast := payments[len(payments)-1].Amount
+	issueParsed, err := timeutil.ParseUTC(c.IssueDate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	consumer, err := GenerateAutoSchedule(
+		c.PrincipalAmount, c.TermMonths, c.MonthlyPayment,
+		IntervalMonth, issueParsed, c.InterestRate, CreditKindConsumer,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if consumer[len(consumer)-1].Amount == origLast {
+		t.Fatal("fixture: consumer last payment matches mortgage")
+	}
+	for i := 8; i < len(payments); i++ {
+		if _, err := sqlDB.ExecContext(ctx, `DELETE FROM credit_payments WHERE id = ?`, payments[i].ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := RepairShortSchedules(ctx, sqlDB); err != nil {
+		t.Fatal(err)
+	}
+	payments, err = queries(sqlDB).ListCreditPayments(ctx, c.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(payments) != 12 {
+		t.Fatalf("after repair: expected 12 payments, got %d", len(payments))
+	}
+	if payments[len(payments)-1].Amount != origLast {
+		t.Fatalf("last payment %d want mortgage %d (consumer would be %d)",
+			payments[len(payments)-1].Amount, origLast, consumer[len(consumer)-1].Amount)
+	}
+}
+
 func TestAutoCloseOnFullPayment(t *testing.T) {
 	ctx, handle, userID, accountID := seedCreditEnv(t)
 	sqlDB := handle.DB()
@@ -866,6 +929,64 @@ func TestRepairScheduleOnList(t *testing.T) {
 	}
 	if len(got.Schedule) == 0 {
 		t.Fatal("expected repaired schedule on get")
+	}
+}
+
+func TestRepairScheduleOnGetMortgage(t *testing.T) {
+	ctx, handle, userID, accountID := seedCreditEnv(t)
+	sqlDB := handle.DB()
+	issue := timeutil.NowUTC().AddDate(0, 1, 0)
+	price := int64(6_000_000)
+
+	c, err := Create(ctx, sqlDB, userID, CreateInput{
+		CreditKind:         CreditKindMortgage,
+		PropertyPrice:      &price,
+		DownPayment:        1_000_000,
+		IssueDate:          issue,
+		TermMonths:         12,
+		InterestRate:       12,
+		PaymentInterval:    IntervalMonth,
+		DebitAccountID:     accountID,
+		CreateTransactions: false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	orig, err := GetByID(ctx, sqlDB, userID, c.ID, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(orig.Schedule) != 12 {
+		t.Fatalf("setup schedule %d", len(orig.Schedule))
+	}
+	origLast := orig.Schedule[len(orig.Schedule)-1].Amount
+	issueParsed, err := timeutil.ParseUTC(orig.IssueDate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	consumer, err := GenerateAutoSchedule(
+		orig.PrincipalAmount, orig.TermMonths, orig.MonthlyPayment,
+		IntervalMonth, issueParsed, orig.InterestRate, CreditKindConsumer,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if consumer[len(consumer)-1].Amount == origLast {
+		t.Fatal("fixture: consumer last payment matches mortgage")
+	}
+	if _, err := sqlDB.ExecContext(ctx, `DELETE FROM credit_payments WHERE credit_id = ?`, c.ID); err != nil {
+		t.Fatal(err)
+	}
+	got, err := GetByID(ctx, sqlDB, userID, c.ID, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Schedule) != 12 {
+		t.Fatalf("repaired schedule %d", len(got.Schedule))
+	}
+	if got.Schedule[len(got.Schedule)-1].Amount != origLast {
+		t.Fatalf("last payment %d want mortgage %d (consumer would be %d)",
+			got.Schedule[len(got.Schedule)-1].Amount, origLast, consumer[len(consumer)-1].Amount)
 	}
 }
 

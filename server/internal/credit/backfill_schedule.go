@@ -11,11 +11,11 @@ import (
 )
 
 type repairCreditRow struct {
-	id, userID, issueDate, paymentInterval string
-	principal, monthlyPayment              int64
-	termMonths                             int
-	interestRate                           float64
-	addedRetroactively                     bool
+	id, userID, issueDate, paymentInterval, creditKind string
+	principal, monthlyPayment                          int64
+	termMonths                                         int
+	interestRate                                       float64
+	addedRetroactively                                 bool
 }
 
 // RepairShortSchedules appends missing scheduled payments for credits created with the
@@ -38,6 +38,7 @@ func RepairShortSchedules(ctx context.Context, db *sql.DB) error {
 			paymentInterval:    row.PaymentInterval,
 			monthlyPayment:     row.MonthlyPayment,
 			addedRetroactively: row.AddedRetroactively == 1,
+			creditKind:         row.CreditKind,
 		})
 	}
 
@@ -64,7 +65,7 @@ func repairCreditSchedule(ctx context.Context, db *sql.DB, c repairCreditRow) er
 	}
 	entries, err := GenerateAutoSchedule(
 		c.principal, c.termMonths, c.monthlyPayment,
-		PaymentInterval(c.paymentInterval), issueDate, c.interestRate,
+		PaymentInterval(c.paymentInterval), issueDate, c.interestRate, c.creditKind,
 	)
 	if err != nil {
 		return err

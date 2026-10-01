@@ -254,38 +254,12 @@ func ApplyDue(ctx context.Context, db *sql.DB, userID string, now time.Time, tz 
 	if len(due) == 0 {
 		return 0, nil
 	}
-	q := queries(db)
 	applied := 0
 	affectedAccounts := make(map[string]struct{}, len(due))
 	var lastAsOf time.Time
 	for _, op := range due {
 		if err := validateDueOperation(ctx, db, userID, op); err != nil {
 			continue
-		}
-		txID := uuid.NewString()
-		createdAt := timeutil.FormatUTC(now)
-		if err := q.InsertTransaction(ctx, sqlcdb.InsertTransactionParams{
-			ID:                txID,
-			UserID:            userID,
-			AccountID:         op.AccountID,
-			Type:              op.Type,
-			Kind:              "manual",
-			Amount:            op.Amount,
-			Description:       op.Description,
-			CategoryID:        strPtr(op.CategoryID),
-			SubcategoryID:     op.SubcategoryID,
-			TransferGroupID:   nil,
-			TransferAccountID: nil,
-			TransactionDate:   op.NextRunAt,
-			AffectsBalance:    1,
-			CreatedAt:         createdAt,
-			UpdatedAt:         createdAt,
-		}); err != nil {
-			continue
-		}
-		affectedAccounts[op.AccountID] = struct{}{}
-		if runAt, err := timeutil.ParseUTC(op.NextRunAt); err == nil {
-			lastAsOf = runAt
 		}
 		nextInput := Input{
 			Type:          op.Type,
@@ -305,13 +279,37 @@ func ApplyDue(ctx context.Context, db *sql.DB, userID string, now time.Time, tz 
 		if err != nil {
 			continue
 		}
-		_, _ = q.MarkRecurringOperationRan(ctx, sqlcdb.MarkRecurringOperationRanParams{
+		txID := uuid.NewString()
+		createdAt := timeutil.FormatUTC(now)
+		if err := chargeDueRecurring(ctx, db, sqlcdb.InsertTransactionParams{
+			ID:                txID,
+			UserID:            userID,
+			AccountID:         op.AccountID,
+			Type:              op.Type,
+			Kind:              "manual",
+			Amount:            op.Amount,
+			Description:       op.Description,
+			CategoryID:        strPtr(op.CategoryID),
+			SubcategoryID:     op.SubcategoryID,
+			TransferGroupID:   nil,
+			TransferAccountID: nil,
+			TransactionDate:   op.NextRunAt,
+			AffectsBalance:    1,
+			CreatedAt:         createdAt,
+			UpdatedAt:         createdAt,
+		}, sqlcdb.MarkRecurringOperationRanParams{
 			NextRunAt: next,
 			LastRunAt: strPtr(op.NextRunAt),
 			UpdatedAt: createdAt,
 			ID:        op.ID,
 			UserID:    userID,
-		})
+		}); err != nil {
+			continue
+		}
+		affectedAccounts[op.AccountID] = struct{}{}
+		if runAt, err := timeutil.ParseUTC(op.NextRunAt); err == nil {
+			lastAsOf = runAt
+		}
 		applied++
 	}
 	if len(affectedAccounts) > 0 {
@@ -325,6 +323,26 @@ func ApplyDue(ctx context.Context, db *sql.DB, userID string, now time.Time, tz 
 		balancehooks.NotifyRefresh(ctx, db, userID, lastAsOf, accountIDs...)
 	}
 	return applied, nil
+}
+
+func chargeDueRecurring(ctx context.Context, db *sql.DB, insert sqlcdb.InsertTransactionParams, mark sqlcdb.MarkRecurringOperationRanParams) error {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	q := queries(tx)
+	if err := q.InsertTransaction(ctx, insert); err != nil {
+		return err
+	}
+	n, err := q.MarkRecurringOperationRan(ctx, mark)
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return tx.Commit()
 }
 
 func validateInput(ctx context.Context, db *sql.DB, userID string, in Input) error {

@@ -333,7 +333,7 @@ erDiagram
 - `POST /credits/schedule/preview` — предпросмотр графика без сохранения; ответ: `schedule_preview`, `calculated_monthly_payment`
 - При создании с `added_retroactively`: прошлые платежи → `retroactive`; опционально `retroactive_debit_count` — последние N ретро-платежей со списанием на счёт (`transaction_id`, `exclude_from_stats=0`)
 - `PATCH /credits/{id}/schedule` — правка сумм неоплаченных `scheduled` (v1.1)
-- При старте: `RepairShortSchedules` дополняет неполные графики (миграция-маркер `020`)
+- При старте: `RepairShortSchedules` дополняет неполные графики (миграция-маркер `020`); алгоритм как при создании — по `credit_kind` (ипотека с ежедневными процентами, не аннуитет потребкредита). То же при восстановлении пустого графика (`repairMissingSchedule`)
 - `transactions.affects_balance` — `0` при завершении кредита «без учёта в балансе»
 - Автосписание: `server/internal/scheduler` по `debit_time_local` в `users.timezone`; `transactions.transaction_date` — дата платежа + это время (UTC в БД)
 - При старте: `EnsureCreditPaymentCategories` выравнивает категорию связанных с графиком операций на системную «Кредиты» (см. [credit-payment-link.md](../roadmap/credit-payment-link.md))

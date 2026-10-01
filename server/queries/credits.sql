@@ -286,7 +286,7 @@ WHERE id = ? AND user_id = ? AND kind = 'future';
 
 -- name: ListActiveCreditsForScheduleRepair :many
 SELECT id, user_id, principal_amount, issue_date, term_months, interest_rate,
-       payment_interval, monthly_payment, added_retroactively
+       payment_interval, monthly_payment, added_retroactively, credit_kind
 FROM credits
 WHERE status = 'active' AND payment_interval != 'manual';
 

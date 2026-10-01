@@ -360,13 +360,13 @@ func generateManualSchedule(in ScheduleInput) ([]ScheduleEntry, error) {
 }
 
 // GenerateAutoSchedule builds schedule from issue_date without seed rows.
-func GenerateAutoSchedule(principal int64, term int, monthlyPayment int64, interval PaymentInterval, issueDate time.Time, interestRate float64) ([]ScheduleEntry, error) {
+func GenerateAutoSchedule(principal int64, term int, monthlyPayment int64, interval PaymentInterval, issueDate time.Time, interestRate float64, creditKind string) ([]ScheduleEntry, error) {
 	return GenerateSchedule(ScheduleInput{
 		Principal:       principal,
 		TermMonths:      term,
 		MonthlyPayment:  monthlyPayment,
 		PaymentInterval: interval,
-		CreditKind:      CreditKindConsumer,
+		CreditKind:      normalizeCreditKind(creditKind),
 		IssueDate:       issueDate,
 		InterestRate:    interestRate,
 	})

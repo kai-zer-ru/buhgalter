@@ -141,6 +141,57 @@ func TestSameNameSharesSubcategory(t *testing.T) {
 	}
 }
 
+func TestApplyDueRollsBackChargeIfMarkFails(t *testing.T) {
+	mgr, userID, accID := setup(t)
+	ctx := context.Background()
+	day := int64(1)
+	sub, err := subscription.Create(ctx, mgr.DB(), userID, subscription.Input{
+		Name: "Netflix", Amount: 99900, AccountID: accID, Period: "month",
+		DayOfMonth: &day, StartDate: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		TimeLocal: "08:00", Active: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	past := timeutil.FormatUTC(timeutil.NowUTC().Add(-time.Hour))
+	upcomingJSON := mustEncodeUpcoming(t, []string{
+		past,
+		timeutil.FormatUTC(timeutil.NowUTC().Add(24 * time.Hour)),
+		timeutil.FormatUTC(timeutil.NowUTC().Add(48 * time.Hour)),
+	})
+	_, err = sqlcdb.New(mgr.DB()).MarkSubscriptionRan(ctx, sqlcdb.MarkSubscriptionRanParams{
+		NextRunAt: past, UpcomingRunAts: upcomingJSON, LastRunAt: nil, SubcategoryID: nil,
+		UpdatedAt: timeutil.FormatUTC(timeutil.NowUTC()), ID: sub.ID, UserID: userID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mgr.DB().Exec(`
+		CREATE TRIGGER test_fail_sub_mark
+		AFTER UPDATE OF next_run_at ON subscriptions
+		BEGIN
+			SELECT RAISE(ABORT, 'test-fail-mark');
+		END;
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	n, err := subscription.ApplyDue(ctx, mgr.DB(), userID, timeutil.NowUTC(), "Europe/Moscow")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("applied %d, want 0", n)
+	}
+	var txs int
+	if err := mgr.DB().QueryRow(`SELECT COUNT(*) FROM transactions WHERE user_id = ?`, userID).Scan(&txs); err != nil {
+		t.Fatal(err)
+	}
+	if txs != 0 {
+		t.Fatalf("transactions after failed mark = %d, want 0", txs)
+	}
+}
+
 func mustEncodeUpcoming(t *testing.T, dates []string) string {
 	t.Helper()
 	if err := subscription.ValidateUpcoming(dates); err != nil {
