@@ -183,7 +183,7 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) bool {
 	case errors.Is(err, ErrInvalidReorder):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_TEMPLATE_REORDER")
 	default:
-		return false
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 	}
 	return true
 }

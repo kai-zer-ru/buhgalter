@@ -122,7 +122,7 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) bool {
 	case errors.Is(err, ErrInvalidName):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_TAG_NAME_REQUIRED")
 	default:
-		return false
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 	}
 	return true
 }

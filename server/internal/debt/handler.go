@@ -316,7 +316,7 @@ func writeDebtorError(w http.ResponseWriter, r *http.Request, err error) bool {
 	case errors.Is(err, ErrInvalidDebtorName):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_DEBTOR_NAME_REQUIRED")
 	default:
-		return false
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 	}
 	return true
 }
@@ -355,7 +355,7 @@ func writeDebtError(w http.ResponseWriter, r *http.Request, err error) bool {
 	case errors.Is(err, ErrCannotLendToCreditor):
 		apperror.WriteR(w, r, http.StatusConflict, apperror.Conflict, "CONFLICT_DEBT_CANNOT_LEND")
 	default:
-		return false
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 	}
 	return true
 }
