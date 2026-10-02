@@ -2,6 +2,9 @@ name: ci
 
 on:
   push:
+    # Need `branches` when using tag filters — tags-only/tags-ignore alone skips branch pushes (GitHub docs).
+    branches:
+      - '**'
     # Tag push already ran CI on the commit; release.yml only builds artifacts.
     tags-ignore:
       - 'v*'
