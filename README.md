@@ -292,7 +292,9 @@ BUHGALTER_ALLOWED_HOSTS=["192.168.1.100","example.com"]
 
 **Важно:** нужен **Sub CA 2024** (`russian_trusted_sub_ca_2024_pem.crt`), а не старый выпуск 2022 года.
 
-Скачайте архивы (Linux):
+Для **нативного бинарника** (не Docker) — **два шага**: сначала скачать PEM, затем **обязательно** установить их в доверенные CA **ОС** (раздел «Linux» ниже). Одного распаковывания в `~/certs` **недостаточно**: бинарник смотрит системное хранилище, перезапуск приложения без `update-ca-certificates` / `update-ca-trust` TLS не починит.
+
+**Шаг 1 — скачать** (Linux):
 
 ```bash
 mkdir -p ~/certs && cd ~/certs
@@ -302,13 +304,15 @@ unzip -o linux_russian_trusted_root_ca_pem.zip
 unzip -o russian_trusted_sub_ca_pem.zip
 ```
 
+**Шаг 2 — установить в систему** — см. «Linux» ниже (для Raspberry Pi OS / Debian — блок Debian, Ubuntu).
+
 Портал для всех ОС: **[gosuslugi.ru/crt](https://www.gosuslugi.ru/crt)**.
 
 ### Образ GHCR
 
 В образе `ghcr.io/kai-zer-ru/buhgalter` сертификаты уже добавлены. **Дополнительных действий не требуется.**
 
-### Linux
+### Linux (шаг 2)
 
 **Debian, Ubuntu:**
 
@@ -334,6 +338,8 @@ sudo cp russian_trusted_root_ca_pem.crt /etc/ca-certificates/trust-source/anchor
 sudo cp russian_trusted_sub_ca_2024_pem.crt /etc/ca-certificates/trust-source/anchors/russian_trusted_sub_ca_2024.crt
 sudo update-ca-trust
 ```
+
+После установки перезапустите процесс `buhgalter` (systemd, docker compose и т.п.) и проверьте TLS.
 
 Проверка (успех — любой HTTP-код **без** `curl: (60) SSL certificate...`):
 

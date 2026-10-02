@@ -27,6 +27,13 @@
 - [v1.6.0](#v160)
 - [v1.7.0](#v170)
 - [v1.7.1](#v171)
+- [v1.8.0](#v180)
+- [v1.9.0](#v190)
+- [v1.10.0](#v1100)
+- [v1.11.0](#v1110)
+- [v1.12.0](#v1120)
+- [v1.13.0](#v1130)
+- [v1.14.0](#v1140)
 - [Общие планы](#общие-планы)
 - [На подумать](#на-подумать)
 
@@ -354,25 +361,59 @@
 - [x] БАГ. Android: в офлайне (список операций — перелистывание страницы, и то же глобально по приложению) вместо «Сервер недоступен» показывается сырой текст ошибки: код, URL запросов. Нужно единое человекочитаемое сообщение, без технических деталей
 - [x] БАГ. Android: после отпечатка приложение часто само сворачивается; главная и меню (drawer) тормозят на несколько секунд. Фикс: quiet wake не `moveTaskToBack` после PIN/отпечатка/лаунчера; wake при PIN смотрит `AppLockNative`, не скрытие сумм виджетов; пауза отпечатка не flush/background-lock; heavy warm после ~1.8 с ([android-client-platform.md](docs/android-client-platform.md))
 
+## v1.8.0
+
+Видимость финансов и разбор входящего (перехват, импорт, бюджет). Semver: **minor** = новый функционал ([project-context](bmad_docs/project-context.md)).
+
+- [ ] [Графики /stats и нетто-капитал](roadmap/stats-charts-net-worth.md) — Chart.js на web; `GET /stats/net-worth`; блок на web и Android (без графиков)
+- [ ] [Правила категорий + очередь «разобрать»](roadmap/category-rules-inbox.md) — правила (категория → счёт, текст → категория); inbox без категории
+- [ ] [Бюджет: rollover, прогноз, конверты](roadmap/budget-post-mvp.md) — перенос остатка, прогноз из периодических; минимальный UX «конвертов» (доступно = лимит + перенос − spent)
+- [ ] [Кнопки в Telegram / MAX](roadmap/telegram-max-buttons.md) — MVP: **URL-кнопки** в исходящих уведомлениях («Открыть долг/кредит»); callback — позже
+
+## v1.9.0
+
+Накопления и импорт файлов.
+
+- [ ] [Цели накопления](roadmap/savings-goals.md) — копилки, прогресс, напоминания (`savings_goals`)
+- [ ] [Улучшение импорта](roadmap/import-improve.md) — универсальный CSV / выгрузки РФ; dedup; связка с правилами и inbox
+
+## v1.10.0
+
+Отдельный релиз: [сканер чеков](roadmap/receipt-scanner.md) (объёмный модуль — не смешивать с другими фичами). Уроки ветки `scan_chek`; код не мержить вслепую.
+
+- [ ] QR 54-ФЗ **на устройстве** → prefill формы; подтверждение перед сохранением; dedup по фискальным полям
+- [ ] Состав позиций — **BYO** ключ посредника (не «бесплатный» ФНС с VPS); prefill магазина → [merchants-tags](roadmap/merchants-tags.md)
+- [ ] Опционально: ИИ по фото (prefill, не auto-import); вложение фото к операции
+- [ ] Web + Android; feature flag `receipt_scanner`
+
+## v1.11.0
+
+Модель операций, отчёты, выписка файлом (после v1.9 import и v1.8 rules).
+
+- [ ] [Разбивка операции на несколько счетов](roadmap/transaction-split-accounts.md)
+- [ ] [PDF-отчёты](roadmap/savings-reports-import.md) — месячная сводка (server-side)
+- [ ] [Синхронизация с выпиской банка](roadmap/bank-sync.md) — РФ: файл выписки → normalize → dedup (не скрейпинг ЛК)
+
+## v1.12.0
+
+- [ ] [Валюта счёта](roadmap/multicurrency.md) — `accounts.currency`, отдельно от `users.currency`; сводки и переводы без тихого смешения валют
+
+## v1.13.0
+
+- [ ] [Семья / команда](roadmap/team-collaboration.md) — household, личные + семейные счета; owner invite (ссылка/QR/код); [спека](roadmap/team-collaboration.md) зафиксирована
+
+## v1.14.0
+
+- [ ] [PostgreSQL](roadmap/postgresql.md) — опциональный драйвер вместо SQLite (K8s / managed DB / нагрузка после team)
+
 ## Общие планы
 
-- [ ] [Цели накопления](roadmap/savings-goals.md) — копилки, прогресс, напоминания
-- [ ] [Разбивка операции на несколько счетов](roadmap/transaction-split-accounts.md)
-- [ ] [Семья / команда](roadmap/team-collaboration.md) — личные + семейные счета; owner invite (ссылка/QR/код); спецификация зафиксирована, реализация отложена
-- [ ] [Валюта счёта](roadmap/multicurrency.md) — отдельно от валюты профиля (`users.currency`)
-- [ ] [PostgreSQL](roadmap/postgresql.md) — опциональная БД вместо SQLite
-- [ ] [Сканер чеков](roadmap/receipt-scanner.md) — QR ФНС (РФ) и разбор фото через ИИ; в доке — уроки сбитого эксперимента (ветка `scan_chek`, код не мержить вслепую)
-- [ ] [Правила категорий + очередь «разобрать»](roadmap/category-rules-inbox.md) — например транспорт → «Автобус» → счёт «Наличные»
-- [ ] [Бюджет: rollover, прогноз, конверты](roadmap/budget-post-mvp.md) — перенос остатка, прогноз из периодических, бюджет «конвертами»
-- [ ] [Графики /stats и нетто-капитал](roadmap/stats-charts-net-worth.md) — Chart.js на web; нетто API + блок на web и Android
-- [ ] [Кнопки в Telegram / MAX](roadmap/telegram-max-buttons.md) — inline-кнопки в исходящих уведомлениях
-- [ ] [Улучшение импорта](roadmap/import-improve.md) — универсальный CSV / выгрузки РФ
-- [ ] [Двухфакторная аутентификация](roadmap/two-factor-auth.md) — TOTP
-- [ ] [Синхронизация с выпиской банка](roadmap/bank-sync.md) — ориентир только РФ, не зарубежные агрегаторы
-- [ ] [PDF-отчёты](roadmap/savings-reports-import.md) — месячная сводка (цели и импорт вынесены в v1.6.0)
+Без жёсткой версии — по спросу и после очереди minor-релизов выше. Черновик приоритетов: [roadmap-common-plans-priorities.md](bmad_docs/planning-artifacts/roadmap-common-plans-priorities.md).
+
+- [ ] [Двухфакторная аутентификация](roadmap/two-factor-auth.md) — TOTP; для self-host **спорно** (VPN/reverse proxy vs exposed); решение отложено
 - [ ] [Webhook](roadmap/webhooks.md) — исходящие события для внешних интеграций
-- [ ] [Home Assistant](roadmap/home-assistant.md) — интеграция для умного дома
-- [ ] [Эволюция уведомлений](roadmap/notifications-evolution.md) — развитие политик/шаблонов/частоты
+- [ ] [Home Assistant](roadmap/home-assistant.md) — custom component или REST-документация
+- [ ] [Эволюция уведомлений](roadmap/notifications-evolution.md) — частота, тихие часы, эскалация, wizard
 
 ## На подумать
 

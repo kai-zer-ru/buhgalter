@@ -1,6 +1,6 @@
 # Цели накопления (копилки)
 
-Планируется в **v1.6.0** ([ROADMAP](../ROADMAP.md#v160)).
+Планируется в **v1.9.0** ([ROADMAP](../ROADMAP.md#v190)).
 
 Раньше цели были в общем черновике вместе с PDF и импортом ([savings-reports-import.md](savings-reports-import.md)). Здесь — только накопления.
 
@@ -8,7 +8,7 @@
 
 Сейчас «копить» = обычный счёт или дисциплина пользователя. Нет модели «цель: N рублей к дате», прогресса и напоминаний.
 
-## Scope (v1.6.0)
+## Scope (v1.9.0)
 
 Feature flag: `savings_goals` (см. [feature-toggles.md](feature-toggles.md)).
 
