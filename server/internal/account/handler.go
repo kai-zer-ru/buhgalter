@@ -139,13 +139,18 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_ACCOUNT_INVALID_CREDIT_LIMIT")
 		return
 	}
+	autoTopup, err := parseAutoTopupInput(req)
+	if err != nil {
+		_ = writeAccountError(w, r, err)
+		return
+	}
 	acc, err := Update(r.Context(), h.Store.DB(), info.User.ID, id, UpdateInput{
 		Name:             strings.TrimSpace(req.Name),
 		BankID:           req.BankID,
 		InitialBalance:   balancePtr,
 		CreditLimit:      creditLimit,
 		PaymentAccountID: req.PaymentAccountID,
-		AutoTopup:        parseAutoTopupInput(req),
+		AutoTopup:        autoTopup,
 	})
 	if errors.Is(err, ErrNotFound) {
 		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
@@ -316,25 +321,29 @@ func parseOptionalRubles(s *string) (*int64, error) {
 	return &v, nil
 }
 
-func parseAutoTopupInput(req updateRequest) *AutoTopupInput {
+func parseAutoTopupInput(req updateRequest) (*AutoTopupInput, error) {
 	if req.AutoTopupEnabled == nil {
-		return nil
+		return nil, nil
 	}
 	in := AutoTopupInput{Enabled: *req.AutoTopupEnabled}
 	if req.AutoTopupThreshold != nil {
-		if v, err := money.ParseRubles(*req.AutoTopupThreshold); err == nil {
-			in.Threshold = v
+		v, err := money.ParseRubles(*req.AutoTopupThreshold)
+		if err != nil {
+			return nil, ErrInvalidAutoTopupThreshold
 		}
+		in.Threshold = v
 	}
 	if req.AutoTopupTarget != nil {
-		if v, err := money.ParseRubles(*req.AutoTopupTarget); err == nil {
-			in.Target = v
+		v, err := money.ParseRubles(*req.AutoTopupTarget)
+		if err != nil {
+			return nil, ErrInvalidAutoTopupTarget
 		}
+		in.Target = v
 	}
 	if req.AutoTopupSourceAccountID != nil {
 		in.SourceAccountID = strings.TrimSpace(*req.AutoTopupSourceAccountID)
 	}
-	return &in
+	return &in, nil
 }
 
 func clientIP(r *http.Request) string {
