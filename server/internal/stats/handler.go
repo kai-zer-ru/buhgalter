@@ -137,6 +137,34 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
+func (h *Handler) NetWorth(w http.ResponseWriter, r *http.Request) {
+	info, ok := auth.FromContext(r.Context())
+	if !ok {
+		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
+		return
+	}
+	q := r.URL.Query()
+	groupBy := q.Get("group_by")
+	if groupBy == "" {
+		groupBy = "month"
+	}
+	svc := New(h.Store.DB())
+	out, err := svc.NetWorth(r.Context(), info.User.ID, q.Get("from"), q.Get("to"), groupBy)
+	if errors.Is(err, ErrInvalidDate) {
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_PERIOD_DATE")
+		return
+	}
+	if errors.Is(err, ErrInvalidGroupBy) {
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_GROUP_BY")
+		return
+	}
+	if err != nil {
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 func (h *Handler) Context(w http.ResponseWriter, r *http.Request) {
 	info, ok := auth.FromContext(r.Context())
 	if !ok {

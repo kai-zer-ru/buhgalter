@@ -1109,6 +1109,32 @@ export type StatsPeriodItem = {
 	expense: number;
 };
 
+export type StatsNetWorthSnapshot = {
+	period?: string;
+	as_of: string;
+	net_worth: number;
+	net_worth_display: string;
+	assets: number;
+	assets_display: string;
+	liabilities: number;
+	liabilities_display: string;
+	cash_bank: number;
+	cash_bank_display: string;
+	owed_to_me: number;
+	owed_to_me_display: string;
+	i_owe: number;
+	i_owe_display: string;
+	credits_remaining: number;
+	credits_remaining_display: string;
+	credit_cards_debt: number;
+	credit_cards_debt_display: string;
+};
+
+export type StatsNetWorthResponse = {
+	current: StatsNetWorthSnapshot;
+	items: StatsNetWorthSnapshot[];
+};
+
 export type StatsContext = StatsSummary & {
 	scope: 'all' | 'account' | 'debtor' | 'credit' | 'debts';
 	scope_id?: string;
@@ -1772,6 +1798,11 @@ export function searchStats(params?: Record<string, string>) {
 export function getStatsContext(params?: Record<string, string>) {
 	const q = params ? '?' + new URLSearchParams(params).toString() : '';
 	return request<StatsContext>(`/api/v1/stats/context${q}`);
+}
+
+export function getStatsNetWorth(params?: Record<string, string>) {
+	const q = params ? '?' + new URLSearchParams(params).toString() : '';
+	return request<StatsNetWorthResponse>(`/api/v1/stats/net-worth${q}`);
 }
 
 export function getAccountsSummary() {

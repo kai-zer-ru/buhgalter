@@ -371,7 +371,7 @@
 
 Видимость финансов и разбор входящего (перехват, импорт, бюджет). 
 
-- [ ] [Графики /stats и нетто-капитал](roadmap/stats-charts-net-worth.md) — Chart.js на web; `GET /stats/net-worth`; блок на web и Android (без графиков)
+- [x] [Графики /stats и нетто-капитал](roadmap/stats-charts-net-worth.md) — Chart.js на web; `GET /stats/net-worth`; блок на web и Android (без графиков)
 - [ ] [Правила категорий + очередь «разобрать»](roadmap/category-rules-inbox.md) — правила (категория → счёт, текст → категория); inbox без категории
 - [ ] [Бюджет: rollover, прогноз, конверты](roadmap/budget-post-mvp.md) — перенос остатка, прогноз из периодических; минимальный UX «конвертов» (доступно = лимит + перенос − spent)
 - [x] БАГ. Не сохраняются настройки банковских карт и привязки их к счетам при переустановке приложения — `GET/PUT /user/notification-intercept/bindings` на сервере, синхронизация в Android при входе и при сохранении настроек

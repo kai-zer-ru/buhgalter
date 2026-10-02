@@ -307,6 +307,7 @@ func (s *Server) Handler() http.Handler {
 				mod.Get("/stats/by-period", statsHandler.ByPeriod)
 				mod.Get("/stats/search", statsHandler.Search)
 				mod.Get("/stats/context", statsHandler.Context)
+				mod.Get("/stats/net-worth", statsHandler.NetWorth)
 			})
 
 			ar.Get("/ui/meta", uiHandler.Meta)

@@ -106,7 +106,11 @@ func computeDeltas(ctx context.Context, db sqlcdb.DBTX, userID, cutoff string) (
 
 // ComputeAll returns current balances for every account of the user.
 func ComputeAll(ctx context.Context, db sqlcdb.DBTX, userID string) (map[string]int64, error) {
-	cutoff := timeutil.FormatUTC(timeutil.NowUTC())
+	return ComputeAllAsOf(ctx, db, userID, timeutil.FormatUTC(timeutil.NowUTC()))
+}
+
+// ComputeAllAsOf returns account balances including only manual operations with transaction_date <= cutoff (UTC).
+func ComputeAllAsOf(ctx context.Context, db sqlcdb.DBTX, userID, cutoff string) (map[string]int64, error) {
 	accounts, err := queries(db).ListAllAccountIDsByUser(ctx, userID)
 	if err != nil {
 		return nil, err

@@ -9,6 +9,7 @@
 		getStatsBySubcategory,
 		getStatsByPeriod,
 		getStatsSummary,
+		getStatsNetWorth,
 		getBudgetSummary,
 		getUIMeta,
 		searchStats,
@@ -20,6 +21,7 @@
 		type StatsSubcategoryItem,
 		type StatsPeriodItem,
 		type StatsSummary,
+		type StatsNetWorthResponse,
 		type BudgetSummaryItem,
 		type Transaction
 	} from '$lib/api/client';
@@ -54,6 +56,7 @@
 	} from '$lib/select-options';
 	import { user } from '$lib/stores/auth';
 	import { reportPageLoadFailure } from '$lib/page-load';
+	import StatsNetWorthCard from '$lib/components/StatsNetWorthCard.svelte';
 
 	let loading = $state(true);
 	let filterLoading = $state(false);
@@ -63,6 +66,7 @@
 	let bySubcategory = $state<StatsSubcategoryItem[]>([]);
 	let budgetByCategory = $state<Record<string, BudgetSummaryItem>>({});
 	let byPeriod = $state<StatsPeriodItem[]>([]);
+	let netWorth = $state<StatsNetWorthResponse | null>(null);
 	let searchRows = $state<Transaction[]>([]);
 	let accounts = $state<Account[]>([]);
 	let categories = $state<Category[]>([]);
@@ -139,6 +143,7 @@
 	const periodMax = $derived(
 		Math.max(1, ...byPeriod.map((row) => Math.max(Math.abs(row.income), Math.abs(row.expense))))
 	);
+	const showNetWorthGlobal = $derived(!type && !accountId && !categoryId);
 
 	function periodLabel(period: string): string {
 		void $locale;
@@ -212,6 +217,13 @@
 		return params;
 	}
 
+	function netWorthParams() {
+		const params: Record<string, string> = { group_by: 'month' };
+		if (fromLocal) params.from = fromDateLocalStart(fromLocal, tz);
+		if (toLocal) params.to = fromDateLocalEnd(toLocal, tz);
+		return params;
+	}
+
 	function budgetMonthKey(): string {
 		const raw = (toLocal || fromLocal || todayDateLocal(tz)).split('T')[0];
 		const [y, m] = raw.split('-');
@@ -227,21 +239,27 @@
 		try {
 			const params = statsParams();
 			const month = budgetMonthKey();
-			const [summaryRes, categoryRes, subcategoryRes, periodRes, budgetRes] = await Promise.all([
-				getStatsSummary(params),
-				getStatsByCategory(params),
-				getStatsBySubcategory(params),
-				getStatsByPeriod({ ...params, group_by: groupBy }),
-				getBudgetSummary(month).catch(() => ({
-					items: [] as BudgetSummaryItem[],
-					month,
-					can_copy_from_previous: false
-				}))
-			]);
+			const netWorthPromise = showNetWorthGlobal
+				? getStatsNetWorth(netWorthParams()).catch(() => null)
+				: Promise.resolve(null);
+			const [summaryRes, categoryRes, subcategoryRes, periodRes, budgetRes, netWorthRes] =
+				await Promise.all([
+					getStatsSummary(params),
+					getStatsByCategory(params),
+					getStatsBySubcategory(params),
+					getStatsByPeriod({ ...params, group_by: groupBy }),
+					getBudgetSummary(month).catch(() => ({
+						items: [] as BudgetSummaryItem[],
+						month,
+						can_copy_from_previous: false
+					})),
+					netWorthPromise
+				]);
 			summary = summaryRes;
 			byCategory = categoryRes.items;
 			bySubcategory = subcategoryRes.items;
 			byPeriod = periodRes.items;
+			netWorth = netWorthRes;
 			const bmap: Record<string, BudgetSummaryItem> = {};
 			for (const b of budgetRes.items) {
 				if (b.scope === 'category' && b.category_id) {
@@ -262,7 +280,10 @@
 			}
 			loadError = null;
 		} catch (err) {
-			const msg = reportPageLoadFailure(err, { background: !initial, hasData: summary !== null });
+			const msg = reportPageLoadFailure(err, {
+				background: !initial,
+				hasData: summary !== null || netWorth !== null
+			});
 			if (msg) loadError = msg;
 		} finally {
 			loading = false;
@@ -430,6 +451,16 @@
 		<div class="relative space-y-4" class:opacity-60={filterLoading}>
 			{#if filterLoading}
 				<p class="text-sm" style:color="var(--text-muted)">{$_('common.loading')}</p>
+			{/if}
+			{#if !showNetWorthGlobal}
+				<p class="text-sm" style:color="var(--text-muted)">{$_('stats.netWorth.globalOnly')}</p>
+			{:else if netWorth}
+				<StatsNetWorthCard
+					current={netWorth.current}
+					items={netWorth.items}
+					{currency}
+					periodLabel={(p) => periodLabel(p)}
+				/>
 			{/if}
 			<div class="grid gap-3 sm:grid-cols-3">
 				<div class="card">

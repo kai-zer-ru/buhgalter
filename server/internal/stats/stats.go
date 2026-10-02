@@ -13,6 +13,7 @@ import (
 )
 
 var ErrInvalidDate = errors.New("invalid stats date")
+var ErrInvalidGroupBy = errors.New("invalid stats group_by")
 
 type Filters struct {
 	From          string

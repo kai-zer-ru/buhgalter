@@ -1741,6 +1741,37 @@ paths:
                 $ref: '#/components/schemas/StatsContextSummary'
         '400':
           description: Некорректный период
+  /stats/net-worth:
+    get:
+      summary: Нетто-капитал во времени
+      description: |
+        Текущий снимок и серия по месяцам (конец месяца в timezone пользователя; для текущего месяца — «сейчас»).
+        Без `from`/`to` — последние 12 календарных месяцев; диапазон — не более **120** месяцев (`400`, `ERR_PERIOD_DATE`).
+        Удалённые счета (`status=deleted`) не участвуют. Активы: наличные и банк + «мне должны». Обязательства:
+        «я должен», остаток по активным кредитам, задолженность по кредитным картам (`max(0, credit_limit − balance)`).
+        Суммы в копейках и `*_display`.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/StatsFrom'
+        - $ref: '#/components/parameters/StatsTo'
+        - name: group_by
+          in: query
+          schema:
+            type: string
+            enum: [month]
+            default: month
+          description: Пока поддерживается только `month`
+      responses:
+        '200':
+          description: Текущий нетто и ряд по месяцам
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatsNetWorthResponse'
+        '400':
+          description: Некорректный период или `group_by` (`ERR_PERIOD_DATE`, `ERR_GROUP_BY`)
   /transactions:
     get:
       summary: Список операций
@@ -5184,6 +5215,75 @@ components:
           type: integer
         expense:
           type: integer
+    StatsNetWorthSnapshot:
+      type: object
+      required:
+        - as_of
+        - net_worth
+        - net_worth_display
+        - assets
+        - assets_display
+        - liabilities
+        - liabilities_display
+        - cash_bank
+        - cash_bank_display
+        - owed_to_me
+        - owed_to_me_display
+        - i_owe
+        - i_owe_display
+        - credits_remaining
+        - credits_remaining_display
+        - credit_cards_debt
+        - credit_cards_debt_display
+      properties:
+        period:
+          type: string
+          description: Первое число месяца (`YYYY-MM-DD`) для точек ряда; у `current` отсутствует
+        as_of:
+          type: string
+          description: Момент расчёта (UTC, `YYYY-MM-DD HH:MM:SS`)
+        net_worth:
+          type: integer
+        net_worth_display:
+          type: string
+        assets:
+          type: integer
+        assets_display:
+          type: string
+        liabilities:
+          type: integer
+        liabilities_display:
+          type: string
+        cash_bank:
+          type: integer
+        cash_bank_display:
+          type: string
+        owed_to_me:
+          type: integer
+        owed_to_me_display:
+          type: string
+        i_owe:
+          type: integer
+        i_owe_display:
+          type: string
+        credits_remaining:
+          type: integer
+        credits_remaining_display:
+          type: string
+        credit_cards_debt:
+          type: integer
+        credit_cards_debt_display:
+          type: string
+    StatsNetWorthResponse:
+      type: object
+      required: [current, items]
+      properties:
+        current:
+          $ref: '#/components/schemas/StatsNetWorthSnapshot'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/StatsNetWorthSnapshot'
     StatsContextSummary:
       allOf:
         - $ref: '#/components/schemas/StatsSummary'
