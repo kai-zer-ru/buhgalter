@@ -115,6 +115,13 @@ erDiagram
         TEXT tag_id
     }
 
+    category_rules {
+        TEXT kind "category_account|text_category"
+        TEXT pattern "text_category only"
+        TEXT default_account_id "category_account only"
+        INTEGER priority
+    }
+
     subscriptions {
         TEXT name
         TEXT period "week|two_weeks|month|quarter|half_year|year"
@@ -267,6 +274,10 @@ erDiagram
     users ||--o{ transaction_templates : owns
     transaction_templates ||--o{ transaction_template_tags : has
     tags ||--o{ transaction_template_tags : has
+    users ||--o{ category_rules : owns
+    categories ||--o{ category_rules : category_id
+    subcategories ||--o{ category_rules : subcategory_id
+    accounts ||--o{ category_rules : default_account_id
     accounts ||--o{ transactions : account_id
     accounts ||--o{ transactions : transfer_account_id
     accounts ||--o{ credits : debit_account_id

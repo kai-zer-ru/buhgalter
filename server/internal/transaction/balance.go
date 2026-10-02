@@ -54,6 +54,7 @@ type AccountsSummary struct {
 type Dashboard struct {
 	TotalBalance       int64               `json:"total_balance"`
 	TotalForecast      int64               `json:"total_forecast"`
+	InboxCount         int64               `json:"inbox_count"`
 	CreditCardsSummary *CreditCardsSummary `json:"credit_cards_summary,omitempty"`
 	Accounts           []AccountBalance    `json:"accounts"`
 	RecentTransactions []Transaction       `json:"recent_transactions"`
@@ -248,9 +249,14 @@ func DashboardForUser(ctx context.Context, db *sql.DB, userID string) (Dashboard
 	if err != nil {
 		return Dashboard{}, err
 	}
+	inboxCount, err := CountInbox(ctx, db, userID)
+	if err != nil {
+		return Dashboard{}, err
+	}
 	return Dashboard{
 		TotalBalance:       summary.TotalBalance,
 		TotalForecast:      summary.TotalForecast,
+		InboxCount:         inboxCount,
 		CreditCardsSummary: creditCardsSummaryFromAccounts(summary.Accounts),
 		Accounts:           summary.Accounts,
 		RecentTransactions: recent,

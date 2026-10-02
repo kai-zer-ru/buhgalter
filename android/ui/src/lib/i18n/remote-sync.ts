@@ -2,8 +2,16 @@ import { browser } from '$app/environment';
 import { addMessages, waitLocale } from 'svelte-i18n';
 import { getUIi18n } from '$lib/api/client';
 import { versionsMismatch } from '$lib/version-check';
+import bundledRu from './ru.json';
 
-const CACHE_PREFIX = 'buhgalter.remote_i18n.';
+const CACHE_PREFIX = 'buhgalter.remote_i18n.v2.';
+
+/** Reject truncated server catalogs (e.g. web-only export) — keep bundled Android strings. */
+const MIN_REMOTE_I18N_KEYS = Math.floor(Object.keys(bundledRu).length * 0.85);
+
+function remoteCatalogUsable(messages: Record<string, string>): boolean {
+	return Object.keys(messages).length >= MIN_REMOTE_I18N_KEYS;
+}
 
 function normalizeLang(lang: string): 'ru' | 'en' {
 	return lang === 'en' ? 'en' : 'ru';
@@ -58,14 +66,24 @@ export async function syncRemoteI18nOnMismatch(
 
 	const cached = readCachedMessages(serverVersion, code);
 	if (cached) {
-		addMessages(code, cached);
-		return true;
+		if (!remoteCatalogUsable(cached)) {
+			if (browser) {
+				try {
+					localStorage.removeItem(cacheKey(serverVersion, code));
+				} catch {
+					// ignore
+				}
+			}
+		} else {
+			addMessages(code, cached);
+			return true;
+		}
 	}
 
 	try {
 		const res = await getUIi18n(code);
-		const messages = res.messages;
-		if (!messages || typeof messages !== 'object') {
+		const messages = res.messages as Record<string, string>;
+		if (!messages || typeof messages !== 'object' || !remoteCatalogUsable(messages)) {
 			return false;
 		}
 		addMessages(code, messages);

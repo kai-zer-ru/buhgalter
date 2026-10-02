@@ -107,6 +107,19 @@ type Category struct {
 	CreatedAt string `json:"created_at"`
 }
 
+type CategoryRule struct {
+	ID               string  `json:"id"`
+	UserID           string  `json:"user_id"`
+	Kind             string  `json:"kind"`
+	Pattern          *string `json:"pattern"`
+	CategoryID       string  `json:"category_id"`
+	SubcategoryID    *string `json:"subcategory_id"`
+	DefaultAccountID *string `json:"default_account_id"`
+	Priority         int64   `json:"priority"`
+	CreatedAt        string  `json:"created_at"`
+	UpdatedAt        string  `json:"updated_at"`
+}
+
 type Credit struct {
 	ID                        string  `json:"id"`
 	UserID                    string  `json:"user_id"`

@@ -11,6 +11,8 @@
 		| '/settings/notifications'
 		| '/settings/import'
 		| '/transaction-templates'
+		| '/category-rules'
+		| '/transactions/inbox'
 		| '/admin'
 		| '/admin/features'
 		| '/admin/users'

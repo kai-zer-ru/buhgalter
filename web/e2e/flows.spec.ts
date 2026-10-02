@@ -159,7 +159,7 @@ test('stats page shows summary and category sections', async ({ page }) => {
 	await page.goto('/stats');
 	await waitAppReady(page);
 	await expect(page.getByRole('heading', { name: 'Статистика', level: 1 })).toBeVisible();
-	await expect(page.getByRole('heading', { name: 'По категориям' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'По категориям', exact: true })).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'По периодам' })).toBeVisible();
 
 	await page.getByPlaceholder('Комментарий операции').fill(marker);

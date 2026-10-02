@@ -120,6 +120,17 @@ html.dark .android-drawer-backdrop {
 	gap: 0.25rem;
 }
 
+.android-drawer-logout-row {
+	margin-top: 0.375rem;
+	padding-top: 0.5rem;
+	border-top: 1px solid var(--border);
+}
+
+.android-drawer-logout:disabled {
+	opacity: 0.45;
+	pointer-events: none;
+}
+
 .android-drawer-foot-row {
 	display: flex;
 	align-items: center;

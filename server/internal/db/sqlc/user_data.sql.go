@@ -48,6 +48,15 @@ func (q *Queries) DeleteUserCategories(ctx context.Context, userID string) error
 	return err
 }
 
+const deleteUserCategoryRules = `-- name: DeleteUserCategoryRules :exec
+DELETE FROM category_rules WHERE user_id = ?
+`
+
+func (q *Queries) DeleteUserCategoryRules(ctx context.Context, userID string) error {
+	_, err := q.db.ExecContext(ctx, deleteUserCategoryRules, userID)
+	return err
+}
+
 const deleteUserChangeEvents = `-- name: DeleteUserChangeEvents :exec
 DELETE FROM user_change_events WHERE user_id = ?
 `

@@ -21,6 +21,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/bank"
 	"github.com/kai-zer-ru/buhgalter/internal/budget"
 	"github.com/kai-zer-ru/buhgalter/internal/category"
+	"github.com/kai-zer-ru/buhgalter/internal/categoryrule"
 	"github.com/kai-zer-ru/buhgalter/internal/config"
 	"github.com/kai-zer-ru/buhgalter/internal/credit"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
@@ -99,6 +100,7 @@ func (s *Server) Handler() http.Handler {
 	accountArchiveHandler := &accountArchiveHandler{store: dbHandle, audit: s.audit}
 	accountDeleteHandler := &accountDeleteHandler{store: dbHandle, audit: s.audit}
 	categoryHandler := &category.Handler{Store: dbHandle, Audit: s.audit}
+	categoryRuleHandler := &categoryrule.Handler{Store: dbHandle, Audit: s.audit}
 	transactionHandler := &transaction.Handler{Store: dbHandle, Audit: s.audit}
 	merchantHandler := &merchant.Handler{Store: dbHandle, Audit: s.audit}
 	tagHandler := &tag.Handler{Store: dbHandle, Audit: s.audit}
@@ -163,6 +165,8 @@ func (s *Server) Handler() http.Handler {
 			ar.Post("/accounts/{id}/primary", accountHandler.SetPrimary)
 			ar.Delete("/accounts/{id}", accountDeleteHandler.deleteAccount)
 
+			ar.Get("/transactions/inbox", transactionHandler.Inbox)
+			ar.Get("/transactions/inbox/count", transactionHandler.InboxCount)
 			ar.Get("/transactions", transactionHandler.List)
 			ar.Post("/transactions", transactionHandler.Create)
 			ar.Get("/transactions/{id}", transactionHandler.Get)
@@ -288,6 +292,14 @@ func (s *Server) Handler() http.Handler {
 
 			ar.Put("/subcategories/{id}", categoryHandler.UpdateSubcategory)
 			ar.Delete("/subcategories/{id}", categoryHandler.DeleteSubcategory)
+
+			ar.Get("/category-rules", categoryRuleHandler.List)
+			ar.Post("/category-rules", categoryRuleHandler.Create)
+			ar.Post("/category-rules/evaluate", categoryRuleHandler.Evaluate)
+			ar.Put("/category-rules/order", categoryRuleHandler.Reorder)
+			ar.Get("/category-rules/{id}", categoryRuleHandler.Get)
+			ar.Put("/category-rules/{id}", categoryRuleHandler.Update)
+			ar.Delete("/category-rules/{id}", categoryRuleHandler.Delete)
 
 			ar.Group(func(mod chi.Router) {
 				mod.Use(features.RequireFeature(dbHandle, features.ImportExport))

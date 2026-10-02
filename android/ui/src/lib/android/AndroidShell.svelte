@@ -23,11 +23,16 @@
 		getCurrentInterceptSettings,
 		interceptDraftsTick
 	} from '$lib/android/notification-intercept';
+	import { readInboxCount } from '$lib/stores/inbox-count';
+	import { refCacheTick } from '$lib/offline/ref-cache';
+	import { getDashboard } from '$lib/api/client';
 	import AndroidDrawerSync from '$lib/android/AndroidDrawerSync.svelte';
 	import AndroidDrawerVersion from '$lib/android/AndroidDrawerVersion.svelte';
 	import UpdateAvailableModal from '$lib/components/UpdateAvailableModal.svelte';
 	import { APP_VERSION } from '$lib/platform/app-version';
 	import { fetchAppVersionInfo, applyVersionBlock, type AppVersionInfo } from '$lib/version-check';
+	import { confirm } from '$lib/confirm';
+	import { syncState } from '$lib/offline/sync';
 	import './android-shell.css';
 
 	type Props = {
@@ -47,6 +52,22 @@
 	});
 	let showUpdateModal = $state(false);
 
+	const syncing = $derived($syncState === 'syncing');
+
+	async function confirmLogout() {
+		if (syncing) return;
+		const ok = await confirm({
+			title: $_('nav.logout'),
+			message: $_('nav.logoutConfirm'),
+			confirmLabel: $_('nav.logout'),
+			cancelLabel: $_('common.cancel'),
+			danger: true
+		});
+		if (!ok) return;
+		closeDrawer();
+		await onlogout();
+	}
+
 	const path = $derived($page.url.pathname);
 	const chrome = $derived($shellHeader);
 	const homeNav = $derived(androidHomeNavItem());
@@ -61,6 +82,23 @@
 		void $user?.id;
 		if (!getCurrentInterceptSettings().enabled) return 0;
 		return countInterceptDrafts($user?.id);
+	});
+	let inboxCountFromDashboard = $state(0);
+
+	const inboxCount = $derived.by(() => {
+		void $refCacheTick;
+		void $user?.id;
+		return Math.max(readInboxCount(), inboxCountFromDashboard);
+	});
+
+	$effect(() => {
+		if (!$user) return;
+		void getDashboard()
+			.then((d) => {
+				const n = d.inbox_count;
+				inboxCountFromDashboard = typeof n === 'number' && n > 0 ? n : 0;
+			})
+			.catch(() => {});
 	});
 
 	$effect(() => {
@@ -156,6 +194,13 @@
 							>
 								{draftCount}
 							</span>
+						{:else if item.labelKey === 'nav.inbox' && inboxCount > 0}
+							<span
+								class="rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums text-white"
+								style:background="var(--primary)"
+							>
+								{inboxCount}
+							</span>
 						{/if}
 					</span>
 				</a>
@@ -183,11 +228,12 @@
 			{#if drawerOpen}
 				<AndroidDrawerSync />
 			{/if}
-			<div class="android-drawer-foot-row">
+			<div class="android-drawer-logout-row android-drawer-foot-row">
 				<button
 					type="button"
-					class="android-drawer-link min-w-0 flex-1 text-left"
-					onclick={() => void onlogout()}
+					class="android-drawer-link android-drawer-logout min-w-0 flex-1 text-left"
+					disabled={syncing}
+					onclick={() => void confirmLogout()}
 				>
 					{$_('nav.logout')}
 				</button>

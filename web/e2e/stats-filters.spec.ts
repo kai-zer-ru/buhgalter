@@ -11,7 +11,7 @@ test('stats filters by type expense', async ({ page }) => {
 	await waitAppReady(page);
 
 	await selectCombobox(page, 'stats-type', { label: 'Расход' });
-	await expect(page.getByRole('heading', { name: 'По категориям' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'По категориям', exact: true })).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'По периодам' })).toBeVisible();
 });
 

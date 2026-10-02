@@ -29,6 +29,9 @@ DELETE FROM budgets WHERE user_id = ?;
 -- name: DeleteUserTransactionTemplates :exec
 DELETE FROM transaction_templates WHERE user_id = ?;
 
+-- name: DeleteUserCategoryRules :exec
+DELETE FROM category_rules WHERE user_id = ?;
+
 -- name: DeleteUserTransactions :exec
 DELETE FROM transactions WHERE user_id = ?;
 

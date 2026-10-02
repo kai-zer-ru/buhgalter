@@ -33,6 +33,7 @@ func ResetUserData(ctx context.Context, database *sql.DB, userID string) error {
 		{"recurring", func() error { return q.DeleteUserRecurringOperations(ctx, userID) }},
 		{"budgets", func() error { return q.DeleteUserBudgets(ctx, userID) }},
 		{"templates", func() error { return q.DeleteUserTransactionTemplates(ctx, userID) }},
+		{"category rules", func() error { return q.DeleteUserCategoryRules(ctx, userID) }},
 		{"transactions", func() error { return q.DeleteUserTransactions(ctx, userID) }},
 		{"merchants", func() error { return q.DeleteUserMerchants(ctx, userID) }},
 		{"tags", func() error { return q.DeleteUserTags(ctx, userID) }},

@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kai-zer-ru/buhgalter/internal/budgetnotify"
 	"github.com/kai-zer-ru/buhgalter/internal/category"
+	"github.com/kai-zer-ru/buhgalter/internal/categoryrule"
 	"github.com/kai-zer-ru/buhgalter/internal/credit"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/debt"
@@ -132,6 +133,26 @@ func txFromListDesc(row sqlcdb.ListTransactionsFilteredDateDescRow) Transaction 
 }
 
 func txFromListAsc(row sqlcdb.ListTransactionsFilteredDateAscRow) Transaction {
+	return txFromFields(
+		row.ID, row.AccountID, row.Type, row.Kind, row.Amount, row.Commission, row.Description,
+		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID, row.SubscriptionID, row.MerchantID,
+		row.TransactionDate, row.CreatedAt, row.UpdatedAt,
+		row.MerchantName, row.MerchantIcon, row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.TransferAccountName, row.TransferAccountStatus,
+		row.TransferIsOut, row.CreditPaymentLinked,
+	)
+}
+
+func txFromInboxDesc(row sqlcdb.ListInboxTransactionsDateDescRow) Transaction {
+	return txFromFields(
+		row.ID, row.AccountID, row.Type, row.Kind, row.Amount, row.Commission, row.Description,
+		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID, row.SubscriptionID, row.MerchantID,
+		row.TransactionDate, row.CreatedAt, row.UpdatedAt,
+		row.MerchantName, row.MerchantIcon, row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.TransferAccountName, row.TransferAccountStatus,
+		row.TransferIsOut, row.CreditPaymentLinked,
+	)
+}
+
+func txFromInboxAsc(row sqlcdb.ListInboxTransactionsDateAscRow) Transaction {
 	return txFromFields(
 		row.ID, row.AccountID, row.Type, row.Kind, row.Amount, row.Commission, row.Description,
 		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID, row.SubscriptionID, row.MerchantID,
@@ -273,6 +294,13 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Tra
 	if err := validateActiveAccount(ctx, db, userID, in.AccountID); err != nil {
 		return Transaction{}, err
 	}
+	catID := in.CategoryID
+	subIDPtr := in.SubcategoryID
+	if err := categoryrule.ApplySilentTextCategory(ctx, db, userID, &catID, &subIDPtr, in.Description); err != nil {
+		return Transaction{}, err
+	}
+	in.CategoryID = catID
+	in.SubcategoryID = subIDPtr
 	subID, err := resolveSubcategory(ctx, db, userID, in.CategoryID, in.SubcategoryID, in.SubcategoryName)
 	if err != nil {
 		return Transaction{}, err

@@ -30,6 +30,13 @@ vi.mock('$lib/api/client', () => ({
 	getUIi18n: (...args: unknown[]) => getUIi18n(...args)
 }));
 
+/** Enough keys to pass remoteCatalogUsable (bundled ru.json × 0.85). */
+function fullCatalog(extra: Record<string, string>): Record<string, string> {
+	const base: Record<string, string> = {};
+	for (let i = 0; i < 1200; i++) base[`test.key.${i}`] = 'x';
+	return { ...base, ...extra };
+}
+
 describe('syncRemoteI18nOnMismatch', () => {
 	beforeEach(() => {
 		memoryStore.clear();
@@ -54,32 +61,41 @@ describe('syncRemoteI18nOnMismatch', () => {
 		getUIi18n.mockResolvedValue({
 			version: '1.5.0',
 			lang: 'ru',
-			messages: { 'app.title': 'Бухгалтер', 'nav.newKey': 'Новое' }
+			messages: fullCatalog({ 'app.title': 'Бухгалтер', 'nav.newKey': 'Новое' })
 		});
 
 		expect(await syncRemoteI18nOnMismatch('1.4.0', '1.5.0', 'ru')).toBe(true);
 		expect(waitLocale).toHaveBeenCalledWith('ru');
 		expect(getUIi18n).toHaveBeenCalledWith('ru');
-		expect(addMessages).toHaveBeenCalledWith('ru', {
-			'app.title': 'Бухгалтер',
-			'nav.newKey': 'Новое'
-		});
-		expect(memoryStore.get('buhgalter.remote_i18n.1.5.0.ru')).toContain('nav.newKey');
+		const applied = addMessages.mock.calls[0]?.[1] as Record<string, string>;
+		expect(applied['nav.newKey']).toBe('Новое');
+		expect(memoryStore.get('buhgalter.remote_i18n.v2.1.5.0.ru')).toContain('nav.newKey');
 	});
 
 	it('uses cache on second call', async () => {
 		memoryStore.set(
-			'buhgalter.remote_i18n.1.5.0.en',
-			JSON.stringify({ 'nav.home': 'Home (remote)' })
+			'buhgalter.remote_i18n.v2.1.5.0.en',
+			JSON.stringify(fullCatalog({ 'nav.home': 'Home (remote)' }))
 		);
 
 		expect(await syncRemoteI18nOnMismatch('1.4.0', '1.5.0', 'en')).toBe(true);
 		expect(getUIi18n).not.toHaveBeenCalled();
-		expect(addMessages).toHaveBeenCalledWith('en', { 'nav.home': 'Home (remote)' });
+		const applied = addMessages.mock.calls[0]?.[1] as Record<string, string>;
+		expect(applied['nav.home']).toBe('Home (remote)');
 	});
 
 	it('soft-fails when network request fails', async () => {
 		getUIi18n.mockRejectedValue(new Error('offline'));
+		expect(await syncRemoteI18nOnMismatch('1.4.0', '1.5.0', 'ru')).toBe(false);
+		expect(addMessages).not.toHaveBeenCalled();
+	});
+
+	it('ignores truncated remote catalogs', async () => {
+		getUIi18n.mockResolvedValue({
+			version: '1.5.0',
+			lang: 'ru',
+			messages: { 'app.title': 'Бухгалтер' }
+		});
 		expect(await syncRemoteI18nOnMismatch('1.4.0', '1.5.0', 'ru')).toBe(false);
 		expect(addMessages).not.toHaveBeenCalled();
 	});

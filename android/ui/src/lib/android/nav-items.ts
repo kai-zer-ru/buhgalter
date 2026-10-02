@@ -70,6 +70,16 @@ export function androidMainNavItems(): AndroidNavItem[] {
 			isActive: (p) => p.startsWith('/transaction-templates')
 		},
 		{
+			href: resolve('/category-rules'),
+			labelKey: 'categoryRules.title',
+			isActive: (p) => p.startsWith('/category-rules')
+		},
+		{
+			href: resolve('/transactions/inbox'),
+			labelKey: 'nav.inbox',
+			isActive: (p) => p.startsWith('/transactions/inbox')
+		},
+		{
 			href: resolve('/categories'),
 			labelKey: 'nav.categories',
 			isActive: (p) => p.startsWith('/categories')

@@ -706,3 +706,103 @@ SELECT DISTINCT account_id
 FROM transactions
 WHERE user_id = ? AND kind = 'future'
   AND transaction_date >= ? AND transaction_date <= ?;
+
+-- name: CountInboxTransactions :one
+SELECT COUNT(*) AS count
+FROM transactions t
+WHERE t.user_id = ?
+  AND t.type IN ('income', 'expense')
+  AND t.category_id IS NULL
+  AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL);
+
+-- name: ListInboxTransactionsDateDesc :many
+SELECT
+    t.id,
+    t.user_id,
+    t.account_id,
+    t.type,
+    t.kind,
+    t.amount,
+    t.description,
+    t.category_id,
+    t.subcategory_id,
+    t.transfer_group_id,
+    t.transfer_account_id,
+    t.subscription_id,
+    t.merchant_id,
+    t.transaction_date,
+    t.created_at,
+    t.updated_at,
+    m.name AS merchant_name,
+    m.icon AS merchant_icon,
+    c.name AS category_name,
+    c.icon AS category_icon,
+    c.is_system AS category_is_system,
+    s.name AS subcategory_name,
+    s.icon AS subcategory_icon,
+    a.name AS account_name,
+    a.status AS account_status,
+    ta.name AS transfer_account_name,
+    ta.status AS transfer_account_status,
+    0 AS transfer_is_out,
+    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked,
+    0 AS commission
+FROM transactions t
+LEFT JOIN merchants m ON m.id = t.merchant_id
+LEFT JOIN categories c ON c.id = t.category_id
+LEFT JOIN subcategories s ON s.id = t.subcategory_id
+LEFT JOIN accounts a ON a.id = t.account_id
+LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
+LEFT JOIN credit_payments cp ON cp.transaction_id = t.id
+WHERE t.user_id = ?
+  AND t.type IN ('income', 'expense')
+  AND t.category_id IS NULL
+  AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL)
+ORDER BY t.transaction_date DESC, t.created_at DESC
+LIMIT ? OFFSET ?;
+
+-- name: ListInboxTransactionsDateAsc :many
+SELECT
+    t.id,
+    t.user_id,
+    t.account_id,
+    t.type,
+    t.kind,
+    t.amount,
+    t.description,
+    t.category_id,
+    t.subcategory_id,
+    t.transfer_group_id,
+    t.transfer_account_id,
+    t.subscription_id,
+    t.merchant_id,
+    t.transaction_date,
+    t.created_at,
+    t.updated_at,
+    m.name AS merchant_name,
+    m.icon AS merchant_icon,
+    c.name AS category_name,
+    c.icon AS category_icon,
+    c.is_system AS category_is_system,
+    s.name AS subcategory_name,
+    s.icon AS subcategory_icon,
+    a.name AS account_name,
+    a.status AS account_status,
+    ta.name AS transfer_account_name,
+    ta.status AS transfer_account_status,
+    0 AS transfer_is_out,
+    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked,
+    0 AS commission
+FROM transactions t
+LEFT JOIN merchants m ON m.id = t.merchant_id
+LEFT JOIN categories c ON c.id = t.category_id
+LEFT JOIN subcategories s ON s.id = t.subcategory_id
+LEFT JOIN accounts a ON a.id = t.account_id
+LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
+LEFT JOIN credit_payments cp ON cp.transaction_id = t.id
+WHERE t.user_id = ?
+  AND t.type IN ('income', 'expense')
+  AND t.category_id IS NULL
+  AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL)
+ORDER BY t.transaction_date ASC, t.created_at ASC
+LIMIT ? OFFSET ?;

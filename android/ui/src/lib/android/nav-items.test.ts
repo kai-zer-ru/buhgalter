@@ -20,6 +20,8 @@ describe('android nav items', () => {
 			'nav.subscriptions',
 			'nav.recurring',
 			'settings.tab.templates',
+			'categoryRules.title',
+			'nav.inbox',
 			'nav.categories',
 			'nav.merchants',
 			'nav.tags',

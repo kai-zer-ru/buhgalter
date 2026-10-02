@@ -402,6 +402,19 @@
 {/snippet}
 
 <div class="space-y-6">
+	{#if (dash?.inbox_count ?? 0) > 0}
+		<div class="card flex flex-wrap items-center justify-between gap-3">
+			<div>
+				<p class="font-medium">{$_('inbox.title')}</p>
+				<p class="text-sm" style:color="var(--text-muted)">
+					{$_('inbox.homeHint', { values: { count: String(dash?.inbox_count ?? 0) } })}
+				</p>
+			</div>
+			<a href={resolve('/transactions/inbox')} class="btn-primary shrink-0">
+				{$_('inbox.open')}
+			</a>
+		</div>
+	{/if}
 	<div class="flex flex-wrap items-center justify-between gap-3">
 		<h1 class="text-2xl font-semibold">{$_('dashboard.title')}</h1>
 		<div class="flex shrink-0 items-center gap-1">

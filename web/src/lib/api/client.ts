@@ -1014,10 +1014,47 @@ export type AccountsSummary = {
 export type Dashboard = {
 	total_balance: number;
 	total_forecast: number;
+	inbox_count?: number;
 	credit_cards_summary?: CreditCardsSummary | null;
 	accounts: AccountBalanceSummary[];
 	recent_transactions: Transaction[];
 	debts_summary: DebtsSummary;
+};
+
+export type CategoryRuleKind = 'category_account' | 'text_category';
+
+export type CategoryRule = {
+	id: string;
+	kind: CategoryRuleKind;
+	pattern?: string | null;
+	category_id: string;
+	subcategory_id?: string | null;
+	default_account_id?: string | null;
+	priority: number;
+	created_at: string;
+	updated_at: string;
+};
+
+export type CategoryRuleUpsert = {
+	kind: CategoryRuleKind;
+	pattern?: string | null;
+	category_id: string;
+	subcategory_id?: string | null;
+	default_account_id?: string | null;
+};
+
+export type CategoryRuleTextMatch = {
+	rule_id: string;
+	pattern: string;
+	category_id: string;
+	subcategory_id?: string | null;
+	priority: number;
+};
+
+export type CategoryRuleEvaluateResult = {
+	text_matches: CategoryRuleTextMatch[];
+	account_suggestion: { rule_id: string; account_id: string } | null;
+	ambiguous: boolean;
 };
 
 export type DebtsSummary = {
@@ -1729,6 +1766,61 @@ export function reorderTransactionTemplates(ids: string[]) {
 		method: 'PUT',
 		body: JSON.stringify({ ids })
 	});
+}
+
+export function listCategoryRules() {
+	return request<CategoryRule[]>('/api/v1/category-rules');
+}
+
+export function createCategoryRule(payload: CategoryRuleUpsert) {
+	return request<CategoryRule>('/api/v1/category-rules', {
+		method: 'POST',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function updateCategoryRule(id: string, payload: CategoryRuleUpsert) {
+	return request<CategoryRule>(`/api/v1/category-rules/${id}`, {
+		method: 'PUT',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function deleteCategoryRule(id: string) {
+	return request<void>(`/api/v1/category-rules/${id}`, { method: 'DELETE' });
+}
+
+export function reorderCategoryRules(ids: string[]) {
+	return request<CategoryRule[]>('/api/v1/category-rules/order', {
+		method: 'PUT',
+		body: JSON.stringify({ ids })
+	});
+}
+
+export function evaluateCategoryRules(payload: {
+	description?: string;
+	category_id?: string;
+	subcategory_id?: string;
+}) {
+	return request<CategoryRuleEvaluateResult>('/api/v1/category-rules/evaluate', {
+		method: 'POST',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function listInboxTransactions(params?: { page?: number; limit?: number; sort?: string }) {
+	const qs = new URLSearchParams();
+	if (params?.page) qs.set('page', String(params.page));
+	if (params?.limit) qs.set('limit', String(params.limit));
+	if (params?.sort) qs.set('sort', params.sort);
+	const q = qs.toString();
+	return request<{ data: Transaction[]; meta: { page: number; limit: number; total: number } }>(
+		`/api/v1/transactions/inbox${q ? `?${q}` : ''}`
+	);
+}
+
+export function getInboxCount() {
+	return request<{ count: number }>('/api/v1/transactions/inbox/count');
 }
 
 export function listDebtors() {

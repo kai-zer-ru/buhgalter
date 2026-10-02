@@ -1772,6 +1772,53 @@ paths:
                 $ref: '#/components/schemas/StatsNetWorthResponse'
         '400':
           description: Некорректный период или `group_by` (`ERR_PERIOD_DATE`, `ERR_GROUP_BY`)
+  /transactions/inbox:
+    get:
+      summary: Очередь «разобрать»
+      description: |
+        Операции `income`/`expense` с `category_id IS NULL` (без commission legs переводов).
+        Пагинация как у `GET /transactions`.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [date_desc, date_asc]
+      responses:
+        '200':
+          description: Список
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionListResponse'
+  /transactions/inbox/count:
+    get:
+      summary: Счётчик очереди «разобрать»
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [count]
+                properties:
+                  count:
+                    type: integer
   /transactions:
     get:
       summary: Список операций
@@ -2342,6 +2389,149 @@ paths:
       responses:
         '204':
           description: Удалён
+  /category-rules:
+    get:
+      summary: Список правил категорий
+      description: |
+        Постоянные правила пользователя для подстановки счёта и (позже) автокатегоризации.
+        Сортировка: `priority` (меньше — раньше), затем `id`. Кеш GET TTL 5 мин.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Список
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CategoryRule'
+    post:
+      summary: Создать правило категории
+      description: |
+        Лимит — 100 правил на пользователя.
+        `category_account`: обязательны `category_id` и `default_account_id`; `pattern` не передаётся.
+        `text_category`: обязательны `category_id` и `pattern`; цель не может быть системной категорией.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryRuleUpsert'
+      responses:
+        '201':
+          description: Создано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryRule'
+        '400':
+          description: Ошибка валидации или лимит
+  /category-rules/evaluate:
+    post:
+      summary: Подсказки правил (без записи)
+      description: |
+        Возвращает совпадения text→category и подсказку счёта для category→account.
+        Не изменяет данные.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryRuleEvaluateRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryRuleEvaluateResult'
+  /category-rules/order:
+    put:
+      summary: Изменить приоритет правил
+      description: Тело — полный упорядоченный список `ids` всех правил пользователя (первый = наивысший приоритет).
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids]
+              properties:
+                ids:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Список после перестановки
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CategoryRule'
+        '400':
+          description: Неполный или неверный набор id
+  /category-rules/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Правило по id
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryRule'
+        '404':
+          description: Не найдено
+    put:
+      summary: Обновить правило
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryRuleUpsert'
+      responses:
+        '200':
+          description: Обновлено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryRule'
+        '404':
+          description: Не найдено
+    delete:
+      summary: Удалить правило
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Удалено
   /debtors:
     get:
       summary: Список должников
@@ -4590,6 +4780,101 @@ components:
           type: array
           items:
             type: string
+    CategoryRule:
+      type: object
+      required: [id, kind, category_id, priority, created_at, updated_at]
+      description: Правило категоризации или подстановки счёта по категории
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum: [category_account, text_category]
+        pattern:
+          type: string
+          nullable: true
+          description: Подстрока для `text_category` (регистронезависимый match — на этапе apply)
+        category_id:
+          type: string
+          description: Условие для `category_account`; целевая категория для `text_category`
+        subcategory_id:
+          type: string
+          nullable: true
+        default_account_id:
+          type: string
+          nullable: true
+          description: Только для `category_account` — счёт по умолчанию в форме
+        priority:
+          type: integer
+          description: Меньше — выше приоритет
+        created_at:
+          type: string
+        updated_at:
+          type: string
+    CategoryRuleUpsert:
+      type: object
+      required: [kind, category_id]
+      properties:
+        kind:
+          type: string
+          enum: [category_account, text_category]
+        pattern:
+          type: string
+          nullable: true
+          maxLength: 200
+        category_id:
+          type: string
+        subcategory_id:
+          type: string
+          nullable: true
+        default_account_id:
+          type: string
+          nullable: true
+    CategoryRuleEvaluateRequest:
+      type: object
+      properties:
+        description:
+          type: string
+          nullable: true
+        category_id:
+          type: string
+          nullable: true
+        subcategory_id:
+          type: string
+          nullable: true
+    CategoryRuleEvaluateResult:
+      type: object
+      required: [text_matches, ambiguous]
+      properties:
+        text_matches:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryRuleTextMatch'
+        account_suggestion:
+          type: object
+          nullable: true
+          properties:
+            rule_id:
+              type: string
+            account_id:
+              type: string
+        ambiguous:
+          type: boolean
+    CategoryRuleTextMatch:
+      type: object
+      required: [rule_id, pattern, category_id, priority]
+      properties:
+        rule_id:
+          type: string
+        pattern:
+          type: string
+        category_id:
+          type: string
+        subcategory_id:
+          type: string
+          nullable: true
+        priority:
+          type: integer
     Merchant:
       type: object
       properties:
@@ -5138,6 +5423,9 @@ components:
           type: integer
         total_forecast:
           type: integer
+        inbox_count:
+          type: integer
+          description: Операции income/expense без category_id (очередь «разобрать»)
         credit_cards_summary:
           $ref: '#/components/schemas/CreditCardsSummary'
           nullable: true

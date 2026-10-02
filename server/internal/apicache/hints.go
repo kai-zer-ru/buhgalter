@@ -17,6 +17,8 @@ func HintsForMutation(apiPath string) InvalidateHints {
 		return InvalidateHints{
 			Paths: []string{
 				"/api/v1/transactions",
+				"/api/v1/transactions/inbox",
+				"/api/v1/transactions/inbox/count",
 				"/api/v1/dashboard",
 				"/api/v1/accounts",
 				"/api/v1/accounts/summary",
@@ -118,6 +120,11 @@ func HintsForMutation(apiPath string) InvalidateHints {
 			Paths:    []string{"/api/v1/transaction-templates", "/api/v1/dashboard"},
 			Entities: []string{"transaction_template"},
 		}
+	case strings.HasPrefix(path, "/api/v1/category-rules"):
+		return InvalidateHints{
+			Paths:    []string{"/api/v1/category-rules", "/api/v1/dashboard"},
+			Entities: []string{"category_rule"},
+		}
 	case strings.HasPrefix(path, "/api/v1/import"):
 		return LedgerHints()
 	case strings.HasPrefix(path, "/api/v1/user/data"):
@@ -143,6 +150,7 @@ func LedgerHints() InvalidateHints {
 			"/api/v1/recurring-operations",
 			"/api/v1/stats",
 			"/api/v1/transaction-templates",
+			"/api/v1/category-rules",
 			"/api/v1/ui/meta",
 		},
 		Entities: []string{

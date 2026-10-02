@@ -5,7 +5,9 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
 	import { _ } from 'svelte-i18n';
-	import { ApiError, getSetupStatus } from '$lib/api/client';
+	import { ApiError, getDashboard, getSetupStatus } from '$lib/api/client';
+	import { readInboxCount } from '$lib/stores/inbox-count';
+	import { refCacheTick } from '$lib/ref-cache';
 	import { loadUser, logout, user, hasRecentSession, clearSessionHint } from '$lib/stores/auth';
 	import { isPublicAppRoute, sessionExpiredTick } from '$lib/auth/session-expired';
 	import { invalidateApiCache } from '$lib/api/cache';
@@ -68,6 +70,24 @@
 	const path = $derived($page.url.pathname);
 	const isSetup = $derived(path === '/setup');
 
+	let inboxCountFromDashboard = $state(0);
+
+	const inboxCount = $derived.by(() => {
+		void $refCacheTick;
+		void $user?.id;
+		return Math.max(readInboxCount(), inboxCountFromDashboard);
+	});
+
+	$effect(() => {
+		if (!$user || bootError) return;
+		void getDashboard()
+			.then((d) => {
+				const n = d.inbox_count;
+				inboxCountFromDashboard = typeof n === 'number' && n > 0 ? n : 0;
+			})
+			.catch(() => {});
+	});
+
 	$effect(() => {
 		if ($sessionExpiredTick === 0) return;
 		disconnectRealtime();
@@ -116,7 +136,12 @@
 		{
 			href: resolve('/transactions'),
 			labelKey: 'nav.transactions',
-			isActive: (p) => p.startsWith('/transactions')
+			isActive: (p) => p.startsWith('/transactions') && !p.startsWith('/transactions/inbox')
+		},
+		{
+			href: resolve('/transactions/inbox'),
+			labelKey: 'nav.inbox',
+			isActive: (p) => p.startsWith('/transactions/inbox')
 		},
 		{
 			href: resolve('/budget'),
@@ -184,6 +209,11 @@
 			labelKey: 'settings.tab.templates',
 			feature: 'transaction_templates',
 			isActive: (p) => p.startsWith('/transaction-templates')
+		},
+		{
+			path: '/category-rules',
+			labelKey: 'categoryRules.title',
+			isActive: (p) => p.startsWith('/category-rules')
 		}
 	];
 
@@ -459,8 +489,17 @@
 									<a
 										href={item.href}
 										class={navLinkClass(isNavItemActive(item), 'btn-ghost btn-nav')}
-										aria-current={isNavItemActive(item) ? 'page' : undefined}>{$_(item.labelKey)}</a
+										aria-current={isNavItemActive(item) ? 'page' : undefined}
 									>
+										{#if item.labelKey === 'nav.inbox' && inboxCount > 0}
+											<span class="inline-flex items-center gap-1.5">
+												{$_(item.labelKey)}
+												<span class="nav-badge" aria-label={String(inboxCount)}>{inboxCount}</span>
+											</span>
+										{:else}
+											{$_(item.labelKey)}
+										{/if}
+									</a>
 								{/if}
 							{/each}
 							<NavDropdown
@@ -499,8 +538,17 @@
 								class={navLinkClass(isNavItemActive(item), 'nav-mobile-link')}
 								aria-current={isNavItemActive(item) ? 'page' : undefined}
 								role="menuitem"
-								onclick={closeNav}>{$_(item.labelKey)}</a
+								onclick={closeNav}
 							>
+								{#if item.labelKey === 'nav.inbox' && inboxCount > 0}
+									<span class="flex w-full items-center justify-between gap-2">
+										<span>{$_(item.labelKey)}</span>
+										<span class="nav-badge">{inboxCount}</span>
+									</span>
+								{:else}
+									{$_(item.labelKey)}
+								{/if}
+							</a>
 						{/each}
 						<button
 							type="button"

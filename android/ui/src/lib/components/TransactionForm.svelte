@@ -2,6 +2,7 @@
 	import { untrack } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import {
+		evaluateCategoryRules,
 		listAccounts,
 		listCategories,
 		listCredits,
@@ -76,6 +77,7 @@
 		createPrefill?: CreatePrefill | null;
 		onclose: () => void;
 		onsaved: () => void;
+		onsavedTx?: (tx: Transaction) => void;
 	};
 
 	let {
@@ -89,7 +91,8 @@
 		initialDescription = '',
 		createPrefill = null,
 		onclose,
-		onsaved
+		onsaved,
+		onsavedTx
 	}: Props = $props();
 
 	let txType = $state<'expense' | 'income'>('expense');
@@ -116,6 +119,8 @@
 	let optionalDetailsOpen = $state(false);
 	let timeExpanded = $state(false);
 	let timeInput = $state('');
+	let ruleHint = $state('');
+	let evaluateTimer: ReturnType<typeof setTimeout> | undefined;
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
 	const editing = $derived(!!transaction);
@@ -312,6 +317,50 @@
 		merchants = merchantsRes.status === 'fulfilled' ? merchantsRes.value : [];
 		allTags = tagsRes.status === 'fulfilled' ? tagsRes.value : [];
 		await loadCategories();
+		if (!editSource) scheduleRuleEvaluate();
+	}
+
+	function scheduleRuleEvaluate() {
+		if (editing) return;
+		if (evaluateTimer) clearTimeout(evaluateTimer);
+		evaluateTimer = setTimeout(() => void runRuleEvaluate(), 350);
+	}
+
+	async function runRuleEvaluate() {
+		if (editing) return;
+		if (variant === 'modal' && !open) return;
+		try {
+			const res = await evaluateCategoryRules({
+				description: description.trim() || undefined,
+				category_id: categoryId || undefined,
+				subcategory_id: subcategoryId || undefined
+			});
+			if (
+				res.account_suggestion?.account_id &&
+				accounts.some((a) => a.id === res.account_suggestion!.account_id)
+			) {
+				selectedAccount = res.account_suggestion.account_id;
+			}
+			if (res.text_matches.length === 1 && !categoryId) {
+				const match = res.text_matches[0];
+				categoryId = match.category_id;
+				subcategoryId = match.subcategory_id ?? '';
+				try {
+					subcategories = categoryId
+						? await loadSubcategoriesForCategory(categoryId, subcategoryId)
+						: [];
+				} catch {
+					subcategories = [];
+				}
+				ruleHint = $_('categoryRules.hintApplied');
+			} else if (res.text_matches.length > 1) {
+				ruleHint = $_('categoryRules.hintAmbiguous');
+			} else {
+				ruleHint = '';
+			}
+		} catch {
+			ruleHint = '';
+		}
 	}
 
 	async function loadCategories() {
@@ -392,6 +441,7 @@
 		} catch {
 			subcategories = [];
 		}
+		scheduleRuleEvaluate();
 	}
 
 	function onCreditChange(nextCreditId: string) {
@@ -453,13 +503,15 @@
 				tag_names: tagNames,
 				transaction_date: fromDatetimeLocalValue(dateTimeValue, tz)
 			};
+			let saved: Transaction;
 			if (transaction) {
-				await updateTransaction(transaction.id, payload);
+				saved = await updateTransaction(transaction.id, payload);
 			} else {
-				await createTransaction(payload);
+				saved = await createTransaction(payload);
 			}
 			if (variant === 'modal') open = false;
 			toast($_('common.saved'));
+			onsavedTx?.(saved);
 			onsaved();
 		} catch (err) {
 			toast.fromError(err);
@@ -532,6 +584,9 @@
 			usePortal
 			onchange={(next) => void onCategoryChange(next)}
 		/>
+		{#if ruleHint}
+			<p class="text-sm" style:color="var(--primary)">{ruleHint}</p>
+		{/if}
 
 		{#if isCreditPaymentMode}
 			<Select
@@ -554,6 +609,7 @@
 				options={subcategoryOptions}
 				usePortal
 				allowCreate
+				onchange={() => scheduleRuleEvaluate()}
 				placeholder={$_('transactions.field.newSubcategory')}
 				createLabel={$_('transactions.field.createNamed', {
 					values: { name: subcategoryQuery.trim() || '…' }
@@ -616,7 +672,12 @@
 						<label class="mb-1 block text-sm font-medium" for="tx-desc"
 							>{$_('transactions.field.description')}</label
 						>
-						<input id="tx-desc" class="input w-full" bind:value={description} />
+						<input
+							id="tx-desc"
+							class="input w-full"
+							bind:value={description}
+							oninput={() => scheduleRuleEvaluate()}
+						/>
 					</div>
 
 					<Combobox

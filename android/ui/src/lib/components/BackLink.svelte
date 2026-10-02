@@ -17,6 +17,8 @@
 		| '/settings/bank-notifications/history'
 		| '/settings/import'
 		| '/transaction-templates'
+		| '/category-rules'
+		| '/transactions/inbox'
 		| '/admin'
 		| '/admin/system'
 		| '/admin/backups'
