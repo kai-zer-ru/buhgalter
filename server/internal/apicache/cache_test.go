@@ -38,6 +38,41 @@ func TestMiddlewareCachesGET(t *testing.T) {
 	}
 }
 
+func TestMiddlewareDoesNotInvalidateOnFailedWrite(t *testing.T) {
+	cache := New()
+	calls := 0
+	handler := Middleware(cache)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, `{"n":%d}`, calls)
+	}))
+
+	userID := "user-1"
+	withUser := func(r *http.Request) *http.Request {
+		ctx := context.WithValue(r.Context(), auth.AuthContextKey, auth.AuthInfo{
+			User: auth.User{ID: userID},
+		})
+		return r.WithContext(ctx)
+	}
+
+	handler.ServeHTTP(httptest.NewRecorder(), withUser(httptest.NewRequest(http.MethodGet, "/api/v1/dashboard", nil)))
+	handler.ServeHTTP(httptest.NewRecorder(), withUser(httptest.NewRequest(http.MethodGet, "/api/v1/dashboard", nil)))
+	if calls != 1 {
+		t.Fatalf("expected cache hit, calls=%d", calls)
+	}
+
+	postReq := withUser(httptest.NewRequest(http.MethodPost, "/api/v1/transactions", nil))
+	handler.ServeHTTP(httptest.NewRecorder(), postReq)
+	handler.ServeHTTP(httptest.NewRecorder(), withUser(httptest.NewRequest(http.MethodGet, "/api/v1/dashboard", nil)))
+	if calls != 2 {
+		t.Fatalf("failed write must not drop GET cache, calls=%d", calls)
+	}
+}
+
 func TestMiddlewareInvalidatesUserCacheOnWrite(t *testing.T) {
 	cache := New()
 	calls := 0

@@ -11,7 +11,7 @@
 | Файл | Назначение |
 |------|------------|
 | `server/internal/apicache/cache.go` | Хранилище, TTL, эпоха |
-| `server/internal/apicache/middleware.go` | Кеширование GET (`SetIfEpoch`), инвалидация при POST/PUT/PATCH/DELETE |
+| `server/internal/apicache/middleware.go` | Кеширование GET (`SetIfEpoch`), инвалидация при успешных POST/PUT/PATCH/DELETE (2xx) |
 | `server/internal/httpserver/server.go` | Подключение middleware к маршрутам API |
 
 ## TTL
@@ -21,7 +21,7 @@
 | Справочники (`/banks`, `/categories`, `/debtors`, `/merchants`, `/tags`, `/transaction-templates`) | 5 мин |
 | Остальные GET (счета, дашборд, операции, статистика и т.д.) | 1 мин |
 
-TTL — страховка; при любой мутации кеш пользователя сбрасывается сразу.
+TTL — страховка; при **успешной** мутации (ответ 2xx) кеш пользователя сбрасывается сразу. Ошибки 4xx/5xx кеш не трогают — данные на сервере не менялись.
 
 GET, начатый **до** мутации, не должен снова заполнить кеш **после** инвалидации: иначе следующий запрос до 1 мин отдаёт старый дашборд/список (операция «есть на одном экране и нет на другом»). У кеша есть **эпоха**: ответ GET кладётся через `SetIfEpoch` только если с момента miss не было `InvalidateUser` / `Clear`. На клиенте то же для in-flight GET и фонового SWR: `writeRefCache` пропускается, если за время запроса выросли `cacheEpoch` (`clearRefCache` или `invalidateRefCachePrefix`).
 
@@ -48,7 +48,7 @@ GET, начатый **до** мутации, не должен снова зап
 
 ## Инвалидация
 
-- Любой `POST` / `PUT` / `PATCH` / `DELETE` авторизованного пользователя — сброс всех ключей `u:{user_id}:*`
+- Успешный (2xx) `POST` / `PUT` / `PATCH` / `DELETE` авторизованного пользователя — сброс всех ключей `u:{user_id}:*`
 - Исключение: `POST /api/v1/import/jobs` — кеш не сбрасывается (фоновый commit ещё не меняет данные). Сброс на сервере (`InvalidateUser`) и на клиенте — когда job `done`/`failed`
 - `POST /setup`, restore — полная очистка кеша
 - Logout, настройки, админка — через тот же middleware

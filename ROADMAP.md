@@ -362,6 +362,7 @@
 - [x] БАГ. Android: после отпечатка приложение часто само сворачивается; главная и меню (drawer) тормозят на несколько секунд. Фикс: quiet wake не `moveTaskToBack` после PIN/отпечатка/лаунчера; wake при PIN смотрит `AppLockNative`, не скрытие сумм виджетов; пауза отпечатка не flush/background-lock; heavy warm после ~1.8 с ([android-client-platform.md](docs/android-client-platform.md))
 - [x] Сервер: долги и каталоги (merchant/tag/шаблоны операций) — несмапленная ошибка домена → **500**, не 200/201 с пустым телом
 - [x] Сервер: бюджет — auto-copy на GET без 500 при гонке UNIQUE; создание бюджета и `budget_period` в одной транзакции
+- [x] Сервер: apicache — инвалидация GET-кеша только после **успешных** мутаций (2xx), не после 4xx/5xx ([ui-api-cache.md](docs/ui-api-cache.md))
 
 ## v1.8.0
 

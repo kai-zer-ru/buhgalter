@@ -100,12 +100,16 @@ func Middleware(cache *Cache) func(http.Handler) http.Handler {
 
 			rec := &responseRecorder{ResponseWriter: w}
 			next.ServeHTTP(rec, r)
-			if isMutating(r.Method) && shouldInvalidateAfterWrite(r.URL.Path) {
+			if isMutating(r.Method) && shouldInvalidateAfterWrite(r.URL.Path) && isSuccessStatus(rec.status) {
 				invalidateForRequest(cache, r)
 			}
 			rec.flush()
 		})
 	}
+}
+
+func isSuccessStatus(status int) bool {
+	return status >= http.StatusOK && status < http.StatusMultipleChoices
 }
 
 func isMutating(method string) bool {
