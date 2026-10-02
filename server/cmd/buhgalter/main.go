@@ -32,7 +32,7 @@ import (
 )
 
 var (
-	version       = "1.7.1"
+	version       = "1.8.0"
 	installMethod = "dev"
 	buildCommit   = "unknown"
 	buildTime     = ""

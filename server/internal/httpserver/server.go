@@ -323,6 +323,8 @@ func (s *Server) Handler() http.Handler {
 				mod.Use(features.RequireFeature(dbHandle, features.Notifications))
 				mod.Get("/notifications", userHandler.GetNotifications)
 				mod.Put("/notifications", userHandler.PutNotifications)
+				mod.Get("/notification-intercept/bindings", userHandler.GetNotificationInterceptBindings)
+				mod.Put("/notification-intercept/bindings", userHandler.PutNotificationInterceptBindings)
 				mod.Post("/notifications/test", userHandler.SendNotificationTest)
 				mod.Post("/notifications/templates/preview", userHandler.PreviewNotificationTemplate)
 				mod.Post("/notifications/templates/reset", userHandler.ResetNotificationTemplates)

@@ -23,7 +23,7 @@ info:
     Лимит кредитной карты меняется только через `PUT /accounts/{id}/credit-limit` (см. [ui-credit-cards.md](../ui-credit-cards.md)).
     В форме «Начальный баланс» — значение `initial_balance`, не текущий `balance_display` (см. [data-model.md](../data-model.md)).
     Подробнее — [ui-row-actions.md](../ui-row-actions.md).
-  version: 1.7.1
+  version: 1.8.0
 servers:
   - url: /api/v1
 paths:
@@ -524,6 +524,51 @@ paths:
                 $ref: '#/components/schemas/NotificationSettings'
         '400':
           description: Ошибка валидации (неверный trigger_type, placeholder, длина шаблона и т.д.)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                validation:
+                  $ref: '#/components/examples/ApiErrorValidation'
+  /user/notification-intercept/bindings:
+    get:
+      summary: Привязки банков и карт для перехвата уведомлений (Android)
+      description: |
+        Счёт → банк (push/SMS) и карта `*XXXX` → счёт. Хранится на сервере per-user,
+        чтобы настройки переживали переустановку приложения. Включение перехвата и разрешения
+        остаются на устройстве.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Текущие привязки
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationInterceptBindings'
+    put:
+      summary: Заменить привязки перехвата уведомлений
+      description: |
+        Полная замена списков. Счета должны быть активными `bank` или `credit_card` пользователя;
+        `bank_id` — из каталога банков.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationInterceptBindings'
+      responses:
+        '200':
+          description: Сохранённые привязки
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationInterceptBindings'
+        '400':
+          description: Ошибка валидации
           content:
             application/json:
               schema:
@@ -4178,6 +4223,43 @@ components:
           type: string
           minLength: 1
           maxLength: 500
+    NotificationInterceptBankBinding:
+      type: object
+      required: [package_name, bank_id, account_id]
+      properties:
+        package_name:
+          type: string
+          description: Package Android-приложения банка
+        bank_id:
+          type: string
+          description: ID банка из каталога
+        account_id:
+          type: string
+          description: Счёт пользователя для списаний из push этого банка
+    NotificationInterceptCardBinding:
+      type: object
+      required: [bank_id, last4, account_id]
+      properties:
+        bank_id:
+          type: string
+        last4:
+          type: string
+          pattern: '^[0-9]{4}$'
+          description: Последние 4 цифры карты
+        account_id:
+          type: string
+    NotificationInterceptBindings:
+      type: object
+      required: [bank_bindings, card_bindings]
+      properties:
+        bank_bindings:
+          type: array
+          items:
+            $ref: '#/components/schemas/NotificationInterceptBankBinding'
+        card_bindings:
+          type: array
+          items:
+            $ref: '#/components/schemas/NotificationInterceptCardBinding'
     NotificationSettingsUpdate:
       type: object
       properties:

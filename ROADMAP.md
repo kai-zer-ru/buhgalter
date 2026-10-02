@@ -369,12 +369,12 @@
 
 ## v1.8.0
 
-Видимость финансов и разбор входящего (перехват, импорт, бюджет). Semver: **minor** = новый функционал ([project-context](bmad_docs/project-context.md)).
+Видимость финансов и разбор входящего (перехват, импорт, бюджет). 
 
 - [ ] [Графики /stats и нетто-капитал](roadmap/stats-charts-net-worth.md) — Chart.js на web; `GET /stats/net-worth`; блок на web и Android (без графиков)
 - [ ] [Правила категорий + очередь «разобрать»](roadmap/category-rules-inbox.md) — правила (категория → счёт, текст → категория); inbox без категории
 - [ ] [Бюджет: rollover, прогноз, конверты](roadmap/budget-post-mvp.md) — перенос остатка, прогноз из периодических; минимальный UX «конвертов» (доступно = лимит + перенос − spent)
-- [ ] [Кнопки в Telegram / MAX](roadmap/telegram-max-buttons.md) — MVP: **URL-кнопки** в исходящих уведомлениях («Открыть долг/кредит»); callback — позже
+- [x] БАГ. Не сохраняются настройки банковских карт и привязки их к счетам при переустановке приложения — `GET/PUT /user/notification-intercept/bindings` на сервере, синхронизация в Android при входе и при сохранении настроек
 
 ## v1.9.0
 
@@ -420,6 +420,9 @@
 - [ ] [Webhook](roadmap/webhooks.md) — исходящие события для внешних интеграций
 - [ ] [Home Assistant](roadmap/home-assistant.md) — custom component или REST-документация
 - [ ] [Эволюция уведомлений](roadmap/notifications-evolution.md) — частота, тихие часы, эскалация, wizard
+- [ ] [Кнопки в Telegram / MAX](roadmap/telegram-max-buttons.md) — MVP: **URL-кнопки** в исходящих уведомлениях («Открыть долг/кредит»); callback — позже
+- [ ] [Открытие приложения через ссылку](roadmap/app-open-links.md) — https **и локальные** (`http` LAN / `:8765`, localhost) при совпадении с профилем сервера в APK; custom scheme для виджетов; единый builder (notify / Telegram)
+- [ ] [Внутренняя ссылка в уведомлениях](roadmap/app-open-links.md#cap-6--внутренний-base-когда-external_url-пуст) — fallback вместо текста «настройте внешний URL»; LAN / scheme / опциональный internal base
 
 ## На подумать
 

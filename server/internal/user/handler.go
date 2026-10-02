@@ -16,6 +16,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/notificationintercept"
 	"github.com/kai-zer-ru/buhgalter/internal/notify"
 )
 
@@ -502,6 +503,61 @@ func (h *Handler) secretBoxForUpdate(ctx context.Context, req notify.UpdateSetti
 		return nil, nil
 	}
 	return h.mustSecretBox(ctx)
+}
+
+func (h *Handler) GetNotificationInterceptBindings(w http.ResponseWriter, r *http.Request) {
+	info, ok := auth.FromContext(r.Context())
+	if !ok {
+		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
+		return
+	}
+	view, err := notificationintercept.GetSettings(r.Context(), h.Store.DB(), info.User.ID)
+	if err != nil {
+		if db.IsBusy(err) {
+			slog.Warn("get notification intercept bindings: database busy", "user_id", info.User.ID, "err", err)
+			apperror.WriteR(w, r, http.StatusServiceUnavailable, apperror.ServiceUnavailable)
+			return
+		}
+		slog.Warn("get notification intercept bindings failed", "user_id", info.User.ID, "err", err)
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
+}
+
+func (h *Handler) PutNotificationInterceptBindings(w http.ResponseWriter, r *http.Request) {
+	info, ok := auth.FromContext(r.Context())
+	if !ok {
+		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
+		return
+	}
+	var req notificationintercept.UpdateInput
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_INVALID_JSON")
+		return
+	}
+	view, err := notificationintercept.ReplaceSettings(r.Context(), h.Store.DB(), info.User.ID, req)
+	if err != nil {
+		msg := err.Error()
+		switch msg {
+		case "ERR_NOTIFICATION_INTERCEPT_BINDING_INVALID",
+			"ERR_NOTIFICATION_INTERCEPT_BANK_UNKNOWN",
+			"ERR_NOTIFICATION_INTERCEPT_ACCOUNT_TYPE",
+			"ERR_ACCOUNT_NOT_FOUND",
+			"ERR_ACCOUNT_ARCHIVED":
+			apperror.WriteDetail(w, r, http.StatusBadRequest, apperror.ValidationError, apperror.ValidationError, msg)
+			return
+		}
+		if db.IsBusy(err) {
+			slog.Warn("put notification intercept bindings: database busy", "user_id", info.User.ID, "err", err)
+			apperror.WriteR(w, r, http.StatusServiceUnavailable, apperror.ServiceUnavailable)
+			return
+		}
+		slog.Warn("put notification intercept bindings failed", "user_id", info.User.ID, "err", err)
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
 }
 
 func (h *Handler) mustSecretBox(ctx context.Context) (*notify.SecretBox, error) {

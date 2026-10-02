@@ -43,6 +43,8 @@ func ResetUserData(ctx context.Context, database *sql.DB, userID string) error {
 		{"import keys", func() error { return q.DeleteUserImportIdempotency(ctx, userID) }},
 		{"change events", func() error { return q.DeleteUserChangeEvents(ctx, userID) }},
 		{"notification log", func() error { return q.DeleteUserNotificationLog(ctx, userID) }},
+		{"notification intercept bank bindings", func() error { return q.DeleteNotificationInterceptBankBindings(ctx, userID) }},
+		{"notification intercept card bindings", func() error { return q.DeleteNotificationInterceptCardBindings(ctx, userID) }},
 	}
 	for _, step := range steps {
 		if err := step.fn(); err != nil {

@@ -213,6 +213,20 @@ type Merchant struct {
 	CreatedAt string `json:"created_at"`
 }
 
+type NotificationInterceptBankBinding struct {
+	UserID      string `json:"user_id"`
+	AccountID   string `json:"account_id"`
+	BankID      string `json:"bank_id"`
+	PackageName string `json:"package_name"`
+}
+
+type NotificationInterceptCardBinding struct {
+	UserID    string `json:"user_id"`
+	BankID    string `json:"bank_id"`
+	Last4     string `json:"last4"`
+	AccountID string `json:"account_id"`
+}
+
 type NotificationLog struct {
 	ID          string  `json:"id"`
 	UserID      string  `json:"user_id"`

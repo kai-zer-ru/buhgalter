@@ -21,12 +21,19 @@ import {
 	syncNativeCapture
 } from './plugin';
 import { draftTxType } from './prefill';
-import { getCurrentInterceptSettings, loadInterceptSettings } from './settings';
+import {
+	getCurrentInterceptSettings,
+	loadInterceptSettings,
+	syncInterceptSettingsFromServer
+} from './settings';
 import type { InterceptDraft, RawBankNotification } from './types';
 
 /** Push current user's enabled flag + allowlist into native store. */
 export async function syncInterceptNativeFromSettings(userId?: string | null): Promise<void> {
 	const id = userId ?? get(user)?.id;
+	if (id) {
+		await syncInterceptSettingsFromServer(id);
+	}
 	const settings = id ? loadInterceptSettings(id) : getCurrentInterceptSettings();
 	await syncNativeCapture({
 		enabled: settings.enabled,

@@ -370,6 +370,23 @@ export type NotificationSettingsUpdate = {
 	templates?: Array<{ trigger_type: string; template: string }>;
 };
 
+export type NotificationInterceptBankBinding = {
+	package_name: string;
+	bank_id: string;
+	account_id: string;
+};
+
+export type NotificationInterceptCardBinding = {
+	bank_id: string;
+	last4: string;
+	account_id: string;
+};
+
+export type NotificationInterceptBindings = {
+	bank_bindings: NotificationInterceptBankBinding[];
+	card_bindings: NotificationInterceptCardBinding[];
+};
+
 export type AdminSettings = {
 	external_url: string;
 	secret_key_set: boolean;
@@ -542,6 +559,17 @@ export function getNotificationSettings() {
 
 export function putNotificationSettings(payload: NotificationSettingsUpdate) {
 	return request<NotificationSettings>('/api/v1/user/notifications', {
+		method: 'PUT',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function getNotificationInterceptBindings() {
+	return request<NotificationInterceptBindings>('/api/v1/user/notification-intercept/bindings');
+}
+
+export function putNotificationInterceptBindings(payload: NotificationInterceptBindings) {
+	return request<NotificationInterceptBindings>('/api/v1/user/notification-intercept/bindings', {
 		method: 'PUT',
 		body: JSON.stringify(payload)
 	});
