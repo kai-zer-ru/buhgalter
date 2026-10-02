@@ -373,7 +373,7 @@ curl -v https://platform-api2.max.ru/
 
 ## Обновление
 
-Сделайте бэкап, замените бинарник или образ, перезапустите. Миграции применятся при старте. Release notes текущего релиза — [v1.7.0](docs/release-notes-v1.7.0.md).
+Сделайте бэкап, замените бинарник или образ, перезапустите. Миграции применятся при старте. Release notes текущего релиза — [v1.7.1](docs/release-notes-v1.7.1.md) (patch: надёжность учёта, безопасность, кеш; новых миграций БД нет).
 
 Если стоите за nginx — для живых обновлений веба добавьте `location /api/v1/realtime` с `Upgrade` (см. [Nginx](#nginx-reverse-proxy--https)); без этого веб останется на SWR.
 
@@ -418,7 +418,7 @@ docker compose up -d
 
 ## Документация
 
-Справочники по установке, данным, UI и API — [docs/README.md](docs/README.md). История изменений — [CHANGELOG.md](CHANGELOG.md). Последний релиз — [v1.7.0](docs/release-notes-v1.7.0.md).
+Справочники по установке, данным, UI и API — [docs/README.md](docs/README.md). История изменений — [CHANGELOG.md](CHANGELOG.md). Последний релиз — [v1.7.1](docs/release-notes-v1.7.1.md).
 
 ## API-документация
 

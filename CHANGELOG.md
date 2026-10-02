@@ -7,15 +7,63 @@
 внутри — **Добавлено** / **Изменено** / **Исправлено** / **Удалено** (и при необходимости **Техническое**).
 Исторические секции до этого соглашения не переписываются.
 
-Подробные release notes для пользователей: [docs/release-notes-v1.7.0.md](docs/release-notes-v1.7.0.md).
+Подробные release notes для пользователей: [docs/release-notes-v1.7.1.md](docs/release-notes-v1.7.1.md).
 
 ## [Unreleased]
 
+## [v1.7.1] — 2026-10-02
+
+> **ОБЯЗАТЕЛЬНО СДЕЛАЙТЕ БЕКАП!** Перед обновлением сохраните копию базы (`data/buhgalter.db`) и каталога `backups/`. Новых миграций БД нет.
+
+### Android
+
+#### Исправлено
+
+- Офлайн и сетевые ошибки: единое человекочитаемое сообщение вместо сырого текста (HTTP-код, URL запроса)
+- После отпечатка / PIN приложение реже само сворачивается; меньше задержек главной и бокового меню сразу после разблокировки ([android-client-platform.md](docs/android-client-platform.md))
+
+### Web
+
+#### Изменено
+
+- Плановый остаток на главной: подпись учитывает запланированные платежи по **кредитам** текущего месяца (вместе с подписками и периодическими)
+
+#### Исправлено
+
+- При живом WebSocket главная могла показывать устаревшие балансы (`0.00`), а страница счёта — актуальные: сброс ledger-кеша на первом `onopen`, обогащение `/accounts*` из dashboard, `hint_paths` для переводов ([ui-api-cache.md](docs/ui-api-cache.md))
+- Сразу после создания операции главная, счета и список могли расходиться до истечения TTL: **эпоха** серверного GET-кеша и клиентского ref-cache — in-flight GET после `clearRefCache` не записывает stale-снимок
+
 ### Server
+
+#### Исправлено
+
+- ExternalAccess: `localhost` / `127.0.0.1` / `::1` в Host не обходят проверку с удалённого IP; `X-Forwarded-Host` не используется ([install/nginx.md](docs/install/nginx.md))
+- Бан пользователя удаляет API-токены, не только сессии ([api/user-status.md](docs/api/user-status.md))
+- Битый `expires_at` API-токена — истёкший (fail-closed); смена пароля отзывает чужие сессии ([api/authentication.md](docs/api/authentication.md))
+- `forecast_balance`: просроченная подписка прошлого месяца не суммируется со списанием текущего
+- Архивация/удаление cash/bank: остаток и статус в одной транзакции ([accounts-archive-delete.md](docs/accounts-archive-delete.md))
+- Create/Update/Transfer операций: запись, теги и `current_balance` атомарно
+- Платёж на кредитную карту: проверка лимита под блокировкой строки счёта
+- Подписки/периодика: списание и сдвиг `next_run` в одной транзакции (нет двойного списания при ошибке Mark)
+- Восстановление графика кредита с учётом `credit_kind`; `paid_amount` не выше тела кредита ([data-model.md](docs/data-model.md))
+- Импорт: `done` после успешной записи статуса; `Idempotency-Key` без гонки дубля ([import/cubux.md](docs/import/cubux.md))
+- Restore БД: `.bak` не удаляется до успешного `Reopen`; `Manager.Reopen` не закрывает живой handle при ошибке `Open`
+- Scheduler: `lastRun` только после успешного ApplyDue
+- Notify: dedup только `sent`; worker не активирует `future` при выключенных плановых уведомлениях ([notifications.md](docs/notifications.md))
+- Долги и каталоги (merchant/tag/шаблоны): несмапленная ошибка → 500, не 200/201 с пустым JSON
+- Бюджет: auto-copy на GET без 500 при UNIQUE-гонке; `budget` + `budget_period` в одной транзакции
+- `PUT /accounts/{id}`: некорректные суммы автопополнения → 400, не тихий 0
+
+#### Изменено
+
+- apicache: инвалидация GET-кеша и realtime `invalidate` только после **успешных** мутаций (2xx), не после 4xx/5xx ([ui-api-cache.md](docs/ui-api-cache.md))
+- GET-кеш: эпоха (`SetIfEpoch`) — ответ GET, начатый до мутации, не попадает в кеш после инвалидации
 
 #### Техническое
 
-- Release workflow: `goreleaser` зависит от `android-apk` и `docker`; повторный CI на теге `v*` убран (`ci.yml` + job `test` в `release.yml`)
+- [docs/release-notes-v1.7.1.md](docs/release-notes-v1.7.1.md)
+- OpenAPI **1.7.1**; версия сборки **1.7.1**
+- Release workflow: `goreleaser` ждёт `android-apk` и `docker`; на теге `v*` не гоняется повторный полный CI (`ci.yml` + job `test` в `release.yml`)
 
 ## [v1.7.0] — 2026-09-28
 

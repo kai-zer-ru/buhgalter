@@ -364,6 +364,7 @@
 - [x] Сервер: бюджет — auto-copy на GET без 500 при гонке UNIQUE; создание бюджета и `budget_period` в одной транзакции
 - [x] Сервер: apicache — инвалидация GET-кеша только после **успешных** мутаций (2xx), не после 4xx/5xx ([ui-api-cache.md](docs/ui-api-cache.md))
 - [x] Сервер: `PUT /accounts/{id}` — некорректные суммы автопополнения (threshold/target) → 400, а не тихий 0
+- [x] **Docs:** [Release notes](docs/release-notes-v1.7.1.md) · [CHANGELOG.md](CHANGELOG.md) · [ui-api-cache.md](docs/ui-api-cache.md) · [install/nginx.md](docs/install/nginx.md) · [android-client-platform.md](docs/android-client-platform.md)
 
 ## v1.8.0
 
