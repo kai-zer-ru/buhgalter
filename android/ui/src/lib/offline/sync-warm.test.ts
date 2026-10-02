@@ -6,7 +6,12 @@ import {
 	WARM_BACKGROUND_COOLDOWN_MS
 } from '$lib/offline/sync';
 import { resetOutboxForTests } from '$lib/offline/store';
+import { writeRefCache } from '$lib/offline/ref-cache';
 import * as client from '$lib/api/client';
+
+function seedChangeCursor() {
+	writeRefCache('__internal_tx_changes_cursor__', { user_id: 'test-user', since_id: 1 });
+}
 
 vi.mock('$lib/api/cache', () => ({
 	invalidateApiCache: vi.fn()
@@ -57,6 +62,7 @@ vi.mock('$lib/api/client', async (importOriginal) => {
 beforeEach(() => {
 	resetWarmRefCacheForTests();
 	resetOutboxForTests();
+	seedChangeCursor();
 	vi.mocked(client.listCredits).mockReset();
 	vi.mocked(client.getCredit).mockReset();
 	vi.mocked(client.listDebtors).mockReset().mockResolvedValue([]);
@@ -86,6 +92,12 @@ beforeEach(() => {
 describe('warmRefCache credit details', () => {
 	it('fetches each credit detail once after listing active and closed', async () => {
 		await warmRefCache({ force: true });
+		await vi.waitFor(
+			() => {
+				expect(client.getCredit).toHaveBeenCalled();
+			},
+			{ timeout: 2_000 }
+		);
 
 		expect(client.listCredits).toHaveBeenCalledWith({ status: 'active' });
 		expect(client.listCredits).toHaveBeenCalledWith({ status: 'closed' });

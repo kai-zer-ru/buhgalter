@@ -6,3 +6,8 @@ WHERE user_id = sqlc.arg(user_id)
   AND (sqlc.arg(since) = '' OR occurred_at >= sqlc.arg(since))
 ORDER BY id ASC
 LIMIT sqlc.arg(limit);
+
+-- name: MaxUserChangeEventID :one
+SELECT IFNULL(MAX(id), 0)
+FROM user_change_events
+WHERE user_id = ?;

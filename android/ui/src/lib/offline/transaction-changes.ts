@@ -12,6 +12,7 @@ import {
 	listRefCachePaths,
 	publishRefCachePath,
 	readRefCache,
+	runWithSuppressedRefCacheNotifications,
 	writeRefCache
 } from '$lib/offline/ref-cache';
 import { isServerOfflineMode } from '$lib/offline/server-connectivity';
@@ -272,29 +273,95 @@ function readCursor(userId: string): TxChangesCursor {
 	return { user_id: userId || stored.user_id, since_id: stored.since_id ?? 0 };
 }
 
-/** Pull GET /sync/transaction-changes and patch cached operations. */
+let alignCursorInflight: Promise<void> | null = null;
+
+function persistCursor(userId: string, sinceId: number): void {
+	writeRefCache(TX_CHANGES_CURSOR_KEY, {
+		user_id: userId,
+		since_id: sinceId
+	});
+}
+
+/** Fast-forward cursor without patching lists (no applyTransactionChanges). */
+async function seekTransactionChangesCursorHead(userId: string, startSinceId = 0): Promise<number> {
+	let since = startSinceId;
+	await runWithSuppressedRefCacheNotifications(async () => {
+		for (let page = 0; page < 80; page++) {
+			const res = await listTransactionChanges({ since_id: since, limit: 500 });
+			since = res.since_id;
+			if (!res.has_more) break;
+		}
+	});
+	persistCursor(userId, since);
+	return since;
+}
+
+/**
+ * After a full ref-cache warm, skip replaying the entire change log (GET lists are already fresh).
+ * Prefer `watermark=1`; legacy servers — seek head without apply.
+ */
+export function alignTransactionChangesCursor(): Promise<void> {
+	if (alignCursorInflight) return alignCursorInflight;
+	alignCursorInflight = (async () => {
+		if (isServerOfflineMode()) return;
+		const me = readRefCache<{ id?: string }>(AUTH_ME_PATH);
+		const userId = me?.id ?? '';
+		try {
+			const res = await listTransactionChanges({ watermark: true });
+			if (res.changes.length === 0 && !res.has_more) {
+				persistCursor(userId || readCursor(userId).user_id, res.since_id);
+				return;
+			}
+			await seekTransactionChangesCursorHead(userId, 0);
+		} catch (err) {
+			debugLogWarn('sync', 'transaction changes watermark failed', { error: String(err) });
+		}
+	})().finally(() => {
+		alignCursorInflight = null;
+	});
+	return alignCursorInflight;
+}
+
+const INCREMENTAL_CHANGE_PAGES = 2;
+
+/**
+ * Apply at most a couple of pages of new events (resume / background).
+ * Never replays a long backlog — aligns to head when lagging.
+ */
 export async function pullTransactionChanges(): Promise<boolean> {
 	if (isServerOfflineMode()) return false;
 	const me = readRefCache<{ id?: string }>(AUTH_ME_PATH);
 	const userId = me?.id ?? '';
 	let cursor = readCursor(userId);
+	if (cursor.since_id <= 0) {
+		await alignTransactionChangesCursor();
+		return false;
+	}
 	let applied = false;
 	try {
-		for (let page = 0; page < 20; page++) {
-			const res = await listTransactionChanges({ since_id: cursor.since_id, limit: 200 });
-			if (res.changes.length) {
-				applyTransactionChanges(res.changes);
-				applied = true;
+		await runWithSuppressedRefCacheNotifications(async () => {
+			for (let page = 0; page < INCREMENTAL_CHANGE_PAGES; page++) {
+				const res = await listTransactionChanges({ since_id: cursor.since_id, limit: 200 });
+				if (res.changes.length) {
+					applyTransactionChanges(res.changes);
+					applied = true;
+				}
+				cursor = { user_id: userId || cursor.user_id, since_id: res.since_id };
+				persistCursor(userId || cursor.user_id, cursor.since_id);
+				if (!res.has_more) return;
 			}
-			cursor = { user_id: userId || cursor.user_id, since_id: res.since_id };
-			writeRefCache(TX_CHANGES_CURSOR_KEY, cursor);
-			if (!res.has_more) break;
-		}
+			await seekTransactionChangesCursorHead(userId, cursor.since_id);
+		});
 	} catch (err) {
 		debugLogWarn('sync', 'transaction changes pull failed', { error: String(err) });
 		return applied;
 	}
 	return applied;
+}
+
+export function transactionChangesCursorSinceId(): number {
+	const me = readRefCache<{ id?: string }>(AUTH_ME_PATH);
+	return readCursor(me?.id ?? '').since_id;
 }
 
 export function resetTransactionChangesCursorForTests(): void {

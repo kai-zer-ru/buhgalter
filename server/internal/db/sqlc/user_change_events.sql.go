@@ -60,3 +60,16 @@ func (q *Queries) ListUserChangeEventsAfter(ctx context.Context, arg ListUserCha
 	}
 	return items, nil
 }
+
+const maxUserChangeEventID = `-- name: MaxUserChangeEventID :one
+SELECT IFNULL(MAX(id), 0)
+FROM user_change_events
+WHERE user_id = ?
+`
+
+func (q *Queries) MaxUserChangeEventID(ctx context.Context, userID string) (interface{}, error) {
+	row := q.db.QueryRowContext(ctx, maxUserChangeEventID, userID)
+	var ifnull interface{}
+	err := row.Scan(&ifnull)
+	return ifnull, err
+}

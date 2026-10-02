@@ -1319,11 +1319,13 @@ export function listTransactionChanges(params?: {
 	since_id?: number;
 	since?: string;
 	limit?: number;
+	watermark?: boolean;
 }) {
 	const sp = new URLSearchParams();
 	if (params?.since_id != null) sp.set('since_id', String(params.since_id));
 	if (params?.since) sp.set('since', params.since);
 	if (params?.limit != null) sp.set('limit', String(params.limit));
+	if (params?.watermark) sp.set('watermark', '1');
 	const q = sp.toString();
 	return request<TransactionChanges>(`/api/v1/sync/transaction-changes${q ? `?${q}` : ''}`);
 }

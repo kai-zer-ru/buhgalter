@@ -1427,6 +1427,14 @@ paths:
           schema:
             type: integer
             default: 200
+        - name: watermark
+          in: query
+          description: |
+            Если `1` — без `changes`: вернуть только high-water `since_id` (MAX id событий пользователя).
+            Android после полного warm выставляет курсор одним запросом, не проигрывая всю историю.
+          schema:
+            type: string
+            enum: ['1']
       responses:
         '200':
           description: Пакет изменений

@@ -100,7 +100,10 @@ import {
 	setWarmRefCacheActive
 } from '$lib/offline/ref-cache';
 import { debugLogError, debugLogInfo, debugLogWarn } from '$lib/platform/debug-log';
-import { pullTransactionChanges } from '$lib/offline/transaction-changes';
+import {
+	alignTransactionChangesCursor,
+	transactionChangesCursorSinceId
+} from '$lib/offline/transaction-changes';
 
 export const syncState = writable<'idle' | 'syncing'>('idle');
 
@@ -599,13 +602,46 @@ async function warmRefCacheHeavy(): Promise<void> {
 	await Promise.allSettled([warmupTransactionIndex(), warmAllSubcategoriesCache()]);
 }
 
+async function syncTransactionChangesAfterWarm(): Promise<void> {
+	// Lists are fresh from warm — never replay the full change log here (only align cursor).
+	await alignTransactionChangesCursor();
+}
+
+let deferredHeavyWarmInflight: Promise<void> | null = null;
+
+async function runDeferredHeavyWarm(): Promise<void> {
+	if (deferredHeavyWarmInflight) return deferredHeavyWarmInflight;
+	deferredHeavyWarmInflight = (async () => {
+		await yieldToUi();
+		if (WARM_HEAVY_DEFER_MS > 0) {
+			await new Promise<void>((resolve) => setTimeout(resolve, WARM_HEAVY_DEFER_MS));
+		}
+		setWarmRefCacheActive(true);
+		try {
+			await runWithSuppressedRefCacheNotifications(warmRefCacheHeavy);
+		} finally {
+			setWarmRefCacheActive(false);
+			await yieldToUi();
+			flushRefCacheDisk();
+			lastWarmFinishedAt = Date.now();
+		}
+	})().finally(() => {
+		deferredHeavyWarmInflight = null;
+	});
+	return deferredHeavyWarmInflight;
+}
+
 async function warmRefCacheBody(opts: WarmRefCacheOptions): Promise<void> {
 	debugLogInfo('sync', 'warmRefCache started');
+	const cursorAtStart = transactionChangesCursorSinceId();
+	// Manual sync / cold cache: unblock UI — prefetch entity cards in the background.
+	const deferHeavy = opts.force || cursorAtStart <= 0;
 	setWarmRefCacheActive(true);
 	try {
 		const run = async () => {
 			await runWithSuppressedRefCacheNotifications(warmRefCacheCore);
 			if (opts.force) notifyServerDataChanged();
+			if (deferHeavy) return;
 			if (!opts.force && WARM_HEAVY_DEFER_MS > 0) {
 				await new Promise<void>((resolve) => setTimeout(resolve, WARM_HEAVY_DEFER_MS));
 			}
@@ -628,9 +664,12 @@ async function warmRefCacheBody(opts: WarmRefCacheOptions): Promise<void> {
 		scheduleWidgetSnapshotPublish();
 	}
 	try {
-		await pullTransactionChanges();
+		await syncTransactionChangesAfterWarm();
 	} catch (err) {
-		debugLogWarn('sync', 'transaction changes pull failed', { error: String(err) });
+		debugLogWarn('sync', 'transaction changes sync failed', { error: String(err) });
+	}
+	if (deferHeavy) {
+		void runDeferredHeavyWarm();
 	}
 }
 
@@ -642,7 +681,7 @@ export async function warmRefCache(opts: WarmRefCacheOptions = {}): Promise<void
 		Date.now() - lastWarmFinishedAt < WARM_BACKGROUND_COOLDOWN_MS
 	) {
 		debugLogInfo('sync', 'warmRefCache skipped (background cooldown)');
-		await pullTransactionChanges();
+		await alignTransactionChangesCursor();
 		return;
 	}
 	if (warmRefCacheInflight) return warmRefCacheInflight;
@@ -654,6 +693,7 @@ export async function warmRefCache(opts: WarmRefCacheOptions = {}): Promise<void
 
 export function resetWarmRefCacheForTests(): void {
 	warmRefCacheInflight = null;
+	deferredHeavyWarmInflight = null;
 	lastWarmFinishedAt = 0;
 	void import('$lib/widgets/publish').then((m) => m.resetWidgetPublishForTests());
 }

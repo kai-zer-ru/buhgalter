@@ -36,6 +36,23 @@ type ChangesResult struct {
 	Changes    []TransactionChange `json:"changes"`
 }
 
+func maxUserChangeEventID(v any) (int64, error) {
+	switch n := v.(type) {
+	case int64:
+		return n, nil
+	case int:
+		return int64(n), nil
+	case int32:
+		return int64(n), nil
+	case float64:
+		return int64(n), nil
+	case nil:
+		return 0, nil
+	default:
+		return 0, errors.New("unexpected max change id type")
+	}
+}
+
 func clampChangesLimit(limit int) int {
 	if limit <= 0 {
 		return changesDefaultLimit
@@ -114,6 +131,25 @@ func (h *Handler) Changes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
+	if q.Get("watermark") == "1" {
+		maxRaw, err := queries(h.Store.DB()).MaxUserChangeEventID(r.Context(), info.User.ID)
+		if err != nil {
+			apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+			return
+		}
+		maxID, err := maxUserChangeEventID(maxRaw)
+		if err != nil {
+			apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+			return
+		}
+		writeJSON(w, http.StatusOK, ChangesResult{
+			ServerTime: timeutil.FormatUTC(timeutil.NowUTC()),
+			SinceID:    maxID,
+			HasMore:    false,
+			Changes:    []TransactionChange{},
+		})
+		return
+	}
 	afterID, _ := strconv.ParseInt(q.Get("since_id"), 10, 64)
 	if afterID < 0 {
 		afterID = 0

@@ -99,4 +99,21 @@ func TestTransactionChangesFeed(t *testing.T) {
 	if len(delFeed.Changes) != 1 || delFeed.Changes[0].Action != "deleted" || delFeed.Changes[0].EntityID != created.ID {
 		t.Fatalf("expected delete event, got %+v", delFeed.Changes)
 	}
+
+	wmResp, err := env.authedRequest(http.MethodGet, "/api/v1/sync/transaction-changes?watermark=1", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer wmResp.Body.Close()
+	var wm struct {
+		SinceID int64 `json:"since_id"`
+		Changes []any `json:"changes"`
+	}
+	_ = json.NewDecoder(wmResp.Body).Decode(&wm)
+	if len(wm.Changes) != 0 {
+		t.Fatalf("watermark expected no changes, got %+v", wm.Changes)
+	}
+	if wm.SinceID < afterCreate {
+		t.Fatalf("watermark since_id %d < feed since_id %d", wm.SinceID, afterCreate)
+	}
 }
