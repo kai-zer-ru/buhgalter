@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -341,6 +342,20 @@ func ensurePeriod(ctx context.Context, db *sql.DB, budgetID, periodStart string,
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	}); err != nil {
+		if isUniqueConstraintError(err) {
+			row, err := queries(db).GetBudgetPeriod(ctx, sqlcdb.GetBudgetPeriodParams{
+				BudgetID: budgetID, PeriodStart: periodStart,
+			})
+			if err != nil {
+				return Period{}, err
+			}
+			return Period{
+				PeriodStart:    row.PeriodStart,
+				PlannedAmount:  row.PlannedAmount,
+				PlannedDisplay: money.FormatRubles(row.PlannedAmount),
+				RolloverAmount: row.RolloverAmount,
+			}, nil
+		}
 		return Period{}, err
 	}
 	return Period{
@@ -487,6 +502,10 @@ func checkActiveUniqueness(ctx context.Context, db *sql.DB, userID string, in In
 		return ErrDuplicateActive
 	}
 	return nil
+}
+
+func isUniqueConstraintError(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed")
 }
 
 func userTimezone(ctx context.Context, db *sql.DB, userID string) (string, error) {

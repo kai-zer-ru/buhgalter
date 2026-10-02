@@ -3,7 +3,9 @@ package budget_test
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
@@ -426,5 +428,59 @@ func TestBudgetCopyForwardOnlyNextMonth(t *testing.T) {
 	}
 	if len(sumNext2.Items) != 0 {
 		t.Fatalf("expected no budget two months ahead, got %d", len(sumNext2.Items))
+	}
+}
+
+func TestBudgetConcurrentAutoCopySummary(t *testing.T) {
+	ctx, sqlDB, userID, _, categoryID := seedBudgetEnv(t)
+	month, err := budget.CurrentMonthQuery(ctx, sqlDB, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next, err := budget.AddMonths(month, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cat := categoryID
+	_, err = budget.Create(ctx, sqlDB, userID, budget.Input{
+		Name: "Копируемый", Scope: budget.ScopeCategory, CategoryID: &cat,
+		Amount: 10_000, IsActive: true, Month: month, CopyForward: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const workers = 8
+	var wg sync.WaitGroup
+	errs := make(chan error, workers)
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sum, err := budget.Summary(ctx, sqlDB, userID, next)
+			if err != nil {
+				errs <- err
+				return
+			}
+			if len(sum.Items) != 1 {
+				errs <- fmt.Errorf("expected 1 item, got %d", len(sum.Items))
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent summary: %v", err)
+		}
+	}
+	cnt, err := sqlcdb.New(sqlDB).CountActiveBudgetsByUserMonth(ctx, sqlcdb.CountActiveBudgetsByUserMonthParams{
+		UserID: userID, Month: next,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cnt != 1 {
+		t.Fatalf("expected 1 active budget in %s, got %d", next, cnt)
 	}
 }

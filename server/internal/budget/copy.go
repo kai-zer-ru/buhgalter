@@ -81,6 +81,9 @@ func maybeAutoCopyFromPrevious(ctx context.Context, db *sql.DB, userID, month st
 			return err
 		}
 		if _, err := insertBudget(ctx, db, userID, in); err != nil {
+			if errors.Is(err, ErrDuplicateActive) || isUniqueConstraintError(err) {
+				continue
+			}
 			return err
 		}
 	}
@@ -148,6 +151,9 @@ func CopyFromPreviousMonth(ctx context.Context, db *sql.DB, userID, month string
 		}
 		b, err := insertBudget(ctx, db, userID, in)
 		if err != nil {
+			if errors.Is(err, ErrDuplicateActive) || isUniqueConstraintError(err) {
+				continue
+			}
 			return nil, err
 		}
 		out = append(out, b)
@@ -179,7 +185,6 @@ func insertBudget(ctx context.Context, db *sql.DB, userID string, in Input) (Bud
 		return Budget{}, err
 	}
 	if in.Month == "" {
-		var err error
 		in.Month, err = CurrentMonthQuery(ctx, db, userID)
 		if err != nil {
 			return Budget{}, err
@@ -191,9 +196,28 @@ func insertBudget(ctx context.Context, db *sql.DB, userID string, in Input) (Bud
 	if err := checkActiveUniqueness(ctx, db, userID, in, ""); err != nil {
 		return Budget{}, err
 	}
+	tz, err := userTimezone(ctx, db, userID)
+	if err != nil {
+		return Budget{}, err
+	}
+	year, mon, err := parseMonth(in.Month)
+	if err != nil {
+		return Budget{}, err
+	}
+	periodStart, _, err := monthBoundsExclusive(tz, year, mon)
+	if err != nil {
+		return Budget{}, err
+	}
+
 	id := uuid.NewString()
 	now := timeutil.FormatUTC(timeutil.NowUTC())
-	if err := queries(db).InsertBudget(ctx, sqlcdb.InsertBudgetParams{
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return Budget{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	q := queries(tx)
+	if err := q.InsertBudget(ctx, sqlcdb.InsertBudgetParams{
 		ID:             id,
 		UserID:         userID,
 		Name:           in.Name,
@@ -213,19 +237,19 @@ func insertBudget(ctx context.Context, db *sql.DB, userID string, in Input) (Bud
 	}); err != nil {
 		return Budget{}, err
 	}
-	tz, err := userTimezone(ctx, db, userID)
-	if err != nil {
+	periodID := uuid.NewString()
+	if err := q.InsertBudgetPeriod(ctx, sqlcdb.InsertBudgetPeriodParams{
+		ID:             periodID,
+		BudgetID:       id,
+		PeriodStart:    periodStart,
+		PlannedAmount:  in.Amount,
+		RolloverAmount: 0,
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}); err != nil {
 		return Budget{}, err
 	}
-	year, mon, err := parseMonth(in.Month)
-	if err != nil {
-		return Budget{}, err
-	}
-	periodStart, _, err := monthBoundsExclusive(tz, year, mon)
-	if err != nil {
-		return Budget{}, err
-	}
-	if _, err := ensurePeriod(ctx, db, id, periodStart, in.Amount); err != nil {
+	if err := tx.Commit(); err != nil {
 		return Budget{}, err
 	}
 	return Get(ctx, db, userID, id)
