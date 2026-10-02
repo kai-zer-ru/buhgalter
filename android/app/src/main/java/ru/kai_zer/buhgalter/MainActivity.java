@@ -58,7 +58,22 @@ public class MainActivity extends BridgeActivity {
         handleQuietWakeIntent(intent);
     }
 
+    @Override
+    public void onUserInteraction() {
+        super.onUserInteraction();
+        cancelQuietWakeHide();
+        InterceptPendingWake.markUserEngaged();
+    }
+
     private void handleQuietWakeIntent(Intent intent) {
+        boolean quietExtra =
+                intent != null && intent.getBooleanExtra(InterceptPendingWake.EXTRA_QUIET_WAKE, false);
+        if (!quietExtra) {
+            // Launcher, recents, share, deep link — user opened the app.
+            cancelQuietWakeHide();
+            InterceptPendingWake.markUserEngaged();
+            return;
+        }
         InterceptPendingWake.markQuietWakeFromIntent(intent);
         if (!InterceptPendingWake.isQuietWakeActive()) {
             return;
@@ -69,16 +84,30 @@ public class MainActivity extends BridgeActivity {
         }
         quietWakeFallback =
                 () -> {
-                    if (InterceptPendingWake.isQuietWakeActive()) {
-                        InterceptPendingWake.clearQuietWake();
-                        try {
-                            moveTaskToBack(true);
-                        } catch (RuntimeException ignored) {
-                            // ignore
-                        }
+                    boolean pin = AppLockNative.isPinEnabled(MainActivity.this);
+                    boolean hide =
+                            InterceptPendingWake.shouldMoveTaskToBack(
+                                    InterceptPendingWake.isQuietWakeActive(),
+                                    InterceptPendingWake.isUserEngaged(),
+                                    pin);
+                    InterceptPendingWake.clearQuietWake();
+                    if (!hide) {
+                        return;
+                    }
+                    try {
+                        moveTaskToBack(true);
+                    } catch (RuntimeException ignored) {
+                        // ignore
                     }
                 };
         mainHandler.postDelayed(quietWakeFallback, 12_000L);
+    }
+
+    void cancelQuietWakeHide() {
+        if (quietWakeFallback != null) {
+            mainHandler.removeCallbacks(quietWakeFallback);
+            quietWakeFallback = null;
+        }
     }
 
     @Override
@@ -114,10 +143,7 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public void onDestroy() {
-        if (quietWakeFallback != null) {
-            mainHandler.removeCallbacks(quietWakeFallback);
-            quietWakeFallback = null;
-        }
+        cancelQuietWakeHide();
         super.onDestroy();
     }
 

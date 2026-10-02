@@ -3,6 +3,7 @@ import { _ } from 'svelte-i18n';
 import { isNativeApp } from '$lib/platform/native';
 import { toast } from '$lib/toast';
 import { user } from '$lib/stores/auth';
+import { isBiometricPromptActive } from '$lib/platform/app-lock';
 import {
 	addDraftsChangedListener,
 	addPendingAvailableListener,
@@ -70,7 +71,10 @@ export async function initNotificationIntercept(): Promise<() => void> {
 	try {
 		const { App } = await import('@capacitor/app');
 		const handle = await App.addListener('appStateChange', ({ isActive }) => {
-			if (isActive) run();
+			if (isActive) {
+				if (isBiometricPromptActive()) return;
+				run();
+			}
 		});
 		removeResume = () => void handle.remove();
 	} catch {

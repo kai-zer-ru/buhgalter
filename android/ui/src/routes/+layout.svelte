@@ -49,7 +49,7 @@
 	} from '$lib/version-check';
 	import { initDeepLinkListener } from '$lib/android/deep-link';
 	import { initShareTargetListener } from '$lib/android/share-target';
-	import { initNotificationIntercept } from '$lib/android/notification-intercept';
+	import { initNotificationIntercept, cancelQuietWake } from '$lib/android/notification-intercept';
 	import { initDebugLogListeners, debugLogInfo } from '$lib/platform/debug-log';
 	import { isNativeApp } from '$lib/platform/native';
 	import type { User } from '$lib/api/client';
@@ -318,7 +318,12 @@
 {:else if $user && $versionBlockInfo}
 	<VersionBlockScreen info={$versionBlockInfo} />
 {:else if $user && $appLockVisible}
-	<AppLockScreen onunlocked={() => appLockVisible.set(false)} />
+	<AppLockScreen
+		onunlocked={() => {
+			void cancelQuietWake();
+			appLockVisible.set(false);
+		}}
+	/>
 {:else if $user}
 	<AndroidShell onlogout={handleLogout}>
 		{@render children()}

@@ -3,6 +3,7 @@ import { registerPlugin } from '@capacitor/core';
 type AppInstancePlugin = {
 	getStorageNamespace(): Promise<{ namespace: string }>;
 	hideSoftKeyboard(): Promise<void>;
+	setPinLockEnabled?(options: { enabled: boolean }): Promise<void>;
 };
 
 const plugin = registerPlugin<AppInstancePlugin>('AppInstance', {
@@ -25,5 +26,14 @@ export async function hideSoftKeyboard(): Promise<void> {
 		await plugin.hideSoftKeyboard();
 	} catch {
 		// no-op in browser / older APK
+	}
+}
+
+/** Native PIN-on flag for intercept quiet-wake (must not use widget hide-amounts). */
+export async function setNativePinLockEnabled(enabled: boolean): Promise<void> {
+	try {
+		await plugin.setPinLockEnabled?.({ enabled });
+	} catch {
+		// older APK / web
 	}
 }

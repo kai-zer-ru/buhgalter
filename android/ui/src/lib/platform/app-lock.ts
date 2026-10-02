@@ -1,6 +1,7 @@
 import { writable } from 'svelte/store';
 import { tr } from '$lib/i18n';
 import { secureGet, secureRemove, secureSet } from '$lib/platform/secure-store';
+import { flushRefCacheDisk } from '$lib/offline/ref-cache';
 
 export const PIN_LENGTH = 4;
 
@@ -53,6 +54,7 @@ export type PinCredentials = {
 let configCache: AppLockConfig | null = null;
 let sessionUnlocked = false;
 let backgroundAt: number | null = null;
+let biometricPromptDepth = 0;
 let failedAttempts = 0;
 let blockedUntil = 0;
 
@@ -208,6 +210,7 @@ export async function refreshAppLockConfig(force = false): Promise<AppLockConfig
 		showWidgetsWhenLocked: widgetsRaw === '1'
 	};
 	syncLockScreenVisible();
+	syncNativePinLock();
 	return configCache;
 }
 
@@ -237,6 +240,15 @@ export function shouldHideWidgetAmounts(): boolean {
 function syncWidgetLockVisibility(): void {
 	const hideAmounts = shouldHideWidgetAmounts();
 	void import('$lib/widgets/bridge').then((m) => m.setWidgetLockEnabled(hideAmounts));
+}
+
+function syncNativePinLock(): void {
+	const enabled = configCache?.enabled ?? false;
+	void import('$lib/platform/app-instance').then((m) => m.setNativePinLockEnabled(enabled));
+}
+
+export function isBiometricPromptActive(): boolean {
+	return biometricPromptDepth > 0;
 }
 
 export function unlockSession(): void {
@@ -323,6 +335,7 @@ export async function clearAppLock(): Promise<void> {
 	backgroundAt = null;
 	syncLockScreenVisible();
 	syncWidgetLockVisibility();
+	syncNativePinLock();
 }
 
 export async function setBackgroundLockMs(ms: BackgroundLockMs): Promise<void> {
@@ -373,6 +386,8 @@ export async function verifyBiometric(
 	cancelTitle?: string,
 	androidTitle?: string
 ): Promise<boolean> {
+	biometricPromptDepth += 1;
+	void import('$lib/android/notification-intercept/plugin').then((m) => m.cancelQuietWake());
 	try {
 		const { BiometricAuth } = await import('@aparajita/capacitor-biometric-auth');
 		await BiometricAuth.authenticate({
@@ -385,10 +400,21 @@ export async function verifyBiometric(
 		return true;
 	} catch {
 		return false;
+	} finally {
+		biometricPromptDepth = Math.max(0, biometricPromptDepth - 1);
+		void import('@capacitor/app')
+			.then(({ App }) => App.getState())
+			.then((state) => {
+				if (state.isActive) return;
+				noteAppBackground();
+				flushRefCacheDisk();
+			})
+			.catch(() => undefined);
 	}
 }
 
 export function noteAppBackground(): void {
+	if (biometricPromptDepth > 0) return;
 	backgroundAt = Date.now();
 }
 
@@ -422,6 +448,7 @@ export function resetAppLockForTests(): void {
 	configCache = null;
 	sessionUnlocked = false;
 	backgroundAt = null;
+	biometricPromptDepth = 0;
 	failedAttempts = 0;
 	blockedUntil = 0;
 	appLockVisible.set(false);
@@ -430,4 +457,8 @@ export function resetAppLockForTests(): void {
 export function setAppLockConfigForTests(config: Partial<AppLockConfig>): void {
 	configCache = { ...DEFAULT_CONFIG, ...config };
 	syncLockScreenVisible();
+}
+
+export function setBiometricPromptActiveForTests(active: boolean): void {
+	biometricPromptDepth = active ? 1 : 0;
 }

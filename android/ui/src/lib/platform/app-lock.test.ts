@@ -12,6 +12,7 @@ import {
 	retryBlockedMs,
 	setAppLockConfigForTests,
 	setBackgroundLockMs,
+	setBiometricPromptActiveForTests,
 	setPin,
 	setShowWidgetsWhenLocked,
 	shouldHideWidgetAmounts,
@@ -176,5 +177,20 @@ describe('background lock', () => {
 		vi.advanceTimersByTime(30_000);
 		noteAppForeground();
 		expect(shouldShowLockScreen()).toBe(true);
+	});
+
+	it('does not start background idle while the biometric sheet is open', () => {
+		vi.useFakeTimers();
+		setAppLockConfigForTests({
+			enabled: true,
+			backgroundLockMs: 30_000
+		});
+		unlockSession();
+		setBiometricPromptActiveForTests(true);
+		noteAppBackground();
+		vi.advanceTimersByTime(30_000);
+		setBiometricPromptActiveForTests(false);
+		noteAppForeground();
+		expect(shouldShowLockScreen()).toBe(false);
 	});
 });

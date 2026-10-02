@@ -24,6 +24,13 @@ public class AppInstancePlugin extends Plugin {
         call.resolve(ret);
     }
 
+    @PluginMethod
+    public void setPinLockEnabled(PluginCall call) {
+        boolean enabled = Boolean.TRUE.equals(call.getBoolean("enabled", false));
+        AppLockNative.setPinEnabled(getContext(), enabled);
+        call.resolve();
+    }
+
     /** Hide the system IME — used while MoneyInput shows the in-app keypad. */
     @PluginMethod
     public void hideSoftKeyboard(PluginCall call) {

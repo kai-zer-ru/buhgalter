@@ -66,6 +66,7 @@ interface NotificationInterceptPlugin {
 	}>;
 	finishQuietWake(): Promise<{ quiet: boolean }>;
 	isQuietWake(): Promise<{ quiet: boolean }>;
+	cancelQuietWake(): Promise<void>;
 }
 
 const Native = registerPlugin<NotificationInterceptPlugin>('NotificationIntercept');
@@ -482,6 +483,16 @@ export async function finishQuietWake(): Promise<void> {
 	if (!isNativeApp()) return;
 	try {
 		await Native.finishQuietWake();
+	} catch {
+		// ignore
+	}
+}
+
+/** User opened or unlocked the app — never moveTaskToBack for this wake. */
+export async function cancelQuietWake(): Promise<void> {
+	if (!isNativeApp()) return;
+	try {
+		await Native.cancelQuietWake();
 	} catch {
 		// ignore
 	}

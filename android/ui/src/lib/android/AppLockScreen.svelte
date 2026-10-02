@@ -10,6 +10,7 @@
 		verifyBiometric,
 		verifyPin
 	} from '$lib/platform/app-lock';
+	import { cancelQuietWake } from '$lib/android/notification-intercept/plugin';
 
 	type Props = {
 		onunlocked: () => void;
@@ -40,6 +41,7 @@
 	]);
 
 	onMount(() => {
+		void cancelQuietWake();
 		void initBiometric();
 	});
 
@@ -57,6 +59,7 @@
 		if (busy || retryBlockedMs() > 0) return;
 		busy = true;
 		error = null;
+		void cancelQuietWake();
 		const ok = await verifyBiometric(
 			$_('appLock.biometricReason'),
 			$_('common.cancel'),

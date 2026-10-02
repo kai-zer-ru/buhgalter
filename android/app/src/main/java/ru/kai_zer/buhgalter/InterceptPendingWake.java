@@ -14,6 +14,7 @@ final class InterceptPendingWake {
     private static final long WAKE_COOLDOWN_MS = 15_000L;
     private static volatile long lastWakeElapsedMs;
     private static volatile boolean quietWakeActive;
+    private static volatile boolean userEngaged;
 
     private InterceptPendingWake() {}
 
@@ -29,28 +30,52 @@ final class InterceptPendingWake {
         return quietWakeActive;
     }
 
+    static boolean isUserEngaged() {
+        return userEngaged;
+    }
+
     static void clearQuietWake() {
+        quietWakeActive = false;
+    }
+
+    /**
+     * Launcher / recents / PIN / fingerprint: the user is looking at the app.
+     * Clears quiet hide so finishQuietWake must not {@code moveTaskToBack}.
+     */
+    static void markUserEngaged() {
+        userEngaged = true;
         quietWakeActive = false;
     }
 
     static void markQuietWakeFromIntent(Intent intent) {
         if (intent != null && intent.getBooleanExtra(EXTRA_QUIET_WAKE, false)) {
             quietWakeActive = true;
-            intent.removeExtra(EXTRA_QUIET_WAKE);
+            userEngaged = false;
         }
+    }
+
+    /** Hide after processing only if this was a true background wake, not a user open / unlock. */
+    static boolean shouldMoveTaskToBack(boolean quietActive, boolean engaged, boolean pinEnabled) {
+        return quietActive && !engaged && !pinEnabled;
+    }
+
+    static void resetForTests() {
+        quietWakeActive = false;
+        userEngaged = false;
+        lastWakeElapsedMs = 0;
     }
 
     private static void maybeQuietWake(Context app) {
         if (NotificationInterceptPlugin.hasLiveBridge()) {
             return;
         }
-        // PIN/app-lock blocks intercept init until unlock — don't flash the lock screen.
+        // PIN lock: JS intercept waits until unlock — do not flash the lock screen.
         try {
-            if (ru.kai_zer.buhgalter.widgets.WidgetSnapshotStore.isLockEnabled(app)) {
+            if (AppLockNative.isPinEnabled(app)
+                    || ru.kai_zer.buhgalter.widgets.WidgetSnapshotStore.isLockEnabled(app)) {
                 return;
             }
         } catch (RuntimeException ignored) {
-            // prefs may be cold; skip wake
             return;
         }
         long now = SystemClock.elapsedRealtime();

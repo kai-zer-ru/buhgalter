@@ -10,6 +10,7 @@ import {
 	refCacheReadyAny
 } from '$lib/offline/ref-cache';
 import { getAuthToken } from '$lib/platform/auth-token';
+import { isBiometricPromptActive } from '$lib/platform/app-lock';
 import { hasServerUrl, refreshActiveServerUrl } from '$lib/platform/server-url';
 import { probeServerReachability, startServerProbeLoop } from '$lib/offline/server-connectivity';
 import { scheduleSyncOutbox } from '$lib/offline/sync';
@@ -21,8 +22,27 @@ const CORE_WARM_PATHS = [
 	HOME_PLANNED_TRANSACTIONS_PATH
 ];
 
+const DISK_FLUSH_DEFER_MS = import.meta.env.MODE === 'test' ? 0 : 2_000;
+const UNLOCK_WARM_DEFER_MS = import.meta.env.MODE === 'test' ? 0 : 400;
+
 let listenersRegistered = false;
 let syncStarted = false;
+let diskFlushTimer: ReturnType<typeof setTimeout> | null = null;
+let unlockWarmTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleRefCacheDiskFlush() {
+	if (diskFlushTimer !== null) return;
+	diskFlushTimer = setTimeout(() => {
+		diskFlushTimer = null;
+		flushRefCacheDisk();
+	}, DISK_FLUSH_DEFER_MS);
+}
+
+function cancelRefCacheDiskFlush() {
+	if (diskFlushTimer === null) return;
+	clearTimeout(diskFlushTimer);
+	diskFlushTimer = null;
+}
 
 function warmIfAuthenticated(background = false) {
 	if (!getAuthToken()) return;
@@ -64,9 +84,11 @@ export function initNativeOfflineSyncListeners() {
 	void import('@capacitor/app').then(({ App }) => {
 		void App.addListener('appStateChange', ({ isActive }) => {
 			if (!isActive) {
-				flushRefCacheDisk();
+				if (isBiometricPromptActive()) return;
+				scheduleRefCacheDiskFlush();
 				return;
 			}
+			cancelRefCacheDiskFlush();
 			onDeviceNetworkAvailable(true);
 		});
 	});
@@ -78,8 +100,12 @@ export function startOfflineSyncAfterUnlock() {
 	syncStarted = true;
 	// Re-seed form catalogs before warm — cold start after days offline must not wait on /health.
 	reconcileOfflineCatalogsOnUnlock();
-	// Defer one frame so first paint / tap handlers register before network storm.
-	requestAnimationFrame(() => startProbeAndWarm(false));
+	// Defer so first paint / tap handlers register before network storm.
+	if (unlockWarmTimer !== null) clearTimeout(unlockWarmTimer);
+	unlockWarmTimer = setTimeout(() => {
+		unlockWarmTimer = null;
+		startProbeAndWarm(false);
+	}, UNLOCK_WARM_DEFER_MS);
 }
 
 /** @deprecated use initNativeOfflineSyncListeners + startOfflineSyncAfterUnlock */
@@ -91,4 +117,9 @@ export function initNativeOfflineSync() {
 export function resetNativeOfflineSyncForTests(): void {
 	listenersRegistered = false;
 	syncStarted = false;
+	cancelRefCacheDiskFlush();
+	if (unlockWarmTimer !== null) {
+		clearTimeout(unlockWarmTimer);
+		unlockWarmTimer = null;
+	}
 }

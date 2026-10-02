@@ -81,7 +81,7 @@ flowchart LR
 | Хранение | Зеркало черновиков в native (SharedPreferences); JS localStorage остаётся источником для UI; sync через Capacitor |
 | Online Accept | Native `POST /api/v1/transactions` (токен/base как у виджетов, `WidgetSnapshotStore`) |
 | Offline Accept | Native queue → при следующем старте JS → `createTransaction` / outbox |
-| Парсинг | По-прежнему JS. При постановке в очередь NLS сразу показывает **provisional**-уведомление; если WebView мёртв и PIN-lock выкл. — тихий wake MainActivity, чтобы распарсить и заменить на Accept/Reject. С PIN-lock — только provisional до ручного открытия |
+| Парсинг | По-прежнему JS. При постановке в очередь NLS сразу показывает **provisional**-уведомление; если WebView мёртв и PIN-lock выкл. (`AppLockNative.pin_enabled`, не скрытие сумм виджетов) — тихий wake MainActivity, чтобы распарсить и заменить на Accept/Reject. С PIN-lock — только provisional до ручного открытия. После PIN/отпечатка и при запуске с лаунчера quiet wake **не** делает `moveTaskToBack` |
 
 ```mermaid
 sequenceDiagram

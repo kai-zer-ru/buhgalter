@@ -447,6 +447,8 @@ let lastWarmFinishedAt = 0;
 
 /** Skip background warm on resume/network if a full warm ran recently. */
 export const WARM_BACKGROUND_COOLDOWN_MS = 5 * 60_000;
+/** Let the home/drawer paint before credit/account card prefetch. */
+export const WARM_HEAVY_DEFER_MS = import.meta.env.MODE === 'test' ? 0 : 1_800;
 
 export type WarmRefCacheOptions = {
 	/** Throttle when called from resume / network reconnect. */
@@ -604,6 +606,9 @@ async function warmRefCacheBody(opts: WarmRefCacheOptions): Promise<void> {
 		const run = async () => {
 			await runWithSuppressedRefCacheNotifications(warmRefCacheCore);
 			if (opts.force) notifyServerDataChanged();
+			if (!opts.force && WARM_HEAVY_DEFER_MS > 0) {
+				await new Promise<void>((resolve) => setTimeout(resolve, WARM_HEAVY_DEFER_MS));
+			}
 			await runWithSuppressedRefCacheNotifications(warmRefCacheHeavy);
 		};
 		if (opts.force) {
@@ -615,6 +620,7 @@ async function warmRefCacheBody(opts: WarmRefCacheOptions): Promise<void> {
 		// navigation never depends on the user having opened that screen online.
 	} finally {
 		setWarmRefCacheActive(false);
+		await yieldToUi();
 		flushRefCacheDisk();
 		lastWarmFinishedAt = Date.now();
 		debugLogInfo('sync', 'warmRefCache finished');

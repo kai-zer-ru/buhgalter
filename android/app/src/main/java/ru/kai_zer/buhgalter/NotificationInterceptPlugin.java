@@ -505,13 +505,16 @@ public class NotificationInterceptPlugin extends Plugin {
 
     /**
      * After quiet background wake processed pending drafts: drop task to back.
-     * No-op when the user opened the app themselves.
+     * No-op when the user opened the app themselves, unlocked PIN, or PIN is on.
      */
     @PluginMethod
     public void finishQuietWake(PluginCall call) {
         boolean quiet = InterceptPendingWake.isQuietWakeActive();
+        boolean engaged = InterceptPendingWake.isUserEngaged();
+        boolean pin = AppLockNative.isPinEnabled(getContext());
+        boolean hide = InterceptPendingWake.shouldMoveTaskToBack(quiet, engaged, pin);
         InterceptPendingWake.clearQuietWake();
-        if (quiet) {
+        if (hide) {
             android.app.Activity activity = getActivity();
             if (activity != null) {
                 activity.runOnUiThread(() -> {
@@ -533,6 +536,16 @@ public class NotificationInterceptPlugin extends Plugin {
         JSObject ret = new JSObject();
         ret.put("quiet", InterceptPendingWake.isQuietWakeActive());
         call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void cancelQuietWake(PluginCall call) {
+        InterceptPendingWake.markUserEngaged();
+        android.app.Activity activity = getActivity();
+        if (activity instanceof MainActivity) {
+            activity.runOnUiThread(((MainActivity) activity)::cancelQuietWakeHide);
+        }
+        call.resolve();
     }
 
     /** Pull Accept/Reject side-effects from native for JS localStorage sync. */
