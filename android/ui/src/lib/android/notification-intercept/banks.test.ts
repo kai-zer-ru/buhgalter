@@ -124,4 +124,17 @@ describe('SMS senders', () => {
 		expect(resolved.packageName).toBe('com.idamob.tinkoff.android');
 		expect(resolved.channel).toBe('sms');
 	});
+
+	it('resolves AOSP Messages (com.android.mms) with grouped notification body', () => {
+		const resolved = resolveRawBankNotification({
+			packageName: 'com.android.mms',
+			title: 'Ваш Т-Банк',
+			text: '4 сообщения | Пополнение. Счет RUB. 10056,18 ₽. Др. банк. Доступно 10056,18 ₽',
+			bigText: '',
+			postedAt: 1,
+			dedupeKey: 'k3'
+		});
+		expect(resolved.packageName).toBe('com.idamob.tinkoff.android');
+		expect(resolved.channel).toBe('sms');
+	});
 });

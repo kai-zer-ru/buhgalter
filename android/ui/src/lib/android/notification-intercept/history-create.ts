@@ -1,4 +1,5 @@
 import { resolveAccountId } from './account-resolve';
+import { isAllowlistedPackage, resolveRawBankNotification } from './banks';
 import { findUniqueTransferComplement, transferPrefillFromDrafts } from './draft-transfer';
 import { matchMerchant } from './merchant-match';
 import { parseBankNotification } from './parsers';
@@ -7,6 +8,7 @@ import type {
 	InterceptDraft,
 	InterceptSettings,
 	NotificationHistoryItem,
+	RawBankNotification,
 	TransactionCreatePrefill,
 	TransferCreatePrefill
 } from './types';
@@ -19,10 +21,28 @@ export function historyRowKey(row: NotificationHistoryItem): string {
 	return row.dedupeKey || `${row.packageName}|${row.postedAt}|${row.title}|${row.text}`;
 }
 
+export function historyItemAsRaw(row: NotificationHistoryItem): RawBankNotification {
+	return {
+		packageName: row.packageName,
+		title: row.title,
+		text: row.text,
+		bigText: row.bigText ?? '',
+		postedAt: row.postedAt,
+		dedupeKey: row.dedupeKey,
+		channel: row.channel
+	};
+}
+
+/** Allowlist after SMS-app → bank remap (native history may store stale inAllowlist). */
+export function isHistoryRowAllowlisted(row: NotificationHistoryItem): boolean {
+	const resolved = resolveRawBankNotification(historyItemAsRaw(row));
+	return isAllowlistedPackage(resolved.packageName);
+}
+
 /** True when the row would become a purchase/income draft (not cancel / unparsed). */
 export function canCreateFromHistory(row: NotificationHistoryItem): boolean {
-	if (!row.inAllowlist) return false;
-	const parsed = parseBankNotification(row);
+	if (!isHistoryRowAllowlisted(row)) return false;
+	const parsed = parseBankNotification(historyItemAsRaw(row));
 	return Boolean(parsed && parsed.kind !== 'cancel');
 }
 
@@ -32,8 +52,8 @@ export function draftFromHistoryItem(
 	settings: InterceptSettings,
 	merchants: MerchantRef[]
 ): InterceptDraft | null {
-	if (!row.inAllowlist) return null;
-	const parsed = parseBankNotification(row);
+	if (!isHistoryRowAllowlisted(row)) return null;
+	const parsed = parseBankNotification(historyItemAsRaw(row));
 	if (!parsed || parsed.kind === 'cancel') return null;
 	const merchant = matchMerchant(parsed.merchantText, merchants);
 	return {

@@ -3,6 +3,7 @@ import {
 	canCreateFromHistory,
 	draftFromHistoryItem,
 	historyTransferComplement,
+	isHistoryRowAllowlisted,
 	prefillFromHistoryItem,
 	transferPrefillFromHistory
 } from './history-create';
@@ -36,6 +37,17 @@ describe('history-create', () => {
 			title: 'Покупка',
 			text: 'Покупка 1 234,50 ₽. Пятёрочка. Карта *4321'
 		});
+		expect(canCreateFromHistory(row)).toBe(true);
+	});
+
+	it('treats messaging-app rows as allowlisted after bank remap', () => {
+		const row = history({
+			packageName: 'com.android.mms',
+			title: 'Ваш Т-Банк',
+			text: '4 сообщения | Пополнение. Счет RUB. 10056,18 ₽',
+			inAllowlist: false
+		});
+		expect(isHistoryRowAllowlisted(row)).toBe(true);
 		expect(canCreateFromHistory(row)).toBe(true);
 	});
 

@@ -12,8 +12,10 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * Persists raw bank notification payloads until the WebView consumes them.
@@ -192,8 +194,8 @@ final class NotificationInterceptStore {
         } else if (s.startsWith("your ")) {
             s = s.substring(5).trim();
         }
-        // Unicode dashes (Messages UI often uses en/em dash in «Т‑Банк») then spaces.
-        s = s.replaceAll("\\p{Pd}+", "").replace(" ", "");
+        // Unicode dashes (Messages UI often uses en/em dash in «Т‑Банк») then whitespace.
+        s = s.replaceAll("[\\s\\p{Pd}]+", "");
         s = s.replace("тбанк", "tbank");
         s = s.replace("тинькофф", "tinkoff");
         if (s.startsWith("+7") && s.length() > 2) {
@@ -210,7 +212,12 @@ final class NotificationInterceptStore {
         if (json == null) {
             return sendersFromJson(DEFAULT_SMS_SENDERS_JSON);
         }
-        return sendersFromJson(json);
+        Map<String, String> map = sendersFromJson(json);
+        // Empty synced map (WebView glitch / partial sync) — fall back like cold start.
+        if (map.isEmpty()) {
+            return sendersFromJson(DEFAULT_SMS_SENDERS_JSON);
+        }
+        return map;
     }
 
     /**
@@ -234,6 +241,114 @@ final class NotificationInterceptStore {
         }
         prefs(context).edit().putString(KEY_SMS_SENDERS_JSON, obj.toString()).commit();
     }
+
+    /**
+     * Fallback when {@link #packageForSmsSender} misses (OEM Messages titles, empty synced map).
+     * Keep roughly in sync with {@code inferBankIdFromText} in banks.ts.
+     */
+    static String inferBankPackageFromText(String combined) {
+        if (combined == null || combined.trim().isEmpty()) {
+            return null;
+        }
+        String s = combined.toLowerCase(Locale.ROOT);
+        s = s.replaceAll("\\p{Pd}+", "-").replaceAll("\\s+", " ");
+        if (BANK_TEXT_TINKOFF.matcher(s).find()) {
+            return "com.idamob.tinkoff.android";
+        }
+        if (BANK_TEXT_SBER.matcher(s).find()) {
+            return "ru.sberbankmobile";
+        }
+        if (BANK_TEXT_VTB.matcher(s).find()) {
+            return "ru.vtb24.mobilebanking.android";
+        }
+        if (BANK_TEXT_ALFA.matcher(s).find()) {
+            return "ru.alfabank.mobile.android";
+        }
+        if (BANK_TEXT_GPB.matcher(s).find()) {
+            return "ru.gazprombank.android.mobilebank.app";
+        }
+        if (BANK_TEXT_RAIF.matcher(s).find()) {
+            return "ru.raiffeisennews";
+        }
+        if (BANK_TEXT_ROSBANK.matcher(s).find()) {
+            return "ru.rosbank.android";
+        }
+        if (BANK_TEXT_RSHB.matcher(s).find()) {
+            return "ru.rshb.dbo";
+        }
+        if (BANK_TEXT_OPEN.matcher(s).find()) {
+            return "com.openbank";
+        }
+        if (BANK_TEXT_SOVCOM.matcher(s).find()) {
+            return "ru.sovcombank.mobile";
+        }
+        if (BANK_TEXT_URALSIB.matcher(s).find()) {
+            return "ru.uralsib.mb";
+        }
+        if (BANK_TEXT_HOME.matcher(s).find()) {
+            return "ru.homecredit.mycredit";
+        }
+        if (BANK_TEXT_MKB.matcher(s).find()) {
+            return "ru.mkb.mobile";
+        }
+        if (BANK_TEXT_PSB.matcher(s).find()) {
+            return "ru.ftc.faktura.psb";
+        }
+        if (BANK_TEXT_OTP.matcher(s).find()) {
+            return "ru.otpbank.mobile";
+        }
+        if (BANK_TEXT_VBRR.matcher(s).find()) {
+            return "com.bssys.vbrrretail";
+        }
+        if (BANK_TEXT_OZON.matcher(s).find()) {
+            return "ru.ozon.fintech.finance";
+        }
+        if (BANK_TEXT_YANDEX.matcher(s).find()) {
+            return "com.yandex.bank";
+        }
+        if (BANK_TEXT_WB.matcher(s).find()) {
+            return "ru.wildberries.fintech";
+        }
+        return null;
+    }
+
+    private static final Pattern BANK_TEXT_TINKOFF =
+            Pattern.compile("т-?банк|тинькофф|t-?bank|tinkoff|tbank", Pattern.CASE_INSENSITIVE);
+    private static final Pattern BANK_TEXT_SBER =
+            Pattern.compile("сбер(?:банк|пей|\\s*pay)?|\\bsber(?:bank|pay)?\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern BANK_TEXT_VTB =
+            Pattern.compile("втб|\\bvtb\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern BANK_TEXT_ALFA =
+            Pattern.compile("альфа[-\\s]?банк|alfa[-\\s]?bank|\\balfabank\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern BANK_TEXT_GPB =
+            Pattern.compile("газпромбанк|gazprombank", Pattern.CASE_INSENSITIVE);
+    private static final Pattern BANK_TEXT_RAIF =
+            Pattern.compile("райффайзен|raiffeisen", Pattern.CASE_INSENSITIVE);
+    private static final Pattern BANK_TEXT_ROSBANK =
+            Pattern.compile("росбанк|rosbank", Pattern.CASE_INSENSITIVE);
+    private static final Pattern BANK_TEXT_RSHB =
+            Pattern.compile("россельхоз(?:банк)?|\\brshb\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern BANK_TEXT_OPEN =
+            Pattern.compile("открытие|otkritie", Pattern.CASE_INSENSITIVE);
+    private static final Pattern BANK_TEXT_SOVCOM =
+            Pattern.compile("совкомбанк|sovcombank|\\bхалва\\b|\\bhalva\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern BANK_TEXT_URALSIB =
+            Pattern.compile("уралсиб|uralsib", Pattern.CASE_INSENSITIVE);
+    private static final Pattern BANK_TEXT_HOME =
+            Pattern.compile("хоум\\s*кредит|home\\s*credit", Pattern.CASE_INSENSITIVE);
+    private static final Pattern BANK_TEXT_MKB = Pattern.compile("мкб|\\bmkb\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern BANK_TEXT_PSB =
+            Pattern.compile("псб|\\bpsb\\b|промсвязьбанк", Pattern.CASE_INSENSITIVE);
+    private static final Pattern BANK_TEXT_OTP =
+            Pattern.compile("отп\\s*банк|otp\\s*bank", Pattern.CASE_INSENSITIVE);
+    private static final Pattern BANK_TEXT_VBRR =
+            Pattern.compile("вбрр|\\bvbrr\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern BANK_TEXT_OZON =
+            Pattern.compile("озон\\s*банк|ozon\\s*bank", Pattern.CASE_INSENSITIVE);
+    private static final Pattern BANK_TEXT_YANDEX =
+            Pattern.compile("яндекс\\s*банк|yandex\\s*bank", Pattern.CASE_INSENSITIVE);
+    private static final Pattern BANK_TEXT_WB =
+            Pattern.compile("wb\\s*банк|wildberries\\s*банк", Pattern.CASE_INSENSITIVE);
 
     /** @return primary package for sender, or null if not allowlisted */
     static String packageForSmsSender(Context context, String sender) {

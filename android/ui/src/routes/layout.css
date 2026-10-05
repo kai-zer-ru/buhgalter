@@ -389,6 +389,30 @@ html.dark {
 		color: var(--text-muted);
 	}
 
+	.section-nav-hub {
+		@apply overflow-hidden p-0;
+	}
+
+	.section-nav-hub-link {
+		@apply flex w-full items-center px-4 py-3 text-left text-sm font-medium transition-colors;
+		color: var(--text);
+		border-bottom: 1px solid var(--border);
+	}
+
+	.section-nav-hub-link:last-child {
+		border-bottom: none;
+	}
+
+	.section-nav-hub-link:hover {
+		background: color-mix(in srgb, var(--primary) 8%, transparent);
+		color: var(--primary);
+	}
+
+	.section-nav-hub-link.active {
+		background: color-mix(in srgb, var(--primary) 12%, transparent);
+		color: var(--primary);
+	}
+
 	.modal-panel {
 		@apply rounded-t-2xl sm:rounded-2xl;
 	}
@@ -406,7 +430,8 @@ html.dark {
 		.tab,
 		.nav-mobile-link,
 		.breadcrumb-link,
-		.breadcrumb-current {
+		.breadcrumb-current,
+		.section-nav-hub-link {
 			min-height: 2.75rem;
 		}
 	}

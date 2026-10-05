@@ -372,11 +372,18 @@ public class BankNotificationListenerService extends NotificationListenerService
                 if (nl > 0) {
                     firstLine = text.substring(0, nl);
                 }
+                int pipe = firstLine.indexOf('|');
+                if (pipe > 0) {
+                    firstLine = firstLine.substring(pipe + 1).trim();
+                }
                 int dot = firstLine.indexOf('.');
                 if (dot > 0) {
                     firstLine = firstLine.substring(0, dot);
                 }
                 bankPkg = NotificationInterceptStore.packageForSmsSender(context, firstLine);
+            }
+            if (bankPkg == null || bankPkg.isEmpty()) {
+                bankPkg = NotificationInterceptStore.inferBankPackageFromText(title + " " + text);
             }
             if (bankPkg != null && !bankPkg.isEmpty()) {
                 effectivePackage = bankPkg;

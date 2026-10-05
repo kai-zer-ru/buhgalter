@@ -37,6 +37,21 @@ test('inbox lists uncategorized transaction and clears after category assign', a
 	await expect(row).toHaveCount(0, { timeout: 15_000 });
 });
 
+test('nav inbox hidden when queue empty', async ({ page }) => {
+	const { count } = await apiJSON<{ count: number }>(
+		page,
+		'GET',
+		'/api/v1/transactions/inbox/count'
+	);
+	test.skip(count > 0, 'inbox not empty in this environment');
+
+	await page.goto('/');
+	await waitAppReady(page);
+	const otherBtn = page.locator('header nav').getByRole('button', { name: /прочее|other/i });
+	await otherBtn.click();
+	await expect(page.getByRole('menuitem', { name: /разобрать|inbox/i })).toHaveCount(0);
+});
+
 test('nav inbox badge shows count after uncategorized create', async ({ page }) => {
 	const account = await createCashAccount(page);
 	await apiJSON(page, 'POST', '/api/v1/transactions', {
@@ -48,8 +63,12 @@ test('nav inbox badge shows count after uncategorized create', async ({ page }) 
 	});
 	await page.goto('/');
 	await waitAppReady(page);
-	const navInbox = page.locator('header nav').getByRole('link', { name: /разобрать|inbox/i });
+	const otherBtn = page.locator('header nav').getByRole('button', { name: /прочее|other/i });
 	await expect
-		.poll(async () => navInbox.locator('.nav-badge').isVisible(), { timeout: 15_000 })
+		.poll(async () => otherBtn.locator('.nav-badge').isVisible(), { timeout: 15_000 })
 		.toBe(true);
+	await otherBtn.click();
+	await expect(
+		page.getByRole('menuitem', { name: /разобрать|inbox/i }).locator('.nav-badge')
+	).toBeVisible();
 });

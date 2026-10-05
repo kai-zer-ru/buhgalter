@@ -264,7 +264,9 @@ export function resolveRawBankNotification(raw: RawBankNotification): RawBankNot
 		return raw;
 	}
 	const bankId =
-		bankIdForSmsSender(raw.title) ?? bankIdForSmsSender(raw.text.split(/[\n.]/)[0]?.trim() ?? '');
+		bankIdForSmsSender(raw.title) ??
+		bankIdForSmsSender(raw.text.split(/[\n.|]/)[0]?.trim() ?? '') ??
+		inferBankIdFromText(raw.title);
 	if (!bankId) return raw;
 	const pkg = packageForBankId(bankId);
 	if (!pkg) return raw;

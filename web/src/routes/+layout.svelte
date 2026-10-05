@@ -139,11 +139,6 @@
 			isActive: (p) => p.startsWith('/transactions') && !p.startsWith('/transactions/inbox')
 		},
 		{
-			href: resolve('/transactions/inbox'),
-			labelKey: 'nav.inbox',
-			isActive: (p) => p.startsWith('/transactions/inbox')
-		},
-		{
 			href: resolve('/budget'),
 			labelKey: 'nav.budget',
 			feature: 'budget',
@@ -158,6 +153,11 @@
 	];
 
 	const otherNavItemsAll: (NavDropdownItem & { feature?: string })[] = [
+		{
+			path: '/transactions/inbox',
+			labelKey: 'nav.inbox',
+			isActive: (p) => p.startsWith('/transactions/inbox')
+		},
 		{
 			path: '/accounts',
 			labelKey: 'nav.accounts',
@@ -250,11 +250,14 @@
 	const flatNavItems = $derived(
 		flatNavItemsAll.filter((item) => !item.feature || isFeatureEnabled(item.feature, $featureFlags))
 	);
-	const otherNavItems = $derived(
-		otherNavItemsAll.filter(
-			(item) => !item.feature || isFeatureEnabled(item.feature, $featureFlags)
-		)
-	);
+	const otherNavItems = $derived.by(() => {
+		void $featureFlags;
+		return otherNavItemsAll.filter(
+			(item) =>
+				(!item.feature || isFeatureEnabled(item.feature, $featureFlags)) &&
+				(item.labelKey !== 'nav.inbox' || inboxCount > 0)
+		);
+	});
 	const settingsNavItems = $derived(
 		settingsNavItemsAll.filter(
 			(item) => !item.feature || isFeatureEnabled(item.feature, $featureFlags)
@@ -291,6 +294,8 @@
 
 	function isOtherGroupActive(p: string) {
 		return (
+			p.startsWith('/transactions/inbox') ||
+			p.startsWith('/category-rules') ||
 			p.startsWith('/accounts') ||
 			p.startsWith('/debts') ||
 			p.startsWith('/debtors') ||
@@ -302,6 +307,11 @@
 			p.startsWith('/subscriptions') ||
 			p.startsWith('/transaction-templates')
 		);
+	}
+
+	function otherNavItemBadge(labelKey: string): number | undefined {
+		if (labelKey === 'nav.inbox' && inboxCount > 0) return inboxCount;
+		return undefined;
 	}
 
 	function isSettingsGroupActive(p: string) {
@@ -491,14 +501,7 @@
 										class={navLinkClass(isNavItemActive(item), 'btn-ghost btn-nav')}
 										aria-current={isNavItemActive(item) ? 'page' : undefined}
 									>
-										{#if item.labelKey === 'nav.inbox' && inboxCount > 0}
-											<span class="inline-flex items-center gap-1.5">
-												{$_(item.labelKey)}
-												<span class="nav-badge" aria-label={String(inboxCount)}>{inboxCount}</span>
-											</span>
-										{:else}
-											{$_(item.labelKey)}
-										{/if}
+										{$_(item.labelKey)}
 									</a>
 								{/if}
 							{/each}
@@ -506,6 +509,8 @@
 								labelKey="nav.other"
 								items={otherNavItems}
 								isGroupActive={isOtherGroupActive}
+								triggerBadge={inboxCount > 0 ? inboxCount : undefined}
+								itemBadge={otherNavItemBadge}
 							/>
 							<NavDropdown
 								labelKey="nav.settings"
@@ -540,14 +545,7 @@
 								role="menuitem"
 								onclick={closeNav}
 							>
-								{#if item.labelKey === 'nav.inbox' && inboxCount > 0}
-									<span class="flex w-full items-center justify-between gap-2">
-										<span>{$_(item.labelKey)}</span>
-										<span class="nav-badge">{inboxCount}</span>
-									</span>
-								{:else}
-									{$_(item.labelKey)}
-								{/if}
+								{$_(item.labelKey)}
 							</a>
 						{/each}
 						<button
@@ -556,7 +554,12 @@
 							role="menuitem"
 							onclick={() => (mobileNavView = 'other')}
 						>
-							<span>{$_('nav.other')}</span>
+							<span class="flex flex-1 items-center justify-between gap-2">
+								<span>{$_('nav.other')}</span>
+								{#if inboxCount > 0}
+									<span class="nav-badge" aria-label={String(inboxCount)}>{inboxCount}</span>
+								{/if}
+							</span>
 							<svg
 								aria-hidden="true"
 								class="nav-mobile-chevron"
@@ -628,13 +631,24 @@
 							{mobileSubmenuTitle()}
 						</p>
 						{#each mobileSubmenuItems() as item (item.path)}
+							{@const badge =
+								mobileNavView === 'other' ? otherNavItemBadge(item.labelKey) : undefined}
 							<a
 								href={resolve(item.path as '/')}
 								class={navLinkClass(isDropdownItemActive(item), 'nav-mobile-link')}
 								aria-current={isDropdownItemActive(item) ? 'page' : undefined}
 								role="menuitem"
-								onclick={closeNav}>{$_(item.labelKey)}</a
+								onclick={closeNav}
 							>
+								{#if badge}
+									<span class="flex w-full items-center justify-between gap-2">
+										<span>{$_(item.labelKey)}</span>
+										<span class="nav-badge" aria-label={String(badge)}>{badge}</span>
+									</span>
+								{:else}
+									{$_(item.labelKey)}
+								{/if}
+							</a>
 						{/each}
 					{/if}
 				</div>

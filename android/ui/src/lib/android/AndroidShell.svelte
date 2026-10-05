@@ -71,9 +71,21 @@
 	const path = $derived($page.url.pathname);
 	const chrome = $derived($shellHeader);
 	const homeNav = $derived(androidHomeNavItem());
+	let inboxCountFromDashboard = $state(0);
+
+	const inboxCount = $derived.by(() => {
+		void $refCacheTick;
+		void $user?.id;
+		return Math.max(readInboxCount(), inboxCountFromDashboard);
+	});
+
 	const mainNav = $derived.by(() => {
 		void $featureFlags;
-		return androidMainNavItemsAfterHome();
+		void $refCacheTick;
+		void $user?.id;
+		return androidMainNavItemsAfterHome().filter(
+			(item) => item.labelKey !== 'nav.inbox' || inboxCount > 0
+		);
 	});
 	const settingsHref = resolve('/settings');
 	const adminHref = resolve('/admin');
@@ -82,13 +94,6 @@
 		void $user?.id;
 		if (!getCurrentInterceptSettings().enabled) return 0;
 		return countInterceptDrafts($user?.id);
-	});
-	let inboxCountFromDashboard = $state(0);
-
-	const inboxCount = $derived.by(() => {
-		void $refCacheTick;
-		void $user?.id;
-		return Math.max(readInboxCount(), inboxCountFromDashboard);
 	});
 
 	$effect(() => {

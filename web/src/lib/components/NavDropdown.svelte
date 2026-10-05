@@ -20,11 +20,16 @@
 	let {
 		labelKey,
 		items,
-		isGroupActive
+		isGroupActive,
+		triggerBadge,
+		itemBadge
 	}: {
 		labelKey: string;
 		items: NavDropdownItem[];
 		isGroupActive: (pathname: string) => boolean;
+		/** Shown on trigger when set (e.g. inbox count on «Прочее»). */
+		triggerBadge?: number;
+		itemBadge?: (labelKey: string) => number | undefined;
 	} = $props();
 
 	let open = $state(false);
@@ -123,7 +128,12 @@
 		onpointerdown={onTriggerPointerDown}
 		onkeydown={onTriggerKeydown}
 	>
-		<span>{$_(labelKey)}</span>
+		<span class="inline-flex items-center gap-1.5">
+			<span>{$_(labelKey)}</span>
+			{#if triggerBadge}
+				<span class="nav-badge" aria-label={String(triggerBadge)}>{triggerBadge}</span>
+			{/if}
+		</span>
 		<svg
 			aria-hidden="true"
 			class="h-3.5 w-3.5 shrink-0 opacity-70"
@@ -144,16 +154,22 @@
 			use:portal={document.body}
 		>
 			{#each items as item (item.path)}
+				{@const badge = itemBadge?.(item.labelKey)}
 				<a
 					href={resolve(item.path as '/')}
-					class="block rounded-lg px-3 py-2 text-sm hover:opacity-90 {itemActive(item)
+					class="flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm hover:opacity-90 {itemActive(
+						item
+					)
 						? 'nav-link-active'
 						: ''}"
 					role="menuitem"
 					aria-current={itemActive(item) ? 'page' : undefined}
 					onclick={handleItemClick}
 				>
-					{$_(item.labelKey)}
+					<span>{$_(item.labelKey)}</span>
+					{#if badge}
+						<span class="nav-badge" aria-label={String(badge)}>{badge}</span>
+					{/if}
 				</a>
 			{/each}
 		</div>

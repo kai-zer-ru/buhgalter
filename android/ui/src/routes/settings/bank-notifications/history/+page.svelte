@@ -12,6 +12,7 @@
 	import { parseBankNotification } from '$lib/android/notification-intercept/parsers';
 	import {
 		canCreateFromHistory,
+		isHistoryRowAllowlisted,
 		clearNotificationHistory,
 		getCurrentInterceptSettings,
 		getNativeListenerDebugState,
@@ -124,7 +125,7 @@
 	}
 
 	function statusLabel(row: NotificationHistoryItem): string {
-		if (!row.inAllowlist) return $_('bankNotifications.history.status.notAllowlisted');
+		if (!isHistoryRowAllowlisted(row)) return $_('bankNotifications.history.status.notAllowlisted');
 		const parsed = parseBankNotification(row);
 		if (!parsed) return $_('bankNotifications.history.status.queuedNoParse');
 		if (parsed.kind === 'income') return $_('bankNotifications.history.status.wouldParseIncome');
@@ -276,7 +277,7 @@
 					<p class="whitespace-pre-wrap break-words">{body(row)}</p>
 					<p
 						class="text-xs font-medium"
-						style:color={row.inAllowlist ? 'var(--primary)' : 'var(--danger)'}
+						style:color={isHistoryRowAllowlisted(row) ? 'var(--primary)' : 'var(--danger)'}
 					>
 						{statusLabel(row)}
 					</p>

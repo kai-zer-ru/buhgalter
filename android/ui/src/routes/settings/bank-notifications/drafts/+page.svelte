@@ -273,18 +273,16 @@
 							</p>
 						</div>
 						<div class="space-y-2">
-							<div class="btn-pair-row">
-								<button type="button" class="btn-primary" onclick={() => openDraft(draft)}>
-									{$_('bankNotifications.drafts.create')}
-								</button>
-								<button
-									type="button"
-									class="btn-ghost"
-									onclick={() => openTransfer(transferPrefillFromDrafts(draft))}
-								>
-									{$_('bankNotifications.drafts.createTransfer')}
-								</button>
-							</div>
+							<button type="button" class="btn-primary w-full" onclick={() => openDraft(draft)}>
+								{$_('bankNotifications.drafts.create')}
+							</button>
+							<button
+								type="button"
+								class="btn-ghost w-full"
+								onclick={() => openTransfer(transferPrefillFromDrafts(draft))}
+							>
+								{$_('bankNotifications.drafts.createTransfer')}
+							</button>
 							<button
 								type="button"
 								class="btn-ghost w-full"

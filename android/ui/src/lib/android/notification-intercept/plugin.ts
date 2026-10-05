@@ -109,7 +109,7 @@ export async function syncNativeCapture(opts: {
 	if (!isNativeApp()) return;
 	try {
 		await Native.setAllowedPackages({ packages: opts.packages });
-		if (opts.smsSenders) {
+		if (opts.smsSenders?.length) {
 			await Native.setAllowedSmsSenders({ senders: opts.smsSenders });
 		}
 		await Native.setCaptureEnabled({ enabled: opts.enabled });

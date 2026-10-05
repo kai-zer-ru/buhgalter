@@ -50,7 +50,7 @@
 
 | Платформа | Правила | Inbox |
 |-----------|---------|-------|
-| Web | `/category-rules` (меню «Прочее») | `/transactions/inbox` (верхнее меню «Разобрать») |
-| Android | drawer → «Правила категорий» | drawer → «Разобрать» |
+| Web | «Прочее» → `/category-rules` | «Прочее» → `/transactions/inbox`, только при `inbox_count > 0` (badge на «Прочее» и у пункта) |
+| Android | drawer → «Правила категорий» | drawer → «Разобрать», только при `inbox_count > 0` |
 
 Форма операции вызывает `POST /category-rules/evaluate` (подсказка категории и подстановка счёта). Счётчик inbox — `inbox_count` на `GET /dashboard`.
