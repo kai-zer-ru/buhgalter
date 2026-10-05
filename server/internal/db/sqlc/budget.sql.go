@@ -58,6 +58,26 @@ func (q *Queries) BudgetSpent(ctx context.Context, arg BudgetSpentParams) (int64
 	return spent, err
 }
 
+const clearBudgetCopyForward = `-- name: ClearBudgetCopyForward :execrows
+UPDATE budgets
+SET copy_forward = 0, updated_at = ?
+WHERE id = ? AND user_id = ?
+`
+
+type ClearBudgetCopyForwardParams struct {
+	UpdatedAt string `json:"updated_at"`
+	ID        string `json:"id"`
+	UserID    string `json:"user_id"`
+}
+
+func (q *Queries) ClearBudgetCopyForward(ctx context.Context, arg ClearBudgetCopyForwardParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, clearBudgetCopyForward, arg.UpdatedAt, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const countActiveBudgetConflict = `-- name: CountActiveBudgetConflict :one
 SELECT COUNT(*) AS cnt
 FROM budgets

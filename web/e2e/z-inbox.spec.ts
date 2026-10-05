@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import { apiJSON, formatUTCDateTime, waitAppReady } from './helpers/auth';
 import { createCashAccount } from './helpers/setup-data';
 import { selectCombobox } from './helpers/transactions';
+import { clearInboxQueue } from './helpers/inbox';
 import { openRowActions } from './helpers/ui';
 
 test('inbox lists uncategorized transaction and clears after category assign', async ({ page }) => {
@@ -38,12 +39,7 @@ test('inbox lists uncategorized transaction and clears after category assign', a
 });
 
 test('nav inbox hidden when queue empty', async ({ page }) => {
-	const { count } = await apiJSON<{ count: number }>(
-		page,
-		'GET',
-		'/api/v1/transactions/inbox/count'
-	);
-	test.skip(count > 0, 'inbox not empty in this environment');
+	await clearInboxQueue(page);
 
 	await page.goto('/');
 	await waitAppReady(page);

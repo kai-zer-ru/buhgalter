@@ -10,6 +10,16 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
 )
 
+func clearCopyForwardOnSource(ctx context.Context, db sqlcdb.DBTX, userID, budgetID string) error {
+	now := timeutil.FormatUTC(timeutil.NowUTC())
+	_, err := queries(db).ClearBudgetCopyForward(ctx, sqlcdb.ClearBudgetCopyForwardParams{
+		UpdatedAt: now,
+		ID:        budgetID,
+		UserID:    userID,
+	})
+	return err
+}
+
 var (
 	ErrCopyTargetExists = errors.New("budget already exists for target month")
 	ErrNothingToCopy    = errors.New("no budgets to copy from previous month")
@@ -76,14 +86,23 @@ func maybeAutoCopyFromPrevious(ctx context.Context, db *sql.DB, userID, month st
 		in.CopyForward = false
 		if err := checkActiveUniqueness(ctx, db, userID, in, ""); err != nil {
 			if errors.Is(err, ErrDuplicateActive) {
+				if err := clearCopyForwardOnSource(ctx, db, userID, row.ID); err != nil {
+					return err
+				}
 				continue
 			}
 			return err
 		}
 		if _, err := insertBudget(ctx, db, userID, in); err != nil {
 			if errors.Is(err, ErrDuplicateActive) || isUniqueConstraintError(err) {
+				if err := clearCopyForwardOnSource(ctx, db, userID, row.ID); err != nil {
+					return err
+				}
 				continue
 			}
+			return err
+		}
+		if err := clearCopyForwardOnSource(ctx, db, userID, row.ID); err != nil {
 			return err
 		}
 	}

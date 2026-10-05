@@ -405,7 +405,7 @@ func TestBudgetCopyForwardOnlyNextMonth(t *testing.T) {
 		t.Fatal(err)
 	}
 	cat := categoryID
-	_, err = budget.Create(ctx, sqlDB, userID, budget.Input{
+	created, err := budget.Create(ctx, sqlDB, userID, budget.Input{
 		Name: "Копируемый", Scope: budget.ScopeCategory, CategoryID: &cat,
 		Amount: 10_000, IsActive: true, Month: month, CopyForward: true,
 	})
@@ -422,12 +422,57 @@ func TestBudgetCopyForwardOnlyNextMonth(t *testing.T) {
 	if sumNext.Items[0].CopyForward {
 		t.Fatal("copied budget should have copy_forward=false")
 	}
+	srcAfter, err := budget.Get(ctx, sqlDB, userID, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if srcAfter.CopyForward {
+		t.Fatal("source copy_forward should be cleared after auto-copy to next month")
+	}
 	sumNext2, err := budget.Summary(ctx, sqlDB, userID, next2)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(sumNext2.Items) != 0 {
 		t.Fatalf("expected no budget two months ahead, got %d", len(sumNext2.Items))
+	}
+}
+
+func TestBudgetDeleteAfterAutoCopyDoesNotRecreate(t *testing.T) {
+	ctx, sqlDB, userID, _, categoryID := seedBudgetEnv(t)
+	month, err := budget.CurrentMonthQuery(ctx, sqlDB, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next, err := budget.AddMonths(month, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cat := categoryID
+	_, err = budget.Create(ctx, sqlDB, userID, budget.Input{
+		Name: "Копируемый", Scope: budget.ScopeCategory, CategoryID: &cat,
+		Amount: 10_000, IsActive: true, Month: month, CopyForward: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sumNext, err := budget.Summary(ctx, sqlDB, userID, next)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sumNext.Items) != 1 {
+		t.Fatalf("expected 1 budget in next month, got %d", len(sumNext.Items))
+	}
+	copyID := sumNext.Items[0].ID
+	if err := budget.Delete(ctx, sqlDB, userID, copyID); err != nil {
+		t.Fatal(err)
+	}
+	sumAfterDelete, err := budget.Summary(ctx, sqlDB, userID, next)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sumAfterDelete.Items) != 0 {
+		t.Fatalf("expected no budget after delete and summary reload, got %d", len(sumAfterDelete.Items))
 	}
 }
 
