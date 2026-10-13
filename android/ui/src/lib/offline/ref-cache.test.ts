@@ -197,20 +197,23 @@ describe('fetchWithRefCache SWR', () => {
 		expect(readRefCache('/api/v1/credits?status=active')).toEqual([{ id: 'c1' }, { id: 'c2' }]);
 	});
 
-	it('clearRefCache ignores in-flight GET writes', async () => {
-		let resolveFetch!: (value: unknown) => void;
+	it('clearRefCache discards in-flight stale body and retries network', async () => {
+		const resolvers: Array<(value: unknown) => void> = [];
 		const fetcher = vi.fn(
 			() =>
 				new Promise<unknown>((resolve) => {
-					resolveFetch = resolve;
+					resolvers.push(resolve);
 				})
 		);
 
 		const inflight = fetchWithRefCache('/api/v1/transactions', fetcher);
 		clearRefCache();
-		resolveFetch([{ id: 'stale' }]);
-		await inflight;
-		expect(readRefCache('/api/v1/transactions')).toBeNull();
+		resolvers[0]!([{ id: 'stale' }]);
+		await Promise.resolve();
+		expect(fetcher).toHaveBeenCalledTimes(2);
+		resolvers[1]!([{ id: 'fresh' }]);
+		await expect(inflight).resolves.toEqual([{ id: 'fresh' }]);
+		expect(readRefCache('/api/v1/transactions')).toEqual([{ id: 'fresh' }]);
 	});
 
 	it('clearRefCache resets SWR cooldown so a list can refetch after a write', async () => {
@@ -273,23 +276,26 @@ describe('clearRefCache preserveAuthMe', () => {
 		expect(fetcher).toHaveBeenCalledOnce();
 	});
 
-	it('preserveAuthMe clear ignores in-flight force GET writes', async () => {
+	it('preserveAuthMe clear discards in-flight force GET and retries', async () => {
 		const { clearRefCache, fetchWithRefCache, readRefCache, writeRefCache } =
 			await import('./ref-cache');
 		writeRefCache('/api/v1/dashboard', { total: 1 });
 		clearRefCache({ preserveAuthMe: true });
-		let resolveFetch!: (value: unknown) => void;
+		const resolvers: Array<(value: unknown) => void> = [];
 		const fetcher = vi.fn(
 			() =>
 				new Promise<unknown>((resolve) => {
-					resolveFetch = resolve;
+					resolvers.push(resolve);
 				})
 		);
 		const inflight = fetchWithRefCache('/api/v1/dashboard', fetcher);
 		clearRefCache({ preserveAuthMe: true });
-		resolveFetch({ total: 99 });
-		await inflight;
-		expect(readRefCache('/api/v1/dashboard')).toEqual({ total: 1 });
+		resolvers[0]!({ total: 99 });
+		await Promise.resolve();
+		expect(fetcher).toHaveBeenCalledTimes(2);
+		resolvers[1]!({ total: 2 });
+		await expect(inflight).resolves.toEqual({ total: 2 });
+		expect(readRefCache('/api/v1/dashboard')).toEqual({ total: 2 });
 	});
 
 	it('keeps category dictionaries so offline forms survive a write', async () => {

@@ -84,8 +84,11 @@
 
 	onMount(async () => {
 		readURLState();
+		// Snapshot URL-derived filters before await — otherwise a fast fill during load is
+		// folded into lastFiltersKey and the auto-apply effect never pushes search= to the URL.
+		const urlFiltersKey = currentFiltersKey();
 		await Promise.all([loadFilterOptions(), load(true)]);
-		lastFiltersKey = currentFiltersKey();
+		lastFiltersKey = urlFiltersKey;
 		filtersAutoApplyReady = true;
 	});
 

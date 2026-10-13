@@ -53,11 +53,11 @@ describe('nextCalendarDay', () => {
 });
 
 describe('calendarCells', () => {
-	it('pads June 2026 with July 1–4 instead of 31–34', () => {
+	it('pads June 2026 to a stable 6-week grid with July days', () => {
 		const cells = calendarCells(2026, 6);
 		const trailing = cells.filter((c) => !c.inMonth).map((c) => c.day);
-		expect(trailing).toEqual([1, 2, 3, 4, 5]);
-		expect(cells).toHaveLength(35);
+		expect(trailing).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+		expect(cells).toHaveLength(42);
 	});
 
 	it('includes leading days from previous month', () => {
@@ -72,7 +72,7 @@ describe('calendarCells', () => {
 	it('assigns year and month to trailing days', () => {
 		const cells = calendarCells(2026, 6);
 		const trailing = cells.filter((c) => !c.inMonth && c.month === 7);
-		expect(trailing.map((c) => c.day)).toEqual([1, 2, 3, 4, 5]);
+		expect(trailing.map((c) => c.day)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
 		expect(trailing.every((c) => c.year === 2026)).toBe(true);
 	});
 });

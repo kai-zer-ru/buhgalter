@@ -118,10 +118,11 @@
 
 	onMount(async () => {
 		readURLState();
+		const urlFiltersKey = currentFiltersKey();
 		await refreshMergeMeta().catch(() => undefined);
 		await Promise.all([loadFilterOptions(), load(true)]);
 		scheduleSyncOutbox();
-		lastFiltersKey = currentFiltersKey();
+		lastFiltersKey = urlFiltersKey;
 		filtersAutoApplyReady = true;
 	});
 

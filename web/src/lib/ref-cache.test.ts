@@ -3,6 +3,7 @@ import {
 	clearRefCache,
 	fetchWithRefCache,
 	invalidateRefCacheAfterWrite,
+	notifyRealtimeInvalidate,
 	readAccountsFromOfflineCache,
 	readCategoriesFromOfflineCache,
 	readRefCache,
@@ -107,24 +108,35 @@ describe('web fetchWithRefCache SWR', () => {
 		expect(refCacheReady('/api/v1/dashboard')).toBe(false);
 	});
 
-	it('clearRefCache ignores in-flight foreground GET writes', async () => {
-		let resolveFetch!: (value: unknown) => void;
+	it('clearRefCache discards in-flight stale body and retries network', async () => {
+		const resolvers: Array<(value: unknown) => void> = [];
 		const fetcher = vi.fn(
 			() =>
 				new Promise<unknown>((resolve) => {
-					resolveFetch = resolve;
+					resolvers.push(resolve);
 				})
 		);
 
 		const inflight = fetchWithRefCache('/api/v1/dashboard', fetcher);
 		clearRefCache();
-		resolveFetch({ total_balance: 0 });
-		await inflight;
-		expect(readRefCache('/api/v1/dashboard')).toBeNull();
-
-		const fresh = await fetchWithRefCache('/api/v1/dashboard', async () => ({ total_balance: 42 }));
-		expect(fresh).toEqual({ total_balance: 42 });
+		resolvers[0]!({ total_balance: 0 });
+		await Promise.resolve();
+		expect(fetcher).toHaveBeenCalledTimes(2);
+		resolvers[1]!({ total_balance: 42 });
+		await expect(inflight).resolves.toEqual({ total_balance: 42 });
 		expect(readRefCache('/api/v1/dashboard')).toEqual({ total_balance: 42 });
+	});
+
+	it('notifyRealtimeInvalidate emits soft-reload path *', () => {
+		writeRefCache('/api/v1/dashboard', { total_balance: 1 });
+		let last: { path: string; seq: number } | null = null;
+		const unsub = refCacheUpdate.subscribe((v) => {
+			last = v;
+		});
+		notifyRealtimeInvalidate();
+		expect(refCacheReady('/api/v1/dashboard')).toBe(false);
+		expect(last?.path).toBe('*');
+		unsub();
 	});
 
 	it('clearRefCache drops cache and ignores in-flight revalidate writes', async () => {

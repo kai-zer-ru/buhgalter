@@ -327,13 +327,17 @@ export async function fetchWithRefCache<T>(path: string, fetcher: () => Promise<
 		return cached;
 	}
 
-	const epoch = cacheEpoch;
 	try {
-		const value = await fetcher();
-		if (epoch === cacheEpoch) {
-			writeRefCache(path, value);
+		// Never return a body fetched under a superseded epoch (pre-mutation snapshot).
+		for (let attempt = 0; attempt < 8; attempt++) {
+			const epoch = cacheEpoch;
+			const value = await fetcher();
+			if (epoch === cacheEpoch) {
+				writeRefCache(path, value);
+				return value;
+			}
 		}
-		return value;
+		throw new Error(`ref-cache: epoch churn while fetching ${path}`);
 	} catch (err) {
 		if (isStaleFetchError(err)) {
 			const stale = readRefCache<T>(path);

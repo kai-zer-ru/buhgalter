@@ -13,6 +13,7 @@
 		"lint": "prettier --check . && eslint .",
 		"lint:fix": "prettier --write . && eslint --fix .",
 		"format": "prettier --write .",
+		"test:unit": "vitest run --config vitest.config.ts",
 		"test:e2e": "playwright test"
 	},
 	"devDependencies": {
@@ -35,7 +36,8 @@
 		"tailwindcss": "^4.3.0",
 		"typescript": "^6.0.3",
 		"typescript-eslint": "^8.60.1",
-		"vite": "^8.0.16"
+		"vite": "^8.0.16",
+		"vitest": "^3.2.4"
 	},
 	"dependencies": {
 		"@fortawesome/fontawesome-free": "^6.7.2",

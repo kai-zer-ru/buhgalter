@@ -548,16 +548,20 @@ export async function fetchWithRefCache<T>(path: string, fetcher: () => Promise<
 		throw new OfflineCacheMissError(path);
 	}
 
-	const epoch = cacheEpoch;
 	const forceNetwork = forceNetworkRefCacheDepth > 0 || pendingNetworkRefresh.has(path);
 	if (forceNetwork) {
 		try {
-			const value = await fetcher();
-			if (epoch !== cacheEpoch) return value;
-			markServerOnline();
-			writeRefCache(path, value);
-			pendingNetworkRefresh.delete(path);
-			return value;
+			// Never return a body fetched under a superseded epoch (pre-mutation snapshot).
+			for (let attempt = 0; attempt < 8; attempt++) {
+				const epoch = cacheEpoch;
+				const value = await fetcher();
+				if (epoch !== cacheEpoch) continue;
+				markServerOnline();
+				writeRefCache(path, value);
+				pendingNetworkRefresh.delete(path);
+				return value;
+			}
+			throw new Error(`ref-cache: epoch churn while fetching ${path}`);
 		} catch (err) {
 			if (isOfflineFetchError(err)) {
 				markServerOffline();
@@ -576,11 +580,15 @@ export async function fetchWithRefCache<T>(path: string, fetcher: () => Promise<
 	}
 
 	try {
-		const value = await fetcher();
-		if (epoch !== cacheEpoch) return value;
-		markServerOnline();
-		writeRefCache(path, value);
-		return value;
+		for (let attempt = 0; attempt < 8; attempt++) {
+			const epoch = cacheEpoch;
+			const value = await fetcher();
+			if (epoch !== cacheEpoch) continue;
+			markServerOnline();
+			writeRefCache(path, value);
+			return value;
+		}
+		throw new Error(`ref-cache: epoch churn while fetching ${path}`);
 	} catch (err) {
 		if (isOfflineFetchError(err)) {
 			markServerOffline();

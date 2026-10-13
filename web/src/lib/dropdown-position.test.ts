@@ -94,9 +94,11 @@ describe('dropdownListStyle', () => {
 	});
 
 	it('treats money-keypad inset as bottom obstruction', () => {
+		vi.stubGlobal('document', { documentElement: {} });
 		vi.stubGlobal('getComputedStyle', () => ({
 			getPropertyValue: (key: string) => (key === '--money-keypad-inset' ? '240px' : '')
 		}));
+		// Without inset: spaceBelow = 800-440 = 360 → down. With 240px keypad: 120 < 200+8 → up.
 		const trigger = mockTrigger({ top: 400, bottom: 440 });
 		expect(dropdownPlacementFor(trigger, 200)).toBe('up');
 		expect(dropdownListStyle(trigger, 200, true)).toContain('bottom:');

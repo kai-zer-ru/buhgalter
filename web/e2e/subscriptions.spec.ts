@@ -10,7 +10,9 @@ test('subscription notify deep link opens inline edit', async ({ page }) => {
 		amount: '99.00',
 		account_id: account.id,
 		period: 'month',
+		day_of_month: 4,
 		start_date: '2026-05-04 08:00:00',
+		time_local: '08:00',
 		active: true
 	});
 

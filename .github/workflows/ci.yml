@@ -60,6 +60,7 @@ jobs:
         working-directory: ${{ github.workspace }}
       - run: npm ci
       - run: npm run check
+      - run: npm run test:unit
 
   test-android-ui:
     runs-on: ubuntu-latest

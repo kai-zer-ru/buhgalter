@@ -26,7 +26,7 @@ export const toastStore = { subscribe };
 function push(message: string, type: ToastType, durationMs = DURATION_MS[type]) {
 	const id = nextId++;
 	update((items) => [...items, { id, message, type }]);
-	window.setTimeout(() => {
+	globalThis.setTimeout(() => {
 		update((items) => items.filter((item) => item.id !== id));
 	}, durationMs);
 }

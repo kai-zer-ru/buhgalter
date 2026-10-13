@@ -7,6 +7,18 @@ import {
 } from './tx-changes-catchup';
 
 const listMock = vi.fn();
+const memoryStore = new Map<string, string>();
+
+vi.stubGlobal('localStorage', {
+	clear: () => memoryStore.clear(),
+	getItem: (key: string) => memoryStore.get(key) ?? null,
+	setItem: (key: string, value: string) => {
+		memoryStore.set(key, value);
+	},
+	removeItem: (key: string) => {
+		memoryStore.delete(key);
+	}
+});
 
 vi.mock('$lib/api/client', () => ({
 	listTransactionChanges: (...args: unknown[]) => listMock(...args)
@@ -20,7 +32,7 @@ describe('tx-changes-catchup', () => {
 	beforeEach(() => {
 		resetTxChangesCursorForTests();
 		listMock.mockReset();
-		localStorage.clear();
+		memoryStore.clear();
 	});
 
 	afterEach(() => {

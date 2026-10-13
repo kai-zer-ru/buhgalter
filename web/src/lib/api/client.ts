@@ -10,6 +10,7 @@ import {
 	fetchWithRefCache,
 	isStaleFetchError,
 	markLocalMutation,
+	notifyRealtimeInvalidate,
 	readAccountsFromOfflineCache,
 	readCategoriesFromOfflineCache,
 	readRefCache,
@@ -92,9 +93,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 		// Web: full clear (not preserveAuthMe). Preserving /accounts after a transaction left a
 		// ui/meta seed (balances 0.00) in SWR; with a live WebSocket background revalidate is
 		// skipped, so /accounts froze on zeros until F5 (e2e: create account → expense → balance).
+		// Soft-reload via notifyRealtimeInvalidate — WS echo is suppressed by wasRecentLocalMutation,
+		// so open ledger screens must not wait for the socket.
 		markLocalMutation();
 		invalidateApiCache();
-		clearRefCache();
+		notifyRealtimeInvalidate();
 	}
 	return result;
 }

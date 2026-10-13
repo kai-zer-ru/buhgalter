@@ -79,6 +79,7 @@ test: test-unit test-e2e
 test-unit: copy-openapi copy-ui-i18n
 	cd server && go test -timeout 30m ./...
 	cd web && npm run check
+	cd web && npm run test:unit
 	cd android/ui && npm run check
 	cd android/ui && npm run test:unit
 
@@ -183,17 +184,18 @@ GOLANGCI_LINT ?= $(firstword $(wildcard $(shell go env GOPATH 2>/dev/null)/bin/g
 
 prepare: prepare-go prepare-web prepare-android prepare-gen prepare-sql-check
 
-# golangci-lint must be built with a Go >= the runtime toolchain (GOROOT).
-# Arch often ships go N+1 before rebuilding golangci-lint → typecheck panic on stdlib.
+# golangci-lint must be built with a Go >= the runtime toolchain (GOROOT), including patch:
+# export data version bumps on go1.27.x patches → typecheck panic if lint was built with an older patch.
+# Arch often ships go ahead of the golangci-lint package; prefer a rebuilt $GOPATH/bin binary.
 prepare-go:
 	@test -n "$(GOLANGCI_LINT)" || (echo "golangci-lint not found in PATH or \$$(go env GOPATH)/bin" >&2; exit 1)
-	@go_mm=$$(go env GOVERSION | sed -E 's/^go([0-9]+\.[0-9]+).*/\1/'); \
-	lint_mm=$$($(GOLANGCI_LINT) version 2>/dev/null | sed -En 's/.*built with go([0-9]+\.[0-9]+).*/\1/p'); \
-	if [ -n "$$lint_mm" ] && [ "$$go_mm" != "$$lint_mm" ] && \
-	   [ "$$(printf '%s\n' "$$lint_mm" "$$go_mm" | sort -V | tail -1)" = "$$go_mm" ]; then \
-		echo "golangci-lint was built with go$$lint_mm, but runtime is go$$go_mm." >&2; \
+	@go_ver=$$(go env GOVERSION | sed -E 's/^go([0-9]+\.[0-9]+\.[0-9]+).*/\1/; t; s/^go([0-9]+\.[0-9]+).*/\1.0/'); \
+	lint_ver=$$($(GOLANGCI_LINT) version 2>/dev/null | sed -En 's/.*built with go([0-9]+\.[0-9]+\.[0-9]+).*/\1/p; t; s/.*built with go([0-9]+\.[0-9]+).*/\1.0/p'); \
+	if [ -n "$$lint_ver" ] && [ "$$go_ver" != "$$lint_ver" ] && \
+	   [ "$$(printf '%s\n' "$$lint_ver" "$$go_ver" | sort -V | tail -1)" = "$$go_ver" ]; then \
+		echo "golangci-lint was built with go$$lint_ver, but runtime is go$$go_ver." >&2; \
 		echo "Rebuild the linter with the current Go, then ensure it is first on PATH:" >&2; \
-		echo "  go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.1" >&2; \
+		echo "  go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0" >&2; \
 		echo "  export PATH=\"\$$(go env GOPATH)/bin:\$$PATH\"" >&2; \
 		exit 1; \
 	fi

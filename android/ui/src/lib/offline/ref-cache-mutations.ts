@@ -512,6 +512,14 @@ export function touchBalancesAfterCreditMutation(): void {
 	invalidateRefCache(ACCOUNTS_ARCHIVED);
 }
 
+/** Online tx/transfer write — drop ledger overlays so listAccounts/home cannot enrich from pre-mutation dashboard. */
+export function touchLedgerAfterTransactionMutation(): void {
+	touchBalancesAfterCreditMutation();
+	// Detail/balance keys survive preserveAuthMe; prefix wipe also bumps cacheEpoch.
+	invalidateRefCachePrefix('/api/v1/accounts/');
+	invalidateRefCachePrefix('/api/v1/transactions');
+}
+
 export function onRecurringCreated(item: RecurringOperation): void {
 	prependRefCacheList(RECURRING_PATH, item);
 }

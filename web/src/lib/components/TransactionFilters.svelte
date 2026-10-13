@@ -189,7 +189,7 @@
 			<span class="text-xs" style:color="var(--text-muted)"
 				>{$_('transactions.filters.search')}</span
 			>
-			<input class="input w-full" bind:value={search} />
+			<input id="tx-filter-search" class="input w-full" bind:value={search} />
 		</label>
 
 		<div class="flex items-end gap-2 sm:col-span-2 lg:col-span-2">

@@ -35,7 +35,12 @@ test('search by description narrows results', async ({ page }) => {
 	await page.goto('/transactions');
 	await waitAppReady(page);
 
-	await page.locator('.filter-panel-body input.input.w-full').last().fill(unique);
+	const searchInput = page
+		.locator('.filter-panel-body label')
+		.filter({ hasText: 'Поиск' })
+		.locator('input');
+	await expect(searchInput).toBeVisible({ timeout: 10_000 });
+	await searchInput.fill(unique);
 	await expect(page).toHaveURL(/search=/, { timeout: 10_000 });
 	await expect(page.getByRole('row', { name: /15\.00/ })).toBeVisible({ timeout: 10_000 });
 	await expect(page.getByRole('row', { name: /16\.00/ })).toHaveCount(0, { timeout: 10_000 });

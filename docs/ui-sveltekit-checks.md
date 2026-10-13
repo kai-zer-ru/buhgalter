@@ -2,7 +2,7 @@
 
 Типичные поломки `svelte-check` / Android `vitest` в `web/` и `android/ui/`. Цель — не повторять одни и те же ошибки при обёртке навигации в `resolve()` и при правках `$lib/*`.
 
-`make test-unit` гоняет: Go tests → `web` check → `android/ui` check → `android/ui` vitest.
+`make test-unit` гоняет: Go tests → `web` check → `web` vitest → `android/ui` check → `android/ui` vitest.
 
 ---
 
@@ -55,7 +55,7 @@ href={resolve(item.path as Pathname)}
 
 Тип: `'success' | 'error' | 'info' | 'warning'`. Значения вроде `'danger'` **нет** (это variant у `RowActionsMenu`).
 
-Android toast: в vitest (environment `node`) использовать `globalThis.setTimeout`, не `window.setTimeout`.
+Toast (web и Android): в vitest (environment `node`) использовать `globalThis.setTimeout`, не `window.setTimeout`.
 
 Подробнее — [ui-toast.md](ui-toast.md).
 
