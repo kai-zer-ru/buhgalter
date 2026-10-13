@@ -25,12 +25,22 @@ export function isConnectionError(err: unknown): boolean {
 	if (err instanceof Error) {
 		const msg = err.message.toLowerCase();
 		if (err.name === 'AbortError' || err.name === 'TimeoutError') return true;
+		// Capacitor / OkHttp / WebView dump English OS text — never show it in toast.
 		return (
 			msg.includes('failed to connect') ||
 			msg.includes('network request failed') ||
 			msg.includes('network error') ||
 			msg.includes('timeout') ||
-			msg.includes('timed out')
+			msg.includes('timed out') ||
+			msg.includes('unreachable') ||
+			msg.includes('connection refused') ||
+			msg.includes('connection reset') ||
+			msg.includes('unable to resolve') ||
+			msg.includes('unknown host') ||
+			msg.includes('no address associated') ||
+			msg.includes('software caused connection abort') ||
+			msg.includes('ehostunreach') ||
+			msg.includes('enetunreach')
 		);
 	}
 	return false;

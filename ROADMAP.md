@@ -373,7 +373,6 @@
 
 - [x] [Графики /stats и нетто-капитал](roadmap/stats-charts-net-worth.md) — Chart.js на web; `GET /stats/net-worth`; блок на web и Android (без графиков)
 - [x] [Правила категорий + очередь «разобрать»](roadmap/category-rules-inbox.md) — правила (категория → счёт, текст → категория); inbox без категории
-- [ ] [Бюджет: rollover, прогноз, конверты](roadmap/budget-post-mvp.md) — перенос остатка, прогноз из периодических; минимальный UX «конвертов» (доступно = лимит + перенос − spent)
 - [x] БАГ. Не сохраняются настройки банковских карт и привязки их к счетам при переустановке приложения — `GET/PUT /user/notification-intercept/bindings` на сервере, синхронизация в Android при входе и при сохранении настроек
 - [x] БАГ. Android: после переустановки «Синхронизировать» минутами тянет `GET /sync/transaction-changes` с `since_id=0` и проигрывает всю ленту (~десятки тысяч событий), UI тормозит. Фикс: после warm только `?watermark=1` / seek без apply; heavy-warm отложен (ручной sync и холодный кеш); фон — align, не paginated replay ([ui-api-cache.md](docs/ui-api-cache.md))
 - [x] БАГ. Android: в карточке черновика перехвата кнопки «Создать операцию» / «Создать перевод» в одном ряду не на всю ширину
@@ -383,6 +382,7 @@
 - [x] БАГ. После create/update/delete операции или перевода балансы и список операций на открытых экранах (web + Android) расходились / обновлялись с задержкой до SWR-cooldown. Фикс: Android — `touchLedgerAfterTransactionMutation` + `afterOnlineWrite` на всех online-ветках; web — soft-reload после локальной мутации (`notifyRealtimeInvalidate`) и discard/retry in-flight GET при смене `cacheEpoch` ([ui-api-cache.md](docs/ui-api-cache.md))
 - [x] БАГ. Web: deep link (напр. `/budget`) → авторизация → главная вместо исходного URL. Фикс: `?next=` при редиректе на `/login`, возврат после входа (`post-login-redirect.ts`)
 - [x] БАГ. Web/Android: при выходе из профиля toast «Требуется авторизация» (иногда два) — `POST /auth/logout` не soft-reload’ит открытые экраны; `toast.fromError` глотает 401
+- [x] БАГ. Android: при создании операции toast с английским native-текстом вроде «Host unreachable» — `isConnectionError` не ловил фразу, `toast.fromError` показывал сырой `err.message`. Фикс: расширен матчер native/OkHttp сообщений
 
 ## v1.9.0
 
@@ -390,6 +390,7 @@
 
 - [ ] [Цели накопления](roadmap/savings-goals.md) — копилки, прогресс, напоминания (`savings_goals`)
 - [ ] [Улучшение импорта](roadmap/import-improve.md) — универсальный CSV / выгрузки РФ; dedup; связка с правилами и inbox
+- [ ] [Бюджет: rollover, прогноз, конверты](roadmap/budget-post-mvp.md) — перенос остатка; прогноз всех ожидаемых расходов в scope; доступно = лимит + перенос − spent; «к распределению» из доходов; статус от лимит+перенос
 
 ## v1.10.0
 

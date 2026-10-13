@@ -22,6 +22,20 @@ describe('isConnectionError', () => {
 		expect(isConnectionError(new TypeError('Failed to fetch'))).toBe(true);
 	});
 
+	it('detects Host unreachable (OkHttp / native)', () => {
+		expect(isConnectionError(new Error('Host unreachable'))).toBe(true);
+		expect(isConnectionError(new Error('Network is unreachable'))).toBe(true);
+	});
+
+	it('detects DNS and refused host messages', () => {
+		expect(
+			isConnectionError(
+				new Error('Unable to resolve host "lan.local": No address associated with hostname')
+			)
+		).toBe(true);
+		expect(isConnectionError(new Error('Connection refused'))).toBe(true);
+	});
+
 	it('ignores validation errors', () => {
 		expect(isConnectionError(new Error('invalid amount'))).toBe(false);
 	});

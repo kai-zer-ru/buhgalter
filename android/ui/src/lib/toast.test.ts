@@ -67,6 +67,11 @@ describe('toast', () => {
 		expect(items).toHaveLength(0);
 	});
 
+	it('fromError swallows Host unreachable without showing native English', () => {
+		toast.fromError(new Error('Host unreachable'));
+		expect(get(toastStore as Parameters<typeof get>[0])).toHaveLength(0);
+	});
+
 	it('fromError swallows 401 / UNAUTHORIZED (logout and session expiry)', () => {
 		toast.fromError(new ApiError('UNAUTHORIZED', 'Требуется авторизация', 401));
 		expect(get(toastStore as Parameters<typeof get>[0])).toHaveLength(0);
