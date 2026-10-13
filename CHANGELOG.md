@@ -7,9 +7,63 @@
 внутри — **Добавлено** / **Изменено** / **Исправлено** / **Удалено** (и при необходимости **Техническое**).
 Исторические секции до этого соглашения не переписываются.
 
-Подробные release notes для пользователей: [docs/release-notes-v1.7.1.md](docs/release-notes-v1.7.1.md).
+Подробные release notes для пользователей: [docs/release-notes-v1.8.0.md](docs/release-notes-v1.8.0.md).
 
 ## [Unreleased]
+
+## [v1.8.0] — 2026-10-13
+
+> **ОБЯЗАТЕЛЬНО СДЕЛАЙТЕ БЕКАП!** Перед обновлением сохраните копию базы (`data/buhgalter.db`) и каталога `backups/`. Есть миграции БД (`053`, `054`).
+
+### Android
+
+#### Добавлено
+
+- Статистика: блок **нетто-капитала** (текущее значение, assets/liabilities, ряд по месяцам) без интерактивных графиков ([ui-stats.md](docs/ui-stats.md))
+- **Правила категорий** и очередь **«Разобрать»** (операции без категории): drawer, evaluate в форме, «всегда так» → правило ([category-rules.md](docs/category-rules.md))
+- Привязки банк/карта→счёт для перехвата уведомлений **на сервере** (`GET/PUT /user/notification-intercept/bindings`) — переживают переустановку APK
+
+#### Исправлено
+
+- После переустановки «Синхронизировать» больше не проигрывает всю ленту `transaction-changes` с `since_id=0`: warm — watermark/seek; heavy-warm отложен ([ui-api-cache.md](docs/ui-api-cache.md))
+- SMS банков из «Сообщения» (`com.android.mms` и OEM) снова попадают в черновики
+- Кнопки «Создать операцию» / «Создать перевод» в карточке черновика — на всю ширину ряда
+- После create/update/delete операции или перевода балансы и списки на открытых экранах обновляются сразу (`touchLedgerAfterTransactionMutation` + `afterOnlineWrite`)
+- При выходе из профиля больше нет toast «Требуется авторизация» (и дублей)
+- Сетевые ошибки native/OkHttp (`Host unreachable` и др.) → человекочитаемое сообщение, не сырой английский текст
+
+### Web
+
+#### Добавлено
+
+- `/stats`: графики Chart.js (нетто line, доходы/расходы bar, donut по категориям) + блок нетто-капитала ([ui-stats.md](docs/ui-stats.md))
+- **Правила категорий** (`/category-rules`) и очередь **«Разобрать»** (`/transactions/inbox`, badge при `inbox_count > 0`) ([category-rules.md](docs/category-rules.md))
+- После логина возврат на исходный URL (`?next=`), а не всегда на главную
+- Редирект `/subscriptions/{id}` → `/subscriptions?edit=` (ссылки из Telegram/MAX)
+
+#### Исправлено
+
+- После локальной мутации операции/перевода — soft-reload открытых экранов; in-flight GET при смене `cacheEpoch` не заливает stale ([ui-api-cache.md](docs/ui-api-cache.md))
+- При выходе — без toast «Требуется авторизация» (`toast.fromError` глотает 401; logout не soft-reload’ит экраны)
+- Бюджет следующего месяца: удаление строки больше не воскресает из-за `copy_forward` прошлого месяца
+
+### Server
+
+#### Добавлено
+
+- `GET /api/v1/stats/net-worth` — снимок и ряд нетто-капитала по месяцам
+- `GET/POST/PUT/DELETE /api/v1/category-rules`, `PUT .../order`, `POST .../evaluate`; `GET /transactions/inbox`, `/transactions/inbox/count`; silent apply категории при create, если ровно одно text-правило
+- `GET/PUT /api/v1/user/notification-intercept/bindings` — банк/карта→счёт для Android-перехвата
+- Миграции `053_notification_intercept_bindings`, `054_category_rules`
+
+#### Исправлено
+
+- Удаление бюджета будущего месяца: сброс `copy_forward` у источника, чтобы `summary` не создавал копию снова
+
+#### Техническое
+
+- [docs/release-notes-v1.8.0.md](docs/release-notes-v1.8.0.md)
+- OpenAPI **1.8.0**; версия сборки **1.8.0**
 
 ## [v1.7.1] — 2026-10-02
 

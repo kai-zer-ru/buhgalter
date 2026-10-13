@@ -39,8 +39,6 @@
 
 ## v1.0.0
 
-Первый стабильный релиз self-hosted приложения для личного учёта финансов.
-
 - [x] Установка: `make build`, Docker (GHCR), бинарники GitHub Releases; `/setup`, миграции SQLite (`001`…`019`)
 - [x] Пользователи: регистрация, сессии, API-токены, админка (пользователи, бэкапы, диагностика), audit log
 - [x] Счета, категории, операции (доход / расход / перевод, `future`), долги, кредиты с графиком и автосписанием
@@ -197,8 +195,6 @@
 - [x] [Release notes](docs/release-notes-v1.3.2.md) · [ui-credits.md](docs/ui-credits.md) · [transactions-display.md](docs/transactions-display.md) · [ui-budget.md](docs/ui-budget.md)
 
 ## v1.4.0
-
-Фокус релиза — **Android-клиент** и улучшения веб-UI (SWR ref-cache).
 
 - [x] [Android-клиент](docs/android-client.md) — [roadmap](roadmap/android-client.md), [UI](docs/android-client-ui.md), [платформа](docs/android-client-platform.md)
 - [x] Начальный остаток на счёте при редактировании
@@ -369,8 +365,6 @@
 
 ## v1.8.0
 
-Видимость финансов и разбор входящего (перехват, импорт, бюджет). 
-
 - [x] [Графики /stats и нетто-капитал](roadmap/stats-charts-net-worth.md) — Chart.js на web; `GET /stats/net-worth`; блок на web и Android (без графиков)
 - [x] [Правила категорий + очередь «разобрать»](roadmap/category-rules-inbox.md) — правила (категория → счёт, текст → категория); inbox без категории
 - [x] БАГ. Не сохраняются настройки банковских карт и привязки их к счетам при переустановке приложения — `GET/PUT /user/notification-intercept/bindings` на сервере, синхронизация в Android при входе и при сохранении настроек
@@ -383,10 +377,9 @@
 - [x] БАГ. Web: deep link (напр. `/budget`) → авторизация → главная вместо исходного URL. Фикс: `?next=` при редиректе на `/login`, возврат после входа (`post-login-redirect.ts`)
 - [x] БАГ. Web/Android: при выходе из профиля toast «Требуется авторизация» (иногда два) — `POST /auth/logout` не soft-reload’ит открытые экраны; `toast.fromError` глотает 401
 - [x] БАГ. Android: при создании операции toast с английским native-текстом вроде «Host unreachable» — `isConnectionError` не ловил фразу, `toast.fromError` показывал сырой `err.message`. Фикс: расширен матчер native/OkHttp сообщений
+- [x] **Docs:** [Release notes](docs/release-notes-v1.8.0.md) · [CHANGELOG.md](CHANGELOG.md) · [category-rules.md](docs/category-rules.md) · [ui-stats.md](docs/ui-stats.md) · [ui-api-cache.md](docs/ui-api-cache.md) · [README.md](README.md)
 
 ## v1.9.0
-
-Накопления и импорт файлов.
 
 - [ ] [Цели накопления](roadmap/savings-goals.md) — копилки, прогресс, напоминания (`savings_goals`)
 - [ ] [Улучшение импорта](roadmap/import-improve.md) — универсальный CSV / выгрузки РФ; dedup; связка с правилами и inbox
@@ -394,16 +387,13 @@
 
 ## v1.10.0
 
-Отдельный релиз: [сканер чеков](roadmap/receipt-scanner.md) (объёмный модуль — не смешивать с другими фичами). Уроки ветки `scan_chek`; код не мержить вслепую.
-
+- [ ] [Сканер чеков](roadmap/receipt-scanner.md) — отдельный объёмный релиз (не смешивать с другими фичами); уроки ветки `scan_chek`, код не мержить вслепую
 - [ ] QR 54-ФЗ **на устройстве** → prefill формы; подтверждение перед сохранением; dedup по фискальным полям
 - [ ] Состав позиций — **BYO** ключ посредника (не «бесплатный» ФНС с VPS); prefill магазина → [merchants-tags](roadmap/merchants-tags.md)
 - [ ] Опционально: ИИ по фото (prefill, не auto-import); вложение фото к операции
 - [ ] Web + Android; feature flag `receipt_scanner`
 
 ## v1.11.0
-
-Модель операций, отчёты, выписка файлом (после v1.9 import и v1.8 rules).
 
 - [ ] [Разбивка операции на несколько счетов](roadmap/transaction-split-accounts.md)
 - [ ] [PDF-отчёты](roadmap/savings-reports-import.md) — месячная сводка (server-side)

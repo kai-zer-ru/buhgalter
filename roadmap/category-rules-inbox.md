@@ -1,6 +1,6 @@
 # Правила категорий и очередь «неразнесённых»
 
-Планируется в **v1.8.0** ([ROADMAP](../ROADMAP.md#v180)). Web + Android + сервер.
+Реализовано в **v1.8.0** ([ROADMAP](../ROADMAP.md#v180), [release notes](../docs/release-notes-v1.8.0.md), [docs/category-rules.md](../docs/category-rules.md)). Web + Android + сервер.
 
 Авторазметка операций по правилам пользователя и очередь того, что нужно разобрать вручную. Соседи: [выписка банка](bank-sync.md), [перехват уведомлений](notification-intercept.md), [сканер чеков](receipt-scanner.md), [магазины](merchants-tags.md).
 

@@ -173,7 +173,7 @@ Picker: `CategoryIconPicker.svelte`. Диалог подкатегории: `Sub
 
 Дефолтные категории при регистрации: `server/internal/categoryseed/defaults.go` (без подкатегорий).
 
-**Правила категорий** (CRUD, подстановка счёта по категории) — [category-rules.md](category-rules.md). Дальше v1.8: text→category, inbox — [category-rules-inbox.md](../roadmap/category-rules-inbox.md). Не путать с разовым маппингом при файловом импорте.
+**Правила категорий** (category→account, text→category, inbox) — [category-rules.md](category-rules.md); спека — [category-rules-inbox.md](../roadmap/category-rules-inbox.md). Не путать с разовым маппингом при файловом импорте.
 
 ## Файлы (шпаргалка)
 

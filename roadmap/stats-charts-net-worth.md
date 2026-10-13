@@ -1,6 +1,6 @@
 # Графики /stats и нетто-капитал
 
-Планируется в **v1.8.0** ([ROADMAP](../ROADMAP.md#v180)). Сейчас на `/stats` — таблицы cashflow (`summary`, `by-category`, `by-period`); балансов во времени и нетто-капитала нет.
+Реализовано в **v1.8.0** ([ROADMAP](../ROADMAP.md#v180), [release notes](../docs/release-notes-v1.8.0.md)). До релиза на `/stats` были только таблицы cashflow (`summary`, `by-category`, `by-period`).
 
 Связано: [docs/ui-stats.md](../docs/ui-stats.md), [ui-credit-cards.md](../docs/ui-credit-cards.md).
 

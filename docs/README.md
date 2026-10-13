@@ -4,7 +4,7 @@
 
 **Спецификация API:** [api/openapi.yaml](api/openapi.yaml) (интерактивно — `/docs` на запущенном сервере).
 
-История изменений по версиям — [CHANGELOG.md](../CHANGELOG.md). Последний релиз: [release-notes-v1.7.1.md](release-notes-v1.7.1.md).
+История изменений по версиям — [CHANGELOG.md](../CHANGELOG.md). Последний релиз: [release-notes-v1.8.0.md](release-notes-v1.8.0.md).
 
 ---
 
@@ -61,8 +61,8 @@
 | [ui-pagination.md](ui-pagination.md) | Постраничная навигация (`TransactionPagination`) |
 | [ui-toast.md](ui-toast.md) | In-app toast (успех, ошибка, предупреждение) |
 | [ui-sveltekit-checks.md](ui-sveltekit-checks.md) | `resolve` / typed routes, vitest-моки, частые поломки check |
-| [ui-stats.md](ui-stats.md) | Страница `/stats` |
-| [../roadmap/stats-charts-net-worth.md](../roadmap/stats-charts-net-worth.md) | (план) Графики /stats и нетто-капитал |
+| [ui-stats.md](ui-stats.md) | Страница `/stats`: сводка, нетто-капитал, графики (web), таблицы |
+| [../roadmap/stats-charts-net-worth.md](../roadmap/stats-charts-net-worth.md) | Нетто-капитал и графики /stats (спека; реализовано в v1.8.0) |
 | [ui-budget.md](ui-budget.md) | Страница `/budget`, форма, копирование, виджет на главной (спойлер категорий) |
 | [ui-credits.md](ui-credits.md) | Страницы кредитов |
 | [ui-credit-cards.md](ui-credit-cards.md) | Кредитные карты (тип счёта) |
@@ -83,9 +83,10 @@
 | [../roadmap/realtime-updates.md](../roadmap/realtime-updates.md) | Живые обновления UI: WebSocket на вебе (v1.7.0); Android — SWR |
 | [import/cubux.md](import/cubux.md) | Импорт и экспорт формата Cubux |
 | [import/buhgalter.md](import/buhgalter.md) | Нативный секционный CSV: полный перенос учёта между инстансами |
-| [category-rules.md](category-rules.md) | Правила категорий (CRUD, category→account) |
-| [../roadmap/category-rules-inbox.md](../roadmap/category-rules-inbox.md) | План v1.8: inbox, text→category, evaluate |
+| [category-rules.md](category-rules.md) | Правила категорий: category→account, text→category, inbox, evaluate |
+| [../roadmap/category-rules-inbox.md](../roadmap/category-rules-inbox.md) | Спека правил и inbox (реализовано в v1.8.0) |
 | [feature-toggles.md](feature-toggles.md) | Флаги модулей в админке; чеклист для новых фич |
 | [subscriptions.md](subscriptions.md) | Подписки: API, UI, уведомления, плановый остаток, привязка и очередь |
+| [release-notes-v1.8.0.md](release-notes-v1.8.0.md) | Release notes v1.8.0: нетто/графики, правила категорий, inbox, Android bindings |
 | [release-notes-v1.7.1.md](release-notes-v1.7.1.md) | Release notes v1.7.1: надёжность учёта, безопасность, кеш, Android |
 | [release-notes-v1.7.0.md](release-notes-v1.7.0.md) | Release notes v1.7.0: realtime, подписки, Android SMS/версии |
