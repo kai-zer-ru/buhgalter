@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { waitAppReady } from './helpers/auth';
-import { expandCollapsibleSection } from './helpers/ui';
+import { expandCollapsibleSection, toastLocator } from './helpers/ui';
 
 test('mobile menu drill-down opens settings submenu', async ({ page }) => {
 	await page.setViewportSize({ width: 390, height: 844 });
@@ -248,4 +248,6 @@ test('logout returns to login page', async ({ page }) => {
 	await waitAppReady(page);
 	await page.getByRole('button', { name: 'Выйти' }).click();
 	await expect(page).toHaveURL(/\/login/, { timeout: 15_000 });
+	// Soft-reload after logout must not toast UNAUTHORIZED on open screens.
+	await expect(toastLocator(page, 'error', 'Требуется авторизация')).toHaveCount(0);
 });

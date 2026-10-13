@@ -20,7 +20,17 @@ vi.mock('svelte-i18n', () => ({
 	_: {}
 }));
 
-import { formatApiError } from './errors';
+import { formatApiError, isSilentClientError } from './errors';
+
+describe('isSilentClientError', () => {
+	it('treats 401 / UNAUTHORIZED as silent (no toast on logout)', () => {
+		expect(isSilentClientError(new ApiError('UNAUTHORIZED', 'Требуется авторизация', 401))).toBe(
+			true
+		);
+		expect(isSilentClientError(new ApiError('NO_SERVER', 'no server', 0))).toBe(true);
+		expect(isSilentClientError(new ApiError('CONFLICT', 'x', 409))).toBe(false);
+	});
+});
 
 describe('formatApiError', () => {
 	it('prefers server message for generic CONFLICT code', () => {

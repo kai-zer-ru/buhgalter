@@ -17,9 +17,12 @@ const GENERIC_API_CODES = new Set([
 	'SERVICE_UNAVAILABLE'
 ]);
 
-/** Errors expected before server URL / auth are configured — no user-facing toast. */
+/** Errors expected before server URL / auth are configured — no user-facing toast.
+ * Also 401/UNAUTHORIZED: logout and session expiry already clear the session. */
 export function isSilentClientError(err: unknown): boolean {
-	return err instanceof ApiError && (err.code === 'NO_SERVER' || err.code === 'INVALID_RESPONSE');
+	if (!(err instanceof ApiError)) return false;
+	if (err.status === 401 || err.code === 'UNAUTHORIZED') return true;
+	return err.code === 'NO_SERVER' || err.code === 'INVALID_RESPONSE';
 }
 
 /** Map API error code to a client-side i18n message (falls back to server message). */

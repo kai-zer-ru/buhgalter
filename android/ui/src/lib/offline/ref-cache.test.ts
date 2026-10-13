@@ -48,6 +48,12 @@ describe('shouldInvalidateRefCacheOnWrite', () => {
 		expect(shouldInvalidateRefCacheOnWrite('/api/v1/import')).toBe(true);
 		expect(shouldInvalidateRefCacheOnWrite('/api/v1/transactions')).toBe(true);
 	});
+
+	it('does not soft-reload after auth endpoints (logout must not 401 open screens)', () => {
+		expect(shouldInvalidateRefCacheOnWrite('/api/v1/auth/logout')).toBe(false);
+		expect(shouldInvalidateRefCacheOnWrite('/api/v1/auth/login')).toBe(false);
+		expect(shouldInvalidateRefCacheOnWrite('/api/v1/auth/register')).toBe(false);
+	});
 });
 
 describe('fetchWithRefCache SWR', () => {

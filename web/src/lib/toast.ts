@@ -41,6 +41,10 @@ export const toast = Object.assign(toastFn, {
 	warning: (message: string) => push(message, 'warning'),
 	info: (message: string) => push(message, 'info'),
 	fromError: (err: unknown, fallbackKey = 'common.error') => {
+		// Session expiry / logout already redirect to login — do not toast UNAUTHORIZED.
+		if (err instanceof ApiError && (err.status === 401 || err.code === 'UNAUTHORIZED')) {
+			return;
+		}
 		if (err instanceof Error && !(err instanceof ApiError) && err.message) {
 			push(err.message, 'error');
 			return;

@@ -382,6 +382,7 @@
 - [x] БАГ. Web: ссылка из уведомления `/subscriptions/{id}` (Telegram/MAX) — циклическая перезагрузка; маршрута не было (редактирование только на `/subscriptions?edit=`). Фикс: редирект `/subscriptions/{id}` → `?edit=`
 - [x] БАГ. После create/update/delete операции или перевода балансы и список операций на открытых экранах (web + Android) расходились / обновлялись с задержкой до SWR-cooldown. Фикс: Android — `touchLedgerAfterTransactionMutation` + `afterOnlineWrite` на всех online-ветках; web — soft-reload после локальной мутации (`notifyRealtimeInvalidate`) и discard/retry in-flight GET при смене `cacheEpoch` ([ui-api-cache.md](docs/ui-api-cache.md))
 - [x] БАГ. Web: deep link (напр. `/budget`) → авторизация → главная вместо исходного URL. Фикс: `?next=` при редиректе на `/login`, возврат после входа (`post-login-redirect.ts`)
+- [x] БАГ. Web/Android: при выходе из профиля toast «Требуется авторизация» (иногда два) — `POST /auth/logout` не soft-reload’ит открытые экраны; `toast.fromError` глотает 401
 
 ## v1.9.0
 

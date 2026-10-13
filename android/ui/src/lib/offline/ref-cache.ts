@@ -173,10 +173,13 @@ export function shouldPersistRefCache(path: string): boolean {
 	return true;
 }
 
-/** POST /import/jobs only queues work; bust caches when the job finishes. */
+/** POST /import/jobs only queues work; bust caches when the job finishes.
+ * Auth endpoints do not change ledger data — soft-reload after logout would 401. */
 export function shouldInvalidateRefCacheOnWrite(path: string): boolean {
 	const pathOnly = path.split('?')[0] ?? path;
-	return pathOnly !== '/api/v1/import/jobs';
+	if (pathOnly === '/api/v1/import/jobs') return false;
+	if (pathOnly.startsWith('/api/v1/auth/')) return false;
+	return true;
 }
 
 /** Network / server errors where a cached GET response is acceptable. */

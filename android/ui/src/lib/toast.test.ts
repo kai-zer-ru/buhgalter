@@ -14,6 +14,7 @@ vi.mock('svelte-i18n', () => ({
 	}
 }));
 
+import { ApiError } from './api/client';
 import { toast, toastStore } from './toast';
 
 describe('toast', () => {
@@ -64,5 +65,10 @@ describe('toast', () => {
 		toast.fromError(new Error('Failed to connect to /192.168.0.10:8766'));
 		const items = get(toastStore as Parameters<typeof get>[0]);
 		expect(items).toHaveLength(0);
+	});
+
+	it('fromError swallows 401 / UNAUTHORIZED (logout and session expiry)', () => {
+		toast.fromError(new ApiError('UNAUTHORIZED', 'Требуется авторизация', 401));
+		expect(get(toastStore as Parameters<typeof get>[0])).toHaveLength(0);
 	});
 });

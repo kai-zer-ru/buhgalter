@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { get } from 'svelte/store';
+import { ApiError } from './api/client';
 import { toast, toastStore } from './toast';
 
 describe('toast', () => {
@@ -35,5 +36,10 @@ describe('toast', () => {
 		const items = get(toastStore as Parameters<typeof get>[0]);
 		expect(items[0]?.type).toBe('error');
 		expect(items[0]?.message).toBe('Validation failed');
+	});
+
+	it('fromError swallows 401 / UNAUTHORIZED (logout and session expiry redirect)', () => {
+		toast.fromError(new ApiError('UNAUTHORIZED', 'Требуется авторизация', 401));
+		expect(get(toastStore as Parameters<typeof get>[0])).toHaveLength(0);
 	});
 });
