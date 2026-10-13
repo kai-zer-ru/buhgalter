@@ -5,7 +5,13 @@ import { test, expect } from '@playwright/test';
 import { login, apiJSON, restoreAdminSession, waitAppReady } from './helpers/auth';
 import { advanceImportToPreview, commitImportFromPreview } from './helpers/import';
 import { createCashAccount, createIncome } from './helpers/setup-data';
-import { confirmDialog, expectToast, expandCollapsibleSection, rowMenuAction } from './helpers/ui';
+import {
+	confirmDialog,
+	expectToast,
+	expandCollapsibleSection,
+	rowMenuAction,
+	waitToastGone
+} from './helpers/ui';
 import {
 	fillEditTxAmount,
 	fillTransactionForm,
@@ -88,6 +94,7 @@ test('admin root saves system settings', async ({ page }) => {
 		.getByRole('button', { name: 'Сохранить', exact: true })
 		.click();
 	await expectToast(page, 'success', 'Сохранено');
+	await waitToastGone(page, 'success', 'Сохранено');
 
 	await page.locator('#external').fill('');
 	await page

@@ -2,9 +2,11 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { page } from '$app/stores';
 	import { _ } from 'svelte-i18n';
 	import { getRegistrationEnabled, login, requestPasswordReset } from '$lib/api/client';
 	import { formatAuthUserApiError } from '$lib/auth/api-errors';
+	import { LOGIN_NEXT_PARAM, parsePostLoginPath } from '$lib/auth/post-login-redirect';
 	import { user, markSessionHint } from '$lib/stores/auth';
 	import { loadFeatureFlags } from '$lib/features';
 	import { syncThemeFromUser } from '$lib/stores/theme';
@@ -37,7 +39,8 @@
 			await loadFeatureFlags();
 			setLocale(res.user.language);
 			syncThemeFromUser(res.user.theme);
-			await goto(resolve('/'));
+			const next = parsePostLoginPath($page.url.searchParams.get(LOGIN_NEXT_PARAM), '/');
+			await goto(resolve(next as '/'));
 		} catch (err) {
 			toast.error(formatAuthUserApiError(err));
 		} finally {

@@ -13,7 +13,13 @@ export function toastLocator(page: Page, type: ToastType, text?: string): Locato
 }
 
 export async function expectToast(page: Page, type: ToastType, text: string, timeout = 10_000) {
-	await expect(toastLocator(page, type, text)).toBeVisible({ timeout });
+	// Prefer the newest match: a previous toast with the same text may still be visible (~3s).
+	await expect(toastLocator(page, type, text).last()).toBeVisible({ timeout });
+}
+
+/** Wait until no toast with this text remains (between consecutive actions that show the same message). */
+export async function waitToastGone(page: Page, type: ToastType, text: string, timeout = 10_000) {
+	await expect(toastLocator(page, type, text)).toHaveCount(0, { timeout });
 }
 
 export async function dismissBlockingModals(page: Page) {

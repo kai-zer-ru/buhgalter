@@ -381,6 +381,7 @@
 - [x] БАГ. Бюджет следующего месяца (напр. ноябрь): после удаления строка снова появлялась — `copy_forward` у прошлого месяца не сбрасывался, `summary` заново создавал копию
 - [x] БАГ. Web: ссылка из уведомления `/subscriptions/{id}` (Telegram/MAX) — циклическая перезагрузка; маршрута не было (редактирование только на `/subscriptions?edit=`). Фикс: редирект `/subscriptions/{id}` → `?edit=`
 - [x] БАГ. После create/update/delete операции или перевода балансы и список операций на открытых экранах (web + Android) расходились / обновлялись с задержкой до SWR-cooldown. Фикс: Android — `touchLedgerAfterTransactionMutation` + `afterOnlineWrite` на всех online-ветках; web — soft-reload после локальной мутации (`notifyRealtimeInvalidate`) и discard/retry in-flight GET при смене `cacheEpoch` ([ui-api-cache.md](docs/ui-api-cache.md))
+- [x] БАГ. Web: deep link (напр. `/budget`) → авторизация → главная вместо исходного URL. Фикс: `?next=` при редиректе на `/login`, возврат после входа (`post-login-redirect.ts`)
 
 ## v1.9.0
 

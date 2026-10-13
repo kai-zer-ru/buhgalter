@@ -9,6 +9,11 @@
 	import { readInboxCount } from '$lib/stores/inbox-count';
 	import { refCacheTick } from '$lib/ref-cache';
 	import { loadUser, logout, user, hasRecentSession, clearSessionHint } from '$lib/stores/auth';
+	import {
+		LOGIN_NEXT_PARAM,
+		loginHrefFor,
+		parsePostLoginPath
+	} from '$lib/auth/post-login-redirect';
 	import { isPublicAppRoute, sessionExpiredTick } from '$lib/auth/session-expired';
 	import { invalidateApiCache } from '$lib/api/cache';
 	import {
@@ -98,7 +103,7 @@
 		user.set(null);
 		invalidateApiCache();
 		if (ready && !bootError && !isPublicAppRoute(path)) {
-			void goto(resolve('/login'), { replaceState: true });
+			void goto(resolve(loginHrefFor(path, $page.url.search) as '/'), { replaceState: true });
 		}
 	});
 
@@ -106,7 +111,7 @@
 		if (!ready || bootError) return;
 		if (isPublicAppRoute(path)) return;
 		if ($user === null) {
-			void goto(resolve('/login'), { replaceState: true });
+			void goto(resolve(loginHrefFor(path, $page.url.search) as '/'), { replaceState: true });
 		}
 	});
 
@@ -346,9 +351,9 @@
 		return item.isActive ? item.isActive(path) : path === item.path;
 	}
 
-	async function goReady(route: '/' | '/login' | '/setup') {
+	async function goReady(route: string) {
 		ready = true;
-		await goto(resolve(route));
+		await goto(resolve(route as '/'));
 	}
 
 	async function bootstrap() {
@@ -361,6 +366,7 @@
 		initTheme();
 
 		const currentPath = $page.url.pathname;
+		const currentSearch = $page.url.search;
 		try {
 			const status = await getSetupStatus();
 			if (!status.configured && currentPath !== '/setup') {
@@ -375,7 +381,7 @@
 			if (status.configured && !['/setup', '/login', '/register'].includes(currentPath)) {
 				const auth = await loadUser();
 				if (auth === 'unauthorized') {
-					await goReady('/login');
+					await goReady(loginHrefFor(currentPath, currentSearch));
 					return;
 				}
 				if (auth === 'network') {
@@ -393,15 +399,21 @@
 							if (update) pendingUpdate = update;
 						});
 					}
-					if (currentPath === '/login' || currentPath === '/register') {
-						await goReady('/');
-						return;
-					}
 				}
+			}
+
+			const currentUser = get(user);
+			if (currentUser && (currentPath === '/login' || currentPath === '/register')) {
+				const next =
+					currentPath === '/login'
+						? parsePostLoginPath($page.url.searchParams.get(LOGIN_NEXT_PARAM), '/')
+						: '/';
+				await goReady(next);
+				return;
 			}
 		} catch (err) {
 			if (err instanceof ApiError && err.status === 401) {
-				await goReady('/login');
+				await goReady(loginHrefFor(currentPath, currentSearch));
 				return;
 			}
 			if (currentPath !== '/setup' && currentPath !== '/login' && currentPath !== '/register') {
