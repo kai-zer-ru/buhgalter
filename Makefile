@@ -9,7 +9,7 @@ OPENAPI_DST := server/internal/docs/openapi.yaml
 UI_I18N_SRC := android/ui/src/lib/i18n
 UI_I18N_DST := server/ui_locales
 
-.PHONY: dev dev-server dev-web build build-arm web-build category-icons-json copy-static copy-openapi check-openapi-examples openapi-check copy-ui-i18n ui-i18n-check inline-sql-check server-build server-build-arm fix-build-perms test test-unit test-e2e test-e2e-web test-coverage lint lint-go prepare prepare-go prepare-web prepare-android prepare-gen prepare-sql-check docker-build act-push act-release act-keep-image act-prune tag-release migrate ci sqlc sqlc-check download-bank-logos download-marketplace-logos clear version android-icons android-ui-build android-sync android-apk android-apk-release android-install android-install-release android-ensure-sdk
+.PHONY: dev dev-server dev-web build build-arm web-build category-icons-json copy-static copy-openapi check-openapi-examples openapi-check copy-ui-i18n check-ui-i18n-keys ui-i18n-check inline-sql-check server-build server-build-arm fix-build-perms test test-unit test-e2e test-e2e-web test-coverage lint lint-go prepare prepare-go prepare-web prepare-android prepare-gen prepare-sql-check docker-build act-push act-release act-keep-image act-prune tag-release migrate ci sqlc sqlc-check download-bank-logos download-marketplace-logos clear version android-icons android-ui-build android-sync android-apk android-apk-release android-install android-install-release android-ensure-sdk
 
 DOCKER_COMPOSE := docker compose -f docker/docker-compose.yml
 
@@ -40,8 +40,12 @@ copy-ui-i18n:
 	cp $(UI_I18N_SRC)/ru.json $(UI_I18N_DST)/ru.json
 	cp $(UI_I18N_SRC)/en.json $(UI_I18N_DST)/en.json
 
-# CI: sync + require committed server/ui_locales.
-ui-i18n-check: copy-ui-i18n
+# Literal $_('…')/tr('…') keys in web + android/ui ⊆ both ru.json and en.json.
+check-ui-i18n-keys:
+	@python3 scripts/check_ui_i18n_keys.py
+
+# CI: sync + require committed server/ui_locales + key completeness.
+ui-i18n-check: copy-ui-i18n check-ui-i18n-keys
 	@git diff --exit-code -- $(UI_I18N_DST)/ru.json $(UI_I18N_DST)/en.json || \
 		(echo "ui-i18n: run 'make copy-ui-i18n' and commit $(UI_I18N_DST)/{ru,en}.json" && exit 1)
 
@@ -178,7 +182,7 @@ lint: lint-go
 	cd android/ui && npm run lint
 
 # Автофикс форматирования, линтера и сгенерированных артефактов перед коммитом / make ci.
-# prepare-gen синхронизирует артефакты (copy-*), check-цели с git diff — только в make ci.
+# prepare-gen: sync + ui-i18n-check; openapi/sqlc git-diff checks — в make ci.
 # Prefer a user-built binary (e.g. after Arch upgrades go ahead of golangci-lint package).
 GOLANGCI_LINT ?= $(firstword $(wildcard $(shell go env GOPATH 2>/dev/null)/bin/golangci-lint) $(shell command -v golangci-lint 2>/dev/null))
 
@@ -208,7 +212,7 @@ prepare-web:
 prepare-android:
 	cd android/ui && npm run lint:fix
 
-prepare-gen: sqlc category-icons-json copy-openapi check-openapi-examples copy-ui-i18n
+prepare-gen: sqlc category-icons-json copy-openapi check-openapi-examples ui-i18n-check
 
 prepare-sql-check: sqlc-check inline-sql-check
 

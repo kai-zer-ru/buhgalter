@@ -384,6 +384,7 @@
 
 - [x] БАГ. Android: при запуске приложение сразу сворачивается (гонка quiet wake перехвата: sticky Intent extra + HyperOS bring-to-front без `onNewIntent`). Фикс: one-shot token, strip sticky extras, `onResume` → user engaged ([android-client-platform.md](docs/android-client-platform.md))
 - [x] [UX polish](roadmap/ux-polish.md) — без полос прокрутки; PTR текущего экрана; classic / MaterialBased; radius + профиль. Реализовано; **soak ~неделя** — баги отдельными коммитами в 1.8.1
+- [x] БАГ. Web/Android: на `/settings/notifications` кнопка показывает ключ `settings.notifications.save_all` вместо перевода. Нужны ключи ru/en + тест полноты i18n (литеральные ключи из UI — в обоих языках; `make ui-i18n-check`)
 - [ ] [Кнопки в Telegram / MAX](roadmap/telegram-max-buttons.md) — MVP: **URL-кнопки** в исходящих уведомлениях («Открыть долг/кредит»); callback — позже
 
 ## v1.9.0

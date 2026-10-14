@@ -213,7 +213,7 @@ Launcher-виджеты (не карточки на главной в WebView). 
 
 При **рассинхроне версий** (`APP_VERSION` < `current_version` с `GET /api/v1/version/check`) клиент дополнительно запрашивает `GET /api/v1/ui/i18n/{lang}` и мержит каталог поверх bundled (`svelte-i18n` `addMessages`). Кеш в `localStorage` по паре «версия сервера + язык». Офлайн — мягкий сбой (остаются строки APK).
 
-На сервере каталоги копируются в `server/ui_locales/` (`make copy-ui-i18n`, проверка `ui-i18n-check` в CI) и отдаются с версией бинарника. Это отдельно от `server/locales/` (сообщения API/ошибок).
+На сервере каталоги копируются в `server/ui_locales/` (`make copy-ui-i18n`, проверка `ui-i18n-check` в CI: parity зеркала + литеральные `$_('…')`/`tr('…')` ключи web и android/ui ⊆ ru/en) и отдаются с версией бинарника. Это отдельно от `server/locales/` (сообщения API/ошибок).
 
 Код: `android/ui/src/lib/i18n/remote-sync.ts`, `server/internal/ui/i18n.go`.
 
