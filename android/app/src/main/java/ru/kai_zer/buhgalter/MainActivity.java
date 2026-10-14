@@ -18,6 +18,8 @@ public class MainActivity extends BridgeActivity {
     private boolean skipCapacitor;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private Runnable quietWakeFallback;
+    /** True only while processing a fresh quiet wake that may still {@code moveTaskToBack}. */
+    private boolean quietWakeSession;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -66,24 +68,30 @@ public class MainActivity extends BridgeActivity {
     }
 
     private void handleQuietWakeIntent(Intent intent) {
-        boolean quietExtra =
-                intent != null && intent.getBooleanExtra(InterceptPendingWake.EXTRA_QUIET_WAKE, false);
-        if (!quietExtra) {
-            // Launcher, recents, share, deep link — user opened the app.
+        boolean quiet = InterceptPendingWake.consumeQuietWakeIntent(intent);
+        if (intent != null) {
+            // Keep Activity intent in sync after sticky-extra strip.
+            setIntent(intent);
+        }
+        if (!quiet) {
+            // Launcher, recents, share, deep link, or stale sticky quiet extra.
             cancelQuietWakeHide();
             InterceptPendingWake.markUserEngaged();
             return;
         }
-        InterceptPendingWake.markQuietWakeFromIntent(intent);
-        if (!InterceptPendingWake.isQuietWakeActive()) {
+        if (InterceptPendingWake.isUserEngaged()) {
+            // User already looking — parse in foreground, never hide.
+            cancelQuietWakeHide();
             return;
         }
+        quietWakeSession = true;
         // Fallback if JS never calls finishQuietWake (slow load / no session).
         if (quietWakeFallback != null) {
             mainHandler.removeCallbacks(quietWakeFallback);
         }
         quietWakeFallback =
                 () -> {
+                    quietWakeSession = false;
                     boolean pin = AppLockNative.isPinEnabled(MainActivity.this);
                     boolean hide =
                             InterceptPendingWake.shouldMoveTaskToBack(
@@ -104,6 +112,7 @@ public class MainActivity extends BridgeActivity {
     }
 
     void cancelQuietWakeHide() {
+        quietWakeSession = false;
         if (quietWakeFallback != null) {
             mainHandler.removeCallbacks(quietWakeFallback);
             quietWakeFallback = null;
@@ -130,6 +139,12 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onResume() {
         super.onResume();
+        // HyperOS often brings singleTask to front without onNewIntent — treat as user open
+        // unless we are in the middle of a fresh quiet-wake parse session.
+        if (!quietWakeSession) {
+            cancelQuietWakeHide();
+            InterceptPendingWake.markUserEngaged();
+        }
         attachHistoryBridge();
         // MIUI/HyperOS often unbinds NotificationListenerService while the app is backgrounded.
         if (NotificationInterceptStore.isCaptureEnabled(this)) {
@@ -139,6 +154,12 @@ public class MainActivity extends BridgeActivity {
                     "nls-resume-rebind")
                     .start();
         }
+    }
+
+    @Override
+    public void onStop() {
+        super.onStop();
+        InterceptPendingWake.onActivityStopped();
     }
 
     @Override

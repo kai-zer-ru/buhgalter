@@ -514,17 +514,18 @@ public class NotificationInterceptPlugin extends Plugin {
         boolean pin = AppLockNative.isPinEnabled(getContext());
         boolean hide = InterceptPendingWake.shouldMoveTaskToBack(quiet, engaged, pin);
         InterceptPendingWake.clearQuietWake();
-        if (hide) {
-            android.app.Activity activity = getActivity();
-            if (activity != null) {
-                activity.runOnUiThread(() -> {
-                    try {
-                        activity.moveTaskToBack(true);
-                    } catch (RuntimeException ignored) {
-                        // ignore
-                    }
-                });
-            }
+        android.app.Activity activity = getActivity();
+        if (activity instanceof MainActivity) {
+            activity.runOnUiThread(((MainActivity) activity)::cancelQuietWakeHide);
+        }
+        if (hide && activity != null) {
+            activity.runOnUiThread(() -> {
+                try {
+                    activity.moveTaskToBack(true);
+                } catch (RuntimeException ignored) {
+                    // ignore
+                }
+            });
         }
         JSObject ret = new JSObject();
         ret.put("quiet", quiet);

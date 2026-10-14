@@ -23,4 +23,65 @@ public class InterceptPendingWakeTest {
         assertTrue(InterceptPendingWake.isUserEngaged());
         InterceptPendingWake.resetForTests();
     }
+
+    @Test
+    public void consumeQuietWake_oneShotMatchingToken() {
+        InterceptPendingWake.resetForTests();
+        long token = InterceptPendingWake.armQuietWakeTokenForTests();
+
+        assertTrue(InterceptPendingWake.consumeQuietWake(true, token));
+        assertTrue(InterceptPendingWake.isQuietWakeActive());
+
+        // Second consume / sticky replay must not re-arm.
+        assertFalse(InterceptPendingWake.consumeQuietWake(true, token));
+        InterceptPendingWake.resetForTests();
+    }
+
+    @Test
+    public void consumeQuietWake_rejectsStaleOrMissingToken() {
+        InterceptPendingWake.resetForTests();
+        assertFalse(InterceptPendingWake.consumeQuietWake(true, 42L));
+        assertFalse(InterceptPendingWake.isQuietWakeActive());
+
+        InterceptPendingWake.armQuietWakeTokenForTests();
+        assertFalse(InterceptPendingWake.consumeQuietWake(true, 0L));
+        assertFalse(InterceptPendingWake.isQuietWakeActive());
+        assertFalse(InterceptPendingWake.consumeQuietWake(false, 1L));
+        InterceptPendingWake.resetForTests();
+    }
+
+    @Test
+    public void consumeQuietWake_keepsExistingUserEngaged() {
+        InterceptPendingWake.resetForTests();
+        InterceptPendingWake.markUserEngaged();
+        long token = InterceptPendingWake.armQuietWakeTokenForTests();
+
+        assertTrue(InterceptPendingWake.consumeQuietWake(true, token));
+        assertTrue(InterceptPendingWake.isQuietWakeActive());
+        assertTrue(InterceptPendingWake.isUserEngaged());
+        assertFalse(
+                InterceptPendingWake.shouldMoveTaskToBack(
+                        InterceptPendingWake.isQuietWakeActive(),
+                        InterceptPendingWake.isUserEngaged(),
+                        false));
+        InterceptPendingWake.resetForTests();
+    }
+
+    @Test
+    public void onActivityStopped_clearsEngagedUnlessQuietActive() {
+        InterceptPendingWake.resetForTests();
+        InterceptPendingWake.markUserEngaged();
+        InterceptPendingWake.onActivityStopped();
+        assertFalse(InterceptPendingWake.isUserEngaged());
+
+        InterceptPendingWake.resetForTests();
+        InterceptPendingWake.markUserEngaged();
+        long token = InterceptPendingWake.armQuietWakeTokenForTests();
+        assertTrue(InterceptPendingWake.consumeQuietWake(true, token));
+        assertTrue(InterceptPendingWake.isQuietWakeActive());
+        assertTrue(InterceptPendingWake.isUserEngaged());
+        InterceptPendingWake.onActivityStopped();
+        assertTrue(InterceptPendingWake.isUserEngaged());
+        InterceptPendingWake.resetForTests();
+    }
 }

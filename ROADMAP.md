@@ -28,6 +28,7 @@
 - [v1.7.0](#v170)
 - [v1.7.1](#v171)
 - [v1.8.0](#v180)
+- [v1.8.1](#v181)
 - [v1.9.0](#v190)
 - [v1.10.0](#v1100)
 - [v1.11.0](#v1110)
@@ -379,11 +380,17 @@
 - [x] БАГ. Android: при создании операции toast с английским native-текстом вроде «Host unreachable» — `isConnectionError` не ловил фразу, `toast.fromError` показывал сырой `err.message`. Фикс: расширен матчер native/OkHttp сообщений
 - [x] **Docs:** [Release notes](docs/release-notes-v1.8.0.md) · [CHANGELOG.md](CHANGELOG.md) · [category-rules.md](docs/category-rules.md) · [ui-stats.md](docs/ui-stats.md) · [ui-api-cache.md](docs/ui-api-cache.md) · [README.md](README.md)
 
+## v1.8.1
+
+- [x] БАГ. Android: при запуске приложение сразу сворачивается (гонка quiet wake перехвата: sticky Intent extra + HyperOS bring-to-front без `onNewIntent`). Фикс: one-shot token, strip sticky extras, `onResume` → user engaged ([android-client-platform.md](docs/android-client-platform.md))
+- [ ] [UX polish](roadmap/ux-polish.md) — без полос прокрутки; pull-to-refresh текущего экрана (не полный sync); мелкая полировка; две темы на web и Android: **классика** (как сейчас) и **MaterialBased** (новая). При наплыве багов — в 1.8.1
+
 ## v1.9.0
 
 - [ ] [Цели накопления](roadmap/savings-goals.md) — копилки, прогресс, напоминания (`savings_goals`)
 - [ ] [Улучшение импорта](roadmap/import-improve.md) — универсальный CSV / выгрузки РФ; dedup; связка с правилами и inbox
 - [ ] [Бюджет: rollover, прогноз, конверты](roadmap/budget-post-mvp.md) — перенос остатка; прогноз всех ожидаемых расходов в scope; доступно = лимит + перенос − spent; «к распределению» из доходов; статус от лимит+перенос
+- [ ] [Будущие обязательства при архивации/удалении счёта](roadmap/account-inactive-future-flows.md) — диалог: rebind на счёт-приёмник (default) или pause; кредиты только rebind; ApplyDue не пишет на inactive
 
 ## v1.10.0
 
