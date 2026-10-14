@@ -12,6 +12,7 @@
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
 	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
+	import PullToRefresh from '$lib/components/PullToRefresh.svelte';
 	import PageTabs from '$lib/components/PageTabs.svelte';
 	import SectionHeader from '$lib/components/SectionHeader.svelte';
 	import { user } from '$lib/stores/auth';
@@ -141,91 +142,93 @@
 	<title>{$_('credits.title')} — {$_('app.title')}</title>
 </svelte:head>
 
-<div class="space-y-4">
-	<BackLink
-		items={[
-			{ href: '/', label: $_('nav.home') },
-			{ href: '/credits', label: $_('credits.title') }
-		]}
-	/>
+<PullToRefresh onRefresh={() => load({ background: true })}>
+	<div class="space-y-4">
+		<BackLink
+			items={[
+				{ href: '/', label: $_('nav.home') },
+				{ href: '/credits', label: $_('credits.title') }
+			]}
+		/>
 
-	<SectionHeader title={$_('credits.title')}>
-		{#snippet actions()}
-			<button
-				type="button"
-				class="btn-primary"
-				onclick={() => {
-					if (!requireOnline('offline.onlineOnly.creditCreate')) return;
-					void goto(resolve(creditNewPath('/credits')));
-				}}
-			>
-				{$_('credits.new')}
-			</button>
-		{/snippet}
-	</SectionHeader>
+		<SectionHeader title={$_('credits.title')}>
+			{#snippet actions()}
+				<button
+					type="button"
+					class="btn-primary"
+					onclick={() => {
+						if (!requireOnline('offline.onlineOnly.creditCreate')) return;
+						void goto(resolve(creditNewPath('/credits')));
+					}}
+				>
+					{$_('credits.new')}
+				</button>
+			{/snippet}
+		</SectionHeader>
 
-	{#if attachTxId}
-		<div class="card space-y-3">
-			<h2 class="text-base font-semibold">{$_('credits.selectToAttach')}</h2>
-			{#if credits.length === 0}
-				<p class="text-sm" style:color="var(--text-muted)">{$_('credits.empty')}</p>
-			{:else}
-				<ul class="space-y-2">
-					{#each credits as item (item.id)}
-						<li>
-							<button
-								type="button"
-								class="btn-ghost w-full justify-start text-left"
-								disabled={attaching}
-								onclick={() => void attachToCredit(item)}
-							>
-								<span class="inline-flex items-center gap-2">
-									<span class="font-medium">{creditName(item)}</span>
-									{#if item.monthly_payment_display}
-										<span class="text-sm" style:color="var(--text-muted)">
-											<MoneyDisplay value={item.monthly_payment_display} {currency} class="" />
-										</span>
-									{/if}
-								</span>
-							</button>
-						</li>
-					{/each}
-				</ul>
-			{/if}
-			<button type="button" class="btn-ghost" onclick={clearAttach}>
-				{$_('common.cancel')}
-			</button>
-		</div>
-	{/if}
-
-	<PageTabs
-		active={tab}
-		tabs={[
-			{ id: 'active', label: $_('credits.tab.active') },
-			{ id: 'closed', label: $_('credits.tab.closed') }
-		]}
-		onchange={(next) => void switchTab(next as 'active' | 'closed')}
-	/>
-
-	<PageLoadGate {loading} error={loadError} onretry={() => void load()} inline>
-		{#if credits.length === 0 && filterLoading}
-			<EmptyStateCard message={$_('common.loading')} ariaBusy />
-		{:else if credits.length === 0}
-			<EmptyStateCard
-				message={tab === 'closed' ? $_('credits.empty.closed') : $_('credits.empty')}
-			/>
-		{:else}
-			<div class="relative card md:overflow-x-auto" class:opacity-60={filterLoading}>
-				{#if filterLoading}
-					<p
-						class="pointer-events-none absolute inset-x-0 top-0 z-10 py-2 text-center text-sm"
-						style:color="var(--text-muted)"
-					>
-						{$_('common.loading')}
-					</p>
+		{#if attachTxId}
+			<div class="card space-y-3">
+				<h2 class="text-base font-semibold">{$_('credits.selectToAttach')}</h2>
+				{#if credits.length === 0}
+					<p class="text-sm" style:color="var(--text-muted)">{$_('credits.empty')}</p>
+				{:else}
+					<ul class="space-y-2">
+						{#each credits as item (item.id)}
+							<li>
+								<button
+									type="button"
+									class="btn-ghost w-full justify-start text-left"
+									disabled={attaching}
+									onclick={() => void attachToCredit(item)}
+								>
+									<span class="inline-flex items-center gap-2">
+										<span class="font-medium">{creditName(item)}</span>
+										{#if item.monthly_payment_display}
+											<span class="text-sm" style:color="var(--text-muted)">
+												<MoneyDisplay value={item.monthly_payment_display} {currency} class="" />
+											</span>
+										{/if}
+									</span>
+								</button>
+							</li>
+						{/each}
+					</ul>
 				{/if}
-				<CreditList {credits} {tz} {currency} nameFor={creditName} {bankIconFor} />
+				<button type="button" class="btn-ghost" onclick={clearAttach}>
+					{$_('common.cancel')}
+				</button>
 			</div>
 		{/if}
-	</PageLoadGate>
-</div>
+
+		<PageTabs
+			active={tab}
+			tabs={[
+				{ id: 'active', label: $_('credits.tab.active') },
+				{ id: 'closed', label: $_('credits.tab.closed') }
+			]}
+			onchange={(next) => void switchTab(next as 'active' | 'closed')}
+		/>
+
+		<PageLoadGate {loading} error={loadError} onretry={() => void load()} inline>
+			{#if credits.length === 0 && filterLoading}
+				<EmptyStateCard message={$_('common.loading')} ariaBusy />
+			{:else if credits.length === 0}
+				<EmptyStateCard
+					message={tab === 'closed' ? $_('credits.empty.closed') : $_('credits.empty')}
+				/>
+			{:else}
+				<div class="relative card md:overflow-x-auto" class:opacity-60={filterLoading}>
+					{#if filterLoading}
+						<p
+							class="pointer-events-none absolute inset-x-0 top-0 z-10 py-2 text-center text-sm"
+							style:color="var(--text-muted)"
+						>
+							{$_('common.loading')}
+						</p>
+					{/if}
+					<CreditList {credits} {tz} {currency} nameFor={creditName} {bankIconFor} />
+				</div>
+			{/if}
+		</PageLoadGate>
+	</div>
+</PullToRefresh>

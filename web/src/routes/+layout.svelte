@@ -26,6 +26,7 @@
 	import { disconnectRealtime } from '$lib/realtime';
 	import { registerServiceWorker } from '$lib/pwa';
 	import { initTheme, syncThemeFromUser } from '$lib/stores/theme';
+	import { initUiStyle } from '$lib/ui-style';
 	import { setLocale } from '$lib/i18n';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import PromptDialog from '$lib/components/PromptDialog.svelte';
@@ -364,6 +365,7 @@
 		}
 
 		initTheme();
+		initUiStyle();
 
 		const currentPath = $page.url.pathname;
 		const currentSearch = $page.url.search;

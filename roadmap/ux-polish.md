@@ -1,81 +1,50 @@
-# UX polish — скроллбары, pull-to-refresh, «не топорно»
+# UX polish — скроллбары, pull-to-refresh, темы
 
-Планируется в **v1.9.0** ([ROADMAP](../ROADMAP.md#v190)). Если за пару недель после 1.8.0 набегут баги — блок уходит в **1.8.1**, а не в 1.9.0.
+**v1.8.1** ([ROADMAP](../ROADMAP.md#v181)). Спека: `bmad_docs/specs/spec-ux-polish/`.
 
-Стек остаётся: SvelteKit + Tailwind + свои компоненты (web + `android/ui`). Это **не** обязательный переход на SMUI / полный Material kit — скорее токены/стили поверх текущего UI, плюс опциональная вторая тема.
+**Статус (2026-10-14):** реализация закрыта (stories 1–4 done). Идёт **ручная приёмка ~неделю**. Найденные баги — **отдельными коммитами** в 1.8.1, не раздувать scope.
+
+Стек: SvelteKit + Tailwind + свои компоненты (web + `android/ui`). Не SMUI / полный Material kit.
 
 ## Контекст
 
-Исходная мысль была «переделать под Material UI» из‑за ощущения, что UI слишком топорный. После уточнения:
+Боль: полосы прокрутки (особенно Android WebView), нет PTR текущего экрана, «топорность», плюс выбор look — **классика** или **MaterialBased**.
 
-- Классический MUI — React; у нас Svelte → буквальный MUI не подходит.
-- Полная замена kit (SMUI / Material Web) — отдельный big-bang ближе к **2.0**, дорого.
-- Реальная боль: **полосы прокрутки** (жрут ширину, бесят, особенно в Android WebView), нет привычного **pull-to-refresh**, плюс мелкая полировка плотности/отступов/мелочей.
-- Параллельно можно дать выбор визуала: **две темы** — **классика** (текущий вид) и **MaterialBased** (новый look) — на **web и Android**.
+## Решения (зафиксировано 2026-10-14)
 
-Итого: UX-пакет поверх текущего UI и уже существующего SWR/ref-cache ([android-incremental-ui-updates.md](android-incremental-ui-updates.md), [ui-api-cache.md](../docs/ui-api-cache.md)), с переключаемой парой тем.
+| Вопрос | Решение |
+|--------|---------|
+| Глубина MaterialBased | Токены + материализация Button / inputs / Select·Combobox / cards |
+| Хранение classic/material | `localStorage` (`ui_style`), web и Android раздельно; не сервер |
+| Порядок работ | Один пакет: скроллбары + PTR + polish + темы |
+| PTR на web | Capacitor + web mobile viewport / PWA; не desktop |
+| Radius MaterialBased | Единая шкала `0.75rem` (control / button / card) |
+| Профиль | «Стиль интерфейса» в одной card с формой; без hint; сразу localStorage |
+| Подпись light/dark | «Цветовая схема» / «Color scheme» |
 
-## Scope
+## Scope (сделано)
 
-### 1. Скрыть полосы прокрутки на экранах
-
-- Основные scroll-контейнеры: без видимого scrollbar (`scrollbar-width: none` / `::-webkit-scrollbar { display: none }` или аналог).
-- Жест скролла и accessibility скролла сохраняются.
-- **Приоритет: Android** (WebView). На десктопном web полное скрытие спорно — предпочтительно hide на touch/Android, на desktop оставить тонкие/overlay, если без полосы хуже.
-- Следить, чтобы контент реально занимал освободившуюся ширину (`scrollbar-gutter` не оставлять пустым зазором без нужды).
-
-### 2. Pull-to-refresh текущего экрана
-
-- Жест «потянуть вниз» как в обычных мобильных приложениях.
-- Обновляет **только данные текущего маршрута**: soft-reload / force revalidate через ref-cache (path-aware), **не** heavy warm и **не** полная «Синхронизировать» / replay ленты.
-- Не конфликтовать с вертикальным скроллом и nested scroll (модалки, списки внутри card, горизонтальный overflow таблиц).
-- Ценность в первую очередь в **Android**; на web в браузере PTR часто лишний — не навязывать без нужды.
-
-### 3. Мелкая полировка «топорности»
-
-Короткий backlog «придирок» (не бесконечный redesign), пачкой в том же релизе, например:
-
-- плотность списков и карточек;
-- отступы / выравнивание кнопок на всю ширину где уже болело;
-- empty states, мелкие анимации появления строк (опционально);
-- прочее по факту ручной приёмки Android/web.
-
-Список придирок зафиксировать перед стартом реализации, иначе polish размажется.
-
-### 4. Две темы: классика и MaterialBased
-
-- **Классика** — текущий визуальный язык (default).
-- **MaterialBased** — новая тема в духе Material (токены цвета/типографики/радиусов/elevation поверх своих компонентов), **не** обязательный апгрейд на SMUI / Material Web.
-- Доступны на **web и Android** (`android/ui`); переключение в настройках, выбор сохраняется локально.
-- Обе темы должны жить на одних и тех же экранах/компонентах — без форка разметки «две версии UI».
+1. **Скроллбары** — hide на touch/Android (+ `native-app` gutter fix); desktop thin/overlay.
+2. **PTR** — soft revalidate текущего маршрута; Capacitor + web mobile; без Sync All / outbox на background.
+3. **classic / MaterialBased** — `ui_style`, токены unlayered, материализация контролов.
+4. **Polish follow-up** — radius unify; merge ui_style в profile card. Плотность списков / CTA / EmptyState — **отложены** (не блокер закрытия).
 
 ## Не входит
 
-- Полная замена design system на SMUI / Material Web / big-bang kit.
-- Полный sync / heavy warm по жесту PTR.
-- Продуктовые фичи 1.9.0 (цели, импорт, бюджет) — не смешивать в одну приёмку без нужды; этот пункт последним в секции, но тип работ другой.
+- SMUI / Material Web / big-bang kit.
+- Синхронизация `ui_style` через API.
+- Полный sync / heavy warm по PTR.
+- Продуктовые фичи 1.9.0.
 
-## База в коде
+## Критерии / soak
 
-| Уже есть | Зачем важно |
-|----------|-------------|
-| SWR ref-cache, path-aware `refCacheUpdate`, `assignIfChanged` | PTR = revalidate текущего path, без перерисовки всего приложения |
-| Отдельные web / `android/ui` | PTR и hide scrollbar можно катить Android-first |
-| Документы UI: `docs/ui-*.md`, android-client | Паттерны диалогов/меню/фильтров не ломать ради «красоты» |
+- [x] Android/touch: нет видимых вертикальных scrollbar на основных экранах.
+- [x] PTR на ключевых списках → soft reload, без Sync All; web mobile + Capacitor.
+- [x] Переключатель classic / MaterialBased; `localStorage`.
+- [x] MaterialBased: единый radius; токены не проигрывают cascade.
+- [x] Профиль: ui_style в одной card с формой.
+- [x] Vitest `ui_style` / PTR helpers; web e2e смена стиля.
+- [ ] Soak: web desktop не ухудшен без причины.
+- [ ] Soak: Android ручная приёмка classic ↔ MaterialBased (устройство).
 
-## Критерии готовности (черновик)
-
-- [ ] На основных экранах Android нет видимых вертикальных scrollbar’ов; контент шире / не «съеден» полосой.
-- [ ] PTR на ключевых списках (главная, операции, счета, …): индикатор жеста → обновление данных экрана → без полного sync.
-- [ ] Web desktop не ухудшен без причины (скролл/оверлей осознанны).
-- [ ] Зафиксированный короткий список мелочей закрыт или явно отложен.
-- [ ] Переключатель тем (классика / MaterialBased) на web и Android; выбор сохраняется; ключевые экраны выглядят согласованно в обеих темах.
-- [ ] Unit/vitest по месту для хелперов PTR/revalidate; Android — ручная приёмка; web e2e — только если затронут браузерный поток.
-
-## Открытые вопросы
-
-- [ ] Список экранов с PTR (минимум vs все scrollable lists).
-- [ ] Показывать ли PTR на web (mobile viewport / PWA) или только Capacitor.
-- [ ] Единый компонент-обёртка vs точечно на страницах.
-- [ ] Глубина MaterialBased: только CSS-токены vs точечные Material-подобные компоненты.
-- [ ] Синхронизация выбора темы между web и Android (локально раздельно vs через серверные prefs).
+Баги из soak → отдельные коммиты + checkbox’ы здесь/ROADMAP по факту.

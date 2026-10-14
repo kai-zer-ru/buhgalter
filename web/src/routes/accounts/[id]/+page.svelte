@@ -64,6 +64,7 @@
 	import { reportPageLoadFailure } from '$lib/page-load';
 	import { assignIfChanged } from '$lib/state-utils';
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
+	import PullToRefresh from '$lib/components/PullToRefresh.svelte';
 
 	let acc = $state<Account | null>(null);
 	let accBalance = $state<AccountBalanceSummary | null>(null);
@@ -543,263 +544,275 @@
 	}
 </script>
 
-<div class="space-y-6">
-	<BackLink
-		items={[
-			{ href: '/', label: $_('nav.home') },
-			{ href: '/accounts', label: $_('accounts.title') },
-			{ href: '/accounts', label: acc?.name ?? $_('common.loading') }
-		]}
-	/>
+<PullToRefresh onRefresh={() => load({ silent: true })}>
+	<div class="space-y-6">
+		<BackLink
+			items={[
+				{ href: '/', label: $_('nav.home') },
+				{ href: '/accounts', label: $_('accounts.title') },
+				{ href: '/accounts', label: acc?.name ?? $_('common.loading') }
+			]}
+		/>
 
-	<PageLoadGate {loading} error={loadError} onretry={() => void load()} inline>
-		{#if acc}
-			<div class="card">
-				<div class="flex items-start gap-4">
-					<AccountIcon type={acc.type} bankIcon={acc.bank_icon} size={56} />
-					<div class="min-w-0 flex-1">
-						{#if editing && acc.status !== 'deleted'}
-							<form class="space-y-3" onsubmit={save}>
-								<div>
-									<label class="mb-1 block text-sm" style:color="var(--text-muted)" for="acc-name">
-										{$_('accounts.field.name')}
-									</label>
-									<input
-										id="acc-name"
-										class="input w-full"
-										bind:value={name}
-										required
-										maxlength="64"
-									/>
-								</div>
-								{#if acc.type === 'bank' || acc.type === 'credit_card'}
-									<Select
-										label={$_('accounts.field.bank')}
-										bind:value={bankId}
-										options={bankOptions}
-										usePortal
-									/>
-								{/if}
-								{#if acc.type === 'credit_card'}
-									{#if acc.credit_limit_display}
-										<div>
+		<PageLoadGate {loading} error={loadError} onretry={() => void load()} inline>
+			{#if acc}
+				<div class="card">
+					<div class="flex items-start gap-4">
+						<AccountIcon type={acc.type} bankIcon={acc.bank_icon} size={56} />
+						<div class="min-w-0 flex-1">
+							{#if editing && acc.status !== 'deleted'}
+								<form class="space-y-3" onsubmit={save}>
+									<div>
+										<label
+											class="mb-1 block text-sm"
+											style:color="var(--text-muted)"
+											for="acc-name"
+										>
+											{$_('accounts.field.name')}
+										</label>
+										<input
+											id="acc-name"
+											class="input w-full"
+											bind:value={name}
+											required
+											maxlength="64"
+										/>
+									</div>
+									{#if acc.type === 'bank' || acc.type === 'credit_card'}
+										<Select
+											label={$_('accounts.field.bank')}
+											bind:value={bankId}
+											options={bankOptions}
+											usePortal
+										/>
+									{/if}
+									{#if acc.type === 'credit_card'}
+										{#if acc.credit_limit_display}
+											<div>
+												<p class="mb-1 text-sm" style:color="var(--text-muted)">
+													{$_('accounts.field.creditLimit')}
+												</p>
+												<p class="tabular-nums">
+													<MoneyDisplay
+														value={acc.credit_limit_display}
+														currency={$user?.currency ?? 'RUB'}
+														class=""
+													/>
+												</p>
+											</div>
+										{/if}
+										<Select
+											label={$_('accounts.field.paymentAccount')}
+											bind:value={paymentAccountId}
+											options={[
+												{ value: '', label: $_('accounts.creditCard.paymentAccountDefault') },
+												...debitPaymentOptions
+											]}
+											usePortal
+										/>
+									{/if}
+									<div>
+										<label
+											class="mb-1 block text-sm"
+											style:color="var(--text-muted)"
+											for="acc-balance"
+										>
+											{$_('accounts.field.balance')}
+										</label>
+										<MoneyInput id="acc-balance" bind:value={initialBalance} />
+										{#if acc.type === 'credit_card'}
+											<button
+												type="button"
+												class="btn-ghost mt-1 text-sm"
+												onclick={applyLimitToBalance}
+											>
+												{$_('accounts.creditCard.limitButton')}
+											</button>
+										{/if}
+									</div>
+									<div class="flex gap-2">
+										<button type="submit" class="btn-primary" disabled={saving}>
+											{saving ? $_('common.loading') : $_('common.save')}
+										</button>
+										<button type="button" class="btn-ghost" onclick={() => (editing = false)}>
+											{$_('common.cancel')}
+										</button>
+									</div>
+								</form>
+							{:else}
+								<div class="flex items-start justify-between gap-2">
+									<div class="min-w-0">
+										{#if acc.status === 'archived' || acc.status === 'deleted'}
 											<p class="mb-1 text-sm" style:color="var(--text-muted)">
-												{$_('accounts.field.creditLimit')}
+												{acc.status === 'archived'
+													? $_('accounts.banner.archived')
+													: $_('accounts.banner.deleted')}
 											</p>
-											<p class="tabular-nums">
+										{/if}
+										<div class="flex items-center gap-2">
+											<h1 class="text-2xl font-semibold">{acc.name}</h1>
+											{#if acc.is_primary}
+												<span
+													class="shrink-0"
+													style:color="var(--primary)"
+													title={$_('accounts.primary.badge')}
+													aria-label={$_('accounts.primary.badge')}
+												>
+													<svg
+														aria-hidden="true"
+														class="h-5 w-5"
+														viewBox="0 0 24 24"
+														fill="none"
+														stroke="currentColor"
+														stroke-width="2"
+													>
+														<path d="M20 6 9 17l-5-5" />
+													</svg>
+												</span>
+											{/if}
+										</div>
+										<p class="mt-1 text-3xl font-semibold tabular-nums">
+											<MoneyDisplay
+												value={accBalance?.balance_display ?? acc.balance_display}
+												currency={$user?.currency ?? 'RUB'}
+												class=""
+											/>
+										</p>
+										{#if acc.credit_limit_display}
+											<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
+												{$_('accounts.field.creditLimit')}:
 												<MoneyDisplay
 													value={acc.credit_limit_display}
 													currency={$user?.currency ?? 'RUB'}
 													class=""
 												/>
 											</p>
-										</div>
-									{/if}
-									<Select
-										label={$_('accounts.field.paymentAccount')}
-										bind:value={paymentAccountId}
-										options={[
-											{ value: '', label: $_('accounts.creditCard.paymentAccountDefault') },
-											...debitPaymentOptions
-										]}
-										usePortal
-									/>
-								{/if}
-								<div>
-									<label
-										class="mb-1 block text-sm"
-										style:color="var(--text-muted)"
-										for="acc-balance"
-									>
-										{$_('accounts.field.balance')}
-									</label>
-									<MoneyInput id="acc-balance" bind:value={initialBalance} />
-									{#if acc.type === 'credit_card'}
-										<button
-											type="button"
-											class="btn-ghost mt-1 text-sm"
-											onclick={applyLimitToBalance}
-										>
-											{$_('accounts.creditCard.limitButton')}
-										</button>
-									{/if}
-								</div>
-								<div class="flex gap-2">
-									<button type="submit" class="btn-primary" disabled={saving}>
-										{saving ? $_('common.loading') : $_('common.save')}
-									</button>
-									<button type="button" class="btn-ghost" onclick={() => (editing = false)}>
-										{$_('common.cancel')}
-									</button>
-								</div>
-							</form>
-						{:else}
-							<div class="flex items-start justify-between gap-2">
-								<div class="min-w-0">
-									{#if acc.status === 'archived' || acc.status === 'deleted'}
-										<p class="mb-1 text-sm" style:color="var(--text-muted)">
-											{acc.status === 'archived'
-												? $_('accounts.banner.archived')
-												: $_('accounts.banner.deleted')}
-										</p>
-									{/if}
-									<div class="flex items-center gap-2">
-										<h1 class="text-2xl font-semibold">{acc.name}</h1>
-										{#if acc.is_primary}
-											<span
-												class="shrink-0"
-												style:color="var(--primary)"
-												title={$_('accounts.primary.badge')}
-												aria-label={$_('accounts.primary.badge')}
-											>
-												<svg
-													aria-hidden="true"
-													class="h-5 w-5"
-													viewBox="0 0 24 24"
-													fill="none"
-													stroke="currentColor"
-													stroke-width="2"
-												>
-													<path d="M20 6 9 17l-5-5" />
-												</svg>
-											</span>
 										{/if}
-									</div>
-									<p class="mt-1 text-3xl font-semibold tabular-nums">
-										<MoneyDisplay
-											value={accBalance?.balance_display ?? acc.balance_display}
-											currency={$user?.currency ?? 'RUB'}
-											class=""
-										/>
-									</p>
-									{#if acc.credit_limit_display}
-										<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
-											{$_('accounts.field.creditLimit')}:
-											<MoneyDisplay
-												value={acc.credit_limit_display}
-												currency={$user?.currency ?? 'RUB'}
-												class=""
-											/>
-										</p>
-									{/if}
-									{#if acc.type === 'bank' && isFeatureEnabled('balance_maintenance', $featureFlags)}
-										{@const autoTopupSource = resolveAutoTopupSourceName(acc, allAccounts)}
-										{#if autoTopupSource}
-											<p class="mt-1 text-sm" style:color="var(--text-muted)">
-												{$_('accounts.autoTopup.status', {
-													values: { source: autoTopupSource }
-												})}
+										{#if acc.type === 'bank' && isFeatureEnabled('balance_maintenance', $featureFlags)}
+											{@const autoTopupSource = resolveAutoTopupSourceName(acc, allAccounts)}
+											{#if autoTopupSource}
+												<p class="mt-1 text-sm" style:color="var(--text-muted)">
+													{$_('accounts.autoTopup.status', {
+														values: { source: autoTopupSource }
+													})}
+												</p>
+											{/if}
+										{/if}
+										{#if accBalance ? accBalance.forecast_balance !== accBalance.balance : false}
+											<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
+												{$_(forecastWithLabelKey(accBalance ?? {}))}:
+												<MoneyDisplay
+													value={accBalance?.forecast_display ?? acc.balance_display}
+													currency={$user?.currency ?? 'RUB'}
+													class=""
+												/>
 											</p>
 										{/if}
-									{/if}
-									{#if accBalance ? accBalance.forecast_balance !== accBalance.balance : false}
-										<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
-											{$_(forecastWithLabelKey(accBalance ?? {}))}:
-											<MoneyDisplay
-												value={accBalance?.forecast_display ?? acc.balance_display}
-												currency={$user?.currency ?? 'RUB'}
-												class=""
-											/>
-										</p>
+									</div>
+									{#if acc.status === 'active'}
+										<div class="flex shrink-0 items-center gap-1">
+											<div class="hidden items-center gap-1 md:flex">
+												<NewTransactionButtons
+													onincome={() => openNewTransaction('income')}
+													onexpense={() => openNewTransaction('expense')}
+													ontransfer={() => {
+														editTransfer = null;
+														repeatTransfer = null;
+														transferOpen = true;
+													}}
+												/>
+											</div>
+											<div class="md:hidden">
+												<RowActionsMenu actions={accountActions(true)} />
+											</div>
+											<div class="hidden md:block">
+												<RowActionsMenu actions={accountActions(false)} />
+											</div>
+										</div>
 									{/if}
 								</div>
-								{#if acc.status === 'active'}
-									<div class="flex shrink-0 items-center gap-1">
-										<div class="hidden items-center gap-1 md:flex">
-											<NewTransactionButtons
-												onincome={() => openNewTransaction('income')}
-												onexpense={() => openNewTransaction('expense')}
-												ontransfer={() => {
-													editTransfer = null;
-													repeatTransfer = null;
-													transferOpen = true;
-												}}
-											/>
-										</div>
-										<div class="md:hidden">
-											<RowActionsMenu actions={accountActions(true)} />
-										</div>
-										<div class="hidden md:block">
-											<RowActionsMenu actions={accountActions(false)} />
-										</div>
-									</div>
-								{/if}
-							</div>
-						{/if}
+							{/if}
+						</div>
 					</div>
 				</div>
-			</div>
 
-			<div class="relative space-y-3">
-				<TransactionFilters
-					bind:fromLocal
-					bind:toLocal
-					accountId=""
-					accounts={[]}
-					{categories}
-					{merchants}
-					{tags}
-					showAccount={false}
-					expandSearchToEnd={true}
-					onreset={resetFilters}
-					bind:type={typeFilter}
-					bind:categoryId={categoryFilter}
-					bind:kind={kindFilter}
-					bind:search={searchFilter}
-					bind:merchantId={merchantFilter}
-					bind:tagId={tagFilter}
-				/>
-
-				<TransactionContextStats params={accountStatsContextParams()} transactionCount={txTotal} />
-
-				<div class:opacity-60={filterLoading} class="card md:overflow-x-auto">
-					<TransactionList
-						transactions={visibleTx}
-						siblings={transactions}
-						{tz}
-						emptyMessage={$_('transactions.empty')}
-						showDescription
-						showAmountSign
-						singleAccount
-						showEdit={!accountTxReadOnly}
-						showDelete={!accountTxReadOnly}
-						onmakeRecurring={accountTxReadOnly
-							? undefined
-							: (tx) =>
-									void goto(resolve(`/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`))}
-						onmakeSubscription={accountTxReadOnly
-							? undefined
-							: (tx) => void goto(resolve(`/subscriptions?from_tx=${encodeURIComponent(tx.id)}`))}
-						onattachSubscription={accountTxReadOnly
-							? undefined
-							: (tx) => void goto(resolve(`/subscriptions?attach_tx=${encodeURIComponent(tx.id)}`))}
-						onattachCredit={accountTxReadOnly
-							? undefined
-							: (tx) => void goto(resolve(`/credits?attach_tx=${encodeURIComponent(tx.id)}`))}
-						onrepeat={openRepeat}
-						onsaveAsTemplate={(tx) => void saveAsTemplate(tx)}
-						onedit={accountTxReadOnly ? undefined : openEdit}
-						ondelete={accountTxReadOnly ? undefined : (tx) => void removeTx(tx)}
+				<div class="relative space-y-3">
+					<TransactionFilters
+						bind:fromLocal
+						bind:toLocal
+						accountId=""
+						accounts={[]}
+						{categories}
+						{merchants}
+						{tags}
+						showAccount={false}
+						expandSearchToEnd={true}
+						onreset={resetFilters}
+						bind:type={typeFilter}
+						bind:categoryId={categoryFilter}
+						bind:kind={kindFilter}
+						bind:search={searchFilter}
+						bind:merchantId={merchantFilter}
+						bind:tagId={tagFilter}
 					/>
+
+					<TransactionContextStats
+						params={accountStatsContextParams()}
+						transactionCount={txTotal}
+					/>
+
+					<div class:opacity-60={filterLoading} class="card md:overflow-x-auto">
+						<TransactionList
+							transactions={visibleTx}
+							siblings={transactions}
+							{tz}
+							emptyMessage={$_('transactions.empty')}
+							showDescription
+							showAmountSign
+							singleAccount
+							showEdit={!accountTxReadOnly}
+							showDelete={!accountTxReadOnly}
+							onmakeRecurring={accountTxReadOnly
+								? undefined
+								: (tx) =>
+										void goto(
+											resolve(`/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`)
+										)}
+							onmakeSubscription={accountTxReadOnly
+								? undefined
+								: (tx) => void goto(resolve(`/subscriptions?from_tx=${encodeURIComponent(tx.id)}`))}
+							onattachSubscription={accountTxReadOnly
+								? undefined
+								: (tx) =>
+										void goto(resolve(`/subscriptions?attach_tx=${encodeURIComponent(tx.id)}`))}
+							onattachCredit={accountTxReadOnly
+								? undefined
+								: (tx) => void goto(resolve(`/credits?attach_tx=${encodeURIComponent(tx.id)}`))}
+							onrepeat={openRepeat}
+							onsaveAsTemplate={(tx) => void saveAsTemplate(tx)}
+							onedit={accountTxReadOnly ? undefined : openEdit}
+							ondelete={accountTxReadOnly ? undefined : (tx) => void removeTx(tx)}
+						/>
+					</div>
+					{#if filterLoading}
+						<p
+							class="absolute inset-0 flex items-center justify-center text-sm"
+							style:color="var(--text-muted)"
+						>
+							{$_('common.loading')}
+						</p>
+					{/if}
 				</div>
-				{#if filterLoading}
-					<p
-						class="absolute inset-0 flex items-center justify-center text-sm"
-						style:color="var(--text-muted)"
-					>
-						{$_('common.loading')}
-					</p>
-				{/if}
-			</div>
-			<TransactionPagination
-				page={txPage}
-				limit={txLimit}
-				total={txTotal}
-				onchange={onPageChange}
-			/>
-		{/if}
-	</PageLoadGate>
-</div>
+				<TransactionPagination
+					page={txPage}
+					limit={txLimit}
+					total={txTotal}
+					onchange={onPageChange}
+				/>
+			{/if}
+		</PageLoadGate>
+	</div>
+</PullToRefresh>
 
 <TransactionForm
 	bind:open={txOpen}

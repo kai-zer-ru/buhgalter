@@ -25,6 +25,7 @@
 	import BackLink from '$lib/components/BackLink.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
+	import PullToRefresh from '$lib/components/PullToRefresh.svelte';
 	import IntegerInput from '$lib/components/IntegerInput.svelte';
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
 	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
@@ -557,126 +558,133 @@
 	<title>{$_('budget.title')} — {$_('app.title')}</title>
 </svelte:head>
 
-<div class="space-y-5">
-	<BackLink
-		items={[
-			{ href: '/', label: $_('nav.home') },
-			{ href: '/budget', label: $_('budget.title') }
-		]}
-	/>
+<PullToRefresh onRefresh={() => loadAll({ background: true })}>
+	<div class="space-y-5">
+		<BackLink
+			items={[
+				{ href: '/', label: $_('nav.home') },
+				{ href: '/budget', label: $_('budget.title') }
+			]}
+		/>
 
-	<div class="flex flex-wrap items-center justify-between gap-3">
-		<h1 class="text-2xl font-semibold">{$_('budget.title')}</h1>
+		<div class="flex flex-wrap items-center justify-between gap-3">
+			<h1 class="text-2xl font-semibold">{$_('budget.title')}</h1>
 
-		<div class="flex flex-wrap items-center gap-2">
-			{#if canCopyFromPrevious}
-				<button
-					type="button"
-					class="btn-ghost shrink-0"
-					disabled={copying}
-					onclick={() => void copyFromPreviousMonth()}
-				>
-					{$_('budget.action.copy_from_previous')}
-				</button>
-			{/if}
-			<div class="flex items-center gap-2">
-				<button type="button" class="btn-primary shrink-0" onclick={toggleForm} disabled={copying}>
-					{formOpen && !editId ? $_('common.cancel') : $_('budget.add')}
-				</button>
-				<div class="flex shrink-0 items-center gap-1">
+			<div class="flex flex-wrap items-center gap-2">
+				{#if canCopyFromPrevious}
 					<button
 						type="button"
-						class="btn-ghost shrink-0 max-sm:flex max-sm:h-11 max-sm:w-11 max-sm:items-center max-sm:justify-center max-sm:p-0"
-						onclick={() => shiftMonth(-1)}
-						aria-label={$_('budget.month.prev')}
+						class="btn-ghost shrink-0"
+						disabled={copying}
+						onclick={() => void copyFromPreviousMonth()}
 					>
-						←
+						{$_('budget.action.copy_from_previous')}
 					</button>
-					<span
-						class="inline-flex h-11 w-[11rem] shrink-0 items-center justify-center rounded-xl border px-2 text-center text-sm font-medium capitalize sm:h-auto sm:px-3 sm:py-2"
-						style:border-color="var(--border)"
-					>
-						{monthLabel}
-					</span>
+				{/if}
+				<div class="flex items-center gap-2">
 					<button
 						type="button"
-						class="btn-ghost shrink-0 max-sm:flex max-sm:h-11 max-sm:w-11 max-sm:items-center max-sm:justify-center max-sm:p-0"
-						onclick={() => shiftMonth(1)}
-						aria-label={$_('budget.month.next')}
+						class="btn-primary shrink-0"
+						onclick={toggleForm}
+						disabled={copying}
 					>
-						→
+						{formOpen && !editId ? $_('common.cancel') : $_('budget.add')}
 					</button>
+					<div class="flex shrink-0 items-center gap-1">
+						<button
+							type="button"
+							class="btn-ghost shrink-0 max-sm:flex max-sm:h-11 max-sm:w-11 max-sm:items-center max-sm:justify-center max-sm:p-0"
+							onclick={() => shiftMonth(-1)}
+							aria-label={$_('budget.month.prev')}
+						>
+							←
+						</button>
+						<span
+							class="inline-flex h-11 w-[11rem] shrink-0 items-center justify-center rounded-xl border px-2 text-center text-sm font-medium capitalize sm:h-auto sm:px-3 sm:py-2"
+							style:border-color="var(--border)"
+						>
+							{monthLabel}
+						</span>
+						<button
+							type="button"
+							class="btn-ghost shrink-0 max-sm:flex max-sm:h-11 max-sm:w-11 max-sm:items-center max-sm:justify-center max-sm:p-0"
+							onclick={() => shiftMonth(1)}
+							aria-label={$_('budget.month.next')}
+						>
+							→
+						</button>
+					</div>
 				</div>
 			</div>
 		</div>
-	</div>
 
-	{#if formOpen && !editId}
-		<div class="card">
-			{@render budgetForm('create')}
-		</div>
-	{/if}
+		{#if formOpen && !editId}
+			<div class="card">
+				{@render budgetForm('create')}
+			</div>
+		{/if}
 
-	<PageLoadGate {loading} error={loadError} onretry={() => void loadAll()} inline>
-		{#if items.length === 0 && !formOpen}
-			<EmptyStateCard message={$_('budget.empty')} />
-		{:else if items.length > 0}
-			<div class="grid gap-4 md:grid-cols-2">
-				{#each items as item (item.id)}
-					<article class="card space-y-3">
-						<div class="flex items-start justify-between gap-2">
-							<div class="min-w-0">
-								<h2 class="font-medium">{item.name}</h2>
-								<p class="text-sm" style:color="var(--text-muted)">
-									{tr('budget.progress', {
-										values: {
-											spent: formatMoneyDisplay(item.spent_display),
-											planned: formatMoneyDisplay(item.planned_display)
-										}
-									})}
-								</p>
+		<PageLoadGate {loading} error={loadError} onretry={() => void loadAll()} inline>
+			{#if items.length === 0 && !formOpen}
+				<EmptyStateCard message={$_('budget.empty')} />
+			{:else if items.length > 0}
+				<div class="grid gap-4 md:grid-cols-2">
+					{#each items as item (item.id)}
+						<article class="card space-y-3">
+							<div class="flex items-start justify-between gap-2">
+								<div class="min-w-0">
+									<h2 class="font-medium">{item.name}</h2>
+									<p class="text-sm" style:color="var(--text-muted)">
+										{tr('budget.progress', {
+											values: {
+												spent: formatMoneyDisplay(item.spent_display),
+												planned: formatMoneyDisplay(item.planned_display)
+											}
+										})}
+									</p>
+								</div>
+								<RowActionsMenu actions={rowActions(item)} />
 							</div>
-							<RowActionsMenu actions={rowActions(item)} />
-						</div>
-						<div
-							class="h-2 overflow-hidden rounded-full"
-							style:background-color="color-mix(in srgb, var(--border) 80%, transparent)"
-						>
 							<div
-								class="h-full transition-all {progressClass(item.status)}"
-								style="width: {Math.min(item.percent, 100)}%"
-							></div>
-						</div>
-						<p class="text-sm tabular-nums" style:color="var(--text-muted)">
-							{budgetStatusLine(item)}
-						</p>
-						<p class="text-sm" style:color="var(--text-muted)">
-							{tr('budget.copy_status', {
-								values: {
-									value: item.copy_forward
-										? $_('budget.copy_status.yes')
-										: $_('budget.copy_status.no')
-								}
-							})}
-						</p>
-						{#if item.scope === 'all_expense' && item.children_planned_display}
+								class="h-2 overflow-hidden rounded-full"
+								style:background-color="color-mix(in srgb, var(--border) 80%, transparent)"
+							>
+								<div
+									class="h-full transition-all {progressClass(item.status)}"
+									style="width: {Math.min(item.percent, 100)}%"
+								></div>
+							</div>
 							<p class="text-sm tabular-nums" style:color="var(--text-muted)">
-								{tr('budget.children', {
+								{budgetStatusLine(item)}
+							</p>
+							<p class="text-sm" style:color="var(--text-muted)">
+								{tr('budget.copy_status', {
 									values: {
-										spent: formatMoneyDisplay(item.children_spent_display ?? '0.00'),
-										planned: formatMoneyDisplay(item.children_planned_display)
+										value: item.copy_forward
+											? $_('budget.copy_status.yes')
+											: $_('budget.copy_status.no')
 									}
 								})}
 							</p>
-						{/if}
-						{#if editId === item.id}
-							<div class="border-t pt-3" style:border-color="var(--border)">
-								{@render budgetForm('edit')}
-							</div>
-						{/if}
-					</article>
-				{/each}
-			</div>
-		{/if}
-	</PageLoadGate>
-</div>
+							{#if item.scope === 'all_expense' && item.children_planned_display}
+								<p class="text-sm tabular-nums" style:color="var(--text-muted)">
+									{tr('budget.children', {
+										values: {
+											spent: formatMoneyDisplay(item.children_spent_display ?? '0.00'),
+											planned: formatMoneyDisplay(item.children_planned_display)
+										}
+									})}
+								</p>
+							{/if}
+							{#if editId === item.id}
+								<div class="border-t pt-3" style:border-color="var(--border)">
+									{@render budgetForm('edit')}
+								</div>
+							{/if}
+						</article>
+					{/each}
+				</div>
+			{/if}
+		</PageLoadGate>
+	</div>
+</PullToRefresh>

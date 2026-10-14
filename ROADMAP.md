@@ -383,7 +383,8 @@
 ## v1.8.1
 
 - [x] БАГ. Android: при запуске приложение сразу сворачивается (гонка quiet wake перехвата: sticky Intent extra + HyperOS bring-to-front без `onNewIntent`). Фикс: one-shot token, strip sticky extras, `onResume` → user engaged ([android-client-platform.md](docs/android-client-platform.md))
-- [ ] [UX polish](roadmap/ux-polish.md) — без полос прокрутки; pull-to-refresh текущего экрана (не полный sync); мелкая полировка; две темы на web и Android: **классика** (как сейчас) и **MaterialBased** (новая). При наплыве багов — в 1.8.1
+- [x] [UX polish](roadmap/ux-polish.md) — без полос прокрутки; PTR текущего экрана; classic / MaterialBased; radius + профиль. Реализовано; **soak ~неделя** — баги отдельными коммитами в 1.8.1
+- [ ] [Кнопки в Telegram / MAX](roadmap/telegram-max-buttons.md) — MVP: **URL-кнопки** в исходящих уведомлениях («Открыть долг/кредит»); callback — позже
 
 ## v1.9.0
 
@@ -426,7 +427,6 @@
 - [ ] [Webhook](roadmap/webhooks.md) — исходящие события для внешних интеграций
 - [ ] [Home Assistant](roadmap/home-assistant.md) — custom component или REST-документация
 - [ ] [Эволюция уведомлений](roadmap/notifications-evolution.md) — частота, тихие часы, эскалация, wizard
-- [ ] [Кнопки в Telegram / MAX](roadmap/telegram-max-buttons.md) — MVP: **URL-кнопки** в исходящих уведомлениях («Открыть долг/кредит»); callback — позже
 - [ ] [Открытие приложения через ссылку](roadmap/app-open-links.md) — https **и локальные** (`http` LAN / `:8765`, localhost) при совпадении с профилем сервера в APK; custom scheme для виджетов; единый builder (notify / Telegram)
 - [ ] [Внутренняя ссылка в уведомлениях](roadmap/app-open-links.md#cap-6--внутренний-base-когда-external_url-пуст) — fallback вместо текста «настройте внешний URL»; LAN / scheme / опциональный internal base
 

@@ -38,6 +38,7 @@
 	import AccountIcon from '$lib/components/AccountIcon.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
+	import PullToRefresh from '$lib/components/PullToRefresh.svelte';
 	import PageTabs from '$lib/components/PageTabs.svelte';
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
 	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
@@ -362,66 +363,68 @@
 	<title>{$_('accounts.title')} — {$_('app.title')}</title>
 </svelte:head>
 
-<div class="space-y-6">
-	<BackLink
-		items={[
-			{ href: '/', label: $_('nav.home') },
-			{ href: '/accounts', label: $_('accounts.title') }
-		]}
-	/>
+<PullToRefresh onRefresh={() => load({ background: true })}>
+	<div class="space-y-6">
+		<BackLink
+			items={[
+				{ href: '/', label: $_('nav.home') },
+				{ href: '/accounts', label: $_('accounts.title') }
+			]}
+		/>
 
-	<div class="flex flex-wrap items-center justify-between gap-3">
-		<h1 class="text-2xl font-semibold">{$_('accounts.title')}</h1>
-		<a href={resolve(accountNewPath('/accounts'))} class="btn-primary">
-			{$_('accounts.new')}
-		</a>
+		<div class="flex flex-wrap items-center justify-between gap-3">
+			<h1 class="text-2xl font-semibold">{$_('accounts.title')}</h1>
+			<a href={resolve(accountNewPath('/accounts'))} class="btn-primary">
+				{$_('accounts.new')}
+			</a>
+		</div>
+
+		<PageTabs
+			active={filter}
+			tabs={[
+				{ id: 'active', label: $_('accounts.filter.active') },
+				{ id: 'archived', label: $_('accounts.filter.archived') },
+				{ id: 'deleted', label: $_('accounts.filter.deleted') }
+			]}
+			onchange={(next) => setFilter(next as 'active' | 'archived' | 'deleted')}
+		/>
+
+		<PageLoadGate {loading} error={loadError} onretry={() => void load()} inline>
+			{#if accounts.length === 0 && filterLoading}
+				<EmptyStateCard message={$_('common.loading')} ariaBusy />
+			{:else if accounts.length === 0}
+				<EmptyStateCard message={$_('accounts.empty')} />
+			{:else}
+				<div class="relative space-y-6" class:opacity-60={filterLoading}>
+					{#if filterLoading}
+						<p
+							class="pointer-events-none absolute inset-x-0 top-0 py-2 text-center text-sm"
+							style:color="var(--text-muted)"
+						>
+							{$_('common.loading')}
+						</p>
+					{/if}
+					{#each accountGroups as group (accountGroupKind(group))}
+						{@const kind = accountGroupKind(group)}
+						<section>
+							<h2 class="mb-3 text-lg font-medium">
+								{$_(accountGroupLabelKey(kind))}
+								<span class="font-normal tabular-nums" style:color="var(--text-muted)">
+									({group.length})
+								</span>
+							</h2>
+							<div class="grid gap-4 sm:grid-cols-2">
+								{#each group as acc (acc.id)}
+									{@render accountCard(acc)}
+								{/each}
+							</div>
+						</section>
+					{/each}
+				</div>
+			{/if}
+		</PageLoadGate>
 	</div>
-
-	<PageTabs
-		active={filter}
-		tabs={[
-			{ id: 'active', label: $_('accounts.filter.active') },
-			{ id: 'archived', label: $_('accounts.filter.archived') },
-			{ id: 'deleted', label: $_('accounts.filter.deleted') }
-		]}
-		onchange={(next) => setFilter(next as 'active' | 'archived' | 'deleted')}
-	/>
-
-	<PageLoadGate {loading} error={loadError} onretry={() => void load()} inline>
-		{#if accounts.length === 0 && filterLoading}
-			<EmptyStateCard message={$_('common.loading')} ariaBusy />
-		{:else if accounts.length === 0}
-			<EmptyStateCard message={$_('accounts.empty')} />
-		{:else}
-			<div class="relative space-y-6" class:opacity-60={filterLoading}>
-				{#if filterLoading}
-					<p
-						class="pointer-events-none absolute inset-x-0 top-0 py-2 text-center text-sm"
-						style:color="var(--text-muted)"
-					>
-						{$_('common.loading')}
-					</p>
-				{/if}
-				{#each accountGroups as group (accountGroupKind(group))}
-					{@const kind = accountGroupKind(group)}
-					<section>
-						<h2 class="mb-3 text-lg font-medium">
-							{$_(accountGroupLabelKey(kind))}
-							<span class="font-normal tabular-nums" style:color="var(--text-muted)">
-								({group.length})
-							</span>
-						</h2>
-						<div class="grid gap-4 sm:grid-cols-2">
-							{#each group as acc (acc.id)}
-								{@render accountCard(acc)}
-							{/each}
-						</div>
-					</section>
-				{/each}
-			</div>
-		{/if}
-	</PageLoadGate>
-</div>
+</PullToRefresh>
 
 {#snippet accountCard(acc: Account)}
 	<div class="card">

@@ -36,6 +36,7 @@
 	import TransactionList from '$lib/components/TransactionList.svelte';
 	import TransactionPagination from '$lib/components/TransactionPagination.svelte';
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
+	import PullToRefresh from '$lib/components/PullToRefresh.svelte';
 	import { confirm } from '$lib/confirm';
 	import { reportPageLoadFailure } from '$lib/page-load';
 	import { toast } from '$lib/toast';
@@ -294,7 +295,8 @@
 			} else {
 				await loadFlat(opts);
 			}
-			scheduleSyncOutbox();
+			// PTR / SWR background: soft reload only — no outbox replay (CAP-2).
+			if (!opts.background) scheduleSyncOutbox();
 		} finally {
 			loading = false;
 			filterLoading = false;
@@ -418,180 +420,185 @@
 	<title>{$_('transactions.all')} — {$_('app.title')}</title>
 </svelte:head>
 
-<div class="space-y-4">
-	<BackLink
-		items={[
-			{ href: '/', label: $_('nav.home') },
-			{ href: '/transactions', label: $_('transactions.all') }
-		]}
-	/>
+<PullToRefresh onRefresh={() => load(false, { background: true })}>
+	<div class="space-y-4">
+		<BackLink
+			items={[
+				{ href: '/', label: $_('nav.home') },
+				{ href: '/transactions', label: $_('transactions.all') }
+			]}
+		/>
 
-	<div class="flex flex-wrap items-center justify-between gap-3">
-		<h1 class="text-2xl font-semibold">{$_('transactions.all')}</h1>
-		<div class="flex shrink-0 items-center gap-1">
-			<NewTransactionButtons
-				onincome={() => openNewTransaction('income')}
-				onexpense={() => openNewTransaction('expense')}
-				ontransfer={() => void goto(resolve(transferNewPath({ from: listFrom })))}
-			/>
+		<div class="flex flex-wrap items-center justify-between gap-3">
+			<h1 class="text-2xl font-semibold">{$_('transactions.all')}</h1>
+			<div class="flex shrink-0 items-center gap-1">
+				<NewTransactionButtons
+					onincome={() => openNewTransaction('income')}
+					onexpense={() => openNewTransaction('expense')}
+					ontransfer={() => void goto(resolve(transferNewPath({ from: listFrom })))}
+				/>
+			</div>
 		</div>
-	</div>
 
-	<TransactionFilters
-		bind:fromLocal
-		bind:toLocal
-		bind:type
-		bind:categoryId
-		bind:accountId
-		bind:kind
-		bind:search
-		bind:merchantId
-		bind:tagId
-		{accounts}
-		{categories}
-		{merchants}
-		{tags}
-		onreset={resetFilters}
-	/>
+		<TransactionFilters
+			bind:fromLocal
+			bind:toLocal
+			bind:type
+			bind:categoryId
+			bind:accountId
+			bind:kind
+			bind:search
+			bind:merchantId
+			bind:tagId
+			{accounts}
+			{categories}
+			{merchants}
+			{tags}
+			onreset={resetFilters}
+		/>
 
-	<TransactionContextStats params={statsContextParams()} transactionCount={listTransactionCount} />
+		<TransactionContextStats
+			params={statsContextParams()}
+			transactionCount={listTransactionCount}
+		/>
 
-	<PageLoadGate {loading} error={loadError} onretry={() => void load(false)} inline>
-		{#if splitMode}
-			<div class="relative space-y-3">
-				<div class="card overflow-hidden" class:opacity-60={filterLoading}>
-					{#if !pastLoading && !plannedLoading && pastTotal === 0 && plannedTotal === 0}
+		<PageLoadGate {loading} error={loadError} onretry={() => void load(false)} inline>
+			{#if splitMode}
+				<div class="relative space-y-3">
+					<div class="card overflow-hidden" class:opacity-60={filterLoading}>
+						{#if !pastLoading && !plannedLoading && pastTotal === 0 && plannedTotal === 0}
+							<p
+								class="flex min-h-[7rem] items-center justify-center px-4 py-6 text-center text-sm"
+								style:color="var(--text-muted)"
+							>
+								{$_('transactions.empty')}
+							</p>
+						{:else}
+							{#if plannedTotal > 0 || plannedLoading}
+								<details
+									class:border-b={pastTotal > 0 || pastLoading}
+									style:border-color="var(--border)"
+								>
+									<summary
+										class="cursor-pointer list-none px-4 py-3 text-sm font-medium select-none [&::-webkit-details-marker]:hidden"
+									>
+										{$_('dashboard.group.planned')}
+										<span class="ml-1 font-normal tabular-nums" style:color="var(--text-muted)">
+											({plannedTotal})
+										</span>
+									</summary>
+									{#if plannedLoading}
+										<p class="px-4 pb-4 text-sm" style:color="var(--text-muted)">
+											{$_('common.loading')}
+										</p>
+									{:else}
+										<div class="pb-4 md:overflow-x-auto">
+											<TransactionList
+												transactions={plannedVisible}
+												siblings={txSiblings}
+												{tz}
+												emptyMessage={$_('transactions.empty')}
+												showDescription
+												showAmountSign
+												showEdit
+												showDelete
+												onrepeat={openRepeat}
+												onsaveAsTemplate={(tx) => void saveAsTemplate(tx)}
+												onmakeRecurring={openMakeRecurring}
+												onmakeSubscription={openMakeSubscription}
+												onattachSubscription={openAttachSubscription}
+												onattachCredit={openAttachCredit}
+												onedit={openEdit}
+												ondelete={(tx) => void removeTx(tx)}
+											/>
+										</div>
+									{/if}
+								</details>
+							{/if}
+
+							{#if pastTotal > 0 || pastLoading}
+								<details open>
+									<summary
+										class="cursor-pointer list-none px-4 py-3 text-sm font-medium select-none [&::-webkit-details-marker]:hidden"
+									>
+										{$_('dashboard.group.past')}
+										<span class="ml-1 font-normal tabular-nums" style:color="var(--text-muted)">
+											({pastTotal})
+										</span>
+									</summary>
+									{#if pastLoading}
+										<p class="px-4 pb-4 text-sm" style:color="var(--text-muted)">
+											{$_('common.loading')}
+										</p>
+									{:else}
+										<div class="pb-4 md:overflow-x-auto">
+											<TransactionList
+												transactions={pastVisible}
+												siblings={txSiblings}
+												{tz}
+												emptyMessage={$_('transactions.empty')}
+												showDescription
+												showAmountSign
+												showEdit
+												showDelete
+												onrepeat={openRepeat}
+												onsaveAsTemplate={(tx) => void saveAsTemplate(tx)}
+												onmakeRecurring={openMakeRecurring}
+												onmakeSubscription={openMakeSubscription}
+												onattachSubscription={openAttachSubscription}
+												onattachCredit={openAttachCredit}
+												onedit={openEdit}
+												ondelete={(tx) => void removeTx(tx)}
+											/>
+										</div>
+									{/if}
+								</details>
+							{/if}
+						{/if}
+					</div>
+					{#if filterLoading}
 						<p
-							class="flex min-h-[7rem] items-center justify-center px-4 py-6 text-center text-sm"
+							class="absolute inset-0 flex items-center justify-center text-sm"
 							style:color="var(--text-muted)"
 						>
-							{$_('transactions.empty')}
+							{$_('common.loading')}
 						</p>
-					{:else}
-						{#if plannedTotal > 0 || plannedLoading}
-							<details
-								class:border-b={pastTotal > 0 || pastLoading}
-								style:border-color="var(--border)"
-							>
-								<summary
-									class="cursor-pointer list-none px-4 py-3 text-sm font-medium select-none [&::-webkit-details-marker]:hidden"
-								>
-									{$_('dashboard.group.planned')}
-									<span class="ml-1 font-normal tabular-nums" style:color="var(--text-muted)">
-										({plannedTotal})
-									</span>
-								</summary>
-								{#if plannedLoading}
-									<p class="px-4 pb-4 text-sm" style:color="var(--text-muted)">
-										{$_('common.loading')}
-									</p>
-								{:else}
-									<div class="pb-4 md:overflow-x-auto">
-										<TransactionList
-											transactions={plannedVisible}
-											siblings={txSiblings}
-											{tz}
-											emptyMessage={$_('transactions.empty')}
-											showDescription
-											showAmountSign
-											showEdit
-											showDelete
-											onrepeat={openRepeat}
-											onsaveAsTemplate={(tx) => void saveAsTemplate(tx)}
-											onmakeRecurring={openMakeRecurring}
-											onmakeSubscription={openMakeSubscription}
-											onattachSubscription={openAttachSubscription}
-											onattachCredit={openAttachCredit}
-											onedit={openEdit}
-											ondelete={(tx) => void removeTx(tx)}
-										/>
-									</div>
-								{/if}
-							</details>
-						{/if}
-
-						{#if pastTotal > 0 || pastLoading}
-							<details open>
-								<summary
-									class="cursor-pointer list-none px-4 py-3 text-sm font-medium select-none [&::-webkit-details-marker]:hidden"
-								>
-									{$_('dashboard.group.past')}
-									<span class="ml-1 font-normal tabular-nums" style:color="var(--text-muted)">
-										({pastTotal})
-									</span>
-								</summary>
-								{#if pastLoading}
-									<p class="px-4 pb-4 text-sm" style:color="var(--text-muted)">
-										{$_('common.loading')}
-									</p>
-								{:else}
-									<div class="pb-4 md:overflow-x-auto">
-										<TransactionList
-											transactions={pastVisible}
-											siblings={txSiblings}
-											{tz}
-											emptyMessage={$_('transactions.empty')}
-											showDescription
-											showAmountSign
-											showEdit
-											showDelete
-											onrepeat={openRepeat}
-											onsaveAsTemplate={(tx) => void saveAsTemplate(tx)}
-											onmakeRecurring={openMakeRecurring}
-											onmakeSubscription={openMakeSubscription}
-											onattachSubscription={openAttachSubscription}
-											onattachCredit={openAttachCredit}
-											onedit={openEdit}
-											ondelete={(tx) => void removeTx(tx)}
-										/>
-									</div>
-								{/if}
-							</details>
-						{/if}
 					{/if}
 				</div>
-				{#if filterLoading}
-					<p
-						class="absolute inset-0 flex items-center justify-center text-sm"
-						style:color="var(--text-muted)"
-					>
-						{$_('common.loading')}
-					</p>
-				{/if}
-			</div>
-			<TransactionPagination {page} {limit} total={pastTotal} onchange={onPageChange} />
-		{:else}
-			<div class="relative space-y-3">
-				<div class="card md:overflow-x-auto" class:opacity-60={filterLoading}>
-					<TransactionList
-						transactions={visibleTx}
-						siblings={transactions}
-						{tz}
-						emptyMessage={$_('transactions.empty')}
-						showDescription
-						showAmountSign
-						showEdit
-						showDelete
-						onrepeat={openRepeat}
-						onsaveAsTemplate={(tx) => void saveAsTemplate(tx)}
-						onmakeRecurring={openMakeRecurring}
-						onmakeSubscription={openMakeSubscription}
-						onattachSubscription={openAttachSubscription}
-						onattachCredit={openAttachCredit}
-						onedit={openEdit}
-						ondelete={(tx) => void removeTx(tx)}
-					/>
+				<TransactionPagination {page} {limit} total={pastTotal} onchange={onPageChange} />
+			{:else}
+				<div class="relative space-y-3">
+					<div class="card md:overflow-x-auto" class:opacity-60={filterLoading}>
+						<TransactionList
+							transactions={visibleTx}
+							siblings={transactions}
+							{tz}
+							emptyMessage={$_('transactions.empty')}
+							showDescription
+							showAmountSign
+							showEdit
+							showDelete
+							onrepeat={openRepeat}
+							onsaveAsTemplate={(tx) => void saveAsTemplate(tx)}
+							onmakeRecurring={openMakeRecurring}
+							onmakeSubscription={openMakeSubscription}
+							onattachSubscription={openAttachSubscription}
+							onattachCredit={openAttachCredit}
+							onedit={openEdit}
+							ondelete={(tx) => void removeTx(tx)}
+						/>
+					</div>
+					{#if filterLoading}
+						<p
+							class="absolute inset-0 flex items-center justify-center text-sm"
+							style:color="var(--text-muted)"
+						>
+							{$_('common.loading')}
+						</p>
+					{/if}
 				</div>
-				{#if filterLoading}
-					<p
-						class="absolute inset-0 flex items-center justify-center text-sm"
-						style:color="var(--text-muted)"
-					>
-						{$_('common.loading')}
-					</p>
-				{/if}
-			</div>
-			<TransactionPagination {page} {limit} {total} onchange={onPageChange} />
-		{/if}
-	</PageLoadGate>
-</div>
+				<TransactionPagination {page} {limit} {total} onchange={onPageChange} />
+			{/if}
+		</PageLoadGate>
+	</div>
+</PullToRefresh>

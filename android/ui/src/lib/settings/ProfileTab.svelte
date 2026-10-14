@@ -7,6 +7,7 @@
 	import { deleteUserData, getUserSettings, putUserSettings } from '$lib/api/client';
 	import { user } from '$lib/stores/auth';
 	import { applyThemePreference, isThemePreference, type ThemePreference } from '$lib/theme';
+	import { isUiStyle, readUiStyle, setUiStyle, type UiStyle } from '$lib/ui-style';
 	import { setLocale } from '$lib/i18n';
 	import { syncRemoteI18nOnMismatch } from '$lib/i18n/remote-sync';
 	import { APP_VERSION } from '$lib/platform/app-version';
@@ -35,10 +36,18 @@
 	let currency = $state('RUB');
 	let timezone = $state('Europe/Moscow');
 	let theme = $state<ThemePreference>('system');
+	let uiStyle = $state<UiStyle>('classic');
 
 	onMount(() => {
+		uiStyle = readUiStyle();
 		void loadProfile();
 	});
+
+	function onUiStyleChange(value: string) {
+		if (!isUiStyle(value)) return;
+		uiStyle = value;
+		setUiStyle(value);
+	}
 
 	async function loadProfile() {
 		pageLoading = true;
@@ -182,6 +191,16 @@
 				{ value: 'system', label: $_('settings.theme.system') },
 				{ value: 'light', label: $_('settings.theme.light') },
 				{ value: 'dark', label: $_('settings.theme.dark') }
+			]}
+		/>
+		<Select
+			id="ui-style"
+			label={$_('settings.ui_style')}
+			value={uiStyle}
+			onchange={onUiStyleChange}
+			options={[
+				{ value: 'classic', label: $_('settings.ui_style.classic') },
+				{ value: 'material', label: $_('settings.ui_style.material') }
 			]}
 		/>
 		<button type="submit" class="btn-primary" disabled={loading || wiping}

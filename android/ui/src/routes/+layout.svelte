@@ -19,6 +19,7 @@
 	import { isPublicAppRoute, sessionExpiredTick } from '$lib/auth/session-expired';
 	import { invalidateApiCache } from '$lib/api/cache';
 	import { initTheme, syncThemeFromUser } from '$lib/stores/theme';
+	import { initUiStyle } from '$lib/ui-style';
 	import { setLocale } from '$lib/i18n';
 	import { syncRemoteI18nOnMismatch } from '$lib/i18n/remote-sync';
 	import { hasServerUrl, refreshActiveServerUrl } from '$lib/platform/server-url';
@@ -170,6 +171,7 @@
 		ready = false;
 		debugLogInfo('bootstrap', 'App bootstrap started');
 		initTheme();
+		initUiStyle();
 		// initAuthToken already awaited in onMount — do not block on SSID refresh.
 		void refreshActiveServerUrl();
 

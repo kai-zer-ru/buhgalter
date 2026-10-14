@@ -102,6 +102,39 @@ test('settings change theme', async ({ page }) => {
 	await expect(page.locator('html')).toHaveClass(/dark/, { timeout: 10_000 });
 });
 
+test('settings change ui_style', async ({ page }) => {
+	await page.goto('/settings');
+	await waitAppReady(page);
+	// Reset shared storageState so a prior run cannot leave material.
+	await page.evaluate(() => localStorage.setItem('ui_style', 'classic'));
+	await page.reload();
+	await waitAppReady(page);
+	await expect(page.locator('html')).toHaveAttribute('data-ui-style', 'classic');
+	// ui_style in profile form card: after theme, before Save; wipe-data stays a sibling card.
+	const profileForm = page.locator('form.card');
+	await expect(profileForm.locator('#ui-style')).toBeVisible();
+	const fieldOrder = await profileForm.evaluate((form) =>
+		[...form.querySelectorAll('#theme, #ui-style, button[type="submit"]')].map(
+			(el) => (el as HTMLElement).id || (el as HTMLButtonElement).type
+		)
+	);
+	expect(fieldOrder).toEqual(['theme', 'ui-style', 'submit']);
+	await expect(profileForm.getByRole('heading', { name: 'Удалить данные' })).toHaveCount(0);
+	await expect(page.locator('.card').filter({ hasText: 'Удалить данные' })).toBeVisible();
+
+	await selectCombobox(page, 'ui-style', { label: 'MaterialBased' });
+	await expect(page.locator('html')).toHaveAttribute('data-ui-style', 'material');
+	await expect(profileForm).toHaveCSS('border-top-color', 'rgba(0, 0, 0, 0)');
+
+	await page.reload();
+	await waitAppReady(page);
+	await expect(page.locator('html')).toHaveAttribute('data-ui-style', 'material');
+	await expect(page.getByText('MaterialBased', { exact: true }).first()).toBeVisible();
+
+	await selectCombobox(page, 'ui-style', { label: 'Классика' });
+	await expect(page.locator('html')).toHaveAttribute('data-ui-style', 'classic');
+});
+
 test('settings theme system follows color scheme', async ({ page }) => {
 	await page.goto('/settings');
 	await waitAppReady(page);

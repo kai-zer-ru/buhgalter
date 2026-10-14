@@ -14,6 +14,7 @@
 	import DebtSummaryCard from '$lib/components/DebtSummaryCard.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
+	import PullToRefresh from '$lib/components/PullToRefresh.svelte';
 	import PageTabs from '$lib/components/PageTabs.svelte';
 	import SectionHeader from '$lib/components/SectionHeader.svelte';
 	import TransactionContextStats from '$lib/components/TransactionContextStats.svelte';
@@ -39,11 +40,10 @@
 
 	onMount(() => void load());
 
-	async function load(opts: { tabChange?: boolean } = {}) {
-		if (opts?.tabChange) {
-			filterLoading = true;
-		} else {
-			loading = true;
+	async function load(opts: { tabChange?: boolean; silent?: boolean } = {}) {
+		if (!opts.silent) {
+			if (opts.tabChange) filterLoading = true;
+			else loading = true;
 		}
 		try {
 			const settled = tab === 'active' ? 'false' : 'true';
@@ -52,11 +52,16 @@
 			debts = list;
 			loadError = null;
 		} catch (err) {
-			const msg = reportPageLoadFailure(err, { hasData: debts.length > 0 });
+			const msg = reportPageLoadFailure(err, {
+				silent: opts.silent,
+				hasData: debts.length > 0
+			});
 			if (msg) loadError = msg;
 		} finally {
-			loading = false;
-			filterLoading = false;
+			if (!opts.silent) {
+				loading = false;
+				filterLoading = false;
+			}
 		}
 	}
 
@@ -93,57 +98,67 @@
 	<title>{$_('debts.title')} — {$_('app.title')}</title>
 </svelte:head>
 
-<div class="space-y-4">
-	<BackLink
-		items={[
-			{ href: '/', label: $_('nav.home') },
-			{ href: '/debts', label: $_('debts.title') }
-		]}
-	/>
+<PullToRefresh onRefresh={() => load({ silent: true })} disabled={formOpen || settleOpen}>
+	<div class="space-y-4">
+		<BackLink
+			items={[
+				{ href: '/', label: $_('nav.home') },
+				{ href: '/debts', label: $_('debts.title') }
+			]}
+		/>
 
-	<SectionHeader title={$_('debts.title')}>
-		{#snippet actions()}
-			<button type="button" class="btn-primary" onclick={() => openDebtForm('lent')}>
-				{$_('debts.action.lend')}
-			</button>
-			<button type="button" class="btn-ghost" onclick={() => openDebtForm('borrowed')}>
-				{$_('debts.action.borrow')}
-			</button>
-		{/snippet}
-	</SectionHeader>
+		<SectionHeader title={$_('debts.title')}>
+			{#snippet actions()}
+				<button type="button" class="btn-primary" onclick={() => openDebtForm('lent')}>
+					{$_('debts.action.lend')}
+				</button>
+				<button type="button" class="btn-ghost" onclick={() => openDebtForm('borrowed')}>
+					{$_('debts.action.borrow')}
+				</button>
+			{/snippet}
+		</SectionHeader>
 
-	<DebtSummaryCard iOwe={summary?.i_owe ?? 0} owedToMe={summary?.owed_to_me ?? 0} />
-	<TransactionContextStats params={{ debts: '1' }} />
+		<DebtSummaryCard iOwe={summary?.i_owe ?? 0} owedToMe={summary?.owed_to_me ?? 0} />
+		<TransactionContextStats params={{ debts: '1' }} />
 
-	<PageTabs
-		active={tab}
-		tabs={[
-			{ id: 'active', label: $_('debts.tab.active') },
-			{ id: 'settled', label: $_('debts.tab.settled') }
-		]}
-		onchange={(next) => void switchTab(next as 'active' | 'settled')}
-	/>
+		<PageTabs
+			active={tab}
+			tabs={[
+				{ id: 'active', label: $_('debts.tab.active') },
+				{ id: 'settled', label: $_('debts.tab.settled') }
+			]}
+			onchange={(next) => void switchTab(next as 'active' | 'settled')}
+		/>
 
-	<PageLoadGate {loading} error={loadError} onretry={() => void load()} inline>
-		{#if debts.length === 0 && filterLoading}
-			<EmptyStateCard message={$_('common.loading')} ariaBusy />
-		{:else if debts.length === 0}
-			<EmptyStateCard message={tab === 'settled' ? $_('debts.empty.settled') : $_('debts.empty')} />
-		{:else}
-			<div class="relative card md:overflow-x-auto" class:opacity-60={filterLoading}>
-				{#if filterLoading}
-					<p
-						class="pointer-events-none absolute inset-x-0 top-0 z-10 py-2 text-center text-sm"
-						style:color="var(--text-muted)"
-					>
-						{$_('common.loading')}
-					</p>
-				{/if}
-				<DebtList {debts} {tz} {currency} onsettle={openSettle} ondelete={(d) => void remove(d)} />
-			</div>
-		{/if}
-	</PageLoadGate>
-</div>
+		<PageLoadGate {loading} error={loadError} onretry={() => void load()} inline>
+			{#if debts.length === 0 && filterLoading}
+				<EmptyStateCard message={$_('common.loading')} ariaBusy />
+			{:else if debts.length === 0}
+				<EmptyStateCard
+					message={tab === 'settled' ? $_('debts.empty.settled') : $_('debts.empty')}
+				/>
+			{:else}
+				<div class="relative card md:overflow-x-auto" class:opacity-60={filterLoading}>
+					{#if filterLoading}
+						<p
+							class="pointer-events-none absolute inset-x-0 top-0 z-10 py-2 text-center text-sm"
+							style:color="var(--text-muted)"
+						>
+							{$_('common.loading')}
+						</p>
+					{/if}
+					<DebtList
+						{debts}
+						{tz}
+						{currency}
+						onsettle={openSettle}
+						ondelete={(d) => void remove(d)}
+					/>
+				</div>
+			{/if}
+		</PageLoadGate>
+	</div>
+</PullToRefresh>
 
 <DebtForm
 	bind:open={formOpen}

@@ -44,6 +44,68 @@ html.dark {
 	--warning: #fbbf24;
 }
 
+/* MaterialBased tokens must be unlayered (same as :root / html.dark) or they lose cascade. */
+html[data-ui-style='material'] {
+	/* Single chrome scale: control / button align to card (not pill, not near-square). */
+	--ui-radius-control: 0.75rem;
+	--ui-radius-button: 0.75rem;
+	--ui-radius-card: 0.75rem;
+	--ui-elevation-1:
+		0 1px 3px color-mix(in srgb, #0f172a 16%, transparent),
+		0 2px 6px color-mix(in srgb, #0f172a 10%, transparent);
+	--ui-elevation-2:
+		0 3px 8px color-mix(in srgb, #0f172a 18%, transparent),
+		0 8px 20px color-mix(in srgb, #0f172a 12%, transparent);
+	--bg: color-mix(in srgb, #ecfdf5 18%, #f8fafc);
+	--bg-elevated: #ffffff;
+	--primary: #059669;
+	--primary-hover: #047857;
+}
+
+html.dark[data-ui-style='material'] {
+	--ui-elevation-1:
+		0 1px 3px color-mix(in srgb, #000 72%, transparent),
+		0 4px 14px color-mix(in srgb, #000 55%, transparent),
+		0 0 0 1px color-mix(in srgb, #94a3b8 14%, transparent);
+	--ui-elevation-2:
+		0 4px 12px color-mix(in srgb, #000 78%, transparent),
+		0 12px 28px color-mix(in srgb, #000 58%, transparent),
+		0 0 0 1px color-mix(in srgb, #94a3b8 18%, transparent);
+	--bg: color-mix(in srgb, #042f2e 35%, #0f172a);
+	--bg-elevated: #1e293b;
+	--primary: #14b8a6;
+	--primary-hover: #2dd4bf;
+}
+
+/* Radius unlayered: beat Tailwind utility rounded-* (e.g. sm:rounded-2xl on dialogs). */
+html[data-ui-style='material'] .card,
+html[data-ui-style='material'] .popover-panel {
+	border-radius: var(--ui-radius-card);
+}
+
+html[data-ui-style='material'] .input {
+	border-radius: var(--ui-radius-control);
+}
+
+html[data-ui-style='material'] .btn-primary,
+html[data-ui-style='material'] .btn-danger,
+html[data-ui-style='material'] .btn-ghost,
+html[data-ui-style='material'] .btn-icon,
+html[data-ui-style='material'] .btn-icon-danger {
+	border-radius: var(--ui-radius-button);
+}
+
+/* Sheet: top corners only below sm; full radius at sm+ (matches classic modal-panel). */
+html[data-ui-style='material'] .modal-panel {
+	border-radius: var(--ui-radius-card) var(--ui-radius-card) 0 0;
+}
+
+@media (min-width: 640px) {
+	html[data-ui-style='material'] .modal-panel {
+		border-radius: var(--ui-radius-card);
+	}
+}
+
 @layer base {
 	@font-face {
 		font-family: 'Font Awesome 6 Free';
@@ -87,6 +149,20 @@ html.dark {
 	@media (hover: hover) and (pointer: fine) {
 		html {
 			scrollbar-gutter: stable;
+		}
+	}
+
+	/* Touch / Android WebView: hide scrollbars; scroll gesture and a11y remain. */
+	@media (pointer: coarse) {
+		* {
+			scrollbar-width: none;
+			-ms-overflow-style: none;
+		}
+
+		*::-webkit-scrollbar {
+			display: none;
+			width: 0;
+			height: 0;
 		}
 	}
 }
@@ -167,6 +243,28 @@ html.dark {
 	.btn-ghost:hover:not(:disabled) {
 		background-color: color-mix(in srgb, var(--border) 50%, transparent);
 		color: var(--text);
+	}
+
+	/* MaterialBased surface materialization (radius is unlayered above). */
+	html[data-ui-style='material'] .card {
+		border-color: transparent;
+		box-shadow: var(--ui-elevation-1);
+	}
+
+	html[data-ui-style='material'] .popover-panel {
+		border-color: transparent;
+		box-shadow: var(--ui-elevation-2);
+	}
+
+	html[data-ui-style='material'] .input {
+		box-shadow: none;
+		background-color: color-mix(in srgb, var(--bg) 55%, var(--bg-elevated));
+	}
+
+	html[data-ui-style='material'] .btn-primary,
+	html[data-ui-style='material'] .btn-danger {
+		border-color: transparent;
+		box-shadow: var(--ui-elevation-1);
 	}
 
 	.btn-nav {
