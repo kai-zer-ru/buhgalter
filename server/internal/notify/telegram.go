@@ -25,7 +25,7 @@ func (n *TelegramNotifier) ValidateConfig() error {
 	return nil
 }
 
-func (n *TelegramNotifier) Send(ctx context.Context, recipient string, text string) error {
+func (n *TelegramNotifier) Send(ctx context.Context, recipient string, text string, keyboard *InlineKeyboard) error {
 	if err := n.ValidateConfig(); err != nil {
 		return err
 	}
@@ -39,10 +39,14 @@ func (n *TelegramNotifier) Send(ctx context.Context, recipient string, text stri
 	if baseURL == "" {
 		baseURL = "https://api.telegram.org"
 	}
-	payload, _ := json.Marshal(map[string]string{
+	body := map[string]any{
 		"chat_id": recipient,
 		"text":    text,
-	})
+	}
+	if markup := keyboard.ToTelegramReplyMarkup(); markup != nil {
+		body["reply_markup"] = markup
+	}
+	payload, _ := json.Marshal(body)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/bot%s/sendMessage", baseURL, n.Token), bytes.NewReader(payload))
 	if err != nil {
 		return err

@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { test, expect } from '@playwright/test';
 import { selectCombobox, selectLabeledCombobox, fillTransactionForm } from './helpers/transactions';
 import { waitAppReady, apiJSON, formatUTCDateTime, restoreAdminSession } from './helpers/auth';
-import { expectToast } from './helpers/ui';
+import { expandCollapsibleSection, expectToast } from './helpers/ui';
 import { createCashAccount, createExpense } from './helpers/setup-data';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -283,7 +283,7 @@ test('notifications settings load', async ({ page }) => {
 	await expect(
 		page
 			.getByRole('heading', { name: 'Ключ шифрования не настроен' })
-			.or(page.getByRole('heading', { name: 'Telegram', exact: true }))
+			.or(page.locator('summary.account-group-summary').filter({ hasText: /^Telegram/ }))
 	).toBeVisible();
 });
 
@@ -295,11 +295,7 @@ test('notifications negative balance toggle locks template', async ({ page }) =>
 
 	await page.goto('/settings/notifications');
 	await waitAppReady(page);
-	await expect(page.getByRole('heading', { name: 'Настройки', level: 3 })).toBeVisible();
-
-	const settingsCard = page.locator('.card').filter({
-		has: page.getByRole('heading', { name: 'Настройки', level: 3 })
-	});
+	const settingsCard = (await expandCollapsibleSection(page, 'Настройки')).locator('.card');
 	await expect(settingsCard.getByRole('row', { name: /Отрицательный баланс/ })).toBeVisible();
 	const negativeBalanceSwitch = settingsCard
 		.getByRole('row', { name: /Отрицательный баланс/ })
@@ -310,10 +306,10 @@ test('notifications negative balance toggle locks template', async ({ page }) =>
 	await settingsCard.getByRole('button', { name: 'Сохранить' }).click();
 	await expectToast(page, 'success', 'Изменения сохранены.');
 
+	await expandCollapsibleSection(page, 'Отрицательный баланс');
 	await expect(
 		page
-			.locator('.card')
-			.filter({ has: page.locator('#tpl-balance_shortfall') })
+			.getByTestId('notifications-template-balance_shortfall')
 			.getByText('Включите «Отрицательный баланс» в настройках, чтобы редактировать шаблон.')
 	).toBeVisible();
 	await expect(page.locator('#tpl-balance_shortfall')).toBeDisabled();
@@ -328,9 +324,7 @@ test('notifications debt toggle locks template', async ({ page }) => {
 	await page.goto('/settings/notifications');
 	await waitAppReady(page);
 
-	const settingsCard = page.locator('.card').filter({
-		has: page.getByRole('heading', { name: 'Настройки', level: 3 })
-	});
+	const settingsCard = (await expandCollapsibleSection(page, 'Настройки')).locator('.card');
 	const debtSwitch = settingsCard.getByRole('row', { name: /^Долги/ }).getByRole('switch');
 	if (await debtSwitch.isChecked()) {
 		await debtSwitch.click();
@@ -338,9 +332,8 @@ test('notifications debt toggle locks template', async ({ page }) => {
 	await settingsCard.getByRole('button', { name: 'Сохранить' }).click();
 	await expectToast(page, 'success', 'Изменения сохранены.');
 
-	const debtTemplateCard = page.locator('.card').filter({
-		has: page.locator('#tpl-debt_overdue')
-	});
+	await expandCollapsibleSection(page, 'Просроченный долг');
+	const debtTemplateCard = page.getByTestId('notifications-template-debt_overdue');
 	await expect(
 		debtTemplateCard.getByText('Включите «Долги» в настройках, чтобы редактировать шаблон.')
 	).toBeVisible();

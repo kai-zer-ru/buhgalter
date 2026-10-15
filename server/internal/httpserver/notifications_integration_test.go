@@ -73,10 +73,19 @@ func TestNotificationsSettingsAndPreview(t *testing.T) {
 	if previewResp.StatusCode != http.StatusOK {
 		t.Fatalf("preview status %d", previewResp.StatusCode)
 	}
-	var preview map[string]string
-	_ = json.NewDecoder(previewResp.Body).Decode(&preview)
-	if strings.TrimSpace(preview["text"]) == "" {
+	var preview map[string]any
+	if err := json.NewDecoder(previewResp.Body).Decode(&preview); err != nil {
+		t.Fatalf("preview decode: %v", err)
+	}
+	text, _ := preview["text"].(string)
+	if strings.TrimSpace(text) == "" {
 		t.Fatal("preview text is empty")
+	}
+	if _, ok := preview["keyboard_telegram"]; !ok {
+		t.Fatal("preview missing keyboard_telegram")
+	}
+	if _, ok := preview["keyboard_max"]; !ok {
+		t.Fatal("preview missing keyboard_max")
 	}
 }
 

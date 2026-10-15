@@ -278,14 +278,18 @@ type NotificationSetting struct {
 	CreditDaysBefore              int64   `json:"credit_days_before"`
 	SubscriptionDaysBefore        int64   `json:"subscription_days_before"`
 	NotificationTimeLocal         string  `json:"notification_time_local"`
+	KeyboardTelegram              string  `json:"keyboard_telegram"`
+	KeyboardMax                   string  `json:"keyboard_max"`
 	UpdatedAt                     string  `json:"updated_at"`
 }
 
 type NotificationTemplate struct {
-	UserID      string `json:"user_id"`
-	TriggerType string `json:"trigger_type"`
-	Template    string `json:"template"`
-	UpdatedAt   string `json:"updated_at"`
+	UserID           string `json:"user_id"`
+	TriggerType      string `json:"trigger_type"`
+	Template         string `json:"template"`
+	KeyboardTelegram string `json:"keyboard_telegram"`
+	KeyboardMax      string `json:"keyboard_max"`
+	UpdatedAt        string `json:"updated_at"`
 }
 
 type PasswordResetRequest struct {

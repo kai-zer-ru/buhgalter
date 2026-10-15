@@ -6,7 +6,7 @@ import (
 )
 
 type Notifier interface {
-	Send(ctx context.Context, recipient string, text string) error
+	Send(ctx context.Context, recipient string, text string, keyboard *InlineKeyboard) error
 	ValidateConfig() error
 }
 

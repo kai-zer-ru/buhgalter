@@ -38,9 +38,20 @@ func TestFormatWithBalanceShortfallAppendsSuffix(t *testing.T) {
 	q := sqlcdb.New(manager.DB())
 	lookup := newBalanceLookup(q, userID)
 	mainText := "Платёж по кредиту «Кредит»: 10 000.00 ₽. Дата: сегодня"
-	text, err := formatWithBalanceShortfall(ctx, lookup, true, "ru", "RUB", map[string]*string{}, mainText, "acc-bal", 1000000)
+	const externalURL = "https://buhgalter.example"
+	text, shortfallData, err := formatWithBalanceShortfall(ctx, lookup, true, "ru", "RUB", map[string]*string{}, mainText, "acc-bal", 1000000, externalURL)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if shortfallData == nil {
+		t.Fatal("expected shortfall applied")
+	}
+	if shortfallData["amount"] != "1 200.00 ₽" {
+		t.Fatalf("shortfall amount for keyboard: %q", shortfallData["amount"])
+	}
+	wantAccountURL := externalURL + "/accounts/acc-bal"
+	if shortfallData["account_url"] != wantAccountURL {
+		t.Fatalf("shortfall account_url: %q, want %q", shortfallData["account_url"], wantAccountURL)
 	}
 	if !strings.Contains(text, mainText) {
 		t.Fatalf("expected main text preserved: %q", text)
@@ -78,9 +89,12 @@ func TestFormatWithBalanceShortfallDisabled(t *testing.T) {
 	q := sqlcdb.New(manager.DB())
 	lookup := newBalanceLookup(q, userID)
 	mainText := "Платёж: 10 000.00 ₽"
-	text, err := formatWithBalanceShortfall(ctx, lookup, false, "ru", "RUB", map[string]*string{}, mainText, "acc-off", 1000000)
+	text, shortfallData, err := formatWithBalanceShortfall(ctx, lookup, false, "ru", "RUB", map[string]*string{}, mainText, "acc-off", 1000000, "")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if shortfallData != nil {
+		t.Fatal("expected shortfall not applied when disabled")
 	}
 	if text != mainText {
 		t.Fatalf("expected unchanged text, got %q", text)
@@ -115,9 +129,12 @@ func TestFormatWithBalanceShortfallSufficientFunds(t *testing.T) {
 	q := sqlcdb.New(manager.DB())
 	lookup := newBalanceLookup(q, userID)
 	mainText := "Платёж: 10 000.00 ₽"
-	text, err := formatWithBalanceShortfall(ctx, lookup, true, "ru", "RUB", map[string]*string{}, mainText, "acc-ok", 1000000)
+	text, shortfallData, err := formatWithBalanceShortfall(ctx, lookup, true, "ru", "RUB", map[string]*string{}, mainText, "acc-ok", 1000000, "https://buhgalter.example")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if shortfallData != nil {
+		t.Fatal("expected shortfall not applied when funds sufficient")
 	}
 	if text != mainText {
 		t.Fatalf("expected unchanged text when balance is enough, got %q", text)

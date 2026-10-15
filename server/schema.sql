@@ -436,6 +436,8 @@ CREATE TABLE notification_settings (
     credit_days_before  INTEGER NOT NULL DEFAULT 1,
     subscription_days_before INTEGER NOT NULL DEFAULT 1,
     notification_time_local TEXT NOT NULL DEFAULT '00:00',
+    keyboard_telegram   TEXT NOT NULL DEFAULT '{"rows":[]}',
+    keyboard_max        TEXT NOT NULL DEFAULT '{"rows":[]}',
     updated_at          TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -461,6 +463,8 @@ CREATE TABLE notification_templates (
                         'user_registration', 'password_reset', 'test'
                     )),
     template        TEXT NOT NULL,
+    keyboard_telegram TEXT NOT NULL DEFAULT '{"rows":[]}',
+    keyboard_max      TEXT NOT NULL DEFAULT '{"rows":[]}',
     updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (user_id, trigger_type)
 );

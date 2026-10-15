@@ -70,8 +70,10 @@ type notificationTestRequest struct {
 }
 
 type notificationPreviewRequest struct {
-	TriggerType string `json:"trigger_type"`
-	Template    string `json:"template"`
+	TriggerType      string                 `json:"trigger_type"`
+	Template         string                 `json:"template"`
+	KeyboardTelegram *notify.InlineKeyboard `json:"keyboard_telegram,omitempty"`
+	KeyboardMax      *notify.InlineKeyboard `json:"keyboard_max,omitempty"`
 }
 
 type notificationResetRequest struct {
@@ -270,12 +272,17 @@ func (h *Handler) PreviewNotificationTemplate(w http.ResponseWriter, r *http.Req
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_INVALID_JSON")
 		return
 	}
-	text, err := notify.PreviewTemplate(r.Context(), h.Store.DB(), info.User.ID, req.TriggerType, req.Template)
+	result, err := notify.PreviewTemplate(r.Context(), h.Store.DB(), info.User.ID, notify.PreviewInput{
+		TriggerType:      req.TriggerType,
+		Template:         req.Template,
+		KeyboardTelegram: req.KeyboardTelegram,
+		KeyboardMax:      req.KeyboardMax,
+	})
 	if err != nil {
 		apperror.WriteDetail(w, r, http.StatusBadRequest, apperror.ValidationError, apperror.ValidationError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"text": text})
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (h *Handler) ResetNotificationTemplates(w http.ResponseWriter, r *http.Request) {

@@ -46,7 +46,7 @@ var triggerPlaceholders = map[string][]string{
 	TriggerCreditPayment:      {"credit", "amount", "payment_date", "when", "credit_url"},
 	TriggerSubscriptionCharge: {"name", "amount", "date", "account", "description", "website_url", "subscription_url", "when"},
 	TriggerPlannedOp:          {"type", "amount", "description", "date", "transaction_url"},
-	TriggerBalanceShortfall:   {"amount"},
+	TriggerBalanceShortfall:   {"amount", "account_url"},
 	TriggerBudgetThreshold:    {"name", "spent", "planned", "percent", "budget_url"},
 	TriggerAutoTopupDisabled:  {"account", "source_account", "amount", "source_balance", "account_url"},
 	TriggerUserRegistration:   {"login", "display_name", "registered_at", "moderation_url"},

@@ -173,6 +173,8 @@
 	"bankNotifications.drafts.noMerchant": "No merchant",
 	"bankNotifications.drafts.kindExpense": "Expense",
 	"bankNotifications.drafts.kindIncome": "Income",
+	"settings.notifications.web_only_banner": "Configure notifications in the web version",
+	"settings.notifications.web_only_hint": "Telegram and MAX channels, templates, and buttons are configured in the browser. This screen in the app is for reference only.",
 	"settings.notifications.channel.telegram": "Telegram",
 	"settings.notifications.channel.max": "MAX",
 	"settings.notifications.telegram.enable": "Enable Telegram",

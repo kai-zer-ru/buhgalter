@@ -50,7 +50,7 @@ func TestMaxOfficialNotifierSendUserRecipient(t *testing.T) {
 		BaseURL:     server.URL,
 		APIVersion:  "1.2.5",
 	}
-	if err := n.Send(context.Background(), "", "hello"); err != nil {
+	if err := n.Send(context.Background(), "", "hello", nil); err != nil {
 		t.Fatalf("unexpected send error: %v", err)
 	}
 	if gotAuth != "official-token" {
@@ -64,6 +64,37 @@ func TestMaxOfficialNotifierSendUserRecipient(t *testing.T) {
 	}
 	if !strings.Contains(gotBody, "\"text\":\"hello\"") {
 		t.Fatalf("unexpected body: %q", gotBody)
+	}
+}
+
+func TestMaxOfficialNotifierSendWithKeyboard(t *testing.T) {
+	t.Parallel()
+
+	var gotBody string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		gotBody = string(raw)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	kb := &InlineKeyboard{Rows: [][]KeyboardButton{
+		{{Type: "link", Text: "Open", URL: "https://example.com"}},
+	}}
+	n := &MaxOfficialNotifier{
+		Token:       "official-token",
+		RecipientID: "1001",
+		BaseURL:     server.URL,
+		APIVersion:  "1.2.5",
+	}
+	if err := n.Send(context.Background(), "", "hello", kb); err != nil {
+		t.Fatalf("unexpected send error: %v", err)
+	}
+	if !strings.Contains(gotBody, `"attachments"`) || !strings.Contains(gotBody, `"inline_keyboard"`) {
+		t.Fatalf("body missing attachments: %q", gotBody)
+	}
+	if !strings.Contains(gotBody, `"type":"link"`) {
+		t.Fatalf("body missing link button: %q", gotBody)
 	}
 }
 

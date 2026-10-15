@@ -66,13 +66,14 @@ func notifyAdminUserRegistration(ctx context.Context, db *sql.DB, q *sqlcdb.Quer
 		display = login
 	}
 	modURL := moderationURLPlaceholderValue(externalURLValue, localeCode, userID)
-	text, err := Format(TriggerUserRegistration, localeCode, customMap[TriggerUserRegistration], FormatData{
+	data := FormatData{
 		"login":          login,
 		"display_name":   display,
 		"registered_at":  timeutil.FormatDisplayDateTimeShortInTimezone(registeredAt, timezone),
 		"moderation_url": modURL,
 		"amount":         FormatAmountDisplay(0, currencyCode),
-	})
+	}
+	text, err := Format(TriggerUserRegistration, localeCode, customMap[TriggerUserRegistration], data)
 	if err != nil {
 		return nil
 	}
@@ -82,6 +83,7 @@ func notifyAdminUserRegistration(ctx context.Context, db *sql.DB, q *sqlcdb.Quer
 		loc = time.UTC
 	}
 	dateKey := now.In(loc).Format("2006-01-02")
+	triggerTG, triggerMax, _, _ := templateKeyboardsRaw(templates, TriggerUserRegistration)
 	for _, channel := range activeChannels(settings) {
 		exists, err := DedupExists(ctx, q, adminID, TriggerUserRegistration, channel, userID, dateKey)
 		if err != nil || exists {
@@ -92,7 +94,8 @@ func notifyAdminUserRegistration(ctx context.Context, db *sql.DB, q *sqlcdb.Quer
 			_ = appendLog(ctx, q, adminID, TriggerUserRegistration, channel, &userID, &dateKey, "error", text)
 			continue
 		}
-		if err := notifier.Send(ctx, recipient, text); err != nil {
+		kb := channelKeyboard(settings, channel, triggerTG, triggerMax, "", "", data, nil)
+		if err := notifier.Send(ctx, recipient, text, kb); err != nil {
 			_ = appendLog(ctx, q, adminID, TriggerUserRegistration, channel, &userID, &dateKey, "error", text)
 			continue
 		}

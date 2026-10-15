@@ -617,7 +617,8 @@ paths:
     post:
       summary: Предпросмотр шаблона уведомления
       description: |
-        Формирует текст шаблона с тестовыми данными без отправки в мессенджер.
+        Формирует текст шаблона и resolved-клавиатуры Telegram/MAX с тестовыми данными
+        без отправки в мессенджер. Merge: global → template; url/link без http(s) URL отбрасываются (T1).
       security:
         - sessionCookie: []
       requestBody:
@@ -646,8 +647,8 @@ paths:
     post:
       summary: Сбросить пользовательские шаблоны уведомлений
       description: |
-        Если `trigger_type` не передан — сбрасывает все пользовательские шаблоны.
-        Если передан — только для указанного типа.
+        Если `trigger_type` не передан — сбрасывает все пользовательские шаблоны (включая их keyboard).
+        Если передан — только для указанного типа. Global keyboard settings не затрагиваются.
       security:
         - sessionCookie: []
       requestBody:
@@ -4316,9 +4317,78 @@ components:
           additionalProperties:
             type: string
           description: Публичные BUHGALTER_* переменные (без секретов)
+    NotificationInlineKeyboard:
+      type: object
+      description: |
+        Клавиатура inline-кнопок. Форма `{"rows":[[{button}]]}`.
+        Пустая — `{"rows":[]}`. При send: merge global → trigger → balance_shortfall;
+        кнопки url/link/web_app/open_app/login_url без resolved http(s) URL отбрасываются.
+      required: [rows]
+      properties:
+        rows:
+          type: array
+          items:
+            type: array
+            items:
+              $ref: '#/components/schemas/NotificationKeyboardButton'
+    NotificationKeyboardButton:
+      type: object
+      required: [type, text]
+      properties:
+        type:
+          type: string
+          description: |
+            Telegram: url|callback_data|web_app|login_url|switch_inline_query|
+            switch_inline_query_current_chat|switch_inline_query_chosen_chat|callback_game|pay|copy_text.
+            MAX: callback|link|message|open_app|request_contact|request_geo_location|clipboard.
+        text:
+          type: string
+        url:
+          type: string
+          description: Для url/link/open_app; плейсхолдеры как в шаблонах
+        callback_data:
+          type: string
+        web_app:
+          type: object
+          properties:
+            url:
+              type: string
+        login_url:
+          type: object
+          properties:
+            url:
+              type: string
+            forward_text:
+              type: string
+            bot_username:
+              type: string
+            request_write_access:
+              type: boolean
+        switch_inline_query:
+          type: string
+          nullable: true
+        switch_inline_query_current_chat:
+          type: string
+          nullable: true
+        switch_inline_query_chosen_chat:
+          type: object
+          additionalProperties: true
+        callback_game:
+          type: object
+          additionalProperties: true
+        pay:
+          type: boolean
+        copy_text:
+          type: object
+          properties:
+            text:
+              type: string
+        payload:
+          type: string
+          description: MAX callback/clipboard/message
     NotificationTemplate:
       type: object
-      required: [trigger_type, template, placeholders, is_custom]
+      required: [trigger_type, template, placeholders, is_custom, keyboard_telegram, keyboard_max]
       properties:
         trigger_type:
           type: string
@@ -4340,6 +4410,10 @@ components:
         is_custom:
           type: boolean
           description: true, если шаблон задан пользователем в БД
+        keyboard_telegram:
+          $ref: '#/components/schemas/NotificationInlineKeyboard'
+        keyboard_max:
+          $ref: '#/components/schemas/NotificationInlineKeyboard'
     NotificationSettings:
       type: object
       required:
@@ -4362,6 +4436,8 @@ components:
           owed_debt_overdue_days_limit,
           credit_days_before,
           notification_time_local,
+          keyboard_telegram,
+          keyboard_max,
           templates
         ]
       properties:
@@ -4404,6 +4480,9 @@ components:
         trigger_budget:
           type: boolean
           description: Уведомления о превышении порога бюджета
+        trigger_auto_topup_disabled:
+          type: boolean
+          description: Уведомление о отключении автопополнения счёта
         trigger_user_registration:
           type: boolean
           description: Только для администратора — уведомление о новой регистрации
@@ -4437,6 +4516,12 @@ components:
           type: string
           description: Локальное время пользователя для ежедневного запуска cron (HH:MM)
           example: "09:30"
+        keyboard_telegram:
+          $ref: '#/components/schemas/NotificationInlineKeyboard'
+          description: Global-клавиатура Telegram (на каждое исходящее)
+        keyboard_max:
+          $ref: '#/components/schemas/NotificationInlineKeyboard'
+          description: Global-клавиатура MAX
         templates:
           type: array
           items:
@@ -4452,6 +4537,12 @@ components:
           type: string
           minLength: 1
           maxLength: 500
+        keyboard_telegram:
+          $ref: '#/components/schemas/NotificationInlineKeyboard'
+          description: Если опущено — сохранить предыдущую keyboard шаблона
+        keyboard_max:
+          $ref: '#/components/schemas/NotificationInlineKeyboard'
+          description: Если опущено — сохранить предыдущую keyboard шаблона
     NotificationInterceptBankBinding:
       type: object
       required: [package_name, bank_id, account_id]
@@ -4527,6 +4618,9 @@ components:
         trigger_budget:
           type: boolean
           description: Уведомления о превышении порога бюджета
+        trigger_auto_topup_disabled:
+          type: boolean
+          description: Уведомление о отключении автопополнения счёта
         trigger_user_registration:
           type: boolean
           description: Только для администратора — уведомление о новой регистрации
@@ -4560,6 +4654,12 @@ components:
           type: string
           description: Локальное время пользователя для ежедневного запуска cron (HH:MM)
           pattern: '^([01]\d|2[0-3]):([0-5]\d)$'
+        keyboard_telegram:
+          $ref: '#/components/schemas/NotificationInlineKeyboard'
+          description: Global Telegram keyboard; если опущено — не менять
+        keyboard_max:
+          $ref: '#/components/schemas/NotificationInlineKeyboard'
+          description: Global MAX keyboard; если опущено — не менять
         templates:
           type: array
           items:
@@ -4582,18 +4682,28 @@ components:
           type: string
           minLength: 1
           maxLength: 500
+        keyboard_telegram:
+          $ref: '#/components/schemas/NotificationInlineKeyboard'
+          description: Опционально — preview unsaved template keyboard (иначе из БД)
+        keyboard_max:
+          $ref: '#/components/schemas/NotificationInlineKeyboard'
     NotificationPreviewResponse:
       type: object
-      required: [text]
+      required: [text, keyboard_telegram, keyboard_max]
       properties:
         text:
           type: string
+        keyboard_telegram:
+          $ref: '#/components/schemas/NotificationInlineKeyboard'
+        keyboard_max:
+          $ref: '#/components/schemas/NotificationInlineKeyboard'
     NotificationResetRequest:
       type: object
       properties:
         trigger_type:
           type: string
           enum: [debt_overdue, debt_due_soon, credit_payment, subscription_charge, planned_operation, balance_shortfall, budget_threshold, user_registration, password_reset, test]
+          description: Сброс шаблона удаляет и keyboard шаблона; global не трогает
     Category:
       type: object
       properties:

@@ -152,11 +152,38 @@ export type UserSettings = {
 	theme: string;
 };
 
+export type NotificationKeyboardButton = {
+	type: string;
+	text: string;
+	url?: string;
+	callback_data?: string;
+	web_app?: { url: string };
+	login_url?: {
+		url: string;
+		forward_text?: string;
+		bot_username?: string;
+		request_write_access?: boolean;
+	};
+	switch_inline_query?: string | null;
+	switch_inline_query_current_chat?: string | null;
+	switch_inline_query_chosen_chat?: Record<string, unknown>;
+	callback_game?: Record<string, unknown>;
+	pay?: boolean;
+	copy_text?: { text: string };
+	payload?: string;
+};
+
+export type NotificationInlineKeyboard = {
+	rows: NotificationKeyboardButton[][];
+};
+
 export type NotificationTemplate = {
 	trigger_type: string;
 	template: string;
 	placeholders: string[];
 	is_custom: boolean;
+	keyboard_telegram: NotificationInlineKeyboard;
+	keyboard_max: NotificationInlineKeyboard;
 };
 
 export type NotificationSettings = {
@@ -185,6 +212,8 @@ export type NotificationSettings = {
 	credit_days_before: number;
 	subscription_days_before?: number;
 	notification_time_local: string;
+	keyboard_telegram: NotificationInlineKeyboard;
+	keyboard_max: NotificationInlineKeyboard;
 	templates: NotificationTemplate[];
 };
 
@@ -213,7 +242,20 @@ export type NotificationSettingsUpdate = {
 	credit_days_before?: number;
 	subscription_days_before?: number;
 	notification_time_local?: string;
-	templates?: Array<{ trigger_type: string; template: string }>;
+	keyboard_telegram?: NotificationInlineKeyboard;
+	keyboard_max?: NotificationInlineKeyboard;
+	templates?: Array<{
+		trigger_type: string;
+		template: string;
+		keyboard_telegram?: NotificationInlineKeyboard;
+		keyboard_max?: NotificationInlineKeyboard;
+	}>;
+};
+
+export type NotificationPreviewResponse = {
+	text: string;
+	keyboard_telegram: NotificationInlineKeyboard;
+	keyboard_max: NotificationInlineKeyboard;
 };
 
 export type AdminSettings = {
@@ -420,8 +462,13 @@ export function sendNotificationTest(channel: 'telegram' | 'max') {
 	});
 }
 
-export function previewNotificationTemplate(payload: { trigger_type: string; template: string }) {
-	return request<{ text: string }>('/api/v1/user/notifications/templates/preview', {
+export function previewNotificationTemplate(payload: {
+	trigger_type: string;
+	template: string;
+	keyboard_telegram?: NotificationInlineKeyboard;
+	keyboard_max?: NotificationInlineKeyboard;
+}) {
+	return request<NotificationPreviewResponse>('/api/v1/user/notifications/templates/preview', {
 		method: 'POST',
 		body: JSON.stringify(payload)
 	});

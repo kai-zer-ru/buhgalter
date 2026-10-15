@@ -13,12 +13,12 @@ import (
 var BudgetThresholdChecker func(ctx context.Context, db *sql.DB, userID string) error
 
 // Deliver sends a notification on all enabled channels with deduplication.
-func Deliver(ctx context.Context, db *sql.DB, settings sqlcdb.NotificationSetting, userID, triggerType, entityID, dedupDate, text string) {
+func Deliver(ctx context.Context, db *sql.DB, settings sqlcdb.NotificationSetting, userID, triggerType, entityID, dedupDate, text string, data FormatData) {
 	if enabled, err := features.IsEnabled(ctx, db, features.Notifications); err != nil || !enabled {
 		return
 	}
 	w := &Worker{DB: db, Logger: slog.Default()}
-	w.sendByChannels(ctx, sqlcdb.New(db), settings, userID, triggerType, entityID, dedupDate, text)
+	w.sendByChannels(ctx, sqlcdb.New(db), settings, userID, triggerType, entityID, dedupDate, text, data, nil)
 }
 
 // UserFormatting returns locale, timezone and currency for a user.

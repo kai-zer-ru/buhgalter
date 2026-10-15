@@ -110,6 +110,8 @@ SELECT
     credit_days_before,
     subscription_days_before,
     notification_time_local,
+    keyboard_telegram,
+    keyboard_max,
     updated_at
 FROM notification_settings
 WHERE user_id = ?
@@ -144,6 +146,8 @@ func (q *Queries) GetNotificationSettings(ctx context.Context, userID string) (N
 		&i.CreditDaysBefore,
 		&i.SubscriptionDaysBefore,
 		&i.NotificationTimeLocal,
+		&i.KeyboardTelegram,
+		&i.KeyboardMax,
 		&i.UpdatedAt,
 	)
 	return i, err
@@ -191,7 +195,7 @@ func (q *Queries) InsertNotificationLog(ctx context.Context, arg InsertNotificat
 }
 
 const listNotificationTemplates = `-- name: ListNotificationTemplates :many
-SELECT user_id, trigger_type, template, updated_at
+SELECT user_id, trigger_type, template, keyboard_telegram, keyboard_max, updated_at
 FROM notification_templates
 WHERE user_id = ?
 `
@@ -209,6 +213,8 @@ func (q *Queries) ListNotificationTemplates(ctx context.Context, userID string) 
 			&i.UserID,
 			&i.TriggerType,
 			&i.Template,
+			&i.KeyboardTelegram,
+			&i.KeyboardMax,
 			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
@@ -251,8 +257,10 @@ INSERT INTO notification_settings (
     credit_days_before,
     subscription_days_before,
     notification_time_local,
+    keyboard_telegram,
+    keyboard_max,
     updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(user_id) DO UPDATE SET
     telegram_enabled = excluded.telegram_enabled,
     telegram_bot_token = excluded.telegram_bot_token,
@@ -278,6 +286,8 @@ ON CONFLICT(user_id) DO UPDATE SET
     credit_days_before = excluded.credit_days_before,
     subscription_days_before = excluded.subscription_days_before,
     notification_time_local = excluded.notification_time_local,
+    keyboard_telegram = excluded.keyboard_telegram,
+    keyboard_max = excluded.keyboard_max,
     updated_at = excluded.updated_at
 `
 
@@ -307,6 +317,8 @@ type UpsertNotificationSettingsParams struct {
 	CreditDaysBefore              int64   `json:"credit_days_before"`
 	SubscriptionDaysBefore        int64   `json:"subscription_days_before"`
 	NotificationTimeLocal         string  `json:"notification_time_local"`
+	KeyboardTelegram              string  `json:"keyboard_telegram"`
+	KeyboardMax                   string  `json:"keyboard_max"`
 	UpdatedAt                     string  `json:"updated_at"`
 }
 
@@ -337,24 +349,30 @@ func (q *Queries) UpsertNotificationSettings(ctx context.Context, arg UpsertNoti
 		arg.CreditDaysBefore,
 		arg.SubscriptionDaysBefore,
 		arg.NotificationTimeLocal,
+		arg.KeyboardTelegram,
+		arg.KeyboardMax,
 		arg.UpdatedAt,
 	)
 	return err
 }
 
 const upsertNotificationTemplate = `-- name: UpsertNotificationTemplate :exec
-INSERT INTO notification_templates (user_id, trigger_type, template, updated_at)
-VALUES (?, ?, ?, ?)
+INSERT INTO notification_templates (user_id, trigger_type, template, keyboard_telegram, keyboard_max, updated_at)
+VALUES (?, ?, ?, ?, ?, ?)
 ON CONFLICT(user_id, trigger_type) DO UPDATE SET
     template = excluded.template,
+    keyboard_telegram = excluded.keyboard_telegram,
+    keyboard_max = excluded.keyboard_max,
     updated_at = excluded.updated_at
 `
 
 type UpsertNotificationTemplateParams struct {
-	UserID      string `json:"user_id"`
-	TriggerType string `json:"trigger_type"`
-	Template    string `json:"template"`
-	UpdatedAt   string `json:"updated_at"`
+	UserID           string `json:"user_id"`
+	TriggerType      string `json:"trigger_type"`
+	Template         string `json:"template"`
+	KeyboardTelegram string `json:"keyboard_telegram"`
+	KeyboardMax      string `json:"keyboard_max"`
+	UpdatedAt        string `json:"updated_at"`
 }
 
 func (q *Queries) UpsertNotificationTemplate(ctx context.Context, arg UpsertNotificationTemplateParams) error {
@@ -362,6 +380,8 @@ func (q *Queries) UpsertNotificationTemplate(ctx context.Context, arg UpsertNoti
 		arg.UserID,
 		arg.TriggerType,
 		arg.Template,
+		arg.KeyboardTelegram,
+		arg.KeyboardMax,
 		arg.UpdatedAt,
 	)
 	return err

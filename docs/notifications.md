@@ -8,14 +8,37 @@ API: `GET` / `PUT` `/api/v1/user/notifications`, preview и reset шаблоно
 
 ## Вкладка «Уведомления» (`/settings/notifications`)
 
-Доступна после настройки ключа шифрования уведомлений (админка). Блоки сохраняются **отдельными кнопками «Сохранить»**; после PUT состояние берётся из **ответа API** (`applyNotificationSettings`), не из повторного GET.
+Доступна после настройки ключа шифрования уведомлений (админка). Блоки сохраняются **отдельными кнопками «Сохранить»**; после PUT состояние берётся из **ответа API** (`applyNotificationSettings`), не из повторного GET. Блоки настроек (кроме предупреждения о ключе) свёрнуты в spoiler’ы (`CollapsibleSection`), по умолчанию закрыты.
 
 | Блок | Содержимое |
 |------|------------|
-| Telegram / MAX | Включение канала, идентификаторы получателя, тестовая отправка |
+| Telegram / MAX | Включение канала, идентификаторы получателя, тестовая отправка (с кнопками, если клавиатура не пуста) |
+| **Кнопки по умолчанию** | Global inline-клавиатуры Telegram и MAX (конструктор DnD; пресеты: долги / кредит / операции / бюджет / настройки) |
 | **Настройки** | Переключатели типов событий (таблица на десктопе, карточки на мобильных) |
 | **Периоды и расписание** | Числовые параметры напоминаний и время проверки очереди (таблица / карточки) |
-| **Шаблоны сообщений** | Текст по каждому `trigger_type`, preview, сброс |
+| **Шаблоны сообщений** | Текст и per-template клавиатуры по каждому `trigger_type` (вкладки TG/MAX только если оба канала включены; иначе сразу конструктор активного; пресет кнопки соответствует типу шаблона), preview (текст + кнопки), сброс |
+
+На **Android** страница `/settings/notifications` показывает только баннер «Настройте уведомления в веб-версии» (каналы, шаблоны и кнопки — только в web).
+
+---
+
+## Inline-кнопки (Telegram / MAX)
+
+Исходящие уведомления могут содержать **inline-клавиатуру**. Две независимые модели: Telegram (`reply_markup`) и MAX (`attachments.inline_keyboard`; a161 — тот же JSON, другой base URL). Типы кнопок — по официальным докам провайдеров.
+
+### Хранение и API
+
+- Global: `keyboard_telegram` / `keyboard_max` в `notification_settings` (JSON `{"rows":[[{button}]]}`, default пустой).
+- Per-template: те же поля у `notification_templates`.
+- `GET` / `PUT` `/api/v1/user/notifications`; preview возвращает resolved text **и** resolved keyboards (tg/max). Сброс шаблона сбрасывает и его keyboard; global не трогает.
+
+### Merge при отправке
+
+Ряды склеиваются в порядке: **global → trigger → balance_shortfall** (если shortfall дописан к сообщению). Плейсхолдеры в url/link (и аналогах) — как в тексте шаблонов, база только `system_settings.external_url`.
+
+Если после резолва у кнопки типа url/link/web_app/open_app/login_url URL пуст — **эта кнопка отбрасывается** (T1), остальные остаются. Если клавиатура пуста — markup / attachment **не** передаётся.
+
+Webhook, обработка callback и CAP-6 (`internal_url`) — **вне scope** (см. [telegram-max-buttons.md](../roadmap/telegram-max-buttons.md)).
 
 ---
 
@@ -84,7 +107,7 @@ API: `GET` / `PUT` `/api/v1/user/notifications`, preview и reset шаблоно
 
 При включённом **«Отрицательный баланс»** worker дописывает шаблон `balance_shortfall` к исходящим напоминаниям (кредит, плановый расход/перевод, долг «я должен»), если `current_balance` меньше суммы операции.
 
-Placeholder `{amount}` — недостающая сумма. Формула: `max(0, сумма − current_balance)` (копейки).
+Плейсхолдеры: `{amount}` — недостающая сумма (`max(0, сумма − current_balance)`, копейки); `{account_url}` → `/accounts/{id}` счёта с недостачей.
 
 ---
 
@@ -109,8 +132,11 @@ Placeholder `{amount}` — недостающая сумма. Формула: `m
 | `password_reset` | `{reset_url}` | `/admin/users?reset={user_id}` |
 | `user_registration` | `{moderation_url}` | `/admin/users?moderate={user_id}` |
 | `budget_threshold` | `{budget_url}` | `/budget` |
+| `balance_shortfall` | `{account_url}` | `/accounts/{id}` |
+| `auto_topup_disabled` | `{account_url}` | `/accounts/{id}` |
+| `subscription_charge` | `{subscription_url}` | `/subscriptions/{id}` |
 
-Шаблон `balance_shortfall` — только `{amount}` (суффикс к основному сообщению, без отдельной ссылки).
+Шаблон `balance_shortfall` — суффикс к основному сообщению; ссылка на счёт — `{account_url}`.
 
 ### Долги: направление и срок
 
@@ -136,6 +162,7 @@ Placeholder `{amount}` — недостающая сумма. Формула: `m
 |-----------|------|
 | Настройки, PUT/GET | [`service.go`](../server/internal/notify/service.go) |
 | Worker, отправка | [`worker.go`](../server/internal/notify/worker.go) |
+| Клавиатуры (модель, merge, T1) | [`keyboard.go`](../server/internal/notify/keyboard.go), [`keyboard_merge.go`](../server/internal/notify/keyboard_merge.go), [`keyboard_validate.go`](../server/internal/notify/keyboard_validate.go) |
 | Gating шаблонов | `TemplateSettingEnabled` |
 | Gating периодов | `PolicySettingEnabled` |
 | Суффикс баланса | [`balance.go`](../server/internal/notify/balance.go) |
@@ -154,12 +181,16 @@ Worker `processPlanned` при включённом `trigger_planned` по-пр�
 
 Миграция `032_notification_balance_shortfall.sql` — `trigger_negative_balance`, шаблон `balance_shortfall`.
 
+Миграция `055_notification_keyboards.sql` — JSON `keyboard_telegram` / `keyboard_max` в settings и templates.
+
 ---
 
 ## UI (файлы)
 
 | Файл | Назначение |
 |------|------------|
-| [`web/src/routes/settings/+page.svelte`](../web/src/routes/settings/+page.svelte) | Вкладка уведомлений, таблицы, gating |
+| [`web/src/lib/settings/NotificationsTab.svelte`](../web/src/lib/settings/NotificationsTab.svelte) | Вкладка уведомлений (web), таблицы, gating, кнопки |
+| [`web/src/lib/settings/KeyboardBuilder.svelte`](../web/src/lib/settings/KeyboardBuilder.svelte) | Конструктор inline-клавиатур (DnD) |
+| [`android/ui/src/routes/settings/notifications/+page.svelte`](../android/ui/src/routes/settings/notifications/+page.svelte) | Android: баннер «настройте в веб» |
 | [`web/src/lib/components/IntegerInput.svelte`](../web/src/lib/components/IntegerInput.svelte) | Целые числа без spinner |
 | [`web/src/lib/components/MoneyInput.svelte`](../web/src/lib/components/MoneyInput.svelte) | Деньги (аналогичный текстовый ввод) |

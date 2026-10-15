@@ -207,16 +207,17 @@ func notifyAutoTopupDisabled(ctx context.Context, db *sql.DB, userID string, ben
 		return
 	}
 	customMap := notify.ToTemplateMap(customTemplates)
-	text, err := notify.Format(notify.TriggerAutoTopupDisabled, localeCode, customMap[notify.TriggerAutoTopupDisabled], notify.FormatData{
+	data := notify.FormatData{
 		"account":        beneficiary.name,
 		"source_account": source.name,
 		"amount":         notify.FormatAmountDisplay(transferAmount, currencyCode),
 		"source_balance": notify.FormatAmountDisplay(source.balance, currencyCode),
 		"account_url":    notify.AccountURLPlaceholderValue(externalURL, localeCode, beneficiary.id),
-	})
+	}
+	text, err := notify.Format(notify.TriggerAutoTopupDisabled, localeCode, customMap[notify.TriggerAutoTopupDisabled], data)
 	if err != nil {
 		return
 	}
 	dedupDate := time.Now().UTC().Format("2006-01-02")
-	notify.Deliver(ctx, db, settings, userID, notify.TriggerAutoTopupDisabled, beneficiary.id, dedupDate, text)
+	notify.Deliver(ctx, db, settings, userID, notify.TriggerAutoTopupDisabled, beneficiary.id, dedupDate, text, data)
 }

@@ -74,17 +74,18 @@ func CheckThresholdsForUser(ctx context.Context, db *sql.DB, userID string) erro
 			if err != nil || sent > 0 {
 				continue
 			}
-			text, err := notify.Format(notify.TriggerBudgetThreshold, localeCode, customMap[notify.TriggerBudgetThreshold], notify.FormatData{
+			data := notify.FormatData{
 				"name":       item.Name,
 				"spent":      notify.FormatAmountDisplay(item.Spent, currencyCode),
 				"planned":    notify.FormatAmountDisplay(item.Planned, currencyCode),
 				"percent":    strconv.Itoa(item.Percent),
 				"budget_url": notify.BudgetURLPlaceholderValue(externalURL, localeCode),
-			})
+			}
+			text, err := notify.Format(notify.TriggerBudgetThreshold, localeCode, customMap[notify.TriggerBudgetThreshold], data)
 			if err != nil {
 				continue
 			}
-			notify.Deliver(ctx, db, settings, userID, notify.TriggerBudgetThreshold, item.ID, periodStart, text)
+			notify.Deliver(ctx, db, settings, userID, notify.TriggerBudgetThreshold, item.ID, periodStart, text, data)
 			_ = q.InsertBudgetAlertSent(ctx, sqlcdb.InsertBudgetAlertSentParams{
 				BudgetID: item.ID, PeriodStart: periodStart, ThresholdPercent: th,
 				SentAt: timeutil.FormatUTC(time.Now().UTC()),

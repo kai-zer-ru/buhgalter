@@ -55,7 +55,9 @@ export async function rowMenuAction(page: Page, row: Locator, action: string) {
 
 /** Expand a top-level `CollapsibleSection` / `AccountGroupPanel` by summary label. */
 export async function expandCollapsibleSection(page: Page, label: string | RegExp) {
-	const panel = page.locator('details.account-group-panel').filter({ hasText: label });
+	const panel = page.locator('details.account-group-panel').filter({
+		has: page.locator('summary.account-group-summary', { hasText: label })
+	});
 	const summary = panel.locator('summary.account-group-summary');
 	await expect(summary).toBeVisible();
 	if (!(await panel.evaluate((el) => (el as HTMLDetailsElement).open))) {

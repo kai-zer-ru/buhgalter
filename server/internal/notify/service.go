@@ -17,10 +17,12 @@ import (
 )
 
 type TemplateView struct {
-	TriggerType  string   `json:"trigger_type"`
-	Template     string   `json:"template"`
-	Placeholders []string `json:"placeholders"`
-	IsCustom     bool     `json:"is_custom"`
+	TriggerType      string         `json:"trigger_type"`
+	Template         string         `json:"template"`
+	Placeholders     []string       `json:"placeholders"`
+	IsCustom         bool           `json:"is_custom"`
+	KeyboardTelegram InlineKeyboard `json:"keyboard_telegram"`
+	KeyboardMax      InlineKeyboard `json:"keyboard_max"`
 }
 
 type SettingsView struct {
@@ -49,12 +51,16 @@ type SettingsView struct {
 	CreditDaysBefore              int64          `json:"credit_days_before"`
 	SubscriptionDaysBefore        int64          `json:"subscription_days_before"`
 	NotificationTimeLocal         string         `json:"notification_time_local"`
+	KeyboardTelegram              InlineKeyboard `json:"keyboard_telegram"`
+	KeyboardMax                   InlineKeyboard `json:"keyboard_max"`
 	Templates                     []TemplateView `json:"templates"`
 }
 
 type TemplateUpdate struct {
-	TriggerType string `json:"trigger_type"`
-	Template    string `json:"template"`
+	TriggerType      string          `json:"trigger_type"`
+	Template         string          `json:"template"`
+	KeyboardTelegram *InlineKeyboard `json:"keyboard_telegram,omitempty"`
+	KeyboardMax      *InlineKeyboard `json:"keyboard_max,omitempty"`
 }
 
 type UpdateSettingsInput struct {
@@ -82,7 +88,22 @@ type UpdateSettingsInput struct {
 	CreditDaysBefore              *int64           `json:"credit_days_before,omitempty"`
 	SubscriptionDaysBefore        *int64           `json:"subscription_days_before,omitempty"`
 	NotificationTimeLocal         *string          `json:"notification_time_local,omitempty"`
+	KeyboardTelegram              *InlineKeyboard  `json:"keyboard_telegram,omitempty"`
+	KeyboardMax                   *InlineKeyboard  `json:"keyboard_max,omitempty"`
 	Templates                     []TemplateUpdate `json:"templates,omitempty"`
+}
+
+type PreviewInput struct {
+	TriggerType      string          `json:"trigger_type"`
+	Template         string          `json:"template"`
+	KeyboardTelegram *InlineKeyboard `json:"keyboard_telegram,omitempty"`
+	KeyboardMax      *InlineKeyboard `json:"keyboard_max,omitempty"`
+}
+
+type PreviewResult struct {
+	Text             string         `json:"text"`
+	KeyboardTelegram InlineKeyboard `json:"keyboard_telegram"`
+	KeyboardMax      InlineKeyboard `json:"keyboard_max"`
 }
 
 func GetSettings(ctx context.Context, sqlDB *sql.DB, userID string) (SettingsView, error) {
@@ -120,10 +141,12 @@ func getSettingsOnce(ctx context.Context, sqlDB *sql.DB, userID string) (Setting
 	if err != nil {
 		return SettingsView{}, err
 	}
-	custom := make(map[string]string, len(templates))
+	custom := make(map[string]sqlcdb.NotificationTemplate, len(templates))
 	for _, tpl := range templates {
-		custom[tpl.TriggerType] = tpl.Template
+		custom[tpl.TriggerType] = tpl
 	}
+	globalTG, _ := ParseInlineKeyboard(settings.KeyboardTelegram)
+	globalMax, _ := ParseInlineKeyboard(settings.KeyboardMax)
 	view := SettingsView{
 		SecretKeyConfigured:           SecretKeyConfigured(ctx, sqlDB),
 		TelegramEnabled:               settings.TelegramEnabled == 1,
@@ -150,6 +173,8 @@ func getSettingsOnce(ctx context.Context, sqlDB *sql.DB, userID string) (Setting
 		CreditDaysBefore:              settings.CreditDaysBefore,
 		SubscriptionDaysBefore:        settings.SubscriptionDaysBefore,
 		NotificationTimeLocal:         normalizeNotificationTimeLocal(settings.NotificationTimeLocal),
+		KeyboardTelegram:              globalTG,
+		KeyboardMax:                   globalMax,
 		Templates:                     make([]TemplateView, 0, len(triggerOrder)),
 	}
 	for _, trigger := range triggerOrder {
@@ -159,12 +184,20 @@ func getSettingsOnce(ctx context.Context, sqlDB *sql.DB, userID string) (Setting
 		if RequiresRegistrationEnabled(trigger) && !regEnabled {
 			continue
 		}
-		customTemplate, ok := custom[trigger]
+		tpl, ok := custom[trigger]
+		tplTG := EmptyInlineKeyboard()
+		tplMax := EmptyInlineKeyboard()
+		if ok {
+			tplTG, _ = ParseInlineKeyboard(tpl.KeyboardTelegram)
+			tplMax, _ = ParseInlineKeyboard(tpl.KeyboardMax)
+		}
 		view.Templates = append(view.Templates, TemplateView{
-			TriggerType:  trigger,
-			Template:     choose(ok, customTemplate, defaultTemplate(language, trigger)),
-			Placeholders: AvailablePlaceholders(trigger),
-			IsCustom:     ok,
+			TriggerType:      trigger,
+			Template:         choose(ok, tpl.Template, defaultTemplate(language, trigger)),
+			Placeholders:     AvailablePlaceholders(trigger),
+			IsCustom:         ok,
+			KeyboardTelegram: tplTG,
+			KeyboardMax:      tplMax,
 		})
 	}
 	return view, nil
@@ -347,6 +380,34 @@ func UpdateSettings(ctx context.Context, db *sql.DB, userID string, in UpdateSet
 		}
 		settings.MaxToken = encrypted
 	}
+	if in.KeyboardTelegram != nil {
+		if err := ValidateTelegramKeyboard(*in.KeyboardTelegram); err != nil {
+			return SettingsView{}, err
+		}
+		raw, err := MarshalInlineKeyboard(*in.KeyboardTelegram)
+		if err != nil {
+			return SettingsView{}, err
+		}
+		settings.KeyboardTelegram = raw
+	}
+	if in.KeyboardMax != nil {
+		if err := ValidateMaxKeyboard(*in.KeyboardMax); err != nil {
+			return SettingsView{}, err
+		}
+		raw, err := MarshalInlineKeyboard(*in.KeyboardMax)
+		if err != nil {
+			return SettingsView{}, err
+		}
+		settings.KeyboardMax = raw
+	}
+	existingTemplates, err := q.ListNotificationTemplates(ctx, userID)
+	if err != nil {
+		return SettingsView{}, err
+	}
+	existingByTrigger := make(map[string]sqlcdb.NotificationTemplate, len(existingTemplates))
+	for _, tpl := range existingTemplates {
+		existingByTrigger[tpl.TriggerType] = tpl
+	}
 	for _, tpl := range in.Templates {
 		trigger := strings.TrimSpace(tpl.TriggerType)
 		if _, ok := triggerPlaceholders[trigger]; !ok {
@@ -374,11 +435,39 @@ func UpdateSettings(ctx context.Context, db *sql.DB, userID string, in UpdateSet
 		if err := ValidateTemplate(trigger, template); err != nil {
 			return SettingsView{}, err
 		}
+		kbTG := emptyKeyboardJSON
+		kbMax := emptyKeyboardJSON
+		if existing, ok := existingByTrigger[trigger]; ok {
+			kbTG = keyboardJSONOrEmpty(existing.KeyboardTelegram)
+			kbMax = keyboardJSONOrEmpty(existing.KeyboardMax)
+		}
+		if tpl.KeyboardTelegram != nil {
+			if err := ValidateTelegramKeyboard(*tpl.KeyboardTelegram); err != nil {
+				return SettingsView{}, err
+			}
+			raw, err := MarshalInlineKeyboard(*tpl.KeyboardTelegram)
+			if err != nil {
+				return SettingsView{}, err
+			}
+			kbTG = raw
+		}
+		if tpl.KeyboardMax != nil {
+			if err := ValidateMaxKeyboard(*tpl.KeyboardMax); err != nil {
+				return SettingsView{}, err
+			}
+			raw, err := MarshalInlineKeyboard(*tpl.KeyboardMax)
+			if err != nil {
+				return SettingsView{}, err
+			}
+			kbMax = raw
+		}
 		if err := q.UpsertNotificationTemplate(ctx, sqlcdb.UpsertNotificationTemplateParams{
-			UserID:      userID,
-			TriggerType: trigger,
-			Template:    template,
-			UpdatedAt:   time.Now().UTC().Format(time.RFC3339),
+			UserID:           userID,
+			TriggerType:      trigger,
+			Template:         template,
+			KeyboardTelegram: kbTG,
+			KeyboardMax:      kbMax,
+			UpdatedAt:        time.Now().UTC().Format(time.RFC3339),
 		}); err != nil {
 			return SettingsView{}, err
 		}
@@ -409,6 +498,8 @@ func UpdateSettings(ctx context.Context, db *sql.DB, userID string, in UpdateSet
 		CreditDaysBefore:              settings.CreditDaysBefore,
 		SubscriptionDaysBefore:        settings.SubscriptionDaysBefore,
 		NotificationTimeLocal:         settings.NotificationTimeLocal,
+		KeyboardTelegram:              keyboardJSONOrEmpty(settings.KeyboardTelegram),
+		KeyboardMax:                   keyboardJSONOrEmpty(settings.KeyboardMax),
 		UpdatedAt:                     time.Now().UTC().Format(time.RFC3339),
 	}); err != nil {
 		return SettingsView{}, err
@@ -419,28 +510,39 @@ func UpdateSettings(ctx context.Context, db *sql.DB, userID string, in UpdateSet
 	return GetSettings(ctx, db, userID)
 }
 
-func PreviewTemplate(ctx context.Context, db *sql.DB, userID, triggerType, template string) (string, error) {
-	triggerType = strings.TrimSpace(triggerType)
-	template = strings.TrimSpace(template)
+func PreviewTemplate(ctx context.Context, db *sql.DB, userID string, in PreviewInput) (PreviewResult, error) {
+	triggerType := strings.TrimSpace(in.TriggerType)
+	template := strings.TrimSpace(in.Template)
+	empty := PreviewResult{KeyboardTelegram: EmptyInlineKeyboard(), KeyboardMax: EmptyInlineKeyboard()}
 	if _, ok := triggerPlaceholders[triggerType]; !ok {
-		return "", fmt.Errorf("unknown trigger_type: %s", triggerType)
+		return empty, fmt.Errorf("unknown trigger_type: %s", triggerType)
 	}
 	if err := rejectRegistrationDependentTrigger(ctx, db, userID, triggerType); err != nil {
-		return "", err
+		return empty, err
 	}
 	if err := rejectTemplateWhenSettingDisabled(ctx, db, userID, triggerType); err != nil {
-		return "", err
+		return empty, err
 	}
 	if err := ValidateTemplate(triggerType, template); err != nil {
-		return "", err
+		return empty, err
+	}
+	if in.KeyboardTelegram != nil {
+		if err := ValidateTelegramKeyboard(*in.KeyboardTelegram); err != nil {
+			return empty, err
+		}
+	}
+	if in.KeyboardMax != nil {
+		if err := ValidateMaxKeyboard(*in.KeyboardMax); err != nil {
+			return empty, err
+		}
 	}
 	localeCode, timezone, currencyCode, err := userFormatting(ctx, db, userID)
 	if err != nil {
-		return "", err
+		return empty, err
 	}
 	externalURL, err := settingscache.ExternalURL(ctx, db)
 	if err != nil {
-		return "", err
+		return empty, err
 	}
 	urlValue := ""
 	if externalURL.Valid {
@@ -449,9 +551,46 @@ func PreviewTemplate(ctx context.Context, db *sql.DB, userID, triggerType, templ
 	data := previewData(triggerType, localeCode, timezone, currencyCode, "", urlValue)
 	text, err := Format(triggerType, localeCode, &template, data)
 	if err != nil {
-		return "", err
+		return empty, err
 	}
-	return text, nil
+
+	q := sqlcdb.New(db)
+	if err := q.EnsureNotificationSettings(ctx, userID); err != nil {
+		return empty, err
+	}
+	settings, err := q.GetNotificationSettings(ctx, userID)
+	if err != nil {
+		return empty, err
+	}
+	templates, err := q.ListNotificationTemplates(ctx, userID)
+	if err != nil {
+		return empty, err
+	}
+	triggerTG, triggerMax, shortfallTG, shortfallMax := templateKeyboardsRaw(templates, triggerType)
+	if in.KeyboardTelegram != nil {
+		raw, err := MarshalInlineKeyboard(*in.KeyboardTelegram)
+		if err != nil {
+			return empty, err
+		}
+		triggerTG = raw
+	}
+	if in.KeyboardMax != nil {
+		raw, err := MarshalInlineKeyboard(*in.KeyboardMax)
+		if err != nil {
+			return empty, err
+		}
+		triggerMax = raw
+	}
+	kbTG := PrepareChannelKeyboard(settings.KeyboardTelegram, triggerTG, shortfallTG, data, nil, ChannelTelegram)
+	kbMax := PrepareChannelKeyboard(settings.KeyboardMax, triggerMax, shortfallMax, data, nil, ChannelMax)
+	result := PreviewResult{Text: text, KeyboardTelegram: EmptyInlineKeyboard(), KeyboardMax: EmptyInlineKeyboard()}
+	if kbTG != nil {
+		result.KeyboardTelegram = *kbTG
+	}
+	if kbMax != nil {
+		result.KeyboardMax = *kbMax
+	}
+	return result, nil
 }
 
 func ResetTemplates(ctx context.Context, db *sql.DB, userID string, triggerType *string) error {
@@ -511,7 +650,8 @@ func SendTest(ctx context.Context, db *sql.DB, userID string, channel string, bo
 	if channelValue == "" {
 		channelValue = ChannelTelegram
 	}
-	text, err := Format(TriggerTest, localeCode, custom, previewData(TriggerTest, localeCode, timezone, currencyCode, channelValue, urlValue))
+	data := previewData(TriggerTest, localeCode, timezone, currencyCode, channelValue, urlValue)
+	text, err := Format(TriggerTest, localeCode, custom, data)
 	if err != nil {
 		return err
 	}
@@ -520,7 +660,9 @@ func SendTest(ctx context.Context, db *sql.DB, userID string, channel string, bo
 		_ = appendLog(ctx, q, userID, TriggerTest, channel, nil, nil, "error", text)
 		return err
 	}
-	if err := notifier.Send(ctx, recipient, text); err != nil {
+	triggerTG, triggerMax, _, _ := templateKeyboardsRaw(templates, TriggerTest)
+	kb := channelKeyboard(settings, channelValue, triggerTG, triggerMax, "", "", data, nil)
+	if err := notifier.Send(ctx, recipient, text, kb); err != nil {
 		_ = appendLog(ctx, q, userID, TriggerTest, channel, nil, nil, "error", text)
 		return err
 	}
@@ -573,13 +715,14 @@ func NotifyAdminsOnPasswordReset(ctx context.Context, db *sql.DB, targetUserID, 
 		if display == "" {
 			display = login
 		}
-		text, err := Format(TriggerPasswordReset, localeCode, customMap[TriggerPasswordReset], FormatData{
+		data := FormatData{
 			"login":        login,
 			"display_name": display,
 			"requested_at": timeutil.FormatDisplayDateTimeShortInTimezone(requestedAt, timezone),
 			"amount":       FormatAmountDisplay(0, currencyCode),
 			"reset_url":    resetURLPlaceholderValue(externalURLValue, localeCode, targetUserID),
-		})
+		}
+		text, err := Format(TriggerPasswordReset, localeCode, customMap[TriggerPasswordReset], data)
 		if err != nil {
 			continue
 		}
@@ -589,6 +732,7 @@ func NotifyAdminsOnPasswordReset(ctx context.Context, db *sql.DB, targetUserID, 
 			loc = time.UTC
 		}
 		dateKey := now.In(loc).Format("2006-01-02")
+		triggerTG, triggerMax, _, _ := templateKeyboardsRaw(templates, TriggerPasswordReset)
 		for _, channel := range activeChannels(settings) {
 			exists, err := DedupExists(ctx, q, adminID, TriggerPasswordReset, channel, entityID, dateKey)
 			if err != nil || exists {
@@ -599,7 +743,8 @@ func NotifyAdminsOnPasswordReset(ctx context.Context, db *sql.DB, targetUserID, 
 				_ = appendLog(ctx, q, adminID, TriggerPasswordReset, channel, &entityID, &dateKey, "error", text)
 				continue
 			}
-			if err := notifier.Send(ctx, recipient, text); err != nil {
+			kb := channelKeyboard(settings, channel, triggerTG, triggerMax, "", "", data, nil)
+			if err := notifier.Send(ctx, recipient, text, kb); err != nil {
 				_ = appendLog(ctx, q, adminID, TriggerPasswordReset, channel, &entityID, &dateKey, "error", text)
 				continue
 			}
@@ -827,6 +972,8 @@ func applyPreviewURLs(triggerType string, data FormatData, externalURL, localeCo
 		data["source_account"] = choose(normalizeLocale(localeCode) == "ru", "Сбер", "Sber")
 		data["amount"] = FormatAmountDisplay(250000, currencyCode)
 		data["source_balance"] = FormatAmountDisplay(100000, currencyCode)
+		data["account_url"] = accountURLPlaceholderValue(externalURL, localeCode, previewAccountID)
+	case TriggerBalanceShortfall:
 		data["account_url"] = accountURLPlaceholderValue(externalURL, localeCode, previewAccountID)
 	case TriggerTest:
 		data["settings_url"] = settingsURLPlaceholderValue(externalURL, localeCode)

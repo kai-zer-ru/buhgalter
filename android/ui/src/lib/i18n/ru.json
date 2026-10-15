@@ -173,6 +173,8 @@
 	"bankNotifications.drafts.noMerchant": "Без магазина",
 	"bankNotifications.drafts.kindExpense": "Расход",
 	"bankNotifications.drafts.kindIncome": "Доход",
+	"settings.notifications.web_only_banner": "Настройте уведомления в веб-версии",
+	"settings.notifications.web_only_hint": "Каналы Telegram и MAX, шаблоны и кнопки настраиваются в браузере. В приложении этот раздел только для справки.",
 	"settings.notifications.channel.telegram": "Telegram",
 	"settings.notifications.channel.max": "MAX",
 	"settings.notifications.telegram.enable": "Включить Telegram",

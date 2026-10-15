@@ -385,7 +385,9 @@
 - [x] БАГ. Android: при запуске приложение сразу сворачивается (гонка quiet wake перехвата: sticky Intent extra + HyperOS bring-to-front без `onNewIntent`). Фикс: one-shot token, strip sticky extras, `onResume` → user engaged ([android-client-platform.md](docs/android-client-platform.md))
 - [x] [UX polish](roadmap/ux-polish.md) — без полос прокрутки; PTR текущего экрана; classic / MaterialBased; radius + профиль. Реализовано; **soak ~неделя** — баги отдельными коммитами в 1.8.1
 - [x] БАГ. Web/Android: на `/settings/notifications` кнопка показывает ключ `settings.notifications.save_all` вместо перевода. Нужны ключи ru/en + тест полноты i18n (литеральные ключи из UI — в обоих языках; `make ui-i18n-check`)
-- [ ] [Кнопки в Telegram / MAX](roadmap/telegram-max-buttons.md) — MVP: **URL-кнопки** в исходящих уведомлениях («Открыть долг/кредит»); callback — позже
+- [x] [Кнопки в Telegram / MAX](roadmap/telegram-max-buttons.md) — исходящие inline-кнопки TG/MAX (все типы по доке); конструктор DnD на web (global + per-template); Android — баннер «в веб»; webhook/CAP-6 — позже
+- [x] Web: UI polish уведомлений — все блоки настроек под spoiler’ы; в шаблонах только enabled каналы; `toApiKeyboard` без `id` в payload
+- [x] Web/Server: пресеты кнопок по `trigger_type`; у `balance_shortfall` — `{account_url}` + пресет «Открыть счёт»
 
 ## v1.9.0
 

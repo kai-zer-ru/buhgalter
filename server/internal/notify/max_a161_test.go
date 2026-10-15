@@ -49,7 +49,7 @@ func TestMaxA161NotifierSend(t *testing.T) {
 		UserID:  "1001",
 		BaseURL: server.URL,
 	}
-	if err := n.Send(context.Background(), "", "hello"); err != nil {
+	if err := n.Send(context.Background(), "", "hello", nil); err != nil {
 		t.Fatalf("unexpected send error: %v", err)
 	}
 	if gotAuth != "1234567890123456" {
@@ -63,6 +63,33 @@ func TestMaxA161NotifierSend(t *testing.T) {
 	}
 	if !strings.Contains(gotBody, "\"text\":\"hello\"") {
 		t.Fatalf("unexpected body: %q", gotBody)
+	}
+}
+
+func TestMaxA161NotifierSendWithKeyboard(t *testing.T) {
+	t.Parallel()
+
+	var gotBody string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		gotBody = string(raw)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	kb := &InlineKeyboard{Rows: [][]KeyboardButton{
+		{{Type: "callback", Text: "Go", Payload: "act"}},
+	}}
+	n := &MaxA161Notifier{
+		Token:   "1234567890123456",
+		UserID:  "1001",
+		BaseURL: server.URL,
+	}
+	if err := n.Send(context.Background(), "", "hello", kb); err != nil {
+		t.Fatalf("unexpected send error: %v", err)
+	}
+	if !strings.Contains(gotBody, `"attachments"`) || !strings.Contains(gotBody, `"buttons"`) {
+		t.Fatalf("body missing keyboard: %q", gotBody)
 	}
 }
 
