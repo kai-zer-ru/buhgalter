@@ -388,6 +388,7 @@
 - [x] [Кнопки в Telegram / MAX](roadmap/telegram-max-buttons.md) — исходящие inline-кнопки TG/MAX (все типы по доке); конструктор DnD на web (global + per-template); Android — баннер «в веб»; webhook/CAP-6 — позже
 - [x] Web: UI polish уведомлений — все блоки настроек под spoiler’ы; в шаблонах только enabled каналы; `toApiKeyboard` без `id` в payload
 - [x] Web/Server: пресеты кнопок по `trigger_type`; у `balance_shortfall` — `{account_url}` + пресет «Открыть счёт»
+- [x] Docs: Android 15+ «Конфиденциальные данные скрыты» при перехвате банковских push — раздел в [README.md](README.md) (Enhanced notifications / ADB `RECEIVE_SENSITIVE_NOTIFICATIONS`)
 
 ## v1.9.0
 
