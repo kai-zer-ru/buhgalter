@@ -413,7 +413,7 @@ curl -v https://platform-api2.max.ru/
 
 ## Обновление
 
-Сделайте бэкап, замените бинарник или образ, перезапустите. Миграции применятся при старте. Release notes текущего релиза — [v1.8.0](docs/release-notes-v1.8.0.md) (нетто-капитал и графики `/stats`, правила категорий и inbox; миграции `053`/`054`).
+Сделайте бэкап, замените бинарник или образ, перезапустите. Миграции применятся при старте. Release notes текущего релиза — [v1.9.0](docs/release-notes-v1.9.0.md) (кнопки Telegram/MAX, UX polish, фиксы Android: сворачивание, шторка/«Магазин», парсер; миграция `055`).
 
 Если стоите за nginx — для живых обновлений веба добавьте `location /api/v1/realtime` с `Upgrade` (см. [Nginx](#nginx-reverse-proxy--https)); без этого веб останется на SWR.
 
@@ -458,7 +458,7 @@ docker compose up -d
 
 ## Документация
 
-Справочники по установке, данным, UI и API — [docs/README.md](docs/README.md). История изменений — [CHANGELOG.md](CHANGELOG.md). Последний релиз — [v1.8.0](docs/release-notes-v1.8.0.md).
+Справочники по установке, данным, UI и API — [docs/README.md](docs/README.md). История изменений — [CHANGELOG.md](CHANGELOG.md). Последний релиз — [v1.9.0](docs/release-notes-v1.9.0.md).
 
 ## API-документация
 

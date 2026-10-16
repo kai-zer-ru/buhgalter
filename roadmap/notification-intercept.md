@@ -180,7 +180,7 @@ flowchart LR
 
 Списание ВТБ с хвостом «Баланс» по-прежнему purchase. Детали — [bank-notification-income-patterns.md](bank-notification-income-patterns.md). Пункт в [ROADMAP](../ROADMAP.md#v190).
 
-## Follow-up: грязный «Магазин» после голого `р` (v1.8.1)
+## Follow-up: грязный «Магазин» после голого `р` (v1.9.0)
 
 **Исправлено.** Cleanup `extractMerchant` + vitest — [notification-merchant-strip.md](notification-merchant-strip.md). Часть [Улучшение уведомлений в шторке](#quick-actions-в-шторке-v160).
 

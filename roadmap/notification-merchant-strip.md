@@ -1,6 +1,6 @@
 # БАГ. Android: в «Магазин» попадает почти весь текст push
 
-Статус: **исправлен** (часть [Улучшение уведомлений в шторке](notification-intercept.md#quick-actions-в-шторке-v160)). Пункт в [ROADMAP](../ROADMAP.md#v190).
+Статус: **исправлен** (часть [Улучшение уведомлений в шторке](notification-intercept.md#quick-actions-в-шторке-v160)). Вошло в **v1.9.0** — [ROADMAP](../ROADMAP.md#v190), [release-notes](../docs/release-notes-v1.9.0.md).
 
 ## Симптомы
 

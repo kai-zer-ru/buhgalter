@@ -394,6 +394,7 @@
 - [x] [Улучшение парсера уведомлений](roadmap/bank-notification-income-patterns.md) — ВТБ «Поступление», Сбер SMS «Перевод по СБП», валюта `р`, last4 из `СЧЁТ5159`; vitest ([notification-intercept.md](roadmap/notification-intercept.md))
 - [x] БАГ. Android: **Принять** в шторке черновика банка → «Не удалось отправить часть операций» + ⚠️; правка в форме — ок. Причина: ISO `transaction_date` vs API `YYYY-MM-DD HH:MM:SS` ([shade-accept-sync-failed.md](roadmap/shade-accept-sync-failed.md))
 - [x] [Улучшение уведомлений в шторке](roadmap/notification-intercept.md#quick-actions-в-шторке-v160) — чистый «Магазин» из push (`extractMerchant`) + **Принять** снова открывает форму с prefill (не silent POST); Отклонить без изменений ([notification-merchant-strip.md](roadmap/notification-merchant-strip.md), [shade-accept-open-form.md](roadmap/shade-accept-open-form.md))
+- [x] **Docs:** [Release notes](docs/release-notes-v1.9.0.md) · [CHANGELOG.md](CHANGELOG.md) · [notifications.md](docs/notifications.md) · [android-client-platform.md](docs/android-client-platform.md) · [README.md](README.md) · [shade-accept-sync-failed.md](roadmap/shade-accept-sync-failed.md)
 
 ## v1.10.0
 

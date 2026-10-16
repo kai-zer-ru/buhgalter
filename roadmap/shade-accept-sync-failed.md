@@ -33,4 +33,4 @@ Shade Accept (`DraftNotifyHttp`) отправляет `transaction_date` в RFC3
 
 После [shade-accept-open-form](shade-accept-open-form.md) кнопка **Принять** больше не вызывает `DraftNotifyHttp` (только форма). Конвертация Layout в `DraftNotifyHttp` оставлена как hardening на случай других вызывающих / старых сборок.
 
-Подготовка к релизу **v1.8.1** (CHANGELOG / release notes) — в stash `wip: release prep v1.8.1`, пока владелец не попросит `stash pop`.
+Вошло в **v1.9.0** — [release-notes-v1.9.0.md](../docs/release-notes-v1.9.0.md), [CHANGELOG.md](../CHANGELOG.md).
