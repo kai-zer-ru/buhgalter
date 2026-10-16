@@ -9,11 +9,14 @@ import type { ParsedPurchase, RawBankNotification } from './types';
 
 // Avoid \\b with Cyrillic — JS word boundaries are ASCII-oriented.
 const IGNORE_RE =
-	/(код|code|otp|пароль|вход|войдите|баланс|остаток|отказ|отклонен|отклонён|заблокир|перевод\s+на\s+карт)/i;
+	/(код|code|otp|пароль|вход|войдите|баланс|остаток|отказ|отклонен|отклонён|заблокир|перевод\s+на\s+карт|перевод\s+по\s+сбп)/i;
 
 /** Incoming / credit pushes → income drafts (not expense). */
 const INCOME_RE =
-	/(выплат|процент|начислен|кэшб[еэ]к|кешб[еэ]к|cashback|поступило|поступил[аи]?|зачисл|пополнен|входящ|перевод\s+от|вам\s+перевел|зарплат|стипенд|доход\b|заработн)/i;
+	/(выплат|процент|начислен|кэшб[еэ]к|кешб[еэ]к|cashback|поступлен|поступил[аи]?|зачисл|пополнен|входящ|перевод\s+по\s+сбп[\s\S]{0,120}?от|перевод\s+от|вам\s+перевел|зарплат|стипенд|доход\b|заработн)/i;
+
+/** True when an amount is followed by a currency marker (bare `р` ok; avoids `р` in names). */
+const HAS_CURRENCY_AMOUNT_RE = /\d(?:[.,]\d{1,2})?\s*(?:₽|руб\.?|р\.?|RUB|rub)/i;
 
 const CANCEL_RE =
 	/(отмена\s+покупки|отмен[аы]\s+операц|отменена?\s+покупк|возврат\s+средств|возврат\s+покупк|purchase\s+cancel|canceled?\s+purchase|refund)/i;
@@ -23,19 +26,20 @@ const PURCHASE_HINT_RE =
 
 /** Titles that are bank/card chrome, not a merchant (Yandex cancel uses «Карта Пэй»). */
 const GENERIC_TITLE_RE =
-	/^(карта(\s+пэй)?|card(\s+pay)?|пэй|pay|яндекс(\s+пэй)?|yandex(\s+pay)?|тинькофф|т-?банк|сбер(банк)?|wb\s*банк|mir(\s*pay)?|мир(\s*пэй|\s*pay)?|samsung(\s*(pay|wallet))?|google(\s*(pay|wallet))?|сбпэй|сбп|huawei(\s*(pay|wallet))?|mi(\s*pay)?|xiaomi(\s*(pay|wallet))?|юmoney|юмани|yoomoney)$/i;
+	/^(карта(\s+пэй)?|card(\s+pay)?|пэй|pay|яндекс(\s+пэй)?|yandex(\s+pay)?|тинькофф|т-?банк|сбер(банк)?|втб(\s+онлайн)?|vtb(\s+online)?|wb\s*банк|mir(\s*pay)?|мир(\s*пэй|\s*pay)?|samsung(\s*(pay|wallet))?|google(\s*(pay|wallet))?|сбпэй|сбп|huawei(\s*(pay|wallet))?|mi(\s*pay)?|xiaomi(\s*(pay|wallet))?|юmoney|юмани|yoomoney)$/i;
 
 const AMOUNT_RE =
-	/(?:^|[^\d])(\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*(?:₽|руб\.?|р\.|RUB|rub)?(?!\d)/i;
+	/(?:^|[^\d])(\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*(?:₽|руб\.?|р\.?|RUB|rub)?(?!\d)/i;
 
-const LAST4_RE = /(?:\*|⁎|•|∙|●|○|∗|карты?\s*|карта\s*|card\s*)(\d{4})\b/i;
+/** *XXXX, карта *XXXX, СЧЁТ5159 / Счет*1736 (optional * / bullet between счёт and digits). */
+const LAST4_RE = /(?:сч[её]т\s*[*⁎•∙●○∗]?|(?:[*⁎•∙●○∗]|карты?\s*|карта\s*|card\s*))(\d{4})\b/i;
 
 const PURCHASE_WORD_RE =
 	/\b(покупка|оплата|оплат|списание|списан|трата|платёж|платеж|purchase|payment|spent|paid)\b/gi;
 
 /** T-Bank SMS: «Покупка, карта *2552. 56 RUB. STOLOVAYA. Доступно …» */
 const TBANK_SMS_MERCHANT_RE =
-	/(?:^|[^\d])(?:\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*(?:₽|руб\.?|р\.|RUB)\.?\s+([A-Za-zА-Яа-яЁё0-9 ._-]{2,60}?)\s*\.?\s*(?:доступно|available)/i;
+	/(?:^|[^\d])(?:\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*(?:₽|руб\.?|р\.?|RUB)\.?\s+([A-Za-zА-Яа-яЁё0-9 ._-]{2,60}?)\s*\.?\s*(?:доступно|available)/i;
 
 function combinedText(raw: RawBankNotification): string {
 	// SMS title is the sender address — exclude from amount/kind heuristics.
@@ -63,7 +67,7 @@ function extractAmount(text: string): string | null {
 			/(?:₽|руб\.?|RUB)\s*(\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)/i
 		) ??
 		text.match(
-			/(\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*(?:₽|руб\.?|р\.|RUB)/i
+			/(\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*(?:₽|руб\.?|р\.?|RUB)/i
 		);
 	if (currencyFirst?.[1]) {
 		const a = normalizeAmount(currencyFirst[1]);
@@ -117,8 +121,8 @@ function extractMerchant(raw: RawBankNotification, amount: string): string {
 	t = t.replace(new RegExp(`\\b${amountAlt}\\b`, 'i'), ' ');
 	// Strip card mask before amounts — otherwise «2552» becomes «255» + stray digit.
 	t = t.replace(LAST4_RE, ' ');
-	t = t.replace(/\b\d{1,3}(?:[ \u00a0]\d{3})+(?:[.,]\d{1,2})?\s*(?:₽|руб\.?|р\.|RUB)\b/gi, ' ');
-	t = t.replace(/\b\d+(?:[.,]\d{1,2})?\s*(?:₽|руб\.?|р\.|RUB)\b/gi, ' ');
+	t = t.replace(/\b\d{1,3}(?:[ \u00a0]\d{3})+(?:[.,]\d{1,2})?\s*(?:₽|руб\.?|р\.?|RUB)\b/gi, ' ');
+	t = t.replace(/\b\d+(?:[.,]\d{1,2})?\s*(?:₽|руб\.?|р\.?|RUB)\b/gi, ' ');
 	t = t.replace(/\b(карта|card|счёт|счет|доступно|на|MIR|Visa|MasterCard)\b/gi, ' ');
 	t = t.replace(/[•*⁎∙●○∗]+/g, ' ');
 	t = t.replace(/\s+/g, ' ').trim();
@@ -131,6 +135,20 @@ function extractMerchant(raw: RawBankNotification, amount: string): string {
 	return t;
 }
 
+/** Counterparty after «от …» on incoming transfers; stops before amount / Баланс / time.
+ * No \\b — JS word boundaries are ASCII-only (same as other Cyrillic regexes here). */
+function extractIncomeCounterparty(text: string): string | undefined {
+	const m = text.match(
+		/(?:^|[\s.,:;])от\s+([A-Za-zА-Яа-яЁё][^₽\n]*?)(?=\s*(?:\+?\d[\d \u00a0]*(?:[.,]\d{1,2})?\s*(?:₽|руб\.?|р\.?|RUB)|баланс|доступно|available|\d{1,2}:\d{2}|$))/i
+	);
+	if (!m?.[1]) return undefined;
+	const name = m[1]
+		.replace(/^[\s.,:;!\-–—]+|[\s.,:;!\-–—]+$/g, '')
+		.replace(/\s+/g, ' ')
+		.trim();
+	return name || undefined;
+}
+
 /** Short label for income when there is no counterparty (e.g. «Выплата процентов»). */
 function extractIncomeLabel(raw: RawBankNotification): string {
 	const line = [raw.text, raw.bigText, raw.title]
@@ -138,7 +156,7 @@ function extractIncomeLabel(raw: RawBankNotification): string {
 		.join(' ')
 		.replace(/\s+/g, ' ')
 		.trim();
-	const beforeAmount = line.split(/(?:\d[\d \u00a0]*(?:[.,]\d{1,2})?\s*(?:₽|руб\.?|р\.|RUB))/i)[0];
+	const beforeAmount = line.split(/(?:\d[\d \u00a0]*(?:[.,]\d{1,2})?\s*(?:₽|руб\.?|р\.?|RUB))/i)[0];
 	let t = (beforeAmount || line).trim();
 	t = t.replace(GENERIC_TITLE_RE, ' ').replace(/\s+/g, ' ').trim();
 	t = t.replace(/^[\s.,:;!\-–—]+|[\s.,:;!\-–—]+$/g, '').trim();
@@ -150,7 +168,7 @@ function looksLikeIncome(text: string): boolean {
 	if (CANCEL_RE.test(text)) return false;
 	if (!INCOME_RE.test(text)) return false;
 	if (PURCHASE_HINT_RE.test(text)) return false;
-	return /(?:₽|руб\.?|RUB)/i.test(text) && AMOUNT_RE.test(text);
+	return HAS_CURRENCY_AMOUNT_RE.test(text) && AMOUNT_RE.test(text);
 }
 
 function looksLikePurchase(text: string): boolean {
@@ -158,7 +176,7 @@ function looksLikePurchase(text: string): boolean {
 	if (INCOME_RE.test(text)) return false;
 	if (PURCHASE_HINT_RE.test(text)) return true;
 	if (IGNORE_RE.test(text)) return false;
-	return /(?:₽|руб\.?|RUB)/i.test(text) && AMOUNT_RE.test(text);
+	return HAS_CURRENCY_AMOUNT_RE.test(text) && AMOUNT_RE.test(text);
 }
 
 function hashRaw(raw: RawBankNotification): string {
@@ -186,7 +204,13 @@ export function parseBankNotification(raw: RawBankNotification): ParsedPurchase 
 	const last4 = extractLast4(text);
 	const bankId = packageBankId ?? inferBankIdFromText(text) ?? walletId;
 	if (!bankId) return null;
-	let merchantText = extractMerchant(resolved, amount);
+	let merchantText = '';
+	if (isIncome) {
+		merchantText = extractIncomeCounterparty(text) ?? '';
+	}
+	if (!merchantText) {
+		merchantText = extractMerchant(resolved, amount);
+	}
 	if (isIncome && !merchantText) {
 		merchantText = extractIncomeLabel(resolved);
 	}

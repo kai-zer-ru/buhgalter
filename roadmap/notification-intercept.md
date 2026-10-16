@@ -176,6 +176,15 @@ flowchart LR
 
 Пункт в [ROADMAP](../ROADMAP.md#v154); правки UI — [v1.5.5](../ROADMAP.md#v155).
 
+## Follow-up: входящие ВТБ / Сбер СБП (v1.8.1)
+
+**Реализовано.** После README-обхода Android 15 («Конфиденциальные данные скрыты») сумма в теле снова видна; эвристики `parsers.ts` распознают:
+
+- ВТБ push `Поступление …р … Баланс …` → income + last4;
+- Сбер SMS `Перевод по СБП … +Nр от …` → income; last4 из `СЧЁТ5159` без `*`.
+
+Списание ВТБ с хвостом «Баланс» по-прежнему purchase. Детали — [bank-notification-income-patterns.md](bank-notification-income-patterns.md). Пункт в [ROADMAP](../ROADMAP.md#v181).
+
 ## Не входит
 
 - Скрытый сбор уведомлений без opt-in.

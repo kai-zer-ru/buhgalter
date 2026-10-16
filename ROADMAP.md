@@ -389,6 +389,7 @@
 - [x] Web: UI polish уведомлений — все блоки настроек под spoiler’ы; в шаблонах только enabled каналы; `toApiKeyboard` без `id` в payload
 - [x] Web/Server: пресеты кнопок по `trigger_type`; у `balance_shortfall` — `{account_url}` + пресет «Открыть счёт»
 - [x] Docs: Android 15+ «Конфиденциальные данные скрыты» при перехвате банковских push — раздел в [README.md](README.md) (Enhanced notifications / ADB `RECEIVE_SENSITIVE_NOTIFICATIONS`)
+- [x] [Улучшение парсера уведомлений](roadmap/bank-notification-income-patterns.md) — ВТБ «Поступление», Сбер SMS «Перевод по СБП», валюта `р`, last4 из `СЧЁТ5159`; vitest ([notification-intercept.md](roadmap/notification-intercept.md))
 
 ## v1.9.0
 

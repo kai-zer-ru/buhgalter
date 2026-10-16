@@ -2,6 +2,7 @@ import { expect, type Page } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { dismissBlockingModals } from './ui';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -36,7 +37,6 @@ export async function waitAppReady(page: Page) {
 		await expect(crashed).toHaveCount(0, { timeout: 15_000 });
 	}
 
-	const { dismissBlockingModals } = await import('./ui');
 	await dismissBlockingModals(page);
 }
 

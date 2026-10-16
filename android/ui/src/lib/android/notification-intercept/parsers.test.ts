@@ -100,6 +100,7 @@ describe('parseBankNotification', () => {
 		expect(transfer).not.toBeNull();
 		expect(transfer!.kind).toBe('income');
 		expect(transfer!.amount).toBe('1500.00');
+		expect(transfer!.merchantText).toMatch(/иван/i);
 	});
 
 	it('ignores unknown packages', () => {
@@ -315,6 +316,105 @@ describe('parseBankNotification', () => {
 					title: '900',
 					text: 'Никому не сообщайте код: 12345. Вход в СберБанк Онлайн.',
 					channel: 'sms'
+				})
+			)
+		).toBeNull();
+	});
+
+	it('parses VTB push списание with bare р and Счет*last4 (regression)', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'ru.vtb24.mobilebanking.android',
+				title: 'ВТБ Онлайн',
+				text: 'Списание 1000р Счет*1736 Александр Ч. Баланс 8505.12р 10:40'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.kind).toBe('purchase');
+		expect(parsed!.amount).toBe('1000.00');
+		expect(parsed!.last4).toBe('1736');
+		expect(parsed!.bankId).toBe('vtb');
+		expect(parsed!.merchantText.toLowerCase()).toContain('александр');
+	});
+
+	it('parses VTB push поступление as income with bare р', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'ru.vtb24.mobilebanking.android',
+				title: 'ВТБ Онлайн',
+				text: 'Поступление 1000р Счет*1736 от АЛЕКСАНДР Ч. Баланс 9505.12р 10:52'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.kind).toBe('income');
+		expect(parsed!.amount).toBe('1000.00');
+		expect(parsed!.last4).toBe('1736');
+		expect(parsed!.bankId).toBe('vtb');
+		expect(parsed!.merchantText.toLowerCase()).toContain('александр');
+		expect(parsed!.merchantText.toLowerCase()).not.toContain('втб');
+	});
+
+	it('parses Sber SMS Перевод по СБП as income with СЧЁТ last4 without *', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'ru.sberbankmobile',
+				title: '900',
+				text: 'СЧЁТ5159 10:40 Перевод по СБП из ВТБ +1000р от АЛЕКСАНДР Ч.',
+				channel: 'sms'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.kind).toBe('income');
+		expect(parsed!.amount).toBe('1000.00');
+		expect(parsed!.last4).toBe('5159');
+		expect(parsed!.bankId).toBe('sberbank');
+		expect(parsed!.merchantText.toLowerCase()).toContain('александр');
+		expect(parsed!.merchantText).not.toMatch(/\d{1,2}:\d{2}/);
+	});
+
+	it('extracts last4 from Счет5159 and Счёт*5159', () => {
+		const glued = parseBankNotification(
+			raw({
+				packageName: 'ru.sberbankmobile',
+				title: '900',
+				text: 'Счет5159 Перевод по СБП +100р от Иван',
+				channel: 'sms'
+			})
+		);
+		expect(glued).not.toBeNull();
+		expect(glued!.last4).toBe('5159');
+
+		const starred = parseBankNotification(
+			raw({
+				packageName: 'ru.sberbankmobile',
+				title: '900',
+				text: 'Счёт*5159 Перевод по СБП +100р от Иван',
+				channel: 'sms'
+			})
+		);
+		expect(starred).not.toBeNull();
+		expect(starred!.last4).toBe('5159');
+	});
+
+	it('does not treat outgoing Перевод по СБП as income', () => {
+		expect(
+			parseBankNotification(
+				raw({
+					packageName: 'ru.sberbankmobile',
+					title: '900',
+					text: 'Перевод по СБП 1000р на карту *4321',
+					channel: 'sms'
+				})
+			)
+		).toBeNull();
+	});
+
+	it('ignores balance-only with bare р', () => {
+		expect(
+			parseBankNotification(
+				raw({
+					packageName: 'ru.sberbankmobile',
+					text: 'Баланс карты *1234: 10 000р'
 				})
 			)
 		).toBeNull();
