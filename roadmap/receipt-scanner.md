@@ -1,6 +1,6 @@
 # Сканер чеков
 
-Отдельный релиз **v1.10.0** ([ROADMAP](../ROADMAP.md#v1100)): QR на устройстве, BYO состав, опционально ИИ и вложение фото — **один minor**, не дробить по другим версиям. Web + Android.
+Отдельный релиз **v1.11.0** ([ROADMAP](../ROADMAP.md#v1110)): QR на устройстве, BYO состав, опционально ИИ и вложение фото — **один minor**, не дробить по другим версиям. Web + Android.
 
 Feature flag: `receipt_scanner` (см. [feature-toggles.md](feature-toggles.md)).
 
@@ -68,7 +68,7 @@ Feature flag: `receipt_scanner` (см. [feature-toggles.md](feature-toggles.md))
 
 ---
 
-## Целевое направление (v1.10.0)
+## Целевое направление (v1.11.0)
 
 ### A. QR на устройстве (главный путь для РФ)
 
@@ -99,7 +99,7 @@ Feature flag: `receipt_scanner` (см. [feature-toggles.md](feature-toggles.md))
 
 ---
 
-## Scope v1.10.0 (кратко)
+## Scope v1.11.0 (кратко)
 
 Реализация **поэтапно внутри одного релиза** (фазы 1→2→3), без отдельных minor между ними.
 

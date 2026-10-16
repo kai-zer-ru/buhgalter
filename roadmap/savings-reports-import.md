@@ -2,10 +2,10 @@
 
 Цели накопления и улучшение импорта вынесены:
 
-- [savings-goals.md](savings-goals.md) — **v1.9.0**
-- [import-improve.md](import-improve.md) — **v1.9.0**
+- [savings-goals.md](savings-goals.md) — **v1.10.0**
+- [import-improve.md](import-improve.md) — **v1.10.0**
 
-**Месячный PDF-отчёт** — [v1.11.0](../ROADMAP.md#v1110).
+**Месячный PDF-отчёт** — [v1.12.0](../ROADMAP.md#v1120).
 
 ## PDF / месячный отчёт
 

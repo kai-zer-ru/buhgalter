@@ -1,6 +1,6 @@
 # БАГ. Android: Accept в шторке → «Не удалось отправить часть операций»
 
-Статус: **исправлен** (2026-10-16). Пункт в [ROADMAP](../ROADMAP.md#v181).
+Статус: **исправлен** (2026-10-16). Пункт в [ROADMAP](../ROADMAP.md#v190).
 
 Фикс: native `DraftNotifyHttp.toApiTransactionDate` (POST + offline payload) + JS `toApiUtcDateTime` в `applyNativeDraftNotifySync`; vitest на ISO→Layout.
 
@@ -29,6 +29,8 @@ Shade Accept (`DraftNotifyHttp`) отправляет `transaction_date` в RFC3
 - Анализ: [analysis.md](../bmad_docs/specs/spec-shade-accept-date-format/analysis.md)
 - Промпт для нового чата: [DEV_PROMPT.md](../bmad_docs/specs/spec-shade-accept-date-format/DEV_PROMPT.md)
 
-## Примечание по релизу
+## Примечание
 
-Подготовка к релизу v1.8.1 (CHANGELOG / release notes и т.п.) отложена: `git stash` с сообщением `wip: release prep v1.8.1 (отложено из-за бага шторки Accept)`.
+После [shade-accept-open-form](shade-accept-open-form.md) кнопка **Принять** больше не вызывает `DraftNotifyHttp` (только форма). Конвертация Layout в `DraftNotifyHttp` оставлена как hardening на случай других вызывающих / старых сборок.
+
+Подготовка к релизу **v1.8.1** (CHANGELOG / release notes) — в stash `wip: release prep v1.8.1`, пока владелец не попросит `stash pop`.

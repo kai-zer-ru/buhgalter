@@ -47,70 +47,11 @@ public class DraftNotifyReceiver extends BroadcastReceiver {
             return;
         }
 
-        if ("transfer".equals(draft.optString("type", ""))) {
-            handleTransferAccept(app, itemId, draft);
-            return;
-        }
-
-        String accountId = draft.optString("accountId", "");
-        if (TextUtils.isEmpty(accountId)) {
-            // Cannot create without account — open form with prefill; keep draft until save.
-            DraftNotifyStore.snoozeDraft(app, itemId);
-            DraftNotifyHelper.cancelDraft(app, itemId);
-            openPath(app, DraftNotifyHelper.contentPath(draft));
-            return;
-        }
-
-        // Accept complete: try native POST, else queue for JS outbox.
-        boolean ok = DraftNotifyHttp.postTransaction(app, draft);
-        DraftNotifyStore.removeDraft(app, itemId);
+        // Always open create/transfer form with prefill (same as ACTION_OPEN).
+        // Keep draft until Save in the form — do not silent POST / removeDraft here.
+        DraftNotifyStore.snoozeDraft(app, itemId);
         DraftNotifyHelper.cancelDraft(app, itemId);
-        if (ok) {
-            DraftNotifyStore.enqueueAccepted(app, itemId);
-        } else {
-            JSONObject payload = DraftNotifyHttp.offlinePayloadFromDraft(draft);
-            if (payload != null) {
-                DraftNotifyStore.enqueueOfflineAccept(app, payload);
-            } else {
-                DraftNotifyStore.enqueueRejected(app, itemId);
-            }
-        }
-        NotificationInterceptPlugin.emitDraftsChanged();
-    }
-
-    private static void handleTransferAccept(Context app, String itemId, JSONObject draft) {
-        String fromAccount = draft.optString("fromAccountId", "");
-        String toAccount = draft.optString("toAccountId", "");
-        String fromDraftId = draft.optString("fromDraftId", "");
-        String toDraftId = draft.optString("toDraftId", "");
-
-        if (TextUtils.isEmpty(fromAccount) || TextUtils.isEmpty(toAccount)) {
-            DraftNotifyStore.snoozeDraft(app, itemId);
-            DraftNotifyHelper.cancelDraft(app, itemId);
-            openPath(app, DraftNotifyHelper.contentPath(draft));
-            return;
-        }
-
-        boolean ok = DraftNotifyHttp.postTransfer(app, draft);
-        DraftNotifyStore.removeDraft(app, itemId);
-        DraftNotifyHelper.cancelDraft(app, itemId);
-        if (ok) {
-            if (!TextUtils.isEmpty(fromDraftId)) DraftNotifyStore.enqueueAccepted(app, fromDraftId);
-            if (!TextUtils.isEmpty(toDraftId)) DraftNotifyStore.enqueueAccepted(app, toDraftId);
-        } else {
-            JSONObject payload = DraftNotifyHttp.offlinePayloadFromTransfer(draft);
-            if (payload != null) {
-                DraftNotifyStore.enqueueOfflineAccept(app, payload);
-            } else {
-                if (!TextUtils.isEmpty(fromDraftId)) {
-                    DraftNotifyStore.enqueueRejected(app, fromDraftId);
-                }
-                if (!TextUtils.isEmpty(toDraftId)) {
-                    DraftNotifyStore.enqueueRejected(app, toDraftId);
-                }
-            }
-        }
-        NotificationInterceptPlugin.emitDraftsChanged();
+        openPath(app, DraftNotifyHelper.contentPath(draft));
     }
 
     private static void enqueueLinkedRejected(Context app, JSONObject item, String fallbackId) {

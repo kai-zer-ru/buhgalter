@@ -33,7 +33,7 @@
 | [../roadmap/credit-payment-link.md](../roadmap/credit-payment-link.md) | Привязка операции к оплате кредита |
 | [categories-and-icons.md](categories-and-icons.md) | Категории, подкатегории, иконки |
 | [budget.md](budget.md) | Бюджет: помесячные лимиты, копирование, план vs факт, API |
-| [../roadmap/budget-post-mvp.md](../roadmap/budget-post-mvp.md) | (план v1.9) Бюджет: rollover, прогноз ожидаемых расходов, конверты |
+| [../roadmap/budget-post-mvp.md](../roadmap/budget-post-mvp.md) | (план v1.10) Бюджет: rollover, прогноз ожидаемых расходов, конверты |
 | [transactions-display.md](transactions-display.md) | Отображение операций в UI и API |
 | [../roadmap/transaction-templates.md](../roadmap/transaction-templates.md) | Шаблоны операций для быстрого добавления |
 | [../roadmap/multicurrency.md](../roadmap/multicurrency.md) | (план) Настоящая мультивалютность |

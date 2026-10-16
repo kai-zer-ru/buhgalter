@@ -34,8 +34,30 @@ const AMOUNT_RE =
 /** *XXXX, карта *XXXX, СЧЁТ5159 / Счет*1736 (optional * / bullet between счёт and digits). */
 const LAST4_RE = /(?:сч[её]т\s*[*⁎•∙●○∗]?|(?:[*⁎•∙●○∗]|карты?\s*|карта\s*|card\s*))(\d{4})\b/i;
 
-const PURCHASE_WORD_RE =
-	/\b(покупка|оплата|оплат|списание|списан|трата|платёж|платеж|purchase|payment|spent|paid)\b/gi;
+/** Cyrillic-safe token bounds (JS \b is ASCII-only). */
+const TOKEN_BOUND_L = '(?:^|[\\s.,:;!\\-–—])';
+const TOKEN_BOUND_R = '(?=[\\s.,:;!\\-–—]|$)';
+
+const PURCHASE_WORD_RE = new RegExp(
+	`${TOKEN_BOUND_L}(покупка|оплата|оплат|списание|списан|трата|платёж|платеж|purchase|payment|spent|paid)${TOKEN_BOUND_R}`,
+	'gi'
+);
+
+/** Amount + currency as one unit; no trailing \b after Cyrillic `р`. */
+const AMOUNT_WITH_CURRENCY_RE =
+	/(?:^|[^\d])(\d{1,3}(?:[ \u00a0]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*(?:₽|руб\.?|р\.?|RUB)(?=[\s.,:;!]|\b|$)/gi;
+
+/** Orphan currency left after stripping bare digits of the purchase amount. */
+const ORPHAN_CURRENCY_RE = /(?:^|[\s.,:;!\-–—])(?:₽|руб\.?|р\.?|RUB)(?=[\s.,:;!\-–—]|$)/gi;
+
+/** Card / account chrome words — Cyrillic-safe (Latin \b ok for MIR/Visa). */
+const CARD_CHROME_RE = new RegExp(
+	`${TOKEN_BOUND_L}(карта|card|счёт|счет|на)${TOKEN_BOUND_R}|\\b(MIR|Visa|MasterCard)\\b`,
+	'gi'
+);
+
+/** Tail from Баланс / Доступно (no \\b after Cyrillic — JS word bounds are ASCII-only). */
+const BALANCE_TAIL_RE = /[\s.,:;!\-–—]+(?:баланс|доступно|available)[\s\S]*$/i;
 
 /** T-Bank SMS: «Покупка, карта *2552. 56 RUB. STOLOVAYA. Доступно …» */
 const TBANK_SMS_MERCHANT_RE =
@@ -117,16 +139,19 @@ function extractMerchant(raw: RawBankNotification, amount: string): string {
 	t = t.replace(CANCEL_RE, ' ');
 	t = t.replace(INCOME_RE, ' ');
 	t = t.replace(PURCHASE_WORD_RE, ' ').replace(/\s+/g, ' ').trim();
+	// Prefer amount+currency as one unit; bare digits leave orphan `р`/`₽`.
+	t = t.replace(AMOUNT_WITH_CURRENCY_RE, ' ');
 	const amountAlt = amount.replace('.', '[,.]');
-	t = t.replace(new RegExp(`\\b${amountAlt}\\b`, 'i'), ' ');
-	// Strip card mask before amounts — otherwise «2552» becomes «255» + stray digit.
+	t = t.replace(new RegExp(`(?:^|[^\\d])${amountAlt}(?!\\d)`, 'i'), ' ');
+	t = t.replace(ORPHAN_CURRENCY_RE, ' ');
+	// Strip card mask before leftover amounts — otherwise «2552» becomes «255» + stray digit.
 	t = t.replace(LAST4_RE, ' ');
-	t = t.replace(/\b\d{1,3}(?:[ \u00a0]\d{3})+(?:[.,]\d{1,2})?\s*(?:₽|руб\.?|р\.?|RUB)\b/gi, ' ');
-	t = t.replace(/\b\d+(?:[.,]\d{1,2})?\s*(?:₽|руб\.?|р\.?|RUB)\b/gi, ' ');
-	t = t.replace(/\b(карта|card|счёт|счет|доступно|на|MIR|Visa|MasterCard)\b/gi, ' ');
+	t = t.replace(AMOUNT_WITH_CURRENCY_RE, ' ');
+	t = t.replace(CARD_CHROME_RE, ' ');
+	t = t.replace(BALANCE_TAIL_RE, ' ');
 	t = t.replace(/[•*⁎∙●○∗]+/g, ' ');
 	t = t.replace(/\s+/g, ' ').trim();
-	const inMatch = t.match(/\bв\s+([A-Za-zА-Яа-яЁё0-9 ._-]{2,60})/i);
+	const inMatch = t.match(/(?:^|[\s.,:;])в\s+([A-Za-zА-Яа-яЁё0-9 ._-]{2,60})/i);
 	if (inMatch?.[1]) {
 		t = inMatch[1].trim();
 	}

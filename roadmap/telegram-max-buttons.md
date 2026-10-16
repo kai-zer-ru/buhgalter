@@ -1,6 +1,6 @@
 # Кнопки в сообщениях Telegram / MAX
 
-Релиз **v1.8.1**. Исходящие кнопки в уведомлениях + конструктор на web. Webhook / обработка callback — **отдельно, позже**. CAP-6 (`internal_url` / LAN fallback) — **не в этом релизе**.
+Релиз **v1.9.0**. Исходящие кнопки в уведомлениях + конструктор на web. Webhook / обработка callback — **отдельно, позже**. CAP-6 (`internal_url` / LAN fallback) — **не в этом релизе**.
 
 Brief для BMAD: [`bmad_docs/planning-artifacts/telegram-max-buttons-brief.md`](../bmad_docs/planning-artifacts/telegram-max-buttons-brief.md). Overnight-промпт: [`bmad_docs/planning-artifacts/telegram-max-buttons-overnight-prompt.md`](../bmad_docs/planning-artifacts/telegram-max-buttons-overnight-prompt.md).
 
@@ -8,7 +8,7 @@ Brief для BMAD: [`bmad_docs/planning-artifacts/telegram-max-buttons-brief.md`
 
 Сейчас уведомления — **текст** по шаблонам ([docs/notifications.md](../docs/notifications.md)). Кнопки в Telegram/MAX ускоряют переход в приложение и готовят почву для будущих действий из чата (без inbound в этом релизе).
 
-## Scope v1.8.1 (зафиксировано)
+## Scope v1.9.0 (зафиксировано)
 
 ### Делаем
 
@@ -110,7 +110,7 @@ a161 (`notify.a161.ru`) — тот же формат attachments, что officia
 | F | Все типы по докам |
 | G | Лимиты per provider |
 | T | Drop только url/link без resolved URL |
-| CAP-6 | Не в 1.8.1 |
+| CAP-6 | Не в 1.9.0 |
 | Git | Без commit/push |
 | Автономия | При споре — рекомендация из brief + лог в `bmad_docs/` |
 

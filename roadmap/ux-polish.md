@@ -1,8 +1,8 @@
 # UX polish — скроллбары, pull-to-refresh, темы
 
-**v1.8.1** ([ROADMAP](../ROADMAP.md#v181)). Спека: `bmad_docs/specs/spec-ux-polish/`.
+**v1.9.0** ([ROADMAP](../ROADMAP.md#v190)). Спека: `bmad_docs/specs/spec-ux-polish/`.
 
-**Статус (2026-10-14):** реализация закрыта (stories 1–4 done). Идёт **ручная приёмка ~неделю**. Найденные баги — **отдельными коммитами** в 1.8.1, не раздувать scope.
+**Статус (2026-10-14):** реализация закрыта (stories 1–4 done). Идёт **ручная приёмка ~неделю**. Найденные баги — **отдельными коммитами** в 1.9.0, не раздувать scope.
 
 Стек: SvelteKit + Tailwind + свои компоненты (web + `android/ui`). Не SMUI / полный Material kit.
 

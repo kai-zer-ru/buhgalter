@@ -68,21 +68,20 @@ flowchart LR
 
 ## Quick-actions в шторке (v1.6.0)
 
-**Реализовано.** Своё уведомление Buhgalter при появлении черновика: **Принять** / **Отклонить** без открытия Activity. Не автосоздание при push — операция только после явного «Принять» (или через текущий UI списка/формы).
+**Реализовано.** Своё уведомление Buhgalter при появлении черновика: **Принять** / **Отклонить**. **Отклонить** — без Activity. **Принять** — всегда форма с prefill (подтверждение «Сохранить» в приложении); не silent create при push.
 
 | Тема | Решение |
 |------|---------|
 | Вкл/выкл | Настройки перехвата (`/settings/bank-notifications`): per-user тумблер «Уведомления в шторке» (default on). Активен только при включённом перехвате. Выкл. перехвата или тумблера → снять все наши draft-уведомления; черновики в списке и bindings сохраняются |
 | Разрешение | `POST_NOTIFICATIONS` (API 33+); статус + запрос под тумблером. Без permission — только список в приложении |
 | Отклонить | Удалить черновик, снять уведомление; Activity не открывать |
-| Принять (полный черновик) | Создать операцию с полями черновика (тип, сумма, счёт, магазин, дата, категория), удалить черновик, снять уведомление — без Activity |
-| Принять (пара перевода) | Одно уведомление на уникальную пару (как в списке); Accept → `POST /transfers` при двух счетах, иначе форма перевода; Reject снимает оба черновика |
-| Принять без счёта | Deep-link в форму с prefill (создать без `accountId` нельзя) |
+| Принять (полный черновик) | Открыть форму с prefill (как тап по телу); подтверждение — «Сохранить» в приложении. Не silent `POST` / offlineAccept — см. [shade-accept-open-form.md](shade-accept-open-form.md) |
+| Принять (пара перевода) | Одно уведомление на пару; всегда форма перевода с prefill (не silent `POST /transfers`). Reject снимает оба черновика |
+| Принять без счёта | Тот же путь, что и при полном черновике: deep-link в форму с prefill |
 | Тап по телу | Открыть форму создания с prefill (расход/доход или перевод для пары) |
 | Категория | Считать при **создании** черновика (`suggestCategoryFromMerchant`) и хранить на draft — Accept не зависит от WebView |
 | Хранение | Зеркало черновиков в native (SharedPreferences); JS localStorage остаётся источником для UI; sync через Capacitor |
-| Online Accept | Native `POST /api/v1/transactions` (токен/base как у виджетов, `WidgetSnapshotStore`) |
-| Offline Accept | Native queue → при следующем старте JS → `createTransaction` / outbox |
+| Создание операции | Только после «Сохранить» в форме (Accept из шторки форму открывает, не POST’ит) |
 | Парсинг | По-прежнему JS. При постановке в очередь NLS сразу показывает **provisional**-уведомление; если WebView мёртв и PIN-lock выкл. (`AppLockNative.pin_enabled`, не скрытие сумм виджетов) — тихий wake MainActivity, чтобы распарсить и заменить на Accept/Reject. С PIN-lock — только provisional до ручного открытия. После PIN/отпечатка и при запуске с лаунчера quiet wake **не** делает `moveTaskToBack` (one-shot token на Intent, strip sticky extras; `onResume` без quiet-сессии = user engaged) |
 
 ```mermaid
@@ -92,7 +91,6 @@ sequenceDiagram
   participant JS as WebView_JS
   participant Native as DraftNotify
   participant User as Shade
-  participant API as Server_or_outbox
 
   Bank->>NLS: purchase/income
   NLS->>JS: pending queue
@@ -103,11 +101,8 @@ sequenceDiagram
   alt Reject
     Native->>Native: delete draft, cancel notif
     Native->>JS: sync on next resume
-  else Accept complete
-    Native->>API: POST transaction
-    Native->>Native: delete draft, cancel notif
-    Native->>JS: sync on next resume
-  else Accept no account
+  else Accept
+    Native->>Native: snooze draft, cancel notif
     Native->>User: open form with prefill
   end
 ```
@@ -176,21 +171,25 @@ flowchart LR
 
 Пункт в [ROADMAP](../ROADMAP.md#v154); правки UI — [v1.5.5](../ROADMAP.md#v155).
 
-## Follow-up: входящие ВТБ / Сбер СБП (v1.8.1)
+## Follow-up: входящие ВТБ / Сбер СБП (v1.9.0)
 
 **Реализовано.** После README-обхода Android 15 («Конфиденциальные данные скрыты») сумма в теле снова видна; эвристики `parsers.ts` распознают:
 
 - ВТБ push `Поступление …р … Баланс …` → income + last4;
 - Сбер SMS `Перевод по СБП … +Nр от …` → income; last4 из `СЧЁТ5159` без `*`.
 
-Списание ВТБ с хвостом «Баланс» по-прежнему purchase. Детали — [bank-notification-income-patterns.md](bank-notification-income-patterns.md). Пункт в [ROADMAP](../ROADMAP.md#v181).
+Списание ВТБ с хвостом «Баланс» по-прежнему purchase. Детали — [bank-notification-income-patterns.md](bank-notification-income-patterns.md). Пункт в [ROADMAP](../ROADMAP.md#v190).
+
+## Follow-up: грязный «Магазин» после голого `р` (v1.8.1)
+
+**Исправлено.** Cleanup `extractMerchant` + vitest — [notification-merchant-strip.md](notification-merchant-strip.md). Часть [Улучшение уведомлений в шторке](#quick-actions-в-шторке-v160).
 
 ## Не входит
 
 - Скрытый сбор уведомлений без opt-in.
 - Отправка сырых уведомлений на чужой облачный сервис.
 - Чтение всей SMS-ленты / ретроскан inbox / стать default SMS-приложением.
-- Автосоздание операции без нажатия «Принять» / автосвязка с подпиской.
+- Автосоздание операции без подтверждения в форме («Сохранить») / автосвязка с подпиской.
 - Перенос полного JS-парсера в native.
 - Actions на уведомлении банка (только на **нашем** уведомлении о черновике — v1.6.0).
 - Поддержка зарубежных банков.

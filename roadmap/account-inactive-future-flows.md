@@ -1,6 +1,6 @@
 # Будущие обязательства при архивации / удалении счёта
 
-Планируется в **v1.9.0** ([ROADMAP](../ROADMAP.md#v190)). Канон после реализации — расширить [docs/accounts-archive-delete.md](../docs/accounts-archive-delete.md).
+Планируется в **v1.10.0** ([ROADMAP](../ROADMAP.md#v1100)). Канон после реализации — расширить [docs/accounts-archive-delete.md](../docs/accounts-archive-delete.md).
 
 Связанные документы: [accounts-archive-delete.md](../docs/accounts-archive-delete.md), [subscriptions.md](../docs/subscriptions.md), [balance-maintenance.md](../docs/balance-maintenance.md), [ui-credits.md](../docs/ui-credits.md), [data-model.md](../docs/data-model.md), [transactions-display.md](../docs/transactions-display.md).
 

@@ -28,13 +28,13 @@
 - [v1.7.0](#v170)
 - [v1.7.1](#v171)
 - [v1.8.0](#v180)
-- [v1.8.1](#v181)
 - [v1.9.0](#v190)
 - [v1.10.0](#v1100)
 - [v1.11.0](#v1110)
 - [v1.12.0](#v1120)
 - [v1.13.0](#v1130)
 - [v1.14.0](#v1140)
+- [v1.15.0](#v1150)
 - [Общие планы](#общие-планы)
 - [На подумать](#на-подумать)
 
@@ -380,26 +380,31 @@
 - [x] БАГ. Android: при создании операции toast с английским native-текстом вроде «Host unreachable» — `isConnectionError` не ловил фразу, `toast.fromError` показывал сырой `err.message`. Фикс: расширен матчер native/OkHttp сообщений
 - [x] **Docs:** [Release notes](docs/release-notes-v1.8.0.md) · [CHANGELOG.md](CHANGELOG.md) · [category-rules.md](docs/category-rules.md) · [ui-stats.md](docs/ui-stats.md) · [ui-api-cache.md](docs/ui-api-cache.md) · [README.md](README.md)
 
-## v1.8.1
+## v1.9.0
+
+Уведомления (кнопки TG/MAX, парсер, шторка) + UX polish. Было черновиком как patch 1.8.1 — поднято до minor (фичи + миграция).
 
 - [x] БАГ. Android: при запуске приложение сразу сворачивается (гонка quiet wake перехвата: sticky Intent extra + HyperOS bring-to-front без `onNewIntent`). Фикс: one-shot token, strip sticky extras, `onResume` → user engaged ([android-client-platform.md](docs/android-client-platform.md))
-- [x] [UX polish](roadmap/ux-polish.md) — без полос прокрутки; PTR текущего экрана; classic / MaterialBased; radius + профиль. Реализовано; **soak ~неделя** — баги отдельными коммитами в 1.8.1
+- [x] [UX polish](roadmap/ux-polish.md) — без полос прокрутки; PTR текущего экрана; classic / MaterialBased; radius + профиль. Реализовано; **soak ~неделя** — баги отдельными коммитами в 1.9.0
 - [x] БАГ. Web/Android: на `/settings/notifications` кнопка показывает ключ `settings.notifications.save_all` вместо перевода. Нужны ключи ru/en + тест полноты i18n (литеральные ключи из UI — в обоих языках; `make ui-i18n-check`)
 - [x] [Кнопки в Telegram / MAX](roadmap/telegram-max-buttons.md) — исходящие inline-кнопки TG/MAX (все типы по доке); конструктор DnD на web (global + per-template); Android — баннер «в веб»; webhook/CAP-6 — позже
-- [x] Web: UI polish уведомлений — все блоки настроек под spoiler’ы; в шаблонах только enabled каналы; `toApiKeyboard` без `id` в payload
+- [x] Web: UI polish уведомлений — все блоки настроек под спойлерами; в шаблонах только enabled каналы; `toApiKeyboard` без `id` в payload
 - [x] Web/Server: пресеты кнопок по `trigger_type`; у `balance_shortfall` — `{account_url}` + пресет «Открыть счёт»
 - [x] Docs: Android 15+ «Конфиденциальные данные скрыты» при перехвате банковских push — раздел в [README.md](README.md) (Enhanced notifications / ADB `RECEIVE_SENSITIVE_NOTIFICATIONS`)
 - [x] [Улучшение парсера уведомлений](roadmap/bank-notification-income-patterns.md) — ВТБ «Поступление», Сбер SMS «Перевод по СБП», валюта `р`, last4 из `СЧЁТ5159`; vitest ([notification-intercept.md](roadmap/notification-intercept.md))
 - [x] БАГ. Android: **Принять** в шторке черновика банка → «Не удалось отправить часть операций» + ⚠️; правка в форме — ок. Причина: ISO `transaction_date` vs API `YYYY-MM-DD HH:MM:SS` ([shade-accept-sync-failed.md](roadmap/shade-accept-sync-failed.md))
+- [x] [Улучшение уведомлений в шторке](roadmap/notification-intercept.md#quick-actions-в-шторке-v160) — чистый «Магазин» из push (`extractMerchant`) + **Принять** снова открывает форму с prefill (не silent POST); Отклонить без изменений ([notification-merchant-strip.md](roadmap/notification-merchant-strip.md), [shade-accept-open-form.md](roadmap/shade-accept-open-form.md))
 
-## v1.9.0
+## v1.10.0
+
+Бывший план v1.9.0 (сдвинут из‑за minor «уведомления + UX»).
 
 - [ ] [Цели накопления](roadmap/savings-goals.md) — копилки, прогресс, напоминания (`savings_goals`)
 - [ ] [Улучшение импорта](roadmap/import-improve.md) — универсальный CSV / выгрузки РФ; dedup; связка с правилами и inbox
 - [ ] [Бюджет: rollover, прогноз, конверты](roadmap/budget-post-mvp.md) — перенос остатка; прогноз всех ожидаемых расходов в scope; доступно = лимит + перенос − spent; «к распределению» из доходов; статус от лимит+перенос
 - [ ] [Будущие обязательства при архивации/удалении счёта](roadmap/account-inactive-future-flows.md) — диалог: rebind на счёт-приёмник (default) или pause; кредиты только rebind; ApplyDue не пишет на inactive
 
-## v1.10.0
+## v1.11.0
 
 - [ ] [Сканер чеков](roadmap/receipt-scanner.md) — отдельный объёмный релиз (не смешивать с другими фичами); уроки ветки `scan_chek`, код не мержить вслепую
 - [ ] QR 54-ФЗ **на устройстве** → prefill формы; подтверждение перед сохранением; dedup по фискальным полям
@@ -407,21 +412,21 @@
 - [ ] Опционально: ИИ по фото (prefill, не auto-import); вложение фото к операции
 - [ ] Web + Android; feature flag `receipt_scanner`
 
-## v1.11.0
+## v1.12.0
 
 - [ ] [Разбивка операции на несколько счетов](roadmap/transaction-split-accounts.md)
 - [ ] [PDF-отчёты](roadmap/savings-reports-import.md) — месячная сводка (server-side)
 - [ ] [Синхронизация с выпиской банка](roadmap/bank-sync.md) — РФ: файл выписки → normalize → dedup (не скрейпинг ЛК)
 
-## v1.12.0
+## v1.13.0
 
 - [ ] [Валюта счёта](roadmap/multicurrency.md) — `accounts.currency`, отдельно от `users.currency`; сводки и переводы без тихого смешения валют
 
-## v1.13.0
+## v1.14.0
 
 - [ ] [Семья / команда](roadmap/team-collaboration.md) — household, личные + семейные счета; owner invite (ссылка/QR/код); [спека](roadmap/team-collaboration.md) зафиксирована
 
-## v1.14.0
+## v1.15.0
 
 - [ ] [PostgreSQL](roadmap/postgresql.md) — опциональный драйвер вместо SQLite (K8s / managed DB / нагрузка после team)
 

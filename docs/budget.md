@@ -218,7 +218,7 @@ Hook после расходной операции и worker по распис�
 
 ## Вне scope / позже
 
-Подробный план (**v1.9.0**): [budget-post-mvp.md](../roadmap/budget-post-mvp.md). Решения на реализацию зафиксированы там (и в `bmad_docs/specs/spec-budget-post-mvp/`).
+Подробный план (**v1.10.0**): [budget-post-mvp.md](../roadmap/budget-post-mvp.md). Решения на реализацию зафиксированы там (и в `bmad_docs/specs/spec-budget-post-mvp/`).
 
 | Тема | Суть |
 |------|------|

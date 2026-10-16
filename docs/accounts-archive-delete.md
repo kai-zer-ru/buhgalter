@@ -4,7 +4,7 @@
 
 Связанные документы: [data-model.md](data-model.md), [ui-dialogs.md](ui-dialogs.md), [ui-row-actions.md](ui-row-actions.md), [ui-credit-cards.md](ui-credit-cards.md), [transactions-display.md](transactions-display.md), [api/openapi.yaml](api/openapi.yaml).
 
-**Открытый gap (v1.9.0):** при архивации/удалении подписки, периодические, плановые операции и кредиты на этом счёте пока не переносятся и не приостанавливаются; scheduler может писать на `archived`/`deleted`. Целевая политика — [roadmap/account-inactive-future-flows.md](../roadmap/account-inactive-future-flows.md). После реализации правила войдут в этот документ.
+**Открытый gap (v1.10.0):** при архивации/удалении подписки, периодические, плановые операции и кредиты на этом счёте пока не переносятся и не приостанавливаются; scheduler может писать на `archived`/`deleted`. Целевая политика — [roadmap/account-inactive-future-flows.md](../roadmap/account-inactive-future-flows.md). После реализации правила войдут в этот документ.
 
 ---
 
