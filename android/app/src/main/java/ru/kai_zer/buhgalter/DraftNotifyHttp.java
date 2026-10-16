@@ -27,8 +27,39 @@ import ru.kai_zer.buhgalter.widgets.WidgetSnapshotStore;
 /** Native POST /api/v1/transactions for shade Accept (same auth as widgets). */
 final class DraftNotifyHttp {
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
+    /** Server create/transfer wire format ({@code timeutil.ParseUTC}). */
+    private static final java.time.format.DateTimeFormatter API_UTC =
+            java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+                    .withZone(java.time.ZoneOffset.UTC);
 
     private DraftNotifyHttp() {}
+
+    /**
+     * Draft {@code occurredAt} (ISO RFC3339) → API Layout {@code YYYY-MM-DD HH:MM:SS} UTC. Already-Layout
+     * values pass through. Empty → now in Layout.
+     */
+    static String toApiTransactionDate(String occurredAt) {
+        if (TextUtils.isEmpty(occurredAt)) {
+            return API_UTC.format(java.time.Instant.now());
+        }
+        if (occurredAt.length() == 19
+                && occurredAt.charAt(4) == '-'
+                && occurredAt.charAt(7) == '-'
+                && occurredAt.charAt(10) == ' '
+                && occurredAt.charAt(13) == ':'
+                && occurredAt.charAt(16) == ':') {
+            return occurredAt;
+        }
+        try {
+            return API_UTC.format(java.time.Instant.parse(occurredAt));
+        } catch (java.time.format.DateTimeParseException e) {
+            try {
+                return API_UTC.format(java.time.OffsetDateTime.parse(occurredAt).toInstant());
+            } catch (Exception e2) {
+                return occurredAt;
+            }
+        }
+    }
 
     /**
      * @return true if the server accepted the create (2xx)
@@ -46,11 +77,7 @@ final class DraftNotifyHttp {
             String type = "income".equals(draft.optString("type", "")) ? "income" : "expense";
             body.put("type", type);
             body.put("amount", draft.optString("amount", ""));
-            String occurredAt = draft.optString("occurredAt", "");
-            if (TextUtils.isEmpty(occurredAt)) {
-                occurredAt = java.time.Instant.now().toString();
-            }
-            body.put("transaction_date", occurredAt);
+            body.put("transaction_date", toApiTransactionDate(draft.optString("occurredAt", "")));
 
             String categoryId = draft.optString("categoryId", "");
             if (!TextUtils.isEmpty(categoryId)) body.put("category_id", categoryId);
@@ -95,11 +122,7 @@ final class DraftNotifyHttp {
             body.put("from_account_id", fromAccount);
             body.put("to_account_id", toAccount);
             body.put("amount", draft.optString("amount", ""));
-            String occurredAt = draft.optString("occurredAt", "");
-            if (TextUtils.isEmpty(occurredAt)) {
-                occurredAt = java.time.Instant.now().toString();
-            }
-            body.put("transaction_date", occurredAt);
+            body.put("transaction_date", toApiTransactionDate(draft.optString("occurredAt", "")));
             return postJson(context, base, token, "/api/v1/transfers", body);
         } catch (org.json.JSONException e) {
             return false;
@@ -136,11 +159,7 @@ final class DraftNotifyHttp {
             String type = "income".equals(draft.optString("type", "")) ? "income" : "expense";
             body.put("type", type);
             body.put("amount", draft.optString("amount", ""));
-            String occurredAt = draft.optString("occurredAt", "");
-            if (TextUtils.isEmpty(occurredAt)) {
-                occurredAt = java.time.Instant.now().toString();
-            }
-            body.put("transaction_date", occurredAt);
+            body.put("transaction_date", toApiTransactionDate(draft.optString("occurredAt", "")));
             String categoryId = draft.optString("categoryId", "");
             if (!TextUtils.isEmpty(categoryId)) body.put("category_id", categoryId);
             String subcategoryId = draft.optString("subcategoryId", "");
@@ -180,11 +199,7 @@ final class DraftNotifyHttp {
             body.put("from_account_id", draft.optString("fromAccountId", ""));
             body.put("to_account_id", draft.optString("toAccountId", ""));
             body.put("amount", draft.optString("amount", ""));
-            String occurredAt = draft.optString("occurredAt", "");
-            if (TextUtils.isEmpty(occurredAt)) {
-                occurredAt = java.time.Instant.now().toString();
-            }
-            body.put("transaction_date", occurredAt);
+            body.put("transaction_date", toApiTransactionDate(draft.optString("occurredAt", "")));
             return body;
         } catch (org.json.JSONException e) {
             return null;

@@ -294,6 +294,14 @@ export function apiDateTimeToRFC3339(api: string): string {
 	return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6])).toISOString();
 }
 
+/**
+ * Layout or RFC3339/ISO → API UTC Layout `yyyy-MM-dd HH:mm:ss`.
+ * Used by shade Accept offline path (defense-in-depth vs native DraftNotifyHttp).
+ */
+export function toApiUtcDateTime(value: string): string {
+	return formatUTC(parseAPIDateTime(value));
+}
+
 /** Date-only filter end → API UTC (23:59:59 in user TZ). */
 export function fromDateLocalEnd(value: string, tz: string): string {
 	const m = value.match(/^(\d{4})-(\d{2})-(\d{2})/);

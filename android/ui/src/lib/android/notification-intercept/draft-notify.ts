@@ -1,4 +1,5 @@
 import { get } from 'svelte/store';
+import { toApiUtcDateTime } from '$lib/dates';
 import { createTransaction, createTransfer } from '$lib/offline/transactions-api';
 import { user } from '$lib/stores/auth';
 import {
@@ -128,6 +129,16 @@ type OfflineAcceptPayload = {
 	description?: string;
 };
 
+/** Normalize offlineAccept date so ISO from older native builds still reaches create as Layout. */
+function offlineAcceptTransactionDate(value: string | undefined): string {
+	if (!value) return value ?? '';
+	try {
+		return toApiUtcDateTime(value);
+	} catch {
+		return value;
+	}
+}
+
 /**
  * Apply Accept/Reject side-effects from native shade actions into JS drafts / outbox.
  */
@@ -154,6 +165,7 @@ export async function applyNativeDraftNotifySync(userId?: string | null): Promis
 				: payload.draftId
 					? [payload.draftId]
 					: [];
+		const transactionDate = offlineAcceptTransactionDate(payload.transaction_date);
 
 		if (payload.kind === 'transfer' || (payload.from_account_id && payload.to_account_id)) {
 			if (!payload.from_account_id || !payload.to_account_id || !payload.amount) {
@@ -165,7 +177,7 @@ export async function applyNativeDraftNotifySync(userId?: string | null): Promis
 					from_account_id: payload.from_account_id,
 					to_account_id: payload.to_account_id,
 					amount: payload.amount,
-					transaction_date: payload.transaction_date,
+					transaction_date: transactionDate,
 					description: payload.description
 				});
 				created += 1;
@@ -187,7 +199,7 @@ export async function applyNativeDraftNotifySync(userId?: string | null): Promis
 				account_id: payload.account_id,
 				type: payload.type === 'income' ? 'income' : 'expense',
 				amount: payload.amount,
-				transaction_date: payload.transaction_date,
+				transaction_date: transactionDate,
 				category_id: payload.category_id,
 				subcategory_id: payload.subcategory_id,
 				merchant_id: payload.merchant_id,

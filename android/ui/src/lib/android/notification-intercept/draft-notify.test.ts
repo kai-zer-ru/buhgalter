@@ -1,5 +1,7 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createTransaction, createTransfer } from '$lib/offline/transactions-api';
 import {
+	applyNativeDraftNotifySync,
 	buildShadeNotifyItems,
 	shadeTransferItemId,
 	toNativeDraftPayload,
@@ -11,7 +13,21 @@ import {
 	updateInterceptDraft,
 	listInterceptDrafts
 } from './drafts';
+import * as plugin from './plugin';
 import type { InterceptDraft, ParsedPurchase } from './types';
+
+vi.mock('$lib/offline/transactions-api', () => ({
+	createTransaction: vi.fn().mockResolvedValue({ id: 'tx1' }),
+	createTransfer: vi.fn().mockResolvedValue({ id: 'tr1' })
+}));
+
+vi.mock('./plugin', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('./plugin')>();
+	return {
+		...actual,
+		consumeDraftNotifySync: vi.fn()
+	};
+});
 
 const purchase: ParsedPurchase = {
 	bankId: 'tinkoff',
@@ -107,5 +123,82 @@ describe('draft-notify payload', () => {
 		const items = buildShadeNotifyItems(listInterceptDrafts('user-1'));
 		expect(items).toHaveLength(1);
 		expect(items[0].type).toBe('expense');
+	});
+});
+
+describe('applyNativeDraftNotifySync date format', () => {
+	beforeEach(() => {
+		vi.mocked(plugin.consumeDraftNotifySync).mockReset();
+		vi.mocked(createTransaction).mockClear();
+		vi.mocked(createTransfer).mockClear();
+	});
+
+	it('converts ISO offlineAccept transaction_date to API Layout before create', async () => {
+		vi.mocked(plugin.consumeDraftNotifySync).mockResolvedValue({
+			rejectedIds: [],
+			acceptedIds: [],
+			offlineAccepts: [
+				{
+					kind: 'transaction',
+					draftId: 'd1',
+					account_id: 'acc-1',
+					type: 'expense',
+					amount: '10.00',
+					transaction_date: '2026-10-16T05:54:00.000Z'
+				}
+			]
+		});
+		await applyNativeDraftNotifySync('user-1');
+		expect(createTransaction).toHaveBeenCalledWith(
+			expect.objectContaining({
+				transaction_date: '2026-10-16 05:54:00'
+			})
+		);
+	});
+
+	it('passes through Layout offlineAccept transaction_date', async () => {
+		vi.mocked(plugin.consumeDraftNotifySync).mockResolvedValue({
+			rejectedIds: [],
+			acceptedIds: [],
+			offlineAccepts: [
+				{
+					kind: 'transaction',
+					draftId: 'd1',
+					account_id: 'acc-1',
+					type: 'expense',
+					amount: '10.00',
+					transaction_date: '2026-10-16 05:54:00'
+				}
+			]
+		});
+		await applyNativeDraftNotifySync('user-1');
+		expect(createTransaction).toHaveBeenCalledWith(
+			expect.objectContaining({
+				transaction_date: '2026-10-16 05:54:00'
+			})
+		);
+	});
+
+	it('converts ISO transfer offlineAccept date to Layout', async () => {
+		vi.mocked(plugin.consumeDraftNotifySync).mockResolvedValue({
+			rejectedIds: [],
+			acceptedIds: [],
+			offlineAccepts: [
+				{
+					kind: 'transfer',
+					draftIds: ['a', 'b'],
+					from_account_id: 'acc-from',
+					to_account_id: 'acc-to',
+					amount: '10.00',
+					transaction_date: '2026-10-16T05:54:00.000Z'
+				}
+			]
+		});
+		await applyNativeDraftNotifySync('user-1');
+		expect(createTransfer).toHaveBeenCalledWith(
+			expect.objectContaining({
+				transaction_date: '2026-10-16 05:54:00'
+			})
+		);
 	});
 });

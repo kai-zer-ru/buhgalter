@@ -12,7 +12,8 @@ import {
 	formatDisplayDateTime,
 	formatDisplayDateTimeShort,
 	formatDisplayDayMonthTime,
-	formatISODateForDisplay
+	formatISODateForDisplay,
+	toApiUtcDateTime
 } from './dates';
 
 describe('display format constants', () => {
@@ -70,6 +71,20 @@ describe('formatAPIDateTimeForDisplay', () => {
 
 	it('formats RFC3339 build timestamps', () => {
 		expect(formatAPIDateTimeForDisplay('2026-12-31T04:22:46Z', 'UTC')).toBe('31.12.2026 04:22:46');
+	});
+});
+
+describe('toApiUtcDateTime', () => {
+	it('converts ISO RFC3339 to API Layout UTC', () => {
+		expect(toApiUtcDateTime('2026-10-16T05:54:00.000Z')).toBe('2026-10-16 05:54:00');
+	});
+
+	it('converts offset ISO to UTC Layout', () => {
+		expect(toApiUtcDateTime('2026-10-16T08:54:00+03:00')).toBe('2026-10-16 05:54:00');
+	});
+
+	it('passes through Layout unchanged', () => {
+		expect(toApiUtcDateTime('2026-10-16 05:54:00')).toBe('2026-10-16 05:54:00');
 	});
 });
 
