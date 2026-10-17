@@ -29,6 +29,7 @@
 - [v1.7.1](#v171)
 - [v1.8.0](#v180)
 - [v1.9.0](#v190)
+- [v1.9.1](#v191)
 - [v1.10.0](#v1100)
 - [v1.11.0](#v1110)
 - [v1.12.0](#v1120)
@@ -395,6 +396,12 @@
 - [x] БАГ. Android: **Принять** в шторке черновика банка → «Не удалось отправить часть операций» + ⚠️; правка в форме — ок. Причина: ISO `transaction_date` vs API `YYYY-MM-DD HH:MM:SS` ([shade-accept-sync-failed.md](roadmap/shade-accept-sync-failed.md))
 - [x] [Улучшение уведомлений в шторке](roadmap/notification-intercept.md#quick-actions-в-шторке-v160) — чистый «Магазин» из push (`extractMerchant`) + **Принять** снова открывает форму с prefill (не silent POST); Отклонить без изменений ([notification-merchant-strip.md](roadmap/notification-merchant-strip.md), [shade-accept-open-form.md](roadmap/shade-accept-open-form.md))
 - [x] **Docs:** [Release notes](docs/release-notes-v1.9.0.md) · [CHANGELOG.md](CHANGELOG.md) · [notifications.md](docs/notifications.md) · [android-client-platform.md](docs/android-client-platform.md) · [README.md](README.md) · [shade-accept-sync-failed.md](roadmap/shade-accept-sync-failed.md)
+
+## v1.9.1
+
+Patch: ужесточение перехвата банковских push (меньше мусора в шторке, СБП WB снова работает).
+
+- [x] [Улучшение перехвата уведомлений](roadmap/notification-intercept-harden.md) — единый gate черновиков и уведомлений бухгалтера; «перевод по»→расход / «от»→доход / пара→transfer; allowlist маркетплейсов без маркетинга; provisional без ложных сумм ([notification-intercept.md](roadmap/notification-intercept.md))
 
 ## v1.10.0
 

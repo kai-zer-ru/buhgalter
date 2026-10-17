@@ -298,6 +298,10 @@ public class NotificationInterceptPlugin extends Plugin {
             }
         }
         NotificationInterceptStore.acknowledge(getContext(), set);
+        // Drop provisional shade items for acked keys (incl. parse=null — no draft).
+        for (String key : set) {
+            DraftNotifyProvisional.cancel(getContext(), key);
+        }
         call.resolve();
     }
 

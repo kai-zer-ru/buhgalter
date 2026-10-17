@@ -21,9 +21,14 @@ final class InterceptPendingWake {
     private InterceptPendingWake() {}
 
     static void onQueued(
-            Context context, String dedupeKey, String title, String text, String bigText) {
+            Context context,
+            String dedupeKey,
+            String packageName,
+            String title,
+            String text,
+            String bigText) {
         Context app = context.getApplicationContext();
-        DraftNotifyProvisional.show(app, dedupeKey, title, text, bigText);
+        DraftNotifyProvisional.show(app, dedupeKey, packageName, title, text, bigText);
         NotificationInterceptPlugin.emitPendingAvailable();
         maybeQuietWake(app);
     }

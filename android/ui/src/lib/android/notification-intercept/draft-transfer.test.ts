@@ -171,4 +171,71 @@ describe('draft transfer pairing', () => {
 		const otherExpense = draft('e2', 'purchase', { bankId: 'sberbank', accountId: 'acc-s' });
 		expect(transferPrefillFromDrafts(expense, otherExpense)).toBeNull();
 	});
+
+	it('solo expense (перевод по) has no pair', () => {
+		expect(findUniqueTransferComplement(expense, [expense])).toBeNull();
+		expect(listUniqueTransferPairs([expense])).toEqual([]);
+		expect(countVisibleInterceptItems([expense])).toBe(1);
+	});
+
+	it('solo income (перевод от) has no pair', () => {
+		expect(findUniqueTransferComplement(income, [income])).toBeNull();
+		expect(listUniqueTransferPairs([income])).toEqual([]);
+		expect(countVisibleInterceptItems([income])).toBe(1);
+	});
+
+	it('pairs WB-style expense with mirror income same amount in window', () => {
+		const wbOut = draft('wb-out', 'purchase', {
+			bankId: 'wbbank',
+			packageName: 'com.wildberries.ru',
+			accountId: 'acc-wb',
+			amount: '500.00',
+			merchantText: 'Ольга Викторовна К.',
+			occurredAt: '2026-10-17T07:18:00.000Z'
+		});
+		const sberIn = draft('sber-in', 'income', {
+			bankId: 'sberbank',
+			packageName: 'ru.sberbankmobile',
+			accountId: 'acc-s',
+			amount: '500.00',
+			merchantText: 'Ольга',
+			occurredAt: '2026-10-17T07:19:00.000Z'
+		});
+		expect(canPairDraftsAsTransfer(wbOut, sberIn)).toBe(true);
+		expect(listUniqueTransferPairs([wbOut, sberIn])).toEqual([{ from: wbOut, to: sberIn }]);
+		expect(countVisibleInterceptItems([wbOut, sberIn])).toBe(1);
+	});
+
+	it('does not pair when amounts differ', () => {
+		const wbOut = draft('wb-out', 'purchase', {
+			bankId: 'wbbank',
+			accountId: 'acc-wb',
+			amount: '500.00'
+		});
+		const sberIn = draft('sber-in', 'income', {
+			bankId: 'sberbank',
+			accountId: 'acc-s',
+			amount: '501.00'
+		});
+		expect(canPairDraftsAsTransfer(wbOut, sberIn)).toBe(false);
+		expect(listUniqueTransferPairs([wbOut, sberIn])).toEqual([]);
+	});
+
+	it('does not pair outside the 2h window', () => {
+		const wbOut = draft('wb-out', 'purchase', {
+			bankId: 'wbbank',
+			accountId: 'acc-wb',
+			amount: '500.00',
+			occurredAt: '2026-10-17T07:18:00.000Z'
+		});
+		const sberIn = draft('sber-in', 'income', {
+			bankId: 'sberbank',
+			accountId: 'acc-s',
+			amount: '500.00',
+			occurredAt: new Date(
+				Date.parse('2026-10-17T07:18:00.000Z') + TRANSFER_PAIR_WINDOW_MS + 60_000
+			).toISOString()
+		});
+		expect(canPairDraftsAsTransfer(wbOut, sberIn)).toBe(false);
+	});
 });

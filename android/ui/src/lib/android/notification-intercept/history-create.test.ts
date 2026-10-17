@@ -146,6 +146,45 @@ describe('history-create', () => {
 		expect(transferPrefillFromHistory(expense, [expense], settings, [])).toBeNull();
 	});
 
+	it('pairs WB «перевод по» expense with «перевод от» income from history', () => {
+		const settings: InterceptSettings = {
+			...emptySettings,
+			bankBindings: [
+				{
+					packageName: 'com.wildberries.ru',
+					bankId: 'wbbank',
+					accountId: 'acc-wb'
+				},
+				{
+					packageName: 'ru.sberbankmobile',
+					bankId: 'sberbank',
+					accountId: 'acc-s'
+				}
+			]
+		};
+		const expense = history({
+			packageName: 'com.wildberries.ru',
+			title: 'WB Кошелёк',
+			dedupeKey: 'wb-out',
+			text: 'Перевод по СБП 500 ₽\nОльга Викторовна К.\nДоступно 26 867,01 ₽'
+		});
+		const income = history({
+			packageName: 'ru.sberbankmobile',
+			dedupeKey: 'sber-in',
+			postedAt: 1_700_000_000_000 + 60_000,
+			text: 'Перевод от Ольга В. 500 ₽. Баланс 10 000 ₽'
+		});
+		expect(canCreateFromHistory(expense)).toBe(true);
+		expect(draftFromHistoryItem(expense, settings, [])!.parsed.kind).toBe('purchase');
+		expect(draftFromHistoryItem(expense, settings, [])!.parsed.amount).toBe('500.00');
+		expect(draftFromHistoryItem(income, settings, [])!.parsed.kind).toBe('income');
+		const prefill = transferPrefillFromHistory(expense, [expense, income], settings, []);
+		expect(prefill).not.toBeNull();
+		expect(prefill!.amount).toBe('500.00');
+		expect(prefill!.fromAccountId).toBe('acc-wb');
+		expect(prefill!.toAccountId).toBe('acc-s');
+	});
+
 	it('prefillFromHistoryItem omits draftId', async () => {
 		const settings: InterceptSettings = {
 			...emptySettings,

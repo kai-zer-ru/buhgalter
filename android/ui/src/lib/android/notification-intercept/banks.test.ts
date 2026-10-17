@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	KNOWN_BANK_APPS,
 	KNOWN_WALLET_APPS,
+	MARKETPLACE_PACKAGES,
 	allKnownPackages,
 	allKnownSmsSenderEntries,
 	bankIdForPackage,
@@ -9,6 +10,7 @@ import {
 	bankOrWalletLabelKey,
 	inferBankIdFromText,
 	isAllowlistedPackage,
+	isMarketplacePackage,
 	normalizeSmsSender,
 	resolveRawBankNotification,
 	walletIdForPackage
@@ -34,6 +36,17 @@ describe('KNOWN_BANK_APPS', () => {
 		expect(bankIdForPackage('com.bssys.vbrrretail')).toBe('vbrr');
 		expect(bankIdForPackage('com.unknown')).toBeNull();
 		expect(bankIdForPackage('ru.nspk.mirpay')).toBeNull();
+	});
+
+	it('marks marketplace shells separately from fintech packages', () => {
+		expect(MARKETPLACE_PACKAGES).toContain('com.wildberries.ru');
+		expect(MARKETPLACE_PACKAGES).toContain('ru.ozon.app.android');
+		expect(isMarketplacePackage('com.wildberries.ru')).toBe(true);
+		expect(isMarketplacePackage('ru.ozon.app.android')).toBe(true);
+		expect(isMarketplacePackage('ru.wildberries.fintech')).toBe(false);
+		expect(isMarketplacePackage('ru.ozon.fintech.finance')).toBe(false);
+		expect(bankIdForPackage('ru.wildberries.fintech')).toBe('wbbank');
+		expect(bankIdForPackage('ru.ozon.fintech.finance')).toBe('ozon');
 	});
 });
 

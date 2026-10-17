@@ -393,6 +393,11 @@ public class BankNotificationListenerService extends NotificationListenerService
         boolean allowed =
                 NotificationInterceptStore.allowedPackages(context).contains(effectivePackage);
         boolean captureOn = NotificationInterceptStore.isCaptureEnabled(context);
+        boolean queueForJs =
+                allowed
+                        && captureOn
+                        && DraftNotifyProvisional.shouldQueuePackage(
+                                effectivePackage, title, text, bigText);
 
         if (forceHistory || captureOn) {
             try {
@@ -405,7 +410,7 @@ public class BankNotificationListenerService extends NotificationListenerService
                 historyItem.put("dedupeKey", dedupeKey);
                 historyItem.put("channel", channel);
                 historyItem.put("inAllowlist", allowed);
-                historyItem.put("queued", allowed && captureOn);
+                historyItem.put("queued", queueForJs);
                 if (!effectivePackage.equals(packageName)) {
                     historyItem.put("resolvedPackageName", effectivePackage);
                 }
@@ -418,7 +423,7 @@ public class BankNotificationListenerService extends NotificationListenerService
             }
         }
 
-        if (!allowed || !captureOn) {
+        if (!queueForJs) {
             return forceHistory || captureOn ? 1 : 0;
         }
 
@@ -433,7 +438,8 @@ public class BankNotificationListenerService extends NotificationListenerService
             item.put("channel", channel);
             NotificationInterceptStore.append(context, item);
             if (!forceHistory) {
-                InterceptPendingWake.onQueued(context, dedupeKey, title, text, bigText);
+                InterceptPendingWake.onQueued(
+                        context, dedupeKey, effectivePackage, title, text, bigText);
             }
         } catch (JSONException ignored) {
             // ignore

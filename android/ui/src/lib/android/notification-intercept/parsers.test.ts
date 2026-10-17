@@ -404,17 +404,34 @@ describe('parseBankNotification', () => {
 		expect(starred!.last4).toBe('5159');
 	});
 
-	it('does not treat outgoing Перевод по СБП as income', () => {
-		expect(
-			parseBankNotification(
-				raw({
-					packageName: 'ru.sberbankmobile',
-					title: '900',
-					text: 'Перевод по СБП 1000р на карту *4321',
-					channel: 'sms'
-				})
-			)
-		).toBeNull();
+	it('treats solo Перевод по СБП as expense (not income, not ignore)', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'ru.sberbankmobile',
+				title: '900',
+				text: 'Перевод по СБП 1000р на карту *4321',
+				channel: 'sms'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.kind).toBe('purchase');
+		expect(parsed!.amount).toBe('1000.00');
+		expect(parsed!.last4).toBe('4321');
+	});
+
+	it('treats solo Перевод от as income', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'ru.sberbankmobile',
+				title: '900',
+				text: 'Перевод от Мария П. 750р Баланс 2000р',
+				channel: 'sms'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.kind).toBe('income');
+		expect(parsed!.amount).toBe('750.00');
+		expect(parsed!.merchantText).toMatch(/мария/i);
 	});
 
 	it('ignores balance-only with bare р', () => {
@@ -479,5 +496,105 @@ describe('parseBankNotification', () => {
 				})
 			)
 		).toBeNull();
+	});
+
+	describe('v1.9.1 harden fixtures', () => {
+		it('A1: WB Кошелёк СБП «по» → expense 500 (not balance, not income)', () => {
+			const parsed = parseBankNotification(
+				raw({
+					packageName: 'com.wildberries.ru',
+					title: 'WB Кошелёк',
+					text: 'Перевод по СБП 500 ₽\nОльга Викторовна К.\nДоступно 26 867,01 ₽'
+				})
+			);
+			expect(parsed).not.toBeNull();
+			expect(parsed!.kind).toBe('purchase');
+			expect(parsed!.amount).toBe('500.00');
+			expect(parsed!.bankId).toBe('wbbank');
+			expect(parsed!.merchantText).toMatch(/ольга\s+викторовна/i);
+			expect(parsed!.merchantText).not.toMatch(/доступно|26867/i);
+		});
+
+		it('A2: WB Оплата частями purchase 1256 (not 125)', () => {
+			const parsed = parseBankNotification(
+				raw({
+					packageName: 'com.wildberries.ru',
+					title: 'Оплата частями',
+					text: 'Списали 1256.00 ₽ . Обновлённый график платежей уже в деталях расс'
+				})
+			);
+			expect(parsed).not.toBeNull();
+			expect(parsed!.kind).toBe('purchase');
+			expect(parsed!.amount).toBe('1256.00');
+		});
+
+		it('B1–B4: WB marketplace marketing → null', () => {
+			expect(
+				parseBankNotification(
+					raw({
+						packageName: 'com.wildberries.ru',
+						title: 'Можно забирать 📦',
+						text: 'Заказ в пункте выдачи, загляните за ним сегодня'
+					})
+				)
+			).toBeNull();
+			expect(
+				parseBankNotification(
+					raw({
+						packageName: 'com.wildberries.ru',
+						title: 'Доставили 📦',
+						text: 'Ваш заказ уже в пункте выдачи. Заходите — он ждёт вас'
+					})
+				)
+			).toBeNull();
+			expect(
+				parseBankNotification(
+					raw({
+						packageName: 'com.wildberries.ru',
+						title: 'Личное приглашение 📩',
+						text: 'В подборку с вау-ценами ->'
+					})
+				)
+			).toBeNull();
+			expect(
+				parseBankNotification(
+					raw({
+						packageName: 'com.wildberries.ru',
+						title: 'Куртки и пуховики от 2 184 ₽',
+						text: 'Тёплые, стильные и с хорошими отзывами. Подобрать ->'
+					})
+				)
+			).toBeNull();
+		});
+
+		it('B5–B7: Ozon marketplace marketing / percent → null', () => {
+			expect(
+				parseBankNotification(
+					raw({
+						packageName: 'ru.ozon.app.android',
+						title: 'Ух ты, что это? 🤩',
+						text: '+1000 ₽ у вас на счёте. Потратьте на покупку одежды и обуви до 29 октября'
+					})
+				)
+			).toBeNull();
+			expect(
+				parseBankNotification(
+					raw({
+						packageName: 'ru.ozon.app.android',
+						title: '💛 Сезон простуд отменяется!',
+						text: 'Соберите аптечку для поддержки иммунитета выгодно ->'
+					})
+				)
+			).toBeNull();
+			expect(
+				parseBankNotification(
+					raw({
+						packageName: 'ru.ozon.app.android',
+						title: 'Пиджак приталенный Befree',
+						text: 'Или джемпер Outventure с выгодой до 80%. Купить сейчас'
+					})
+				)
+			).toBeNull();
+		});
 	});
 });

@@ -83,6 +83,7 @@ flowchart LR
 | Хранение | Зеркало черновиков в native (SharedPreferences); JS localStorage остаётся источником для UI; sync через Capacitor |
 | Создание операции | Только после «Сохранить» в форме (Accept из шторки форму открывает, не POST’ит) |
 | Парсинг | По-прежнему JS. При постановке в очередь NLS сразу показывает **provisional**-уведомление; если WebView мёртв и PIN-lock выкл. (`AppLockNative.pin_enabled`, не скрытие сумм виджетов) — тихий wake MainActivity, чтобы распарсить и заменить на Accept/Reject. С PIN-lock — только provisional до ручного открытия. После PIN/отпечатка и при запуске с лаунчера quiet wake **не** делает `moveTaskToBack` (one-shot token на Intent, strip sticky extras; `onResume` без quiet-сессии = user engaged) |
+| Переводы «по»/«от» | **v1.9.1** — см. [notification-intercept-harden.md](notification-intercept-harden.md): solo «перевод по» → расход; solo «перевод от» → доход; оба с одной суммой в окне ~2 ч → пара перевода |
 
 ```mermaid
 sequenceDiagram

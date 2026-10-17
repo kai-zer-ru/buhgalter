@@ -107,7 +107,8 @@ public class BankSmsReceiver extends BroadcastReceiver {
                 item.put("dedupeKey", dedupeKey);
                 item.put("channel", "sms");
                 NotificationInterceptStore.append(app, item);
-                InterceptPendingWake.onQueued(app, dedupeKey, sender.trim(), body, "");
+                InterceptPendingWake.onQueued(
+                        app, dedupeKey, packageName, sender.trim(), body, "");
             } catch (JSONException ignored) {
                 // ignore malformed row
             }

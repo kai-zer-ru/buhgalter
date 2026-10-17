@@ -207,6 +207,17 @@ export const KNOWN_WALLET_APPS: KnownWalletApp[] = [
 	}
 ];
 
+/**
+ * Marketplace shells that also host wallet/bank pushes.
+ * Keep in sync with native {@code DraftNotifyProvisional.MARKETPLACE_PACKAGES}.
+ * Fintech packages (ozon/wb) are not listed — they need no extra title/op gate.
+ */
+export const MARKETPLACE_PACKAGES = ['com.wildberries.ru', 'ru.ozon.app.android'] as const;
+
+export function isMarketplacePackage(packageName: string): boolean {
+	return (MARKETPLACE_PACKAGES as readonly string[]).includes(packageName);
+}
+
 /** Bank names as card issuer in wallet push — not marketplace brands (Ozon, WB). */
 const BANK_TEXT_ALIASES: { bankId: string; re: RegExp }[] = [
 	{ bankId: 'tinkoff', re: /т-?банк|тинькофф|t-?bank|tinkoff/i },

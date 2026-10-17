@@ -124,6 +124,30 @@ describe('draft-notify payload', () => {
 		expect(items).toHaveLength(1);
 		expect(items[0].type).toBe('expense');
 	});
+
+	it('solo expense and solo income stay two shade items (no pair)', () => {
+		addInterceptDraft(
+			{ ...purchase, rawHash: 'exp-solo', kind: 'purchase', bankId: 'wbbank', amount: '500.00' },
+			{ accountId: 'acc-wb' },
+			'user-1'
+		);
+		addInterceptDraft(
+			{
+				...purchase,
+				rawHash: 'inc-solo',
+				kind: 'income',
+				bankId: 'sberbank',
+				packageName: 'ru.sberbankmobile',
+				amount: '300.00',
+				merchantText: 'Кто-то'
+			},
+			{ accountId: 'acc-s' },
+			'user-1'
+		);
+		const items = buildShadeNotifyItems(listInterceptDrafts('user-1'));
+		expect(items).toHaveLength(2);
+		expect(items.map((i) => i.type).sort()).toEqual(['expense', 'income']);
+	});
 });
 
 describe('applyNativeDraftNotifySync date format', () => {
