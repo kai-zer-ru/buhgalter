@@ -402,6 +402,7 @@
 Patch: ужесточение перехвата банковских push (меньше мусора в шторке, СБП WB снова работает).
 
 - [x] [Улучшение перехвата уведомлений](roadmap/notification-intercept-harden.md) — единый gate черновиков и уведомлений бухгалтера; «перевод по»→расход / «от»→доход / пара→transfer; allowlist маркетплейсов без маркетинга; provisional без ложных сумм ([notification-intercept.md](roadmap/notification-intercept.md))
+- [x] **Docs:** [Release notes](docs/release-notes-v1.9.1.md) · [CHANGELOG.md](CHANGELOG.md) · [android-client.md](docs/android-client.md) · [android-client-platform.md](docs/android-client-platform.md) · [README.md](README.md)
 
 ## v1.10.0
 
