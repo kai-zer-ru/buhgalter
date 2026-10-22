@@ -2,6 +2,7 @@ import { expect, type Page } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { dismissBlockingModals } from './ui';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -25,32 +26,79 @@ export async function waitAppReady(page: Page) {
 		return;
 	}
 	await expect(page.locator('header')).toBeVisible({ timeout: 20_000 });
-	const { dismissBlockingModals } = await import('./ui');
+
+	// SPA client crash (failed chunk / render) shows SvelteKit's default error inside the shell.
+	// Header is still visible, so without this check later locators time out for 60s.
+	const crashed = page.getByRole('heading', { name: '500', exact: true });
+	if (await crashed.isVisible().catch(() => false)) {
+		await page.reload();
+		await expect(page.getByText('Загрузка…')).toHaveCount(0, { timeout: 20_000 });
+		await expect(page.locator('header')).toBeVisible({ timeout: 20_000 });
+		await expect(crashed).toHaveCount(0, { timeout: 15_000 });
+	}
+
 	await dismissBlockingModals(page);
 }
 
+/** First-run admin via API — avoids UI/i18n races on /setup (flake → login 401). */
 export async function completeSetupIfNeeded(page: Page) {
-	await page.goto('/setup');
-	await expect(page.getByText('Загрузка…')).toHaveCount(0, { timeout: 20_000 });
+	const statusRes = await page.request.get('/api/v1/setup/status');
+	expect(statusRes.ok(), `setup status failed: ${statusRes.status()}`).toBeTruthy();
+	const status = (await statusRes.json()) as { configured?: boolean };
+	if (status.configured) return;
 
-	const displayName = page.locator('#display-name');
-	if (!(await displayName.isVisible())) return;
+	const res = await page.request.post('/api/v1/setup', {
+		data: {
+			admin_login: ADMIN.login,
+			admin_display_name: ADMIN.displayName,
+			admin_password: ADMIN.password,
+			admin_password_confirm: ADMIN.password,
+			registration_enabled: false,
+			external_url: ''
+		}
+	});
+	// 409: already configured between status check and POST.
+	if (res.status() === 409) return;
+	expect(res.ok(), `API setup failed: ${res.status()} ${await res.text()}`).toBeTruthy();
+}
 
-	await displayName.fill(ADMIN.displayName);
-	await page.locator('#login').fill(ADMIN.login);
-	await page.locator('#password').fill(ADMIN.password);
-	await page.locator('#password-confirm').fill(ADMIN.password);
-	await page.getByRole('button', { name: 'Завершить настройку' }).click();
-	await page.waitForURL('**/login**', { timeout: 15_000 });
+async function fillLoginForm(page: Page, loginName: string, password: string) {
+	await waitAppReady(page);
+	const submit = page.getByRole('button', { name: 'Войти' });
+	await expect(submit).toBeVisible({ timeout: 20_000 });
+	await page.locator('#login').fill(loginName);
+	await page.locator('#password').fill(password);
+	await submit.click();
 }
 
 export async function login(page: Page) {
 	await page.goto('/login');
-	await page.locator('#login').fill(ADMIN.login);
-	await page.locator('#password').fill(ADMIN.password);
-	await page.getByRole('button', { name: 'Войти' }).click();
+	await fillLoginForm(page, ADMIN.login, ADMIN.password);
 	await expect(page).toHaveURL(/\/(\?.*)?$/, { timeout: 15_000 });
 	await waitAppReady(page);
+}
+
+/** Cookie session via API — preferred for setup / restore (no UI race). */
+export async function loginViaAPI(page: Page): Promise<void> {
+	let lastStatus = 0;
+	let lastBody = '';
+	for (let attempt = 0; attempt < 5; attempt++) {
+		const res = await page.request.post('/api/v1/auth/login', {
+			data: { login: ADMIN.login, password: ADMIN.password }
+		});
+		lastStatus = res.status();
+		if (res.ok()) {
+			if (isAdminSession(await currentSession(page))) return;
+		} else {
+			lastBody = await res.text().catch(() => '');
+		}
+		await page.waitForTimeout(150 * (attempt + 1));
+	}
+	expect(lastStatus, `API login failed: ${lastStatus}${lastBody ? ` ${lastBody}` : ''}`).toBe(200);
+	expect(
+		isAdminSession(await currentSession(page)),
+		'API login did not yield admin session'
+	).toBeTruthy();
 }
 
 type MeResponse = { login: string; is_admin: boolean };
@@ -96,9 +144,7 @@ export async function restoreAdminSession(page: Page) {
 	}
 
 	await page.goto('/login');
-	await page.locator('#login').fill(ADMIN.login);
-	await page.locator('#password').fill(ADMIN.password);
-	await page.getByRole('button', { name: 'Войти' }).click();
+	await fillLoginForm(page, ADMIN.login, ADMIN.password);
 	await expect(page).toHaveURL(/\/(\?.*)?$/, { timeout: 15_000 });
 	await waitAppReady(page);
 
@@ -120,6 +166,18 @@ export function formatUTCDateTime(date: Date): string {
 	return iso.slice(0, 19).replace('T', ' ');
 }
 
+/** Drop web SWR localStorage after API mutations done outside the UI client. */
+export async function clearBrowserRefCache(page: Page): Promise<void> {
+	await page.evaluate(() => {
+		const keys: string[] = [];
+		for (let i = 0; i < localStorage.length; i++) {
+			const key = localStorage.key(i);
+			if (key?.includes('ref_cache')) keys.push(key);
+		}
+		for (const key of keys) localStorage.removeItem(key);
+	});
+}
+
 export async function apiJSON<T>(
 	page: Page,
 	method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH',
@@ -136,6 +194,11 @@ export async function apiJSON<T>(
 			response.ok(),
 			`API ${method} ${path} failed with ${response.status()}${detail ? `: ${detail}` : ''}`
 		).toBeTruthy();
+	}
+	if (method !== 'GET') {
+		await clearBrowserRefCache(page).catch(() => {
+			// page may not have localStorage yet (about:blank)
+		});
 	}
 	if (response.status() === 204) return undefined as T;
 	return (await response.json()) as T;

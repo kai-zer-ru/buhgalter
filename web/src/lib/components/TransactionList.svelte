@@ -9,9 +9,11 @@
 	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
 	import {
 		transactionAmountSign,
+		transferCommissionDisplay,
 		canEditTransaction,
 		canRepeatTransaction,
-		canDeleteTransaction
+		canDeleteTransaction,
+		canLinkToSubscription
 	} from '$lib/transaction-display';
 	import TransactionCategoryCell from '$lib/components/TransactionCategoryCell.svelte';
 	import IconButton from '$lib/components/IconButton.svelte';
@@ -27,6 +29,8 @@
 		receiptTransactionId = tx.id;
 		receiptOpen = true;
 	}
+	import TransactionMerchantTags from '$lib/components/TransactionMerchantTags.svelte';
+	import { featureFlags, isFeatureEnabled } from '$lib/features';
 
 	let {
 		transactions,
@@ -42,7 +46,11 @@
 		ondelete,
 		onedit,
 		onrepeat,
+		onsaveAsTemplate,
 		onmakeRecurring,
+		onmakeSubscription,
+		onattachSubscription,
+		onattachCredit,
 		descriptionExtra
 	}: {
 		transactions: Transaction[];
@@ -58,16 +66,51 @@
 		ondelete?: (tx: Transaction) => void;
 		onedit?: (tx: Transaction) => void;
 		onrepeat?: (tx: Transaction) => void;
+		onsaveAsTemplate?: (tx: Transaction) => void;
 		onmakeRecurring?: (tx: Transaction) => void;
+		onmakeSubscription?: (tx: Transaction) => void;
+		onattachSubscription?: (tx: Transaction) => void;
+		onattachCredit?: (tx: Transaction) => void;
 		descriptionExtra?: Snippet<[Transaction]>;
 	} = $props();
 
+	const templatesEnabled = $derived(isFeatureEnabled('transaction_templates', $featureFlags));
+	const recurringEnabled = $derived(isFeatureEnabled('recurring', $featureFlags));
+	const subscriptionsEnabled = $derived(isFeatureEnabled('subscriptions', $featureFlags));
+
 	const showActions = $derived(
-		Boolean((showDelete && ondelete) || (showEdit && onedit) || onrepeat || onmakeRecurring)
+		Boolean(
+			(showDelete && ondelete) ||
+			(showEdit && onedit) ||
+			onrepeat ||
+			(onsaveAsTemplate && templatesEnabled) ||
+			(onmakeRecurring && recurringEnabled) ||
+			(onmakeSubscription && subscriptionsEnabled) ||
+			(onattachSubscription && subscriptionsEnabled) ||
+			onattachCredit
+		)
 	);
 
 	function canMakeRecurring(tx: Transaction): boolean {
 		return Boolean(onmakeRecurring && tx.type !== 'transfer' && !tx.category_is_system);
+	}
+
+	function canMakeSubscription(tx: Transaction): boolean {
+		return Boolean(onmakeSubscription && canLinkToSubscription(tx));
+	}
+
+	function canAttachSubscription(tx: Transaction): boolean {
+		return Boolean(onattachSubscription && canLinkToSubscription(tx));
+	}
+
+	function canAttachCredit(tx: Transaction): boolean {
+		return Boolean(
+			onattachCredit &&
+			tx.type === 'expense' &&
+			!tx.credit_payment_linked &&
+			!tx.subscription_id &&
+			!tx.transfer_group_id
+		);
 	}
 
 	function rowActions(tx: Transaction): RowAction[] {
@@ -79,11 +122,39 @@
 				onclick: () => onrepeat(tx)
 			});
 		}
-		if (canMakeRecurring(tx)) {
+		if (templatesEnabled && onsaveAsTemplate && canRepeatTransaction(tx)) {
+			actions.push({
+				icon: 'save',
+				label: $_('templates.saveAs'),
+				onclick: () => onsaveAsTemplate(tx)
+			});
+		}
+		if (recurringEnabled && canMakeRecurring(tx)) {
 			actions.push({
 				icon: 'repeat',
 				label: $_('recurring.fromTransaction'),
 				onclick: () => onmakeRecurring?.(tx)
+			});
+		}
+		if (subscriptionsEnabled && canMakeSubscription(tx)) {
+			actions.push({
+				icon: 'pay',
+				label: $_('subscriptions.fromTransaction'),
+				onclick: () => onmakeSubscription?.(tx)
+			});
+		}
+		if (subscriptionsEnabled && canAttachSubscription(tx)) {
+			actions.push({
+				icon: 'add',
+				label: $_('subscriptions.attachToSubscription'),
+				onclick: () => onattachSubscription?.(tx)
+			});
+		}
+		if (canAttachCredit(tx)) {
+			actions.push({
+				icon: 'pay',
+				label: $_('credits.attachFromTransaction'),
+				onclick: () => onattachCredit?.(tx)
 			});
 		}
 		if (showEdit && onedit && canEditTransaction(tx)) {
@@ -128,6 +199,7 @@
 			</thead>
 			<tbody>
 				{#each transactions as tx (tx.id)}
+					{@const commissionDisplay = transferCommissionDisplay(tx, siblings)}
 					<tr class="border-t" style:border-color="var(--border)">
 						<td class="p-3 align-middle whitespace-nowrap">
 							{formatAPIOperationDateTimeForDisplay(tx.transaction_date, tz)}
@@ -164,13 +236,36 @@
 									/>
 								{/if}
 							</div>
+							<div>
+								{showAmountSign ? transactionAmountSign(tx, { singleAccount }) : ''}<MoneyDisplay
+									value={tx.amount_display}
+									class=""
+								/>
+							</div>
+							{#if commissionDisplay}
+								<div class="text-xs font-normal" style:color="var(--text-muted)">
+									{$_('transactions.commission')}:
+									<MoneyDisplay value={commissionDisplay} class="" />
+								</div>
+							{/if}
 						</td>
 						{#if showDescription}
 							<td class="p-3 align-middle" style:color="var(--text-muted)">
-								{tx.description ?? ''}
-								{#if descriptionExtra}
-									{@render descriptionExtra(tx)}
-								{/if}
+								<div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+									<TransactionMerchantTags
+										merchantName={tx.merchant_name}
+										merchantIcon={tx.merchant_icon}
+										tags={tx.tags}
+									/>
+									{#if tx.description || descriptionExtra}
+										<span>
+											{tx.description ?? ''}
+											{#if descriptionExtra}
+												{@render descriptionExtra(tx)}
+											{/if}
+										</span>
+									{/if}
+								</div>
 							</td>
 						{/if}
 						{#if showActions}
@@ -186,6 +281,7 @@
 
 	<div class="space-y-3 md:hidden">
 		{#each transactions as tx (tx.id)}
+			{@const commissionDisplay = transferCommissionDisplay(tx, siblings)}
 			<article class="rounded-xl border p-4" style:border-color="var(--border)">
 				<div class="flex items-start justify-between gap-3">
 					<div class="min-w-0">
@@ -214,6 +310,20 @@
 								onclick={() => openReceipt(tx)}
 							/>
 						{/if}
+						<div class="text-right">
+							<p class="text-sm font-semibold tabular-nums">
+								{showAmountSign ? transactionAmountSign(tx, { singleAccount }) : ''}<MoneyDisplay
+									value={tx.amount_display}
+									class=""
+								/>
+							</p>
+							{#if commissionDisplay}
+								<p class="text-xs tabular-nums" style:color="var(--text-muted)">
+									{$_('transactions.commission')}:
+									<MoneyDisplay value={commissionDisplay} class="" />
+								</p>
+							{/if}
+						</div>
 						{#if showActions}
 							<RowActionsMenu actions={rowActions(tx)} />
 						{/if}
@@ -230,13 +340,25 @@
 						/>
 					</p>
 				{/if}
-				{#if showDescription && (tx.description || descriptionExtra)}
-					<p class="mt-2 text-sm" style:color="var(--text-muted)">
-						{tx.description ?? ''}
-						{#if descriptionExtra}
-							{@render descriptionExtra(tx)}
+				{#if showDescription && (tx.description || descriptionExtra || tx.merchant_name || (tx.tags && tx.tags.length > 0))}
+					<div
+						class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm"
+						style:color="var(--text-muted)"
+					>
+						<TransactionMerchantTags
+							merchantName={tx.merchant_name}
+							merchantIcon={tx.merchant_icon}
+							tags={tx.tags}
+						/>
+						{#if tx.description || descriptionExtra}
+							<span>
+								{tx.description ?? ''}
+								{#if descriptionExtra}
+									{@render descriptionExtra(tx)}
+								{/if}
+							</span>
 						{/if}
-					</p>
+					</div>
 				{/if}
 			</article>
 		{/each}

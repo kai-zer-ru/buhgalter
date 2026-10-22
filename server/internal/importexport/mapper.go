@@ -94,6 +94,8 @@ func MapTable(table RawTable, opts ImportOptions) ([]MappedRow, []RowError) {
 		switch opts.Preset {
 		case "custom":
 			m, err = ApplyColumnMap(table.Headers, row, opts.ColumnMap)
+		case "buhgalter":
+			m, err = MapBuhgalterRow(table.Headers, row)
 		default:
 			m, err = MapCubuxRow(table.Headers, row)
 		}
@@ -123,6 +125,9 @@ func PreviewFromMapped(rows []MappedRow) (Report, map[string]struct{}, map[strin
 			continue
 		}
 		report.ValidRows++
+		if m.CubuxType == "Перевод" {
+			report.TransferRows++
+		}
 		for _, a := range accts {
 			accounts[a] = struct{}{}
 		}
@@ -133,6 +138,7 @@ func PreviewFromMapped(rows []MappedRow) (Report, map[string]struct{}, map[strin
 			report.Preview = append(report.Preview, item)
 		}
 	}
+	report.ListRows = report.ValidRows
 	return report, accounts, categories
 }
 

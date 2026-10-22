@@ -36,12 +36,14 @@ func (m *Manager) Reopen() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if m.db != nil {
-		_ = m.db.Close()
-	}
+	// Open before closing so a failed Open keeps the previous handle live.
+	// Callers that replace the file on disk (Restore) must Close first.
 	sqlDB, err := Open(m.path)
 	if err != nil {
 		return err
+	}
+	if m.db != nil {
+		_ = m.db.Close()
 	}
 	m.db = sqlDB
 	return nil

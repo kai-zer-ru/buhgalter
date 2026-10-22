@@ -16,6 +16,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/categoryseed"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/features"
 	"github.com/kai-zer-ru/buhgalter/internal/settingscache"
 
 	"github.com/google/uuid"
@@ -56,14 +57,15 @@ type restoreResponse struct {
 func (h *Handler) Status(w http.ResponseWriter, r *http.Request) {
 	configured := syncConfiguredMarker(h.DataDir, h.Store.DB())
 
-	row, _ := sqlcdb.New(h.Store.DB()).GetSetupStatus(r.Context())
+	externalURL, _ := sqlcdb.New(h.Store.DB()).GetSetupStatus(r.Context())
+	regEnabled, _ := features.IsEnabled(r.Context(), h.Store.DB(), features.Registration)
 	resp := statusResponse{
 		Configured:          configured,
 		Database:            "SQLite",
-		RegistrationEnabled: row.RegistrationEnabled == 1,
+		RegistrationEnabled: regEnabled,
 	}
-	if row.ExternalUrl != nil {
-		resp.ExternalURL = *row.ExternalUrl
+	if externalURL != nil {
+		resp.ExternalURL = *externalURL
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -153,15 +155,11 @@ func (h *Handler) Setup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reg := int64(0)
-	if req.RegistrationEnabled {
-		reg = 1
+	if err := sqlcdb.New(tx).CompleteSetup(r.Context(), strPtr(externalURL)); err != nil {
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
 	}
-
-	if err := sqlcdb.New(tx).CompleteSetup(r.Context(), sqlcdb.CompleteSetupParams{
-		ExternalUrl:         strPtr(externalURL),
-		RegistrationEnabled: reg,
-	}); err != nil {
+	if err := features.SetOne(r.Context(), tx, features.Registration, req.RegistrationEnabled); err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}

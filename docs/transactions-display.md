@@ -19,12 +19,14 @@ OpenAPI-схемы: [`Transaction`](api/openapi.yaml#/components/schemas/Transac
 | `category_is_system` | bool | `categories.is_system` — скрывает «Повторить» для дохода/расхода |
 | `subcategory_name`, `subcategory_icon` | | Из `subcategories`; без подкатегории `subcategory_icon` пустой |
 | `amount_display` | string | `"1234.56"` для UI |
-| `commission` | integer | Только для перевода: комиссия в копейках (v1.1) |
-| `commission_display` | string | Отформатированная комиссия |
+| `commission` | integer | Только для `type=transfer`: комиссия в копейках (сумма ноги `expense` в группе) |
+| `commission_display` | string | Отформатированная комиссия (если `commission > 0`) |
 | `credit_payment_linked` | bool | `true` — операция привязана к платежу по кредиту; редактирование через `PUT /transactions/{id}` запрещено |
 | `store_id` | string | nullable; только `expense` — магазин из чека или выбранный вручную |
 | `store_name` | string | nullable; имя из `stores` (обогащение в SELECT) |
 | `receipt_import_id` | string | nullable; если операция создана из чека — для иконки и попапа деталей |
+| `merchant_id`, `merchant_name`, `merchant_icon` | | Магазин (`merchants`); иконка из каталога категорий |
+| `tags` | array `{id,name}` | Теги операции (`transaction_tags` + `tags`); не колонка БД |
 
 `transfer_is_out` вычисляется в sqlc-запросах (`CASE` + подзапрос по `transfer_group_id`), не хранится в таблице `transactions`.
 
@@ -38,17 +40,38 @@ OpenAPI-схемы: [`Transaction`](api/openapi.yaml#/components/schemas/Transac
 |------|----------|
 | `type` | `cash` \| `bank` |
 | `bank_icon` | Slug логотипа банка (для `AccountIcon` на главной) |
+| `forecast_balance` | Текущий баланс + `kind=future` за месяц + ещё не исполненные активные [подписки](subscriptions.md) и периодические операции (`next_run_at` в текущем месяце, TZ пользователя) + неоплаченные `scheduled`-платежи активных [кредитов](ui-credits.md) (`payment_date` в текущем месяце, счёт `debit_account_id`) |
+| `has_future_this_month` | Есть вклад в прогноз (future-операции и/или подписки/периодические и/или кредиты) |
+| `has_planned_this_month` | Вклад от `kind=future` и/или периодических и/или неоплаченных кредитов месяца |
+| `has_subscriptions_this_month` | Вклад от активных подписок |
+
+UI показывает строку прогноза, если `forecast_balance !== balance`. Подпись зависит от флагов:
+
+| Флаги | Подпись |
+|-------|---------|
+| только planned | «С учётом плановых» |
+| только subscriptions | «С учётом подписок» |
+| оба | «С учётом плановых и подписок» |
+
+На **веб**-главной в карточке «Общий баланс», если `total_forecast === total_balance` (нет вклада в прогноз), под суммой показывается текст «Нет ближайших подписок и периодических» (`dashboard.noUpcomingSubscriptionsOrRecurring`). На Android — без этого empty-state.
+
+Хелпер: `$lib/forecast-label.ts` (`forecastWithLabelKey`, `aggregateForecastLabelFlags`).
 
 ## Модуль `$lib/transaction-display.ts`
 
 | Функция | Назначение |
 |---------|------------|
 | `transferOutLeg(tx, siblings)` | Исходящая нога пары (min `created_at` в группе) |
-| `dedupeTransferLegs(txs)` | Оставить одну строку на перевод, если в списке обе ноги (главная, `/transactions`) |
+| `dedupeTransferLegs(txs)` | Оставить одну строку на перевод; скрыть ногу комиссии (`expense` с `transfer_group_id`) |
 | `transferRoute(tx, siblings)` | `{ from, to }` — имена счетов **в направлении движения денег** |
 | `transferAccountIds(tx, siblings?)` | `{ fromAccountId, toAccountId }` для формы редактирования перевода (одна видимая нога + `transfer_is_out`) |
-| `canEditTransaction(tx)` | `false` при `credit_payment_linked` — скрыть «Изменить» в списке |
+| `transferCommissionDisplay(tx, siblings?)` | Текст комиссии для строки перевода (`commission_display` или fallback) |
+| `isTransferCommission(tx)` | `expense` с `transfer_group_id` — нога комиссии |
+| `canEditTransaction(tx)` | `false` при `credit_payment_linked` или ноге комиссии — скрыть «Изменить» |
 | `canRepeatTransaction(tx)` | `false` при `credit_payment_linked` или системной категории (доход/расход); переводы — без ограничения по категории |
+| «Сделать платежом по кредиту» | Расход без `credit_payment_linked` / `subscription_id` / перевода → `/credits?attach_tx=` (web и Android) |
+| `canDeleteTransaction(tx)` | `false` при ноге комиссии или `deletable === false` |
+| `canLinkToSubscription(tx)` | Расход без `subscription_id` — пункты «Сделать подпиской» / «Прикрепить к подписке» в меню строки |
 | `formatTransactionAccount(tx, siblings, mode)` | Текст колонки «Счёт» |
 | `transactionAmountSign(tx, opts?)` | Префикс суммы: `+`, `−` или пусто |
 
@@ -77,18 +100,23 @@ OpenAPI-схемы: [`Transaction`](api/openapi.yaml#/components/schemas/Transac
 
 ## Дедупликация переводов в списках
 
-На главной и в `/transactions` в одном списке могут попасть обе ноги перевода → `dedupeTransferLegs` оставляет только исходящую ногу.
+`GET /transactions` без фильтра `account_id` отдаёт **одну** строку на перевод (исходящая нога). `meta.total` — число операций в журнале: перевод считается один раз, нога комиссии (`expense` с `transfer_group_id`) не считается. В БД по-прежнему две ноги перевода и отдельная строка комиссии.
 
-На `/accounts/[id]` API отдаёт только ногу выбранного счёта — дедупликация не меняет состав, но `transferRoute` всё равно опирается на `transfer_is_out`.
+`dedupeTransferLegs` на главной и в `/transactions` прячет входящую ногу и комиссию, если они всё же попали в страницу (кеш Android, старый ответ).
 
-## Комиссия перевода (v1.1)
+На `/accounts/[id]` API отдаёт ногу выбранного счёта (входящую или исходящую) — для этого счёта перевод тоже одна операция. `transferRoute` опирается на `transfer_is_out`.
+
+## Комиссия перевода (v1.1 / v1.4.1)
 
 В форме перевода (`TransferForm.svelte`) — опциональное поле **комиссии**. При сохранении:
 
-- Создаётся расход на счёте-источнике в системной категории «Комиссия»
-- В ответе `GET /transactions/{id}` для перевода — поля `commission`, `commission_display` (сумма ноги комиссии в группе)
+- Создаётся расход на счёте-источнике в системной категории «Комиссия» (нога группы с тем же `transfer_group_id`)
+- В списках и `GET /transactions/{id}` нога комиссии **не отдаётся** как отдельная операция
+- На ногах `type=transfer` — поля `commission`, `commission_display`
+- UI: комиссия показывается **в строке перевода** (под суммой), не отдельной строкой
+- Редактирование/удаление комиссии отдельно запрещены (`ERR_COMMISSION_LINKED`); менять — через `PUT /transfers/{group_id}`, удалять — вместе с переводом (`DELETE /transfers/{group_id}` или `DELETE` ноги перевода)
 
-OpenAPI: `CreateTransferRequest.commission`, схема `Transfer`.
+OpenAPI: `CreateTransferRequest.commission`, схемы `Transfer` и `Transaction`.
 
 ## Колонка «Дата» в таблицах операций
 
@@ -97,13 +125,14 @@ OpenAPI: `CreateTransferRequest.commission`, схема `Transfer`.
 ## Главная (`/`)
 
 - **Сводка (v1.2.4):** на десктопе (`sm:` и шире) **«Общий баланс»** и **«Долги»** — в одной строке (`grid sm:grid-cols-2`); на мобильных — два блока столбцом.
-- **Счета на главной (v1.3):** **два спойлера** `AccountGroupPanel` — **«Мои средства»** и **«Кредитные средства»**; на мобильных свёрнуты по умолчанию, на десктопе развёрнуты. **На `/accounts`** — те же блоки с заголовками `h2`, **без спойлеров**. В каждом блоке сетка `sm:grid-cols-2`: сначала `cash`, затем `bank` (или только кредитки во втором). Карточки: `AccountIcon`, имя, баланс, лимит кредитки, автопополнение (`bank`), прогноз; меню «⋯» — [ui-row-actions.md](ui-row-actions.md). Группировка — `groupAccountsByType`.
+- **Счета на главной:** **два спойлера** `AccountGroupPanel` — **«Мои средства»** и **«Кредитные средства»**; на мобильных свёрнуты по умолчанию, на десктопе развёрнуты. **На `/accounts`** — те же блоки с заголовками `h2`, **без спойлеров**. В «Мои средства»: сначала `cash`, затем `bank`; внутри типа основной (`is_primary`) первым. Кредитную карту нельзя сделать основной. Карточки: `AccountIcon`, имя, баланс, лимит кредитки, автопополнение (`bank`), прогноз; меню «⋯» — [ui-row-actions.md](ui-row-actions.md). Группировка — `groupAccountsByType` ([ui-credit-cards.md](ui-credit-cards.md)).
 - В шапке — три кнопки **Доход / Расход / Перевод** (`NewTransactionButtons`); тип новой операции задаётся кнопкой, без переключателя в форме.
 - «Последние операции» — спойлер `CollapsibleSection` (свёрнут по умолчанию на всех экранах; в `summary` — общее число операций). Внутри карточка с двумя группами в спойлерах `<details>`:
   - **Плановые** (`kind=future`) — **выше** прошлых, спойлер **свёрнут** по умолчанию, сортировка по дате убыванию (от новых к старым), до 10 записей;
   - **Прошлые** (`kind=manual`) — спойлер **открыт** по умолчанию, сортировка по дате убыванию, до 10 записей (`GET /transactions`, `limit=10`).
+- **Android (офлайн):** после merge outbox + кэш список снова сортируется `date_desc` (`mergeTransactionLists` / `sortTransactionsDateDesc`) — pending из очереди не должны подниматься в порядке FIFO (от старых к новым).
 - Внизу карточки — кнопка «Все операции» → `/transactions`.
-- В заголовке каждого спойлера — общее число операций в группе (`meta.total`).
+- В заголовке каждого спойлера — число операций в группе (`meta.total`): перевод — одна операция, комиссия в счётчик не входит. То же число на веб и Android.
 - Колонки: дата, счёт, категория (с `CategoryIcon`), сумма, описание; меню «⋯» в каждой строке (как на `/transactions`).
 
 ## Все операции (`/transactions`)
@@ -112,8 +141,9 @@ OpenAPI: `CreateTransferRequest.commission`, схема `Transfer`.
   - **Плановые** (`kind=future`) — **выше** прошлых, спойлер **свёрнут** по умолчанию, сортировка `date_desc`, до 20 записей первой страницы (без пагинации);
   - **Прошлые операции** (`kind=manual`) — спойлер **открыт** по умолчанию, сортировка `date_desc`, пагинация **20** на страницу (`?page=`, `TransactionPagination` только под блоком прошлых).
 - При фильтре `kind=manual` или `kind=future` — один плоский список с пагинацией (как раньше).
-- Общие фильтры (даты, тип, счёт, категория, поиск) применяются к обеим группам; `TransactionContextStats` учитывает `kind`, если он задан; без `kind` — `include_future=true` (доход/расход по плановым и фактическим). Число **«Операций»** в сводке — сумма `meta.total` групп (как в заголовках спойлеров), не `transaction_count` из stats API (тот считает только доход/расход).
+- Общие фильтры (даты, тип, счёт, категория, магазин, тег, поиск) применяются к обеим группам; `TransactionContextStats` учитывает `kind`, если он задан; без `kind` — `include_future=true` (доход/расход по плановым и фактическим). Число **«Операций»** в сводке — сумма `meta.total` групп (как в заголовках спойлеров): перевод один раз, комиссия не отдельно. Это не `transaction_count` из stats API (тот считает только доход/расход).
 - Заголовок страницы — «Все операции» (`transactions.all`); пункт верхнего меню — «Операции» (`nav.transactions`).
+- В списке (`TransactionList`): **магазин** и **теги** — в колонке описания/комментария рядом с `description` (`TransactionMerchantTags`: иконка + имя, chips тегов). Категория отдельно, без магазина/тегов.
 
 ## Операции счёта (`/accounts/[id]`)
 
@@ -132,7 +162,9 @@ OpenAPI: `CreateTransferRequest.commission`, схема `Transfer`.
 
 Иконки — Font Awesome Solid (`f067` доход, `f068` расход, `f0ec` перевод); видимый текст только в `title` / `aria-label`.
 
-`TransactionForm` при **создании**: без вкладок типа; заголовок модалки — «Доход» или «Расход» (`defaultType` из родителя). При **редактировании** — заголовок «Изменить операцию», тип текстом, смена типа запрещена API. Поле **«Новая подкатегория»** под селектом подкатегории показывается **только если** подкатегория в списке не выбрана (`{#if !subcategoryId}`).
+`TransactionForm` при **создании**: без вкладок типа; заголовок модалки — «Доход» или «Расход» (`defaultType` из родителя). При **редактировании** — заголовок «Изменить операцию», тип текстом, смена типа запрещена API. Порядок полей: счёт → категория → подкатегория → сумма → дата → спойлер **«Время, комментарий, магазин, теги»** (`transactions.field.optionalDetails`: время → описание / `description` → магазин → теги). Дата — `DateTimePicker` с `timeMode: optional` и `showOptionalTimeUI={false}` (время в спойлере; если не меняли — текущее / из БД). Спойлер свёрнут по умолчанию; при редактировании/повторе открыт, если заполнены комментарий, магазин или теги. Подкатегория и магазин — единый `Combobox` с `allowCreate`: ввод фильтрует список; точное совпадение выбирает существующее; иначе — создание по имени (`subcategory_name` / `merchant_name`, пункт «Создать «…»»). Теги — chips + ввод с подсказками по тексту (`tag_ids` / `tag_names`). Справочники: `/merchants` и `/tags` (отдельные страницы; поиск по названию в списке). У магазина — иконка из каталога категорий (`CategoryIconPicker`).
+
+**Платёж по кредиту из формы:** при выборе системной «Кредиты» (создание расхода) вместо подкатегории — список активных кредитов; спойлер опциональных полей **не показывается** (магазин, теги, описание скрыты); поле времени вынесено сразу под датой, без `<details>`. Описание платежа задаёт сервер (имя кредита). См. [credit-payment-link.md](../roadmap/credit-payment-link.md).
 
 `TransferForm` — отдельная модалка по кнопке перевода на тех же экранах. **(v1.2.3)** В селектах «Откуда» и «Куда» выбранный в одном поле счёт **не показывается** в другом (`transferAccountOptions` в `$lib/transfer-accounts.ts`); при совпадении значений (например, один активный счёт) поле «Куда» сбрасывается на другой счёт. При создании перевода со **страницы счёта** (`/accounts/[id]`) в «Откуда» подставляется **текущий счёт** (как счёт в `TransactionForm` для дохода/расхода); на главной и в «Все операции» — **основной** счёт (`defaultAccountId` без явного id).
 
@@ -141,7 +173,7 @@ OpenAPI: `CreateTransferRequest.commission`, схема `Transfer`.
 Из списка операций (`TransactionList` — главная, `/transactions`, `/accounts/[id]`) — пункт меню «Изменить» открывает `TransactionForm`:
 
 - API: `PUT /api/v1/transactions/{id}` (`updateTransaction` в клиенте)
-- Можно менять: счёт, категорию, подкатегорию, сумму, описание, дату
+- Можно менять: счёт, категорию, подкатегорию, магазин, теги, сумму, описание, дату
 - **Тип** (`income` / `expense`) не меняется — в форме показывается текстом; при смене типа в теле запроса — `ERR_TX_TYPE_CHANGE`
 - Дата в будущем (в TZ пользователя) → `kind=future` (плановая операция)
 - Операции с `credit_payment_linked` **не** редактируются из списка (`canEditTransaction`)
@@ -156,7 +188,7 @@ OpenAPI: `CreateTransferRequest.commission`, схема `Transfer`.
 
 ## Фильтры
 
-`TransactionFilters` внутри `FilterPanel`: на мобильных — спойлер «Фильтры» с chevron; на десктопе — всегда открыта. Поля с `dateOnlyPicker`: только дата, границы суток — `fromDateLocalStart` / `toDateLocalEnd` (`$lib/dates.ts`) в часовом поясе пользователя. См. [date-time-display.md](date-time-display.md). Используется на `/transactions`, `/stats`, странице счёта.
+`TransactionFilters` внутри `FilterPanel`: на мобильных — спойлер «Фильтры» с chevron; на десктопе — всегда открыта. Поля с `dateOnlyPicker`: только дата, границы суток — `fromDateLocalStart` / `toDateLocalEnd` (`$lib/dates.ts`) в часовом поясе пользователя. Дополнительно: `merchant_id`, `tag_id` (списки из справочников). См. [date-time-display.md](date-time-display.md). Используется на `/transactions`, `/stats`, странице счёта.
 
 Подробнее: [ui-row-actions.md](ui-row-actions.md).
 
@@ -169,7 +201,7 @@ OpenAPI: `CreateTransferRequest.commission`, схема `Transfer`.
 | Счёт | `AccountIcon` (`cash` / `bank` / `credit_card`, логотип банка) |
 | Категория / подкатегория | `CategoryIcon` по slug |
 
-Хелперы: `accountSelectOptions`, `categorySelectOptions`, `subcategorySelectOptions`. Используется в формах операций, переводов, долгов, кредитов, бюджета, фильтрах, импорте, периодических операциях.
+Хелперы: `accountSelectOptions`, `categorySelectOptions`, `subcategorySelectOptions`. В селектах счетов порядок как на главной / `/accounts`: `cash` → `bank` (внутри типа основной первым), затем кредитные карты (`sortAccountsForSelect` → `groupAccountsByType`). Используется в формах операций, переводов, долгов, кредитов, бюджета, фильтрах, импорте, периодических операциях.
 
 ## Пагинация
 
@@ -177,11 +209,13 @@ OpenAPI: `CreateTransferRequest.commission`, схема `Transfer`.
 
 ## Действия в списке операций
 
-`TransactionList` — меню «⋯» в каждой строке (повторить, сделать периодической, изменить, удалить). На мобильных меню в шапке карточки рядом с суммой. Используется на **главной** («Последние операции»), `/transactions`, странице счёта.
+`TransactionList` — меню «⋯» в каждой строке (повторить, сохранить как шаблон, сделать периодической, изменить, удалить). На мобильных меню в шапке карточки рядом с суммой. Используется на **главной** («Последние операции»), `/transactions`, странице счёта. После create/edit/delete — silent reload (`loadAll` / `load` / `onsaved`), не только filter списка: иначе балансы (и вторая нога перевода) не обновляются (см. [ui-stable-layout.md](ui-stable-layout.md)). Android: `afterOnlineWrite` в offline wrappers + `dataRefreshTick` в `finish` форм.
 
 На странице **удалённого** счёта (`/accounts/[id]`, `status = deleted`) в меню операций доступно только **«Повторить»** — см. [accounts-archive-delete.md](accounts-archive-delete.md).
 
 **Повторить (v1.2.3)** — открывает форму **создания** новой операции с полями из выбранной строки (счёт, категория, сумма, описание; для перевода — счета, сумма, комиссия); дата — текущая. Работает для **дохода**, **расхода** и **перевода**. Доход/расход — `TransactionForm` (`repeatFrom`); перевод — `TransferForm` (`repeatFrom`). Недоступно для операций с `credit_payment_linked` и для дохода/расхода в **системных категориях** (как «Сделать периодической»).
+
+**Шаблоны операций (v1.5.0)** — именованные пресеты полей для быстрого ручного создания (не scheduler). Управление: `/transaction-templates` (web — «Прочее»; Android — левое меню; в меню строки — «Создать операцию»). На главной — спойлер «Шаблоны» (`CollapsibleSection`, **свёрнут по умолчанию**) в едином стиле с группами счетов / «Последние операции», **перед** спойлером бюджета (скрыт, если шаблонов нет); тап по шаблону → форма с prefill (`repeatFrom` / `?template=`). Из журнала — «Сохранить как шаблон» (те же ограничения, что у «Повторить»). API: `/api/v1/transaction-templates`. План: [transaction-templates.md](../roadmap/transaction-templates.md).
 
 ## Категории с одинаковым именем
 
@@ -193,14 +227,18 @@ OpenAPI: `CreateTransferRequest.commission`, схема `Transfer`.
 
 **Отображение сумм в UI:** компонент `MoneyDisplay.svelte` (`web/src/lib/components/MoneyDisplay.svelte`) — единая точка для read-only сумм. Принимает `value` (строка `_display` из API), `cents` (копейки) и опционально `currency` (добавляет символ валюты, например `₽`). Логика форматирования — в `$lib/money-display.ts` (`formatMoneyForDisplay`); для интерполяции в i18n (`tr(..., { values: { amount } })`) используйте ту же функцию.
 
+Валюта сейчас берётся из `users.currency` (**только отображение**). Учёт нескольких валют на счетах — план: [multicurrency.md](../roadmap/multicurrency.md).
+
 **Ввод:** компонент `MoneyInput.svelte` — при вводе курсор сохраняется при форматировании (`mapMoneyInputCursor`).
 
 **Поля ввода суммы (v1.2.3):** пустое значение и ноль не показываются как `0.00` — поле остаётся пустым, подсказка `placeholder="0.00"`. При потере фокуса нулевой ввод очищается (`formatMoneyInput`). Для подстановки значений из API в формы используйте `formatMoneyForInput`, не `formatMoneyDisplay`.
 
+**Калькулятор +/− в поле суммы:** можно ввести выражение вроде `7899+500` или `100+200-50` (разделители тысяч и десятичная точка/запятая допустимы). При blur и при сохранении (`toCents` / `toAPIAmount`) выражение считается в копейках и подставляется результат (`8 399.00`). Во время ввода операторы сохраняются (`formatMoneyLive`). Неполное выражение (`7899+`) результат не подставляет. То же в Android UI (`android/ui` — тот же `money.ts`).
+
 ## Тесты
 
 - `TestTransferRollbackOnError` — атомарность перевода при сбое второй ноги (SQLite-триггер в интеграционном тесте).
-- `money.test.ts` — стабильность курсора в `MoneyInput`, `formatMoneyForInput` / `formatMoneyInput` (ноль → пусто).
+- `money.test.ts` — стабильность курсора в `MoneyInput`, `formatMoneyForInput` / `formatMoneyInput` (ноль → пусто), выражения `+/−`.
 - `money-display.test.ts` — `formatMoneyForDisplay` (разделитель тысяч, валюта).
 - `accounts.test.ts` — `defaultAccountId` (контекстный счёт vs основной).
 - `select-options.test.ts` — иконки и подписи опций селектов.

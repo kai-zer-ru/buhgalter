@@ -8,8 +8,13 @@ test.describe.configure({ mode: 'serial' });
 
 async function createRecurring(page: import('@playwright/test').Page, description: string) {
 	const account = await createCashAccount(page);
-	await page.goto('/settings/recurring-operations');
+	await page.goto('/recurring-operations');
 	await waitAppReady(page);
+	const header = page
+		.locator('div')
+		.filter({ has: page.getByRole('heading', { name: 'Периодические операции', level: 1 }) })
+		.filter({ has: page.getByRole('button', { name: 'Добавить' }) });
+	await expect(header.first()).toBeVisible();
 	await page.getByRole('button', { name: 'Добавить' }).click();
 	await page.locator('#recurring-amount-create').fill('55');
 	await page.locator('#recurring-description-create').fill(description);
@@ -25,31 +30,28 @@ test('create recurring uses 08:00 local time by default', async ({ page }) => {
 	const account = await createCashAccount(page);
 	const description = `E2E Rec Time ${Date.now()}`;
 
-	await page.goto('/settings/recurring-operations');
+	await page.goto('/recurring-operations');
 	await waitAppReady(page);
-
-	let postedTime = '';
-	await page.route('**/api/v1/recurring-operations', async (route) => {
-		if (route.request().method() !== 'POST') {
-			await route.continue();
-			return;
-		}
-		const body = route.request().postDataJSON() as { time_local?: string };
-		postedTime = body.time_local ?? '';
-		await route.continue();
-	});
 
 	await page.getByRole('button', { name: 'Добавить' }).click();
 	await page.locator('#recurring-amount-create').fill('42');
 	await page.locator('#recurring-description-create').fill(description);
 	await selectLabeledCombobox(page, 'Счёт', { label: account.name });
 	await selectLabeledCombobox(page, 'Категория', { index: 0 });
+
+	// waitForRequest is race-free vs page.route + side-effect flag (flaky empty postedTime).
+	const postPromise = page.waitForRequest((req) => {
+		if (req.method() !== 'POST') return false;
+		const path = new URL(req.url()).pathname.replace(/\/$/, '');
+		return path.endsWith('/api/v1/recurring-operations');
+	});
 	await page.getByRole('button', { name: 'Создать' }).click();
+	const body = (await postPromise).postDataJSON() as { time_local?: string };
+	expect(body.time_local).toBe('08:00');
 
 	await expect(page.getByRole('row', { name: new RegExp(description) })).toBeVisible({
 		timeout: 10_000
 	});
-	expect(postedTime).toBe('08:00');
 });
 
 test('edit recurring operation inline', async ({ page }) => {
@@ -84,7 +86,7 @@ test('create weekly recurring with weekday selector', async ({ page }) => {
 	const account = await createCashAccount(page);
 	const description = `E2E Weekly ${Date.now()}`;
 
-	await page.goto('/settings/recurring-operations');
+	await page.goto('/recurring-operations');
 	await waitAppReady(page);
 	await page.getByRole('button', { name: 'Добавить' }).click();
 	await page.locator('#recurring-amount-create').fill('33');

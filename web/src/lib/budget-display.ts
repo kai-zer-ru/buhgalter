@@ -1,6 +1,6 @@
-import type { BudgetSummaryItem } from '$lib/api/client';
+import type { BudgetScope, BudgetSummaryItem } from '$lib/api/client';
 import { tr } from '$lib/i18n';
-import { formatMoneyDisplay, fromCents } from '$lib/money';
+import { formatMoneyDisplay, fromCents } from './money';
 
 type BudgetStatusFields = Pick<
 	BudgetSummaryItem,
@@ -35,4 +35,21 @@ export function budgetRemainingCell(item: BudgetStatusFields): string {
 		});
 	}
 	return formatMoneyDisplay(item.remaining_display);
+}
+
+/** True when create/edit form can load spent preview for the selected scope. */
+export function budgetSpentPreviewReady(
+	scope: BudgetScope,
+	categoryId: string,
+	subcategoryId: string
+): boolean {
+	if (scope === 'all_expense') return true;
+	if (scope === 'category') return categoryId !== '';
+	if (scope === 'subcategory') return subcategoryId !== '';
+	return false;
+}
+
+/** Show spent hint only for current or past month (YYYY-MM lexicographic compare). */
+export function isBudgetMonthSpentPreviewable(month: string, currentMonth: string): boolean {
+	return month <= currentMonth;
 }

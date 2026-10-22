@@ -40,6 +40,10 @@ func (b balanceLookup) currentBalance(ctx context.Context, accountID string) (in
 	return acc.CurrentBalance, true
 }
 
+// formatWithBalanceShortfall appends the shortfall suffix when the account cannot cover expenseAmount.
+// shortfallData is non-nil only when the suffix was applied; it carries shortfall-specific
+// placeholders ({amount}, {account_url}) for the balance_shortfall keyboard zone so merge does not
+// reuse the main trigger's amount.
 func formatWithBalanceShortfall(
 	ctx context.Context,
 	lookup balanceLookup,
@@ -49,20 +53,25 @@ func formatWithBalanceShortfall(
 	mainText string,
 	accountID string,
 	expenseAmount int64,
-) (string, error) {
+	externalURL string,
+) (text string, shortfallData FormatData, err error) {
 	if !enabled || expenseAmount <= 0 {
-		return mainText, nil
+		return mainText, nil, nil
 	}
 	balance, ok := lookup.currentBalance(ctx, accountID)
 	if !ok || balance >= expenseAmount {
-		return mainText, nil
+		return mainText, nil, nil
 	}
 	shortfall := expenseAmount - balance
-	suffix, err := Format(TriggerBalanceShortfall, localeCode, customMap[TriggerBalanceShortfall], FormatData{
-		"amount": FormatAmountDisplay(shortfall, currencyCode),
-	})
-	if err != nil {
-		return mainText, err
+	amountDisplay := FormatAmountDisplay(shortfall, currencyCode)
+	accountURL := accountURLPlaceholderValue(externalURL, localeCode, accountID)
+	data := FormatData{
+		"amount":      amountDisplay,
+		"account_url": accountURL,
 	}
-	return mainText + ". " + suffix, nil
+	suffix, err := Format(TriggerBalanceShortfall, localeCode, customMap[TriggerBalanceShortfall], data)
+	if err != nil {
+		return mainText, nil, err
+	}
+	return mainText + ". " + suffix, data, nil
 }

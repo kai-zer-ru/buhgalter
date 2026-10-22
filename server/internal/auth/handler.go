@@ -10,7 +10,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/apperror"
 	"github.com/kai-zer-ru/buhgalter/internal/audit"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
-	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/features"
 	appmw "github.com/kai-zer-ru/buhgalter/internal/middleware"
 	"github.com/kai-zer-ru/buhgalter/internal/notify"
 )
@@ -144,12 +144,12 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
-	enabled, err := sqlcdb.New(h.Store.DB()).GetRegistrationEnabled(r.Context())
+	enabled, err := features.IsEnabled(r.Context(), h.Store.DB(), features.Registration)
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
-	if enabled != 1 {
+	if !enabled {
 		apperror.WriteR(w, r, http.StatusForbidden, apperror.RegistrationDisabled)
 		return
 	}

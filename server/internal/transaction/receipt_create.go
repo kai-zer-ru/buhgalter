@@ -53,6 +53,8 @@ func CreateWithReceipt(ctx context.Context, db sqlcdb.DBTX, userID string, in Re
 		ReceiptItemIndex:  in.ReceiptItemIndex,
 		TransactionDate:   txDate,
 		AffectsBalance:    1,
+		SubscriptionID:    nil,
+		MerchantID:        nil,
 		CreatedAt:         now,
 		UpdatedAt:         now,
 	}); err != nil {
@@ -81,7 +83,7 @@ func resolveKindTx(ctx context.Context, db sqlcdb.DBTX, userID string, txDate ti
 
 // RefreshAccountBalances updates cached balances after batch receipt import.
 func RefreshAccountBalances(ctx context.Context, db *sql.DB, userID string, accountIDs ...string) error {
-	return refreshAccountBalances(ctx, db, userID, accountIDs...)
+	return refreshAccountBalances(ctx, db, userID, timeutil.NowUTC(), accountIDs...)
 }
 
 // ValidateActiveAccount checks account is active before receipt import.

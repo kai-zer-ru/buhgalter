@@ -27,7 +27,23 @@
 		type SubcategoryMappingSuggestion,
 		type ImportReport
 	} from '$lib/api/client';
+	import { invalidateApiCache } from '$lib/api/cache';
 	import { confirm } from '$lib/confirm';
+	import {
+		clearStoredImportJob,
+		isRetriableImportJobPollError,
+		readStoredImportJobSnapshot,
+		restoreStepFromSnapshot,
+		shouldApplyImportProgress,
+		writeStoredImportJob,
+		type StoredImportJobSnapshot
+	} from '$lib/import-job-poll';
+	import { clearRefCache, markLocalMutation } from '$lib/ref-cache';
+	import {
+		clearImportRealtimeEvent,
+		peekImportRealtimeEvent,
+		subscribeImportRealtime
+	} from '$lib/realtime';
 	import { randomId } from '$lib/random-id';
 	import { toast } from '$lib/toast';
 	import {
@@ -60,18 +76,30 @@
 		| 'importing'
 		| 'done';
 	type Tab = 'import' | 'export';
-	const ACTIVE_IMPORT_JOB_ID_KEY = 'buhgalter.active_import_job_id';
 
+	function jobFromSnapshot(s: StoredImportJobSnapshot): ImportJob {
+		return {
+			id: s.id,
+			filename: s.filename,
+			status: s.status,
+			created_at: s.created_at,
+			started_at: s.started_at,
+			error_message: s.error_message,
+			report: s.report as ImportReport | undefined
+		};
+	}
+
+	const storedImport = readStoredImportJobSnapshot();
 	let tab = $state<Tab>('import');
-	let step = $state<Step>('upload');
+	let step = $state<Step>(restoreStepFromSnapshot(storedImport));
 	let file = $state<File | null>(null);
-	let preset = $state<'cubux' | 'custom'>('cubux');
+	let preset = $state<'buhgalter' | 'cubux' | 'custom'>('buhgalter');
 	let deduplicate = $state(true);
 	let dragOver = $state(false);
 	let loading = $state(false);
 	let report = $state<ImportReport | null>(null);
 	let finalReport = $state<ImportReport | null>(null);
-	let importJob = $state<ImportJob | null>(null);
+	let importJob = $state<ImportJob | null>(storedImport ? jobFromSnapshot(storedImport) : null);
 	let importPollingToken = 0;
 	let accounts = $state<Account[]>([]);
 	let banks = $state<Bank[]>([]);
@@ -89,8 +117,20 @@
 	let exportTo = $state(new Date().toISOString().slice(0, 10));
 	let exportAccountId = $state('');
 	let exportCategoryId = $state('');
+	let exportFormat = $state<'buhgalter' | 'cubux'>('buhgalter');
 
-	onMount(async () => {
+	onMount(() => {
+		// Sync (not $effect): import.done must apply before the next WS frame (invalidate).
+		const unsubImport = subscribeImportRealtime((ev) => handleImportRealtime(ev));
+		void restoreActiveImportJob();
+		void loadExportCatalogs();
+		return () => {
+			unsubImport();
+			importPollingToken++;
+		};
+	});
+
+	async function loadExportCatalogs() {
 		try {
 			[accounts, banks] = await Promise.all([listAccounts(), listBanks()]);
 			const [expense, income] = await Promise.all([
@@ -101,15 +141,10 @@
 		} catch {
 			// optional for filters
 		}
-		void restoreActiveImportJob();
-	});
-
-	function saveActiveImportJobID(jobID: string) {
-		localStorage.setItem(ACTIVE_IMPORT_JOB_ID_KEY, jobID);
 	}
 
-	function clearActiveImportJobID() {
-		localStorage.removeItem(ACTIVE_IMPORT_JOB_ID_KEY);
+	function persistImportJob(job: ImportJob) {
+		writeStoredImportJob(job);
 	}
 
 	function emptyReport(): ImportReport {
@@ -129,28 +164,53 @@
 		};
 	}
 
+	function journalRows(r: ImportReport | null | undefined): number {
+		if (!r) return 0;
+		if ((r.list_rows ?? 0) > 0) return r.list_rows ?? 0;
+		return r.valid_rows ?? 0;
+	}
+
+	function confirmImportMessage(r: ImportReport | null): string {
+		const rows = r?.valid_rows ?? 0;
+		const journal = journalRows(r);
+		if (journal > rows) {
+			return $_('import.confirm.message_journal', { values: { rows, journal } });
+		}
+		return $_('import.confirm.message', { values: { count: rows } });
+	}
+
 	async function restoreActiveImportJob() {
-		const jobID = localStorage.getItem(ACTIVE_IMPORT_JOB_ID_KEY);
+		const jobID = readStoredImportJobSnapshot()?.id;
 		if (!jobID) return;
 		try {
 			const current = await getImportJob(jobID);
 			importJob = current;
+			persistImportJob(current);
 			if (current.status === 'queued' || current.status === 'running') {
 				step = 'importing';
-				void pollImportJob(jobID);
+				watchImportJob(jobID);
 				return;
 			}
 			if (current.status === 'done') {
 				finalReport = normalizeImportReport(current.report ?? emptyReport());
 				step = 'done';
+				return;
 			}
 			if (current.status === 'failed') {
 				toast.error(current.error_message ?? $_('common.error'));
+				step = 'importing';
 			}
-		} catch {
-			// stale or unavailable job id, ignore and reset persisted state
-		} finally {
-			clearActiveImportJobID();
+		} catch (err) {
+			if (isRetriableImportJobPollError(err)) {
+				step = 'importing';
+				watchImportJob(jobID);
+				return;
+			}
+			clearStoredImportJob();
+			if (step === 'importing') {
+				importJob = null;
+				step = 'upload';
+			}
 		}
 	}
 
@@ -360,7 +420,8 @@
 				account_id: m.account_id,
 				account_type: m.account_type ?? 'cash',
 				bank_id: m.bank_id,
-				credit_limit: m.credit_limit
+				credit_limit: m.credit_limit,
+				initial_balance: m.initial_balance
 			};
 		}
 		accountMap = next;
@@ -375,7 +436,9 @@
 				[fileName]: {
 					mode: 'create',
 					account_type: prev?.account_type ?? suggestion?.account_type ?? 'cash',
-					bank_id: prev?.bank_id ?? suggestion?.bank_id
+					bank_id: prev?.bank_id ?? suggestion?.bank_id,
+					credit_limit: prev?.credit_limit ?? suggestion?.credit_limit,
+					initial_balance: prev?.initial_balance ?? suggestion?.initial_balance
 				}
 			};
 			return;
@@ -401,7 +464,8 @@
 				mode: 'create',
 				account_type: accountType,
 				bank_id: bankDefault,
-				credit_limit: accountType === 'credit_card' ? prev?.credit_limit : undefined
+				credit_limit: accountType === 'credit_card' ? prev?.credit_limit : undefined,
+				initial_balance: prev?.initial_balance ?? suggestion?.initial_balance
 			}
 		};
 	}
@@ -414,7 +478,8 @@
 				mode: 'create',
 				account_type: prev?.account_type ?? 'bank',
 				bank_id: bankId,
-				credit_limit: prev?.credit_limit
+				credit_limit: prev?.credit_limit,
+				initial_balance: prev?.initial_balance
 			}
 		};
 	}
@@ -427,7 +492,8 @@
 				mode: 'create',
 				account_type: 'credit_card',
 				bank_id: prev?.bank_id ?? banks[0]?.id ?? '',
-				credit_limit: creditLimit
+				credit_limit: creditLimit,
+				initial_balance: prev?.initial_balance
 			}
 		};
 	}
@@ -439,7 +505,8 @@
 			account_id: entry?.account_id ?? m.account_id ?? '',
 			account_type: entry?.account_type ?? m.account_type ?? 'cash',
 			bank_id: entry?.bank_id ?? m.bank_id ?? '',
-			credit_limit: entry?.credit_limit ?? m.credit_limit ?? ''
+			credit_limit: entry?.credit_limit ?? m.credit_limit ?? '',
+			initial_balance: entry?.initial_balance ?? m.initial_balance ?? ''
 		};
 	}
 
@@ -456,7 +523,8 @@
 								entry.account_type === 'bank' || entry.account_type === 'credit_card'
 									? entry.bank_id
 									: undefined,
-							credit_limit: entry.account_type === 'credit_card' ? entry.credit_limit : undefined
+							credit_limit: entry.account_type === 'credit_card' ? entry.credit_limit : undefined,
+							initial_balance: entry.initial_balance
 						}
 					: { mode: 'existing', account_id: entry.account_id };
 		}
@@ -644,42 +712,138 @@
 		return new Promise<void>((resolve) => setTimeout(resolve, ms));
 	}
 
+	function watchedImportJobID(): string | null {
+		return importJob?.id ?? readStoredImportJobSnapshot()?.id ?? null;
+	}
+
+	function finishImportDone(report: ImportReport | undefined | null) {
+		if (step === 'done' && finalReport) return;
+		finalReport = normalizeImportReport(report ?? emptyReport());
+		// Mark before invalidateAfterImport / before the next WS invalidate frame.
+		markLocalMutation();
+		importPollingToken++;
+		invalidateAfterImport();
+		step = 'done';
+		toast($_('import.done.title'));
+	}
+
+	function handleImportRealtime(ev: {
+		type: string;
+		job_id: string;
+		status: ImportJob['status'];
+		report?: ImportReport;
+		error_message?: string;
+	}) {
+		if (ev.job_id !== watchedImportJobID()) return;
+
+		if (ev.type === 'import.progress') {
+			if (!shouldApplyImportProgress({ step, jobStatus: importJob?.status })) return;
+			const base =
+				importJob ??
+				(readStoredImportJobSnapshot() ? jobFromSnapshot(readStoredImportJobSnapshot()!) : null);
+			if (!base) return;
+			importJob = {
+				...base,
+				status: 'running',
+				report: ev.report ?? base.report
+			};
+			persistImportJob(importJob);
+			if (step !== 'importing') step = 'importing';
+			return;
+		}
+
+		if (ev.type === 'import.done') {
+			const base =
+				importJob ??
+				(readStoredImportJobSnapshot() ? jobFromSnapshot(readStoredImportJobSnapshot()!) : null);
+			if (!base) return;
+			importJob = {
+				...base,
+				status: 'done',
+				report: ev.report ?? base.report
+			};
+			persistImportJob(importJob);
+			finishImportDone(ev.report ?? base.report);
+			clearImportRealtimeEvent(ev.job_id);
+			return;
+		}
+
+		if (ev.type === 'import.failed') {
+			const base =
+				importJob ??
+				(readStoredImportJobSnapshot() ? jobFromSnapshot(readStoredImportJobSnapshot()!) : null);
+			if (base) {
+				importJob = {
+					...base,
+					status: 'failed',
+					error_message: ev.error_message ?? base.error_message
+				};
+				persistImportJob(importJob);
+			}
+			markLocalMutation();
+			importPollingToken++;
+			invalidateAfterImport();
+			toast.error(ev.error_message ?? $_('common.error'));
+			step = file ? 'preview' : 'importing';
+			clearImportRealtimeEvent(ev.job_id);
+		}
+	}
+
 	async function pollImportJob(jobId: string) {
 		const token = ++importPollingToken;
 		while (token === importPollingToken) {
 			try {
 				const current = await getImportJob(jobId);
 				importJob = current;
+				persistImportJob(current);
 				if (current.status === 'done') {
-					finalReport = normalizeImportReport(current.report ?? emptyReport());
-					clearActiveImportJobID();
-					step = 'done';
-					toast($_('import.done.title'));
+					finishImportDone(current.report);
+					clearImportRealtimeEvent(jobId);
 					return;
 				}
 				if (current.status === 'failed') {
-					clearActiveImportJobID();
+					if (step === 'preview' || step === 'upload' || step === 'done') return;
+					markLocalMutation();
+					importPollingToken++;
+					invalidateAfterImport();
 					toast.error(current.error_message ?? $_('common.error'));
-					step = 'preview';
+					step = file ? 'preview' : 'importing';
+					clearImportRealtimeEvent(jobId);
 					return;
 				}
 			} catch (err) {
-				clearActiveImportJobID();
-				toast.fromError(err);
-				step = 'preview';
-				return;
+				if (!isRetriableImportJobPollError(err)) {
+					clearStoredImportJob();
+					toast.fromError(err);
+					step = file ? 'preview' : 'upload';
+					return;
+				}
 			}
+			// Socket accelerates completion; poll remains fallback (1.2s).
 			await sleep(1200);
 		}
+	}
+
+	function invalidateAfterImport() {
+		invalidateApiCache();
+		clearRefCache({ preserveAuthMe: true });
+	}
+
+	function watchImportJob(jobId: string) {
+		const pending = peekImportRealtimeEvent(jobId);
+		if (pending) {
+			handleImportRealtime(pending);
+		}
+		if (step === 'done' && finalReport) return;
+		if (importJob?.status === 'failed') return;
+		void pollImportJob(jobId);
 	}
 
 	async function runImport() {
 		if (!file) return;
 		const ok = await confirm({
 			title: $_('import.confirm.title'),
-			message: $_('import.confirm.message', {
-				values: { count: report?.valid_rows ?? 0 }
-			}),
+			message: confirmImportMessage(report),
 			confirmLabel: $_('import.confirm.apply')
 		});
 		if (!ok) return;
@@ -693,10 +857,10 @@
 				...importOpts(),
 				idempotencyKey: importAttemptKey
 			});
-			saveActiveImportJobID(importJob.id);
+			persistImportJob(importJob);
 			step = 'importing';
 			loading = false;
-			void pollImportJob(importJob.id);
+			watchImportJob(importJob.id);
 		} catch (err) {
 			toast.fromError(err);
 			loading = false;
@@ -710,7 +874,7 @@
 		finalReport = null;
 		importJob = null;
 		importPollingToken++;
-		clearActiveImportJobID();
+		clearStoredImportJob();
 		fileHeaders = [];
 		columnMap = {};
 		accountMap = {};
@@ -824,24 +988,43 @@
 	{#if tab === 'export'}
 		<div class="card space-y-4">
 			<h2 class="text-lg font-medium">{$_('import.export.title')}</h2>
-			<div class="grid gap-4 sm:grid-cols-2">
-				<DateTimePicker
-					label={$_('import.export.from')}
-					bind:value={exportFrom}
-					{...dateOnlyPicker}
-				/>
-				<DateTimePicker label={$_('import.export.to')} bind:value={exportTo} {...dateOnlyPicker} />
+			<div class="space-y-2">
+				<p class="text-sm font-medium">{$_('import.export.format')}</p>
+				<label class="flex items-center gap-2">
+					<input type="radio" bind:group={exportFormat} value="buhgalter" />
+					<span>{$_('import.export.format_buhgalter')}</span>
+				</label>
+				<label class="flex items-center gap-2">
+					<input type="radio" bind:group={exportFormat} value="cubux" />
+					<span>{$_('import.export.format_cubux')}</span>
+				</label>
 			</div>
-			<Select
-				label={$_('import.export.account')}
-				bind:value={exportAccountId}
-				options={exportAccountOptions}
-			/>
-			<Select
-				label={$_('import.export.category')}
-				bind:value={exportCategoryId}
-				options={exportCategoryOptions}
-			/>
+			{#if exportFormat === 'buhgalter'}
+				<p class="text-sm" style:color="var(--text-muted)">{$_('import.export.buhgalter_full')}</p>
+			{:else}
+				<div class="grid gap-4 sm:grid-cols-2">
+					<DateTimePicker
+						label={$_('import.export.from')}
+						bind:value={exportFrom}
+						{...dateOnlyPicker}
+					/>
+					<DateTimePicker
+						label={$_('import.export.to')}
+						bind:value={exportTo}
+						{...dateOnlyPicker}
+					/>
+				</div>
+				<Select
+					label={$_('import.export.account')}
+					bind:value={exportAccountId}
+					options={exportAccountOptions}
+				/>
+				<Select
+					label={$_('import.export.category')}
+					bind:value={exportCategoryId}
+					options={exportCategoryOptions}
+				/>
+			{/if}
 			<button
 				type="button"
 				class="btn-primary inline-flex"
@@ -850,7 +1033,8 @@
 						from: exportFrom.split('T')[0],
 						to: exportTo.split('T')[0],
 						account_id: exportAccountId || undefined,
-						category_id: exportCategoryId || undefined
+						category_id: exportCategoryId || undefined,
+						format: exportFormat
 					});
 				}}
 			>
@@ -886,6 +1070,10 @@
 		{:else if step === 'settings'}
 			<div class="card space-y-4">
 				<p class="text-sm" style:color="var(--text-muted)">{file?.name}</p>
+				<label class="flex items-center gap-2">
+					<input type="radio" bind:group={preset} value="buhgalter" />
+					<span>{$_('import.settings.preset_buhgalter')}</span>
+				</label>
 				<label class="flex items-center gap-2">
 					<input type="radio" bind:group={preset} value="cubux" />
 					<span>{$_('import.settings.preset_cubux')}</span>
@@ -1326,6 +1514,10 @@
 				>
 					<span>{$_('import.preview.total')}: {report.total_rows}</span>
 					<span>{$_('import.preview.valid')}: {report.valid_rows}</span>
+					<span>{$_('import.preview.journal')}: {journalRows(report)}</span>
+					{#if (report.transfer_rows ?? 0) > 0}
+						<span>{$_('import.preview.transfers')}: {report.transfer_rows}</span>
+					{/if}
 					<span>{$_('import.preview.duplicates')}: {report.skipped_duplicates}</span>
 					<span>{$_('import.preview.errors')}: {(report.errors ?? []).length}</span>
 				</div>
@@ -1379,12 +1571,21 @@
 				>
 					<span>{$_('import.preview.total')}: {finalReport.total_rows}</span>
 					<span>{$_('import.preview.valid')}: {finalReport.valid_rows}</span>
+					<span>{$_('import.preview.journal')}: {journalRows(finalReport)}</span>
+					{#if (finalReport.transfer_rows ?? 0) > 0}
+						<span>{$_('import.preview.transfers')}: {finalReport.transfer_rows}</span>
+					{/if}
 					<span>{$_('import.preview.duplicates')}: {finalReport.skipped_duplicates}</span>
 					<span>{$_('import.preview.errors')}: {(finalReport.errors ?? []).length}</span>
 				</div>
 				<p>
 					{$_('import.done.created', { values: { count: finalReport.created_transactions ?? 0 } })}
 				</p>
+				{#if journalRows(finalReport) > (finalReport.created_transactions ?? finalReport.valid_rows)}
+					<p class="text-sm" style:color="var(--text-muted)">
+						{$_('import.done.journal', { values: { count: journalRows(finalReport) } })}
+					</p>
+				{/if}
 				<p class="text-sm" style:color="var(--text-muted)">
 					{$_('import.done.skipped', { values: { count: finalReport.skipped_duplicates } })}
 				</p>

@@ -8,79 +8,89 @@ on:
 permissions:
   contents: write
   packages: write
+  # GHA cache for docker/build-push-action (cache-from/cache-to type=gha)
+  actions: write
 
 jobs:
-  test:
+  android-apk:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          clean: false
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.26.4'
-          cache-dependency-path: server/go.sum
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: web/package-lock.json
-      - run: go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1
-      - run: make sqlc-check inline-sql-check openapi-check
-      - run: python3 scripts/build_category_icons_json.py
-      - run: npm ci
-        working-directory: web
-      - run: npm run lint && npm run check
-        working-directory: web
-      - run: go test ./...
-        working-directory: server
-
-  goreleaser:
-    needs: [test]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+          cache-dependency-path: android/ui/package-lock.json
+      - uses: actions/setup-java@v6
         with:
-          fetch-depth: 0
-      - uses: actions/setup-go@v5
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v4
         with:
-          go-version: '1.26.4'
-          cache-dependency-path: server/go.sum
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-      - name: Changelog section for release header
+          # compileSdk/targetSdk 36 — without these AGP may fail or hang downloading SDK
+          packages: 'tools platform-tools platforms;android-36 build-tools;36.0.0'
+      - name: Install Pillow (android-icons.py)
+        run: pip3 install --user Pillow
+      - name: Prepare release keystore
         run: |
-          NOTES="$(bash scripts/extract-release-notes.sh --stdout)"
-          {
-            echo 'RELEASE_CHANGELOG<<EOF'
-            printf '%s\n' "$NOTES"
-            echo 'EOF'
-          } >> "$GITHUB_ENV"
-      - uses: goreleaser/goreleaser-action@v6
+          if [ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/buhgalter-release.jks"
+            echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/buhgalter-release.jks" >> "$GITHUB_ENV"
+            echo "ANDROID_KEYSTORE_PASSWORD=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" >> "$GITHUB_ENV"
+            echo "ANDROID_KEY_ALIAS=${{ secrets.ANDROID_KEY_ALIAS }}" >> "$GITHUB_ENV"
+            echo "ANDROID_KEY_PASSWORD=${{ secrets.ANDROID_KEY_PASSWORD }}" >> "$GITHUB_ENV"
+          else
+            mkdir -p "$HOME/.android"
+            if [ ! -f "$HOME/.android/debug.keystore" ]; then
+              keytool -genkey -v -keystore "$HOME/.android/debug.keystore" -storepass android \
+                -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 \
+                -dname "CN=Android Debug,O=Android,C=US"
+            fi
+            echo "::warning::ANDROID_KEYSTORE_BASE64 not set — APK signed with debug keystore"
+          fi
+      - name: Write android/local.properties
+        run: |
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          if [ -z "$SDK" ] || [ ! -d "$SDK" ]; then
+            echo "ERROR: ANDROID_SDK_ROOT/ANDROID_HOME not set or missing: '$SDK'"
+            exit 1
+          fi
+          # Gradle local.properties needs escaped Windows paths; on Linux plain path is fine.
+          printf 'sdk.dir=%s\n' "$SDK" > android/local.properties
+          echo "sdk.dir=$SDK"
+          ls "$SDK/platforms" || true
+          ls "$SDK/build-tools" || true
+      - name: Build release APK
+        run: |
+          set -euxo pipefail
+          echo "JAVA_HOME=${JAVA_HOME:?JAVA_HOME must be set by setup-java}"
+          java -version
+          test -f android/local.properties
+          cat android/local.properties
+          make android-apk-release
+      - name: Verify release APKs
+        run: bash scripts/verify-android-release-apks.sh
+      - uses: actions/upload-artifact@v7
         with:
-          distribution: goreleaser
-          version: '~> v2'
-          args: release --clean
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: android-apk-release
+          # Upload the directory (not file paths from repo root) so download
+          # places APKs flat under android/app/build/outputs/apk/release/.
+          path: android/app/build/outputs/apk/release/
+          if-no-files-found: error
 
   docker:
-    needs: [test]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: actions/checkout@v7
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ghcr.io/kai-zer-ru/buhgalter
           tags: |
@@ -94,7 +104,7 @@ jobs:
           TAG="$(bash scripts/resolve-release-tag.sh)"
           echo "semver=${TAG#v}" >> "$GITHUB_OUTPUT"
           echo "time=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> "$GITHUB_OUTPUT"
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           context: .
           file: docker/Dockerfile
@@ -102,6 +112,15 @@ jobs:
           push: true
           # BuildKit provenance attestation manifests show as unknown/unknown on GHCR.
           provenance: false
+          # Persist layers across release tags (npm/go downloads + compile caches).
+          # GHA cache is fast but may expire between infrequent releases; registry
+          # cache on GHCR is the durable fallback. Stable scopes/refs so tags share cache.
+          cache-from: |
+            type=gha,scope=buhgalter-docker
+            type=registry,ref=ghcr.io/kai-zer-ru/buhgalter:buildcache
+          cache-to: |
+            type=gha,mode=max,scope=buhgalter-docker
+            type=registry,ref=ghcr.io/kai-zer-ru/buhgalter:buildcache,mode=max
           build-args: |
             VERSION=${{ steps.build.outputs.semver }}
             INSTALL_METHOD=docker
@@ -109,3 +128,41 @@ jobs:
             BUILD_TIME=${{ steps.build.outputs.time }}
           labels: ${{ steps.meta.outputs.labels }}
           tags: ${{ steps.meta.outputs.tags }}
+
+  goreleaser:
+    needs: [android-apk, docker]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v8
+        with:
+          name: android-apk-release
+          path: android/app/build/outputs/apk/release/
+      - name: Verify downloaded APKs for goreleaser
+        run: bash scripts/verify-android-release-apks.sh
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.4'
+          cache-dependency-path: server/go.sum
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Changelog section for release header
+        run: |
+          NOTES="$(bash scripts/extract-release-notes.sh --stdout)"
+          {
+            echo 'RELEASE_CHANGELOG<<EOF'
+            printf '%s\n' "$NOTES"
+            echo 'EOF'
+          } >> "$GITHUB_ENV"
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

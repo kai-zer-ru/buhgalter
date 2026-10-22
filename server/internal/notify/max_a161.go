@@ -31,7 +31,7 @@ func (n *MaxA161Notifier) ValidateConfig() error {
 	return nil
 }
 
-func (n *MaxA161Notifier) Send(ctx context.Context, recipient string, text string) error {
+func (n *MaxA161Notifier) Send(ctx context.Context, recipient string, text string, keyboard *InlineKeyboard) error {
 	if err := n.ValidateConfig(); err != nil {
 		return err
 	}
@@ -50,8 +50,12 @@ func (n *MaxA161Notifier) Send(ctx context.Context, recipient string, text strin
 	if err != nil {
 		return err
 	}
-	body, _ := json.Marshal(map[string]string{"text": text})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	body := map[string]any{"text": text}
+	if att := keyboard.ToMaxInlineKeyboardAttachment(); att != nil {
+		body["attachments"] = []any{att}
+	}
+	payload, _ := json.Marshal(body)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
 		return err
 	}

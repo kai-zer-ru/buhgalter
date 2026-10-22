@@ -12,6 +12,8 @@
 		type Account,
 		type Category,
 		type Store,
+		type Merchant,
+		type Tag,
 		type Transaction
 	} from '$lib/api/client';
 	import { accountsFromUIMeta } from '$lib/select-options';
@@ -29,6 +31,15 @@
 	import { user } from '$lib/stores/auth';
 	import { fromDateLocalEnd, fromDateLocalStart } from '$lib/dates';
 	import { dedupeTransferLegs } from '$lib/transaction-display';
+	import { saveTransactionAsTemplate } from '$lib/save-transaction-template';
+	import { refCacheReady, refCacheUpdate } from '$lib/ref-cache';
+	import { refCacheUpdateMatches } from '$lib/ref-cache-watch';
+	import { reportPageLoadFailure } from '$lib/page-load';
+	import { assignIfChanged } from '$lib/state-utils';
+	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
+	import PullToRefresh from '$lib/components/PullToRefresh.svelte';
+
+	const UI_META_PATH = '/api/v1/ui/meta';
 
 	let transactions = $state<Transaction[]>([]);
 	let total = $state(0);
@@ -40,8 +51,9 @@
 	let plannedLoading = $state(false);
 	let page = $state(1);
 	const limit = 20;
-	let loading = $state(true);
+	let loading = $state(!refCacheReady(UI_META_PATH));
 	let filterLoading = $state(false);
+	let loadError = $state<string | null>(null);
 	let txOpen = $state(false);
 	let receiptOpen = $state(false);
 	let transferOpen = $state(false);
@@ -53,6 +65,8 @@
 	let accounts = $state<Account[]>([]);
 	let categories = $state<Category[]>([]);
 	let stores = $state<Store[]>([]);
+	let merchants = $state<Merchant[]>([]);
+	let tags = $state<Tag[]>([]);
 
 	let fromLocal = $state('');
 	let toLocal = $state('');
@@ -62,6 +76,8 @@
 	let accountId = $state('');
 	let kind = $state('');
 	let search = $state('');
+	let merchantId = $state('');
+	let tagId = $state('');
 	let filtersAutoApplyReady = $state(false);
 	let lastFiltersKey = $state('');
 
@@ -75,8 +91,11 @@
 
 	onMount(async () => {
 		readURLState();
+		// Snapshot URL-derived filters before await — otherwise a fast fill during load is
+		// folded into lastFiltersKey and the auto-apply effect never pushes search= to the URL.
+		const urlFiltersKey = currentFiltersKey();
 		await Promise.all([loadFilterOptions(), load(true)]);
-		lastFiltersKey = currentFiltersKey();
+		lastFiltersKey = urlFiltersKey;
 		filtersAutoApplyReady = true;
 	});
 
@@ -100,6 +119,8 @@
 		accountId = q.get('account_id') ?? '';
 		kind = q.get('kind') ?? '';
 		search = q.get('search') ?? '';
+		merchantId = q.get('merchant_id') ?? '';
+		tagId = q.get('tag_id') ?? '';
 	}
 
 	function baseFilterParams() {
@@ -111,6 +132,8 @@
 		if (storeId) params.store_id = storeId;
 		if (accountId) params.account_id = accountId;
 		if (search.trim()) params.search = search.trim();
+		if (merchantId) params.merchant_id = merchantId;
+		if (tagId) params.tag_id = tagId;
 		return params;
 	}
 
@@ -137,28 +160,63 @@
 			storeId,
 			accountId,
 			kind,
-			search: search.trim()
+			search: search.trim(),
+			merchantId,
+			tagId
 		});
 	}
 
-	async function loadFilterOptions() {
-		const meta = await getUIMeta();
-		accounts = accountsFromUIMeta(
-			meta.accounts.filter((acc) => acc.status === 'active'),
-			meta.banks
-		) as Account[];
-		const uniqueByID: Record<string, Category> = {};
-		for (const cat of [...meta.expense_categories, ...meta.income_categories]) {
-			uniqueByID[cat.id] = cat;
+	$effect(() => {
+		const update = $refCacheUpdate;
+		if (!update || !filtersAutoApplyReady) return;
+		if (
+			refCacheUpdateMatches(update, UI_META_PATH) ||
+			refCacheUpdateMatches(update, '/api/v1/transactions')
+		) {
+			void load(false, { silent: true });
+		}
+	});
+
+	async function loadFilterOptions(opts: { silent?: boolean } = {}) {
+		try {
+			const meta = await getUIMeta();
+			const nextAccounts = accountsFromUIMeta(
+				meta.accounts.filter((acc) => acc.status === 'active'),
+				meta.banks
+			) as Account[];
+			const uniqueByID: Record<string, Category> = {};
+			for (const cat of [...meta.expense_categories, ...meta.income_categories]) {
+				uniqueByID[cat.id] = cat;
+			}
+			const nextCategories = Object.values(uniqueByID).sort((a, b) =>
+				a.name.localeCompare(b.name, 'ru')
+			);
+			const nextMerchants = [...(meta.merchants ?? [])].sort((a, b) =>
+				a.name.localeCompare(b.name, 'ru')
+			);
+			const nextTags = [...(meta.tags ?? [])].sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+			accounts = opts.silent ? assignIfChanged(accounts, nextAccounts) : nextAccounts;
+			categories = opts.silent ? assignIfChanged(categories, nextCategories) : nextCategories;
+			merchants = opts.silent ? assignIfChanged(merchants, nextMerchants) : nextMerchants;
+			tags = opts.silent ? assignIfChanged(tags, nextTags) : nextTags;
+			loadError = null;
+		} catch (err) {
+			const msg = reportPageLoadFailure(err, {
+				silent: opts.silent,
+				hasData: categories.length > 0
+			});
+			if (msg) loadError = msg;
 		}
 		categories = Object.values(uniqueByID).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
 		stores = await listStores();
 	}
 
-	async function loadSplit() {
+	async function loadSplit(opts: { silent?: boolean } = {}) {
 		const base = baseFilterParams();
-		pastLoading = true;
-		plannedLoading = true;
+		if (!opts.silent) {
+			pastLoading = true;
+			plannedLoading = true;
+		}
 		try {
 			const [pastRes, plannedRes] = await Promise.all([
 				listTransactions({
@@ -176,36 +234,51 @@
 					limit: String(limit)
 				})
 			]);
-			pastTx = pastRes.data;
-			pastTotal = pastRes.meta.total;
-			plannedTx = plannedRes.data;
-			plannedTotal = plannedRes.meta.total;
+			const nextPast = pastRes.data;
+			pastTx = opts.silent ? assignIfChanged(pastTx, nextPast) : nextPast;
+			pastTotal = opts.silent ? assignIfChanged(pastTotal, pastRes.meta.total) : pastRes.meta.total;
+			const nextPlanned = plannedRes.data;
+			plannedTx = opts.silent ? assignIfChanged(plannedTx, nextPlanned) : nextPlanned;
+			plannedTotal = opts.silent
+				? assignIfChanged(plannedTotal, plannedRes.meta.total)
+				: plannedRes.meta.total;
+			loadError = null;
 		} catch (err) {
-			toast.fromError(err);
+			const msg = reportPageLoadFailure(err, {
+				silent: opts.silent,
+				hasData: pastTotal > 0 || plannedTotal > 0
+			});
+			if (msg) loadError = msg;
 		} finally {
 			pastLoading = false;
 			plannedLoading = false;
 		}
 	}
 
-	async function loadFlat() {
+	async function loadFlat(opts: { silent?: boolean } = {}) {
 		try {
 			const result = await listTransactions(requestParams());
-			transactions = result.data;
-			total = result.meta.total;
+			const next = result.data;
+			transactions = opts.silent ? assignIfChanged(transactions, next) : next;
+			total = opts.silent ? assignIfChanged(total, result.meta.total) : result.meta.total;
+			loadError = null;
 		} catch (err) {
-			toast.fromError(err);
+			const msg = reportPageLoadFailure(err, {
+				silent: opts.silent,
+				hasData: total > 0 || transactions.length > 0
+			});
+			if (msg) loadError = msg;
 		}
 	}
 
-	async function load(initial = false) {
-		if (initial) loading = true;
-		else filterLoading = true;
+	async function load(initial = false, opts: { silent?: boolean } = {}) {
+		if (initial && !opts.silent && !refCacheReady(UI_META_PATH)) loading = true;
+		else if (!initial && !opts.silent) filterLoading = true;
 		try {
 			if (splitMode) {
-				await loadSplit();
+				await loadSplit(opts);
 			} else {
-				await loadFlat();
+				await loadFlat(opts);
 			}
 		} finally {
 			loading = false;
@@ -224,6 +297,8 @@
 		if (accountId) queryParts.push(`account_id=${encodeURIComponent(accountId)}`);
 		if (kind) queryParts.push(`kind=${encodeURIComponent(kind)}`);
 		if (search.trim()) queryParts.push(`search=${encodeURIComponent(search.trim())}`);
+		if (merchantId) queryParts.push(`merchant_id=${encodeURIComponent(merchantId)}`);
+		if (tagId) queryParts.push(`tag_id=${encodeURIComponent(tagId)}`);
 		// eslint-disable-next-line svelte/no-navigation-without-resolve -- query string is appended to resolved base path
 		await goto(`${basePath}?${queryParts.join('&')}`, {
 			replaceState: true,
@@ -242,6 +317,8 @@
 		accountId = '';
 		kind = '';
 		search = '';
+		merchantId = '';
+		tagId = '';
 		page = 1;
 		lastFiltersKey = currentFiltersKey();
 		await pushURLAndReload();
@@ -276,6 +353,10 @@
 		txOpen = true;
 	}
 
+	async function saveAsTemplate(tx: Transaction) {
+		await saveTransactionAsTemplate(tx);
+	}
+
 	function openRepeat(tx: Transaction) {
 		if (tx.credit_payment_linked) return;
 		if (tx.type === 'transfer' && tx.transfer_group_id) {
@@ -304,7 +385,7 @@
 		try {
 			await deleteTransaction(tx.id);
 			toast($_('common.deleted'));
-			await load();
+			await load(false, { silent: true });
 		} catch (err) {
 			toast.fromError(err);
 		}
@@ -315,13 +396,14 @@
 	<title>{$_('transactions.all')} — {$_('app.title')}</title>
 </svelte:head>
 
-<div class="space-y-4">
-	<BackLink
-		items={[
-			{ href: '/', label: $_('nav.home') },
-			{ href: '/transactions', label: $_('transactions.all') }
-		]}
-	/>
+<PullToRefresh onRefresh={() => load(false, { silent: true })}>
+	<div class="space-y-4">
+		<BackLink
+			items={[
+				{ href: '/', label: $_('nav.home') },
+				{ href: '/transactions', label: $_('transactions.all') }
+			]}
+		/>
 
 	<div class="flex flex-wrap items-center justify-between gap-3">
 		<h1 class="text-2xl font-semibold">{$_('transactions.all')}</h1>
@@ -482,20 +564,203 @@
 					onrepeat={openRepeat}
 					onedit={openEdit}
 					ondelete={(tx) => void removeTx(tx)}
+		<div class="flex flex-wrap items-center justify-between gap-3">
+			<h1 class="text-2xl font-semibold">{$_('transactions.all')}</h1>
+			<div class="flex shrink-0 items-center gap-1">
+				<NewTransactionButtons
+					onincome={() => openNewTransaction('income')}
+					onexpense={() => openNewTransaction('expense')}
+					ontransfer={() => {
+						editTransfer = null;
+						repeatTransfer = null;
+						transferOpen = true;
+					}}
 				/>
 			</div>
-			{#if filterLoading}
-				<p
-					class="absolute inset-0 flex items-center justify-center text-sm"
-					style:color="var(--text-muted)"
-				>
-					{$_('common.loading')}
-				</p>
-			{/if}
 		</div>
-		<TransactionPagination {page} {limit} {total} onchange={onPageChange} />
-	{/if}
-</div>
+
+		<TransactionFilters
+			bind:fromLocal
+			bind:toLocal
+			bind:type
+			bind:categoryId
+			bind:accountId
+			bind:kind
+			bind:search
+			bind:merchantId
+			bind:tagId
+			{accounts}
+			{categories}
+			{merchants}
+			{tags}
+			onreset={resetFilters}
+		/>
+
+		<TransactionContextStats
+			params={statsContextParams()}
+			transactionCount={listTransactionCount}
+		/>
+
+		<PageLoadGate {loading} error={loadError} onretry={() => void load(true)} inline>
+			{#if splitMode}
+				<div class="relative space-y-3">
+					<div class="card overflow-hidden" class:opacity-60={filterLoading}>
+						{#if !pastLoading && !plannedLoading && pastTotal === 0 && plannedTotal === 0}
+							<p
+								class="flex min-h-[7rem] items-center justify-center px-4 py-6 text-center text-sm"
+								style:color="var(--text-muted)"
+							>
+								{$_('transactions.empty')}
+							</p>
+						{:else}
+							{#if plannedTotal > 0 || plannedLoading}
+								<details
+									class:border-b={pastTotal > 0 || pastLoading}
+									style:border-color="var(--border)"
+								>
+									<summary
+										class="cursor-pointer list-none px-4 py-3 text-sm font-medium select-none [&::-webkit-details-marker]:hidden"
+									>
+										{$_('dashboard.group.planned')}
+										<span class="ml-1 font-normal tabular-nums" style:color="var(--text-muted)">
+											({plannedTotal})
+										</span>
+									</summary>
+									{#if plannedLoading}
+										<p class="px-4 pb-4 text-sm" style:color="var(--text-muted)">
+											{$_('common.loading')}
+										</p>
+									{:else}
+										<div class="pb-4 md:overflow-x-auto">
+											<TransactionList
+												transactions={plannedVisible}
+												siblings={txSiblings}
+												{tz}
+												emptyMessage={$_('transactions.empty')}
+												showDescription
+												showAmountSign
+												showEdit
+												showDelete
+												onmakeRecurring={(tx) =>
+													void goto(
+														resolve(`/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`)
+													)}
+												onmakeSubscription={(tx) =>
+													void goto(resolve(`/subscriptions?from_tx=${encodeURIComponent(tx.id)}`))}
+												onattachSubscription={(tx) =>
+													void goto(
+														resolve(`/subscriptions?attach_tx=${encodeURIComponent(tx.id)}`)
+													)}
+												onattachCredit={(tx) =>
+													void goto(resolve(`/credits?attach_tx=${encodeURIComponent(tx.id)}`))}
+												onrepeat={openRepeat}
+												onsaveAsTemplate={(tx) => void saveAsTemplate(tx)}
+												onedit={openEdit}
+												ondelete={(tx) => void removeTx(tx)}
+											/>
+										</div>
+									{/if}
+								</details>
+							{/if}
+
+							{#if pastTotal > 0 || pastLoading}
+								<details open>
+									<summary
+										class="cursor-pointer list-none px-4 py-3 text-sm font-medium select-none [&::-webkit-details-marker]:hidden"
+									>
+										{$_('dashboard.group.past')}
+										<span class="ml-1 font-normal tabular-nums" style:color="var(--text-muted)">
+											({pastTotal})
+										</span>
+									</summary>
+									{#if pastLoading}
+										<p class="px-4 pb-4 text-sm" style:color="var(--text-muted)">
+											{$_('common.loading')}
+										</p>
+									{:else}
+										<div class="pb-4 md:overflow-x-auto">
+											<TransactionList
+												transactions={pastVisible}
+												siblings={txSiblings}
+												{tz}
+												emptyMessage={$_('transactions.empty')}
+												showDescription
+												showAmountSign
+												showEdit
+												showDelete
+												onmakeRecurring={(tx) =>
+													void goto(
+														resolve(`/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`)
+													)}
+												onmakeSubscription={(tx) =>
+													void goto(resolve(`/subscriptions?from_tx=${encodeURIComponent(tx.id)}`))}
+												onattachSubscription={(tx) =>
+													void goto(
+														resolve(`/subscriptions?attach_tx=${encodeURIComponent(tx.id)}`)
+													)}
+												onattachCredit={(tx) =>
+													void goto(resolve(`/credits?attach_tx=${encodeURIComponent(tx.id)}`))}
+												onrepeat={openRepeat}
+												onsaveAsTemplate={(tx) => void saveAsTemplate(tx)}
+												onedit={openEdit}
+												ondelete={(tx) => void removeTx(tx)}
+											/>
+										</div>
+									{/if}
+								</details>
+							{/if}
+						{/if}
+					</div>
+					{#if filterLoading}
+						<p
+							class="absolute inset-0 flex items-center justify-center text-sm"
+							style:color="var(--text-muted)"
+						>
+							{$_('common.loading')}
+						</p>
+					{/if}
+				</div>
+				<TransactionPagination {page} {limit} total={pastTotal} onchange={onPageChange} />
+			{:else}
+				<div class="relative space-y-3">
+					<div class="card md:overflow-x-auto" class:opacity-60={filterLoading}>
+						<TransactionList
+							transactions={visibleTx}
+							siblings={transactions}
+							{tz}
+							emptyMessage={$_('transactions.empty')}
+							showDescription
+							showAmountSign
+							showEdit
+							showDelete
+							onmakeRecurring={(tx) =>
+								void goto(resolve(`/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`))}
+							onmakeSubscription={(tx) =>
+								void goto(resolve(`/subscriptions?from_tx=${encodeURIComponent(tx.id)}`))}
+							onattachSubscription={(tx) =>
+								void goto(resolve(`/subscriptions?attach_tx=${encodeURIComponent(tx.id)}`))}
+							onattachCredit={(tx) =>
+								void goto(resolve(`/credits?attach_tx=${encodeURIComponent(tx.id)}`))}
+							onrepeat={openRepeat}
+							onsaveAsTemplate={(tx) => void saveAsTemplate(tx)}
+							onedit={openEdit}
+							ondelete={(tx) => void removeTx(tx)}
+						/>
+					</div>
+					{#if filterLoading}
+						<p
+							class="absolute inset-0 flex items-center justify-center text-sm"
+							style:color="var(--text-muted)"
+						>
+							{$_('common.loading')}
+						</p>
+					{/if}
+				</div>
+				<TransactionPagination {page} {limit} {total} onchange={onPageChange} />
+			{/if}
+		</PageLoadGate>
+	</div>
+</PullToRefresh>
 
 <TransactionForm
 	bind:open={txOpen}
@@ -507,7 +772,7 @@
 		editTx = null;
 		repeatTx = null;
 	}}
-	onsaved={load}
+	onsaved={() => void load(false, { silent: true })}
 />
 <ReceiptImportForm
 	bind:open={receiptOpen}
@@ -524,5 +789,5 @@
 		editTransfer = null;
 		repeatTransfer = null;
 	}}
-	onsaved={load}
+	onsaved={() => void load(false, { silent: true })}
 />

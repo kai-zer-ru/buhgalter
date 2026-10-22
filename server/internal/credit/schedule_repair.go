@@ -32,7 +32,7 @@ func repairMissingSchedule(ctx context.Context, db *sql.DB, userID string, f cre
 	}
 	entries, err := GenerateAutoSchedule(
 		f.principal, f.termMonths, f.monthlyPayment,
-		PaymentInterval(f.paymentInterval), issueDate, f.interestRate,
+		PaymentInterval(f.paymentInterval), issueDate, f.interestRate, f.creditKind,
 	)
 	if err != nil {
 		return err
@@ -56,7 +56,7 @@ func repairMissingSchedule(ctx context.Context, db *sql.DB, userID string, f cre
 	defer func() { _ = dbTx.Rollback() }()
 
 	q := queries(dbTx)
-	remainingPaid := f.paidAmount
+	remainingPaid := capPaidToPrincipal(f.principal, f.paidAmount)
 
 	for _, e := range entries {
 		payDate, err := timeutil.ParseUTC(e.PaymentDate)

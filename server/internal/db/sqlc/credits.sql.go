@@ -192,6 +192,49 @@ func (q *Queries) CreditPaymentsUnappliedByUser(ctx context.Context, userID stri
 	return items, nil
 }
 
+const creditPaymentsUnappliedScheduledInMonth = `-- name: CreditPaymentsUnappliedScheduledInMonth :many
+SELECT c.debit_account_id, cp.amount
+FROM credit_payments cp
+JOIN credits c ON c.id = cp.credit_id
+WHERE cp.is_applied = 0 AND cp.kind = 'scheduled'
+  AND c.status = 'active' AND c.user_id = ?
+  AND cp.payment_date >= ? AND cp.payment_date <= ?
+`
+
+type CreditPaymentsUnappliedScheduledInMonthParams struct {
+	UserID        string `json:"user_id"`
+	PaymentDate   string `json:"payment_date"`
+	PaymentDate_2 string `json:"payment_date_2"`
+}
+
+type CreditPaymentsUnappliedScheduledInMonthRow struct {
+	DebitAccountID string `json:"debit_account_id"`
+	Amount         int64  `json:"amount"`
+}
+
+func (q *Queries) CreditPaymentsUnappliedScheduledInMonth(ctx context.Context, arg CreditPaymentsUnappliedScheduledInMonthParams) ([]CreditPaymentsUnappliedScheduledInMonthRow, error) {
+	rows, err := q.db.QueryContext(ctx, creditPaymentsUnappliedScheduledInMonth, arg.UserID, arg.PaymentDate, arg.PaymentDate_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CreditPaymentsUnappliedScheduledInMonthRow{}
+	for rows.Next() {
+		var i CreditPaymentsUnappliedScheduledInMonthRow
+		if err := rows.Scan(&i.DebitAccountID, &i.Amount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const deleteCredit = `-- name: DeleteCredit :execrows
 DELETE FROM credits WHERE id = ? AND user_id = ?
 `
@@ -637,7 +680,7 @@ func (q *Queries) InsertCreditPayment(ctx context.Context, arg InsertCreditPayme
 
 const listActiveCreditsForScheduleRepair = `-- name: ListActiveCreditsForScheduleRepair :many
 SELECT id, user_id, principal_amount, issue_date, term_months, interest_rate,
-       payment_interval, monthly_payment, added_retroactively
+       payment_interval, monthly_payment, added_retroactively, credit_kind
 FROM credits
 WHERE status = 'active' AND payment_interval != 'manual'
 `
@@ -652,6 +695,7 @@ type ListActiveCreditsForScheduleRepairRow struct {
 	PaymentInterval    string  `json:"payment_interval"`
 	MonthlyPayment     int64   `json:"monthly_payment"`
 	AddedRetroactively int64   `json:"added_retroactively"`
+	CreditKind         string  `json:"credit_kind"`
 }
 
 func (q *Queries) ListActiveCreditsForScheduleRepair(ctx context.Context) ([]ListActiveCreditsForScheduleRepairRow, error) {
@@ -673,6 +717,7 @@ func (q *Queries) ListActiveCreditsForScheduleRepair(ctx context.Context) ([]Lis
 			&i.PaymentInterval,
 			&i.MonthlyPayment,
 			&i.AddedRetroactively,
+			&i.CreditKind,
 		); err != nil {
 			return nil, err
 		}
@@ -990,6 +1035,36 @@ func (q *Queries) ListDueCreditPayments(ctx context.Context, paymentDate string)
 	return items, nil
 }
 
+const listUsersWithLinkedCreditPayments = `-- name: ListUsersWithLinkedCreditPayments :many
+SELECT DISTINCT c.user_id
+FROM credits c
+JOIN credit_payments cp ON cp.credit_id = c.id
+WHERE cp.transaction_id IS NOT NULL
+`
+
+func (q *Queries) ListUsersWithLinkedCreditPayments(ctx context.Context) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listUsersWithLinkedCreditPayments)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var user_id string
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markCreditPaymentApplied = `-- name: MarkCreditPaymentApplied :execrows
 UPDATE credit_payments
 SET is_applied = 1
@@ -1003,6 +1078,92 @@ type MarkCreditPaymentAppliedParams struct {
 
 func (q *Queries) MarkCreditPaymentApplied(ctx context.Context, arg MarkCreditPaymentAppliedParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, markCreditPaymentApplied, arg.ID, arg.CreditID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const relinkCreditPaymentExpenseCategories = `-- name: RelinkCreditPaymentExpenseCategories :execrows
+UPDATE transactions
+SET category_id = ?,
+    subcategory_id = NULL,
+    updated_at = ?
+WHERE transactions.user_id = ?
+  AND transactions.type = 'expense'
+  AND transactions.id IN (
+    SELECT cp.transaction_id
+    FROM credit_payments cp
+    JOIN credits c ON c.id = cp.credit_id
+    WHERE c.user_id = ?
+      AND cp.transaction_id IS NOT NULL
+  )
+  AND (
+    transactions.category_id IS NULL
+    OR transactions.category_id != ?
+    OR transactions.subcategory_id IS NOT NULL
+  )
+`
+
+type RelinkCreditPaymentExpenseCategoriesParams struct {
+	CategoryID   *string `json:"category_id"`
+	UpdatedAt    string  `json:"updated_at"`
+	UserID       string  `json:"user_id"`
+	UserID_2     string  `json:"user_id_2"`
+	CategoryID_2 *string `json:"category_id_2"`
+}
+
+func (q *Queries) RelinkCreditPaymentExpenseCategories(ctx context.Context, arg RelinkCreditPaymentExpenseCategoriesParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, relinkCreditPaymentExpenseCategories,
+		arg.CategoryID,
+		arg.UpdatedAt,
+		arg.UserID,
+		arg.UserID_2,
+		arg.CategoryID_2,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const relinkCreditPaymentIncomeCategories = `-- name: RelinkCreditPaymentIncomeCategories :execrows
+UPDATE transactions
+SET category_id = ?,
+    subcategory_id = NULL,
+    updated_at = ?
+WHERE transactions.user_id = ?
+  AND transactions.type = 'income'
+  AND transactions.id IN (
+    SELECT cp.transaction_id
+    FROM credit_payments cp
+    JOIN credits c ON c.id = cp.credit_id
+    WHERE c.user_id = ?
+      AND cp.transaction_id IS NOT NULL
+  )
+  AND (
+    transactions.category_id IS NULL
+    OR transactions.category_id != ?
+    OR transactions.subcategory_id IS NOT NULL
+  )
+`
+
+type RelinkCreditPaymentIncomeCategoriesParams struct {
+	CategoryID   *string `json:"category_id"`
+	UpdatedAt    string  `json:"updated_at"`
+	UserID       string  `json:"user_id"`
+	UserID_2     string  `json:"user_id_2"`
+	CategoryID_2 *string `json:"category_id_2"`
+}
+
+func (q *Queries) RelinkCreditPaymentIncomeCategories(ctx context.Context, arg RelinkCreditPaymentIncomeCategoriesParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, relinkCreditPaymentIncomeCategories,
+		arg.CategoryID,
+		arg.UpdatedAt,
+		arg.UserID,
+		arg.UserID_2,
+		arg.CategoryID_2,
+	)
 	if err != nil {
 		return 0, err
 	}

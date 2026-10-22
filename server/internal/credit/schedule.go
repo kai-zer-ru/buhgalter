@@ -29,15 +29,16 @@ type ScheduleEntry struct {
 }
 
 type ScheduleInput struct {
-	Principal       int64
-	TermMonths      int
-	MonthlyPayment  int64
-	UserSetPayment  bool
-	PaymentInterval PaymentInterval
-	CreditKind      string
-	IssueDate       time.Time
-	InterestRate    float64
-	SeedPayments    []ScheduleSeed
+	Principal         int64
+	TermMonths        int
+	MonthlyPayment    int64
+	UserSetPayment    bool
+	PaymentInterval   PaymentInterval
+	CreditKind        string
+	IssueDate         time.Time
+	InterestRate      float64
+	SeedPayments      []ScheduleSeed
+	FirstPaymentToday bool
 }
 
 var ErrMonthlyPaymentTooLowForInterest = errors.New("monthly payment is too low for interest accrual")
@@ -125,6 +126,13 @@ func GenerateSchedule(in ScheduleInput) ([]ScheduleEntry, error) {
 	}
 
 	for len(entries) < in.TermMonths {
+		if len(entries) == 0 && in.FirstPaymentToday {
+			entries = append(entries, ScheduleEntry{
+				PaymentDate: timeutil.FormatUTC(in.IssueDate),
+				Amount:      in.MonthlyPayment,
+			})
+			continue
+		}
 		lastDate = nextPaymentDate(lastDate, in.PaymentInterval)
 		entries = append(entries, ScheduleEntry{
 			PaymentDate: timeutil.FormatUTC(lastDate),
@@ -157,6 +165,11 @@ func schedulePaymentDates(in ScheduleInput) ([]time.Time, error) {
 		if i < len(in.SeedPayments) {
 			lastDate = in.SeedPayments[i].PaymentDate
 			dates = append(dates, lastDate)
+			continue
+		}
+		if i == 0 && in.FirstPaymentToday {
+			dates = append(dates, in.IssueDate)
+			lastDate = in.IssueDate
 			continue
 		}
 		lastDate = nextPaymentDate(lastDate, in.PaymentInterval)
@@ -347,13 +360,13 @@ func generateManualSchedule(in ScheduleInput) ([]ScheduleEntry, error) {
 }
 
 // GenerateAutoSchedule builds schedule from issue_date without seed rows.
-func GenerateAutoSchedule(principal int64, term int, monthlyPayment int64, interval PaymentInterval, issueDate time.Time, interestRate float64) ([]ScheduleEntry, error) {
+func GenerateAutoSchedule(principal int64, term int, monthlyPayment int64, interval PaymentInterval, issueDate time.Time, interestRate float64, creditKind string) ([]ScheduleEntry, error) {
 	return GenerateSchedule(ScheduleInput{
 		Principal:       principal,
 		TermMonths:      term,
 		MonthlyPayment:  monthlyPayment,
 		PaymentInterval: interval,
-		CreditKind:      CreditKindConsumer,
+		CreditKind:      normalizeCreditKind(creditKind),
 		IssueDate:       issueDate,
 		InterestRate:    interestRate,
 	})

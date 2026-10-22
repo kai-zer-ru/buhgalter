@@ -26,15 +26,19 @@ type Handler struct {
 }
 
 type createRequest struct {
-	AccountID       string  `json:"account_id"`
-	Type            string  `json:"type"`
-	Amount          string  `json:"amount"`
-	Description     *string `json:"description"`
-	CategoryID      *string `json:"category_id"`
-	SubcategoryID   *string `json:"subcategory_id"`
-	SubcategoryName *string `json:"subcategory_name"`
-	StoreID         *string `json:"store_id"`
-	TransactionDate string  `json:"transaction_date"`
+	AccountID       string    `json:"account_id"`
+	Type            string    `json:"type"`
+	Amount          string    `json:"amount"`
+	Description     *string   `json:"description"`
+	CategoryID      *string   `json:"category_id"`
+	SubcategoryID   *string   `json:"subcategory_id"`
+	SubcategoryName *string   `json:"subcategory_name"`
+	StoreID         *string   `json:"store_id"`
+	MerchantID      *string   `json:"merchant_id"`
+	MerchantName    *string   `json:"merchant_name"`
+	TagIDs          *[]string `json:"tag_ids"`
+	TagNames        *[]string `json:"tag_names"`
+	TransactionDate string    `json:"transaction_date"`
 }
 
 type transferRequest struct {
@@ -64,6 +68,8 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		From:       q.Get("from"),
 		To:         q.Get("to"),
 		Search:     q.Get("search"),
+		MerchantID: q.Get("merchant_id"),
+		TagID:      q.Get("tag_id"),
 		Sort:       q.Get("sort"),
 		Page:       page,
 		Limit:      limit,
@@ -77,6 +83,37 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
+}
+
+func (h *Handler) Inbox(w http.ResponseWriter, r *http.Request) {
+	info, ok := auth.FromContext(r.Context())
+	if !ok {
+		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
+		return
+	}
+	q := r.URL.Query()
+	page, _ := strconv.Atoi(q.Get("page"))
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	result, err := ListInbox(r.Context(), h.Store.DB(), info.User.ID, page, limit, q.Get("sort"))
+	if err != nil {
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (h *Handler) InboxCount(w http.ResponseWriter, r *http.Request) {
+	info, ok := auth.FromContext(r.Context())
+	if !ok {
+		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
+		return
+	}
+	n, err := CountInbox(r.Context(), h.Store.DB(), info.User.ID)
+	if err != nil {
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]int64{"count": n})
 }
 
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
@@ -328,7 +365,7 @@ func parseCreateInput(req createRequest) (CreateInput, error) {
 	if err != nil {
 		return CreateInput{}, errors.New("некорректная дата операции")
 	}
-	return CreateInput{
+	in := CreateInput{
 		AccountID:       req.AccountID,
 		Type:            req.Type,
 		Amount:          amount,
@@ -336,17 +373,20 @@ func parseCreateInput(req createRequest) (CreateInput, error) {
 		CategoryID:      req.CategoryID,
 		SubcategoryID:   req.SubcategoryID,
 		SubcategoryName: req.SubcategoryName,
-		StoreID:         emptyToNil(req.StoreID),
+		StoreID:         req.StoreID,
+		MerchantID:      req.MerchantID,
+		MerchantName:    req.MerchantName,
 		TransactionDate: txDate,
-	}, nil
-}
-
-func emptyToNil(s *string) *string {
-	if s == nil || strings.TrimSpace(*s) == "" {
-		return nil
 	}
-	v := strings.TrimSpace(*s)
-	return &v
+	if req.TagIDs != nil {
+		in.TagIDs = *req.TagIDs
+		in.SetTags = true
+	}
+	if req.TagNames != nil {
+		in.TagNames = *req.TagNames
+		in.SetTags = true
+	}
+	return in, nil
 }
 
 func parseTransferInput(req transferRequest) (TransferInput, error) {
@@ -400,18 +440,22 @@ func writeTxError(w http.ResponseWriter, r *http.Request, err error) bool {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_CANNOT_EDIT_PAYMENT")
 	case errors.Is(err, ErrInvalidSubcategory):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_SUBCATEGORY_NOT_FOUND")
+	case errors.Is(err, ErrInvalidMerchant):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_MERCHANT_NOT_FOUND")
+	case errors.Is(err, ErrStoreExpenseOnly):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_STORE_EXPENSE_ONLY")
+	case errors.Is(err, ErrInvalidTag):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_TAG_NOT_FOUND")
 	case errors.Is(err, ErrSameAccount):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_TRANSFER_SAME_ACCOUNT")
 	case errors.Is(err, ErrCreditCardPaymentExceedsLimit):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_CARD_PAYMENT_EXCEEDS_LIMIT")
-	case errors.Is(err, ErrStoreExpenseOnly):
-		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_STORE_EXPENSE_ONLY")
+	case errors.Is(err, ErrUseTransfersEndpoint):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_USE_TRANSFERS_ENDPOINT")
+	case errors.Is(err, ErrCommissionLinked):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_COMMISSION_LINKED")
 	default:
-		if strings.Contains(err.Error(), "transfer endpoint") {
-			apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_USE_TRANSFERS_ENDPOINT")
-		} else {
-			apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
-		}
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 	}
 	return true
 }

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,7 +14,6 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/bank"
 	"github.com/kai-zer-ru/buhgalter/internal/category"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
-	"github.com/kai-zer-ru/buhgalter/internal/store"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
 )
 
@@ -302,6 +302,83 @@ func TestTransferWithCommission(t *testing.T) {
 	}
 }
 
+func TestTransferCommissionLinkedAndHiddenFromList(t *testing.T) {
+	handle, env := seedEnvFull(t)
+	database := handle.DB()
+	ctx := context.Background()
+	past := timeutil.NowUTC().Add(-time.Hour)
+
+	tr, err := CreateTransfer(ctx, database, env.userID, TransferInput{
+		FromAccountID: env.accountID, ToAccountID: env.account2,
+		Amount: 10000, Commission: 500, TransactionDate: past,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	list, err := List(ctx, database, env.userID, ListFilters{Page: 1, Limit: 50})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if list.Meta.Total != 1 {
+		t.Fatalf("transfer with commission counts as 1 operation, got %d", list.Meta.Total)
+	}
+	var transferOut *Transaction
+	for i := range list.Data {
+		tx := &list.Data[i]
+		if tx.Type == "expense" && tx.TransferGroupID != nil && *tx.TransferGroupID == tr.GroupID {
+			t.Fatalf("commission expense must not appear in list: %+v", tx)
+		}
+		if tx.Type == "transfer" && tx.TransferGroupID != nil && *tx.TransferGroupID == tr.GroupID {
+			if !tx.TransferIsOut {
+				t.Fatalf("incoming transfer leg must not be a separate journal row: %+v", tx)
+			}
+			transferOut = tx
+		}
+	}
+	if transferOut == nil {
+		t.Fatal("expected transfer out leg in list")
+	}
+	byDest, err := List(ctx, database, env.userID, ListFilters{AccountID: env.account2, Page: 1, Limit: 50})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if byDest.Meta.Total != 1 || len(byDest.Data) != 1 || byDest.Data[0].TransferIsOut {
+		t.Fatalf("destination account keeps its incoming leg, got total=%d data=%+v", byDest.Meta.Total, byDest.Data)
+	}
+	if transferOut.Commission != 500 {
+		t.Fatalf("list commission %d, want 500", transferOut.Commission)
+	}
+	if transferOut.CommissionDisplay != "5.00" {
+		t.Fatalf("list commission_display %q, want 5.00", transferOut.CommissionDisplay)
+	}
+
+	got, err := GetByID(ctx, database, env.userID, transferOut.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Commission != 500 {
+		t.Fatalf("get commission %d, want 500", got.Commission)
+	}
+
+	commissionID := commissionLegID(t, ctx, database, env.userID, tr.GroupID)
+	if _, err := Update(ctx, database, env.userID, commissionID, UpdateInput{
+		AccountID: env.accountID, Type: "expense", Amount: 100, TransactionDate: past,
+	}); !errors.Is(err, ErrCommissionLinked) {
+		t.Fatalf("update commission: want ErrCommissionLinked, got %v", err)
+	}
+	if err := Delete(ctx, database, env.userID, commissionID); !errors.Is(err, ErrCommissionLinked) {
+		t.Fatalf("delete commission: want ErrCommissionLinked, got %v", err)
+	}
+
+	if err := Delete(ctx, database, env.userID, transferOut.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := GetTransfer(ctx, database, env.userID, tr.GroupID); !errors.Is(err, ErrTransferNotFound) {
+		t.Fatalf("after deleting transfer, group should be gone, got %v", err)
+	}
+}
+
 func TestActivateFutureTransaction(t *testing.T) {
 	handle, env := seedEnvFull(t)
 	database := handle.DB()
@@ -506,6 +583,79 @@ func TestCreateWithSubcategoryName(t *testing.T) {
 	}
 }
 
+func TestCreateWithMerchantAndTags(t *testing.T) {
+	handle, env := seedEnvFull(t)
+	ctx := context.Background()
+	database := handle.DB()
+	merchantName := "Пятёрочка"
+	tx, err := Create(ctx, database, env.userID, CreateInput{
+		AccountID: env.accountID, Type: "expense", Amount: 1200,
+		CategoryID: &env.expenseID, MerchantName: &merchantName,
+		TagNames:        []string{"отпуск", "семья"},
+		TransactionDate: timeutil.NowUTC().Add(-time.Hour),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tx.MerchantID == nil || tx.MerchantName == nil || *tx.MerchantName != "Пятёрочка" {
+		t.Fatalf("merchant=%v %v", tx.MerchantID, tx.MerchantName)
+	}
+	if len(tx.Tags) != 2 {
+		t.Fatalf("tags=%v", tx.Tags)
+	}
+
+	list, err := List(ctx, database, env.userID, ListFilters{
+		MerchantID: *tx.MerchantID, Page: 1, Limit: 10,
+	})
+	if err != nil || list.Meta.Total != 1 {
+		t.Fatalf("merchant filter meta=%+v err=%v", list.Meta, err)
+	}
+	listTag, err := List(ctx, database, env.userID, ListFilters{
+		TagID: tx.Tags[0].ID, Page: 1, Limit: 10,
+	})
+	if err != nil || listTag.Meta.Total != 1 {
+		t.Fatalf("tag filter meta=%+v err=%v", listTag.Meta, err)
+	}
+
+	updated, err := Update(ctx, database, env.userID, tx.ID, UpdateInput{
+		AccountID: env.accountID, Type: "expense", Amount: 1300,
+		CategoryID: &env.expenseID, MerchantID: tx.MerchantID,
+		TagIDs:          []string{tx.Tags[0].ID},
+		SetTags:         true,
+		TransactionDate: timeutil.NowUTC().Add(-time.Hour),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(updated.Tags) != 1 || updated.Tags[0].ID != tx.Tags[0].ID {
+		t.Fatalf("updated tags=%v", updated.Tags)
+	}
+	// Update without SetTags must keep existing tags
+	kept, err := Update(ctx, database, env.userID, tx.ID, UpdateInput{
+		AccountID: env.accountID, Type: "expense", Amount: 1400,
+		CategoryID: &env.expenseID, MerchantID: tx.MerchantID,
+		TransactionDate: timeutil.NowUTC().Add(-time.Hour),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(kept.Tags) != 1 {
+		t.Fatalf("tags cleared unexpectedly: %v", kept.Tags)
+	}
+
+	// delete merchant → SET NULL on transaction
+	if _, err := database.ExecContext(ctx, `DELETE FROM merchants WHERE id = ?`, *tx.MerchantID); err != nil {
+		t.Fatal(err)
+	}
+	got, err := GetByID(ctx, database, env.userID, tx.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.MerchantID != nil {
+		t.Fatalf("expected merchant cleared, got %v", *got.MerchantID)
+	}
+}
+
 func seedBanksForTest(t *testing.T, ctx context.Context, database *sql.DB) {
 	t.Helper()
 	if err := bank.SeedIfEmpty(ctx, database); err != nil {
@@ -539,6 +689,20 @@ func commissionDescription(t *testing.T, ctx context.Context, database *sql.DB, 
 		return ""
 	}
 	return desc.String
+}
+
+func commissionLegID(t *testing.T, ctx context.Context, database *sql.DB, userID, groupID string) string {
+	t.Helper()
+	var id string
+	err := database.QueryRowContext(ctx, `
+		SELECT id FROM transactions
+		WHERE user_id = ? AND transfer_group_id = ? AND type = 'expense'
+		LIMIT 1`,
+		userID, groupID).Scan(&id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
 }
 
 func TestDashboardExcludesCreditCards(t *testing.T) {
@@ -628,40 +792,188 @@ func TestCreditCardPaymentExceedsLimit(t *testing.T) {
 	}
 }
 
-func TestCreateExpenseWithStore(t *testing.T) {
+func TestCreditCardConcurrentPaymentsDoNotExceedLimit(t *testing.T) {
 	handle, env := seedEnvFull(t)
 	database := handle.DB()
 	ctx := context.Background()
 	past := timeutil.NowUTC().Add(-time.Hour)
-
-	storeID, err := store.GetOrCreate(ctx, database, env.userID, "Лента")
-	if err != nil {
+	insertCreditCardAccount(t, ctx, database, env.userID, "cc-1", 200_000, 100_000)
+	if err := accountbalance.Refresh(ctx, database, env.userID); err != nil {
 		t.Fatal(err)
 	}
 
+	const n = 2
+	errs := make([]error, n)
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			_, errs[i] = CreateTransfer(ctx, database, env.userID, TransferInput{
+				FromAccountID: env.accountID, ToAccountID: "cc-1",
+				Amount: 100_000, TransactionDate: past,
+			})
+		}(i)
+	}
+	wg.Wait()
+
+	ok, limited := 0, 0
+	for _, err := range errs {
+		switch {
+		case err == nil:
+			ok++
+		case errors.Is(err, ErrCreditCardPaymentExceedsLimit):
+			limited++
+		default:
+			t.Fatalf("unexpected error: %v", errs)
+		}
+	}
+	if ok != 1 || limited != 1 {
+		t.Fatalf("want 1 success and 1 limit error, got ok=%d limited=%d errs=%v", ok, limited, errs)
+	}
+	var legs int
+	if err := database.QueryRow(`SELECT COUNT(*) FROM transactions WHERE account_id = 'cc-1' AND type = 'transfer'`).Scan(&legs); err != nil {
+		t.Fatal(err)
+	}
+	if legs != 1 {
+		t.Fatalf("credit card transfer legs = %d, want 1", legs)
+	}
+}
+
+func countUserTransactions(t *testing.T, database *sql.DB, userID string) int {
+	t.Helper()
+	var n int
+	if err := database.QueryRow(`SELECT COUNT(*) FROM transactions WHERE user_id = ?`, userID).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+func TestCreateRollsBackWhenTagsFail(t *testing.T) {
+	handle, env := seedEnvFull(t)
+	database := handle.DB()
+	ctx := context.Background()
+	if _, err := database.Exec(`
+		CREATE TRIGGER test_fail_tx_tags
+		AFTER INSERT ON transaction_tags
+		BEGIN
+			SELECT RAISE(ABORT, 'test-fail-tags');
+		END;
+	`); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Create(ctx, database, env.userID, CreateInput{
+		AccountID:       env.accountID,
+		Type:            "expense",
+		Amount:          2500,
+		CategoryID:      &env.expenseID,
+		TagNames:        []string{"отпуск"},
+		TransactionDate: timeutil.NowUTC().Add(-time.Hour),
+	})
+	if err == nil {
+		t.Fatal("expected tag insert to fail")
+	}
+	if n := countUserTransactions(t, database, env.userID); n != 0 {
+		t.Fatalf("transactions after tag failure = %d, want 0", n)
+	}
+}
+
+func TestCreateRollsBackWhenBalanceRefreshFails(t *testing.T) {
+	handle, env := seedEnvFull(t)
+	database := handle.DB()
+	ctx := context.Background()
+	if _, err := database.Exec(`
+		CREATE TRIGGER test_fail_balance_refresh
+		AFTER UPDATE OF current_balance ON accounts
+		BEGIN
+			SELECT RAISE(ABORT, 'test-fail-refresh');
+		END;
+	`); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Create(ctx, database, env.userID, CreateInput{
+		AccountID:       env.accountID,
+		Type:            "expense",
+		Amount:          2500,
+		CategoryID:      &env.expenseID,
+		TransactionDate: timeutil.NowUTC().Add(-time.Hour),
+	})
+	if err == nil {
+		t.Fatal("expected balance refresh to fail")
+	}
+	if n := countUserTransactions(t, database, env.userID); n != 0 {
+		t.Fatalf("transactions after refresh failure = %d, want 0", n)
+	}
+}
+
+func TestUpdateRollsBackWhenTagsFail(t *testing.T) {
+	handle, env := seedEnvFull(t)
+	database := handle.DB()
+	ctx := context.Background()
+	past := timeutil.NowUTC().Add(-time.Hour)
 	tx, err := Create(ctx, database, env.userID, CreateInput{
 		AccountID:       env.accountID,
 		Type:            "expense",
-		Amount:          1200,
+		Amount:          2500,
 		CategoryID:      &env.expenseID,
-		StoreID:         storeID,
 		TransactionDate: past,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if tx.StoreID == nil || *tx.StoreID != *storeID {
-		t.Fatalf("expected store_id on tx, got %+v", tx.StoreID)
+	if _, err := database.Exec(`
+		CREATE TRIGGER test_fail_tx_tags_update
+		AFTER INSERT ON transaction_tags
+		BEGIN
+			SELECT RAISE(ABORT, 'test-fail-tags');
+		END;
+	`); err != nil {
+		t.Fatal(err)
 	}
-	if tx.StoreName == nil || *tx.StoreName != "Лента" {
-		t.Fatalf("expected store name, got %+v", tx.StoreName)
+	_, err = Update(ctx, database, env.userID, tx.ID, UpdateInput{
+		AccountID:       env.accountID,
+		Type:            "expense",
+		Amount:          9999,
+		CategoryID:      &env.expenseID,
+		TagNames:        []string{"отпуск"},
+		SetTags:         true,
+		TransactionDate: past,
+	})
+	if err == nil {
+		t.Fatal("expected tag update to fail")
 	}
-
-	res, err := List(ctx, database, env.userID, ListFilters{StoreID: *storeID, Page: 1, Limit: 10})
+	got, err := GetByID(ctx, database, env.userID, tx.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Meta.Total != 1 {
-		t.Fatalf("expected 1 tx for store filter, got %d", res.Meta.Total)
+	if got.Amount != 2500 {
+		t.Fatalf("amount after failed update = %d, want 2500", got.Amount)
+	}
+}
+
+func TestCreateTransferRollsBackWhenBalanceRefreshFails(t *testing.T) {
+	handle, env := seedEnvFull(t)
+	database := handle.DB()
+	ctx := context.Background()
+	if _, err := database.Exec(`
+		CREATE TRIGGER test_fail_transfer_refresh
+		AFTER UPDATE OF current_balance ON accounts
+		BEGIN
+			SELECT RAISE(ABORT, 'test-fail-refresh');
+		END;
+	`); err != nil {
+		t.Fatal(err)
+	}
+	_, err := CreateTransfer(ctx, database, env.userID, TransferInput{
+		FromAccountID:   env.accountID,
+		ToAccountID:     env.account2,
+		Amount:          1000,
+		TransactionDate: timeutil.NowUTC().Add(-time.Hour),
+	})
+	if err == nil {
+		t.Fatal("expected transfer refresh to fail")
+	}
+	if n := countUserTransactions(t, database, env.userID); n != 0 {
+		t.Fatalf("transactions after failed transfer = %d, want 0", n)
 	}
 }

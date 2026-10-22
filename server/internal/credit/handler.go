@@ -45,6 +45,7 @@ type createCreditRequest struct {
 	CreateTransactions        *bool                 `json:"create_transactions"`
 	PrincipalAffectsBalance   *bool                 `json:"principal_affects_balance"`
 	ScheduleSeed              []scheduleSeedRequest `json:"schedule_seed"`
+	FirstPaymentToday         *bool                 `json:"first_payment_today"`
 }
 
 type scheduleSeedRequest struct {
@@ -61,9 +62,10 @@ type updateCreditRequest struct {
 }
 
 type payPaymentRequest struct {
-	Amount      json.RawMessage `json:"amount"`
-	PaymentDate string          `json:"payment_date"`
-	AccountID   *string         `json:"account_id"`
+	Amount        json.RawMessage `json:"amount"`
+	PaymentDate   string          `json:"payment_date"`
+	AccountID     *string         `json:"account_id"`
+	TransactionID *string         `json:"transaction_id"`
 }
 
 type completeCreditRequest struct {
@@ -81,14 +83,15 @@ type scheduleAmountUpdateRequest struct {
 }
 
 type previewScheduleRequest struct {
-	Principal       json.RawMessage       `json:"principal"`
-	CreditKind      string                `json:"credit_kind"`
-	TermMonths      int                   `json:"term"`
-	InterestRate    float64               `json:"interest_rate"`
-	PaymentInterval string                `json:"payment_interval"`
-	IssueDate       string                `json:"issue_date"`
-	MonthlyPayment  json.RawMessage       `json:"monthly_payment"`
-	SeedPayments    []scheduleSeedRequest `json:"seed_payments"`
+	Principal         json.RawMessage       `json:"principal"`
+	CreditKind        string                `json:"credit_kind"`
+	TermMonths        int                   `json:"term"`
+	InterestRate      float64               `json:"interest_rate"`
+	PaymentInterval   string                `json:"payment_interval"`
+	IssueDate         string                `json:"issue_date"`
+	MonthlyPayment    json.RawMessage       `json:"monthly_payment"`
+	SeedPayments      []scheduleSeedRequest `json:"seed_payments"`
+	FirstPaymentToday *bool                 `json:"first_payment_today"`
 }
 
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
@@ -203,14 +206,32 @@ func (h *Handler) AddPayment(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_INVALID_JSON")
 		return
 	}
-	amount, err := money.ParseAmount(req.Amount)
-	if err != nil {
+	attachID := ""
+	if req.TransactionID != nil {
+		attachID = strings.TrimSpace(*req.TransactionID)
+	}
+	var amount int64
+	if len(req.Amount) > 0 && string(req.Amount) != "null" {
+		parsed, err := money.ParseAmount(req.Amount)
+		if err != nil {
+			apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_INVALID_AMOUNT")
+			return
+		}
+		amount = parsed
+	} else if attachID == "" {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_INVALID_AMOUNT")
 		return
 	}
-	payDate, err := timeutil.ParseUTC(req.PaymentDate)
-	if err != nil {
-		apperror.WriteDetail(w, r, http.StatusBadRequest, apperror.ValidationError, apperror.ValidationError, err.Error())
+	var payDate time.Time
+	if strings.TrimSpace(req.PaymentDate) != "" {
+		parsed, err := timeutil.ParseUTC(req.PaymentDate)
+		if err != nil {
+			apperror.WriteDetail(w, r, http.StatusBadRequest, apperror.ValidationError, apperror.ValidationError, err.Error())
+			return
+		}
+		payDate = parsed
+	} else if attachID == "" {
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_INVALID_JSON")
 		return
 	}
 	accountID := ""
@@ -218,12 +239,14 @@ func (h *Handler) AddPayment(w http.ResponseWriter, r *http.Request) {
 		accountID = strings.TrimSpace(*req.AccountID)
 	}
 	c, err := PayNextScheduled(r.Context(), h.Store.DB(), info.User.ID, id, PayPaymentInput{
-		Amount: amount, PaymentDate: payDate, AccountID: accountID,
+		Amount: amount, PaymentDate: payDate, AccountID: accountID, TransactionID: attachID,
 	})
 	if writeCreditError(w, r, err) {
 		return
 	}
-	_ = h.Audit.Log("credit.pay", info.User.ID, info.User.Login, clientIP(r), map[string]any{"credit_id": id, "amount": amount})
+	_ = h.Audit.Log("credit.pay", info.User.ID, info.User.Login, clientIP(r), map[string]any{
+		"credit_id": id, "amount": amount, "transaction_id": attachID,
+	})
 	writeJSON(w, http.StatusOK, c)
 }
 
@@ -372,15 +395,18 @@ func (h *Handler) PreviewSchedule(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteDetail(w, r, http.StatusBadRequest, apperror.ValidationError, apperror.ValidationError, err.Error())
 		return
 	}
-	entries, monthly, err := PreviewSchedule(in)
+	result, err := PreviewSchedule(in)
 	if err != nil {
 		apperror.WriteDetail(w, r, http.StatusBadRequest, apperror.ValidationError, apperror.ValidationError, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"schedule_preview":                   entries,
-		"calculated_monthly_payment":         monthly,
-		"calculated_monthly_payment_display": money.FormatRubles(monthly),
+		"schedule_preview":                   result.Schedule,
+		"calculated_monthly_payment":         result.CalculatedMonthly,
+		"calculated_monthly_payment_display": money.FormatRubles(result.CalculatedMonthly),
+		"effective_monthly_payment":          result.EffectiveMonthly,
+		"effective_monthly_payment_display":  money.FormatRubles(result.EffectiveMonthly),
+		"user_set_monthly_payment":           result.UserSetPayment,
 	})
 }
 
@@ -503,6 +529,9 @@ func parseCreateInput(req createCreditRequest) (CreateInput, error) {
 	if req.PrincipalAffectsBalance != nil {
 		in.PrincipalAffectsBalance = *req.PrincipalAffectsBalance
 	}
+	if req.FirstPaymentToday != nil {
+		in.FirstPaymentToday = *req.FirstPaymentToday
+	}
 	if len(req.MonthlyPayment) > 0 && string(req.MonthlyPayment) != "null" {
 		mp, err := money.ParseAmount(req.MonthlyPayment)
 		if err != nil {
@@ -550,6 +579,9 @@ func parsePreviewInput(req previewScheduleRequest) (PreviewInput, error) {
 	in := PreviewInput{
 		Principal: principal, CreditKind: req.CreditKind, TermMonths: req.TermMonths, InterestRate: req.InterestRate,
 		PaymentInterval: interval, IssueDate: issueDate,
+	}
+	if req.FirstPaymentToday != nil {
+		in.FirstPaymentToday = *req.FirstPaymentToday
 	}
 	if len(req.MonthlyPayment) > 0 && string(req.MonthlyPayment) != "null" {
 		mp, err := money.ParseAmount(req.MonthlyPayment)
@@ -615,6 +647,10 @@ func writeCreditError(w http.ResponseWriter, r *http.Request, err error) bool {
 		apperror.WriteR(w, r, http.StatusConflict, apperror.Conflict, "CONFLICT_CREDIT_BANK_LOCKED")
 	case errors.Is(err, ErrNoPendingPayment):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_NO_PENDING_PAYMENT")
+	case errors.Is(err, ErrAttachForbidden):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_ATTACH_FORBIDDEN")
+	case errors.Is(err, ErrTransactionNotFound):
+		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound, "ERR_TRANSACTION_NOT_FOUND")
 	case errors.Is(err, ErrCannotRemoveRetroactive):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_CANNOT_REMOVE_RETRO")
 	case errors.Is(err, ErrOnlyLatestPaymentDelete):

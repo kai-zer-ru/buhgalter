@@ -7,6 +7,7 @@ import (
 	"time"
 
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/features"
 	"github.com/kai-zer-ru/buhgalter/internal/notify"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
 	"github.com/kai-zer-ru/buhgalter/internal/transaction"
@@ -27,27 +28,34 @@ type accountSnap struct {
 }
 
 // CheckAfterRefresh evaluates auto-topup for the given beneficiary account IDs.
-func CheckAfterRefresh(ctx context.Context, db *sql.DB, userID string, accountIDs ...string) {
+// asOf is the trigger operation's transaction_date; zero means "now".
+func CheckAfterRefresh(ctx context.Context, db *sql.DB, userID string, asOf time.Time, accountIDs ...string) {
 	for _, id := range accountIDs {
 		if id == "" {
 			continue
 		}
-		_, _ = ApplyIfNeeded(ctx, db, userID, id)
+		_, _ = ApplyIfNeeded(ctx, db, userID, id, asOf)
 	}
 }
 
 // CheckAllForUser evaluates auto-topup for every enabled bank beneficiary of the user.
-func CheckAllForUser(ctx context.Context, db *sql.DB, userID string) {
+func CheckAllForUser(ctx context.Context, db *sql.DB, userID string, asOf time.Time) {
 	q := sqlcdb.New(db)
 	ids, err := q.ListAutoTopupBeneficiaryAccountIDs(ctx, userID)
 	if err != nil {
 		return
 	}
-	CheckAfterRefresh(ctx, db, userID, ids...)
+	CheckAfterRefresh(ctx, db, userID, asOf, ids...)
 }
 
 // ApplyIfNeeded creates a transfer when the beneficiary balance is below the configured threshold.
-func ApplyIfNeeded(ctx context.Context, db *sql.DB, userID, beneficiaryID string) (bool, error) {
+// asOf stamps the transfer's transaction_date; zero or future falls back to now.
+func ApplyIfNeeded(ctx context.Context, db *sql.DB, userID, beneficiaryID string, asOf time.Time) (bool, error) {
+	if enabled, err := features.IsEnabled(ctx, db, features.BalanceMaintenance); err != nil {
+		return false, err
+	} else if !enabled {
+		return false, nil
+	}
 	beneficiary, err := loadAccount(ctx, db, userID, beneficiaryID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
@@ -81,20 +89,71 @@ func ApplyIfNeeded(ctx context.Context, db *sql.DB, userID, beneficiaryID string
 	}
 
 	desc := Description
-	now := timeutil.NowUTC()
+	txDate := topupTransactionDate(asOf)
 	_, err = transaction.CreateTransfer(ctx, db, userID, transaction.TransferInput{
 		FromAccountID:   source.id,
 		ToAccountID:     beneficiary.id,
 		Amount:          transferAmount,
 		Commission:      0,
 		Description:     &desc,
-		TransactionDate: now,
+		TransactionDate: txDate,
+		CreatedAt:       createdAtAfterTrigger(ctx, db, userID, beneficiary.id, asOf),
 	})
 	if err != nil {
 		return false, err
 	}
-	CheckAfterRefresh(ctx, db, userID, source.id)
+	CheckAfterRefresh(ctx, db, userID, asOf, source.id)
 	return true, nil
+}
+
+func normalizeTopupDate(asOf time.Time) time.Time {
+	now := timeutil.NowUTC()
+	if asOf.IsZero() || asOf.After(now) {
+		return now
+	}
+	return asOf
+}
+
+// topupTransactionDate is the trigger instant plus one second so the top-up
+// is later in time. date_desc (newest first) then shows it above the trigger.
+// If +1s would be in the future, keep the trigger date (created_at still sorts after).
+func topupTransactionDate(asOf time.Time) time.Time {
+	base := normalizeTopupDate(asOf)
+	if asOf.IsZero() {
+		return base
+	}
+	now := timeutil.NowUTC()
+	next := asOf.Add(time.Second)
+	if next.After(now) {
+		return base
+	}
+	return next
+}
+
+// createdAtAfterTrigger is 1s after the trigger's created_at so string/DESC
+// sort treats the top-up as newer. RFC3339Nano of the same second sorts
+// *before* the trigger's RFC3339 "...Z" and made the top-up look older.
+func createdAtAfterTrigger(ctx context.Context, db *sql.DB, userID, accountID string, asOf time.Time) time.Time {
+	if asOf.IsZero() {
+		return time.Time{}
+	}
+	created, err := sqlcdb.New(db).GetLatestTransactionCreatedAtForAccount(ctx, sqlcdb.GetLatestTransactionCreatedAtForAccountParams{
+		UserID:          userID,
+		AccountID:       accountID,
+		TransactionDate: timeutil.FormatUTC(asOf),
+	})
+	if err != nil {
+		return time.Time{}
+	}
+	t, err := timeutil.ParseFlexibleUTC(created)
+	if err != nil {
+		return time.Time{}
+	}
+	t = t.Add(time.Second)
+	if t.Nanosecond() == 0 {
+		t = t.Add(time.Millisecond)
+	}
+	return t
 }
 
 func loadAccount(ctx context.Context, db *sql.DB, userID, accountID string) (accountSnap, error) {
@@ -148,16 +207,17 @@ func notifyAutoTopupDisabled(ctx context.Context, db *sql.DB, userID string, ben
 		return
 	}
 	customMap := notify.ToTemplateMap(customTemplates)
-	text, err := notify.Format(notify.TriggerAutoTopupDisabled, localeCode, customMap[notify.TriggerAutoTopupDisabled], notify.FormatData{
+	data := notify.FormatData{
 		"account":        beneficiary.name,
 		"source_account": source.name,
 		"amount":         notify.FormatAmountDisplay(transferAmount, currencyCode),
 		"source_balance": notify.FormatAmountDisplay(source.balance, currencyCode),
 		"account_url":    notify.AccountURLPlaceholderValue(externalURL, localeCode, beneficiary.id),
-	})
+	}
+	text, err := notify.Format(notify.TriggerAutoTopupDisabled, localeCode, customMap[notify.TriggerAutoTopupDisabled], data)
 	if err != nil {
 		return
 	}
 	dedupDate := time.Now().UTC().Format("2006-01-02")
-	notify.Deliver(ctx, db, settings, userID, notify.TriggerAutoTopupDisabled, beneficiary.id, dedupDate, text)
+	notify.Deliver(ctx, db, settings, userID, notify.TriggerAutoTopupDisabled, beneficiary.id, dedupDate, text, data)
 }

@@ -2,7 +2,11 @@
 	import { portal } from '$lib/actions/portal';
 	import type { IconName } from '$lib/components/IconButton.svelte';
 	import IconGlyph from '$lib/components/IconGlyph.svelte';
-	import { actionMenuStyle } from '$lib/dropdown-position';
+	import {
+		actionMenuStyle,
+		dropdownPlacementFor,
+		type DropdownPlacement
+	} from '$lib/dropdown-position';
 	import { randomId } from '$lib/random-id';
 	import { _ } from 'svelte-i18n';
 
@@ -26,6 +30,7 @@
 	let triggerEl: HTMLButtonElement | undefined = $state();
 	let menuEl: HTMLDivElement | undefined = $state();
 	let menuStyle = $state('');
+	let placement = $state<DropdownPlacement | null>(null);
 	let highlighted = $state(0);
 
 	const menuId = `row-actions-${randomId()}`;
@@ -35,20 +40,24 @@
 		if (!triggerEl) return;
 		const rowHeight = 40;
 		const menuHeight = Math.min(320, Math.max(visibleActions.length, 1) * rowHeight + 8);
-		menuStyle = actionMenuStyle(triggerEl, menuHeight, align, menuEl?.offsetWidth);
+		if (!placement) placement = dropdownPlacementFor(triggerEl, menuHeight);
+		menuStyle = actionMenuStyle(triggerEl, menuHeight, align, menuEl?.offsetWidth, placement);
 	}
 
 	function close() {
 		open = false;
+		placement = null;
 	}
 
 	function toggle() {
 		if (visibleActions.length === 0) return;
-		open = !open;
 		if (open) {
-			highlighted = 0;
-			requestAnimationFrame(positionMenu);
+			close();
+			return;
 		}
+		open = true;
+		highlighted = 0;
+		requestAnimationFrame(positionMenu);
 	}
 
 	function runAction(action: RowAction) {

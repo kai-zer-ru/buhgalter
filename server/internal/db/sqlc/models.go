@@ -107,6 +107,19 @@ type Category struct {
 	CreatedAt string `json:"created_at"`
 }
 
+type CategoryRule struct {
+	ID               string  `json:"id"`
+	UserID           string  `json:"user_id"`
+	Kind             string  `json:"kind"`
+	Pattern          *string `json:"pattern"`
+	CategoryID       string  `json:"category_id"`
+	SubcategoryID    *string `json:"subcategory_id"`
+	DefaultAccountID *string `json:"default_account_id"`
+	Priority         int64   `json:"priority"`
+	CreatedAt        string  `json:"created_at"`
+	UpdatedAt        string  `json:"updated_at"`
+}
+
 type Credit struct {
 	ID                        string  `json:"id"`
 	UserID                    string  `json:"user_id"`
@@ -178,6 +191,12 @@ type Debtor struct {
 	CreatedAt string `json:"created_at"`
 }
 
+type FeatureFlag struct {
+	Key       string `json:"key"`
+	Enabled   int64  `json:"enabled"`
+	UpdatedAt string `json:"updated_at"`
+}
+
 type ImportIdempotency struct {
 	ID             string `json:"id"`
 	UserID         string `json:"user_id"`
@@ -197,6 +216,28 @@ type ImportJob struct {
 	StartedAt    *string `json:"started_at"`
 	FinishedAt   *string `json:"finished_at"`
 	UpdatedAt    string  `json:"updated_at"`
+}
+
+type Merchant struct {
+	ID        string `json:"id"`
+	UserID    string `json:"user_id"`
+	Name      string `json:"name"`
+	Icon      string `json:"icon"`
+	CreatedAt string `json:"created_at"`
+}
+
+type NotificationInterceptBankBinding struct {
+	UserID      string `json:"user_id"`
+	AccountID   string `json:"account_id"`
+	BankID      string `json:"bank_id"`
+	PackageName string `json:"package_name"`
+}
+
+type NotificationInterceptCardBinding struct {
+	UserID    string `json:"user_id"`
+	BankID    string `json:"bank_id"`
+	Last4     string `json:"last4"`
+	AccountID string `json:"account_id"`
 }
 
 type NotificationLog struct {
@@ -229,20 +270,26 @@ type NotificationSetting struct {
 	TriggerAutoTopupDisabled      int64   `json:"trigger_auto_topup_disabled"`
 	TriggerUserRegistration       int64   `json:"trigger_user_registration"`
 	TriggerPasswordReset          int64   `json:"trigger_password_reset"`
+	TriggerSubscription           int64   `json:"trigger_subscription"`
 	DebtDaysBefore                int64   `json:"debt_days_before"`
 	MyDebtOverdueDaysLimit        int64   `json:"my_debt_overdue_days_limit"`
 	OwedDebtOverdueStartAfterDays int64   `json:"owed_debt_overdue_start_after_days"`
 	OwedDebtOverdueDaysLimit      int64   `json:"owed_debt_overdue_days_limit"`
 	CreditDaysBefore              int64   `json:"credit_days_before"`
+	SubscriptionDaysBefore        int64   `json:"subscription_days_before"`
 	NotificationTimeLocal         string  `json:"notification_time_local"`
+	KeyboardTelegram              string  `json:"keyboard_telegram"`
+	KeyboardMax                   string  `json:"keyboard_max"`
 	UpdatedAt                     string  `json:"updated_at"`
 }
 
 type NotificationTemplate struct {
-	UserID      string `json:"user_id"`
-	TriggerType string `json:"trigger_type"`
-	Template    string `json:"template"`
-	UpdatedAt   string `json:"updated_at"`
+	UserID           string `json:"user_id"`
+	TriggerType      string `json:"trigger_type"`
+	Template         string `json:"template"`
+	KeyboardTelegram string `json:"keyboard_telegram"`
+	KeyboardMax      string `json:"keyboard_max"`
+	UpdatedAt        string `json:"updated_at"`
 }
 
 type PasswordResetRequest struct {
@@ -335,6 +382,29 @@ type Subcategory struct {
 	CreatedAt  string `json:"created_at"`
 }
 
+type Subscription struct {
+	ID             string  `json:"id"`
+	UserID         string  `json:"user_id"`
+	Name           string  `json:"name"`
+	Description    *string `json:"description"`
+	Icon           *string `json:"icon"`
+	WebsiteUrl     *string `json:"website_url"`
+	Amount         int64   `json:"amount"`
+	AccountID      string  `json:"account_id"`
+	SubcategoryID  *string `json:"subcategory_id"`
+	Period         string  `json:"period"`
+	Weekday        *int64  `json:"weekday"`
+	DayOfMonth     *int64  `json:"day_of_month"`
+	StartDate      string  `json:"start_date"`
+	TimeLocal      string  `json:"time_local"`
+	NextRunAt      string  `json:"next_run_at"`
+	UpcomingRunAts string  `json:"upcoming_run_ats"`
+	LastRunAt      *string `json:"last_run_at"`
+	Active         int64   `json:"active"`
+	CreatedAt      string  `json:"created_at"`
+	UpdatedAt      string  `json:"updated_at"`
+}
+
 type SystemSetting struct {
 	ID                    int64   `json:"id"`
 	IsConfigured          int64   `json:"is_configured"`
@@ -343,12 +413,18 @@ type SystemSetting struct {
 	NotificationSecretKey string  `json:"notification_secret_key"`
 	AppVersion            string  `json:"app_version"`
 	PreviousAppVersion    *string `json:"previous_app_version"`
-	RegistrationEnabled   int64   `json:"registration_enabled"`
 	BackupEnabled         int64   `json:"backup_enabled"`
 	BackupTime            *string `json:"backup_time"`
 	BackupRetention       int64   `json:"backup_retention"`
 	CreatedAt             string  `json:"created_at"`
 	UpdatedAt             string  `json:"updated_at"`
+}
+
+type Tag struct {
+	ID        string `json:"id"`
+	UserID    string `json:"user_id"`
+	Name      string `json:"name"`
+	CreatedAt string `json:"created_at"`
 }
 
 type Transaction struct {
@@ -368,8 +444,38 @@ type Transaction struct {
 	ReceiptItemIndex  *int64  `json:"receipt_item_index"`
 	TransactionDate   string  `json:"transaction_date"`
 	AffectsBalance    int64   `json:"affects_balance"`
+	SubscriptionID    *string `json:"subscription_id"`
+	MerchantID        *string `json:"merchant_id"`
 	CreatedAt         string  `json:"created_at"`
 	UpdatedAt         string  `json:"updated_at"`
+}
+
+type TransactionTag struct {
+	TransactionID string `json:"transaction_id"`
+	TagID         string `json:"tag_id"`
+}
+
+type TransactionTemplate struct {
+	ID            string  `json:"id"`
+	UserID        string  `json:"user_id"`
+	Name          string  `json:"name"`
+	Type          string  `json:"type"`
+	AccountID     *string `json:"account_id"`
+	ToAccountID   *string `json:"to_account_id"`
+	CategoryID    *string `json:"category_id"`
+	SubcategoryID *string `json:"subcategory_id"`
+	Amount        *int64  `json:"amount"`
+	Description   *string `json:"description"`
+	MerchantID    *string `json:"merchant_id"`
+	Icon          *string `json:"icon"`
+	SortOrder     int64   `json:"sort_order"`
+	CreatedAt     string  `json:"created_at"`
+	UpdatedAt     string  `json:"updated_at"`
+}
+
+type TransactionTemplateTag struct {
+	TemplateID string `json:"template_id"`
+	TagID      string `json:"tag_id"`
 }
 
 type User struct {
@@ -385,4 +491,13 @@ type User struct {
 	Status       string  `json:"status"`
 	CreatedAt    string  `json:"created_at"`
 	UpdatedAt    string  `json:"updated_at"`
+}
+
+type UserChangeEvent struct {
+	ID         int64  `json:"id"`
+	UserID     string `json:"user_id"`
+	EntityType string `json:"entity_type"`
+	EntityID   string `json:"entity_id"`
+	Action     string `json:"action"`
+	OccurredAt string `json:"occurred_at"`
 }

@@ -56,7 +56,7 @@
 
 ### Middleware
 
-`RequireAuth` и `RequireAPIToken` отклоняют запросы пользователей со статусом не `active` (коды те же). При бане сессии инвалидируются админским endpoint.
+`RequireAuth` и `RequireAPIToken` отклоняют запросы пользователей со статусом не `active` (коды те же). При бане сессии и API-токены **удаляются** админским endpoint (после снятия бана старые Bearer не оживают — нужны новые токены).
 
 ## Смена статуса (админ)
 
@@ -84,17 +84,17 @@
 - нельзя установить `pending` через API (`400`, `USER_STATUS_INVALID`);
 - недопустимый переход — `400`, `USER_STATUS_TRANSITION`.
 
-При переходе в `banned` все сессии пользователя удаляются. Audit: `admin.user.status`.
+При переходе в `banned` все сессии и API-токены пользователя удаляются. Audit: `admin.user.status`.
 
 Поле `status` возвращается в `GET /admin/users`, `POST /admin/users`, `GET /auth/me`.
 
 ## Уведомления администраторам
 
-При `POST /auth/register` — отправка в Telegram/MAX всем админам с настроенным каналом и включённым триггером `user_registration`. Регистрация в системе должна быть разрешена (`registration_enabled`).
+При `POST /auth/register` — отправка в Telegram/MAX всем админам с настроенным каналом и включённым триггером `user_registration`. Регистрация в системе должна быть разрешена (флаг `registration`, см. [feature-toggles.md](../feature-toggles.md); публично — `registration_enabled` в `GET /setup/status`).
 
 По образцу [`password_reset`](../../server/internal/notify/service.go) (`NotifyAdminsOnPasswordReset`).
 
-Триггер `user_registration` и шаблон в настройках уведомлений доступны **только администраторам** и **скрываются в UI**, если самостоятельная регистрация отключена. API не возвращает шаблон и не принимает изменения триггера/шаблона при `registration_enabled = 0`.
+Триггер `user_registration` и шаблон в настройках уведомлений доступны **только администраторам** и **скрываются в UI**, если самостоятельная регистрация отключена. API не возвращает шаблон и не принимает изменения триггера/шаблона при `registration = false`. Модуль уведомлений также должен быть включён (`notifications`).
 
 ### Триггер и шаблон
 
@@ -102,7 +102,7 @@
 |------|----------|
 | `trigger_type` | `user_registration` |
 | Доступ | только администраторы (настройка и шаблон в UI) |
-| Видимость в UI | только при `system_settings.registration_enabled = 1` |
+| Видимость в UI | только при флаге `registration = true` (и `notifications = true`) |
 | `notification_settings` | `trigger_user_registration` (default `1`) |
 
 Плейсхолдеры:

@@ -2,6 +2,10 @@ import { writable } from 'svelte/store';
 import type { User } from '$lib/api/client';
 import { ApiError, getMe, isTransientHttpError, logout as apiLogout } from '$lib/api/client';
 import { resetSessionExpiredSignal } from '$lib/auth/session-expired';
+import { clearFeatureFlags, loadFeatureFlags } from '$lib/features';
+import { clearRefCache, setRefCacheUserId } from '$lib/ref-cache';
+import { warmRefCache } from '$lib/ref-cache-warm';
+import { connectRealtime, disconnectRealtime } from '$lib/realtime';
 
 export const user = writable<User | null>(null);
 export const authReady = writable(false);
@@ -51,7 +55,11 @@ export async function loadUser(): Promise<LoadUserResult> {
 		try {
 			const me = await getMe();
 			user.set(me);
+			setRefCacheUserId(me.id);
 			markSessionHint();
+			await loadFeatureFlags();
+			void warmRefCache();
+			connectRealtime();
 			return 'ok';
 		} catch (err) {
 			const retryable =
@@ -65,7 +73,11 @@ export async function loadUser(): Promise<LoadUserResult> {
 			}
 
 			if (err instanceof ApiError && err.status === 401) {
+				disconnectRealtime();
 				clearSessionHint();
+				clearRefCache();
+				clearFeatureFlags();
+				setRefCacheUserId(null);
 				user.set(null);
 				return 'unauthorized';
 			}
@@ -82,6 +94,10 @@ export async function logout() {
 	} catch {
 		// ignore
 	}
+	disconnectRealtime();
 	clearSessionHint();
+	clearRefCache();
+	clearFeatureFlags();
+	setRefCacheUserId(null);
 	user.set(null);
 }

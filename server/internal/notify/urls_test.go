@@ -46,4 +46,10 @@ func TestApplyPreviewURLs(t *testing.T) {
 	if data["credit_url"] != base+"/credits/"+previewCreditID {
 		t.Fatalf("preview credit url: %q", data["credit_url"])
 	}
+
+	shortfall := FormatData{}
+	applyPreviewURLs(TriggerBalanceShortfall, shortfall, base, "ru", "RUB")
+	if shortfall["account_url"] != base+"/accounts/"+previewAccountID {
+		t.Fatalf("preview shortfall account_url: %q", shortfall["account_url"])
+	}
 }

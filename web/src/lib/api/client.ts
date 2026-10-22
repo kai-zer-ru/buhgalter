@@ -1,7 +1,23 @@
 import { get } from 'svelte/store';
 import { locale } from 'svelte-i18n';
 import { cachedGet, invalidateApiCache, seedStaticRef } from '$lib/api/cache';
+import { exportCSVUrl } from '$lib/api/export-url';
 import { notifySessionExpired, shouldRedirectApi401 } from '$lib/auth/session-expired';
+import {
+	clearRefCache,
+	enrichAccountWithCachedBalances,
+	enrichAccountsWithCachedBalances,
+	fetchWithRefCache,
+	isStaleFetchError,
+	markLocalMutation,
+	notifyRealtimeInvalidate,
+	readAccountsFromOfflineCache,
+	readCategoriesFromOfflineCache,
+	readRefCache,
+	seedDictionariesFromUIMeta,
+	shouldInvalidateRefCacheOnWrite,
+	shouldPersistRefCache
+} from '$lib/ref-cache';
 
 const API_BASE = '';
 
@@ -27,7 +43,7 @@ export function isTransientHttpError(status: number): boolean {
 	return status === 408 || status === 502 || status === 503 || status === 504;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function requestNetwork<T>(path: string, init?: RequestInit): Promise<T> {
 	const res = await fetch(`${API_BASE}${path}`, {
 		credentials: 'include',
 		headers: {
@@ -63,6 +79,27 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 		return undefined as T;
 	}
 	return res.json() as Promise<T>;
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+	const method = (init?.method ?? 'GET').toUpperCase();
+	const fetcher = () => requestNetwork<T>(path, init);
+	if (method === 'GET' && shouldPersistRefCache(path)) {
+		return fetchWithRefCache(path, fetcher);
+	}
+	const result = await fetcher();
+	if (method !== 'GET' && shouldInvalidateRefCacheOnWrite(path)) {
+		// Match server apicache: any write invalidates client SWR so subsequent load() hits network.
+		// Web: full clear (not preserveAuthMe). Preserving /accounts after a transaction left a
+		// ui/meta seed (balances 0.00) in SWR; with a live WebSocket background revalidate is
+		// skipped, so /accounts froze on zeros until F5 (e2e: create account → expense → balance).
+		// Soft-reload via notifyRealtimeInvalidate — WS echo is suppressed by wasRecentLocalMutation,
+		// so open ledger screens must not wait for the socket.
+		markLocalMutation();
+		invalidateApiCache();
+		notifyRealtimeInvalidate();
+	}
+	return result;
 }
 
 export type SetupStatus = {
@@ -115,11 +152,38 @@ export type UserSettings = {
 	theme: string;
 };
 
+export type NotificationKeyboardButton = {
+	type: string;
+	text: string;
+	url?: string;
+	callback_data?: string;
+	web_app?: { url: string };
+	login_url?: {
+		url: string;
+		forward_text?: string;
+		bot_username?: string;
+		request_write_access?: boolean;
+	};
+	switch_inline_query?: string | null;
+	switch_inline_query_current_chat?: string | null;
+	switch_inline_query_chosen_chat?: Record<string, unknown>;
+	callback_game?: Record<string, unknown>;
+	pay?: boolean;
+	copy_text?: { text: string };
+	payload?: string;
+};
+
+export type NotificationInlineKeyboard = {
+	rows: NotificationKeyboardButton[][];
+};
+
 export type NotificationTemplate = {
 	trigger_type: string;
 	template: string;
 	placeholders: string[];
 	is_custom: boolean;
+	keyboard_telegram: NotificationInlineKeyboard;
+	keyboard_max: NotificationInlineKeyboard;
 };
 
 export type NotificationSettings = {
@@ -134,6 +198,7 @@ export type NotificationSettings = {
 	max_recipient_id?: number | null;
 	trigger_debt: boolean;
 	trigger_credit: boolean;
+	trigger_subscription?: boolean;
 	trigger_planned: boolean;
 	trigger_negative_balance: boolean;
 	trigger_budget: boolean;
@@ -145,7 +210,10 @@ export type NotificationSettings = {
 	owed_debt_overdue_start_after_days: number;
 	owed_debt_overdue_days_limit: number;
 	credit_days_before: number;
+	subscription_days_before?: number;
 	notification_time_local: string;
+	keyboard_telegram: NotificationInlineKeyboard;
+	keyboard_max: NotificationInlineKeyboard;
 	templates: NotificationTemplate[];
 };
 
@@ -160,6 +228,7 @@ export type NotificationSettingsUpdate = {
 	max_recipient_id?: number | null;
 	trigger_debt?: boolean;
 	trigger_credit?: boolean;
+	trigger_subscription?: boolean;
 	trigger_planned?: boolean;
 	trigger_negative_balance?: boolean;
 	trigger_budget?: boolean;
@@ -171,19 +240,41 @@ export type NotificationSettingsUpdate = {
 	owed_debt_overdue_start_after_days?: number;
 	owed_debt_overdue_days_limit?: number;
 	credit_days_before?: number;
+	subscription_days_before?: number;
 	notification_time_local?: string;
-	templates?: Array<{ trigger_type: string; template: string }>;
+	keyboard_telegram?: NotificationInlineKeyboard;
+	keyboard_max?: NotificationInlineKeyboard;
+	templates?: Array<{
+		trigger_type: string;
+		template: string;
+		keyboard_telegram?: NotificationInlineKeyboard;
+		keyboard_max?: NotificationInlineKeyboard;
+	}>;
+};
+
+export type NotificationPreviewResponse = {
+	text: string;
+	keyboard_telegram: NotificationInlineKeyboard;
+	keyboard_max: NotificationInlineKeyboard;
 };
 
 export type AdminSettings = {
-	registration_enabled: boolean;
 	external_url: string;
 	secret_key_set: boolean;
 };
 
 export type AdminSettingsUpdate = {
-	registration_enabled: boolean;
 	external_url: string;
+};
+
+export type FeatureFlagsSnapshot = Record<string, boolean>;
+
+export type AdminFeatureFlag = {
+	key: string;
+	enabled: boolean;
+	title_key: string;
+	description_key: string;
+	default_enabled: boolean;
 };
 
 export type AdminDiagnostics = {
@@ -297,6 +388,7 @@ export function register(
 
 export function logout() {
 	invalidateApiCache();
+	clearRefCache();
 	return request<void>('/api/v1/auth/logout', { method: 'POST' });
 }
 
@@ -348,6 +440,10 @@ export function putUserSettings(settings: UserSettings) {
 	});
 }
 
+export function deleteUserData() {
+	return request<void>('/api/v1/user/data', { method: 'DELETE' });
+}
+
 export function getNotificationSettings() {
 	return request<NotificationSettings>('/api/v1/user/notifications');
 }
@@ -366,8 +462,13 @@ export function sendNotificationTest(channel: 'telegram' | 'max') {
 	});
 }
 
-export function previewNotificationTemplate(payload: { trigger_type: string; template: string }) {
-	return request<{ text: string }>('/api/v1/user/notifications/templates/preview', {
+export function previewNotificationTemplate(payload: {
+	trigger_type: string;
+	template: string;
+	keyboard_telegram?: NotificationInlineKeyboard;
+	keyboard_max?: NotificationInlineKeyboard;
+}) {
+	return request<NotificationPreviewResponse>('/api/v1/user/notifications/templates/preview', {
 		method: 'POST',
 		body: JSON.stringify(payload)
 	});
@@ -434,6 +535,21 @@ export function putAdminNotificationSecretKey(notificationSecretKey: string) {
 	return request<AdminSettings>('/api/v1/admin/settings/notification-secret', {
 		method: 'PUT',
 		body: JSON.stringify({ notification_secret_key: notificationSecretKey })
+	});
+}
+
+export function getFeatures() {
+	return request<FeatureFlagsSnapshot>('/api/v1/features');
+}
+
+export function getAdminFeatures() {
+	return request<AdminFeatureFlag[]>('/api/v1/admin/features');
+}
+
+export function putAdminFeatures(updates: FeatureFlagsSnapshot) {
+	return request<FeatureFlagsSnapshot>('/api/v1/admin/features', {
+		method: 'PUT',
+		body: JSON.stringify(updates)
 	});
 }
 
@@ -588,6 +704,9 @@ export type UIMeta = {
 	expense_categories: Category[];
 	income_categories: Category[];
 	debtors: Debtor[];
+	merchants: Merchant[];
+	tags: Tag[];
+	transaction_templates?: TransactionTemplate[];
 	active_credits: Credit[];
 	closed_credits: Credit[];
 };
@@ -595,17 +714,32 @@ export type UIMeta = {
 export async function getUIMeta() {
 	const meta = await request<UIMeta>('/api/v1/ui/meta');
 	seedStaticRef('/api/v1/banks', meta.banks);
+	seedStaticRef('/api/v1/merchants', meta.merchants ?? []);
+	seedStaticRef('/api/v1/tags', meta.tags ?? []);
+	seedStaticRef('/api/v1/transaction-templates', meta.transaction_templates ?? []);
+	seedDictionariesFromUIMeta(meta);
 	return meta;
 }
 
 export function listAccounts(status?: 'active' | 'archived' | 'deleted') {
 	const q = status ? `?status=${status}` : '';
 	const path = `/api/v1/accounts${q}`;
-	return request<Account[]>(path);
+	const finalize = (rows: Account[]) => enrichAccountsWithCachedBalances(rows);
+	return request<Account[]>(path)
+		.then((rows) => {
+			if (rows.length > 0) return finalize(rows);
+			return finalize(readAccountsFromOfflineCache(status) ?? rows);
+		})
+		.catch((err) => {
+			if (!isStaleFetchError(err)) throw err;
+			const fromCache = readAccountsFromOfflineCache(status);
+			if (fromCache !== null) return fromCache;
+			throw err;
+		});
 }
 
 export function getAccount(id: string) {
-	return request<Account>(`/api/v1/accounts/${id}`);
+	return request<Account>(`/api/v1/accounts/${id}`).then(enrichAccountWithCachedBalances);
 }
 
 export function createAccount(payload: {
@@ -642,6 +776,13 @@ export function updateAccount(
 	});
 }
 
+export function changeAccountCreditLimit(id: string, creditLimit: string) {
+	return request<Account>(`/api/v1/accounts/${id}/credit-limit`, {
+		method: 'PUT',
+		body: JSON.stringify({ credit_limit: creditLimit })
+	});
+}
+
 export function archiveAccount(id: string, transferToAccountId?: string) {
 	const q = transferToAccountId
 		? `?transfer_to_account_id=${encodeURIComponent(transferToAccountId)}`
@@ -666,7 +807,16 @@ export function deleteAccount(id: string, transferToAccountId?: string) {
 
 export function listCategories(type?: 'income' | 'expense') {
 	const q = type ? `?type=${type}` : '';
-	return request<Category[]>(`/api/v1/categories${q}`);
+	const path = `/api/v1/categories${q}`;
+	return request<Category[]>(path)
+		.then((rows) => {
+			if (rows.length > 0) return rows;
+			return readCategoriesFromOfflineCache<Category>(type) ?? rows;
+		})
+		.catch((err) => {
+			if (!isStaleFetchError(err)) throw err;
+			return readCategoriesFromOfflineCache<Category>(type) ?? [];
+		});
 }
 
 export function createCategory(payload: {
@@ -707,7 +857,10 @@ export function setPrimaryCategory(id: string) {
 }
 
 export function listSubcategories(categoryId: string) {
-	return request<Subcategory[]>(`/api/v1/categories/${categoryId}/subcategories`);
+	return request<Subcategory[]>(`/api/v1/categories/${categoryId}/subcategories`).catch((err) => {
+		if (!isStaleFetchError(err)) throw err;
+		return [];
+	});
 }
 
 export function reorderSubcategories(categoryId: string, ids: string[]) {
@@ -746,7 +899,13 @@ export type Transaction = {
 	kind: 'manual' | 'future';
 	amount: number;
 	amount_display: string;
+	commission?: number;
+	commission_display?: string;
 	description: string | null;
+	merchant_id?: string | null;
+	merchant_name?: string | null;
+	merchant_icon?: string | null;
+	tags?: TagRef[];
 	category_id: string | null;
 	category_name?: string | null;
 	category_icon?: string | null;
@@ -762,6 +921,7 @@ export type Transaction = {
 	transfer_account_id?: string | null;
 	transfer_is_out?: boolean;
 	credit_payment_linked?: boolean;
+	subscription_id?: string | null;
 	transaction_date: string;
 	created_at: string;
 	updated_at: string;
@@ -829,6 +989,32 @@ export type StatsPeriodItem = {
 	expense: number;
 };
 
+export type StatsNetWorthSnapshot = {
+	period?: string;
+	as_of: string;
+	net_worth: number;
+	net_worth_display: string;
+	assets: number;
+	assets_display: string;
+	liabilities: number;
+	liabilities_display: string;
+	cash_bank: number;
+	cash_bank_display: string;
+	owed_to_me: number;
+	owed_to_me_display: string;
+	i_owe: number;
+	i_owe_display: string;
+	credits_remaining: number;
+	credits_remaining_display: string;
+	credit_cards_debt: number;
+	credit_cards_debt_display: string;
+};
+
+export type StatsNetWorthResponse = {
+	current: StatsNetWorthSnapshot;
+	items: StatsNetWorthSnapshot[];
+};
+
 export type StatsContext = StatsSummary & {
 	scope: 'all' | 'account' | 'debtor' | 'credit' | 'debts';
 	scope_id?: string;
@@ -849,6 +1035,9 @@ export type AccountBalanceSummary = {
 	forecast_balance: number;
 	forecast_display: string;
 	has_future_this_month: boolean;
+	has_planned_this_month?: boolean;
+	has_subscriptions_this_month?: boolean;
+	is_primary: boolean;
 	credit_limit?: number | null;
 	credit_limit_display?: string | null;
 	auto_topup_enabled?: boolean;
@@ -878,10 +1067,47 @@ export type AccountsSummary = {
 export type Dashboard = {
 	total_balance: number;
 	total_forecast: number;
+	inbox_count?: number;
 	credit_cards_summary?: CreditCardsSummary | null;
 	accounts: AccountBalanceSummary[];
 	recent_transactions: Transaction[];
 	debts_summary: DebtsSummary;
+};
+
+export type CategoryRuleKind = 'category_account' | 'text_category';
+
+export type CategoryRule = {
+	id: string;
+	kind: CategoryRuleKind;
+	pattern?: string | null;
+	category_id: string;
+	subcategory_id?: string | null;
+	default_account_id?: string | null;
+	priority: number;
+	created_at: string;
+	updated_at: string;
+};
+
+export type CategoryRuleUpsert = {
+	kind: CategoryRuleKind;
+	pattern?: string | null;
+	category_id: string;
+	subcategory_id?: string | null;
+	default_account_id?: string | null;
+};
+
+export type CategoryRuleTextMatch = {
+	rule_id: string;
+	pattern: string;
+	category_id: string;
+	subcategory_id?: string | null;
+	priority: number;
+};
+
+export type CategoryRuleEvaluateResult = {
+	text_matches: CategoryRuleTextMatch[];
+	account_suggestion: { rule_id: string; account_id: string } | null;
+	ambiguous: boolean;
 };
 
 export type DebtsSummary = {
@@ -910,6 +1136,56 @@ export type Debtor = {
 	id: string;
 	name: string;
 	created_at: string;
+};
+
+export type Merchant = {
+	id: string;
+	name: string;
+	icon: string;
+	created_at: string;
+};
+
+export type Tag = {
+	id: string;
+	name: string;
+	created_at: string;
+};
+
+export type TagRef = {
+	id: string;
+	name: string;
+};
+
+export type TransactionTemplate = {
+	id: string;
+	name: string;
+	type: 'income' | 'expense' | 'transfer';
+	account_id?: string | null;
+	to_account_id?: string | null;
+	category_id?: string | null;
+	subcategory_id?: string | null;
+	amount?: number | null;
+	description?: string | null;
+	merchant_id?: string | null;
+	icon?: string | null;
+	sort_order: number;
+	tags: TagRef[];
+	created_at: string;
+	updated_at: string;
+};
+
+export type TransactionTemplateUpsert = {
+	name: string;
+	type: 'income' | 'expense' | 'transfer';
+	account_id?: string | null;
+	to_account_id?: string | null;
+	category_id?: string | null;
+	subcategory_id?: string | null;
+	amount?: number | null;
+	description?: string | null;
+	merchant_id?: string | null;
+	icon?: string | null;
+	tag_ids?: string[];
 };
 
 export type DebtorDetail = Debtor & {
@@ -958,11 +1234,39 @@ export function listTransactions(params?: Record<string, string>) {
 	return request<TransactionList>(`/api/v1/transactions${q}`);
 }
 
+export type TransactionChange = {
+	id: number;
+	action: 'upsert' | 'deleted';
+	entity_id: string;
+	occurred_at: string;
+	transaction?: Transaction;
+};
+
+export type TransactionChanges = {
+	server_time: string;
+	since_id: number;
+	has_more: boolean;
+	changes: TransactionChange[];
+};
+
+export function listTransactionChanges(params?: {
+	since_id?: number;
+	since?: string;
+	limit?: number;
+}) {
+	const sp = new URLSearchParams();
+	if (params?.since_id != null) sp.set('since_id', String(params.since_id));
+	if (params?.since) sp.set('since', params.since);
+	if (params?.limit != null) sp.set('limit', String(params.limit));
+	const q = sp.toString();
+	return request<TransactionChanges>(`/api/v1/sync/transaction-changes${q ? `?${q}` : ''}`);
+}
+
 export function getTransaction(id: string) {
 	return request<Transaction>(`/api/v1/transactions/${id}`);
 }
 
-export function createTransaction(payload: {
+export type TransactionWritePayload = {
 	account_id: string;
 	type: 'income' | 'expense';
 	amount: string;
@@ -971,8 +1275,14 @@ export function createTransaction(payload: {
 	subcategory_id?: string;
 	subcategory_name?: string;
 	store_id?: string;
+	merchant_id?: string;
+	merchant_name?: string;
+	tag_ids?: string[];
+	tag_names?: string[];
 	transaction_date: string;
-}) {
+};
+
+export function createTransaction(payload: TransactionWritePayload) {
 	return request<Transaction>('/api/v1/transactions', {
 		method: 'POST',
 		body: JSON.stringify(payload)
@@ -993,6 +1303,7 @@ export function updateTransaction(
 		transaction_date: string;
 	}
 ) {
+export function updateTransaction(id: string, payload: TransactionWritePayload) {
 	return request<Transaction>(`/api/v1/transactions/${id}`, {
 		method: 'PUT',
 		body: JSON.stringify(payload)
@@ -1054,6 +1365,159 @@ export function deleteRecurringOperation(id: string) {
 	return request<void>(`/api/v1/recurring-operations/${id}`, { method: 'DELETE' });
 }
 
+export type SubscriptionPeriod = 'week' | 'two_weeks' | 'month' | 'quarter' | 'half_year' | 'year';
+
+export type Subscription = {
+	id: string;
+	name: string;
+	description: string | null;
+	icon: string | null;
+	website_url: string | null;
+	amount: number;
+	amount_display: string;
+	account_id: string;
+	account_name: string;
+	subcategory_id: string | null;
+	subcategory_name: string | null;
+	subcategory_icon: string | null;
+	period: SubscriptionPeriod;
+	weekday: number | null;
+	day_of_month: number | null;
+	start_date: string;
+	time_local: string;
+	next_run_at: string;
+	upcoming_run_ats: string[];
+	last_run_at: string | null;
+	active: boolean;
+	created_at: string;
+	updated_at: string;
+};
+
+export type SubscriptionSummary = {
+	monthly_total: number;
+	monthly_total_display: string;
+	yearly_total: number;
+	yearly_total_display: string;
+	upcoming: Subscription[];
+};
+
+export type SubscriptionCandidateTransaction = {
+	id: string;
+	account_id: string;
+	account_name: string;
+	amount: number;
+	amount_display: string;
+	description: string | null;
+	category_id: string | null;
+	category_name: string | null;
+	subcategory_id: string | null;
+	subcategory_name: string | null;
+	transaction_date: string;
+	score: number;
+	match_reasons: string[];
+};
+
+export type SubscriptionCandidateResult = {
+	items: SubscriptionCandidateTransaction[];
+	total: number;
+};
+
+export type SubscriptionUpsertPayload = {
+	name: string;
+	amount: string;
+	description?: string;
+	icon?: string;
+	website_url?: string;
+	account_id: string;
+	period: SubscriptionPeriod;
+	weekday?: number;
+	day_of_month?: number;
+	start_date: string;
+	time_local?: string;
+	active?: boolean;
+	upcoming_run_ats?: string[];
+	attach_transaction_id?: string;
+};
+
+export type SubscriptionPreviewUpcomingPayload = {
+	period: SubscriptionPeriod;
+	weekday?: number;
+	day_of_month?: number;
+	start_date: string;
+	time_local?: string;
+};
+
+export function listSubscriptions() {
+	return request<Subscription[]>('/api/v1/subscriptions');
+}
+
+export function getSubscriptionsSummary(params?: { upcoming_days?: number }) {
+	const q = new URLSearchParams();
+	if (params?.upcoming_days != null) q.set('upcoming_days', String(params.upcoming_days));
+	const suffix = q.toString() ? `?${q}` : '';
+	return request<SubscriptionSummary>(`/api/v1/subscriptions/summary${suffix}`);
+}
+
+export function previewSubscriptionUpcoming(payload: SubscriptionPreviewUpcomingPayload) {
+	return request<{ upcoming_run_ats: string[] }>('/api/v1/subscriptions/preview-upcoming', {
+		method: 'POST',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function createSubscription(payload: SubscriptionUpsertPayload) {
+	return request<Subscription>('/api/v1/subscriptions', {
+		method: 'POST',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function updateSubscription(id: string, payload: SubscriptionUpsertPayload) {
+	return request<Subscription>(`/api/v1/subscriptions/${id}`, {
+		method: 'PUT',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function deleteSubscription(id: string) {
+	return request<void>(`/api/v1/subscriptions/${id}`, { method: 'DELETE' });
+}
+
+export function listSubscriptionCandidateTransactions(id: string, params?: Record<string, string>) {
+	const q = params ? '?' + new URLSearchParams(params).toString() : '';
+	return request<SubscriptionCandidateResult>(
+		`/api/v1/subscriptions/${id}/candidate-transactions${q}`
+	);
+}
+
+export function attachSubscriptionTransactions(id: string, ids: string[]) {
+	return request<{ attached_count: number; attached_ids: string[] }>(
+		`/api/v1/subscriptions/${id}/attach-transactions`,
+		{
+			method: 'POST',
+			body: JSON.stringify({ ids })
+		}
+	);
+}
+
+export function createSubscriptionFromRecurring(
+	recurringId: string,
+	payload?: {
+		name?: string;
+		description?: string;
+		icon?: string;
+		website_url?: string;
+	}
+) {
+	return request<{ subscription: Subscription }>(
+		`/api/v1/subscriptions/from-recurring/${recurringId}`,
+		{
+			method: 'POST',
+			body: JSON.stringify(payload ?? {})
+		}
+	);
+}
+
 export type BudgetScope = 'category' | 'subcategory' | 'all_expense';
 
 export type BudgetItem = {
@@ -1108,6 +1572,27 @@ export function listBudgets(month?: string) {
 export function getBudgetSummary(month?: string) {
 	const q = month ? `?month=${encodeURIComponent(month)}` : '';
 	return request<BudgetSummaryResponse>(`/api/v1/budgets/summary${q}`);
+}
+
+export type BudgetSpentPreview = {
+	spent: number;
+	spent_display: string;
+};
+
+export function getBudgetSpentPreview(params: {
+	month?: string;
+	scope: BudgetScope;
+	category_id?: string;
+	subcategory_id?: string;
+	account_id?: string;
+}) {
+	const q = new URLSearchParams();
+	if (params.month) q.set('month', params.month);
+	q.set('scope', params.scope);
+	if (params.category_id) q.set('category_id', params.category_id);
+	if (params.subcategory_id) q.set('subcategory_id', params.subcategory_id);
+	if (params.account_id) q.set('account_id', params.account_id);
+	return request<BudgetSpentPreview>(`/api/v1/budgets/spent-preview?${q.toString()}`);
 }
 
 export function createBudget(
@@ -1387,12 +1872,173 @@ export function getStatsContext(params?: Record<string, string>) {
 	return request<StatsContext>(`/api/v1/stats/context${q}`);
 }
 
+export function getStatsNetWorth(params?: Record<string, string>) {
+	const q = params ? '?' + new URLSearchParams(params).toString() : '';
+	return request<StatsNetWorthResponse>(`/api/v1/stats/net-worth${q}`);
+}
+
 export function getAccountsSummary() {
 	return request<AccountsSummary>('/api/v1/accounts/summary');
 }
 
 export function getAccountBalance(id: string) {
 	return request<AccountBalanceSummary>(`/api/v1/accounts/${id}/balance`);
+}
+
+export function listMerchants() {
+	return request<Merchant[]>('/api/v1/merchants')
+		.then((rows) => {
+			if (rows.length > 0) return rows;
+			return readRefCache<Merchant[]>('/api/v1/merchants') ?? rows;
+		})
+		.catch((err) => {
+			if (!isStaleFetchError(err)) throw err;
+			return (
+				readRefCache<Merchant[]>('/api/v1/merchants') ??
+				readRefCache<UIMeta>('/api/v1/ui/meta')?.merchants ??
+				[]
+			);
+		});
+}
+
+export function createMerchant(name: string, icon?: string) {
+	return request<Merchant>('/api/v1/merchants', {
+		method: 'POST',
+		body: JSON.stringify({ name, icon: icon?.trim() || 'default' })
+	});
+}
+
+export function updateMerchant(id: string, name: string, icon?: string) {
+	return request<Merchant>(`/api/v1/merchants/${id}`, {
+		method: 'PUT',
+		body: JSON.stringify({ name, icon: icon?.trim() || 'default' })
+	});
+}
+
+export function deleteMerchant(id: string) {
+	return request<void>(`/api/v1/merchants/${id}`, { method: 'DELETE' });
+}
+
+export function listTags(q?: string) {
+	const params = q?.trim() ? `?q=${encodeURIComponent(q.trim())}` : '';
+	return request<Tag[]>(`/api/v1/tags${params}`)
+		.then((rows) => {
+			if (rows.length > 0 || params) return rows;
+			return readRefCache<Tag[]>('/api/v1/tags') ?? rows;
+		})
+		.catch((err) => {
+			if (!isStaleFetchError(err)) throw err;
+			if (params) return [];
+			return (
+				readRefCache<Tag[]>('/api/v1/tags') ?? readRefCache<UIMeta>('/api/v1/ui/meta')?.tags ?? []
+			);
+		});
+}
+
+export function createTag(name: string) {
+	return request<Tag>('/api/v1/tags', {
+		method: 'POST',
+		body: JSON.stringify({ name })
+	});
+}
+
+export function updateTag(id: string, name: string) {
+	return request<Tag>(`/api/v1/tags/${id}`, {
+		method: 'PUT',
+		body: JSON.stringify({ name })
+	});
+}
+
+export function deleteTag(id: string) {
+	return request<void>(`/api/v1/tags/${id}`, { method: 'DELETE' });
+}
+
+export function listTransactionTemplates() {
+	return request<TransactionTemplate[]>('/api/v1/transaction-templates');
+}
+
+export function getTransactionTemplate(id: string) {
+	return request<TransactionTemplate>(`/api/v1/transaction-templates/${id}`);
+}
+
+export function createTransactionTemplate(payload: TransactionTemplateUpsert) {
+	return request<TransactionTemplate>('/api/v1/transaction-templates', {
+		method: 'POST',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function updateTransactionTemplate(id: string, payload: TransactionTemplateUpsert) {
+	return request<TransactionTemplate>(`/api/v1/transaction-templates/${id}`, {
+		method: 'PUT',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function deleteTransactionTemplate(id: string) {
+	return request<void>(`/api/v1/transaction-templates/${id}`, { method: 'DELETE' });
+}
+
+export function reorderTransactionTemplates(ids: string[]) {
+	return request<TransactionTemplate[]>('/api/v1/transaction-templates/reorder', {
+		method: 'PUT',
+		body: JSON.stringify({ ids })
+	});
+}
+
+export function listCategoryRules() {
+	return request<CategoryRule[]>('/api/v1/category-rules');
+}
+
+export function createCategoryRule(payload: CategoryRuleUpsert) {
+	return request<CategoryRule>('/api/v1/category-rules', {
+		method: 'POST',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function updateCategoryRule(id: string, payload: CategoryRuleUpsert) {
+	return request<CategoryRule>(`/api/v1/category-rules/${id}`, {
+		method: 'PUT',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function deleteCategoryRule(id: string) {
+	return request<void>(`/api/v1/category-rules/${id}`, { method: 'DELETE' });
+}
+
+export function reorderCategoryRules(ids: string[]) {
+	return request<CategoryRule[]>('/api/v1/category-rules/order', {
+		method: 'PUT',
+		body: JSON.stringify({ ids })
+	});
+}
+
+export function evaluateCategoryRules(payload: {
+	description?: string;
+	category_id?: string;
+	subcategory_id?: string;
+}) {
+	return request<CategoryRuleEvaluateResult>('/api/v1/category-rules/evaluate', {
+		method: 'POST',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function listInboxTransactions(params?: { page?: number; limit?: number; sort?: string }) {
+	const qs = new URLSearchParams();
+	if (params?.page) qs.set('page', String(params.page));
+	if (params?.limit) qs.set('limit', String(params.limit));
+	if (params?.sort) qs.set('sort', params.sort);
+	const q = qs.toString();
+	return request<{ data: Transaction[]; meta: { page: number; limit: number; total: number } }>(
+		`/api/v1/transactions/inbox${q ? `?${q}` : ''}`
+	);
+}
+
+export function getInboxCount() {
+	return request<{ count: number }>('/api/v1/transactions/inbox/count');
 }
 
 export function listDebtors() {
@@ -1546,7 +2192,7 @@ export function updateCredit(id: string, payload: Record<string, unknown>) {
 
 export function addCreditPayment(
 	id: string,
-	payload: { amount: string; payment_date: string; account_id?: string }
+	payload: { amount?: string; payment_date?: string; account_id?: string; transaction_id?: string }
 ) {
 	return request<Credit>(`/api/v1/credits/${id}/payments`, {
 		method: 'POST',
@@ -1587,6 +2233,9 @@ export function previewCreditSchedule(payload: Record<string, unknown>) {
 		schedule_preview: SchedulePreviewEntry[];
 		calculated_monthly_payment: number;
 		calculated_monthly_payment_display: string;
+		effective_monthly_payment: number;
+		effective_monthly_payment_display: string;
+		user_set_monthly_payment: boolean;
 	}>('/api/v1/credits/schedule/preview', {
 		method: 'POST',
 		body: JSON.stringify(payload)
@@ -1618,6 +2267,7 @@ export type AccountMappingSuggestion = {
 	account_type?: AccountType;
 	bank_id?: string;
 	credit_limit?: string;
+	initial_balance?: string;
 };
 
 export type CategoryMappingSuggestion = {
@@ -1651,6 +2301,8 @@ export type ImportReport = {
 	total_rows: number;
 	processed_rows?: number;
 	valid_rows: number;
+	transfer_rows?: number;
+	list_rows?: number;
 	skipped_duplicates: number;
 	created_transactions?: number;
 	errors: ImportRowError[];
@@ -1680,11 +2332,12 @@ export type AccountMapEntry = {
 	account_type?: AccountType;
 	bank_id?: string;
 	credit_limit?: string;
+	initial_balance?: string;
 };
 
 export type ImportOptions = {
 	file: File;
-	preset?: 'cubux' | 'custom';
+	preset?: 'buhgalter' | 'cubux' | 'custom';
 	deduplicate?: boolean;
 	confirm?: boolean;
 	column_map?: Record<string, string>;
@@ -1698,7 +2351,7 @@ export type ImportOptions = {
 function importFormData(opts: ImportOptions): FormData {
 	const form = new FormData();
 	form.append('file', opts.file);
-	form.append('preset', opts.preset ?? 'cubux');
+	form.append('preset', opts.preset ?? 'buhgalter');
 	form.append('deduplicate', String(opts.deduplicate ?? true));
 	form.append('auto_subcategory', String(opts.auto_subcategory ?? true));
 	if (opts.confirm) form.append('confirm', 'true');
@@ -1749,17 +2402,4 @@ export function getImportJob(id: string) {
 	return request<ImportJob>(`/api/v1/import/jobs/${encodeURIComponent(id)}`);
 }
 
-export function exportCSVUrl(params: {
-	from?: string;
-	to?: string;
-	account_id?: string;
-	category_id?: string;
-}) {
-	const q = new URLSearchParams();
-	if (params.from) q.set('from', params.from);
-	if (params.to) q.set('to', params.to);
-	if (params.account_id) q.set('account_id', params.account_id);
-	if (params.category_id) q.set('category_id', params.category_id);
-	const qs = q.toString();
-	return `/api/v1/export${qs ? `?${qs}` : ''}`;
-}
+export { exportCSVUrl };

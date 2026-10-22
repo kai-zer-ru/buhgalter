@@ -1,19 +1,29 @@
 # Сканер чеков
 
-Реализовано в v1.3+ — см. [docs/receipt-scanner.md](../docs/receipt-scanner.md).
+Текущий код (v1.3+): [docs/receipt-scanner.md](../docs/receipt-scanner.md). Целевой переработанный релиз — **v1.10.0** ([ROADMAP](../ROADMAP.md#v1100)): QR на устройстве, BYO состав (proverkacheka), прикрепление к существующим операциям, опционально ИИ и вложение фото. Web + Android.
+
+Feature flag: `receipt_scanner` (см. [feature-toggles.md](feature-toggles.md)). Модуль активен только с токеном API в админке — см. [README](../README.md#сканер-чеков-токен-proverkacheka).
 
 ## Принятые решения
 
-- **Формат:** только QR 54-ФЗ → API ФНС (цепочка: `irkkt-mobile` при `BUHGALTER_FNS_SESSION_ID`, иначе `:9999`, иначе kkt-online + QR-fallback); фото — async scan job на сервере.
-- **Импорт:** одна операция `expense` на позицию чека; общий счёт; категория на строку + массовое назначение.
-- **Магазины:** автоматически из чека (`stores`), опционально в ручном расходе; фильтры и статистика — только при наличии данных.
-- **Хранение:** полный снимок чека в `receipt_imports.payload_json`; иконка и попап в списке операций.
+- **Формат:** QR 54-ФЗ; состав — **proverkacheka.com** (токен инстанса в админке).
+- **Импорт:** одна операция `expense` на позицию; общий счёт; категории на строках.
+- **Прикрепление:** к уже созданному расходу; mismatch суммы → «Добавить всё равно» / «Отмена»; `POST /receipts/attach`.
+- **Магазины:** из чека в `stores`; фильтры и статистика при наличии данных.
+- **Хранение:** JSON в `receipt_imports`; фото не хранится.
 
-## Не в scope v1
+## Уроки экспериментальной ветки
 
-- OCR без QR, зарубежные чеки, ручной CRUD магазинов, хранение фото, offline.
+Не опираться на `BUHGALTER_FNS_SESSION_ID`, `:9999` с VPS и silent fallback «Покупка по чеку». QR надёжнее на устройстве, не на серверном decode фото.
+
+## Scope v1.10.0 (сканер)
+
+1. QR на устройстве (Android + web).
+2. BYO proverkacheka в админке.
+3. Attach к существующей операции.
+4. Опционально: ИИ по фото, вложение снимка.
 
 ## Зависимости
 
-- [Адаптация под мобильные браузеры](mobile-web.md) — камера на телефоне
-- [Android-клиент](android-client.md) — нативный UX (опционально)
+- [Android-клиент](android-client.md), [mobile-web.md](mobile-web.md)
+- [merchants-tags.md](merchants-tags.md), [category-rules-inbox.md](category-rules-inbox.md)

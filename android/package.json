@@ -1,0 +1,16 @@
+{
+	"name": "buhgalter-android",
+	"private": true,
+	"dependencies": {
+		"@aparajita/capacitor-biometric-auth": "^10.0.0",
+		"@aparajita/capacitor-secure-storage": "^8.0.0",
+		"@capacitor/app": "^8.1.0",
+		"@capacitor/core": "^8.4.1",
+		"@capacitor/network": "^8.0.1",
+		"@capacitor/preferences": "^8.0.1"
+	},
+	"devDependencies": {
+		"@capacitor/android": "^8.4.1",
+		"@capacitor/cli": "^8.4.1"
+	}
+}

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ru" data-ui-style="classic">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="theme-color" content="#f8fafc" />
+		<script>
+			(function () {
+				try {
+					var s = localStorage.getItem('ui_style');
+					if (s === 'classic' || s === 'material') {
+						document.documentElement.dataset.uiStyle = s;
+					}
+				} catch (_) {}
+			})();
+		</script>
+		<!-- Paint immediately. Blocking Google Fonts CSS after a WebView wipe stalls ~30s on HyperOS. -->
+		<style>
+			html,
+			body {
+				margin: 0;
+				background: #f8fafc;
+				color: #0f172a;
+			}
+			@media (prefers-color-scheme: dark) {
+				html,
+				body {
+					background: #0f172a;
+					color: #f1f5f9;
+				}
+			}
+		</style>
+		<link rel="manifest" href="/manifest.json" />
+		<link rel="icon" href="/favicon.ico" sizes="any" />
+		<link rel="icon" href="/icon-192.png" sizes="192x192" type="image/png" />
+		<link rel="apple-touch-icon" href="/icon-192.png" sizes="192x192" />
+		%sveltekit.head%
+	</head>
+	<body data-sveltekit-preload-data="hover">
+		<div style="display: contents">%sveltekit.body%</div>
+	</body>
+</html>

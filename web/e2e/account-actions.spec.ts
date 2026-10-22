@@ -42,7 +42,10 @@ test.describe('account page — operation entry points', () => {
 		await page.getByRole('menuitem', { name: 'Расход' }).click();
 
 		await fillTransactionForm(page, { amount: '50', account: account.name });
-		await expect(page.getByText('50.00').first()).toBeVisible({ timeout: 10_000 });
+		// Desktop table is first in DOM but hidden on mobile viewport — assert the mobile card.
+		await expect(page.locator('div.md\\:hidden').getByText('50.00').first()).toBeVisible({
+			timeout: 10_000
+		});
 	});
 
 	test('account page expense form preselects current account', async ({ page }) => {

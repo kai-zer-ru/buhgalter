@@ -16,8 +16,10 @@
 | `toast.error(msg)` | error | Ошибка API, валидация при submit |
 | `toast.warning(msg)` | warning | Предупреждение перед/после действия |
 | `toast.info(msg)` | info | Нейтральная информация |
-| `toast.fromError(err, fallbackKey?)` | error | `catch` с `ApiError` — через `formatApiError` (для `CONFLICT` и др. общих кодов — текст из `error.message` API) |
+| `toast.fromError(err, fallbackKey?)` | error | `catch` с `ApiError` — через `formatApiError` (для `CONFLICT` и др. общих кодов — текст из `error.message` API). **401 / `UNAUTHORIZED` не показываются** (редирект на login при истечении сессии / после logout). **Android:** `isConnectionError` по-прежнему без toast (полоска «Нет соединения»); cache-miss → `common.server_unavailable`, не URL. |
 | `toast(msg, type?, durationMs?)` | любой | Обратная совместимость |
+
+`type` — только `'success' | 'error' | 'info' | 'warning'` (не `'danger'`). В Android UI — тот же API (`android/ui/src/lib/toast.ts`).
 
 Длительность по умолчанию: success/info — 3,2 с; error/warning — 4,5 с.
 

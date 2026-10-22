@@ -22,7 +22,8 @@ export default defineConfig({
 		locale: 'ru-RU'
 	},
 	projects: [
-		{ name: 'setup', testMatch: /auth\.setup\.ts/ },
+		// Cold start + first-time /setup can exceed the default 60s before login.
+		{ name: 'setup', testMatch: /auth\.setup\.ts/, timeout: 120_000 },
 		{
 			name: 'chromium',
 			use: { ...devices['Desktop Chrome'], storageState: authFile },

@@ -7,9 +7,13 @@ const translations: Record<string, string> = {
 	'common.error': 'Ошибка'
 };
 
-vi.mock('svelte/store', () => ({
-	get: () => (key: string) => translations[key] ?? key
-}));
+vi.mock('svelte/store', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('svelte/store')>();
+	return {
+		...actual,
+		get: () => (key: string) => translations[key] ?? key
+	};
+});
 
 vi.mock('svelte-i18n', () => ({
 	_: {}

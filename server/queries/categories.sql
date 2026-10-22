@@ -102,6 +102,13 @@ FROM subcategories
 WHERE category_id = ?
 ORDER BY sort_order, name;
 
+-- name: ListSubcategoriesByUser :many
+SELECT s.id, s.category_id, s.name, s.icon, s.sort_order, s.created_at
+FROM subcategories s
+INNER JOIN categories c ON c.id = s.category_id
+WHERE c.user_id = ?
+ORDER BY s.category_id, s.sort_order, s.name;
+
 -- name: InsertSubcategory :exec
 INSERT INTO subcategories (id, category_id, name, icon, sort_order, created_at)
 VALUES (?, ?, ?, ?, ?, ?);

@@ -131,6 +131,22 @@ func (q *Queries) ClearTransactionSubcategoriesByCategory(ctx context.Context, a
 	return err
 }
 
+const countInboxTransactions = `-- name: CountInboxTransactions :one
+SELECT COUNT(*) AS count
+FROM transactions t
+WHERE t.user_id = ?
+  AND t.type IN ('income', 'expense')
+  AND t.category_id IS NULL
+  AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL)
+`
+
+func (q *Queries) CountInboxTransactions(ctx context.Context, userID string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countInboxTransactions, userID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countTransactionsFiltered = `-- name: CountTransactionsFiltered :one
 SELECT COUNT(*) AS count
 FROM transactions t
@@ -142,7 +158,27 @@ WHERE t.user_id = ?
   AND (? = '' OR t.transaction_date >= ?)
   AND (? = '' OR t.transaction_date <= ?)
   AND (? = '' OR t.description LIKE '%' || ? || '%')
+  AND (? = '' OR t.merchant_id = ?)
   AND (? = '' OR t.store_id = ?)
+  AND (? = '' OR EXISTS (
+    SELECT 1 FROM transaction_tags tt
+    WHERE tt.transaction_id = t.id AND tt.tag_id = ?
+  ))
+  AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL)
+  -- One journal operation per transfer, unless the list is scoped to a single account
+  -- (that account keeps its own leg). Commission stays inside the transfer.
+  AND (
+    ? != ''
+    OR t.type != 'transfer'
+    OR t.transfer_group_id IS NULL
+    OR t.id = (
+      SELECT x.id FROM transactions x
+      WHERE x.transfer_group_id = t.transfer_group_id
+        AND x.type = 'transfer'
+      ORDER BY x.created_at ASC, x.id ASC
+      LIMIT 1
+    )
+  )
 `
 
 type CountTransactionsFilteredParams struct {
@@ -162,7 +198,12 @@ type CountTransactionsFilteredParams struct {
 	Column14          interface{} `json:"column_14"`
 	Column15          *string     `json:"column_15"`
 	Column16          interface{} `json:"column_16"`
+	MerchantID        *string     `json:"merchant_id"`
+	Column18          interface{} `json:"column_18"`
 	StoreID           *string     `json:"store_id"`
+	Column20          interface{} `json:"column_20"`
+	TagID             string      `json:"tag_id"`
+	Column22          interface{} `json:"column_22"`
 }
 
 func (q *Queries) CountTransactionsFiltered(ctx context.Context, arg CountTransactionsFilteredParams) (int64, error) {
@@ -183,7 +224,12 @@ func (q *Queries) CountTransactionsFiltered(ctx context.Context, arg CountTransa
 		arg.Column14,
 		arg.Column15,
 		arg.Column16,
+		arg.MerchantID,
+		arg.Column18,
 		arg.StoreID,
+		arg.Column20,
+		arg.TagID,
+		arg.Column22,
 	)
 	var count int64
 	err := row.Scan(&count)
@@ -263,6 +309,29 @@ func (q *Queries) GetCategoryByNameAndType(ctx context.Context, arg GetCategoryB
 	return i, err
 }
 
+const getLatestTransactionCreatedAtForAccount = `-- name: GetLatestTransactionCreatedAtForAccount :one
+SELECT created_at
+FROM transactions
+WHERE user_id = ?
+  AND account_id = ?
+  AND transaction_date = ?
+ORDER BY created_at DESC, id DESC
+LIMIT 1
+`
+
+type GetLatestTransactionCreatedAtForAccountParams struct {
+	UserID          string `json:"user_id"`
+	AccountID       string `json:"account_id"`
+	TransactionDate string `json:"transaction_date"`
+}
+
+func (q *Queries) GetLatestTransactionCreatedAtForAccount(ctx context.Context, arg GetLatestTransactionCreatedAtForAccountParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, getLatestTransactionCreatedAtForAccount, arg.UserID, arg.AccountID, arg.TransactionDate)
+	var created_at string
+	err := row.Scan(&created_at)
+	return created_at, err
+}
+
 const getTransactionByID = `-- name: GetTransactionByID :one
 SELECT
     t.id,
@@ -276,11 +345,16 @@ SELECT
     t.subcategory_id,
     t.transfer_group_id,
     t.transfer_account_id,
+    t.subscription_id,
+    t.merchant_id,
     t.store_id,
     t.receipt_import_id,
+    t.receipt_item_index,
     t.transaction_date,
     t.created_at,
     t.updated_at,
+    m.name AS merchant_name,
+    m.icon AS merchant_icon,
     c.name AS category_name,
     c.icon AS category_icon,
     c.is_system AS category_is_system,
@@ -296,18 +370,29 @@ SELECT
         WHEN t.id = (
             SELECT x.id FROM transactions x
             WHERE x.transfer_group_id = t.transfer_group_id
+              AND x.type = 'transfer'
             ORDER BY x.created_at ASC, x.id ASC
             LIMIT 1
         ) THEN 1
         ELSE 0
     END AS transfer_is_out,
-    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked
+    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked,
+    CASE
+        WHEN t.type = 'transfer' AND t.transfer_group_id IS NOT NULL THEN (
+            SELECT COALESCE(SUM(x.amount), 0)
+            FROM transactions x
+            WHERE x.transfer_group_id = t.transfer_group_id
+              AND x.type = 'expense'
+        )
+        ELSE 0
+    END AS commission
 FROM transactions t
+LEFT JOIN merchants m ON m.id = t.merchant_id
+LEFT JOIN stores st ON st.id = t.store_id
 LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
 LEFT JOIN accounts a ON a.id = t.account_id
 LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
-LEFT JOIN stores st ON st.id = t.store_id
 LEFT JOIN credit_payments cp ON cp.transaction_id = t.id
 WHERE t.id = ? AND t.user_id = ?
 `
@@ -329,11 +414,16 @@ type GetTransactionByIDRow struct {
 	SubcategoryID         *string `json:"subcategory_id"`
 	TransferGroupID       *string `json:"transfer_group_id"`
 	TransferAccountID     *string `json:"transfer_account_id"`
+	SubscriptionID        *string `json:"subscription_id"`
+	MerchantID            *string `json:"merchant_id"`
 	StoreID               *string `json:"store_id"`
 	ReceiptImportID       *string `json:"receipt_import_id"`
+	ReceiptItemIndex      *int64  `json:"receipt_item_index"`
 	TransactionDate       string  `json:"transaction_date"`
 	CreatedAt             string  `json:"created_at"`
 	UpdatedAt             string  `json:"updated_at"`
+	MerchantName          *string `json:"merchant_name"`
+	MerchantIcon          *string `json:"merchant_icon"`
 	CategoryName          *string `json:"category_name"`
 	CategoryIcon          *string `json:"category_icon"`
 	CategoryIsSystem      *int64  `json:"category_is_system"`
@@ -346,6 +436,7 @@ type GetTransactionByIDRow struct {
 	StoreName             *string `json:"store_name"`
 	TransferIsOut         int64   `json:"transfer_is_out"`
 	CreditPaymentLinked   int64   `json:"credit_payment_linked"`
+	Commission            int64   `json:"commission"`
 }
 
 func (q *Queries) GetTransactionByID(ctx context.Context, arg GetTransactionByIDParams) (GetTransactionByIDRow, error) {
@@ -363,11 +454,16 @@ func (q *Queries) GetTransactionByID(ctx context.Context, arg GetTransactionByID
 		&i.SubcategoryID,
 		&i.TransferGroupID,
 		&i.TransferAccountID,
+		&i.SubscriptionID,
+		&i.MerchantID,
 		&i.StoreID,
 		&i.ReceiptImportID,
+		&i.ReceiptItemIndex,
 		&i.TransactionDate,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.MerchantName,
+		&i.MerchantIcon,
 		&i.CategoryName,
 		&i.CategoryIcon,
 		&i.CategoryIsSystem,
@@ -380,6 +476,7 @@ func (q *Queries) GetTransactionByID(ctx context.Context, arg GetTransactionByID
 		&i.StoreName,
 		&i.TransferIsOut,
 		&i.CreditPaymentLinked,
+		&i.Commission,
 	)
 	return i, err
 }
@@ -426,8 +523,8 @@ INSERT INTO transactions (
     id, user_id, account_id, type, kind, amount, description,
     category_id, subcategory_id, transfer_group_id, transfer_account_id,
     store_id, receipt_import_id, receipt_item_index,
-    transaction_date, affects_balance, created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    transaction_date, affects_balance, subscription_id, merchant_id, created_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type InsertTransactionParams struct {
@@ -447,6 +544,8 @@ type InsertTransactionParams struct {
 	ReceiptItemIndex  *int64  `json:"receipt_item_index"`
 	TransactionDate   string  `json:"transaction_date"`
 	AffectsBalance    int64   `json:"affects_balance"`
+	SubscriptionID    *string `json:"subscription_id"`
+	MerchantID        *string `json:"merchant_id"`
 	CreatedAt         string  `json:"created_at"`
 	UpdatedAt         string  `json:"updated_at"`
 }
@@ -469,6 +568,8 @@ func (q *Queries) InsertTransaction(ctx context.Context, arg InsertTransactionPa
 		arg.ReceiptItemIndex,
 		arg.TransactionDate,
 		arg.AffectsBalance,
+		arg.SubscriptionID,
+		arg.MerchantID,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
@@ -488,8 +589,11 @@ SELECT
     t.subcategory_id,
     t.transfer_group_id,
     t.transfer_account_id,
+    t.subscription_id,
+    t.merchant_id,
     t.store_id,
     t.receipt_import_id,
+    t.receipt_item_index,
     t.transaction_date,
     t.affects_balance,
     t.created_at,
@@ -518,8 +622,11 @@ type ListDueFutureTransactionsRow struct {
 	SubcategoryID     *string `json:"subcategory_id"`
 	TransferGroupID   *string `json:"transfer_group_id"`
 	TransferAccountID *string `json:"transfer_account_id"`
+	SubscriptionID    *string `json:"subscription_id"`
+	MerchantID        *string `json:"merchant_id"`
 	StoreID           *string `json:"store_id"`
 	ReceiptImportID   *string `json:"receipt_import_id"`
+	ReceiptItemIndex  *int64  `json:"receipt_item_index"`
 	TransactionDate   string  `json:"transaction_date"`
 	AffectsBalance    int64   `json:"affects_balance"`
 	CreatedAt         string  `json:"created_at"`
@@ -547,12 +654,321 @@ func (q *Queries) ListDueFutureTransactions(ctx context.Context, arg ListDueFutu
 			&i.SubcategoryID,
 			&i.TransferGroupID,
 			&i.TransferAccountID,
+			&i.SubscriptionID,
+			&i.MerchantID,
 			&i.StoreID,
 			&i.ReceiptImportID,
+			&i.ReceiptItemIndex,
 			&i.TransactionDate,
 			&i.AffectsBalance,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listInboxTransactionsDateAsc = `-- name: ListInboxTransactionsDateAsc :many
+SELECT
+    t.id,
+    t.user_id,
+    t.account_id,
+    t.type,
+    t.kind,
+    t.amount,
+    t.description,
+    t.category_id,
+    t.subcategory_id,
+    t.transfer_group_id,
+    t.transfer_account_id,
+    t.subscription_id,
+    t.merchant_id,
+    t.store_id,
+    t.receipt_import_id,
+    t.receipt_item_index,
+    t.transaction_date,
+    t.created_at,
+    t.updated_at,
+    m.name AS merchant_name,
+    m.icon AS merchant_icon,
+    c.name AS category_name,
+    c.icon AS category_icon,
+    c.is_system AS category_is_system,
+    s.name AS subcategory_name,
+    s.icon AS subcategory_icon,
+    a.name AS account_name,
+    a.status AS account_status,
+    ta.name AS transfer_account_name,
+    ta.status AS transfer_account_status,
+    st.name AS store_name,
+    0 AS transfer_is_out,
+    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked,
+    0 AS commission
+FROM transactions t
+LEFT JOIN merchants m ON m.id = t.merchant_id
+LEFT JOIN stores st ON st.id = t.store_id
+LEFT JOIN categories c ON c.id = t.category_id
+LEFT JOIN subcategories s ON s.id = t.subcategory_id
+LEFT JOIN accounts a ON a.id = t.account_id
+LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
+LEFT JOIN credit_payments cp ON cp.transaction_id = t.id
+WHERE t.user_id = ?
+  AND t.type IN ('income', 'expense')
+  AND t.category_id IS NULL
+  AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL)
+ORDER BY t.transaction_date ASC, t.created_at ASC
+LIMIT ? OFFSET ?
+`
+
+type ListInboxTransactionsDateAscParams struct {
+	UserID string `json:"user_id"`
+	Limit  int64  `json:"limit"`
+	Offset int64  `json:"offset"`
+}
+
+type ListInboxTransactionsDateAscRow struct {
+	ID                    string  `json:"id"`
+	UserID                string  `json:"user_id"`
+	AccountID             string  `json:"account_id"`
+	Type                  string  `json:"type"`
+	Kind                  string  `json:"kind"`
+	Amount                int64   `json:"amount"`
+	Description           *string `json:"description"`
+	CategoryID            *string `json:"category_id"`
+	SubcategoryID         *string `json:"subcategory_id"`
+	TransferGroupID       *string `json:"transfer_group_id"`
+	TransferAccountID     *string `json:"transfer_account_id"`
+	SubscriptionID        *string `json:"subscription_id"`
+	MerchantID            *string `json:"merchant_id"`
+	StoreID               *string `json:"store_id"`
+	ReceiptImportID       *string `json:"receipt_import_id"`
+	ReceiptItemIndex      *int64  `json:"receipt_item_index"`
+	TransactionDate       string  `json:"transaction_date"`
+	CreatedAt             string  `json:"created_at"`
+	UpdatedAt             string  `json:"updated_at"`
+	MerchantName          *string `json:"merchant_name"`
+	MerchantIcon          *string `json:"merchant_icon"`
+	CategoryName          *string `json:"category_name"`
+	CategoryIcon          *string `json:"category_icon"`
+	CategoryIsSystem      *int64  `json:"category_is_system"`
+	SubcategoryName       *string `json:"subcategory_name"`
+	SubcategoryIcon       *string `json:"subcategory_icon"`
+	AccountName           *string `json:"account_name"`
+	AccountStatus         *string `json:"account_status"`
+	TransferAccountName   *string `json:"transfer_account_name"`
+	TransferAccountStatus *string `json:"transfer_account_status"`
+	StoreName             *string `json:"store_name"`
+	TransferIsOut         int64   `json:"transfer_is_out"`
+	CreditPaymentLinked   int64   `json:"credit_payment_linked"`
+	Commission            int64   `json:"commission"`
+}
+
+func (q *Queries) ListInboxTransactionsDateAsc(ctx context.Context, arg ListInboxTransactionsDateAscParams) ([]ListInboxTransactionsDateAscRow, error) {
+	rows, err := q.db.QueryContext(ctx, listInboxTransactionsDateAsc, arg.UserID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListInboxTransactionsDateAscRow{}
+	for rows.Next() {
+		var i ListInboxTransactionsDateAscRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.AccountID,
+			&i.Type,
+			&i.Kind,
+			&i.Amount,
+			&i.Description,
+			&i.CategoryID,
+			&i.SubcategoryID,
+			&i.TransferGroupID,
+			&i.TransferAccountID,
+			&i.SubscriptionID,
+			&i.MerchantID,
+			&i.StoreID,
+			&i.ReceiptImportID,
+			&i.ReceiptItemIndex,
+			&i.TransactionDate,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.MerchantName,
+			&i.MerchantIcon,
+			&i.CategoryName,
+			&i.CategoryIcon,
+			&i.CategoryIsSystem,
+			&i.SubcategoryName,
+			&i.SubcategoryIcon,
+			&i.AccountName,
+			&i.AccountStatus,
+			&i.TransferAccountName,
+			&i.TransferAccountStatus,
+			&i.StoreName,
+			&i.TransferIsOut,
+			&i.CreditPaymentLinked,
+			&i.Commission,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listInboxTransactionsDateDesc = `-- name: ListInboxTransactionsDateDesc :many
+SELECT
+    t.id,
+    t.user_id,
+    t.account_id,
+    t.type,
+    t.kind,
+    t.amount,
+    t.description,
+    t.category_id,
+    t.subcategory_id,
+    t.transfer_group_id,
+    t.transfer_account_id,
+    t.subscription_id,
+    t.merchant_id,
+    t.store_id,
+    t.receipt_import_id,
+    t.receipt_item_index,
+    t.transaction_date,
+    t.created_at,
+    t.updated_at,
+    m.name AS merchant_name,
+    m.icon AS merchant_icon,
+    c.name AS category_name,
+    c.icon AS category_icon,
+    c.is_system AS category_is_system,
+    s.name AS subcategory_name,
+    s.icon AS subcategory_icon,
+    a.name AS account_name,
+    a.status AS account_status,
+    ta.name AS transfer_account_name,
+    ta.status AS transfer_account_status,
+    st.name AS store_name,
+    0 AS transfer_is_out,
+    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked,
+    0 AS commission
+FROM transactions t
+LEFT JOIN merchants m ON m.id = t.merchant_id
+LEFT JOIN stores st ON st.id = t.store_id
+LEFT JOIN categories c ON c.id = t.category_id
+LEFT JOIN subcategories s ON s.id = t.subcategory_id
+LEFT JOIN accounts a ON a.id = t.account_id
+LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
+LEFT JOIN credit_payments cp ON cp.transaction_id = t.id
+WHERE t.user_id = ?
+  AND t.type IN ('income', 'expense')
+  AND t.category_id IS NULL
+  AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL)
+ORDER BY t.transaction_date DESC, t.created_at DESC
+LIMIT ? OFFSET ?
+`
+
+type ListInboxTransactionsDateDescParams struct {
+	UserID string `json:"user_id"`
+	Limit  int64  `json:"limit"`
+	Offset int64  `json:"offset"`
+}
+
+type ListInboxTransactionsDateDescRow struct {
+	ID                    string  `json:"id"`
+	UserID                string  `json:"user_id"`
+	AccountID             string  `json:"account_id"`
+	Type                  string  `json:"type"`
+	Kind                  string  `json:"kind"`
+	Amount                int64   `json:"amount"`
+	Description           *string `json:"description"`
+	CategoryID            *string `json:"category_id"`
+	SubcategoryID         *string `json:"subcategory_id"`
+	TransferGroupID       *string `json:"transfer_group_id"`
+	TransferAccountID     *string `json:"transfer_account_id"`
+	SubscriptionID        *string `json:"subscription_id"`
+	MerchantID            *string `json:"merchant_id"`
+	StoreID               *string `json:"store_id"`
+	ReceiptImportID       *string `json:"receipt_import_id"`
+	ReceiptItemIndex      *int64  `json:"receipt_item_index"`
+	TransactionDate       string  `json:"transaction_date"`
+	CreatedAt             string  `json:"created_at"`
+	UpdatedAt             string  `json:"updated_at"`
+	MerchantName          *string `json:"merchant_name"`
+	MerchantIcon          *string `json:"merchant_icon"`
+	CategoryName          *string `json:"category_name"`
+	CategoryIcon          *string `json:"category_icon"`
+	CategoryIsSystem      *int64  `json:"category_is_system"`
+	SubcategoryName       *string `json:"subcategory_name"`
+	SubcategoryIcon       *string `json:"subcategory_icon"`
+	AccountName           *string `json:"account_name"`
+	AccountStatus         *string `json:"account_status"`
+	TransferAccountName   *string `json:"transfer_account_name"`
+	TransferAccountStatus *string `json:"transfer_account_status"`
+	StoreName             *string `json:"store_name"`
+	TransferIsOut         int64   `json:"transfer_is_out"`
+	CreditPaymentLinked   int64   `json:"credit_payment_linked"`
+	Commission            int64   `json:"commission"`
+}
+
+func (q *Queries) ListInboxTransactionsDateDesc(ctx context.Context, arg ListInboxTransactionsDateDescParams) ([]ListInboxTransactionsDateDescRow, error) {
+	rows, err := q.db.QueryContext(ctx, listInboxTransactionsDateDesc, arg.UserID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListInboxTransactionsDateDescRow{}
+	for rows.Next() {
+		var i ListInboxTransactionsDateDescRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.AccountID,
+			&i.Type,
+			&i.Kind,
+			&i.Amount,
+			&i.Description,
+			&i.CategoryID,
+			&i.SubcategoryID,
+			&i.TransferGroupID,
+			&i.TransferAccountID,
+			&i.SubscriptionID,
+			&i.MerchantID,
+			&i.StoreID,
+			&i.ReceiptImportID,
+			&i.ReceiptItemIndex,
+			&i.TransactionDate,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.MerchantName,
+			&i.MerchantIcon,
+			&i.CategoryName,
+			&i.CategoryIcon,
+			&i.CategoryIsSystem,
+			&i.SubcategoryName,
+			&i.SubcategoryIcon,
+			&i.AccountName,
+			&i.AccountStatus,
+			&i.TransferAccountName,
+			&i.TransferAccountStatus,
+			&i.StoreName,
+			&i.TransferIsOut,
+			&i.CreditPaymentLinked,
+			&i.Commission,
 		); err != nil {
 			return nil, err
 		}
@@ -580,11 +996,16 @@ SELECT
     t.subcategory_id,
     t.transfer_group_id,
     t.transfer_account_id,
+    t.subscription_id,
+    t.merchant_id,
     t.store_id,
     t.receipt_import_id,
+    t.receipt_item_index,
     t.transaction_date,
     t.created_at,
     t.updated_at,
+    m.name AS merchant_name,
+    m.icon AS merchant_icon,
     c.name AS category_name,
     c.icon AS category_icon,
     c.is_system AS category_is_system,
@@ -600,20 +1021,43 @@ SELECT
         WHEN t.id = (
             SELECT x.id FROM transactions x
             WHERE x.transfer_group_id = t.transfer_group_id
+              AND x.type = 'transfer'
             ORDER BY x.created_at ASC, x.id ASC
             LIMIT 1
         ) THEN 1
         ELSE 0
     END AS transfer_is_out,
-    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked
+    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked,
+    CASE
+        WHEN t.type = 'transfer' AND t.transfer_group_id IS NOT NULL THEN (
+            SELECT COALESCE(SUM(x.amount), 0)
+            FROM transactions x
+            WHERE x.transfer_group_id = t.transfer_group_id
+              AND x.type = 'expense'
+        )
+        ELSE 0
+    END AS commission
 FROM transactions t
+LEFT JOIN merchants m ON m.id = t.merchant_id
+LEFT JOIN stores st ON st.id = t.store_id
 LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
 LEFT JOIN accounts a ON a.id = t.account_id
 LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
-LEFT JOIN stores st ON st.id = t.store_id
 LEFT JOIN credit_payments cp ON cp.transaction_id = t.id
 WHERE t.user_id = ?
+  AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL)
+  AND (
+    t.type != 'transfer'
+    OR t.transfer_group_id IS NULL
+    OR t.id = (
+      SELECT x.id FROM transactions x
+      WHERE x.transfer_group_id = t.transfer_group_id
+        AND x.type = 'transfer'
+      ORDER BY x.created_at ASC, x.id ASC
+      LIMIT 1
+    )
+  )
 ORDER BY t.transaction_date DESC, t.created_at DESC
 LIMIT ?
 `
@@ -635,11 +1079,16 @@ type ListRecentTransactionsRow struct {
 	SubcategoryID         *string `json:"subcategory_id"`
 	TransferGroupID       *string `json:"transfer_group_id"`
 	TransferAccountID     *string `json:"transfer_account_id"`
+	SubscriptionID        *string `json:"subscription_id"`
+	MerchantID            *string `json:"merchant_id"`
 	StoreID               *string `json:"store_id"`
 	ReceiptImportID       *string `json:"receipt_import_id"`
+	ReceiptItemIndex      *int64  `json:"receipt_item_index"`
 	TransactionDate       string  `json:"transaction_date"`
 	CreatedAt             string  `json:"created_at"`
 	UpdatedAt             string  `json:"updated_at"`
+	MerchantName          *string `json:"merchant_name"`
+	MerchantIcon          *string `json:"merchant_icon"`
 	CategoryName          *string `json:"category_name"`
 	CategoryIcon          *string `json:"category_icon"`
 	CategoryIsSystem      *int64  `json:"category_is_system"`
@@ -652,6 +1101,7 @@ type ListRecentTransactionsRow struct {
 	StoreName             *string `json:"store_name"`
 	TransferIsOut         int64   `json:"transfer_is_out"`
 	CreditPaymentLinked   int64   `json:"credit_payment_linked"`
+	Commission            int64   `json:"commission"`
 }
 
 func (q *Queries) ListRecentTransactions(ctx context.Context, arg ListRecentTransactionsParams) ([]ListRecentTransactionsRow, error) {
@@ -675,11 +1125,16 @@ func (q *Queries) ListRecentTransactions(ctx context.Context, arg ListRecentTran
 			&i.SubcategoryID,
 			&i.TransferGroupID,
 			&i.TransferAccountID,
+			&i.SubscriptionID,
+			&i.MerchantID,
 			&i.StoreID,
 			&i.ReceiptImportID,
+			&i.ReceiptItemIndex,
 			&i.TransactionDate,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.MerchantName,
+			&i.MerchantIcon,
 			&i.CategoryName,
 			&i.CategoryIcon,
 			&i.CategoryIsSystem,
@@ -692,6 +1147,7 @@ func (q *Queries) ListRecentTransactions(ctx context.Context, arg ListRecentTran
 			&i.StoreName,
 			&i.TransferIsOut,
 			&i.CreditPaymentLinked,
+			&i.Commission,
 		); err != nil {
 			return nil, err
 		}
@@ -719,11 +1175,16 @@ SELECT
     t.subcategory_id,
     t.transfer_group_id,
     t.transfer_account_id,
+    t.subscription_id,
+    t.merchant_id,
     t.store_id,
     t.receipt_import_id,
+    t.receipt_item_index,
     t.transaction_date,
     t.created_at,
     t.updated_at,
+    m.name AS merchant_name,
+    m.icon AS merchant_icon,
     c.name AS category_name,
     c.icon AS category_icon,
     c.is_system AS category_is_system,
@@ -739,17 +1200,19 @@ SELECT
         WHEN t.id = (
             SELECT x.id FROM transactions x
             WHERE x.transfer_group_id = t.transfer_group_id
+              AND x.type = 'transfer'
             ORDER BY x.created_at ASC, x.id ASC
             LIMIT 1
         ) THEN 1
         ELSE 0
     END AS transfer_is_out
 FROM transactions t
+LEFT JOIN merchants m ON m.id = t.merchant_id
+LEFT JOIN stores st ON st.id = t.store_id
 LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
 LEFT JOIN accounts a ON a.id = t.account_id
 LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
-LEFT JOIN stores st ON st.id = t.store_id
 WHERE t.transfer_group_id = ? AND t.user_id = ?
 ORDER BY t.created_at ASC, t.id ASC
 `
@@ -771,11 +1234,16 @@ type ListTransactionsByTransferGroupRow struct {
 	SubcategoryID         *string `json:"subcategory_id"`
 	TransferGroupID       *string `json:"transfer_group_id"`
 	TransferAccountID     *string `json:"transfer_account_id"`
+	SubscriptionID        *string `json:"subscription_id"`
+	MerchantID            *string `json:"merchant_id"`
 	StoreID               *string `json:"store_id"`
 	ReceiptImportID       *string `json:"receipt_import_id"`
+	ReceiptItemIndex      *int64  `json:"receipt_item_index"`
 	TransactionDate       string  `json:"transaction_date"`
 	CreatedAt             string  `json:"created_at"`
 	UpdatedAt             string  `json:"updated_at"`
+	MerchantName          *string `json:"merchant_name"`
+	MerchantIcon          *string `json:"merchant_icon"`
 	CategoryName          *string `json:"category_name"`
 	CategoryIcon          *string `json:"category_icon"`
 	CategoryIsSystem      *int64  `json:"category_is_system"`
@@ -810,11 +1278,16 @@ func (q *Queries) ListTransactionsByTransferGroup(ctx context.Context, arg ListT
 			&i.SubcategoryID,
 			&i.TransferGroupID,
 			&i.TransferAccountID,
+			&i.SubscriptionID,
+			&i.MerchantID,
 			&i.StoreID,
 			&i.ReceiptImportID,
+			&i.ReceiptItemIndex,
 			&i.TransactionDate,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.MerchantName,
+			&i.MerchantIcon,
 			&i.CategoryName,
 			&i.CategoryIcon,
 			&i.CategoryIsSystem,
@@ -853,11 +1326,16 @@ SELECT
     t.subcategory_id,
     t.transfer_group_id,
     t.transfer_account_id,
+    t.subscription_id,
+    t.merchant_id,
     t.store_id,
     t.receipt_import_id,
+    t.receipt_item_index,
     t.transaction_date,
     t.created_at,
     t.updated_at,
+    m.name AS merchant_name,
+    m.icon AS merchant_icon,
     c.name AS category_name,
     c.icon AS category_icon,
     c.is_system AS category_is_system,
@@ -873,18 +1351,29 @@ SELECT
         WHEN t.id = (
             SELECT x.id FROM transactions x
             WHERE x.transfer_group_id = t.transfer_group_id
+              AND x.type = 'transfer'
             ORDER BY x.created_at ASC, x.id ASC
             LIMIT 1
         ) THEN 1
         ELSE 0
     END AS transfer_is_out,
-    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked
+    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked,
+    CASE
+        WHEN t.type = 'transfer' AND t.transfer_group_id IS NOT NULL THEN (
+            SELECT COALESCE(SUM(x.amount), 0)
+            FROM transactions x
+            WHERE x.transfer_group_id = t.transfer_group_id
+              AND x.type = 'expense'
+        )
+        ELSE 0
+    END AS commission
 FROM transactions t
+LEFT JOIN merchants m ON m.id = t.merchant_id
+LEFT JOIN stores st ON st.id = t.store_id
 LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
 LEFT JOIN accounts a ON a.id = t.account_id
 LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
-LEFT JOIN stores st ON st.id = t.store_id
 LEFT JOIN credit_payments cp ON cp.transaction_id = t.id
 WHERE t.user_id = ?
   AND (? = '' OR t.account_id = ?)
@@ -894,7 +1383,27 @@ WHERE t.user_id = ?
   AND (? = '' OR t.transaction_date >= ?)
   AND (? = '' OR t.transaction_date <= ?)
   AND (? = '' OR t.description LIKE '%' || ? || '%')
+  AND (? = '' OR t.merchant_id = ?)
   AND (? = '' OR t.store_id = ?)
+  AND (? = '' OR EXISTS (
+    SELECT 1 FROM transaction_tags tt
+    WHERE tt.transaction_id = t.id AND tt.tag_id = ?
+  ))
+  AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL)
+  -- One journal operation per transfer, unless the list is scoped to a single account
+  -- (that account keeps its own leg). Commission stays inside the transfer.
+  AND (
+    ? != ''
+    OR t.type != 'transfer'
+    OR t.transfer_group_id IS NULL
+    OR t.id = (
+      SELECT x.id FROM transactions x
+      WHERE x.transfer_group_id = t.transfer_group_id
+        AND x.type = 'transfer'
+      ORDER BY x.created_at ASC, x.id ASC
+      LIMIT 1
+    )
+  )
 ORDER BY t.transaction_date ASC, t.created_at ASC
 LIMIT ? OFFSET ?
 `
@@ -916,7 +1425,12 @@ type ListTransactionsFilteredDateAscParams struct {
 	Column14          interface{} `json:"column_14"`
 	Column15          *string     `json:"column_15"`
 	Column16          interface{} `json:"column_16"`
+	MerchantID        *string     `json:"merchant_id"`
+	Column18          interface{} `json:"column_18"`
 	StoreID           *string     `json:"store_id"`
+	Column20          interface{} `json:"column_20"`
+	TagID             string      `json:"tag_id"`
+	Column22          interface{} `json:"column_22"`
 	Limit             int64       `json:"limit"`
 	Offset            int64       `json:"offset"`
 }
@@ -933,11 +1447,16 @@ type ListTransactionsFilteredDateAscRow struct {
 	SubcategoryID         *string `json:"subcategory_id"`
 	TransferGroupID       *string `json:"transfer_group_id"`
 	TransferAccountID     *string `json:"transfer_account_id"`
+	SubscriptionID        *string `json:"subscription_id"`
+	MerchantID            *string `json:"merchant_id"`
 	StoreID               *string `json:"store_id"`
 	ReceiptImportID       *string `json:"receipt_import_id"`
+	ReceiptItemIndex      *int64  `json:"receipt_item_index"`
 	TransactionDate       string  `json:"transaction_date"`
 	CreatedAt             string  `json:"created_at"`
 	UpdatedAt             string  `json:"updated_at"`
+	MerchantName          *string `json:"merchant_name"`
+	MerchantIcon          *string `json:"merchant_icon"`
 	CategoryName          *string `json:"category_name"`
 	CategoryIcon          *string `json:"category_icon"`
 	CategoryIsSystem      *int64  `json:"category_is_system"`
@@ -950,6 +1469,7 @@ type ListTransactionsFilteredDateAscRow struct {
 	StoreName             *string `json:"store_name"`
 	TransferIsOut         int64   `json:"transfer_is_out"`
 	CreditPaymentLinked   int64   `json:"credit_payment_linked"`
+	Commission            int64   `json:"commission"`
 }
 
 func (q *Queries) ListTransactionsFilteredDateAsc(ctx context.Context, arg ListTransactionsFilteredDateAscParams) ([]ListTransactionsFilteredDateAscRow, error) {
@@ -970,7 +1490,12 @@ func (q *Queries) ListTransactionsFilteredDateAsc(ctx context.Context, arg ListT
 		arg.Column14,
 		arg.Column15,
 		arg.Column16,
+		arg.MerchantID,
+		arg.Column18,
 		arg.StoreID,
+		arg.Column20,
+		arg.TagID,
+		arg.Column22,
 		arg.Limit,
 		arg.Offset,
 	)
@@ -993,11 +1518,16 @@ func (q *Queries) ListTransactionsFilteredDateAsc(ctx context.Context, arg ListT
 			&i.SubcategoryID,
 			&i.TransferGroupID,
 			&i.TransferAccountID,
+			&i.SubscriptionID,
+			&i.MerchantID,
 			&i.StoreID,
 			&i.ReceiptImportID,
+			&i.ReceiptItemIndex,
 			&i.TransactionDate,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.MerchantName,
+			&i.MerchantIcon,
 			&i.CategoryName,
 			&i.CategoryIcon,
 			&i.CategoryIsSystem,
@@ -1010,6 +1540,7 @@ func (q *Queries) ListTransactionsFilteredDateAsc(ctx context.Context, arg ListT
 			&i.StoreName,
 			&i.TransferIsOut,
 			&i.CreditPaymentLinked,
+			&i.Commission,
 		); err != nil {
 			return nil, err
 		}
@@ -1037,11 +1568,16 @@ SELECT
     t.subcategory_id,
     t.transfer_group_id,
     t.transfer_account_id,
+    t.subscription_id,
+    t.merchant_id,
     t.store_id,
     t.receipt_import_id,
+    t.receipt_item_index,
     t.transaction_date,
     t.created_at,
     t.updated_at,
+    m.name AS merchant_name,
+    m.icon AS merchant_icon,
     c.name AS category_name,
     c.icon AS category_icon,
     c.is_system AS category_is_system,
@@ -1057,18 +1593,29 @@ SELECT
         WHEN t.id = (
             SELECT x.id FROM transactions x
             WHERE x.transfer_group_id = t.transfer_group_id
+              AND x.type = 'transfer'
             ORDER BY x.created_at ASC, x.id ASC
             LIMIT 1
         ) THEN 1
         ELSE 0
     END AS transfer_is_out,
-    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked
+    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked,
+    CASE
+        WHEN t.type = 'transfer' AND t.transfer_group_id IS NOT NULL THEN (
+            SELECT COALESCE(SUM(x.amount), 0)
+            FROM transactions x
+            WHERE x.transfer_group_id = t.transfer_group_id
+              AND x.type = 'expense'
+        )
+        ELSE 0
+    END AS commission
 FROM transactions t
+LEFT JOIN merchants m ON m.id = t.merchant_id
+LEFT JOIN stores st ON st.id = t.store_id
 LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
 LEFT JOIN accounts a ON a.id = t.account_id
 LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
-LEFT JOIN stores st ON st.id = t.store_id
 LEFT JOIN credit_payments cp ON cp.transaction_id = t.id
 WHERE t.user_id = ?
   AND (? = '' OR t.account_id = ?)
@@ -1078,7 +1625,27 @@ WHERE t.user_id = ?
   AND (? = '' OR t.transaction_date >= ?)
   AND (? = '' OR t.transaction_date <= ?)
   AND (? = '' OR t.description LIKE '%' || ? || '%')
+  AND (? = '' OR t.merchant_id = ?)
   AND (? = '' OR t.store_id = ?)
+  AND (? = '' OR EXISTS (
+    SELECT 1 FROM transaction_tags tt
+    WHERE tt.transaction_id = t.id AND tt.tag_id = ?
+  ))
+  AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL)
+  -- One journal operation per transfer, unless the list is scoped to a single account
+  -- (that account keeps its own leg). Commission stays inside the transfer.
+  AND (
+    ? != ''
+    OR t.type != 'transfer'
+    OR t.transfer_group_id IS NULL
+    OR t.id = (
+      SELECT x.id FROM transactions x
+      WHERE x.transfer_group_id = t.transfer_group_id
+        AND x.type = 'transfer'
+      ORDER BY x.created_at ASC, x.id ASC
+      LIMIT 1
+    )
+  )
 ORDER BY t.transaction_date DESC, t.created_at DESC
 LIMIT ? OFFSET ?
 `
@@ -1100,7 +1667,12 @@ type ListTransactionsFilteredDateDescParams struct {
 	Column14          interface{} `json:"column_14"`
 	Column15          *string     `json:"column_15"`
 	Column16          interface{} `json:"column_16"`
+	MerchantID        *string     `json:"merchant_id"`
+	Column18          interface{} `json:"column_18"`
 	StoreID           *string     `json:"store_id"`
+	Column20          interface{} `json:"column_20"`
+	TagID             string      `json:"tag_id"`
+	Column22          interface{} `json:"column_22"`
 	Limit             int64       `json:"limit"`
 	Offset            int64       `json:"offset"`
 }
@@ -1117,11 +1689,16 @@ type ListTransactionsFilteredDateDescRow struct {
 	SubcategoryID         *string `json:"subcategory_id"`
 	TransferGroupID       *string `json:"transfer_group_id"`
 	TransferAccountID     *string `json:"transfer_account_id"`
+	SubscriptionID        *string `json:"subscription_id"`
+	MerchantID            *string `json:"merchant_id"`
 	StoreID               *string `json:"store_id"`
 	ReceiptImportID       *string `json:"receipt_import_id"`
+	ReceiptItemIndex      *int64  `json:"receipt_item_index"`
 	TransactionDate       string  `json:"transaction_date"`
 	CreatedAt             string  `json:"created_at"`
 	UpdatedAt             string  `json:"updated_at"`
+	MerchantName          *string `json:"merchant_name"`
+	MerchantIcon          *string `json:"merchant_icon"`
 	CategoryName          *string `json:"category_name"`
 	CategoryIcon          *string `json:"category_icon"`
 	CategoryIsSystem      *int64  `json:"category_is_system"`
@@ -1134,6 +1711,7 @@ type ListTransactionsFilteredDateDescRow struct {
 	StoreName             *string `json:"store_name"`
 	TransferIsOut         int64   `json:"transfer_is_out"`
 	CreditPaymentLinked   int64   `json:"credit_payment_linked"`
+	Commission            int64   `json:"commission"`
 }
 
 func (q *Queries) ListTransactionsFilteredDateDesc(ctx context.Context, arg ListTransactionsFilteredDateDescParams) ([]ListTransactionsFilteredDateDescRow, error) {
@@ -1154,7 +1732,12 @@ func (q *Queries) ListTransactionsFilteredDateDesc(ctx context.Context, arg List
 		arg.Column14,
 		arg.Column15,
 		arg.Column16,
+		arg.MerchantID,
+		arg.Column18,
 		arg.StoreID,
+		arg.Column20,
+		arg.TagID,
+		arg.Column22,
 		arg.Limit,
 		arg.Offset,
 	)
@@ -1177,11 +1760,16 @@ func (q *Queries) ListTransactionsFilteredDateDesc(ctx context.Context, arg List
 			&i.SubcategoryID,
 			&i.TransferGroupID,
 			&i.TransferAccountID,
+			&i.SubscriptionID,
+			&i.MerchantID,
 			&i.StoreID,
 			&i.ReceiptImportID,
+			&i.ReceiptItemIndex,
 			&i.TransactionDate,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.MerchantName,
+			&i.MerchantIcon,
 			&i.CategoryName,
 			&i.CategoryIcon,
 			&i.CategoryIsSystem,
@@ -1194,6 +1782,7 @@ func (q *Queries) ListTransactionsFilteredDateDesc(ctx context.Context, arg List
 			&i.StoreName,
 			&i.TransferIsOut,
 			&i.CreditPaymentLinked,
+			&i.Commission,
 		); err != nil {
 			return nil, err
 		}
@@ -1282,6 +1871,29 @@ func (q *Queries) ReassignTransactionsCategoryByFilter(ctx context.Context, arg 
 		arg.UserID,
 		arg.CategoryID_2,
 		arg.Type,
+	)
+	return err
+}
+
+const setTransactionSubscriptionID = `-- name: SetTransactionSubscriptionID :exec
+UPDATE transactions
+SET subscription_id = ?, updated_at = ?
+WHERE id = ? AND user_id = ?
+`
+
+type SetTransactionSubscriptionIDParams struct {
+	SubscriptionID *string `json:"subscription_id"`
+	UpdatedAt      string  `json:"updated_at"`
+	ID             string  `json:"id"`
+	UserID         string  `json:"user_id"`
+}
+
+func (q *Queries) SetTransactionSubscriptionID(ctx context.Context, arg SetTransactionSubscriptionIDParams) error {
+	_, err := q.db.ExecContext(ctx, setTransactionSubscriptionID,
+		arg.SubscriptionID,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
 	)
 	return err
 }
@@ -1545,6 +2157,7 @@ WHERE t.user_id = ? AND t.account_id = ? AND t.type = 'transfer' AND kind = 'fut
   AND t.id = (
     SELECT x.id FROM transactions x
     WHERE x.transfer_group_id = t.transfer_group_id
+      AND x.type = 'transfer'
     ORDER BY x.created_at ASC, x.id ASC
     LIMIT 1 OFFSET 1
   )
@@ -1631,6 +2244,7 @@ WHERE t.user_id = ? AND t.account_id = ? AND t.type = 'transfer' AND kind = 'fut
   AND t.id = (
     SELECT x.id FROM transactions x
     WHERE x.transfer_group_id = t.transfer_group_id
+      AND x.type = 'transfer'
     ORDER BY x.created_at ASC, x.id ASC
     LIMIT 1
   )
@@ -1725,6 +2339,7 @@ WHERE t.user_id = ? AND t.account_id = ? AND t.type = 'transfer' AND t.kind = 'm
   AND t.id = (
     SELECT x.id FROM transactions x
     WHERE x.transfer_group_id = t.transfer_group_id
+      AND x.type = 'transfer'
     ORDER BY x.created_at ASC, x.id ASC
     LIMIT 1 OFFSET 1
   )
@@ -1804,6 +2419,7 @@ WHERE t.user_id = ? AND t.account_id = ? AND t.type = 'transfer' AND t.kind = 'm
   AND t.id = (
     SELECT x.id FROM transactions x
     WHERE x.transfer_group_id = t.transfer_group_id
+      AND x.type = 'transfer'
     ORDER BY x.created_at ASC, x.id ASC
     LIMIT 1
   )
@@ -1877,7 +2493,7 @@ func (q *Queries) SumTransferOutManualByUser(ctx context.Context, arg SumTransfe
 const updateTransaction = `-- name: UpdateTransaction :exec
 UPDATE transactions
 SET account_id = ?, type = ?, kind = ?, amount = ?, description = ?,
-    category_id = ?, subcategory_id = ?, store_id = ?, transaction_date = ?, updated_at = ?
+    category_id = ?, subcategory_id = ?, merchant_id = ?, store_id = ?, transaction_date = ?, updated_at = ?
 WHERE id = ? AND user_id = ?
 `
 
@@ -1889,6 +2505,7 @@ type UpdateTransactionParams struct {
 	Description     *string `json:"description"`
 	CategoryID      *string `json:"category_id"`
 	SubcategoryID   *string `json:"subcategory_id"`
+	MerchantID      *string `json:"merchant_id"`
 	StoreID         *string `json:"store_id"`
 	TransactionDate string  `json:"transaction_date"`
 	UpdatedAt       string  `json:"updated_at"`
@@ -1905,6 +2522,7 @@ func (q *Queries) UpdateTransaction(ctx context.Context, arg UpdateTransactionPa
 		arg.Description,
 		arg.CategoryID,
 		arg.SubcategoryID,
+		arg.MerchantID,
 		arg.StoreID,
 		arg.TransactionDate,
 		arg.UpdatedAt,

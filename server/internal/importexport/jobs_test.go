@@ -3,7 +3,12 @@ package importexport
 import (
 	"database/sql"
 	"fmt"
+	"log/slog"
+	"path/filepath"
 	"testing"
+
+	"github.com/kai-zer-ru/buhgalter/internal/apicache"
+	"github.com/kai-zer-ru/buhgalter/internal/audit"
 )
 
 func TestRecoverInterruptedJobs(t *testing.T) {
@@ -73,6 +78,53 @@ func TestImportJobLifecycle(t *testing.T) {
 	_, err = getImportJobRecord(ctx, sqlDB, userID, "missing")
 	if !isNotFound(err) {
 		t.Fatalf("expected not found, got %v", err)
+	}
+}
+
+func TestImportJobDoneWriteFailureDoesNotMarkFailed(t *testing.T) {
+	ctx, handle, userID := seedImportHandle(t)
+	sqlDB := handle.DB()
+	job, err := createImportJobRecord(ctx, sqlDB, userID, "data.csv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.ExecContext(ctx, `
+		CREATE TRIGGER test_fail_import_job_done
+		BEFORE UPDATE ON import_jobs
+		WHEN NEW.status = 'done'
+		BEGIN
+			SELECT RAISE(ABORT, 'test-fail-done');
+		END;
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	h := &Handler{
+		Store:  handle,
+		Audit:  audit.New(filepath.Join(t.TempDir(), "audit")),
+		Logger: slog.Default(),
+		Cache:  apicache.New(),
+	}
+	h.runImportJob(job.ID, userID, "importuser", "127.0.0.1", "sample.csv", sampleCSVRows(), ImportOptions{
+		Preset: "cubux", Deduplicate: true, Confirm: true,
+	})
+
+	got, err := getImportJobRecord(ctx, sqlDB, userID, job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status == ImportJobDone {
+		t.Fatal("job must not be done if persist failed")
+	}
+	if got.Status == ImportJobFailed {
+		t.Fatal("successful import must not be marked failed because done-write failed")
+	}
+	var n int
+	if err := sqlDB.QueryRowContext(ctx, `SELECT COUNT(*) FROM transactions WHERE user_id = ?`, userID).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n == 0 {
+		t.Fatal("ledger should be written even if job done persist failed")
 	}
 }
 

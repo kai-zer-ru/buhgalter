@@ -13,7 +13,13 @@ export function toastLocator(page: Page, type: ToastType, text?: string): Locato
 }
 
 export async function expectToast(page: Page, type: ToastType, text: string, timeout = 10_000) {
-	await expect(toastLocator(page, type, text)).toBeVisible({ timeout });
+	// Prefer the newest match: a previous toast with the same text may still be visible (~3s).
+	await expect(toastLocator(page, type, text).last()).toBeVisible({ timeout });
+}
+
+/** Wait until no toast with this text remains (between consecutive actions that show the same message). */
+export async function waitToastGone(page: Page, type: ToastType, text: string, timeout = 10_000) {
+	await expect(toastLocator(page, type, text)).toHaveCount(0, { timeout });
 }
 
 export async function dismissBlockingModals(page: Page) {
@@ -25,7 +31,10 @@ export async function dismissBlockingModals(page: Page) {
 }
 
 export async function confirmDialog(page: Page, confirmLabel = 'Удалить') {
-	const dialog = page.getByRole('alertdialog');
+	// Sequential confirms reuse role=alertdialog; pin this step by its button.
+	const dialog = page.getByRole('alertdialog').filter({
+		has: page.getByRole('button', { name: confirmLabel, exact: true })
+	});
 	await expect(dialog).toBeVisible();
 	await dialog.getByRole('button', { name: confirmLabel, exact: true }).click();
 	await expect(dialog).toHaveCount(0, { timeout: 15_000 });
@@ -46,7 +55,9 @@ export async function rowMenuAction(page: Page, row: Locator, action: string) {
 
 /** Expand a top-level `CollapsibleSection` / `AccountGroupPanel` by summary label. */
 export async function expandCollapsibleSection(page: Page, label: string | RegExp) {
-	const panel = page.locator('details.account-group-panel').filter({ hasText: label });
+	const panel = page.locator('details.account-group-panel').filter({
+		has: page.locator('summary.account-group-summary', { hasText: label })
+	});
 	const summary = panel.locator('summary.account-group-summary');
 	await expect(summary).toBeVisible();
 	if (!(await panel.evaluate((el) => (el as HTMLDetailsElement).open))) {

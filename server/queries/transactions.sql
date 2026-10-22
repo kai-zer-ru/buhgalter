@@ -14,11 +14,16 @@ SELECT
     t.subcategory_id,
     t.transfer_group_id,
     t.transfer_account_id,
+    t.subscription_id,
+    t.merchant_id,
     t.store_id,
     t.receipt_import_id,
+    t.receipt_item_index,
     t.transaction_date,
     t.created_at,
     t.updated_at,
+    m.name AS merchant_name,
+    m.icon AS merchant_icon,
     c.name AS category_name,
     c.icon AS category_icon,
     c.is_system AS category_is_system,
@@ -34,18 +39,29 @@ SELECT
         WHEN t.id = (
             SELECT x.id FROM transactions x
             WHERE x.transfer_group_id = t.transfer_group_id
+              AND x.type = 'transfer'
             ORDER BY x.created_at ASC, x.id ASC
             LIMIT 1
         ) THEN 1
         ELSE 0
     END AS transfer_is_out,
-    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked
+    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked,
+    CASE
+        WHEN t.type = 'transfer' AND t.transfer_group_id IS NOT NULL THEN (
+            SELECT COALESCE(SUM(x.amount), 0)
+            FROM transactions x
+            WHERE x.transfer_group_id = t.transfer_group_id
+              AND x.type = 'expense'
+        )
+        ELSE 0
+    END AS commission
 FROM transactions t
+LEFT JOIN merchants m ON m.id = t.merchant_id
+LEFT JOIN stores st ON st.id = t.store_id
 LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
 LEFT JOIN accounts a ON a.id = t.account_id
 LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
-LEFT JOIN stores st ON st.id = t.store_id
 LEFT JOIN credit_payments cp ON cp.transaction_id = t.id
 WHERE t.id = ? AND t.user_id = ?;
 
@@ -62,11 +78,16 @@ SELECT
     t.subcategory_id,
     t.transfer_group_id,
     t.transfer_account_id,
+    t.subscription_id,
+    t.merchant_id,
     t.store_id,
     t.receipt_import_id,
+    t.receipt_item_index,
     t.transaction_date,
     t.created_at,
     t.updated_at,
+    m.name AS merchant_name,
+    m.icon AS merchant_icon,
     c.name AS category_name,
     c.icon AS category_icon,
     c.is_system AS category_is_system,
@@ -82,37 +103,53 @@ SELECT
         WHEN t.id = (
             SELECT x.id FROM transactions x
             WHERE x.transfer_group_id = t.transfer_group_id
+              AND x.type = 'transfer'
             ORDER BY x.created_at ASC, x.id ASC
             LIMIT 1
         ) THEN 1
         ELSE 0
     END AS transfer_is_out
 FROM transactions t
+LEFT JOIN merchants m ON m.id = t.merchant_id
+LEFT JOIN stores st ON st.id = t.store_id
 LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
 LEFT JOIN accounts a ON a.id = t.account_id
 LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
-LEFT JOIN stores st ON st.id = t.store_id
 WHERE t.transfer_group_id = ? AND t.user_id = ?
 ORDER BY t.created_at ASC, t.id ASC;
+
+-- name: GetLatestTransactionCreatedAtForAccount :one
+SELECT created_at
+FROM transactions
+WHERE user_id = ?
+  AND account_id = ?
+  AND transaction_date = ?
+ORDER BY created_at DESC, id DESC
+LIMIT 1;
 
 -- name: InsertTransaction :exec
 INSERT INTO transactions (
     id, user_id, account_id, type, kind, amount, description,
     category_id, subcategory_id, transfer_group_id, transfer_account_id,
     store_id, receipt_import_id, receipt_item_index,
-    transaction_date, affects_balance, created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    transaction_date, affects_balance, subscription_id, merchant_id, created_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: UpdateTransaction :exec
 UPDATE transactions
 SET account_id = ?, type = ?, kind = ?, amount = ?, description = ?,
-    category_id = ?, subcategory_id = ?, store_id = ?, transaction_date = ?, updated_at = ?
+    category_id = ?, subcategory_id = ?, merchant_id = ?, store_id = ?, transaction_date = ?, updated_at = ?
 WHERE id = ? AND user_id = ?;
 
 -- name: UpdateTransactionAffectsBalance :execrows
 UPDATE transactions
 SET affects_balance = ?, updated_at = ?
+WHERE id = ? AND user_id = ?;
+
+-- name: SetTransactionSubscriptionID :exec
+UPDATE transactions
+SET subscription_id = ?, updated_at = ?
 WHERE id = ? AND user_id = ?;
 
 -- name: UpdateTransferLeg :exec
@@ -143,8 +180,11 @@ SELECT
     t.subcategory_id,
     t.transfer_group_id,
     t.transfer_account_id,
+    t.subscription_id,
+    t.merchant_id,
     t.store_id,
     t.receipt_import_id,
+    t.receipt_item_index,
     t.transaction_date,
     t.affects_balance,
     t.created_at,
@@ -193,7 +233,27 @@ WHERE t.user_id = ?
   AND (? = '' OR t.transaction_date >= ?)
   AND (? = '' OR t.transaction_date <= ?)
   AND (? = '' OR t.description LIKE '%' || ? || '%')
-  AND (? = '' OR t.store_id = ?);
+  AND (? = '' OR t.merchant_id = ?)
+  AND (? = '' OR t.store_id = ?)
+  AND (? = '' OR EXISTS (
+    SELECT 1 FROM transaction_tags tt
+    WHERE tt.transaction_id = t.id AND tt.tag_id = ?
+  ))
+  AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL)
+  -- One journal operation per transfer, unless the list is scoped to a single account
+  -- (that account keeps its own leg). Commission stays inside the transfer.
+  AND (
+    ? != ''
+    OR t.type != 'transfer'
+    OR t.transfer_group_id IS NULL
+    OR t.id = (
+      SELECT x.id FROM transactions x
+      WHERE x.transfer_group_id = t.transfer_group_id
+        AND x.type = 'transfer'
+      ORDER BY x.created_at ASC, x.id ASC
+      LIMIT 1
+    )
+  );
 
 -- name: ListTransactionsFilteredDateDesc :many
 SELECT
@@ -208,11 +268,16 @@ SELECT
     t.subcategory_id,
     t.transfer_group_id,
     t.transfer_account_id,
+    t.subscription_id,
+    t.merchant_id,
     t.store_id,
     t.receipt_import_id,
+    t.receipt_item_index,
     t.transaction_date,
     t.created_at,
     t.updated_at,
+    m.name AS merchant_name,
+    m.icon AS merchant_icon,
     c.name AS category_name,
     c.icon AS category_icon,
     c.is_system AS category_is_system,
@@ -228,18 +293,29 @@ SELECT
         WHEN t.id = (
             SELECT x.id FROM transactions x
             WHERE x.transfer_group_id = t.transfer_group_id
+              AND x.type = 'transfer'
             ORDER BY x.created_at ASC, x.id ASC
             LIMIT 1
         ) THEN 1
         ELSE 0
     END AS transfer_is_out,
-    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked
+    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked,
+    CASE
+        WHEN t.type = 'transfer' AND t.transfer_group_id IS NOT NULL THEN (
+            SELECT COALESCE(SUM(x.amount), 0)
+            FROM transactions x
+            WHERE x.transfer_group_id = t.transfer_group_id
+              AND x.type = 'expense'
+        )
+        ELSE 0
+    END AS commission
 FROM transactions t
+LEFT JOIN merchants m ON m.id = t.merchant_id
+LEFT JOIN stores st ON st.id = t.store_id
 LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
 LEFT JOIN accounts a ON a.id = t.account_id
 LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
-LEFT JOIN stores st ON st.id = t.store_id
 LEFT JOIN credit_payments cp ON cp.transaction_id = t.id
 WHERE t.user_id = ?
   AND (? = '' OR t.account_id = ?)
@@ -249,7 +325,27 @@ WHERE t.user_id = ?
   AND (? = '' OR t.transaction_date >= ?)
   AND (? = '' OR t.transaction_date <= ?)
   AND (? = '' OR t.description LIKE '%' || ? || '%')
+  AND (? = '' OR t.merchant_id = ?)
   AND (? = '' OR t.store_id = ?)
+  AND (? = '' OR EXISTS (
+    SELECT 1 FROM transaction_tags tt
+    WHERE tt.transaction_id = t.id AND tt.tag_id = ?
+  ))
+  AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL)
+  -- One journal operation per transfer, unless the list is scoped to a single account
+  -- (that account keeps its own leg). Commission stays inside the transfer.
+  AND (
+    ? != ''
+    OR t.type != 'transfer'
+    OR t.transfer_group_id IS NULL
+    OR t.id = (
+      SELECT x.id FROM transactions x
+      WHERE x.transfer_group_id = t.transfer_group_id
+        AND x.type = 'transfer'
+      ORDER BY x.created_at ASC, x.id ASC
+      LIMIT 1
+    )
+  )
 ORDER BY t.transaction_date DESC, t.created_at DESC
 LIMIT ? OFFSET ?;
 
@@ -266,11 +362,16 @@ SELECT
     t.subcategory_id,
     t.transfer_group_id,
     t.transfer_account_id,
+    t.subscription_id,
+    t.merchant_id,
     t.store_id,
     t.receipt_import_id,
+    t.receipt_item_index,
     t.transaction_date,
     t.created_at,
     t.updated_at,
+    m.name AS merchant_name,
+    m.icon AS merchant_icon,
     c.name AS category_name,
     c.icon AS category_icon,
     c.is_system AS category_is_system,
@@ -286,18 +387,29 @@ SELECT
         WHEN t.id = (
             SELECT x.id FROM transactions x
             WHERE x.transfer_group_id = t.transfer_group_id
+              AND x.type = 'transfer'
             ORDER BY x.created_at ASC, x.id ASC
             LIMIT 1
         ) THEN 1
         ELSE 0
     END AS transfer_is_out,
-    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked
+    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked,
+    CASE
+        WHEN t.type = 'transfer' AND t.transfer_group_id IS NOT NULL THEN (
+            SELECT COALESCE(SUM(x.amount), 0)
+            FROM transactions x
+            WHERE x.transfer_group_id = t.transfer_group_id
+              AND x.type = 'expense'
+        )
+        ELSE 0
+    END AS commission
 FROM transactions t
+LEFT JOIN merchants m ON m.id = t.merchant_id
+LEFT JOIN stores st ON st.id = t.store_id
 LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
 LEFT JOIN accounts a ON a.id = t.account_id
 LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
-LEFT JOIN stores st ON st.id = t.store_id
 LEFT JOIN credit_payments cp ON cp.transaction_id = t.id
 WHERE t.user_id = ?
   AND (? = '' OR t.account_id = ?)
@@ -307,7 +419,27 @@ WHERE t.user_id = ?
   AND (? = '' OR t.transaction_date >= ?)
   AND (? = '' OR t.transaction_date <= ?)
   AND (? = '' OR t.description LIKE '%' || ? || '%')
+  AND (? = '' OR t.merchant_id = ?)
   AND (? = '' OR t.store_id = ?)
+  AND (? = '' OR EXISTS (
+    SELECT 1 FROM transaction_tags tt
+    WHERE tt.transaction_id = t.id AND tt.tag_id = ?
+  ))
+  AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL)
+  -- One journal operation per transfer, unless the list is scoped to a single account
+  -- (that account keeps its own leg). Commission stays inside the transfer.
+  AND (
+    ? != ''
+    OR t.type != 'transfer'
+    OR t.transfer_group_id IS NULL
+    OR t.id = (
+      SELECT x.id FROM transactions x
+      WHERE x.transfer_group_id = t.transfer_group_id
+        AND x.type = 'transfer'
+      ORDER BY x.created_at ASC, x.id ASC
+      LIMIT 1
+    )
+  )
 ORDER BY t.transaction_date ASC, t.created_at ASC
 LIMIT ? OFFSET ?;
 
@@ -324,11 +456,16 @@ SELECT
     t.subcategory_id,
     t.transfer_group_id,
     t.transfer_account_id,
+    t.subscription_id,
+    t.merchant_id,
     t.store_id,
     t.receipt_import_id,
+    t.receipt_item_index,
     t.transaction_date,
     t.created_at,
     t.updated_at,
+    m.name AS merchant_name,
+    m.icon AS merchant_icon,
     c.name AS category_name,
     c.icon AS category_icon,
     c.is_system AS category_is_system,
@@ -344,20 +481,43 @@ SELECT
         WHEN t.id = (
             SELECT x.id FROM transactions x
             WHERE x.transfer_group_id = t.transfer_group_id
+              AND x.type = 'transfer'
             ORDER BY x.created_at ASC, x.id ASC
             LIMIT 1
         ) THEN 1
         ELSE 0
     END AS transfer_is_out,
-    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked
+    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked,
+    CASE
+        WHEN t.type = 'transfer' AND t.transfer_group_id IS NOT NULL THEN (
+            SELECT COALESCE(SUM(x.amount), 0)
+            FROM transactions x
+            WHERE x.transfer_group_id = t.transfer_group_id
+              AND x.type = 'expense'
+        )
+        ELSE 0
+    END AS commission
 FROM transactions t
+LEFT JOIN merchants m ON m.id = t.merchant_id
+LEFT JOIN stores st ON st.id = t.store_id
 LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
 LEFT JOIN accounts a ON a.id = t.account_id
 LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
-LEFT JOIN stores st ON st.id = t.store_id
 LEFT JOIN credit_payments cp ON cp.transaction_id = t.id
 WHERE t.user_id = ?
+  AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL)
+  AND (
+    t.type != 'transfer'
+    OR t.transfer_group_id IS NULL
+    OR t.id = (
+      SELECT x.id FROM transactions x
+      WHERE x.transfer_group_id = t.transfer_group_id
+        AND x.type = 'transfer'
+      ORDER BY x.created_at ASC, x.id ASC
+      LIMIT 1
+    )
+  )
 ORDER BY t.transaction_date DESC, t.created_at DESC
 LIMIT ?;
 
@@ -382,6 +542,7 @@ WHERE t.user_id = ? AND t.account_id = ? AND t.type = 'transfer' AND t.kind = 'm
   AND t.id = (
     SELECT x.id FROM transactions x
     WHERE x.transfer_group_id = t.transfer_group_id
+      AND x.type = 'transfer'
     ORDER BY x.created_at ASC, x.id ASC
     LIMIT 1
   );
@@ -395,6 +556,7 @@ WHERE t.user_id = ? AND t.account_id = ? AND t.type = 'transfer' AND t.kind = 'm
   AND t.id = (
     SELECT x.id FROM transactions x
     WHERE x.transfer_group_id = t.transfer_group_id
+      AND x.type = 'transfer'
     ORDER BY x.created_at ASC, x.id ASC
     LIMIT 1 OFFSET 1
   );
@@ -420,6 +582,7 @@ WHERE t.user_id = ? AND t.account_id = ? AND t.type = 'transfer' AND kind = 'fut
   AND t.id = (
     SELECT x.id FROM transactions x
     WHERE x.transfer_group_id = t.transfer_group_id
+      AND x.type = 'transfer'
     ORDER BY x.created_at ASC, x.id ASC
     LIMIT 1
   );
@@ -433,6 +596,7 @@ WHERE t.user_id = ? AND t.account_id = ? AND t.type = 'transfer' AND kind = 'fut
   AND t.id = (
     SELECT x.id FROM transactions x
     WHERE x.transfer_group_id = t.transfer_group_id
+      AND x.type = 'transfer'
     ORDER BY x.created_at ASC, x.id ASC
     LIMIT 1 OFFSET 1
   );
@@ -574,3 +738,113 @@ SELECT DISTINCT account_id
 FROM transactions
 WHERE user_id = ? AND kind = 'future'
   AND transaction_date >= ? AND transaction_date <= ?;
+
+-- name: CountInboxTransactions :one
+SELECT COUNT(*) AS count
+FROM transactions t
+WHERE t.user_id = ?
+  AND t.type IN ('income', 'expense')
+  AND t.category_id IS NULL
+  AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL);
+
+-- name: ListInboxTransactionsDateDesc :many
+SELECT
+    t.id,
+    t.user_id,
+    t.account_id,
+    t.type,
+    t.kind,
+    t.amount,
+    t.description,
+    t.category_id,
+    t.subcategory_id,
+    t.transfer_group_id,
+    t.transfer_account_id,
+    t.subscription_id,
+    t.merchant_id,
+    t.store_id,
+    t.receipt_import_id,
+    t.receipt_item_index,
+    t.transaction_date,
+    t.created_at,
+    t.updated_at,
+    m.name AS merchant_name,
+    m.icon AS merchant_icon,
+    c.name AS category_name,
+    c.icon AS category_icon,
+    c.is_system AS category_is_system,
+    s.name AS subcategory_name,
+    s.icon AS subcategory_icon,
+    a.name AS account_name,
+    a.status AS account_status,
+    ta.name AS transfer_account_name,
+    ta.status AS transfer_account_status,
+    st.name AS store_name,
+    0 AS transfer_is_out,
+    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked,
+    0 AS commission
+FROM transactions t
+LEFT JOIN merchants m ON m.id = t.merchant_id
+LEFT JOIN stores st ON st.id = t.store_id
+LEFT JOIN categories c ON c.id = t.category_id
+LEFT JOIN subcategories s ON s.id = t.subcategory_id
+LEFT JOIN accounts a ON a.id = t.account_id
+LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
+LEFT JOIN credit_payments cp ON cp.transaction_id = t.id
+WHERE t.user_id = ?
+  AND t.type IN ('income', 'expense')
+  AND t.category_id IS NULL
+  AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL)
+ORDER BY t.transaction_date DESC, t.created_at DESC
+LIMIT ? OFFSET ?;
+
+-- name: ListInboxTransactionsDateAsc :many
+SELECT
+    t.id,
+    t.user_id,
+    t.account_id,
+    t.type,
+    t.kind,
+    t.amount,
+    t.description,
+    t.category_id,
+    t.subcategory_id,
+    t.transfer_group_id,
+    t.transfer_account_id,
+    t.subscription_id,
+    t.merchant_id,
+    t.store_id,
+    t.receipt_import_id,
+    t.receipt_item_index,
+    t.transaction_date,
+    t.created_at,
+    t.updated_at,
+    m.name AS merchant_name,
+    m.icon AS merchant_icon,
+    c.name AS category_name,
+    c.icon AS category_icon,
+    c.is_system AS category_is_system,
+    s.name AS subcategory_name,
+    s.icon AS subcategory_icon,
+    a.name AS account_name,
+    a.status AS account_status,
+    ta.name AS transfer_account_name,
+    ta.status AS transfer_account_status,
+    st.name AS store_name,
+    0 AS transfer_is_out,
+    CASE WHEN cp.id IS NOT NULL THEN 1 ELSE 0 END AS credit_payment_linked,
+    0 AS commission
+FROM transactions t
+LEFT JOIN merchants m ON m.id = t.merchant_id
+LEFT JOIN stores st ON st.id = t.store_id
+LEFT JOIN categories c ON c.id = t.category_id
+LEFT JOIN subcategories s ON s.id = t.subcategory_id
+LEFT JOIN accounts a ON a.id = t.account_id
+LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
+LEFT JOIN credit_payments cp ON cp.transaction_id = t.id
+WHERE t.user_id = ?
+  AND t.type IN ('income', 'expense')
+  AND t.category_id IS NULL
+  AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL)
+ORDER BY t.transaction_date ASC, t.created_at ASC
+LIMIT ? OFFSET ?;

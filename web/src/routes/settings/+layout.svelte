@@ -13,6 +13,8 @@
 		path: string;
 		titleKey: string;
 		href: BackLinkHref;
+		/** Page renders its own SectionHeader (e.g. with create CTA). */
+		ownsHeader?: boolean;
 	};
 
 	const pages: SettingsPage[] = [
@@ -24,21 +26,17 @@
 			titleKey: 'settings.tab.notifications',
 			href: '/settings/notifications'
 		},
-		{
-			path: '/settings/categories',
-			titleKey: 'settings.tab.categories',
-			href: '/settings/categories'
-		},
-		{ path: '/settings/import', titleKey: 'settings.tab.import', href: '/settings/import' },
-		{
-			path: '/settings/recurring-operations',
-			titleKey: 'nav.recurring',
-			href: '/settings/recurring-operations'
-		}
+		{ path: '/settings/import', titleKey: 'settings.tab.import', href: '/settings/import' }
 	];
 
+	const pathname = $derived($page.url.pathname);
+	const isLegacyRedirect = $derived(
+		pathname === '/settings/categories' ||
+			pathname === '/settings/recurring-operations' ||
+			pathname === '/settings/transaction-templates'
+	);
+
 	const current = $derived.by(() => {
-		const pathname = $page.url.pathname;
 		return (
 			pages.find((p) => p.path === pathname) ??
 			pages.find((p) => pathname.startsWith(`${p.path}/`)) ??
@@ -62,8 +60,14 @@
 	<title>{$_(current.titleKey)} — {$_('app.title')}</title>
 </svelte:head>
 
-<div class="space-y-6">
-	<BackLink items={breadcrumbItems} />
-	<h1 class="text-2xl font-semibold">{$_(current.titleKey)}</h1>
+{#if isLegacyRedirect}
 	{@render children()}
-</div>
+{:else}
+	<div class="space-y-6">
+		<BackLink items={breadcrumbItems} />
+		{#if !current.ownsHeader}
+			<h1 class="text-2xl font-semibold">{$_(current.titleKey)}</h1>
+		{/if}
+		{@render children()}
+	</div>
+{/if}

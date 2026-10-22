@@ -6,6 +6,8 @@
 
 Сейчас интеграции **входящие**: API по токену, Telegram/MAX **исходящие уведомления** с сервера. Webhook — чтобы внешние системы (n8n, Zapier, свой скрипт, [Home Assistant](home-assistant.md)) реагировали на события в бухгалтерии без polling `GET /transactions`.
 
+Имена событий лучше сразу совпасть с шиной для UI ([realtime-updates.md](realtime-updates.md)): webhook — HTTP наружу, сокет — вкладка браузера.
+
 ## События (черновик)
 
 | Событие | Когда |

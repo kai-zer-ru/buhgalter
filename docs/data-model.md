@@ -17,7 +17,12 @@ erDiagram
         INTEGER is_configured
         TEXT notification_secret_key
         TEXT app_version
-        INTEGER registration_enabled
+    }
+
+    feature_flags {
+        TEXT key PK
+        INTEGER enabled
+        TEXT updated_at
     }
 
     users {
@@ -25,6 +30,7 @@ erDiagram
         TEXT login UK
         TEXT language
         TEXT timezone
+        TEXT theme "light|dark|system"
         INTEGER is_admin
         TEXT status
     }
@@ -66,12 +72,61 @@ erDiagram
         INTEGER sort_order
     }
 
+    merchants {
+        TEXT name
+        TEXT icon
+    }
+
+    tags {
+        TEXT name
+    }
+
     transactions {
         TEXT type "income|expense|transfer"
         TEXT kind "manual|future"
         INTEGER amount
         INTEGER affects_balance
         TEXT transfer_group_id
+        TEXT merchant_id
+    }
+
+    user_change_events {
+        INTEGER id PK
+        TEXT entity_type "transaction"
+        TEXT entity_id
+        TEXT action "created|updated|deleted"
+        TEXT occurred_at
+    }
+
+    transaction_tags {
+        TEXT transaction_id
+        TEXT tag_id
+    }
+
+    transaction_templates {
+        TEXT type "income|expense|transfer"
+        INTEGER amount "nullable"
+        INTEGER sort_order
+        TEXT merchant_id
+    }
+
+    transaction_template_tags {
+        TEXT template_id
+        TEXT tag_id
+    }
+
+    category_rules {
+        TEXT kind "category_account|text_category"
+        TEXT pattern "text_category only"
+        TEXT default_account_id "category_account only"
+        INTEGER priority
+    }
+
+    subscriptions {
+        TEXT name
+        TEXT period "week|two_weeks|month|quarter|half_year|year"
+        TEXT next_run_at
+        TEXT upcoming_run_ats "JSON[3] UTC"
     }
 
     recurring_operations {
@@ -154,7 +209,7 @@ erDiagram
         TEXT trigger_type
         TEXT channel
         TEXT dedup_date
-        TEXT status
+        TEXT status "sent|error"
     }
 
     notification_templates {
@@ -192,7 +247,10 @@ erDiagram
     users ||--o{ api_tokens : has
     users ||--o{ accounts : owns
     users ||--o{ categories : owns
+    users ||--o{ merchants : owns
+    users ||--o{ tags : owns
     users ||--o{ transactions : owns
+    users ||--o{ subscriptions : owns
     users ||--o{ recurring_operations : owns
     users ||--o{ budgets : owns
     users ||--o| password_reset_requests : "pending reset"
@@ -209,6 +267,17 @@ erDiagram
     categories ||--o{ subcategories : has
     categories ||--o{ transactions : category_id
     subcategories ||--o{ transactions : subcategory_id
+    merchants ||--o{ transactions : merchant_id
+    transactions ||--o{ transaction_tags : has
+    users ||--o{ user_change_events : owns
+    tags ||--o{ transaction_tags : has
+    users ||--o{ transaction_templates : owns
+    transaction_templates ||--o{ transaction_template_tags : has
+    tags ||--o{ transaction_template_tags : has
+    users ||--o{ category_rules : owns
+    categories ||--o{ category_rules : category_id
+    subcategories ||--o{ category_rules : subcategory_id
+    accounts ||--o{ category_rules : default_account_id
     accounts ||--o{ transactions : account_id
     accounts ||--o{ transactions : transfer_account_id
     accounts ||--o{ credits : debit_account_id
@@ -229,6 +298,8 @@ erDiagram
 ```
 
 `system_settings` — глобальная строка `id = 1`, без `user_id`.  
+`users.theme`: `light` | `dark` | `system` («Как на устройстве»); **default `system`** у новых пользователей (`schema.sql`, `InsertUser`). В UI resolved light/dark через `prefers-color-scheme`.  
+**Сброс учёта:** `DELETE /api/v1/user/data` удаляет ledger пользователя (счета, операции, долги, кредиты, бюджеты, подписки, периодические операции, магазины, теги, шаблоны, категории, журнал уведомлений, задания импорта) и заново создаёт категории по умолчанию. Не трогает профиль, пароль, сессии, API-токены и настройки каналов уведомлений.  
 Переводы: две ноги в `transactions` с общим `transfer_group_id` (самоссылка, не отдельная таблица).
 
 ## Категории и иконки
@@ -241,7 +312,7 @@ erDiagram
 
 - Пара перевода: `transfer_group_id`, исходящая нога — первая по `created_at`.
 - Создание перевода — в одной транзакции БД (`BeginTx` + откат при ошибке второй ноги).
-- **Комиссия (v1.1):** опциональное поле `commission` при создании/изменении перевода; отдельная нога `expense` на счёте-источнике в системной категории «Комиссия».
+- **Комиссия (v1.1 / v1.4.1):** опциональное поле `commission` при создании/изменении перевода; отдельная нога `expense` на счёте-источнике в системной категории «Комиссия». В списках нога скрыта; сумма агрегируется в `commission` / `commission_display` на ногах перевода. Самостоятельные UPDATE/DELETE ноги комиссии — `ERR_COMMISSION_LINKED`.
 - В API-ответах: `transfer_account_name`, `transfer_is_out`, `commission`, `commission_display` (вычисляемые/агрегированные поля).
 - UI: [transactions-display.md](transactions-display.md).
 - **Чеки (54-ФЗ):** `store_id`, `receipt_import_id`, `receipt_item_index` — для расходов из чека и привязки к магазину; см. [receipt-scanner.md](receipt-scanner.md).
@@ -251,6 +322,7 @@ erDiagram
 - `stores` — магазины из чеков (`name`, `name_normalized`); уникальность `(user_id, name_normalized)`; без ручного CRUD.
 - `receipt_imports` — один чек на запись; fiscal-ключ, `payload_json` (снимок ФНС), `fns_check_url`; дедупликация повторного импорта.
 - Несколько `transactions` могут ссылаться на один `receipt_import_id` (позиции чека).
+- **Лента изменений (v1.5.2):** таблица `user_change_events` (триггеры на INSERT/UPDATE/DELETE `transactions`). Android при sync запрашивает `GET /sync/transaction-changes?since_id=` и патчит кеш списков по id — добавление, правку и удаление операции, в том числе старой, которую полный прогрев страницы 1 не перечитывает. Счётчик `meta.total` эта лента не увеличивает для строки старше страницы и для входящей ноги перевода.
 
 ## Долги и операции
 
@@ -272,6 +344,7 @@ erDiagram
 ## Кредиты и операции
 
 - `credits.credit_kind`: `consumer` | `mortgage` (ипотека: `property_price`, `down_payment`, сумма кредита = `property_price - down_payment`; потребкредит: опционально `principal_affects_balance` — доход на счёт при создании)
+- `credits.paid_amount` не превышает `principal_amount` при создании, backfill ретро, автосписании и платеже; `repairMissingSchedule` для будущих слотов тратит не больше тела (ретро-прошлые слоты по-прежнему помечаются applied, как при создании)
 - `credits.payment_interval`: `month` | `week` | `two_weeks` | `manual` (для ипотеки — только `month`)
 - `credit_payments.kind`: `scheduled`, `auto`, `retroactive`; `early` — legacy
 - График ипотеки: ежедневное начисление процентов; автоплатёж через `MonthlyPaymentMortgage`, ручной — через `monthly_payment` в create/preview (отдельный алгоритм, без отклонения «слишком высокого» платежа)
@@ -279,25 +352,46 @@ erDiagram
 - `POST /credits/schedule/preview` — предпросмотр графика без сохранения; ответ: `schedule_preview`, `calculated_monthly_payment`
 - При создании с `added_retroactively`: прошлые платежи → `retroactive`; опционально `retroactive_debit_count` — последние N ретро-платежей со списанием на счёт (`transaction_id`, `exclude_from_stats=0`)
 - `PATCH /credits/{id}/schedule` — правка сумм неоплаченных `scheduled` (v1.1)
-- При старте: `RepairShortSchedules` дополняет неполные графики (миграция-маркер `020`)
+- При старте: `RepairShortSchedules` дополняет неполные графики (миграция-маркер `020`); алгоритм как при создании — по `credit_kind` (ипотека с ежедневными процентами, не аннуитет потребкредита). То же при восстановлении пустого графика (`repairMissingSchedule`)
 - `transactions.affects_balance` — `0` при завершении кредита «без учёта в балансе»
 - Автосписание: `server/internal/scheduler` по `debit_time_local` в `users.timezone`; `transactions.transaction_date` — дата платежа + это время (UTC в БД)
+- При старте: `EnsureCreditPaymentCategories` выравнивает категорию связанных с графиком операций на системную «Кредиты» (см. [credit-payment-link.md](../roadmap/credit-payment-link.md))
 
 Подробнее: [ui-credits.md](ui-credits.md).
+
+## Импорт
+
+- `import_jobs`: после успешной записи журнала статус `done` пишется с retry на `SQLITE_BUSY`; realtime/кеш — только если `done` сохранился. Неуспешный persist `done` не переводит джобу в `failed`.
+- `import_idempotency`: ключ занимается до импорта (`UNIQUE (user_id, idempotency_key)`); пустой `response_json` — in-flight, затем UPDATE готового report.
 
 ## Счета
 
 | Поле | Описание |
 |------|----------|
 | `accounts.type` | `cash`, `bank`, `credit_card` |
-| `accounts.credit_limit` | лимит кредитной карты, копейки; только для `credit_card` |
+| `accounts.initial_balance` | начальный остаток, копейки; фиксируется при создании и при явном изменении в форме редактирования |
+| `accounts.current_balance` | текущий баланс, копейки; денормализация, пересчитывается пакетом `accountbalance` |
+| `accounts.credit_limit` | лимит кредитной карты, копейки; только для `credit_card`; смена после создания — только `PUT /accounts/{id}/credit-limit` (с корректировкой `initial_balance`, см. [ui-credit-cards.md](ui-credit-cards.md)) |
 | `accounts.payment_account_id` | счёт по умолчанию для переводов на карту (опционально) |
 | `accounts.auto_topup_*` | автопополнение bank-счёта — см. [balance-maintenance.md](balance-maintenance.md) |
 | `accounts.status` | `active`, `archived`, `deleted` |
-| `accounts.is_primary` | `1` — основной счёт среди `status = active`; не более одного на пользователя |
+| `accounts.is_primary` | `1` — основной счёт среди активных `cash`/`bank`; не более одного на пользователя; **кредитная карта основным быть не может** |
 | `POST /accounts/{id}/archive` | см. [accounts-archive-delete.md](accounts-archive-delete.md) |
 | `DELETE /accounts/{id}` | см. [accounts-archive-delete.md](accounts-archive-delete.md) |
-| API | `POST /api/v1/accounts/{id}/primary` |
+| API | `POST /api/v1/accounts/{id}/primary` (отклоняет `credit_card` — `ERR_ACCOUNT_PRIMARY_CREDIT_CARD`) |
+| Миграция `042` | `042_primary_not_credit_card.sql` — снимает `is_primary` с `credit_card`; если у пользователя не осталось основного — назначает oldest active `cash`/`bank` |
+
+### Начальный и текущий баланс
+
+Два разных значения; путать их в UI нельзя.
+
+| | `initial_balance` | `current_balance` (API: `balance`, `balance_display`) |
+|---|-------------------|--------------------------------------------------------|
+| Смысл | стартовая сумма на счёте | фактический остаток с учётом операций |
+| Когда меняется | создание счёта; `PUT /accounts/{id}` с полем `initial_balance` | любая операция по счёту; после `PUT` с новым `initial_balance` — пересчёт (`accountbalance.Refresh`) |
+| Формула | задаётся пользователем | `initial_balance` + доходы − расходы + входящие переводы − исходящие переводы (ручные операции, `affects_balance = 1`) |
+
+**Форма редактирования** (`/accounts`, `/accounts/{id}`, Android-клиент): поле «Начальный баланс» заполняется из **`initial_balance`** ответа API, **не** из `balance_display`. На карточке и в шапке счёта по-прежнему показывается текущий баланс. Подстановка текущего баланса в поле начального приводит к порче `initial_balance` при сохранении без правок.
 
 Подробнее о типе `credit_card`: [ui-credit-cards.md](ui-credit-cards.md).
 
@@ -336,11 +430,13 @@ erDiagram
 | transactions | `internal/transaction` | `transactions.sql` | sqlc |
 | stores | `internal/store` | `stores.sql` | sqlc |
 | receipt_imports | `internal/receipt` | `receipts.sql` | sqlc |
+| transactions | `internal/transaction` | `transactions.sql`, `user_change_events.sql` | sqlc |
 | debtors, debts | `internal/debt` | `debts.sql` | sqlc |
 | credits | `internal/credit` | `credits.sql` | sqlc |
 | stats / search | `internal/stats` | `stats.sql` | sqlc |
 | budgets | `internal/budget` | `budget.sql` | sqlc |
 | recurring | `internal/recurring` | `recurring_operations.sql` | sqlc |
+| subscriptions | `internal/subscription` | `subscriptions.sql` | sqlc |
 | budget | `internal/budget` | `budget.sql` | sqlc |
 | notifications | `internal/notify` | `notifications.sql` | sqlc |
 | import / export | `internal/importexport` | `import.sql` | sqlc |
@@ -378,7 +474,11 @@ erDiagram
   - `020_repair_credit_schedules.sql` — repair неполных графиков при старте
   - `023_password_reset_requests.sql` — очередь сброса пароля
   - `026_recurring_operations.sql` — периодические операции
-  - `034_budgets.sql` … `039_budget_scope_unique.sql` — бюджет (см. [budget.md](budget.md))
   - `024_`, `027_`, `028_` — поля кредитов, ипотеки, `accounts.current_balance`
+  - `033_credit_card_accounts.sql` — тип счёта `credit_card`
+  - `034_budgets.sql` … `039_budget_scope_unique.sql` — бюджет (см. [budget.md](budget.md))
+  - `040_account_deleted_status.sql`, `041_account_auto_topup.sql` — удаление счетов, автопополнение
+  - `042_primary_not_credit_card.sql` — кредитная карта не может быть основным счётом
+  - `052_user_change_events.sql` — лента изменений операций для Android-sync
 
 Уже применённые миграции **не переписывать** — только новые файлы в конец цепочки. После каждой миграции обновлять `server/schema.sql` и при необходимости запускать `make sqlc`.

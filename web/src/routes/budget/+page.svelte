@@ -11,6 +11,7 @@
 		createBudget,
 		deleteBudget,
 		getBudgetSummary,
+		getBudgetSpentPreview,
 		getUIMeta,
 		listSubcategories,
 		updateBudget,
@@ -23,6 +24,8 @@
 	} from '$lib/api/client';
 	import BackLink from '$lib/components/BackLink.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
+	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
+	import PullToRefresh from '$lib/components/PullToRefresh.svelte';
 	import IntegerInput from '$lib/components/IntegerInput.svelte';
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
 	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
@@ -32,7 +35,15 @@
 	import { formatMoneyDisplay, formatMoneyForInput, toAPIAmount } from '$lib/money';
 	import { toast } from '$lib/toast';
 	import { tr } from '$lib/i18n';
-	import { budgetStatusLine } from '$lib/budget-display';
+	import {
+		budgetStatusLine,
+		budgetSpentPreviewReady,
+		isBudgetMonthSpentPreviewable
+	} from '$lib/budget-display';
+	import { reportPageLoadFailure } from '$lib/page-load';
+	import { refCacheReady, refCacheUpdate } from '$lib/ref-cache';
+	import { refCacheUpdateMatches } from '$lib/ref-cache-watch';
+	import { assignIfChanged } from '$lib/state-utils';
 	import {
 		accountRefSelectOption,
 		categorySelectOptions,
@@ -46,6 +57,8 @@
 	let banks = $state<Bank[]>([]);
 	let subcategories = $state<Subcategory[]>([]);
 	let loading = $state(true);
+	let ready = $state(false);
+	let loadError = $state<string | null>(null);
 	let saving = $state(false);
 	let error = $state('');
 	let formOpen = $state(false);
@@ -61,8 +74,16 @@
 	let isActive = $state(true);
 	let copyForward = $state(false);
 	let copying = $state(false);
+	let spentPreviewDisplay = $state<string | null>(null);
+	let spentPreviewSeq = 0;
 
 	const month = $derived($page.url.searchParams.get('month') ?? currentMonthKey());
+	const formVisible = $derived(formOpen || editId !== null);
+	const canShowSpentPreview = $derived(
+		formVisible &&
+			isBudgetMonthSpentPreviewable(month, currentMonthKey()) &&
+			budgetSpentPreviewReady(scope, categoryId, subcategoryId)
+	);
 
 	const monthLabel = $derived.by(() => {
 		void $_;
@@ -73,7 +94,7 @@
 	});
 
 	const expenseCategories = $derived(
-		categories.filter((c) => c.type === 'expense' && !c.is_system)
+		categories.filter((c) => c.type === 'expense' && (!c.is_system || c.name === 'Подписки'))
 	);
 	const hasAllExpenseBudget = $derived(
 		items.some((i) => i.scope === 'all_expense' && i.id !== editId)
@@ -170,21 +191,33 @@
 		}
 	}
 
-	async function loadAll() {
-		loading = true;
+	async function loadAll(opts: { background?: boolean } = {}) {
+		const summaryPath = `/api/v1/budgets/summary?month=${encodeURIComponent(month)}`;
+		if (!opts.background && !refCacheReady(summaryPath) && !refCacheReady('/api/v1/ui/meta')) {
+			loading = true;
+		}
 		error = '';
 		try {
 			const [summary, meta] = await Promise.all([getBudgetSummary(month), getUIMeta()]);
-			items = summary.items;
+			items = opts.background ? assignIfChanged(items, summary.items) : summary.items;
 			canCopyFromPrevious = summary.can_copy_from_previous;
-			accounts = meta.accounts.filter((a) => a.status === 'active');
-			banks = meta.banks;
-			categories = meta.expense_categories;
+			const nextAccounts = meta.accounts.filter((a) => a.status === 'active');
+			accounts = opts.background ? assignIfChanged(accounts, nextAccounts) : nextAccounts;
+			banks = opts.background ? assignIfChanged(banks, meta.banks) : meta.banks;
+			categories = opts.background
+				? assignIfChanged(categories, meta.expense_categories)
+				: meta.expense_categories;
 			if (!categoryId && expenseCategories.length > 0) {
 				categoryId = expenseCategories[0].id;
 			}
+			loadError = null;
+			ready = true;
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : $_('common.error');
+			const msg = reportPageLoadFailure(err, {
+				silent: opts.background,
+				hasData: items.length > 0
+			});
+			if (msg) loadError = msg;
 		} finally {
 			loading = false;
 		}
@@ -310,6 +343,47 @@
 	});
 
 	$effect(() => {
+		const update = $refCacheUpdate;
+		if (!update || !ready) return;
+		const summaryPath = `/api/v1/budgets/summary?month=${encodeURIComponent(month)}`;
+		if (refCacheUpdateMatches(update, [summaryPath, '/api/v1/ui/meta', '/api/v1/budgets'])) {
+			void loadAll({ background: true });
+		}
+	});
+
+	$effect(() => {
+		if (!canShowSpentPreview) {
+			spentPreviewDisplay = null;
+			return;
+		}
+		const seq = ++spentPreviewSeq;
+		const previewMonth = month;
+		const previewScope = scope;
+		const previewCategoryId = categoryId;
+		const previewSubcategoryId = subcategoryId;
+		const previewAccountId = accountId;
+		void getBudgetSpentPreview({
+			month: previewMonth,
+			scope: previewScope,
+			category_id:
+				previewScope === 'category' || previewScope === 'subcategory'
+					? previewCategoryId || undefined
+					: undefined,
+			subcategory_id:
+				previewScope === 'subcategory' ? previewSubcategoryId || undefined : undefined,
+			account_id: previewAccountId || undefined
+		})
+			.then((res) => {
+				if (seq !== spentPreviewSeq) return;
+				spentPreviewDisplay = res.spent_display;
+			})
+			.catch(() => {
+				if (seq !== spentPreviewSeq) return;
+				spentPreviewDisplay = null;
+			});
+	});
+
+	$effect(() => {
 		if (scope === 'category' || scope === 'subcategory') {
 			void loadSubcategories();
 		}
@@ -406,6 +480,13 @@
 				</div>
 			</div>
 		{/if}
+		{#if spentPreviewDisplay !== null}
+			<p class="text-sm" style:color="var(--text-muted)" data-testid="budget-already-spent">
+				{$_('budget.field.already_spent', {
+					values: { spent: formatMoneyDisplay(spentPreviewDisplay) }
+				})}
+			</p>
+		{/if}
 		<div class="grid items-end gap-3 md:grid-cols-3">
 			<Select
 				id="budget-account-{formPrefix}"
@@ -477,26 +558,19 @@
 	<title>{$_('budget.title')} — {$_('app.title')}</title>
 </svelte:head>
 
-<div class="space-y-5">
-	<BackLink
-		items={[
-			{ href: '/', label: $_('nav.home') },
-			{ href: '/budget', label: $_('budget.title') }
-		]}
-	/>
+<PullToRefresh onRefresh={() => loadAll({ background: true })}>
+	<div class="space-y-5">
+		<BackLink
+			items={[
+				{ href: '/', label: $_('nav.home') },
+				{ href: '/budget', label: $_('budget.title') }
+			]}
+		/>
 
-	<div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-		<h1 class="text-2xl font-semibold">{$_('budget.title')}</h1>
-		<div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+		<div class="flex flex-wrap items-center justify-between gap-3">
+			<h1 class="text-2xl font-semibold">{$_('budget.title')}</h1>
+
 			<div class="flex flex-wrap items-center gap-2">
-				<button
-					type="button"
-					class="btn-primary min-w-[7.25rem] shrink-0 text-center"
-					onclick={toggleForm}
-					disabled={copying}
-				>
-					{formOpen && !editId ? $_('common.cancel') : $_('budget.add')}
-				</button>
 				{#if canCopyFromPrevious}
 					<button
 						type="button"
@@ -507,95 +581,110 @@
 						{$_('budget.action.copy_from_previous')}
 					</button>
 				{/if}
-			</div>
-			<div class="flex shrink-0 items-center justify-center gap-2 sm:justify-end">
-				<button
-					type="button"
-					class="btn-ghost shrink-0"
-					onclick={() => shiftMonth(-1)}
-					aria-label={$_('budget.month.prev')}
-				>
-					←
-				</button>
-				<span class="whitespace-nowrap text-center font-medium capitalize">{monthLabel}</span>
-				<button
-					type="button"
-					class="btn-ghost shrink-0"
-					onclick={() => shiftMonth(1)}
-					aria-label={$_('budget.month.next')}
-				>
-					→
-				</button>
+				<div class="flex items-center gap-2">
+					<button
+						type="button"
+						class="btn-primary shrink-0"
+						onclick={toggleForm}
+						disabled={copying}
+					>
+						{formOpen && !editId ? $_('common.cancel') : $_('budget.add')}
+					</button>
+					<div class="flex shrink-0 items-center gap-1">
+						<button
+							type="button"
+							class="btn-ghost shrink-0 max-sm:flex max-sm:h-11 max-sm:w-11 max-sm:items-center max-sm:justify-center max-sm:p-0"
+							onclick={() => shiftMonth(-1)}
+							aria-label={$_('budget.month.prev')}
+						>
+							←
+						</button>
+						<span
+							class="inline-flex h-11 w-[11rem] shrink-0 items-center justify-center rounded-xl border px-2 text-center text-sm font-medium capitalize sm:h-auto sm:px-3 sm:py-2"
+							style:border-color="var(--border)"
+						>
+							{monthLabel}
+						</span>
+						<button
+							type="button"
+							class="btn-ghost shrink-0 max-sm:flex max-sm:h-11 max-sm:w-11 max-sm:items-center max-sm:justify-center max-sm:p-0"
+							onclick={() => shiftMonth(1)}
+							aria-label={$_('budget.month.next')}
+						>
+							→
+						</button>
+					</div>
+				</div>
 			</div>
 		</div>
-	</div>
 
-	{#if formOpen && !editId}
-		<div class="card">
-			{@render budgetForm('create')}
-		</div>
-	{/if}
+		{#if formOpen && !editId}
+			<div class="card">
+				{@render budgetForm('create')}
+			</div>
+		{/if}
 
-	{#if loading}
-		<p style:color="var(--text-muted)">{$_('common.loading')}</p>
-	{:else if items.length === 0 && !formOpen}
-		<EmptyStateCard message={$_('budget.empty')} />
-	{:else if items.length > 0}
-		<div class="grid gap-4 md:grid-cols-2">
-			{#each items as item (item.id)}
-				<article class="card space-y-3">
-					<div class="flex items-start justify-between gap-2">
-						<div class="min-w-0">
-							<h2 class="font-medium">{item.name}</h2>
+		<PageLoadGate {loading} error={loadError} onretry={() => void loadAll()} inline>
+			{#if items.length === 0 && !formOpen}
+				<EmptyStateCard message={$_('budget.empty')} />
+			{:else if items.length > 0}
+				<div class="grid gap-4 md:grid-cols-2">
+					{#each items as item (item.id)}
+						<article class="card space-y-3">
+							<div class="flex items-start justify-between gap-2">
+								<div class="min-w-0">
+									<h2 class="font-medium">{item.name}</h2>
+									<p class="text-sm" style:color="var(--text-muted)">
+										{tr('budget.progress', {
+											values: {
+												spent: formatMoneyDisplay(item.spent_display),
+												planned: formatMoneyDisplay(item.planned_display)
+											}
+										})}
+									</p>
+								</div>
+								<RowActionsMenu actions={rowActions(item)} />
+							</div>
+							<div
+								class="h-2 overflow-hidden rounded-full"
+								style:background-color="color-mix(in srgb, var(--border) 80%, transparent)"
+							>
+								<div
+									class="h-full transition-all {progressClass(item.status)}"
+									style="width: {Math.min(item.percent, 100)}%"
+								></div>
+							</div>
+							<p class="text-sm tabular-nums" style:color="var(--text-muted)">
+								{budgetStatusLine(item)}
+							</p>
 							<p class="text-sm" style:color="var(--text-muted)">
-								{tr('budget.progress', {
+								{tr('budget.copy_status', {
 									values: {
-										spent: formatMoneyDisplay(item.spent_display),
-										planned: formatMoneyDisplay(item.planned_display)
+										value: item.copy_forward
+											? $_('budget.copy_status.yes')
+											: $_('budget.copy_status.no')
 									}
 								})}
 							</p>
-						</div>
-						<RowActionsMenu actions={rowActions(item)} />
-					</div>
-					<div
-						class="h-2 overflow-hidden rounded-full"
-						style:background-color="color-mix(in srgb, var(--border) 80%, transparent)"
-					>
-						<div
-							class="h-full transition-all {progressClass(item.status)}"
-							style="width: {Math.min(item.percent, 100)}%"
-						></div>
-					</div>
-					<p class="text-sm tabular-nums" style:color="var(--text-muted)">
-						{budgetStatusLine(item)}
-					</p>
-					<p class="text-sm" style:color="var(--text-muted)">
-						{tr('budget.copy_status', {
-							values: {
-								value: item.copy_forward
-									? $_('budget.copy_status.yes')
-									: $_('budget.copy_status.no')
-							}
-						})}
-					</p>
-					{#if item.scope === 'all_expense' && item.children_planned_display}
-						<p class="text-sm tabular-nums" style:color="var(--text-muted)">
-							{tr('budget.children', {
-								values: {
-									spent: formatMoneyDisplay(item.children_spent_display ?? '0.00'),
-									planned: formatMoneyDisplay(item.children_planned_display)
-								}
-							})}
-						</p>
-					{/if}
-					{#if editId === item.id}
-						<div class="border-t pt-3" style:border-color="var(--border)">
-							{@render budgetForm('edit')}
-						</div>
-					{/if}
-				</article>
-			{/each}
-		</div>
-	{/if}
-</div>
+							{#if item.scope === 'all_expense' && item.children_planned_display}
+								<p class="text-sm tabular-nums" style:color="var(--text-muted)">
+									{tr('budget.children', {
+										values: {
+											spent: formatMoneyDisplay(item.children_spent_display ?? '0.00'),
+											planned: formatMoneyDisplay(item.children_planned_display)
+										}
+									})}
+								</p>
+							{/if}
+							{#if editId === item.id}
+								<div class="border-t pt-3" style:border-color="var(--border)">
+									{@render budgetForm('edit')}
+								</div>
+							{/if}
+						</article>
+					{/each}
+				</div>
+			{/if}
+		</PageLoadGate>
+	</div>
+</PullToRefresh>

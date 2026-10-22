@@ -22,12 +22,16 @@ SELECT
     trigger_auto_topup_disabled,
     trigger_user_registration,
     trigger_password_reset,
+    trigger_subscription,
     debt_days_before,
     my_debt_overdue_days_limit,
     owed_debt_overdue_start_after_days,
     owed_debt_overdue_days_limit,
     credit_days_before,
+    subscription_days_before,
     notification_time_local,
+    keyboard_telegram,
+    keyboard_max,
     updated_at
 FROM notification_settings
 WHERE user_id = ?;
@@ -51,14 +55,18 @@ INSERT INTO notification_settings (
     trigger_auto_topup_disabled,
     trigger_user_registration,
     trigger_password_reset,
+    trigger_subscription,
     debt_days_before,
     my_debt_overdue_days_limit,
     owed_debt_overdue_start_after_days,
     owed_debt_overdue_days_limit,
     credit_days_before,
+    subscription_days_before,
     notification_time_local,
+    keyboard_telegram,
+    keyboard_max,
     updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(user_id) DO UPDATE SET
     telegram_enabled = excluded.telegram_enabled,
     telegram_bot_token = excluded.telegram_bot_token,
@@ -76,23 +84,29 @@ ON CONFLICT(user_id) DO UPDATE SET
     trigger_auto_topup_disabled = excluded.trigger_auto_topup_disabled,
     trigger_user_registration = excluded.trigger_user_registration,
     trigger_password_reset = excluded.trigger_password_reset,
+    trigger_subscription = excluded.trigger_subscription,
     debt_days_before = excluded.debt_days_before,
     my_debt_overdue_days_limit = excluded.my_debt_overdue_days_limit,
     owed_debt_overdue_start_after_days = excluded.owed_debt_overdue_start_after_days,
     owed_debt_overdue_days_limit = excluded.owed_debt_overdue_days_limit,
     credit_days_before = excluded.credit_days_before,
+    subscription_days_before = excluded.subscription_days_before,
     notification_time_local = excluded.notification_time_local,
+    keyboard_telegram = excluded.keyboard_telegram,
+    keyboard_max = excluded.keyboard_max,
     updated_at = excluded.updated_at;
 
 -- name: UpsertNotificationTemplate :exec
-INSERT INTO notification_templates (user_id, trigger_type, template, updated_at)
-VALUES (?, ?, ?, ?)
+INSERT INTO notification_templates (user_id, trigger_type, template, keyboard_telegram, keyboard_max, updated_at)
+VALUES (?, ?, ?, ?, ?, ?)
 ON CONFLICT(user_id, trigger_type) DO UPDATE SET
     template = excluded.template,
+    keyboard_telegram = excluded.keyboard_telegram,
+    keyboard_max = excluded.keyboard_max,
     updated_at = excluded.updated_at;
 
 -- name: ListNotificationTemplates :many
-SELECT user_id, trigger_type, template, updated_at
+SELECT user_id, trigger_type, template, keyboard_telegram, keyboard_max, updated_at
 FROM notification_templates
 WHERE user_id = ?;
 
@@ -124,4 +138,5 @@ WHERE user_id = ?
   AND trigger_type = ?
   AND channel = ?
   AND entity_id = ?
-  AND dedup_date = ?;
+  AND dedup_date = ?
+  AND status = 'sent';

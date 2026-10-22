@@ -3,6 +3,8 @@ package importexport
 import (
 	"context"
 	"database/sql"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/kai-zer-ru/buhgalter/internal/bank"
@@ -22,18 +24,20 @@ func seedImportUser(t *testing.T) (context.Context, *sql.DB, string) {
 	return ctx, handle.DB(), userID
 }
 
-func TestDedupSet(t *testing.T) {
+func TestDedupBag(t *testing.T) {
 	h := DedupHash("2025-01-01", 5000, "Cash", "Food", "expense")
-	s := NewDedupSet([]string{h})
-	if !s.Has(h) {
-		t.Fatal("expected hash in set")
+	b := NewDedupBag([]string{h, h})
+	if !b.SkipExisting(h) {
+		t.Fatal("first matching DB row should skip")
 	}
-	if s.Has("other") {
-		t.Fatal("unexpected hash")
+	if !b.SkipExisting(h) {
+		t.Fatal("second matching DB row should skip")
 	}
-	s.Add("new")
-	if !s.Has("new") {
-		t.Fatal("expected added hash")
+	if b.SkipExisting(h) {
+		t.Fatal("identical file row beyond DB count must import")
+	}
+	if b.SkipExisting("other") {
+		t.Fatal("unknown hash must not skip")
 	}
 }
 
@@ -64,6 +68,9 @@ func TestPreviewAndImportCubux(t *testing.T) {
 	if report.TotalRows != 4 || report.ValidRows != 4 {
 		t.Fatalf("preview: %+v", report)
 	}
+	if report.TransferRows != 1 || report.ListRows != 4 {
+		t.Fatalf("preview journal: transfers=%d list=%d", report.TransferRows, report.ListRows)
+	}
 	if len(report.AccountsToCreate) < 3 {
 		t.Fatalf("accounts to create: %v", report.AccountsToCreate)
 	}
@@ -76,6 +83,9 @@ func TestPreviewAndImportCubux(t *testing.T) {
 	}
 	if committed.CreatedTransactions != 4 {
 		t.Fatalf("created %d", committed.CreatedTransactions)
+	}
+	if committed.TransferRows != 1 || committed.ListRows != 4 {
+		t.Fatalf("import journal: transfers=%d list=%d", committed.TransferRows, committed.ListRows)
 	}
 
 	// second import should skip duplicates
@@ -116,6 +126,54 @@ func TestImportIdempotencyKey(t *testing.T) {
 	}
 }
 
+func TestImportIdempotencyKeyConcurrent(t *testing.T) {
+	ctx, sqlDB, userID := seedImportUser(t)
+	data := sampleCSVRows()
+	opts := ImportOptions{Preset: "cubux", Deduplicate: true, Confirm: true}
+
+	solo, err := Import(ctx, sqlDB, userID, "sample.csv", data, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var want int
+	if err := sqlDB.QueryRowContext(ctx, `SELECT COUNT(*) FROM transactions WHERE user_id = ?`, userID).Scan(&want); err != nil {
+		t.Fatal(err)
+	}
+	if solo.CreatedTransactions != 4 || want == 0 {
+		t.Fatalf("baseline created %d txs %d", solo.CreatedTransactions, want)
+	}
+
+	ctx2, sqlDB2, userID2 := seedImportUser(t)
+	key := "idem-key-concurrent"
+	concOpts := opts
+	concOpts.IdempotencyKey = key
+	var err1, err2 error
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		_, err1 = Import(ctx2, sqlDB2, userID2, "sample.csv", data, concOpts)
+	}()
+	go func() {
+		defer wg.Done()
+		_, err2 = Import(ctx2, sqlDB2, userID2, "sample.csv", data, concOpts)
+	}()
+	wg.Wait()
+	if err1 != nil {
+		t.Fatal(err1)
+	}
+	if err2 != nil {
+		t.Fatal(err2)
+	}
+	var got int
+	if err := sqlDB2.QueryRowContext(ctx2, `SELECT COUNT(*) FROM transactions WHERE user_id = ?`, userID2).Scan(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Fatalf("concurrent txs %d want %d (one import)", got, want)
+	}
+}
+
 func TestExportCSV(t *testing.T) {
 	ctx, sqlDB, userID := seedImportUser(t)
 	data := sampleCSVRows()
@@ -139,6 +197,176 @@ func TestExportCSV(t *testing.T) {
 	}
 	if string(out[:3]) != "\xef\xbb\xbf" {
 		t.Fatal("expected UTF-8 BOM")
+	}
+}
+
+func TestExportCSVBuhgalterFormat(t *testing.T) {
+	ctx, sqlDB, userID := seedImportUser(t)
+	data := sampleCSVRows()
+	if _, err := Import(ctx, sqlDB, userID, "sample.csv", data, ImportOptions{
+		Preset: "cubux", Deduplicate: true, Confirm: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	out, _, err := ExportCSV(ctx, sqlDB, userID, "User", ExportFilters{Format: "buhgalter"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(out)
+	if !strings.Contains(text, "#BUHGALTER") || !strings.Contains(text, "#SECTION") {
+		t.Fatalf("expected native sections, got %s", text[:min(200, len(text))])
+	}
+	if !strings.Contains(text, "Время") || !strings.Contains(text, "Магазин") || !strings.Contains(text, "Теги") {
+		t.Fatalf("expected buhgalter headers, got %s", text[:min(200, len(text))])
+	}
+}
+
+func TestImportSystemCategoryWithUnknownSubcategory(t *testing.T) {
+	ctx, sqlDB, userID := seedImportUser(t)
+	data := []byte("Тип,Дата,Сумма списания,Валюта списания,Счет списания,Сумма пополнения,Валюта назначения,Счет пополнения,Категория,Subcategory,Описание,Проект,Пользователь\n" +
+		"Расходы,12.01.2025,1500.00,RUB,Наличные,,,,Кредиты,Ипотека,,,User\n" +
+		"Расходы,13.01.2025,50.00,RUB,Наличные,,,,Комиссия,,,,User\n")
+	rep, err := Import(ctx, sqlDB, userID, "sys.csv", data, ImportOptions{
+		Preset: "cubux", Deduplicate: true, Confirm: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.Errors) != 0 {
+		t.Fatalf("errors: %+v", rep.Errors)
+	}
+	if rep.CreatedTransactions != 2 {
+		t.Fatalf("created %d", rep.CreatedTransactions)
+	}
+	var subCount int
+	if err := sqlDB.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM transactions t
+		JOIN categories c ON c.id = t.category_id
+		WHERE t.user_id = ? AND c.is_system = 1 AND t.subcategory_id IS NOT NULL`,
+		userID).Scan(&subCount); err != nil {
+		t.Fatal(err)
+	}
+	if subCount != 0 {
+		t.Fatalf("system rows should have no new subcategory, got %d", subCount)
+	}
+}
+
+func TestImportSystemCategoryReusesExistingSubcategory(t *testing.T) {
+	ctx, sqlDB, userID := seedImportUser(t)
+	var catID string
+	if err := sqlDB.QueryRowContext(ctx, `
+		SELECT id FROM categories WHERE user_id = ? AND name = 'Кредиты' AND type = 'expense' AND is_system = 1`,
+		userID).Scan(&catID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.ExecContext(ctx, `
+		INSERT INTO subcategories (id, category_id, name, icon, sort_order, created_at)
+		VALUES ('sub-credit-1', ?, 'Ипотека', 'loan', 1, datetime('now'))`, catID); err != nil {
+		t.Fatal(err)
+	}
+	data := []byte("Тип,Дата,Сумма списания,Валюта списания,Счет списания,Сумма пополнения,Валюта назначения,Счет пополнения,Категория,Subcategory,Описание,Проект,Пользователь\n" +
+		"Расходы,12.01.2025,1500.00,RUB,Наличные,,,,Кредиты,Ипотека,,,User\n")
+	rep, err := Import(ctx, sqlDB, userID, "sys.csv", data, ImportOptions{
+		Preset: "buhgalter", Deduplicate: true, Confirm: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.Errors) != 0 {
+		t.Fatalf("errors: %+v", rep.Errors)
+	}
+	var subID string
+	if err := sqlDB.QueryRowContext(ctx, `
+		SELECT subcategory_id FROM transactions WHERE user_id = ?`, userID).Scan(&subID); err != nil {
+		t.Fatal(err)
+	}
+	if subID != "sub-credit-1" {
+		t.Fatalf("subcategory %q", subID)
+	}
+}
+
+func TestImportReusesExistingUserSubcategory(t *testing.T) {
+	ctx, sqlDB, userID := seedImportUser(t)
+	first := []byte("Тип,Дата,Сумма списания,Валюта списания,Счет списания,Сумма пополнения,Валюта назначения,Счет пополнения,Категория,Subcategory,Описание,Проект,Пользователь\n" +
+		"Расходы,01.01.2025,50.00,RUB,Наличные,,,,Транспорт,Автобус,,,User\n")
+	if _, err := Import(ctx, sqlDB, userID, "a.csv", first, ImportOptions{
+		Preset: "cubux", Deduplicate: false, Confirm: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	second := []byte("Тип,Дата,Сумма списания,Валюта списания,Счет списания,Сумма пополнения,Валюта назначения,Счет пополнения,Категория,Subcategory,Описание,Проект,Пользователь\n" +
+		"Расходы,02.01.2025,70.00,RUB,Наличные,,,,Транспорт,Автобус,,,User\n")
+	rep, err := Import(ctx, sqlDB, userID, "b.csv", second, ImportOptions{
+		Preset: "cubux", Deduplicate: false, Confirm: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.Errors) != 0 {
+		t.Fatalf("second import errors: %+v", rep.Errors)
+	}
+	if rep.CreatedTransactions != 1 {
+		t.Fatalf("created %d", rep.CreatedTransactions)
+	}
+}
+
+func TestImportWithProgressOmitsLogs(t *testing.T) {
+	ctx, sqlDB, userID := seedImportUser(t)
+	data := sampleCSVRows()
+	var snapshots []Report
+	_, err := ImportWithProgress(ctx, sqlDB, userID, "sample.csv", data, ImportOptions{
+		Preset: "cubux", Deduplicate: true, Confirm: true,
+	}, func(progress Report) {
+		snapshots = append(snapshots, progress)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshots) == 0 {
+		t.Fatal("expected progress snapshots")
+	}
+	for i, snap := range snapshots {
+		if len(snap.Logs) != 0 {
+			t.Fatalf("progress snapshot %d should omit logs, got %d", i, len(snap.Logs))
+		}
+	}
+}
+
+func TestImportBuhgalterMerchantTagsAndTime(t *testing.T) {
+	ctx, sqlDB, userID := seedImportUser(t)
+	var b strings.Builder
+	b.WriteString(strings.Join(BuhgalterHeaders, ",") + "\n")
+	b.WriteString("Расходы,18.09.2026,123.00,RUB,Наличные,,,,Транспорт,Автобус,поездка,,User,09:15:00,Пятёрочка,\"дом, еда\"\n")
+	rep, err := Import(ctx, sqlDB, userID, "native.csv", []byte(b.String()), ImportOptions{
+		Preset: "buhgalter", Deduplicate: true, Confirm: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.Errors) != 0 {
+		t.Fatalf("errors: %+v", rep.Errors)
+	}
+	if rep.CreatedTransactions != 1 {
+		t.Fatalf("created %d", rep.CreatedTransactions)
+	}
+	var txDate, merchant string
+	var tagCount int
+	if err := sqlDB.QueryRowContext(ctx, `
+		SELECT t.transaction_date, m.name,
+			(SELECT COUNT(*) FROM transaction_tags tt WHERE tt.transaction_id = t.id)
+		FROM transactions t
+		LEFT JOIN merchants m ON m.id = t.merchant_id
+		WHERE t.user_id = ?`, userID).Scan(&txDate, &merchant, &tagCount); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(txDate, "09:15:00") {
+		t.Fatalf("tx date %q", txDate)
+	}
+	if merchant != "Пятёрочка" {
+		t.Fatalf("merchant %q", merchant)
+	}
+	if tagCount != 2 {
+		t.Fatalf("tags %d", tagCount)
 	}
 }
 
@@ -223,5 +451,52 @@ func TestImportCreateCreditCardAccount(t *testing.T) {
 	}
 	if accType != "credit_card" || !creditLimit.Valid || creditLimit.Int64 != 6_500_000 {
 		t.Fatalf("credit card account: type=%s limit=%v", accType, creditLimit)
+	}
+}
+
+func TestCubuxSameDayDifferentDescriptionsNotDuplicates(t *testing.T) {
+	ctx, sqlDB, userID := seedImportUser(t)
+	data := []byte("Тип,Дата,Сумма списания,Валюта списания,Счет списания,Сумма пополнения,Валюта назначения,Счет пополнения,Категория,Subcategory,Описание,Проект,Пользователь\n" +
+		"Расходы,01.01.2025,50.00,RUB,Наличные,,,,Транспорт,Автобус,утро,,User\n" +
+		"Расходы,01.01.2025,50.00,RUB,Наличные,,,,Транспорт,Автобус,вечер,,User\n")
+	rep, err := Import(ctx, sqlDB, userID, "same-day.csv", data, ImportOptions{
+		Preset: "cubux", Deduplicate: true, Confirm: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.Errors) != 0 {
+		t.Fatalf("errors: %+v", rep.Errors)
+	}
+	if rep.CreatedTransactions != 2 || rep.SkippedDuplicates != 0 {
+		t.Fatalf("created=%d skipped=%d", rep.CreatedTransactions, rep.SkippedDuplicates)
+	}
+}
+
+func TestCubuxIdenticalRowsNotCollapsedInFile(t *testing.T) {
+	ctx, sqlDB, userID := seedImportUser(t)
+	data := []byte("Тип,Дата,Сумма списания,Валюта списания,Счет списания,Сумма пополнения,Валюта назначения,Счет пополнения,Категория,Subcategory,Описание,Проект,Пользователь\n" +
+		"Расходы,01.01.2025,50.00,RUB,Наличные,,,,Транспорт,Автобус,,,User\n" +
+		"Расходы,01.01.2025,50.00,RUB,Наличные,,,,Транспорт,Автобус,,,User\n")
+	rep, err := Import(ctx, sqlDB, userID, "ident.csv", data, ImportOptions{
+		Preset: "cubux", Deduplicate: true, Confirm: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.Errors) != 0 {
+		t.Fatalf("errors: %+v", rep.Errors)
+	}
+	if rep.CreatedTransactions != 2 {
+		t.Fatalf("created %d, want both identical file rows", rep.CreatedTransactions)
+	}
+	again, err := Import(ctx, sqlDB, userID, "ident.csv", data, ImportOptions{
+		Preset: "cubux", Deduplicate: true, Confirm: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.SkippedDuplicates != 2 || again.CreatedTransactions != 0 {
+		t.Fatalf("second import skipped=%d created=%d", again.SkippedDuplicates, again.CreatedTransactions)
 	}
 }

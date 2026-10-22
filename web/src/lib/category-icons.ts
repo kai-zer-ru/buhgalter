@@ -7,6 +7,8 @@ export type CategoryIconDef = {
 	id: string;
 	emoji?: string;
 	brand?: { bg: string; fg: string; label: string; size?: number };
+	official_logo?: boolean;
+	bank_logo?: boolean | string;
 	kind: IconScope;
 	name: string;
 	tags: string[];
@@ -82,6 +84,9 @@ export function searchCategoryIcons(query: string, kind: CategoryKind): Category
 	const q = query.trim().toLowerCase();
 	if (!q) return base;
 	return base.filter(
-		(icon) => icon.id.includes(q) || icon.tags.some((tag) => tag.toLowerCase().includes(q))
+		(icon) =>
+			icon.id.includes(q) ||
+			icon.name.toLowerCase().includes(q) ||
+			icon.tags.some((tag) => tag.toLowerCase().includes(q))
 	);
 }

@@ -14,8 +14,9 @@ import (
 )
 
 // ExternalAccess limits HTTP access by Host based on system_settings.external_url.
-// localhost / loopback is always allowed. Otherwise: BUHGALTER_ALLOWED_HOSTS in .env;
-// with external_url set — also the URL hostname.
+// Host localhost / 127.0.0.1 / ::1 is allowed only when the client IP is loopback.
+// Otherwise: BUHGALTER_ALLOWED_HOSTS in .env; with external_url set — also the URL hostname.
+// X-Forwarded-Host is ignored; reverse proxy must set Host (see docs/install/nginx.md).
 func ExternalAccess(store *db.Handle, allowedHosts []string) func(http.Handler) http.Handler {
 	allowed := allowedHostSet(allowedHosts)
 	return func(next http.Handler) http.Handler {
@@ -62,24 +63,27 @@ func externalAccessAllowed(ctx context.Context, sqlDB *sql.DB, r *http.Request, 
 	}
 
 	configured := externalURL.Valid && strings.TrimSpace(externalURL.String) != ""
-	host := requestHost(r, configured)
+	host := requestHost(r)
 
 	if !configured {
-		return isAccessAllowedHost(host, allowed), nil
+		return isAccessAllowedHost(r, host, allowed), nil
 	}
 
 	wantHost, err := hostnameFromExternalURL(externalURL.String)
 	if err != nil {
 		return false, err
 	}
-	if hostMatches(host, wantHost) || isAccessAllowedHost(host, allowed) {
+	if hostMatches(host, wantHost) || isAccessAllowedHost(r, host, allowed) {
 		return true, nil
 	}
 	return false, nil
 }
 
-func isAccessAllowedHost(host string, allowed map[string]struct{}) bool {
-	return isLocalHost(host) || isConfiguredAllowedHost(host, allowed)
+func isAccessAllowedHost(r *http.Request, host string, allowed map[string]struct{}) bool {
+	if isLocalHost(host) && isLoopbackIP(directClientIP(r)) {
+		return true
+	}
+	return isConfiguredAllowedHost(host, allowed)
 }
 
 func isLocalHost(host string) bool {
@@ -91,14 +95,8 @@ func isLocalHost(host string) bool {
 	}
 }
 
-func requestHost(r *http.Request, trustProxy bool) string {
-	raw := r.Host
-	if trustProxy {
-		if fwd := r.Header.Get("X-Forwarded-Host"); fwd != "" {
-			raw = strings.TrimSpace(strings.Split(fwd, ",")[0])
-		}
-	}
-	return normalizeHost(raw)
+func requestHost(r *http.Request) string {
+	return normalizeHost(r.Host)
 }
 
 func normalizeHost(host string) string {

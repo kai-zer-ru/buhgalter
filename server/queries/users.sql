@@ -7,8 +7,8 @@ SELECT id, login, COALESCE(display_name, '') AS display_name, is_admin, status, 
 FROM users WHERE login = ?;
 
 -- name: InsertUser :exec
-INSERT INTO users (id, login, password_hash, display_name, is_admin, status)
-VALUES (?, ?, ?, ?, ?, ?);
+INSERT INTO users (id, login, password_hash, display_name, is_admin, status, theme)
+VALUES (?, ?, ?, ?, ?, ?, 'system');
 
 -- name: UpdateUserProfile :exec
 UPDATE users

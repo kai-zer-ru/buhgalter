@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/kai-zer-ru/buhgalter/internal/account"
 	"github.com/kai-zer-ru/buhgalter/internal/accountbalance"
@@ -91,7 +92,7 @@ func seedAutoTopupEnv(t *testing.T) (context.Context, *sql.DB, string, string, s
 func TestApplyIfNeededCreatesTransfer(t *testing.T) {
 	ctx, sqlDB, userID, targetID, sourceID := seedAutoTopupEnv(t)
 
-	applied, err := balancetopup.ApplyIfNeeded(ctx, sqlDB, userID, targetID)
+	applied, err := balancetopup.ApplyIfNeeded(ctx, sqlDB, userID, targetID, time.Time{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +101,7 @@ func TestApplyIfNeededCreatesTransfer(t *testing.T) {
 	}
 
 	rows, err := sqlDB.QueryContext(ctx, `
-		SELECT description FROM transactions
+		SELECT description, transaction_date FROM transactions
 		WHERE user_id = ? AND type = 'transfer' AND account_id = ?`,
 		userID, targetID)
 	if err != nil {
@@ -110,12 +111,19 @@ func TestApplyIfNeededCreatesTransfer(t *testing.T) {
 	if !rows.Next() {
 		t.Fatal("expected transfer leg on target account")
 	}
-	var desc string
-	if err := rows.Scan(&desc); err != nil {
+	var desc, txDate string
+	if err := rows.Scan(&desc, &txDate); err != nil {
 		t.Fatal(err)
 	}
 	if desc != balancetopup.Description {
 		t.Fatalf("description %q, want %q", desc, balancetopup.Description)
+	}
+	parsed, err := timeutil.ParseUTC(txDate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d := time.Since(parsed); d < 0 || d > time.Minute {
+		t.Fatalf("zero asOf should stamp near now, got %v", txDate)
 	}
 
 	target, err := account.GetByID(ctx, sqlDB, userID, targetID)
@@ -146,7 +154,7 @@ func TestApplyIfNeededDisablesWhenSourceInsufficient(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	applied, err := balancetopup.ApplyIfNeeded(ctx, sqlDB, userID, targetID)
+	applied, err := balancetopup.ApplyIfNeeded(ctx, sqlDB, userID, targetID, time.Time{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +180,7 @@ func TestApplyIfNeededNoOpForCashAccount(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	applied, err := balancetopup.ApplyIfNeeded(ctx, sqlDB, userID, cashID)
+	applied, err := balancetopup.ApplyIfNeeded(ctx, sqlDB, userID, cashID, time.Time{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,6 +226,110 @@ func TestCheckAfterRefreshViaTransactionHook(t *testing.T) {
 	}
 	if acc.Balance != 500000 {
 		t.Fatalf("balance after hook %d, want 500000", acc.Balance)
+	}
+}
+
+func TestApplyIfNeededUsesTriggerOperationDate(t *testing.T) {
+	ctx, sqlDB, userID, targetID, _ := seedAutoTopupEnv(t)
+	transaction.AfterBalanceRefresh = nil
+	balancehooks.AfterRefresh = balancetopup.CheckAfterRefresh
+	t.Cleanup(func() { balancehooks.AfterRefresh = nil })
+
+	cats, err := category.ListByUser(ctx, sqlDB, userID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var expenseID string
+	for _, c := range cats {
+		if c.Type == "expense" {
+			expenseID = c.ID
+			break
+		}
+	}
+	if expenseID == "" {
+		t.Fatal("missing expense category")
+	}
+
+	past := timeutil.NowUTC().Add(-48 * time.Hour).Truncate(time.Second)
+	_, err = transaction.Create(ctx, sqlDB, userID, transaction.CreateInput{
+		AccountID:       targetID,
+		Type:            "expense",
+		Amount:          200000,
+		CategoryID:      &expenseID,
+		TransactionDate: past,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var txDate string
+	err = sqlDB.QueryRowContext(ctx, `
+		SELECT transaction_date FROM transactions
+		WHERE user_id = ? AND type = 'transfer' AND account_id = ?
+		  AND description = ?
+		ORDER BY created_at DESC LIMIT 1`,
+		userID, targetID, balancetopup.Description).Scan(&txDate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := timeutil.ParseUTC(txDate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Equal(past.Add(time.Second)) {
+		t.Fatalf("topup transaction_date %v, want trigger+1s %v", got, past.Add(time.Second))
+	}
+}
+
+func TestAutoTopupListedAfterTrigger(t *testing.T) {
+	ctx, sqlDB, userID, targetID, _ := seedAutoTopupEnv(t)
+	transaction.AfterBalanceRefresh = nil
+	balancehooks.AfterRefresh = balancetopup.CheckAfterRefresh
+	t.Cleanup(func() { balancehooks.AfterRefresh = nil })
+
+	cats, err := category.ListByUser(ctx, sqlDB, userID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var expenseID string
+	for _, c := range cats {
+		if c.Type == "expense" {
+			expenseID = c.ID
+			break
+		}
+	}
+	if expenseID == "" {
+		t.Fatal("missing expense category")
+	}
+
+	expense, err := transaction.Create(ctx, sqlDB, userID, transaction.CreateInput{
+		AccountID:       targetID,
+		Type:            "expense",
+		Amount:          200000,
+		CategoryID:      &expenseID,
+		TransactionDate: timeutil.NowUTC(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := transaction.List(ctx, sqlDB, userID, transaction.ListFilters{
+		AccountID: targetID,
+		Sort:      "date_desc",
+		Page:      1,
+		Limit:     10,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Data) < 2 {
+		t.Fatalf("expected trigger and auto-topup, got %d", len(res.Data))
+	}
+	if res.Data[0].Type != "transfer" || res.Data[0].Description == nil || *res.Data[0].Description != balancetopup.Description {
+		t.Fatalf("first row (newest) want auto-topup, got type=%s desc=%v", res.Data[0].Type, res.Data[0].Description)
+	}
+	if res.Data[1].ID != expense.ID {
+		t.Fatalf("second row %s (%s), want trigger expense %s", res.Data[1].ID, res.Data[1].Type, expense.ID)
 	}
 }
 

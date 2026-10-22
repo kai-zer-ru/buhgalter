@@ -8,6 +8,7 @@ import (
 
 	"github.com/kai-zer-ru/buhgalter/internal/budget"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/features"
 	"github.com/kai-zer-ru/buhgalter/internal/notify"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
 )
@@ -19,6 +20,16 @@ func CheckThresholdsAfterTx(ctx context.Context, db *sql.DB, userID string) {
 
 // CheckThresholdsForUser sends budget_threshold notifications for crossed thresholds.
 func CheckThresholdsForUser(ctx context.Context, db *sql.DB, userID string) error {
+	if enabled, err := features.IsEnabled(ctx, db, features.Budget); err != nil {
+		return err
+	} else if !enabled {
+		return nil
+	}
+	if enabled, err := features.IsEnabled(ctx, db, features.Notifications); err != nil {
+		return err
+	} else if !enabled {
+		return nil
+	}
 	q := sqlcdb.New(db)
 	if err := q.EnsureNotificationSettings(ctx, userID); err != nil {
 		return err
@@ -63,17 +74,18 @@ func CheckThresholdsForUser(ctx context.Context, db *sql.DB, userID string) erro
 			if err != nil || sent > 0 {
 				continue
 			}
-			text, err := notify.Format(notify.TriggerBudgetThreshold, localeCode, customMap[notify.TriggerBudgetThreshold], notify.FormatData{
+			data := notify.FormatData{
 				"name":       item.Name,
 				"spent":      notify.FormatAmountDisplay(item.Spent, currencyCode),
 				"planned":    notify.FormatAmountDisplay(item.Planned, currencyCode),
 				"percent":    strconv.Itoa(item.Percent),
 				"budget_url": notify.BudgetURLPlaceholderValue(externalURL, localeCode),
-			})
+			}
+			text, err := notify.Format(notify.TriggerBudgetThreshold, localeCode, customMap[notify.TriggerBudgetThreshold], data)
 			if err != nil {
 				continue
 			}
-			notify.Deliver(ctx, db, settings, userID, notify.TriggerBudgetThreshold, item.ID, periodStart, text)
+			notify.Deliver(ctx, db, settings, userID, notify.TriggerBudgetThreshold, item.ID, periodStart, text, data)
 			_ = q.InsertBudgetAlertSent(ctx, sqlcdb.InsertBudgetAlertSentParams{
 				BudgetID: item.ID, PeriodStart: periodStart, ThresholdPercent: th,
 				SentAt: timeutil.FormatUTC(time.Now().UTC()),

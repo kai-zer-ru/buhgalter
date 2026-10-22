@@ -55,6 +55,14 @@ func creditPath(creditID string) string {
 	return "/credits/" + url.PathEscape(creditID)
 }
 
+func subscriptionPath(subscriptionID string) string {
+	subscriptionID = strings.TrimSpace(subscriptionID)
+	if subscriptionID == "" {
+		return ""
+	}
+	return "/subscriptions/" + url.PathEscape(subscriptionID)
+}
+
 func transactionPath(transactionID string) string {
 	_ = transactionID
 	return "/transactions"
@@ -100,6 +108,10 @@ func debtURLPlaceholderValue(externalURL, localeCode, debtID string) string {
 
 func creditURLPlaceholderValue(externalURL, localeCode, creditID string) string {
 	return externalURLPlaceholderValue(externalURL, localeCode, creditPath(creditID))
+}
+
+func subscriptionURLPlaceholderValue(externalURL, localeCode, subscriptionID string) string {
+	return externalURLPlaceholderValue(externalURL, localeCode, subscriptionPath(subscriptionID))
 }
 
 func transactionURLPlaceholderValue(externalURL, localeCode, transactionID string) string {

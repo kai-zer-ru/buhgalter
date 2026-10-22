@@ -98,6 +98,7 @@ type CreateInput struct {
 	ScheduleSeed              []ScheduleSeed
 	CreateTransactions        bool
 	PrincipalAffectsBalance   bool
+	FirstPaymentToday         bool
 }
 
 type UpdateInput struct {
@@ -110,9 +111,10 @@ type UpdateInput struct {
 }
 
 type PayPaymentInput struct {
-	Amount      int64
-	PaymentDate time.Time
-	AccountID   string
+	Amount        int64
+	PaymentDate   time.Time
+	AccountID     string
+	TransactionID string // optional: reuse existing expense as this payment
 }
 
 type CompleteInput struct {
@@ -143,6 +145,8 @@ var (
 	ErrInvalidMortgageFields      = errors.New("invalid mortgage fields")
 	ErrPrincipalIncomePastPayment = errors.New("principal income not allowed when schedule has past payment")
 	ErrInvalidPrincipalIncome     = errors.New("principal income not allowed for this credit type")
+	ErrAttachForbidden            = errors.New("transaction cannot be attached")
+	ErrTransactionNotFound        = errors.New("transaction not found")
 )
 
 const (
@@ -153,14 +157,15 @@ const (
 var localTimePattern = regexp.MustCompile(`^([01]\d|2[0-3]):([0-5]\d)$`)
 
 type PreviewInput struct {
-	Principal       int64
-	TermMonths      int
-	InterestRate    float64
-	PaymentInterval PaymentInterval
-	CreditKind      string
-	IssueDate       time.Time
-	MonthlyPayment  *int64
-	SeedPayments    []ScheduleSeed
+	Principal         int64
+	TermMonths        int
+	InterestRate      float64
+	PaymentInterval   PaymentInterval
+	CreditKind        string
+	IssueDate         time.Time
+	MonthlyPayment    *int64
+	SeedPayments      []ScheduleSeed
+	FirstPaymentToday bool
 }
 
 func queries(db sqlcdb.DBTX) *sqlcdb.Queries {
@@ -207,9 +212,6 @@ func GetByID(ctx context.Context, db *sql.DB, userID, id string, withSchedule bo
 	return c, nil
 }
 
-// monthlyPaymentMatchTolerance allows rounding to whole rubles without treating payment as custom.
-const monthlyPaymentMatchTolerance = int64(100)
-
 func calculatedMonthlyPayment(principal int64, termMonths int, interestRate float64, creditKind string, interval PaymentInterval, issueDate time.Time) int64 {
 	monthly := MonthlyPayment(principal, interestRate, termMonths)
 	if normalizeCreditKind(creditKind) == CreditKindMortgage && interval == IntervalMonth {
@@ -218,16 +220,19 @@ func calculatedMonthlyPayment(principal int64, termMonths int, interestRate floa
 	return monthly
 }
 
+// resolvesToCalculatedPayment reports whether user input should use the auto-calculated payment.
+// Only an exact match counts as "no override": a whole-ruble truncation of the calculated
+// amount (e.g. 323.00 vs 323.83) is a real user edit and must be applied.
+func resolvesToCalculatedPayment(calculated, userMonthly int64) bool {
+	return userMonthly == calculated
+}
+
 func resolveScheduleMonthly(principal int64, termMonths int, interestRate float64, creditKind string, interval PaymentInterval, issueDate time.Time, userMonthly *int64) (monthly int64, userSet bool) {
 	monthly = calculatedMonthlyPayment(principal, termMonths, interestRate, creditKind, interval, issueDate)
 	if userMonthly == nil {
 		return monthly, false
 	}
-	diff := *userMonthly - monthly
-	if diff < 0 {
-		diff = -diff
-	}
-	if diff <= monthlyPaymentMatchTolerance {
+	if resolvesToCalculatedPayment(monthly, *userMonthly) {
 		return monthly, false
 	}
 	return *userMonthly, true
@@ -244,34 +249,50 @@ func validateUserMonthlyAboveCalculated(calculated, monthly int64) error {
 	return nil
 }
 
-func PreviewSchedule(in PreviewInput) ([]ScheduleEntry, int64, error) {
+type PreviewResult struct {
+	Schedule          []ScheduleEntry
+	CalculatedMonthly int64
+	EffectiveMonthly  int64
+	UserSetPayment    bool
+}
+
+func PreviewSchedule(in PreviewInput) (PreviewResult, error) {
+	autoMonthly := calculatedMonthlyPayment(
+		in.Principal, in.TermMonths, in.InterestRate, in.CreditKind, in.PaymentInterval, in.IssueDate,
+	)
 	monthly, userSet := resolveScheduleMonthly(
 		in.Principal, in.TermMonths, in.InterestRate, in.CreditKind, in.PaymentInterval, in.IssueDate, in.MonthlyPayment,
 	)
 	if userSet && normalizeCreditKind(in.CreditKind) != CreditKindMortgage {
-		calculated := calculatedMonthlyPayment(in.Principal, in.TermMonths, in.InterestRate, in.CreditKind, in.PaymentInterval, in.IssueDate)
-		if err := validateUserMonthlyAboveCalculated(calculated, monthly); err != nil {
-			return nil, 0, err
+		if err := validateUserMonthlyAboveCalculated(autoMonthly, monthly); err != nil {
+			return PreviewResult{}, err
 		}
 	}
+	firstPaymentToday := in.FirstPaymentToday && normalizeCreditKind(in.CreditKind) != CreditKindMortgage
 	entries, err := GenerateSchedule(ScheduleInput{
-		Principal:       in.Principal,
-		TermMonths:      in.TermMonths,
-		MonthlyPayment:  monthly,
-		UserSetPayment:  userSet,
-		PaymentInterval: in.PaymentInterval,
-		CreditKind:      normalizeCreditKind(in.CreditKind),
-		IssueDate:       in.IssueDate,
-		InterestRate:    in.InterestRate,
-		SeedPayments:    in.SeedPayments,
+		Principal:         in.Principal,
+		TermMonths:        in.TermMonths,
+		MonthlyPayment:    monthly,
+		UserSetPayment:    userSet,
+		PaymentInterval:   in.PaymentInterval,
+		CreditKind:        normalizeCreditKind(in.CreditKind),
+		IssueDate:         in.IssueDate,
+		InterestRate:      in.InterestRate,
+		SeedPayments:      in.SeedPayments,
+		FirstPaymentToday: firstPaymentToday,
 	})
 	if err != nil {
-		return nil, 0, err
+		return PreviewResult{}, err
 	}
 	for i := range entries {
 		entries[i].AmountDisplay = money.FormatRubles(entries[i].Amount)
 	}
-	return entries, monthly, nil
+	return PreviewResult{
+		Schedule:          entries,
+		CalculatedMonthly: autoMonthly,
+		EffectiveMonthly:  monthly,
+		UserSetPayment:    userSet,
+	}, nil
 }
 
 func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Credit, error) {
@@ -324,16 +345,18 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Cre
 		monthly = sum / int64(len(in.ScheduleSeed))
 	}
 
+	firstPaymentToday := in.FirstPaymentToday && normalizeCreditKind(in.CreditKind) != CreditKindMortgage
 	entries, err := GenerateSchedule(ScheduleInput{
-		Principal:       principalAmount,
-		TermMonths:      in.TermMonths,
-		MonthlyPayment:  monthly,
-		UserSetPayment:  userSet,
-		PaymentInterval: in.PaymentInterval,
-		IssueDate:       in.IssueDate,
-		InterestRate:    in.InterestRate,
-		CreditKind:      creditKind,
-		SeedPayments:    in.ScheduleSeed,
+		Principal:         principalAmount,
+		TermMonths:        in.TermMonths,
+		MonthlyPayment:    monthly,
+		UserSetPayment:    userSet,
+		PaymentInterval:   in.PaymentInterval,
+		IssueDate:         in.IssueDate,
+		InterestRate:      in.InterestRate,
+		CreditKind:        creditKind,
+		SeedPayments:      in.ScheduleSeed,
+		FirstPaymentToday: firstPaymentToday,
 	})
 	if err != nil {
 		return Credit{}, err
@@ -468,10 +491,7 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Cre
 		}
 	}
 
-	paidAmount = in.PaidAmount + retroPaid
-	if paidAmount > principalAmount {
-		paidAmount = principalAmount
-	}
+	paidAmount = capPaidToPrincipal(principalAmount, in.PaidAmount+retroPaid)
 	if paidAmount != in.PaidAmount {
 		if err := q.UpdateCreditPaidAmount(ctx, sqlcdb.UpdateCreditPaidAmountParams{
 			PaidAmount: paidAmount, UpdatedAt: nowStr, ID: id, UserID: userID,
@@ -501,14 +521,14 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Cre
 	if err := dbTx.Commit(); err != nil {
 		return Credit{}, err
 	}
-	syncAccountBalances(ctx, db, userID, in.DebitAccountID)
+	syncAccountBalances(ctx, db, userID, in.IssueDate, in.DebitAccountID)
 	if creditKind == CreditKindMortgage && downPayment > 0 && in.DownPaymentAffectsBalance {
 		downPaymentAccountID := in.DebitAccountID
 		if in.DownPaymentAccountID != nil && strings.TrimSpace(*in.DownPaymentAccountID) != "" {
 			downPaymentAccountID = *in.DownPaymentAccountID
 		}
 		if downPaymentAccountID != in.DebitAccountID {
-			syncAccountBalances(ctx, db, userID, downPaymentAccountID)
+			syncAccountBalances(ctx, db, userID, in.IssueDate, downPaymentAccountID)
 		}
 	}
 	return GetByID(ctx, db, userID, id, true)
@@ -637,6 +657,28 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in UpdateInput) 
 }
 
 func PayNextScheduled(ctx context.Context, db *sql.DB, userID, creditID string, in PayPaymentInput) (Credit, error) {
+	attachID := strings.TrimSpace(in.TransactionID)
+	var attachDesc *string
+	if attachID != "" {
+		row, err := loadAttachableExpense(ctx, db, userID, attachID)
+		if err != nil {
+			return Credit{}, err
+		}
+		if in.Amount <= 0 {
+			in.Amount = row.Amount
+		}
+		if in.PaymentDate.IsZero() {
+			payDate, err := timeutil.ParseUTC(row.TransactionDate)
+			if err != nil {
+				return Credit{}, ErrInvalidPaymentDate
+			}
+			in.PaymentDate = payDate
+		}
+		if in.AccountID == "" {
+			in.AccountID = row.AccountID
+		}
+		attachDesc = row.Description
+	}
 	if in.Amount <= 0 {
 		return Credit{}, ErrInvalidAmount
 	}
@@ -689,11 +731,43 @@ func PayNextScheduled(ctx context.Context, db *sql.DB, userID, creditID string, 
 	if err != nil {
 		return Credit{}, err
 	}
-	desc := creditDescription(c.Name)
-	descPtr := &desc
+	descPtr := paymentDescription(c.Name, attachDesc)
 
 	var txID string
-	if existingTxID != nil {
+	switch {
+	case attachID != "":
+		if existingTxID != nil && *existingTxID != "" && *existingTxID != attachID {
+			if _, err := q.DeleteTransaction(ctx, sqlcdb.DeleteTransactionParams{
+				ID: *existingTxID, UserID: userID,
+			}); err != nil {
+				return Credit{}, err
+			}
+		}
+		txID = attachID
+		if err := q.UpdateTransaction(ctx, sqlcdb.UpdateTransactionParams{
+			AccountID:       debitAccountID,
+			Type:            "expense",
+			Kind:            txKind,
+			Amount:          in.Amount,
+			Description:     descPtr,
+			CategoryID:      &catID,
+			SubcategoryID:   nil,
+			TransactionDate: payDate,
+			UpdatedAt:       nowStr,
+			ID:              txID,
+			UserID:          userID,
+		}); err != nil {
+			return Credit{}, err
+		}
+		if _, err := q.UpdateTransactionAffectsBalance(ctx, sqlcdb.UpdateTransactionAffectsBalanceParams{
+			AffectsBalance: 1,
+			UpdatedAt:      nowStr,
+			ID:             txID,
+			UserID:         userID,
+		}); err != nil {
+			return Credit{}, err
+		}
+	case existingTxID != nil && *existingTxID != "":
 		txID = *existingTxID
 		if err := q.UpdateTransaction(ctx, sqlcdb.UpdateTransactionParams{
 			AccountID:       debitAccountID,
@@ -719,7 +793,7 @@ func PayNextScheduled(ctx context.Context, db *sql.DB, userID, creditID string, 
 		}); err != nil {
 			return Credit{}, err
 		}
-	} else {
+	default:
 		txID, err = insertCreditExpenseTransaction(ctx, dbTx, userID, debitAccountID, c.Name, in.Amount, in.PaymentDate, true)
 		if err != nil {
 			return Credit{}, err
@@ -740,7 +814,7 @@ func PayNextScheduled(ctx context.Context, db *sql.DB, userID, creditID string, 
 		return Credit{}, ErrNoPendingPayment
 	}
 
-	newPaid := c.PaidAmount + in.Amount
+	newPaid := capPaidToPrincipal(c.PrincipalAmount, c.PaidAmount+in.Amount)
 	if err := q.UpdateCreditPaidAmount(ctx, sqlcdb.UpdateCreditPaidAmountParams{
 		PaidAmount: newPaid, UpdatedAt: nowStr, ID: creditID, UserID: userID,
 	}); err != nil {
@@ -758,8 +832,40 @@ func PayNextScheduled(ctx context.Context, db *sql.DB, userID, creditID string, 
 	if err := dbTx.Commit(); err != nil {
 		return Credit{}, err
 	}
-	syncAccountBalances(ctx, db, userID, debitAccountID)
+	syncAccountBalances(ctx, db, userID, in.PaymentDate, debitAccountID)
 	return GetByID(ctx, db, userID, creditID, true)
+}
+
+func paymentDescription(creditName *string, existing *string) *string {
+	if existing != nil && strings.TrimSpace(*existing) != "" {
+		d := strings.TrimSpace(*existing)
+		return &d
+	}
+	d := creditDescription(creditName)
+	return &d
+}
+
+func loadAttachableExpense(ctx context.Context, db *sql.DB, userID, txID string) (sqlcdb.GetTransactionByIDRow, error) {
+	row, err := queries(db).GetTransactionByID(ctx, sqlcdb.GetTransactionByIDParams{ID: txID, UserID: userID})
+	if errors.Is(err, sql.ErrNoRows) {
+		return sqlcdb.GetTransactionByIDRow{}, ErrTransactionNotFound
+	}
+	if err != nil {
+		return sqlcdb.GetTransactionByIDRow{}, err
+	}
+	if row.Type != "expense" {
+		return sqlcdb.GetTransactionByIDRow{}, ErrAttachForbidden
+	}
+	if row.TransferGroupID != nil {
+		return sqlcdb.GetTransactionByIDRow{}, ErrAttachForbidden
+	}
+	if row.SubscriptionID != nil {
+		return sqlcdb.GetTransactionByIDRow{}, ErrAttachForbidden
+	}
+	if row.CreditPaymentLinked != 0 {
+		return sqlcdb.GetTransactionByIDRow{}, ErrAttachForbidden
+	}
+	return row, nil
 }
 
 func Complete(ctx context.Context, db *sql.DB, userID, id string, in CompleteInput) (Credit, error) {
@@ -849,7 +955,7 @@ func Complete(ctx context.Context, db *sql.DB, userID, id string, in CompleteInp
 		return Credit{}, err
 	}
 	if remaining > 0 && in.AffectsBalance {
-		syncAccountBalances(ctx, db, userID, c.DebitAccountID)
+		syncAccountBalances(ctx, db, userID, paymentDate, c.DebitAccountID)
 	}
 	return GetByID(ctx, db, userID, id, true)
 }
@@ -959,7 +1065,7 @@ func Delete(ctx context.Context, db *sql.DB, userID, id, mode string) error {
 		return err
 	}
 	if mode == "cascade" {
-		syncAccountBalances(ctx, db, userID, creditRow.DebitAccountID)
+		syncAccountBalances(ctx, db, userID, time.Time{}, creditRow.DebitAccountID)
 	}
 	return nil
 }
@@ -1045,7 +1151,7 @@ func processAutoPayment(ctx context.Context, db *sql.DB, row sqlcdb.ListDueCredi
 	if err != nil {
 		return false, err
 	}
-	newPaid := creditRow.PaidAmount + row.Amount
+	newPaid := capPaidToPrincipal(creditRow.PrincipalAmount, creditRow.PaidAmount+row.Amount)
 	nowStr := time.Now().UTC().Format(time.RFC3339)
 	if err := q.UpdateCreditPaidAmount(ctx, sqlcdb.UpdateCreditPaidAmountParams{
 		PaidAmount: newPaid, UpdatedAt: nowStr, ID: row.CreditID, UserID: row.UserID,
@@ -1059,7 +1165,7 @@ func processAutoPayment(ctx context.Context, db *sql.DB, row sqlcdb.ListDueCredi
 	if err := dbTx.Commit(); err != nil {
 		return false, err
 	}
-	syncAccountBalances(ctx, db, row.UserID, row.DebitAccountID)
+	syncAccountBalances(ctx, db, row.UserID, txDate, row.DebitAccountID)
 	return true, nil
 }
 
@@ -1096,7 +1202,7 @@ func applyPrecreatedPayment(ctx context.Context, db *sql.DB, row sqlcdb.ListDueC
 	if err != nil {
 		return false, err
 	}
-	newPaid := creditRow.PaidAmount + row.Amount
+	newPaid := capPaidToPrincipal(creditRow.PrincipalAmount, creditRow.PaidAmount+row.Amount)
 	if err := q.UpdateCreditPaidAmount(ctx, sqlcdb.UpdateCreditPaidAmountParams{
 		PaidAmount: newPaid, UpdatedAt: nowStr, ID: row.CreditID, UserID: row.UserID,
 	}); err != nil {
@@ -1108,7 +1214,8 @@ func applyPrecreatedPayment(ctx context.Context, db *sql.DB, row sqlcdb.ListDueC
 	if err := dbTx.Commit(); err != nil {
 		return false, err
 	}
-	syncAccountBalances(ctx, db, row.UserID, row.DebitAccountID)
+	asOf, _ := timeutil.ParseUTC(row.PaymentDate)
+	syncAccountBalances(ctx, db, row.UserID, asOf, row.DebitAccountID)
 	return true, nil
 }
 
@@ -1563,7 +1670,7 @@ func resolveTransactionKind(ctx context.Context, db sqlcdb.DBTX, userID string, 
 	return "manual", nil
 }
 
-func syncAccountBalances(ctx context.Context, db *sql.DB, userID string, accountIDs ...string) {
+func syncAccountBalances(ctx context.Context, db *sql.DB, userID string, asOf time.Time, accountIDs ...string) {
 	ids := make([]string, 0, len(accountIDs))
 	for _, id := range accountIDs {
 		if strings.TrimSpace(id) != "" {
@@ -1574,7 +1681,7 @@ func syncAccountBalances(ctx context.Context, db *sql.DB, userID string, account
 		return
 	}
 	_ = accountbalance.Refresh(ctx, db, userID, ids...)
-	balancehooks.NotifyRefresh(ctx, db, userID, ids...)
+	balancehooks.NotifyRefresh(ctx, db, userID, asOf, ids...)
 }
 
 // TodayCutoffUTC returns end-of-today in user TZ as UTC datetime string for due payment queries.

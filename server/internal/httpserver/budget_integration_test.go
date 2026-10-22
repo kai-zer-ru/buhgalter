@@ -187,3 +187,72 @@ func TestBudgetSummaryExcludesTransferCommission(t *testing.T) {
 		t.Fatalf("expected spent 1000000 (expense only, no transfer commission), got %d", spent)
 	}
 }
+
+func TestBudgetSpentPreview(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+	accID := createTestAccount(t, env, "Превью")
+	catID := getExpenseCategory(t, env)
+
+	txBody, _ := json.Marshal(map[string]any{
+		"account_id": accID, "type": "expense", "amount": "1500.00",
+		"category_id": catID, "description": "preview spend", "transaction_date": "2026-01-12 10:00:00",
+	})
+	respTx, err := env.authedRequest(http.MethodPost, "/api/v1/transactions", bytes.NewReader(txBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	respTx.Body.Close()
+	if respTx.StatusCode != http.StatusCreated {
+		t.Fatalf("create tx status %d", respTx.StatusCode)
+	}
+
+	resp, err := env.authedRequest(
+		http.MethodGet,
+		"/api/v1/budgets/spent-preview?month=2026-01&scope=category&category_id="+catID,
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("spent-preview status %d", resp.StatusCode)
+	}
+	var preview struct {
+		Spent        int64  `json:"spent"`
+		SpentDisplay string `json:"spent_display"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&preview); err != nil {
+		t.Fatal(err)
+	}
+	if preview.Spent != 150000 || preview.SpentDisplay != "1500.00" {
+		t.Fatalf("unexpected preview: %+v", preview)
+	}
+
+	respAll, err := env.authedRequest(
+		http.MethodGet,
+		"/api/v1/budgets/spent-preview?month=2026-01&scope=all_expense",
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respAll.Body.Close()
+	if respAll.StatusCode != http.StatusOK {
+		t.Fatalf("all_expense preview status %d", respAll.StatusCode)
+	}
+
+	respBad, err := env.authedRequest(
+		http.MethodGet,
+		"/api/v1/budgets/spent-preview?month=2026-01&scope=category",
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respBad.Body.Close()
+	if respBad.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 without category_id, got %d", respBad.StatusCode)
+	}
+}

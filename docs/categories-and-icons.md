@@ -1,6 +1,6 @@
 # Категории, подкатегории и иконки
 
-Справочник доходов и расходов: CRUD в **Настройки → Категории** (`/settings/categories`).  
+Справочник доходов и расходов: CRUD на странице **Категории** (`/categories`, пункт основного меню).  
 Иконки общие для категорий и подкатегорий — один каталог, один picker.
 
 ## Модель данных
@@ -39,18 +39,20 @@ ER-диаграмма: [data-model.md](data-model.md).
 
 Ответ категории: `id`, `name`, `type`, `icon`, `sort_order`, `is_primary`, `is_system`, `subcategory_count`, `created_at`.
 
-**Системные категории** (`is_system: true`):
+**Системные категории** (`is_system: true`). Исключение: у «Подписки» в БД есть подкатегории, но `POST/PUT/DELETE` подкатегорий через API категорий → 403; управление — только через [подписки](subscriptions.md):
+
 
 | Название | Тип | Иконка | Назначение |
 |----------|-----|--------|------------|
 | Долги | income, expense | `loan` | Операции по долгам |
-| Кредиты | income, expense | `loan` | Доход при выдаче кредита / расход по платежам |
+| Кредиты | income, expense | `loan` | Доход при выдаче кредита / расход по платежам. В форме расхода категория доступна: вместо подкатегорий — список активных кредитов ([credit-payment-link.md](../roadmap/credit-payment-link.md)) |
 | Комиссия | expense | `percent` | Комиссия за перевод между счетами (v1.1) |
 | Перевод | expense | `transfer` | Переводы между своими счетами (`POST /transfers`) |
+| Подписки | expense | `subscription` | Расходы по подпискам; подкатегории создаёт только движок подписок (не через API категорий). Если у пользователя уже была категория «Подписки», при backfill/ensure она переименовывается в «Подписки (старые)» (при коллизии — «Подписки (старые) 2» …), и создаётся новая системная |
 
 **Дефолтные пользовательские категории** (expense, seed при регистрации): Транспорт, Магазины, Связь, Здоровье, Разное, **Переводы** (`default`) — для ручных операций, связанных с переводами третьим лицам; не путать с системной «Перевод».
 
-Seed при создании пользователя + backfill при старте БД (`categoryseed.EnsureSystemCategories`, `EnsureTransferCategory`). При backfill операции в старой пользовательской «Перевод» с `type != transfer` переносятся в «Переводы»; подкатегории «Перевод» переносятся в «Переводы» (при коллизии имён — merge). `PUT` / `DELETE` системной категории → `403 Forbidden`; `POST /categories/{id}/subcategories` → `403 Forbidden`; `POST /categories/{id}/primary` → `403 Forbidden`. В UI настроек — только просмотр, без раскрытия подкатегорий.
+Seed при создании пользователя + backfill при старте БД (`categoryseed.EnsureSystemCategories`, `EnsureTransferCategory`). При backfill операции в старой пользовательской «Перевод» с `type != transfer` переносятся в «Переводы»; подкатегории «Перевод» переносятся в «Переводы» (при коллизии имён — merge). `PUT` / `DELETE` системной категории → `403 Forbidden`; `POST /categories/{id}/subcategories` → `403 Forbidden`; `POST /categories/{id}/primary` → `403 Forbidden`. В UI категорий — только просмотр системных (кроме «Подписки»), без раскрытия чужих системных подкатегорий.
 
 **Порядок:** список в API — пользовательские категории, затем системные (по `sort_order`, `name`). При `PUT /categories/order` системные всегда остаются в конце списка (клиент передаёт только id пользовательских категорий).
 
@@ -100,27 +102,32 @@ OpenAPI: [api/openapi.yaml](api/openapi.yaml).
 | `name` | Подпись по умолчанию для авто-имени; для `default` на расходах — «Разное», на доходах — «Прочие доходы» |
 | `emoji` | Символ для SVG-заглушки |
 | `official_logo` | `true` — SVG из `data/category_icons/{id}.svg` |
+| `bank_logo` | `true` или id файла — SVG из `data/banks/{id}.svg` (запасной путь) |
 | `brand` | Цветная заглушка с текстом (устарело для брендов с `official_logo`) |
 
-Сгенерированные файлы: `web/static/icons/categories/{id}.svg`  
-URL в UI: `/icons/categories/{id}.svg` (`categoryIconUrl` в `web/src/lib/finance.ts`).
+Сгенерированные файлы: `web/static/icons/categories/{id}.svg` и `android/ui/static/icons/categories/{id}.svg`  
+URL в UI: `/icons/categories/{id}.svg` (`categoryIconUrl` в `web/src/lib/finance.ts` / `android/ui/src/lib/finance.ts`).
 
-### Официальные логотипы (маркетплейсы, Авито)
+### Официальные логотипы (маркетплейсы, подписки, магазины)
 
-| ID | Источник |
-|----|----------|
-| `wildberries` | `wildberries.ru/apple-touch-icon.png` |
-| `ozon` | favicon `ozon.ru` (через `favicon.yandex.net`) |
-| `yandex-market` | favicon `market.yandex.ru` |
-| `avito` | `avito.ru/apple-touch-icon.png` |
+| Группа | ID (примеры) | Источник |
+|--------|--------------|----------|
+| Маркетплейсы | `wildberries`, `ozon`, `yandex-market`, `avito` | apple-touch / favicon |
+| Подписки / стриминг | `yandex-plus`, `spotify`, `netflix`, `telegram`, `chatgpt`, … | favicon через `favicon.yandex.net` |
+| Магазины / доставка | `pyaterochka`, `magnit`, `perekrestok`, `gazprom-bonus`, `samokat`, `yandex-lavka`, `mvideo`, `dns`, … | favicon через `favicon.yandex.net` |
+| Лояльность | `gazprom-bonus`, `sberprime` | favicon сервиса |
+| Банки | `tinkoff`, `sberbank`, `vtb`, `alfabank`, `yandex-bank`, … | apple-touch / favicon (как у подписок) |
 
-Файлы: `data/category_icons/wildberries.svg`, `ozon.svg`, `yandex-market.svg`, `avito.svg`.
+Полный список URL — [`scripts/download_marketplace_logos.py`](../scripts/download_marketplace_logos.py).  
+Файлы-источники после `make download-marketplace-logos`: `data/category_icons/{id}.svg` (каталог в `.gitignore`; в git — сгенерированные SVG в `web/static` / `android/ui/static`).
+
+Поиск в picker — по `id`, `name` и `tags` (удобны запросы вроде «т-банк», «тинькофф», «альфа», «подписка»).
 
 ### Команды Make
 
 | Команда | Назначение |
 |---------|------------|
-| `make download-marketplace-logos` | Скачать официальные логотипы WB/Ozon/Яндекс Маркет/Авито |
+| `make download-marketplace-logos` | Скачать официальные логотипы маркетплейсов, подписок, магазинов и банков |
 | `make generate-category-icons` | Собрать все SVG в `web/static/icons/categories/` |
 
 Редактирование каталога:
@@ -140,36 +147,44 @@ URL в UI: `/icons/categories/{id}.svg` (`categoryIconUrl` в `web/src/lib/finan
 
 ## Поведение UI
 
-Страница: `web/src/routes/settings/categories/+page.svelte`  
-Компонент picker: `web/src/lib/components/CategoryIconPicker.svelte`.
+Страница: `web/src/routes/categories/+page.svelte` (Android: `android/ui` → `/categories`).  
+Компонент списка: `CategoriesTab.svelte`.  
+Picker: `CategoryIconPicker.svelte`. Диалог подкатегории: `SubcategoryFormDialog.svelte`.
 
 | Поведение | Описание |
 |-----------|----------|
 | Вкладки | `?type=income` в URL сохраняется при обновлении страницы |
 | Фильтр иконок | Быстрый ряд (7 шт.) и попап «Ещё» — только иконки с подходящим `kind` |
 | Быстрый ряд | Иконка из «Ещё» встаёт **на 1 место**, последняя из дефолтного quick-ряда скрывается; повторный выбор из «Ещё» заменяет первую; клик по иконке в быстром ряду сбрасывает закрепление. Текущее значение вне quick (редактирование) тоже показывается первым |
+| Варианты picker | `variant="quick"` (по умолчанию) — ряд + «Ещё»; `variant="button"` — только текущая иконка, по клику открывает каталог (форма подкатегории) |
 | Авто-имя | Подставляется только пока поле имени **пустое** или совпадает с последним авто-именем. Сначала ввели название вручную — смена иконки **не трогает** текст; очистка поля снова включает автоподстановку |
-| Редактирование | `lockName={true}` — смена иконки не перезаписывает существующее имя (категория / подкатегория) |
+| Редактирование категории | Inline в карточке; `lockName={true}` — смена иконки не перезаписывает имя |
 | Подкатегории — раскрытие | Клик по названию с **▶ / ▼ после текста** (одна кнопка); список подгружается лениво (`GET …/subcategories`) |
+| Подкатегории — список | Строка: ⠿ + иконка + имя + меню; внизу кнопка «Добавить подкатегорию» (без inline quick-add) |
+| Подкатегории — создание / правка | `SubcategoryFormDialog` (`ModalShell`): имя + picker `variant="button"`; дефолт иконки при создании — иконка родителя; Esc / Отмена без сохранения |
 | Иконка категории | Декоративная, не кликабельна (без `btn-icon`) |
-| Подкатегории — иконка | Тот же picker (компактный, 28px); **по умолчанию иконка родителя**; после добавления фокус остаётся в поле ввода без перезагрузки страницы |
 | Подкатегории — состояние | Обновления `subs` и `expanded` через пересоздание объекта (`{ ...obj, [id]: … }`) — требование реактивности Svelte 5 |
 | Сортировка | Перетаскивание за **⠿** (`web/src/lib/drag-reorder.ts`, `ReorderDragGhost.svelte`): ghost **следует за курсором** с **той же шириной**, что у карточки (фиксированные `width`/`height`); атрибут `data-drag-row` на всей строке; линия вставки на целевой карточке |
 | Главная категория | Галочка у названия; «Сделать главной» — в меню «⋯» (`POST /categories/{id}/primary`); одна на вкладку; дефолт в форме операции |
-| Enter | Сохраняет подкатегорию при редактировании; добавляет новую в форме создания |
+| Enter | В диалоге подкатегории — сохранить |
 | Удаление | `$lib/confirm` + i18n (`categories.confirm.delete`, `categories.confirm.deleteSub`) |
 
 Логика авто-имени в picker: внутренние флаги `nameLocked` и `lastAutoName`; отличие текущего имени от `lastAutoName` трактуется как ручной ввод.
 
 Дефолтные категории при регистрации: `server/internal/categoryseed/defaults.go` (без подкатегорий).
 
+**Правила категорий** (category→account, text→category, inbox) — [category-rules.md](category-rules.md); спека — [category-rules-inbox.md](../roadmap/category-rules-inbox.md). Не путать с разовым маппингом при файловом импорте.
+
 ## Файлы (шпаргалка)
 
 | Путь | Назначение |
 |------|------------|
 | `data/category_icons.json` | каталог ID, kind, name, tags |
-| `web/static/icons/categories/` | SVG для фронта |
+| `web/static/icons/categories/` | SVG для web |
+| `android/ui/static/icons/categories/` | SVG для Android UI |
 | `web/src/lib/category-icons.ts` | фильтрация по kind, quick-ряды |
-| `web/src/lib/components/CategoryIconPicker.svelte` | picker с авто-именем |
-| `web/src/routes/settings/categories/+page.svelte` | страница настроек |
+| `web/src/lib/components/CategoryIconPicker.svelte` | picker с авто-именем (`quick` / `button`) |
+| `web/src/lib/components/SubcategoryFormDialog.svelte` | попап создания/правки подкатегории |
+| `web/src/lib/settings/CategoriesTab.svelte` | вкладка настроек категорий |
+| `web/src/routes/categories/+page.svelte` | страница категорий |
 | `server/queries/categories.sql` | sqlc-запросы |

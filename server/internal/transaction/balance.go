@@ -4,14 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 
 	"github.com/kai-zer-ru/buhgalter/internal/account"
 	"github.com/kai-zer-ru/buhgalter/internal/accountbalance"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/debt"
 	"github.com/kai-zer-ru/buhgalter/internal/money"
-	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
 )
 
 type AccountBalance struct {
@@ -24,6 +22,9 @@ type AccountBalance struct {
 	ForecastBalance           int64   `json:"forecast_balance"`
 	ForecastDisplay           string  `json:"forecast_display"`
 	HasFutureThisMonth        bool    `json:"has_future_this_month"`
+	HasPlannedThisMonth       bool    `json:"has_planned_this_month"`
+	HasSubscriptionsThisMonth bool    `json:"has_subscriptions_this_month"`
+	IsPrimary                 bool    `json:"is_primary"`
 	CreditLimit               *int64  `json:"credit_limit,omitempty"`
 	CreditLimitDisplay        *string `json:"credit_limit_display,omitempty"`
 	AutoTopupEnabled          bool    `json:"auto_topup_enabled"`
@@ -53,6 +54,7 @@ type AccountsSummary struct {
 type Dashboard struct {
 	TotalBalance       int64               `json:"total_balance"`
 	TotalForecast      int64               `json:"total_forecast"`
+	InboxCount         int64               `json:"inbox_count"`
 	CreditCardsSummary *CreditCardsSummary `json:"credit_cards_summary,omitempty"`
 	Accounts           []AccountBalance    `json:"accounts"`
 	RecentTransactions []Transaction       `json:"recent_transactions"`
@@ -72,81 +74,26 @@ func Balance(ctx context.Context, db *sql.DB, userID, accountID string, initialB
 	return row.CurrentBalance, nil
 }
 
-// ForecastBalance adds future transactions in the current month (user timezone) to balance.
+// ForecastBalance adds future transactions and pending scheduled charges
+// (subscriptions + recurring) in the current month (user timezone) to balance.
 func ForecastBalance(ctx context.Context, db *sql.DB, userID, accountID string, balance int64) (int64, bool, error) {
 	tz, err := userTimezone(ctx, db, userID)
 	if err != nil {
 		return 0, false, err
 	}
-	monthStart, monthEnd, err := timeutil.MonthBoundsUTC(tz, timeutil.NowUTC())
+	forecasts, err := accountbalance.ForecastsByUser(ctx, db, userID, tz, map[string]int64{accountID: balance})
 	if err != nil {
 		return 0, false, err
 	}
-	q := queries(db)
-
-	hasFuture, err := q.HasFutureInMonth(ctx, sqlcdb.HasFutureInMonthParams{
-		UserID: userID, AccountID: accountID,
-		TransactionDate: monthStart, TransactionDate_2: monthEnd,
-	})
-	if err != nil {
-		return 0, false, err
-	}
-
-	fi, err := sumInt64(q.SumFutureIncomeInRange(ctx, sqlcdb.SumFutureIncomeInRangeParams{
-		UserID: userID, AccountID: accountID,
-		TransactionDate: monthStart, TransactionDate_2: monthEnd,
-	}))
-	if err != nil {
-		return 0, false, err
-	}
-	fe, err := sumInt64(q.SumFutureExpenseInRange(ctx, sqlcdb.SumFutureExpenseInRangeParams{
-		UserID: userID, AccountID: accountID,
-		TransactionDate: monthStart, TransactionDate_2: monthEnd,
-	}))
-	if err != nil {
-		return 0, false, err
-	}
-	ftOut, err := sumInt64(q.SumFutureTransferOutInRange(ctx, sqlcdb.SumFutureTransferOutInRangeParams{
-		UserID: userID, AccountID: accountID,
-		TransactionDate: monthStart, TransactionDate_2: monthEnd,
-	}))
-	if err != nil {
-		return 0, false, err
-	}
-	ftIn, err := sumInt64(q.SumFutureTransferInInRange(ctx, sqlcdb.SumFutureTransferInInRangeParams{
-		UserID: userID, AccountID: accountID,
-		TransactionDate: monthStart, TransactionDate_2: monthEnd,
-	}))
-	if err != nil {
-		return 0, false, err
-	}
-
-	forecast := balance + fi - fe + ftIn - ftOut
-	return forecast, hasFuture > 0, nil
-}
-
-func sumInt64(v interface{}, err error) (int64, error) {
-	if err != nil {
-		return 0, err
-	}
-	switch n := v.(type) {
-	case int64:
-		return n, nil
-	case int:
-		return int64(n), nil
-	case int32:
-		return int64(n), nil
-	case float64:
-		return int64(n), nil
-	default:
-		return 0, fmt.Errorf("unexpected sum type %T", v)
-	}
+	fc := forecasts[accountID]
+	return fc.Balance, fc.HasFutureThisMonth, nil
 }
 
 func accountBalanceFromRow(
 	id, name, accType string,
 	bankIcon *string,
 	balance int64,
+	isPrimary int64,
 	creditLimit *int64,
 	autoTopupEnabled int64,
 	autoTopupThreshold, autoTopupTarget *int64,
@@ -159,6 +106,7 @@ func accountBalanceFromRow(
 		BankIcon:                 bankIcon,
 		Balance:                  balance,
 		BalanceDisplay:           money.FormatRubles(balance),
+		IsPrimary:                isPrimary != 0,
 		CreditLimit:              creditLimit,
 		AutoTopupEnabled:         autoTopupEnabled != 0,
 		AutoTopupThreshold:       autoTopupThreshold,
@@ -199,12 +147,14 @@ func EnrichAccountBalance(ctx context.Context, db *sql.DB, userID, accountID, ac
 		return AccountBalance{}, err
 	}
 	ab := accountBalanceFromRow(
-		accountID, accountName, accountType, bankIcon, bal, creditLimit,
+		accountID, accountName, accountType, bankIcon, bal, accRow.IsPrimary, creditLimit,
 		accRow.AutoTopupEnabled, accRow.AutoTopupThreshold, accRow.AutoTopupTarget, accRow.AutoTopupSourceAccountID,
 	)
 	ab.ForecastBalance = fc.Balance
 	ab.ForecastDisplay = money.FormatRubles(fc.Balance)
 	ab.HasFutureThisMonth = fc.HasFutureThisMonth
+	ab.HasPlannedThisMonth = fc.HasPlannedThisMonth
+	ab.HasSubscriptionsThisMonth = fc.HasSubscriptionsThisMonth
 	return ab, nil
 }
 
@@ -218,7 +168,7 @@ func AccountsSummaryForUser(ctx context.Context, db *sql.DB, userID string) (Acc
 	for _, row := range rows {
 		balances[row.ID] = row.CurrentBalance
 		ab := accountBalanceFromRow(
-			row.ID, row.Name, row.Type, row.BankIcon, row.CurrentBalance, row.CreditLimit,
+			row.ID, row.Name, row.Type, row.BankIcon, row.CurrentBalance, row.IsPrimary, row.CreditLimit,
 			row.AutoTopupEnabled, row.AutoTopupThreshold, row.AutoTopupTarget, row.AutoTopupSourceAccountID,
 		)
 		ab.ForecastBalance = row.CurrentBalance
@@ -239,6 +189,8 @@ func AccountsSummaryForUser(ctx context.Context, db *sql.DB, userID string) (Acc
 			out[i].ForecastBalance = fc.Balance
 			out[i].ForecastDisplay = money.FormatRubles(fc.Balance)
 			out[i].HasFutureThisMonth = fc.HasFutureThisMonth
+			out[i].HasPlannedThisMonth = fc.HasPlannedThisMonth
+			out[i].HasSubscriptionsThisMonth = fc.HasSubscriptionsThisMonth
 		}
 		if account.IsCreditCard(out[i].Type) {
 			continue
@@ -297,9 +249,14 @@ func DashboardForUser(ctx context.Context, db *sql.DB, userID string) (Dashboard
 	if err != nil {
 		return Dashboard{}, err
 	}
+	inboxCount, err := CountInbox(ctx, db, userID)
+	if err != nil {
+		return Dashboard{}, err
+	}
 	return Dashboard{
 		TotalBalance:       summary.TotalBalance,
 		TotalForecast:      summary.TotalForecast,
+		InboxCount:         inboxCount,
 		CreditCardsSummary: creditCardsSummaryFromAccounts(summary.Accounts),
 		Accounts:           summary.Accounts,
 		RecentTransactions: recent,

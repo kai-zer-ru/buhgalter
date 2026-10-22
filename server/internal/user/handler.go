@@ -16,6 +16,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/notificationintercept"
 	"github.com/kai-zer-ru/buhgalter/internal/notify"
 )
 
@@ -69,8 +70,10 @@ type notificationTestRequest struct {
 }
 
 type notificationPreviewRequest struct {
-	TriggerType string `json:"trigger_type"`
-	Template    string `json:"template"`
+	TriggerType      string                 `json:"trigger_type"`
+	Template         string                 `json:"template"`
+	KeyboardTelegram *notify.InlineKeyboard `json:"keyboard_telegram,omitempty"`
+	KeyboardMax      *notify.InlineKeyboard `json:"keyboard_max,omitempty"`
 }
 
 type notificationResetRequest struct {
@@ -113,7 +116,7 @@ func (h *Handler) PutSettings(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CURRENCY")
 		return
 	}
-	if req.Theme != "" && req.Theme != "light" && req.Theme != "dark" {
+	if req.Theme != "" && req.Theme != "light" && req.Theme != "dark" && req.Theme != "system" {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_THEME")
 		return
 	}
@@ -157,6 +160,29 @@ func (h *Handler) PutSettings(w http.ResponseWriter, r *http.Request) {
 		"timezone":     timezone,
 		"theme":        theme,
 	})
+}
+
+func (h *Handler) DeleteData(w http.ResponseWriter, r *http.Request) {
+	info, ok := auth.FromContext(r.Context())
+	if !ok {
+		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
+		return
+	}
+
+	if err := ResetUserData(r.Context(), h.Store.DB(), info.User.ID); err != nil {
+		if db.IsBusy(err) {
+			slog.Warn("delete user data: database busy", "user_id", info.User.ID, "err", err)
+			apperror.WriteR(w, r, http.StatusServiceUnavailable, apperror.ServiceUnavailable)
+			return
+		}
+		slog.Warn("delete user data failed", "user_id", info.User.ID, "err", err)
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	}
+
+	ip := auth.ClientIP(r)
+	_ = h.Audit.Log("user.data.delete", info.User.ID, info.User.Login, ip, nil)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) GetNotifications(w http.ResponseWriter, r *http.Request) {
@@ -246,12 +272,17 @@ func (h *Handler) PreviewNotificationTemplate(w http.ResponseWriter, r *http.Req
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_INVALID_JSON")
 		return
 	}
-	text, err := notify.PreviewTemplate(r.Context(), h.Store.DB(), info.User.ID, req.TriggerType, req.Template)
+	result, err := notify.PreviewTemplate(r.Context(), h.Store.DB(), info.User.ID, notify.PreviewInput{
+		TriggerType:      req.TriggerType,
+		Template:         req.Template,
+		KeyboardTelegram: req.KeyboardTelegram,
+		KeyboardMax:      req.KeyboardMax,
+	})
 	if err != nil {
 		apperror.WriteDetail(w, r, http.StatusBadRequest, apperror.ValidationError, apperror.ValidationError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"text": text})
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (h *Handler) ResetNotificationTemplates(w http.ResponseWriter, r *http.Request) {
@@ -335,6 +366,12 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
+
+	keepSessionID := info.SessionID
+	if info.APIToken {
+		keepSessionID = ""
+	}
+	_ = auth.DeleteOtherSessions(r.Context(), h.Store.DB(), info.User.ID, keepSessionID)
 
 	ip := auth.ClientIP(r)
 	_ = h.Audit.Log("user.password.change", info.User.ID, info.User.Login, ip, nil)
@@ -473,6 +510,61 @@ func (h *Handler) secretBoxForUpdate(ctx context.Context, req notify.UpdateSetti
 		return nil, nil
 	}
 	return h.mustSecretBox(ctx)
+}
+
+func (h *Handler) GetNotificationInterceptBindings(w http.ResponseWriter, r *http.Request) {
+	info, ok := auth.FromContext(r.Context())
+	if !ok {
+		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
+		return
+	}
+	view, err := notificationintercept.GetSettings(r.Context(), h.Store.DB(), info.User.ID)
+	if err != nil {
+		if db.IsBusy(err) {
+			slog.Warn("get notification intercept bindings: database busy", "user_id", info.User.ID, "err", err)
+			apperror.WriteR(w, r, http.StatusServiceUnavailable, apperror.ServiceUnavailable)
+			return
+		}
+		slog.Warn("get notification intercept bindings failed", "user_id", info.User.ID, "err", err)
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
+}
+
+func (h *Handler) PutNotificationInterceptBindings(w http.ResponseWriter, r *http.Request) {
+	info, ok := auth.FromContext(r.Context())
+	if !ok {
+		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
+		return
+	}
+	var req notificationintercept.UpdateInput
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_INVALID_JSON")
+		return
+	}
+	view, err := notificationintercept.ReplaceSettings(r.Context(), h.Store.DB(), info.User.ID, req)
+	if err != nil {
+		msg := err.Error()
+		switch msg {
+		case "ERR_NOTIFICATION_INTERCEPT_BINDING_INVALID",
+			"ERR_NOTIFICATION_INTERCEPT_BANK_UNKNOWN",
+			"ERR_NOTIFICATION_INTERCEPT_ACCOUNT_TYPE",
+			"ERR_ACCOUNT_NOT_FOUND",
+			"ERR_ACCOUNT_ARCHIVED":
+			apperror.WriteDetail(w, r, http.StatusBadRequest, apperror.ValidationError, apperror.ValidationError, msg)
+			return
+		}
+		if db.IsBusy(err) {
+			slog.Warn("put notification intercept bindings: database busy", "user_id", info.User.ID, "err", err)
+			apperror.WriteR(w, r, http.StatusServiceUnavailable, apperror.ServiceUnavailable)
+			return
+		}
+		slog.Warn("put notification intercept bindings failed", "user_id", info.User.ID, "err", err)
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
 }
 
 func (h *Handler) mustSecretBox(ctx context.Context) (*notify.SecretBox, error) {

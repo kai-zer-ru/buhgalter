@@ -146,10 +146,17 @@ func (s *Service) Restore(src io.Reader) error {
 		return err
 	}
 	db.RemoveSQLiteSidecars(dbPath)
-	_ = os.Remove(dbPath + ".bak")
 	if err := s.Manager.Reopen(); err != nil {
+		db.RemoveSQLiteSidecars(dbPath)
+		_ = os.Remove(dbPath)
+		if rerr := os.Rename(dbPath+".bak", dbPath); rerr != nil {
+			return err
+		}
+		db.RemoveSQLiteSidecars(dbPath)
+		_ = s.Manager.Reopen()
 		return err
 	}
+	_ = os.Remove(dbPath + ".bak")
 	return nil
 }
 

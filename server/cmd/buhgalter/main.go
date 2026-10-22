@@ -22,6 +22,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/config"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/discovery"
 	"github.com/kai-zer-ru/buhgalter/internal/httpserver"
 	"github.com/kai-zer-ru/buhgalter/internal/importexport"
 	"github.com/kai-zer-ru/buhgalter/internal/locale"
@@ -32,7 +33,7 @@ import (
 )
 
 var (
-	version       = "1.3.1"
+	version       = "1.9.1"
 	installMethod = "dev"
 	buildCommit   = "unknown"
 	buildTime     = ""
@@ -104,6 +105,9 @@ func main() {
 	}, &appsched.RecurringRunner{
 		DB:     manager.DB(),
 		Logger: logger,
+	}, &appsched.SubscriptionRunner{
+		DB:     manager.DB(),
+		Logger: logger,
 	}, &appsched.FutureRunner{
 		DB:     manager.DB(),
 		Logger: logger,
@@ -116,12 +120,29 @@ func main() {
 	balancehooks.AfterRefresh = balancetopup.CheckAfterRefresh
 	balancehooks.NotifyAll = balancetopup.CheckAllForUser
 	account.AfterAutoTopupConfigured = func(ctx context.Context, db *sql.DB, userID, accountID string) {
-		balancetopup.CheckAfterRefresh(ctx, db, userID, accountID)
+		balancetopup.CheckAfterRefresh(ctx, db, userID, time.Time{}, accountID)
 	}
 	notifyWorker.Start()
 	defer notifyWorker.Stop()
 
 	srv := httpserver.New(cfg, manager, logger, auditLogger, backupSvc)
+
+	var mdnsAdvertiser *discovery.Advertiser
+	if cfg.MDNSEnabled {
+		adv, err := discovery.NewAdvertiser(discovery.AdvertiseConfig{
+			Addr:         cfg.Addr,
+			InstanceName: cfg.MDNSName,
+			Version:      cfg.Version,
+		}, logger)
+		if err != nil {
+			logger.Warn("mdns disabled", "err", err)
+		} else if err := adv.Start(); err != nil {
+			logger.Warn("mdns start failed", "err", err)
+		} else {
+			mdnsAdvertiser = adv
+			defer mdnsAdvertiser.Stop()
+		}
+	}
 
 	httpServer := &http.Server{
 		Addr:         cfg.Addr,

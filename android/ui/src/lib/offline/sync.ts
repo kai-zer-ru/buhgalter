@@ -1,0 +1,699 @@
+import { get, writable } from 'svelte/store';
+import { invalidateApiCache } from '$lib/api/cache';
+import {
+	getAccount,
+	getAccountBalance,
+	getCredit,
+	getDashboard,
+	getDebtor,
+	getDebtsSummary,
+	getStatsByCategory,
+	getStatsByPeriod,
+	getStatsContext,
+	getStatsSummary,
+	getUIMeta,
+	getBudgetSummary,
+	listAccounts,
+	listBanks,
+	listCredits,
+	listDebtors,
+	listDebts,
+	listRecurringOperations,
+	listSubscriptions,
+	getSubscriptionsSummary,
+	listTransactions,
+	type Account,
+	type Credit,
+	type Debt,
+	type Debtor,
+	createTransaction as apiCreateTransaction,
+	createTransfer as apiCreateTransfer,
+	createCategory as apiCreateCategory,
+	createDebt as apiCreateDebt,
+	createAccount as apiCreateAccount,
+	createBudget as apiCreateBudget,
+	createRecurringOperation as apiCreateRecurring,
+	createSubscription as apiCreateSubscription,
+	deleteTransaction as apiDeleteTransaction,
+	deleteTransfer as apiDeleteTransfer,
+	deleteCategory as apiDeleteCategory,
+	deleteDebt as apiDeleteDebt,
+	deleteBudget as apiDeleteBudget,
+	deleteRecurringOperation as apiDeleteRecurring,
+	deleteSubscription as apiDeleteSubscription,
+	deleteCredit as apiDeleteCredit,
+	deleteCreditPayment as apiDeleteCreditPayment,
+	updateTransaction as apiUpdateTransaction,
+	updateTransfer as apiUpdateTransfer,
+	updateCategory as apiUpdateCategory,
+	updateAccount as apiUpdateAccount,
+	updateBudget as apiUpdateBudget,
+	updateRecurringOperation as apiUpdateRecurring,
+	updateSubscription as apiUpdateSubscription,
+	updateCredit as apiUpdateCredit,
+	updateCreditSchedule as apiUpdateCreditSchedule,
+	addCreditPayment as apiAddCreditPayment,
+	completeCredit as apiCompleteCredit,
+	settleDebt as apiSettleDebt,
+	archiveAccount as apiArchiveAccount,
+	unarchiveAccount as apiUnarchiveAccount,
+	ApiError,
+	isTransientHttpError
+} from '$lib/api/client';
+import { formatApiError } from '$lib/api/errors';
+import {
+	getOutboxEntries,
+	hasFailedOutbox,
+	hasPendingOutbox,
+	markOutboxFailed,
+	removeOutboxEntry
+} from '$lib/offline/store';
+import type {
+	TransactionPayload,
+	TransferPayload,
+	CategoryPayload,
+	CategoryUpdatePayload,
+	DebtPayload,
+	AccountCreatePayload,
+	AccountUpdatePayload,
+	BudgetPayload,
+	CreditActionPayload,
+	RecurringPayload,
+	SubscriptionPayload
+} from '$lib/offline/types';
+import {
+	isAccountStatusPayload,
+	isCreditActionPayload,
+	isDebtSettlePayload
+} from '$lib/offline/types';
+import type { OutboxEntry } from '$lib/offline/types';
+import {
+	markServerOffline,
+	markServerOnline,
+	probeServerReachability,
+	shouldTryServer
+} from '$lib/offline/server-connectivity';
+import {
+	flushRefCacheDisk,
+	runWithForcedRefCacheNetwork,
+	runWithSuppressedRefCacheNotifications,
+	setWarmRefCacheActive
+} from '$lib/offline/ref-cache';
+import { debugLogError, debugLogInfo, debugLogWarn } from '$lib/platform/debug-log';
+import {
+	alignTransactionChangesCursor,
+	transactionChangesCursorSinceId
+} from '$lib/offline/transaction-changes';
+
+export const syncState = writable<'idle' | 'syncing'>('idle');
+
+export type PullStatusKind = 'idle' | 'syncing' | 'ok' | 'pending' | 'failed' | 'offline' | 'error';
+
+export type PullStatus = {
+	kind: PullStatusKind;
+	lastOkAt: number | null;
+	pendingCount: number;
+};
+
+export const pullStatus = writable<PullStatus>({
+	kind: 'idle',
+	lastOkAt: null,
+	pendingCount: 0
+});
+
+/** Bumped after local outbox edits — lists re-merge without a server round-trip. */
+export const localDataTick = writable(0);
+
+/** Bumped after manual pull / successful sync / online write — pages reload from the server. */
+export const dataRefreshTick = writable(0);
+
+/** After a successful online mutation (ref-cache already cleared) — reload open pages. */
+export function notifyServerDataChanged() {
+	dataRefreshTick.update((n) => n + 1);
+}
+
+/** Index warmup page size for manual sync (balance overlay / offline edit-delete). */
+export const TX_INDEX_WARMUP_LIMIT = '200';
+
+let syncPromise: Promise<boolean> | null = null;
+
+function pendingCount(): number {
+	return getOutboxEntries().filter((e) => !e.failed).length;
+}
+
+function refreshPullStatus(override?: PullStatusKind) {
+	pullStatus.update((s) => {
+		const pending = pendingCount();
+		const failed = hasFailedOutbox();
+		let kind = override ?? s.kind;
+		if (!override) {
+			if (failed) kind = 'failed';
+			else if (pending > 0) kind = 'pending';
+			else if (!['ok', 'syncing', 'error', 'offline'].includes(s.kind)) kind = 'idle';
+		}
+		if (s.kind === kind && s.pendingCount === pending) return s;
+		return { ...s, kind, pendingCount: pending };
+	});
+}
+
+function isRetryable(err: unknown): boolean {
+	if (!(err instanceof ApiError)) return true;
+	return isTransientHttpError(err.status) || err.status === 0;
+}
+
+async function replayCreditAction(payload: CreditActionPayload): Promise<void> {
+	const id = payload.credit_id;
+	switch (payload.action) {
+		case 'update': {
+			const { name, debit_account_id, debit_time_local, bank_id } = payload;
+			await apiUpdateCredit(id, { name, debit_account_id, debit_time_local, bank_id });
+			return;
+		}
+		case 'pay':
+			await apiAddCreditPayment(id, {
+				amount: payload.amount,
+				payment_date: payload.payment_date,
+				account_id: payload.account_id
+			});
+			return;
+		case 'complete':
+			await apiCompleteCredit(id, {
+				affects_balance: payload.affects_balance,
+				payment_date: payload.payment_date
+			});
+			return;
+		case 'schedule':
+			await apiUpdateCreditSchedule(id, { payments: payload.payments });
+			return;
+		case 'delete_payment':
+			await apiDeleteCreditPayment(id, payload.payment_id);
+			return;
+		case 'delete':
+			await apiDeleteCredit(id, payload.mode);
+			return;
+	}
+}
+
+async function replayEntry(entry: OutboxEntry) {
+	const { entityKey, kind, op, payload } = entry;
+	try {
+		if (op === 'delete') {
+			if (kind === 'transaction') {
+				await apiDeleteTransaction(entityKey);
+			} else if (kind === 'transfer') {
+				await apiDeleteTransfer(entityKey);
+			} else if (kind === 'category') {
+				await apiDeleteCategory(entityKey);
+			} else if (kind === 'debt') {
+				await apiDeleteDebt(entityKey);
+			} else if (kind === 'budget') {
+				await apiDeleteBudget(entityKey);
+			} else if (kind === 'recurring') {
+				await apiDeleteRecurring(entityKey);
+			} else if (kind === 'subscription') {
+				await apiDeleteSubscription(entityKey);
+			}
+			removeOutboxEntry(entityKey);
+			return;
+		}
+		if (op === 'create') {
+			if (kind === 'transaction') {
+				await apiCreateTransaction(payload as TransactionPayload);
+			} else if (kind === 'transfer') {
+				await apiCreateTransfer(payload as TransferPayload);
+			} else if (kind === 'category') {
+				await apiCreateCategory(payload as CategoryPayload);
+			} else if (kind === 'debt') {
+				await apiCreateDebt(payload as DebtPayload);
+			} else if (kind === 'account') {
+				await apiCreateAccount(payload as AccountCreatePayload);
+			} else if (kind === 'budget') {
+				const bp = payload as BudgetPayload;
+				const { month, ...body } = bp;
+				await apiCreateBudget(body, month);
+			} else if (kind === 'recurring') {
+				await apiCreateRecurring(payload as RecurringPayload);
+			} else if (kind === 'subscription') {
+				await apiCreateSubscription(payload as SubscriptionPayload);
+			}
+			removeOutboxEntry(entityKey);
+			return;
+		}
+		if (op === 'update') {
+			if (kind === 'transaction') {
+				await apiUpdateTransaction(entityKey, payload as TransactionPayload);
+			} else if (kind === 'transfer') {
+				await apiUpdateTransfer(entityKey, payload as TransferPayload);
+			} else if (kind === 'category') {
+				await apiUpdateCategory(entityKey, payload as CategoryUpdatePayload);
+			} else if (kind === 'account') {
+				if (isAccountStatusPayload(payload)) {
+					if (payload.action === 'archive') {
+						await apiArchiveAccount(entityKey, payload.transfer_to_account_id);
+					} else {
+						await apiUnarchiveAccount(entityKey);
+					}
+				} else {
+					await apiUpdateAccount(entityKey, payload as AccountUpdatePayload);
+				}
+			} else if (kind === 'budget') {
+				const bp = payload as BudgetPayload;
+				const { month, ...body } = bp;
+				await apiUpdateBudget(entityKey, body, month);
+			} else if (kind === 'debt' && isDebtSettlePayload(payload)) {
+				await apiSettleDebt(entityKey, {
+					amount: payload.amount,
+					settled_at: payload.settled_at,
+					affects_balance: payload.affects_balance,
+					account_id: payload.account_id
+				});
+			} else if (kind === 'credit' && isCreditActionPayload(payload)) {
+				await replayCreditAction(payload);
+			} else if (kind === 'recurring') {
+				await apiUpdateRecurring(entityKey, payload as RecurringPayload);
+			} else if (kind === 'subscription') {
+				await apiUpdateSubscription(entityKey, payload as SubscriptionPayload);
+			}
+			removeOutboxEntry(entityKey);
+		}
+	} catch (err) {
+		if (isRetryable(err)) throw err;
+		const message = formatApiError(err);
+		markOutboxFailed(entityKey, message);
+	}
+}
+
+async function replayOutbox(): Promise<void> {
+	const ordered = getOutboxEntries().filter((e) => !e.failed);
+	for (const entry of ordered) {
+		await replayEntry(entry);
+	}
+}
+
+function setPullResult(kind: PullStatusKind) {
+	const prev = get(pullStatus);
+	const pending = pendingCount();
+	pullStatus.set({
+		kind,
+		lastOkAt: kind === 'ok' || kind === 'pending' ? Date.now() : prev.lastOkAt,
+		pendingCount: pending
+	});
+}
+
+async function withSyncLock(run: () => Promise<boolean>): Promise<boolean> {
+	if (syncPromise) return syncPromise;
+
+	syncPromise = (async () => {
+		syncState.set('syncing');
+		try {
+			return await run();
+		} finally {
+			syncState.set('idle');
+			syncPromise = null;
+		}
+	})();
+
+	return syncPromise;
+}
+
+/** Replay pending outbox only (background / after local edits). No dashboard pull. */
+export async function syncOutbox(): Promise<boolean> {
+	if (!hasPendingOutbox()) {
+		refreshPullStatus();
+		return true;
+	}
+	if (!(await shouldTryServer())) {
+		debugLogWarn('sync', 'syncOutbox skipped — server offline');
+		refreshPullStatus('offline');
+		return false;
+	}
+
+	return withSyncLock(async () => {
+		debugLogInfo('sync', 'syncOutbox started');
+		pullStatus.update((s) => ({ ...s, kind: 'syncing' }));
+		try {
+			invalidateApiCache();
+			await replayOutbox();
+			const failed = hasFailedOutbox();
+			const pending = pendingCount();
+			const kind: PullStatusKind = failed ? 'failed' : pending > 0 ? 'pending' : 'ok';
+			setPullResult(kind);
+			markServerOnline();
+			dataRefreshTick.update((n) => n + 1);
+			debugLogInfo('sync', `syncOutbox finished: ${kind}`);
+			return kind === 'ok' || kind === 'pending';
+		} catch (err) {
+			markServerOffline();
+			debugLogError('sync', 'syncOutbox failed', { error: String(err) });
+			refreshPullStatus('error');
+			return false;
+		}
+	});
+}
+
+/** Manual sync: force reconnect if offline, then warm cache + outbox replay. */
+export async function pullFromServer(): Promise<boolean> {
+	return withSyncLock(async () => {
+		debugLogInfo('sync', 'pullFromServer started');
+		pullStatus.update((s) => ({ ...s, kind: 'syncing' }));
+		try {
+			if (!(await shouldTryServer())) {
+				debugLogInfo('sync', 'pullFromServer probing (was offline)');
+				const online = await probeServerReachability();
+				if (!online) {
+					debugLogWarn('sync', 'pullFromServer — server still offline');
+					refreshPullStatus('offline');
+					return false;
+				}
+			}
+
+			invalidateApiCache();
+			await warmRefCache({ force: true });
+			if (hasPendingOutbox()) {
+				await replayOutbox();
+			}
+
+			const failed = hasFailedOutbox();
+			const pending = pendingCount();
+			const kind: PullStatusKind = failed ? 'failed' : pending > 0 ? 'pending' : 'ok';
+			setPullResult(kind);
+			markServerOnline();
+			dataRefreshTick.update((n) => n + 1);
+			debugLogInfo('sync', `pullFromServer finished: ${kind}`);
+			return kind === 'ok' || kind === 'pending';
+		} catch (err) {
+			markServerOffline();
+			debugLogError('sync', 'pullFromServer failed', { error: String(err) });
+			refreshPullStatus('error');
+			return false;
+		}
+	});
+}
+
+export function scheduleSyncOutbox() {
+	void syncOutbox().catch(() => {
+		// retry on next network event
+	});
+}
+
+export function updatePullStatusFromOutbox() {
+	refreshPullStatus();
+}
+
+/** Called from outbox store on every queue change — instant UI refresh without server pull. */
+export function notifyOutboxChanged() {
+	localDataTick.update((n) => n + 1);
+	refreshPullStatus();
+}
+
+async function warmupTransactionIndex(): Promise<void> {
+	await listTransactions({
+		sort: 'date_desc',
+		page: '1',
+		limit: TX_INDEX_WARMUP_LIMIT
+	});
+}
+
+async function warmupCreditDetails(): Promise<void> {
+	const [activeRes, closedRes] = await Promise.allSettled([
+		listCredits({ status: 'active' }),
+		listCredits({ status: 'closed' }),
+		listBanks()
+	]);
+	const credits: Credit[] = [];
+	for (const result of [activeRes, closedRes]) {
+		if (result.status === 'fulfilled') {
+			credits.push(...result.value);
+		}
+	}
+	const seen = new Set<string>();
+	const unique = credits.filter((c) => {
+		if (seen.has(c.id)) return false;
+		seen.add(c.id);
+		return true;
+	});
+	const batches: Array<Array<() => Promise<unknown>>> = [];
+	for (let i = 0; i < unique.length; i += 4) {
+		const slice = unique.slice(i, i + 4);
+		batches.push(
+			slice.map(
+				(c) => () => Promise.allSettled([getCredit(c.id), getStatsContext({ credit_id: c.id })])
+			)
+		);
+	}
+	await runWarmBatches(batches);
+}
+
+/** Prefetch main GET endpoints into ref-cache (startup / manual sync). */
+let warmRefCacheInflight: Promise<void> | null = null;
+let lastWarmFinishedAt = 0;
+
+/** Skip background warm on resume/network if a full warm ran recently. */
+export const WARM_BACKGROUND_COOLDOWN_MS = 5 * 60_000;
+/** Let the home/drawer paint before credit/account card prefetch. */
+export const WARM_HEAVY_DEFER_MS = import.meta.env.MODE === 'test' ? 0 : 1_800;
+
+export type WarmRefCacheOptions = {
+	/** Throttle when called from resume / network reconnect. */
+	background?: boolean;
+	/** Ignore background cooldown (manual sync). */
+	force?: boolean;
+};
+
+/**
+ * Skip home reload only while warmRefCache is in flight (avoids duplicate loadAll).
+ * Do not extend past warm completion — pullFromServer bumps dataRefreshTick right after,
+ * and an 8s grace window used to swallow that tick so the home list stayed stale.
+ */
+export function shouldSuppressHomeDataRefresh(): boolean {
+	return warmRefCacheInflight !== null;
+}
+
+function yieldToUi(): Promise<void> {
+	return new Promise((resolve) => {
+		if (typeof requestAnimationFrame === 'function') {
+			requestAnimationFrame(() => setTimeout(resolve, 0));
+		} else {
+			setTimeout(resolve, 0);
+		}
+	});
+}
+
+/** Run fetch batches sequentially so JSON parse / cache writes do not freeze the WebView. */
+async function runWarmBatches(batches: Array<Array<() => Promise<unknown>>>): Promise<void> {
+	for (const batch of batches) {
+		await Promise.allSettled(batch.map((fn) => fn()));
+		await yieldToUi();
+	}
+}
+
+/**
+ * Core warm: home, dictionaries, and every section list.
+ * Merchants/tags come from getUIMeta (seedDictionariesFromUIMeta) — no separate GETs.
+ * Accounts list without status is redundant with active+archived.
+ */
+async function warmRefCacheCore(): Promise<void> {
+	await runWarmBatches([
+		[
+			() => getDashboard(),
+			() => getUIMeta(),
+			() =>
+				listTransactions({
+					kind: 'manual',
+					sort: 'date_desc',
+					page: '1',
+					limit: '10'
+				}),
+			() =>
+				listTransactions({
+					kind: 'future',
+					sort: 'date_desc',
+					page: '1',
+					limit: '10'
+				})
+		],
+		[() => listAccounts('active'), () => listAccounts('archived'), () => getBudgetSummary()],
+		[
+			() => listRecurringOperations(),
+			() => listSubscriptions(),
+			() => getSubscriptionsSummary({ upcoming_days: 14 }),
+			() => getDebtsSummary(),
+			() => listDebts({ settled: 'false' }),
+			() => listDebts({ settled: 'true' }),
+			() => listDebtors(),
+			() => listCredits({ status: 'active' }),
+			() => listCredits({ status: 'closed' })
+		],
+		[
+			() => getStatsSummary(),
+			() => getStatsByCategory(),
+			() => getStatsByPeriod(),
+			() => getStatsContext()
+		]
+	]);
+}
+
+async function warmupDebtorDetails(): Promise<void> {
+	const [debtorsRes, activeRes, settledRes] = await Promise.allSettled([
+		listDebtors(),
+		listDebts({ settled: 'false' }),
+		listDebts({ settled: 'true' })
+	]);
+	const ids = new Set<string>();
+	if (debtorsRes.status === 'fulfilled') {
+		for (const row of debtorsRes.value as Debtor[]) ids.add(row.id);
+	}
+	for (const result of [activeRes, settledRes]) {
+		if (result.status !== 'fulfilled') continue;
+		for (const debt of result.value as Debt[]) {
+			if (debt.debtor_id) ids.add(debt.debtor_id);
+		}
+	}
+	const batches: Array<Array<() => Promise<unknown>>> = [];
+	const list = [...ids];
+	for (let i = 0; i < list.length; i += 4) {
+		const slice = list.slice(i, i + 4);
+		batches.push(
+			slice.map(
+				(id) => () => Promise.allSettled([getDebtor(id), getStatsContext({ debtor_id: id })])
+			)
+		);
+	}
+	await runWarmBatches(batches);
+}
+
+async function warmupAccountDetails(): Promise<void> {
+	const [activeRes, archivedRes] = await Promise.allSettled([
+		listAccounts('active'),
+		listAccounts('archived')
+	]);
+	const accounts: Account[] = [];
+	for (const result of [activeRes, archivedRes]) {
+		if (result.status === 'fulfilled') accounts.push(...result.value);
+	}
+	const seen = new Set<string>();
+	const batches: Array<Array<() => Promise<unknown>>> = [];
+	const unique = accounts.filter((row) => {
+		if (seen.has(row.id)) return false;
+		seen.add(row.id);
+		return true;
+	});
+	for (let i = 0; i < unique.length; i += 3) {
+		const slice = unique.slice(i, i + 3);
+		batches.push(
+			slice.map(
+				(row) => () =>
+					Promise.allSettled([
+						getAccount(row.id),
+						getAccountBalance(row.id),
+						getStatsContext({ account_id: row.id })
+					])
+			)
+		);
+	}
+	await runWarmBatches(batches);
+}
+
+async function warmRefCacheHeavy(): Promise<void> {
+	const { warmAllSubcategoriesCache } = await import('$lib/api/client');
+	await warmupCreditDetails();
+	await warmupDebtorDetails();
+	await warmupAccountDetails();
+	await Promise.allSettled([warmupTransactionIndex(), warmAllSubcategoriesCache()]);
+}
+
+async function syncTransactionChangesAfterWarm(): Promise<void> {
+	// Lists are fresh from warm — never replay the full change log here (only align cursor).
+	await alignTransactionChangesCursor();
+}
+
+let deferredHeavyWarmInflight: Promise<void> | null = null;
+
+async function runDeferredHeavyWarm(): Promise<void> {
+	if (deferredHeavyWarmInflight) return deferredHeavyWarmInflight;
+	deferredHeavyWarmInflight = (async () => {
+		await yieldToUi();
+		if (WARM_HEAVY_DEFER_MS > 0) {
+			await new Promise<void>((resolve) => setTimeout(resolve, WARM_HEAVY_DEFER_MS));
+		}
+		setWarmRefCacheActive(true);
+		try {
+			await runWithSuppressedRefCacheNotifications(warmRefCacheHeavy);
+		} finally {
+			setWarmRefCacheActive(false);
+			await yieldToUi();
+			flushRefCacheDisk();
+			lastWarmFinishedAt = Date.now();
+		}
+	})().finally(() => {
+		deferredHeavyWarmInflight = null;
+	});
+	return deferredHeavyWarmInflight;
+}
+
+async function warmRefCacheBody(opts: WarmRefCacheOptions): Promise<void> {
+	debugLogInfo('sync', 'warmRefCache started');
+	const cursorAtStart = transactionChangesCursorSinceId();
+	// Manual sync / cold cache: unblock UI — prefetch entity cards in the background.
+	const deferHeavy = opts.force || cursorAtStart <= 0;
+	setWarmRefCacheActive(true);
+	try {
+		const run = async () => {
+			await runWithSuppressedRefCacheNotifications(warmRefCacheCore);
+			if (opts.force) notifyServerDataChanged();
+			if (deferHeavy) return;
+			if (!opts.force && WARM_HEAVY_DEFER_MS > 0) {
+				await new Promise<void>((resolve) => setTimeout(resolve, WARM_HEAVY_DEFER_MS));
+			}
+			await runWithSuppressedRefCacheNotifications(warmRefCacheHeavy);
+		};
+		if (opts.force) {
+			await runWithForcedRefCacheNetwork(run);
+		} else {
+			await run();
+		}
+		// Section lists + every entity card (credits, debtors, accounts) so offline
+		// navigation never depends on the user having opened that screen online.
+	} finally {
+		setWarmRefCacheActive(false);
+		await yieldToUi();
+		flushRefCacheDisk();
+		lastWarmFinishedAt = Date.now();
+		debugLogInfo('sync', 'warmRefCache finished');
+		const { scheduleWidgetSnapshotPublish } = await import('$lib/widgets/publish');
+		scheduleWidgetSnapshotPublish();
+	}
+	try {
+		await syncTransactionChangesAfterWarm();
+	} catch (err) {
+		debugLogWarn('sync', 'transaction changes sync failed', { error: String(err) });
+	}
+	if (deferHeavy) {
+		void runDeferredHeavyWarm();
+	}
+}
+
+export async function warmRefCache(opts: WarmRefCacheOptions = {}): Promise<void> {
+	if (
+		opts.background &&
+		!opts.force &&
+		lastWarmFinishedAt > 0 &&
+		Date.now() - lastWarmFinishedAt < WARM_BACKGROUND_COOLDOWN_MS
+	) {
+		debugLogInfo('sync', 'warmRefCache skipped (background cooldown)');
+		await alignTransactionChangesCursor();
+		return;
+	}
+	if (warmRefCacheInflight) return warmRefCacheInflight;
+	warmRefCacheInflight = warmRefCacheBody(opts).finally(() => {
+		warmRefCacheInflight = null;
+	});
+	return warmRefCacheInflight;
+}
+
+export function resetWarmRefCacheForTests(): void {
+	warmRefCacheInflight = null;
+	deferredHeavyWarmInflight = null;
+	lastWarmFinishedAt = 0;
+	void import('$lib/widgets/publish').then((m) => m.resetWidgetPublishForTests());
+}

@@ -119,8 +119,17 @@ func TestImportCommitCreatesTransactions(t *testing.T) {
 		} `json:"meta"`
 	}
 	_ = json.NewDecoder(listResp.Body).Decode(&list)
-	if list.Meta.Total < 5 { // 4 import + possibly transfer = 5 legs? transfer creates 2 legs
-		t.Fatalf("expected transactions in DB, total %d", list.Meta.Total)
+	transfers := 0
+	for _, row := range list.Data {
+		if row.Type == "transfer" {
+			transfers++
+		}
+	}
+	if transfers != 1 {
+		t.Fatalf("expected one transfer operation, got %d (total %d)", transfers, list.Meta.Total)
+	}
+	if list.Meta.Total != 4 {
+		t.Fatalf("expected 4 operations (transfer counts once), total %d", list.Meta.Total)
 	}
 }
 
@@ -196,15 +205,33 @@ func TestImportTransferCreatesLinkedRecords(t *testing.T) {
 	defer listResp.Body.Close()
 	var list struct {
 		Data []struct {
-			TransferGroupID *string `json:"transfer_group_id"`
+			TransferGroupID   *string `json:"transfer_group_id"`
+			TransferAccountID *string `json:"transfer_account_id"`
+			TransferIsOut     bool    `json:"transfer_is_out"`
 		} `json:"data"`
+		Meta struct {
+			Total int64 `json:"total"`
+		} `json:"meta"`
 	}
 	_ = json.NewDecoder(listResp.Body).Decode(&list)
-	if len(list.Data) != 2 {
-		t.Fatalf("expected 2 transfer legs, got %d", len(list.Data))
+	if list.Meta.Total != 1 || len(list.Data) != 1 || !list.Data[0].TransferIsOut || list.Data[0].TransferGroupID == nil || list.Data[0].TransferAccountID == nil {
+		t.Fatalf("journal counts one outgoing transfer, got total=%d data=%+v", list.Meta.Total, list.Data)
 	}
-	if list.Data[0].TransferGroupID == nil || *list.Data[0].TransferGroupID != *list.Data[1].TransferGroupID {
-		t.Fatal("transfer legs should share group_id")
+	groupID := *list.Data[0].TransferGroupID
+	destResp, err := env.authedRequest(http.MethodGet, "/api/v1/transactions?account_id="+*list.Data[0].TransferAccountID+"&limit=10", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer destResp.Body.Close()
+	var dest struct {
+		Data []struct {
+			TransferGroupID *string `json:"transfer_group_id"`
+			TransferIsOut   bool    `json:"transfer_is_out"`
+		} `json:"data"`
+	}
+	_ = json.NewDecoder(destResp.Body).Decode(&dest)
+	if len(dest.Data) != 1 || dest.Data[0].TransferIsOut || dest.Data[0].TransferGroupID == nil || *dest.Data[0].TransferGroupID != groupID {
+		t.Fatalf("destination account still has the incoming leg, got %+v", dest.Data)
 	}
 }
 

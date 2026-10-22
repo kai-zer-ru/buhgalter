@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -146,6 +147,20 @@ func DeleteSessionsByUserID(ctx context.Context, db *sql.DB, userID string) erro
 	return queries(db).DeleteSessionsByUserID(ctx, userID)
 }
 
+func DeleteOtherSessions(ctx context.Context, db *sql.DB, userID, keepSessionID string) error {
+	if keepSessionID == "" {
+		return DeleteSessionsByUserID(ctx, db, userID)
+	}
+	return queries(db).DeleteSessionsByUserIDExcept(ctx, sqlcdb.DeleteSessionsByUserIDExceptParams{
+		UserID: userID,
+		ID:     keepSessionID,
+	})
+}
+
+func DeleteAPITokensByUserID(ctx context.Context, db *sql.DB, userID string) error {
+	return queries(db).DeleteAPITokensByUserID(ctx, userID)
+}
+
 func VerifyToken(ctx context.Context, db *sql.DB, rawToken string) bool {
 	if _, err := LookupSession(ctx, db, rawToken); err == nil {
 		return true
@@ -210,12 +225,16 @@ func parseTime(value string) (time.Time, error) {
 }
 
 func apiTokenExpired(expiresAt *string) bool {
-	if expiresAt == nil || *expiresAt == "" {
+	if expiresAt == nil {
 		return false
 	}
-	t, err := parseTime(*expiresAt)
-	if err != nil {
+	raw := strings.TrimSpace(*expiresAt)
+	if raw == "" {
 		return false
+	}
+	t, err := parseTime(raw)
+	if err != nil {
+		return true
 	}
 	return time.Now().UTC().After(t)
 }

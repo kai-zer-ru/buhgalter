@@ -123,6 +123,67 @@ func TestAPITokenExpiredRejected(t *testing.T) {
 	}
 }
 
+func TestAPITokenExpired(t *testing.T) {
+	future := time.Now().UTC().Add(time.Hour).Format(time.RFC3339)
+	past := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
+	empty := ""
+	space := "  "
+	tests := []struct {
+		name string
+		in   *string
+		want bool
+	}{
+		{"nil never expires", nil, false},
+		{"empty never expires", &empty, false},
+		{"whitespace never expires", &space, false},
+		{"future", &future, false},
+		{"past", &past, true},
+		{"garbage", ptr("not-a-date"), true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := apiTokenExpired(tc.in); got != tc.want {
+				t.Fatalf("apiTokenExpired = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestAPITokenMalformedExpiresAtRejected(t *testing.T) {
+	dir := t.TempDir()
+	mgr, err := db.NewManager(filepath.Join(dir, "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mgr.Close()
+	sqlDB := mgr.DB()
+	ctx := context.Background()
+
+	userID, err := CreateUser(ctx, sqlDB, "badexp", "hash", "Bad", false, UserStatusActive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw := "bhg_malformedexp123456"
+	hash := HashToken(raw)
+	_, err = sqlDB.Exec(`
+		INSERT INTO api_tokens (id, user_id, name, token_hash, token_prefix, expires_at)
+		VALUES ('tok-bad', ?, 'bad', ?, 'bhg_malfo', 'not-a-date')`, userID, hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !apiTokenExpired(ptr("not-a-date")) {
+		t.Fatal("malformed expires_at should be treated as expired")
+	}
+	if VerifyToken(ctx, sqlDB, raw) {
+		t.Fatal("token with malformed expires_at should be invalid")
+	}
+	if _, err := LookupAPIToken(ctx, sqlDB, raw); err == nil {
+		t.Fatal("LookupAPIToken should reject malformed expires_at")
+	}
+}
+
+func ptr(s string) *string { return &s }
+
 func TestSessionRefreshExtendsExpiry(t *testing.T) {
 	dir := t.TempDir()
 	mgr, err := db.NewManager(filepath.Join(dir, "test.db"))
@@ -149,4 +210,96 @@ func TestSessionRefreshExtendsExpiry(t *testing.T) {
 		t.Fatal("expected last_activity to be updated")
 	}
 	_ = sqlDB // silence unused in edge builds
+}
+
+func TestDeleteAPITokensByUserID(t *testing.T) {
+	dir := t.TempDir()
+	mgr, err := db.NewManager(filepath.Join(dir, "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mgr.Close()
+	sqlDB := mgr.DB()
+	ctx := context.Background()
+
+	userID, err := CreateUser(ctx, sqlDB, "tokuser", "hash", "Tok", false, UserStatusActive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw := "bhg_banrevoke123456789"
+	hash := HashToken(raw)
+	_, err = sqlDB.Exec(`
+		INSERT INTO api_tokens (id, user_id, name, token_hash, token_prefix)
+		VALUES ('tok-ban', ?, 'test', ?, 'bhg_banr')`, userID, hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !VerifyToken(ctx, sqlDB, raw) {
+		t.Fatal("api token should be valid")
+	}
+	otherID, err := CreateUser(ctx, sqlDB, "othertok", "hash", "Other", false, UserStatusActive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherRaw := "bhg_keepother123456789"
+	otherHash := HashToken(otherRaw)
+	_, err = sqlDB.Exec(`
+		INSERT INTO api_tokens (id, user_id, name, token_hash, token_prefix)
+		VALUES ('tok-keep', ?, 'keep', ?, 'bhg_keep')`, otherID, otherHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := DeleteAPITokensByUserID(ctx, sqlDB, userID); err != nil {
+		t.Fatal(err)
+	}
+	if VerifyToken(ctx, sqlDB, raw) {
+		t.Fatal("api token should be invalid after DeleteAPITokensByUserID")
+	}
+	if !VerifyToken(ctx, sqlDB, otherRaw) {
+		t.Fatal("other user's api token should remain")
+	}
+}
+
+func TestDeleteOtherSessions(t *testing.T) {
+	dir := t.TempDir()
+	mgr, err := db.NewManager(filepath.Join(dir, "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mgr.Close()
+	sqlDB := mgr.DB()
+	ctx := context.Background()
+
+	userID, err := CreateUser(ctx, sqlDB, "sessuser", "hash", "Sess", false, UserStatusActive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keepTok, err := CreateSession(ctx, sqlDB, userID, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherTok, err := CreateSession(ctx, sqlDB, userID, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	keep, err := LookupSession(ctx, sqlDB, keepTok)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := DeleteOtherSessions(ctx, sqlDB, userID, keep.ID); err != nil {
+		t.Fatal(err)
+	}
+	if !VerifyToken(ctx, sqlDB, keepTok) {
+		t.Fatal("kept session should remain")
+	}
+	if VerifyToken(ctx, sqlDB, otherTok) {
+		t.Fatal("other session should be deleted")
+	}
+
+	if err := DeleteOtherSessions(ctx, sqlDB, userID, ""); err != nil {
+		t.Fatal(err)
+	}
+	if VerifyToken(ctx, sqlDB, keepTok) {
+		t.Fatal("empty keep id should delete remaining sessions")
+	}
 }

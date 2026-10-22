@@ -1,0 +1,20 @@
+{
+	"appId": "ru.kai_zer.buhgalter",
+	"appName": "Бухгалтер",
+	"webDir": "ui/build",
+	"android": {
+		"path": ".",
+		"allowMixedContent": true
+	},
+	"server": {
+		"androidScheme": "https"
+	},
+	"plugins": {
+		"CapacitorHttp": {
+			"enabled": true
+		},
+		"SystemBars": {
+			"style": "DEFAULT"
+		}
+	}
+}

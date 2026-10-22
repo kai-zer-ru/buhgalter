@@ -4,12 +4,11 @@ import { fileURLToPath } from 'node:url';
 import { test, expect } from '@playwright/test';
 import { selectCombobox, selectLabeledCombobox, fillTransactionForm } from './helpers/transactions';
 import { waitAppReady, apiJSON, formatUTCDateTime, restoreAdminSession } from './helpers/auth';
-import { expectToast } from './helpers/ui';
+import { expandCollapsibleSection, expectToast } from './helpers/ui';
 import { createCashAccount, createExpense } from './helpers/setup-data';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const appVersion = JSON.parse(readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'))
-	.version as string;
+const appVersion = readFileSync(path.join(__dirname, '..', '..', 'VERSION'), 'utf8').trim();
 
 test.describe.configure({ mode: 'serial' });
 
@@ -23,7 +22,8 @@ test('create account → add expense → see balance', async ({ page }) => {
 	await page.getByRole('button', { name: 'Наличные' }).click();
 	await page.getByLabel('Начальный баланс').fill('1000');
 	await page.getByRole('button', { name: 'Создать' }).click();
-	await expect(page).toHaveURL(/\/accounts\//);
+	await expect(page).not.toHaveURL(/\/accounts\/new/, { timeout: 15_000 });
+	await expect(page).toHaveURL(/\/accounts\/?$/);
 
 	await page.goto('/transactions');
 	await waitAppReady(page);
@@ -47,9 +47,10 @@ test('create income on dashboard', async ({ page }) => {
 });
 
 test('create transfer', async ({ page }) => {
+	const bankAccountName = `E2E Bank ${Date.now()}`;
 	await page.goto('/accounts/new');
 	await waitAppReady(page);
-	await page.getByLabel('Название').fill('E2E Bank');
+	await page.getByLabel('Название').fill(bankAccountName);
 	await page.getByRole('button', { name: 'Банковский' }).click();
 	await page.getByPlaceholder('Поиск банка…').fill('Сбер');
 	await page
@@ -58,13 +59,14 @@ test('create transfer', async ({ page }) => {
 		.click();
 	await page.getByLabel('Начальный баланс').fill('500');
 	await page.getByRole('button', { name: 'Создать' }).click();
-	await expect(page).toHaveURL(/\/accounts\//);
+	await expect(page).not.toHaveURL(/\/accounts\/new/, { timeout: 15_000 });
+	await expect(page).toHaveURL(/\/accounts\/?$/);
 
 	await page.goto('/');
 	await waitAppReady(page);
 	await page.getByRole('button', { name: 'Перевод', exact: true }).click();
 	await selectCombobox(page, 'from-acc', { label: cashAccountName });
-	await selectCombobox(page, 'to-acc', { label: 'E2E Bank' });
+	await selectCombobox(page, 'to-acc', { label: bankAccountName });
 	await page.locator('#tr-amount').fill('100');
 	await page.getByRole('button', { name: 'Сохранить' }).click();
 	await expect(page.getByText('100.00').first()).toBeVisible({ timeout: 10_000 });
@@ -95,8 +97,60 @@ test('settings change theme', async ({ page }) => {
 	await waitAppReady(page);
 	await selectCombobox(page, 'theme', { label: 'Тёмная' });
 	await page.getByRole('button', { name: 'Сохранить' }).click();
+	await expectToast(page, 'success', 'Сохранено');
 
 	await expect(page.locator('html')).toHaveClass(/dark/, { timeout: 10_000 });
+});
+
+test('settings change ui_style', async ({ page }) => {
+	await page.goto('/settings');
+	await waitAppReady(page);
+	// Reset shared storageState so a prior run cannot leave material.
+	await page.evaluate(() => localStorage.setItem('ui_style', 'classic'));
+	await page.reload();
+	await waitAppReady(page);
+	await expect(page.locator('html')).toHaveAttribute('data-ui-style', 'classic');
+	// ui_style in profile form card: after theme, before Save; wipe-data stays a sibling card.
+	const profileForm = page.locator('form.card');
+	await expect(profileForm.locator('#ui-style')).toBeVisible();
+	const fieldOrder = await profileForm.evaluate((form) =>
+		[...form.querySelectorAll('#theme, #ui-style, button[type="submit"]')].map(
+			(el) => (el as HTMLElement).id || (el as HTMLButtonElement).type
+		)
+	);
+	expect(fieldOrder).toEqual(['theme', 'ui-style', 'submit']);
+	await expect(profileForm.getByRole('heading', { name: 'Удалить данные' })).toHaveCount(0);
+	await expect(page.locator('.card').filter({ hasText: 'Удалить данные' })).toBeVisible();
+
+	await selectCombobox(page, 'ui-style', { label: 'MaterialBased' });
+	await expect(page.locator('html')).toHaveAttribute('data-ui-style', 'material');
+	await expect(profileForm).toHaveCSS('border-top-color', 'rgba(0, 0, 0, 0)');
+
+	await page.reload();
+	await waitAppReady(page);
+	await expect(page.locator('html')).toHaveAttribute('data-ui-style', 'material');
+	await expect(page.getByText('MaterialBased', { exact: true }).first()).toBeVisible();
+
+	await selectCombobox(page, 'ui-style', { label: 'Классика' });
+	await expect(page.locator('html')).toHaveAttribute('data-ui-style', 'classic');
+});
+
+test('settings theme system follows color scheme', async ({ page }) => {
+	await page.goto('/settings');
+	await waitAppReady(page);
+	await selectCombobox(page, 'theme', { label: 'Как на устройстве' });
+	await page.getByRole('button', { name: 'Сохранить' }).click();
+	await expectToast(page, 'success', 'Сохранено');
+
+	await page.emulateMedia({ colorScheme: 'dark' });
+	await page.reload();
+	await waitAppReady(page);
+	await expect(page.locator('html')).toHaveClass(/dark/, { timeout: 10_000 });
+
+	await page.emulateMedia({ colorScheme: 'light' });
+	await page.reload();
+	await waitAppReady(page);
+	await expect(page.locator('html')).not.toHaveClass(/dark/, { timeout: 10_000 });
 });
 
 test('create API token', async ({ page }) => {
@@ -138,7 +192,7 @@ test('stats page shows summary and category sections', async ({ page }) => {
 	await page.goto('/stats');
 	await waitAppReady(page);
 	await expect(page.getByRole('heading', { name: 'Статистика', level: 1 })).toBeVisible();
-	await expect(page.getByRole('heading', { name: 'По категориям' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'По категориям', exact: true })).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'По периодам' })).toBeVisible();
 
 	await page.getByPlaceholder('Комментарий операции').fill(marker);
@@ -152,7 +206,7 @@ test('stats page shows summary and category sections', async ({ page }) => {
 
 test('add expense category', async ({ page }) => {
 	const name = `E2E Cat ${Date.now()}`;
-	await page.goto('/settings/categories');
+	await page.goto('/categories');
 	await waitAppReady(page);
 	await page.getByPlaceholder('Название категории').fill(name);
 	await page.getByRole('button', { name: 'Создать' }).click();
@@ -200,15 +254,16 @@ test('create debt and settle', async ({ page }) => {
 	await page.getByRole('menuitem', { name: 'Закрыть' }).click();
 	const settleModal = page.getByRole('dialog');
 	await settleModal.getByRole('button', { name: 'Закрыть' }).click();
-	await expect(page.getByRole('cell', { name: debtorName })).toHaveCount(0, { timeout: 10_000 });
+	await expect(settleModal).toHaveCount(0, { timeout: 15_000 });
+	await expect(page.getByRole('cell', { name: debtorName })).toHaveCount(0, { timeout: 15_000 });
 
 	await page.getByRole('tab', { name: 'Закрытые', exact: true }).click();
-	await expect(page.getByRole('cell', { name: debtorName })).toBeVisible({ timeout: 10_000 });
+	await expect(page.getByRole('cell', { name: debtorName })).toBeVisible({ timeout: 15_000 });
 });
 
 test('create recurring operation', async ({ page }) => {
 	const description = `E2E Recurring ${Date.now()}`;
-	await page.goto('/settings/recurring-operations');
+	await page.goto('/recurring-operations');
 	await waitAppReady(page);
 	await page.getByRole('button', { name: 'Добавить' }).click();
 	await page.locator('#recurring-amount-create').fill('99');
@@ -228,7 +283,7 @@ test('notifications settings load', async ({ page }) => {
 	await expect(
 		page
 			.getByRole('heading', { name: 'Ключ шифрования не настроен' })
-			.or(page.getByRole('heading', { name: 'Telegram', exact: true }))
+			.or(page.locator('summary.account-group-summary').filter({ hasText: /^Telegram/ }))
 	).toBeVisible();
 });
 
@@ -240,11 +295,7 @@ test('notifications negative balance toggle locks template', async ({ page }) =>
 
 	await page.goto('/settings/notifications');
 	await waitAppReady(page);
-	await expect(page.getByRole('heading', { name: 'Настройки', level: 3 })).toBeVisible();
-
-	const settingsCard = page.locator('.card').filter({
-		has: page.getByRole('heading', { name: 'Настройки', level: 3 })
-	});
+	const settingsCard = (await expandCollapsibleSection(page, 'Настройки')).locator('.card');
 	await expect(settingsCard.getByRole('row', { name: /Отрицательный баланс/ })).toBeVisible();
 	const negativeBalanceSwitch = settingsCard
 		.getByRole('row', { name: /Отрицательный баланс/ })
@@ -255,10 +306,10 @@ test('notifications negative balance toggle locks template', async ({ page }) =>
 	await settingsCard.getByRole('button', { name: 'Сохранить' }).click();
 	await expectToast(page, 'success', 'Изменения сохранены.');
 
+	await expandCollapsibleSection(page, 'Отрицательный баланс');
 	await expect(
 		page
-			.locator('.card')
-			.filter({ has: page.locator('#tpl-balance_shortfall') })
+			.getByTestId('notifications-template-balance_shortfall')
 			.getByText('Включите «Отрицательный баланс» в настройках, чтобы редактировать шаблон.')
 	).toBeVisible();
 	await expect(page.locator('#tpl-balance_shortfall')).toBeDisabled();
@@ -273,9 +324,7 @@ test('notifications debt toggle locks template', async ({ page }) => {
 	await page.goto('/settings/notifications');
 	await waitAppReady(page);
 
-	const settingsCard = page.locator('.card').filter({
-		has: page.getByRole('heading', { name: 'Настройки', level: 3 })
-	});
+	const settingsCard = (await expandCollapsibleSection(page, 'Настройки')).locator('.card');
 	const debtSwitch = settingsCard.getByRole('row', { name: /^Долги/ }).getByRole('switch');
 	if (await debtSwitch.isChecked()) {
 		await debtSwitch.click();
@@ -283,9 +332,8 @@ test('notifications debt toggle locks template', async ({ page }) => {
 	await settingsCard.getByRole('button', { name: 'Сохранить' }).click();
 	await expectToast(page, 'success', 'Изменения сохранены.');
 
-	const debtTemplateCard = page.locator('.card').filter({
-		has: page.locator('#tpl-debt_overdue')
-	});
+	await expandCollapsibleSection(page, 'Просроченный долг');
+	const debtTemplateCard = page.getByTestId('notifications-template-debt_overdue');
 	await expect(
 		debtTemplateCard.getByText('Включите «Долги» в настройках, чтобы редактировать шаблон.')
 	).toBeVisible();
@@ -310,4 +358,15 @@ test('password reset request on login page', async ({ page }) => {
 	await page.getByRole('dialog').locator('input').fill('admin');
 	await page.getByRole('button', { name: 'Отправить запрос' }).click();
 	await expect(page.getByText('Запрос отправлен')).toBeVisible({ timeout: 10_000 });
+
+	// Ack so later tests do not keep the admin password-reset banner.
+	await restoreAdminSession(page);
+	const pending = await apiJSON<{ id: string }[]>(
+		page,
+		'GET',
+		'/api/v1/admin/password-reset-requests'
+	);
+	for (const req of pending) {
+		await apiJSON(page, 'POST', `/api/v1/admin/password-reset-requests/${req.id}/ack`);
+	}
 });

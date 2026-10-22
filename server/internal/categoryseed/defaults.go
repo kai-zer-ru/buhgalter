@@ -14,6 +14,7 @@ import (
 const DebtCategoryName = "Долги"
 const CreditCategoryName = "Кредиты"
 const CommissionCategoryName = "Комиссия"
+const SubscriptionsCategoryName = "Подписки"
 
 type defaultCategory struct {
 	Type      string
@@ -25,7 +26,7 @@ type defaultCategory struct {
 }
 
 // DefaultCount is the number of categories seeded for a new user (including system).
-const DefaultCount = 14
+const DefaultCount = 15
 
 var defaultCategories = []defaultCategory{
 	{Type: "expense", Name: "Транспорт", Icon: "transport", Sort: 1, IsPrimary: true},
@@ -39,8 +40,9 @@ var defaultCategories = []defaultCategory{
 }
 
 var systemCategories = []defaultCategory{
-	{Type: "expense", Name: TransferCategoryName, Icon: "transfer", Sort: 9996, IsSystem: true},
-	{Type: "expense", Name: CommissionCategoryName, Icon: "percent", Sort: 9997, IsSystem: true},
+	{Type: "expense", Name: TransferCategoryName, Icon: "transfer", Sort: 9995, IsSystem: true},
+	{Type: "expense", Name: CommissionCategoryName, Icon: "percent", Sort: 9996, IsSystem: true},
+	// «Подписки» — отдельно в EnsureSubscriptionsCategory (не захватываем пользовательскую с тем же именем).
 	{Type: "expense", Name: CreditCategoryName, Icon: "loan", Sort: 9998, IsSystem: true},
 	{Type: "income", Name: CreditCategoryName, Icon: "loan", Sort: 9998, IsSystem: true},
 	{Type: "expense", Name: DebtCategoryName, Icon: "loan", Sort: 9999, IsSystem: true},
@@ -56,7 +58,10 @@ func SeedDefaults(ctx context.Context, db sqlcdb.DBTX, userID string) error {
 			return fmt.Errorf("seed category %q: %w", c.Name, err)
 		}
 	}
-	return EnsureSystemCategories(ctx, db, userID)
+	if err := EnsureSystemCategories(ctx, db, userID); err != nil {
+		return err
+	}
+	return EnsureSubscriptionsCategory(ctx, db, userID)
 }
 
 // EnsureSystemCategories creates or marks system «Долги» categories for a user.
@@ -108,6 +113,9 @@ func BackfillSystemCategories(ctx context.Context, db *sql.DB) error {
 			return err
 		}
 		if err := EnsureSystemCategories(ctx, db, userID); err != nil {
+			return err
+		}
+		if err := EnsureSubscriptionsCategory(ctx, db, userID); err != nil {
 			return err
 		}
 	}
@@ -163,6 +171,20 @@ func CreditIncomeCategoryID(ctx context.Context, db sqlcdb.DBTX, userID string) 
 	}
 	row, err := sqlcdb.New(db).GetCategoryByNameAndType(ctx, sqlcdb.GetCategoryByNameAndTypeParams{
 		UserID: userID, Name: CreditCategoryName, Type: "income",
+	})
+	if err != nil {
+		return "", err
+	}
+	return row.ID, nil
+}
+
+// SubscriptionsCategoryID returns the system expense «Подписки» category id.
+func SubscriptionsCategoryID(ctx context.Context, db sqlcdb.DBTX, userID string) (string, error) {
+	if err := EnsureSubscriptionsCategory(ctx, db, userID); err != nil {
+		return "", err
+	}
+	row, err := sqlcdb.New(db).GetCategoryByNameAndType(ctx, sqlcdb.GetCategoryByNameAndTypeParams{
+		UserID: userID, Name: SubscriptionsCategoryName, Type: "expense",
 	})
 	if err != nil {
 		return "", err

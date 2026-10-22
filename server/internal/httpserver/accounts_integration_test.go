@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"sync"
 	"testing"
 
 	"github.com/kai-zer-ru/buhgalter/internal/bank"
@@ -183,6 +184,57 @@ func TestAccountPrimary(t *testing.T) {
 	}
 	if primaryCount != 1 {
 		t.Fatalf("expected one primary after archive, got %d", primaryCount)
+	}
+}
+
+func TestAccountPrimaryRejectsCreditCard(t *testing.T) {
+	env := setupConfigured(t)
+	seedBanks(t, env)
+	env.login(t, "admin", "secret123")
+
+	cashBody, _ := json.Marshal(map[string]string{
+		"name": "Наличные", "type": "cash", "initial_balance": "0",
+	})
+	cashResp, err := env.authedRequest(http.MethodPost, "/api/v1/accounts", bytes.NewReader(cashBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cashResp.Body.Close()
+	if cashResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create cash status %d", cashResp.StatusCode)
+	}
+
+	ccBody, _ := json.Marshal(map[string]string{
+		"name":            "Карта",
+		"type":            "credit_card",
+		"bank_id":         "tinkoff",
+		"credit_limit":    "100000.00",
+		"initial_balance": "0",
+	})
+	ccResp, err := env.authedRequest(http.MethodPost, "/api/v1/accounts", bytes.NewReader(ccBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ccResp.Body.Close()
+	var cc struct {
+		ID        string `json:"id"`
+		IsPrimary bool   `json:"is_primary"`
+	}
+	_ = json.NewDecoder(ccResp.Body).Decode(&cc)
+	if ccResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create credit card status %d", ccResp.StatusCode)
+	}
+	if cc.IsPrimary {
+		t.Fatal("credit card must not become primary on create")
+	}
+
+	primResp, err := env.authedRequest(http.MethodPost, "/api/v1/accounts/"+cc.ID+"/primary", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer primResp.Body.Close()
+	if primResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("set primary on credit card status %d, want 400", primResp.StatusCode)
 	}
 }
 
@@ -725,6 +777,199 @@ func TestArchiveAccountRequiresTransferTarget(t *testing.T) {
 	}
 }
 
+func countAccountTransferLegs(t *testing.T, env *testEnv, accountID string) int {
+	t.Helper()
+	var n int
+	if err := env.db.QueryRow(`SELECT COUNT(*) FROM transactions WHERE account_id = ? AND type = 'transfer'`, accountID).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+func TestArchiveAccountTransferRollsBackIfStatusFails(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+
+	targetID := createTestAccount(t, env, "Целевой")
+	accID := createTestAccount(t, env, "На архив")
+
+	_, err := env.db.Exec(`
+		CREATE TRIGGER test_fail_archive_status
+		BEFORE UPDATE OF status ON accounts
+		WHEN NEW.status = 'archived'
+		BEGIN
+			SELECT RAISE(ABORT, 'test-fail-status');
+		END;
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	archResp, err := env.authedRequest(
+		http.MethodPost,
+		"/api/v1/accounts/"+accID+"/archive?transfer_to_account_id="+targetID,
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer archResp.Body.Close()
+	if archResp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("archive status %d, want 500", archResp.StatusCode)
+	}
+	if n := countAccountTransferLegs(t, env, accID); n != 0 {
+		t.Fatalf("transfer legs after rollback = %d, want 0", n)
+	}
+
+	getResp, err := env.authedRequest(http.MethodGet, "/api/v1/accounts/"+accID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer getResp.Body.Close()
+	var acc struct {
+		Status string `json:"status"`
+	}
+	_ = json.NewDecoder(getResp.Body).Decode(&acc)
+	if acc.Status != "active" {
+		t.Fatalf("status after failed archive %q, want active", acc.Status)
+	}
+}
+
+func TestArchiveAccountConcurrentTransferOnce(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+
+	targetID := createTestAccount(t, env, "Целевой")
+	accID := createTestAccount(t, env, "На архив")
+
+	var wg sync.WaitGroup
+	codes := make([]int, 2)
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			resp, err := env.authedRequest(
+				http.MethodPost,
+				"/api/v1/accounts/"+accID+"/archive?transfer_to_account_id="+targetID,
+				nil,
+			)
+			if err != nil {
+				t.Errorf("archive request: %v", err)
+				return
+			}
+			defer resp.Body.Close()
+			codes[i] = resp.StatusCode
+		}(i)
+	}
+	wg.Wait()
+
+	ok := 0
+	for _, c := range codes {
+		if c == http.StatusOK {
+			ok++
+		}
+	}
+	if ok == 0 {
+		t.Fatalf("expected at least one 200, got %v", codes)
+	}
+	if n := countAccountTransferLegs(t, env, accID); n != 1 {
+		t.Fatalf("transfer legs = %d, want 1 (codes %v)", n, codes)
+	}
+}
+
+func TestArchiveThenDeleteIgnoresStaleStoredBalance(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+
+	targetID := createTestAccount(t, env, "Целевой")
+	accID := createTestAccount(t, env, "На архив")
+
+	archResp, err := env.authedRequest(
+		http.MethodPost,
+		"/api/v1/accounts/"+accID+"/archive?transfer_to_account_id="+targetID,
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	archResp.Body.Close()
+	if archResp.StatusCode != http.StatusOK {
+		t.Fatalf("archive status %d", archResp.StatusCode)
+	}
+	if n := countAccountTransferLegs(t, env, accID); n != 1 {
+		t.Fatalf("after archive transfer legs = %d, want 1", n)
+	}
+
+	if _, err := env.db.Exec(`UPDATE accounts SET current_balance = 100000 WHERE id = ?`, accID); err != nil {
+		t.Fatal(err)
+	}
+
+	arch2, err := env.authedRequest(
+		http.MethodPost,
+		"/api/v1/accounts/"+accID+"/archive?transfer_to_account_id="+targetID,
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	arch2.Body.Close()
+	if arch2.StatusCode != http.StatusOK {
+		t.Fatalf("second archive status %d", arch2.StatusCode)
+	}
+
+	delResp, err := env.authedRequest(
+		http.MethodDelete,
+		"/api/v1/accounts/"+accID+"?transfer_to_account_id="+targetID,
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	delResp.Body.Close()
+	if delResp.StatusCode != http.StatusNoContent {
+		t.Fatalf("delete status %d, want 204", delResp.StatusCode)
+	}
+	if n := countAccountTransferLegs(t, env, accID); n != 1 {
+		t.Fatalf("transfer legs after stale retry = %d, want 1", n)
+	}
+}
+
+func TestDeleteAccountTransferRollsBackIfStatusFails(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+
+	targetID := createTestAccount(t, env, "Целевой")
+	accID := createTestAccount(t, env, "На удаление")
+
+	_, err := env.db.Exec(`
+		CREATE TRIGGER test_fail_delete_status
+		BEFORE UPDATE OF status ON accounts
+		WHEN NEW.status = 'deleted'
+		BEGIN
+			SELECT RAISE(ABORT, 'test-fail-status');
+		END;
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	delResp, err := env.authedRequest(
+		http.MethodDelete,
+		"/api/v1/accounts/"+accID+"?transfer_to_account_id="+targetID,
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer delResp.Body.Close()
+	if delResp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("delete status %d, want 500", delResp.StatusCode)
+	}
+	if n := countAccountTransferLegs(t, env, accID); n != 0 {
+		t.Fatalf("transfer legs after rollback = %d, want 0", n)
+	}
+}
+
 func TestArchiveAccountTransfersStoredBalance(t *testing.T) {
 	env := setupConfigured(t)
 	env.login(t, "admin", "secret123")
@@ -781,5 +1026,190 @@ func TestArchiveAccountTransfersStoredBalance(t *testing.T) {
 	}
 	if transferList.Data[0].Amount != driftBalance {
 		t.Fatalf("transfer amount %d, want %d", transferList.Data[0].Amount, driftBalance)
+	}
+}
+
+func TestChangeCreditLimitIncreaseAdjustsBalance(t *testing.T) {
+	env := setupConfigured(t)
+	seedBanks(t, env)
+	env.login(t, "admin", "secret123")
+
+	bodyCC, _ := json.Marshal(map[string]string{
+		"name":            "Кредитка лимит up",
+		"type":            "credit_card",
+		"bank_id":         "tinkoff",
+		"credit_limit":    "1000.00",
+		"initial_balance": "700.00",
+	})
+	respCC, err := env.authedRequest(http.MethodPost, "/api/v1/accounts", bytes.NewReader(bodyCC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respCC.Body.Close()
+	if respCC.StatusCode != http.StatusCreated {
+		t.Fatalf("create credit card status %d", respCC.StatusCode)
+	}
+	var created struct {
+		ID string `json:"id"`
+	}
+	_ = json.NewDecoder(respCC.Body).Decode(&created)
+
+	limitBody, _ := json.Marshal(map[string]string{"credit_limit": "1500.00"})
+	resp, err := env.authedRequest(http.MethodPut, "/api/v1/accounts/"+created.ID+"/credit-limit", bytes.NewReader(limitBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("change limit status %d", resp.StatusCode)
+	}
+	var acc struct {
+		CreditLimit    int64 `json:"credit_limit"`
+		InitialBalance int64 `json:"initial_balance"`
+		Balance        int64 `json:"balance"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&acc)
+	if acc.CreditLimit != 150_000 {
+		t.Fatalf("credit_limit %d, want 150000", acc.CreditLimit)
+	}
+	if acc.InitialBalance != 120_000 || acc.Balance != 120_000 {
+		t.Fatalf("initial/balance %d/%d, want 120000/120000", acc.InitialBalance, acc.Balance)
+	}
+	// Debt unchanged: limit − balance = 300.00 both before and after.
+	if acc.CreditLimit-acc.Balance != 30_000 {
+		t.Fatalf("debt %d, want 30000", acc.CreditLimit-acc.Balance)
+	}
+}
+
+func TestChangeCreditLimitDecreaseRequiresFullPayment(t *testing.T) {
+	env := setupConfigured(t)
+	seedBanks(t, env)
+	env.login(t, "admin", "secret123")
+
+	bodyUnpaid, _ := json.Marshal(map[string]string{
+		"name":            "Кредитка лимит down unpaid",
+		"type":            "credit_card",
+		"bank_id":         "tinkoff",
+		"credit_limit":    "1000.00",
+		"initial_balance": "700.00",
+	})
+	respUnpaid, err := env.authedRequest(http.MethodPost, "/api/v1/accounts", bytes.NewReader(bodyUnpaid))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respUnpaid.Body.Close()
+	var unpaid struct {
+		ID string `json:"id"`
+	}
+	_ = json.NewDecoder(respUnpaid.Body).Decode(&unpaid)
+
+	limitBody, _ := json.Marshal(map[string]string{"credit_limit": "800.00"})
+	respDeny, err := env.authedRequest(http.MethodPut, "/api/v1/accounts/"+unpaid.ID+"/credit-limit", bytes.NewReader(limitBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respDeny.Body.Close()
+	if respDeny.StatusCode != http.StatusBadRequest {
+		t.Fatalf("decrease unpaid status %d, want 400", respDeny.StatusCode)
+	}
+	var errBody struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	_ = json.NewDecoder(respDeny.Body).Decode(&errBody)
+	if errBody.Error.Code != "VALIDATION_ERROR" {
+		t.Fatalf("error code %q", errBody.Error.Code)
+	}
+	if errBody.Error.Message != "Уменьшить лимит можно только при полном погашении карты" {
+		t.Fatalf("error message %q", errBody.Error.Message)
+	}
+
+	bodyPaid, _ := json.Marshal(map[string]string{
+		"name":            "Кредитка лимит down paid",
+		"type":            "credit_card",
+		"bank_id":         "tinkoff",
+		"credit_limit":    "1000.00",
+		"initial_balance": "1000.00",
+	})
+	respPaid, err := env.authedRequest(http.MethodPost, "/api/v1/accounts", bytes.NewReader(bodyPaid))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respPaid.Body.Close()
+	var paid struct {
+		ID string `json:"id"`
+	}
+	_ = json.NewDecoder(respPaid.Body).Decode(&paid)
+
+	respOK, err := env.authedRequest(http.MethodPut, "/api/v1/accounts/"+paid.ID+"/credit-limit", bytes.NewReader(limitBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respOK.Body.Close()
+	if respOK.StatusCode != http.StatusOK {
+		t.Fatalf("decrease paid status %d", respOK.StatusCode)
+	}
+	var acc struct {
+		CreditLimit    int64 `json:"credit_limit"`
+		InitialBalance int64 `json:"initial_balance"`
+		Balance        int64 `json:"balance"`
+	}
+	_ = json.NewDecoder(respOK.Body).Decode(&acc)
+	if acc.CreditLimit != 80_000 || acc.Balance != 80_000 || acc.InitialBalance != 80_000 {
+		t.Fatalf("after decrease: %+v", acc)
+	}
+}
+
+func TestUpdateAccountRejectsCreditLimitChange(t *testing.T) {
+	env := setupConfigured(t)
+	seedBanks(t, env)
+	env.login(t, "admin", "secret123")
+
+	bodyCC, _ := json.Marshal(map[string]string{
+		"name":            "Кредитка immutable limit",
+		"type":            "credit_card",
+		"bank_id":         "tinkoff",
+		"credit_limit":    "1000.00",
+		"initial_balance": "1000.00",
+	})
+	respCC, err := env.authedRequest(http.MethodPost, "/api/v1/accounts", bytes.NewReader(bodyCC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respCC.Body.Close()
+	var created struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	}
+	_ = json.NewDecoder(respCC.Body).Decode(&created)
+
+	updateBody, _ := json.Marshal(map[string]string{
+		"name":            created.Name,
+		"bank_id":         "tinkoff",
+		"credit_limit":    "2000.00",
+		"initial_balance": "1000.00",
+	})
+	resp, err := env.authedRequest(http.MethodPut, "/api/v1/accounts/"+created.ID, bytes.NewReader(updateBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("update with new limit status %d, want 400", resp.StatusCode)
+	}
+	var errBody struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&errBody)
+	if errBody.Error.Code != "VALIDATION_ERROR" {
+		t.Fatalf("error code %q", errBody.Error.Code)
+	}
+	if errBody.Error.Message != "Лимит меняется через «Изменить лимит», не в редактировании счёта" {
+		t.Fatalf("error message %q", errBody.Error.Message)
 	}
 }

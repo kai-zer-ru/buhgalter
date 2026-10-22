@@ -31,6 +31,7 @@ type resolver struct {
 	catNames          map[string]string
 	subcategories     map[string]string
 	subByCategoryID   map[string]map[string]category.Subcategory
+	catIsSystem       map[string]bool
 	createdAccounts   map[string]struct{}
 	createdCategories map[string]struct{}
 	accountMap        map[string]AccountMapEntry
@@ -39,6 +40,9 @@ type resolver struct {
 	autoSubcategory   bool
 	banks             []bank.Bank
 	dryRun            bool
+	nativeAccounts    map[string]nativeAccountMeta
+	txIDMap           map[string]string
+	txSubName         map[string]string
 }
 
 func newResolver(
@@ -61,6 +65,7 @@ func newResolver(
 		catNames:          make(map[string]string),
 		subcategories:     make(map[string]string),
 		subByCategoryID:   make(map[string]map[string]category.Subcategory),
+		catIsSystem:       make(map[string]bool),
 		createdAccounts:   make(map[string]struct{}),
 		createdCategories: make(map[string]struct{}),
 		accountMap:        accountMap,
@@ -68,6 +73,9 @@ func newResolver(
 		subcategoryMap:    subcategoryMap,
 		autoSubcategory:   autoSubcategory,
 		dryRun:            dryRun,
+		nativeAccounts:    make(map[string]nativeAccountMeta),
+		txIDMap:           make(map[string]string),
+		txSubName:         make(map[string]string),
 	}
 	accs, err := account.ListByUser(ctx, db, userID, "active")
 	if err != nil {
@@ -86,16 +94,24 @@ func newResolver(
 	if err != nil {
 		return nil, err
 	}
+	allSubs, err := category.ListSubcategoriesByUser(ctx, db, userID)
+	if err != nil {
+		return nil, err
+	}
+	subsByCat := make(map[string][]category.Subcategory, len(cats))
+	for _, sub := range allSubs {
+		subsByCat[sub.CategoryID] = append(subsByCat[sub.CategoryID], sub)
+	}
 	for _, c := range cats {
 		r.categories[catKey(c.Name, c.Type)] = c.ID
 		r.catNames[catKey(c.Name, c.Type)] = c.Name
-		if _, ok := r.subByCategoryID[c.ID]; !ok {
-			r.subByCategoryID[c.ID] = make(map[string]category.Subcategory)
-		}
-		for _, sub := range c.Subcategories {
+		r.catIsSystem[c.ID] = c.IsSystem
+		byCategory := make(map[string]category.Subcategory)
+		for _, sub := range subsByCat[c.ID] {
 			r.subcategories[subKey(c.Name, sub.Name)] = sub.ID
-			r.subByCategoryID[c.ID][strings.ToLower(strings.TrimSpace(sub.Name))] = sub
+			byCategory[strings.ToLower(strings.TrimSpace(sub.Name))] = sub
 		}
+		r.subByCategoryID[c.ID] = byCategory
 	}
 	return r, nil
 }
@@ -147,6 +163,28 @@ func (r *resolver) resolveAccount(ctx context.Context, name string) (string, err
 	return r.createAccountByFileName(ctx, name, key, AccountMapEntry{})
 }
 
+func (r *resolver) mergeNativeAccountEntry(name string, entry AccountMapEntry) AccountMapEntry {
+	meta, ok := r.nativeAccounts[strings.ToLower(name)]
+	if !ok {
+		return entry
+	}
+	if entry.AccountType == "" {
+		entry.AccountType = meta.Type
+	}
+	if entry.BankID == "" && meta.Bank != "" {
+		if id := MatchBank(meta.Bank, r.banks); id != nil {
+			entry.BankID = *id
+		}
+	}
+	if entry.CreditLimit == "" && meta.hasLimit {
+		entry.CreditLimit = FormatCubuxAmount(meta.CreditLimit)
+	}
+	if entry.InitialBalance == "" && meta.InitialBalance != 0 {
+		entry.InitialBalance = FormatCubuxAmount(meta.InitialBalance)
+	}
+	return entry
+}
+
 func resolveCreateType(name string, entry AccountMapEntry, banks []bank.Bank) (string, *string, *int64, error) {
 	switch entry.AccountType {
 	case "cash":
@@ -185,6 +223,7 @@ func resolveCreateType(name string, entry AccountMapEntry, banks []bank.Bank) (s
 }
 
 func (r *resolver) createAccountByFileName(ctx context.Context, name, key string, entry AccountMapEntry) (string, error) {
+	entry = r.mergeNativeAccountEntry(name, entry)
 	if r.dryRun {
 		r.createdAccounts[name] = struct{}{}
 		r.fileAccounts[key] = ""
@@ -194,8 +233,20 @@ func (r *resolver) createAccountByFileName(ctx context.Context, name, key string
 	if err != nil {
 		return "", err
 	}
+	if accType == "credit_card" && (bankID == nil || *bankID == "") && len(r.banks) > 0 {
+		id := r.banks[0].ID
+		bankID = &id
+	}
+	initial := int64(0)
+	if entry.InitialBalance != "" {
+		v, err := money.ParseRubles(entry.InitialBalance)
+		if err != nil {
+			return "", err
+		}
+		initial = v
+	}
 	created, err := account.Create(ctx, r.db, r.userID, account.CreateInput{
-		Name: name, Type: accType, BankID: bankID, InitialBalance: 0,
+		Name: name, Type: accType, BankID: bankID, InitialBalance: initial,
 		CreditLimit: creditLimit,
 	})
 	if err != nil {
@@ -297,6 +348,9 @@ func (r *resolver) resolveSubcategoryInput(
 				id := entry.SubcategoryID
 				return &id, nil, nil
 			case "create", "":
+				if r.catIsSystem[*catID] {
+					return nil, nil, nil
+				}
 				name := subName
 				return nil, &name, nil
 			default:
@@ -314,6 +368,9 @@ func (r *resolver) resolveSubcategoryInput(
 	if id, ok := r.subcategories[subKey(catName, subName)]; ok {
 		return &id, nil, nil
 	}
+	if r.catIsSystem[*catID] {
+		return nil, nil, nil
+	}
 	name := subName
 	return nil, &name, nil
 }
@@ -325,33 +382,74 @@ func loadExistingDedup(ctx context.Context, db *sql.DB, userID string) ([]string
 	}
 	hashes := make([]string, 0, len(rows))
 	for _, row := range rows {
-		hashes = append(hashes, DedupHash(row.TxDate, row.Amount, row.AccountName, row.CategoryName, row.Type))
+		timeStr := strings.TrimSpace(row.TxTime)
+		if timeStr == "" {
+			timeStr = "12:00:00"
+		} else if len(timeStr) == 5 {
+			timeStr += ":00"
+		}
+		cat := row.CategoryName
+		if row.Type == "transfer" {
+			cat = "Перевод"
+		}
+		hashes = append(hashes, DedupKey{
+			Date: row.TxDate, Time: timeStr, Amount: row.Amount,
+			Account: row.AccountName, DestAccount: row.TransferAccountName,
+			Category: cat, Subcategory: row.SubcategoryName, Type: row.Type,
+			Description: row.Description, Merchant: row.MerchantName, Tags: row.TagNames,
+			Commission: row.Commission,
+		}.Hash())
 	}
 	return hashes, nil
 }
 
-func dedupHashForMapped(m MappedRow) (string, string, int64, string, string, error) {
+func mappedDedupKey(m MappedRow) (DedupKey, error) {
 	date := m.Date.Format("2006-01-02")
+	timeStr := "12:00:00"
+	if m.HasTime {
+		timeStr = m.Date.Format("15:04:05")
+	}
+	tags := strings.Join(m.Tags, ",")
 	switch m.CubuxType {
 	case "Расходы":
-		return DedupHash(date, m.DebitAmount, m.DebitAccount, m.Category, "expense"),
-			date, m.DebitAmount, m.DebitAccount, "expense", nil
+		return DedupKey{
+			Date: date, Time: timeStr, Amount: m.DebitAmount, Account: m.DebitAccount,
+			Category: m.Category, Subcategory: m.Subcategory, Type: "expense",
+			Description: m.Description, Merchant: m.Merchant, Tags: tags,
+		}, nil
 	case "Доходы":
-		return DedupHash(date, m.CreditAmount, m.CreditAccount, m.Category, "income"),
-			date, m.CreditAmount, m.CreditAccount, "income", nil
+		return DedupKey{
+			Date: date, Time: timeStr, Amount: m.CreditAmount, Account: m.CreditAccount,
+			Category: m.Category, Subcategory: m.Subcategory, Type: "income",
+			Description: m.Description, Merchant: m.Merchant, Tags: tags,
+		}, nil
 	case "Перевод":
-		return DedupHash(date, m.DebitAmount, m.DebitAccount, "Перевод", "transfer"),
-			date, m.DebitAmount, m.DebitAccount, "transfer", nil
+		return DedupKey{
+			Date: date, Time: timeStr, Amount: m.DebitAmount, Account: m.DebitAccount,
+			DestAccount: m.CreditAccount, Category: "Перевод", Type: "transfer",
+			Description: m.Description, Merchant: m.Merchant, Tags: tags, Commission: m.Commission,
+		}, nil
 	default:
-		return "", "", 0, "", "", fmt.Errorf("неизвестный тип")
+		return DedupKey{}, fmt.Errorf("неизвестный тип")
 	}
+}
+
+func dedupHashForMapped(m MappedRow) (string, string, int64, string, string, error) {
+	key, err := mappedDedupKey(m)
+	if err != nil {
+		return "", "", 0, "", "", err
+	}
+	return key.Hash(), key.Date, key.Amount, key.Account, key.Type, nil
 }
 
 // Preview runs dry-run import analysis.
 func Preview(ctx context.Context, db *sql.DB, userID string, filename string, data []byte, opts ImportOptions) (Report, error) {
-	table, err := ParseFile(filename, data)
+	table, native, err := ParseImportFile(filename, data)
 	if err != nil {
 		return Report{}, err
+	}
+	if native != nil && opts.Preset != "custom" {
+		opts.Preset = "buhgalter"
 	}
 	mapped, mapErrs := MapTable(table, opts)
 	report, acctSet, _ := PreviewFromMapped(mapped)
@@ -364,12 +462,14 @@ func Preview(ctx context.Context, db *sql.DB, userID string, filename string, da
 	if err != nil {
 		return Report{}, err
 	}
+	res.loadNativeMeta(native)
+	_ = res.ensureNativeAccounts(ctx)
 
 	existing, err := loadExistingDedup(ctx, db, userID)
 	if err != nil {
 		return Report{}, err
 	}
-	dedup := NewDedupSet(existing)
+	dedup := NewDedupBag(existing)
 
 	for _, m := range mapped {
 		if hasMapErr(mapErrs, m.RowNum) {
@@ -379,18 +479,21 @@ func Preview(ctx context.Context, db *sql.DB, userID string, filename string, da
 		if err != nil {
 			continue
 		}
-		if opts.Deduplicate && dedup.Has(hash) {
+		if opts.Deduplicate && dedup.SkipExisting(hash) {
 			report.SkippedDuplicates++
 			continue
 		}
-		dedup.Add(hash)
 
 		if err := res.touchRow(ctx, m); err != nil {
 			report.Errors = append(report.Errors, RowError{Row: m.RowNum, Message: err.Error()})
 		}
 	}
 
-	report.AccountMappings = buildAccountMappings(acctSet, res.accounts, res.acctNames, res.banks)
+	report.AccountMappings = enrichAccountMappings(
+		buildAccountMappings(acctSet, res.accounts, res.acctNames, res.banks),
+		res.nativeAccounts,
+		res.banks,
+	)
 	report.AccountsToCreate = accountsToCreateFromMap(report.AccountMappings)
 	fileCats := collectFileCategories(mapped)
 	report.CategoryMappings = buildCategoryMappings(fileCats, res.categories, res.catNames)
@@ -489,15 +592,28 @@ func importWithProgress(
 	if !opts.Confirm {
 		return Report{}, fmt.Errorf("confirm=true required")
 	}
+	claimed := false
 	if opts.IdempotencyKey != "" {
-		if cached, err := getIdempotency(ctx, db, userID, opts.IdempotencyKey); err == nil && cached != nil {
+		cached, err := claimOrAwaitIdempotency(ctx, db, userID, opts.IdempotencyKey)
+		if err != nil && strings.Contains(err.Error(), "idempotency key released") {
+			cached, err = claimOrAwaitIdempotency(ctx, db, userID, opts.IdempotencyKey)
+		}
+		if err != nil {
+			return Report{}, err
+		}
+		if cached != nil {
 			return *cached, nil
 		}
+		claimed = true
 	}
 
-	table, err := ParseFile(filename, data)
+	table, native, err := ParseImportFile(filename, data)
 	if err != nil {
+		releaseIdempotencyClaim(ctx, db, userID, opts.IdempotencyKey, claimed)
 		return Report{}, err
+	}
+	if native != nil && opts.Preset != "custom" {
+		opts.Preset = "buhgalter"
 	}
 	mapped, mapErrs := MapTable(table, opts)
 	report, _, _ := PreviewFromMapped(mapped)
@@ -505,6 +621,8 @@ func importWithProgress(
 	report.TotalRows = len(table.Rows)
 	report.ProcessedRows = 0
 	report.ValidRows = 0
+	report.TransferRows = 0
+	report.ListRows = 0
 	report.SkippedDuplicates = 0
 	report.Preview = nil
 
@@ -512,14 +630,25 @@ func importWithProgress(
 		ctx, db, userID, opts.AccountMap, opts.CategoryMap, opts.SubcategoryMap, opts.AutoSubcategory, false,
 	)
 	if err != nil {
+		releaseIdempotencyClaim(ctx, db, userID, opts.IdempotencyKey, claimed)
+		return Report{}, err
+	}
+	res.loadNativeMeta(native)
+	if err := res.ensureNativeAccounts(ctx); err != nil {
+		releaseIdempotencyClaim(ctx, db, userID, opts.IdempotencyKey, claimed)
+		return Report{}, err
+	}
+	if err := res.importNativeCatalogs(ctx, native); err != nil {
+		releaseIdempotencyClaim(ctx, db, userID, opts.IdempotencyKey, claimed)
 		return Report{}, err
 	}
 
 	existing, err := loadExistingDedup(ctx, db, userID)
 	if err != nil {
+		releaseIdempotencyClaim(ctx, db, userID, opts.IdempotencyKey, claimed)
 		return Report{}, err
 	}
-	dedup := NewDedupSet(existing)
+	dedup := NewDedupBag(existing)
 
 	lastProgressAt := time.Time{}
 	emitProgress := func(force bool) {
@@ -563,33 +692,54 @@ func importWithProgress(
 			emitProgress(false)
 			continue
 		}
-		if opts.Deduplicate && dedup.Has(hash) {
+		if opts.Deduplicate && dedup.SkipExisting(hash) {
 			report.SkippedDuplicates++
 			report.Logs = append(report.Logs, fmt.Sprintf("row %d: skipped duplicate", m.RowNum))
 			report.ProcessedRows++
 			emitProgress(false)
 			continue
 		}
-		dedup.Add(hash)
 
-		if err := importRowWithRetry(ctx, db, userID, res, m); err != nil {
+		createdID, err := importRowWithRetry(ctx, db, userID, res, m)
+		if err != nil {
 			report.Errors = append(report.Errors, RowError{Row: m.RowNum, Message: err.Error()})
 			report.Logs = append(report.Logs, fmt.Sprintf("row %d: error: %s", m.RowNum, err.Error()))
 			report.ProcessedRows++
 			emitProgress(false)
 			continue
 		}
+		rememberImportedTx(res, m, createdID)
 		report.ValidRows++
+		if m.CubuxType == "Перевод" {
+			report.TransferRows++
+		}
+		report.ListRows = report.ValidRows
 		report.CreatedTransactions++
 		report.ProcessedRows++
 		report.Logs = append(report.Logs, fmt.Sprintf("row %d: imported", m.RowNum))
 		emitProgress(false)
 	}
 
+	importNativeEntities(ctx, db, res, native, &report)
+	if err := res.finalizeNativeAccounts(ctx); err != nil {
+		if claimed {
+			if report.ValidRows > 0 {
+				_ = saveIdempotency(ctx, db, userID, opts.IdempotencyKey, report)
+			} else {
+				releaseIdempotencyClaim(ctx, db, userID, opts.IdempotencyKey, true)
+			}
+		}
+		return Report{}, err
+	}
+
 	for n := range res.createdAccounts {
 		report.AccountsToCreate = appendUnique(report.AccountsToCreate, n)
 	}
-	report.AccountMappings = buildAccountMappings(collectFileAccounts(mapped), res.accounts, res.acctNames, res.banks)
+	report.AccountMappings = enrichAccountMappings(
+		buildAccountMappings(collectFileAccounts(mapped), res.accounts, res.acctNames, res.banks),
+		res.nativeAccounts,
+		res.banks,
+	)
 	fileCats := collectFileCategories(mapped)
 	report.CategoryMappings = buildCategoryMappings(fileCats, res.categories, res.catNames)
 	catMap := make(map[string]CategoryMapEntry, len(report.CategoryMappings))
@@ -609,12 +759,14 @@ func importWithProgress(
 		report.CategoriesToCreate = appendUnique(report.CategoriesToCreate, n)
 	}
 
-	if opts.IdempotencyKey != "" {
-		_ = saveIdempotency(ctx, db, userID, opts.IdempotencyKey, report)
+	if claimed {
+		if err := saveIdempotency(ctx, db, userID, opts.IdempotencyKey, report); err != nil {
+			return Report{}, err
+		}
 	}
 	if report.ValidRows > 0 {
 		_ = accountbalance.Refresh(ctx, db, userID)
-		balancehooks.NotifyAllRefresh(ctx, db, userID)
+		balancehooks.NotifyAllRefresh(ctx, db, userID, time.Time{})
 	}
 	emitProgress(true)
 	warnNonRUB(mapped)
@@ -624,7 +776,7 @@ func importWithProgress(
 func cloneReportForProgress(src Report) Report {
 	out := src
 	out.Errors = append([]RowError(nil), src.Errors...)
-	out.Logs = append([]string(nil), src.Logs...)
+	out.Logs = nil
 	out.Preview = nil
 	out.AccountMappings = nil
 	out.SubcategoryMappings = nil
@@ -634,11 +786,21 @@ func cloneReportForProgress(src Report) Report {
 	return out
 }
 
-func importRowWithRetry(ctx context.Context, db *sql.DB, userID string, res *resolver, m MappedRow) error {
+func importRowWithRetry(ctx context.Context, db *sql.DB, userID string, res *resolver, m MappedRow) (string, error) {
+	var id string
+	err := withSQLiteBusyRetry(ctx, func() error {
+		var err error
+		id, err = importRow(ctx, db, userID, res, m)
+		return err
+	})
+	return id, err
+}
+
+func withSQLiteBusyRetry(ctx context.Context, fn func() error) error {
 	const maxBusyRetries = 7
 	backoff := 40 * time.Millisecond
 	for attempt := 0; ; attempt++ {
-		err := importRow(ctx, db, userID, res, m)
+		err := fn()
 		if err == nil {
 			return nil
 		}
@@ -666,74 +828,111 @@ func isSQLiteBusyError(err error) bool {
 	return strings.Contains(msg, "sqlite_busy") || strings.Contains(msg, "database is locked")
 }
 
-func importRow(ctx context.Context, db *sql.DB, userID string, res *resolver, m MappedRow) error {
-	txDate := time.Date(m.Date.Year(), m.Date.Month(), m.Date.Day(), 12, 0, 0, 0, time.UTC)
+func rememberImportedTx(res *resolver, m MappedRow, id string) {
+	if id == "" {
+		return
+	}
+	if exportID := strings.TrimSpace(m.ExportID); exportID != "" {
+		res.txIDMap[exportID] = id
+	}
+	if sub := strings.TrimSpace(m.Subscription); sub != "" {
+		res.txSubName[id] = sub
+	}
+}
+
+func outgoingTransferTxID(tr transaction.Transfer) string {
+	for _, leg := range tr.Legs {
+		if leg.Type == "transfer" && leg.TransferIsOut {
+			return leg.ID
+		}
+	}
+	if len(tr.Legs) > 0 {
+		return tr.Legs[0].ID
+	}
+	return ""
+}
+
+func importRow(ctx context.Context, db *sql.DB, userID string, res *resolver, m MappedRow) (string, error) {
+	txDate := importTxDate(m)
 	desc := strPtr(m.Description)
+	merchantName := strPtr(m.Merchant)
 
 	switch m.CubuxType {
 	case "Расходы":
 		accID, err := res.resolveAccount(ctx, m.DebitAccount)
 		if err != nil {
-			return err
+			return "", err
 		}
 		catID, err := res.resolveCategory(ctx, m.Category, "expense")
 		if err != nil {
-			return err
+			return "", err
 		}
 		subID, subName, err := res.resolveSubcategoryInput(ctx, catID, m.Category, "expense", m.Subcategory)
 		if err != nil {
-			return err
+			return "", err
 		}
 		created, err := transaction.Create(ctx, db, userID, transaction.CreateInput{
 			AccountID: accID, Type: "expense", Amount: m.DebitAmount,
 			Description: desc, CategoryID: catID, SubcategoryID: subID, SubcategoryName: subName,
+			MerchantName: merchantName, TagNames: m.Tags,
 			TransactionDate: txDate,
 		})
 		if err != nil {
-			return err
+			return "", err
 		}
 		res.rememberCreatedSubcategory(catID, m.Category, subName, created.SubcategoryID)
-		return nil
+		return created.ID, nil
 	case "Доходы":
 		accID, err := res.resolveAccount(ctx, m.CreditAccount)
 		if err != nil {
-			return err
+			return "", err
 		}
 		catID, err := res.resolveCategory(ctx, m.Category, "income")
 		if err != nil {
-			return err
+			return "", err
 		}
 		subID, subName, err := res.resolveSubcategoryInput(ctx, catID, m.Category, "income", m.Subcategory)
 		if err != nil {
-			return err
+			return "", err
 		}
 		created, err := transaction.Create(ctx, db, userID, transaction.CreateInput{
 			AccountID: accID, Type: "income", Amount: m.CreditAmount,
 			Description: desc, CategoryID: catID, SubcategoryID: subID, SubcategoryName: subName,
+			MerchantName: merchantName, TagNames: m.Tags,
 			TransactionDate: txDate,
 		})
 		if err != nil {
-			return err
+			return "", err
 		}
 		res.rememberCreatedSubcategory(catID, m.Category, subName, created.SubcategoryID)
-		return nil
+		return created.ID, nil
 	case "Перевод":
 		fromID, err := res.resolveAccount(ctx, m.DebitAccount)
 		if err != nil {
-			return err
+			return "", err
 		}
 		toID, err := res.resolveAccount(ctx, m.CreditAccount)
 		if err != nil {
-			return err
+			return "", err
 		}
-		_, err = transaction.CreateTransfer(ctx, db, userID, transaction.TransferInput{
+		tr, err := transaction.CreateTransfer(ctx, db, userID, transaction.TransferInput{
 			FromAccountID: fromID, ToAccountID: toID, Amount: m.DebitAmount,
-			Description: desc, TransactionDate: txDate,
+			Commission: m.Commission, Description: desc, TransactionDate: txDate,
 		})
-		return err
+		if err != nil {
+			return "", err
+		}
+		return outgoingTransferTxID(tr), nil
 	default:
-		return fmt.Errorf("неизвестный тип")
+		return "", fmt.Errorf("неизвестный тип")
 	}
+}
+
+func importTxDate(m MappedRow) time.Time {
+	if m.HasTime {
+		return m.Date.UTC()
+	}
+	return time.Date(m.Date.Year(), m.Date.Month(), m.Date.Day(), 12, 0, 0, 0, time.UTC)
 }
 
 func (r *resolver) rememberCreatedSubcategory(catID *string, catName string, subName *string, subID *string) {
@@ -763,6 +962,9 @@ func getIdempotency(ctx context.Context, db *sql.DB, userID, key string) (*Repor
 	if err != nil {
 		return nil, err
 	}
+	if strings.TrimSpace(raw) == "" {
+		return nil, errIdempotencyInFlight
+	}
 	var rep Report
 	if err := json.Unmarshal([]byte(raw), &rep); err != nil {
 		return nil, err
@@ -770,16 +972,79 @@ func getIdempotency(ctx context.Context, db *sql.DB, userID, key string) (*Repor
 	return &rep, nil
 }
 
+var errIdempotencyInFlight = errors.New("import idempotency in flight")
+
+func claimOrAwaitIdempotency(ctx context.Context, db *sql.DB, userID, key string) (*Report, error) {
+	now := time.Now().UTC().Format(time.RFC3339)
+	err := sqlcdb.New(db).InsertImportIdempotency(ctx, sqlcdb.InsertImportIdempotencyParams{
+		ID: uuid.NewString(), UserID: userID, IdempotencyKey: key,
+		ResponseJson: "", CreatedAt: now,
+	})
+	if err == nil {
+		return nil, nil
+	}
+	if !isUniqueConstraintError(err) {
+		return nil, err
+	}
+	return awaitIdempotencyReport(ctx, db, userID, key)
+}
+
+func awaitIdempotencyReport(ctx context.Context, db *sql.DB, userID, key string) (*Report, error) {
+	ticker := time.NewTicker(25 * time.Millisecond)
+	defer ticker.Stop()
+	deadline := time.Now().Add(2 * time.Minute)
+	for {
+		rep, err := getIdempotency(ctx, db, userID, key)
+		if err == nil && rep != nil {
+			return rep, nil
+		}
+		if err == nil && rep == nil {
+			return nil, fmt.Errorf("import idempotency key released")
+		}
+		if err != nil && !errors.Is(err, errIdempotencyInFlight) {
+			return nil, err
+		}
+		if time.Now().After(deadline) {
+			return nil, fmt.Errorf("import idempotency wait timeout")
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-ticker.C:
+		}
+	}
+}
+
 func saveIdempotency(ctx context.Context, db *sql.DB, userID, key string, report Report) error {
 	data, err := json.Marshal(report)
 	if err != nil {
 		return err
 	}
-	now := time.Now().UTC().Format(time.RFC3339)
-	return sqlcdb.New(db).InsertImportIdempotency(ctx, sqlcdb.InsertImportIdempotencyParams{
-		ID: uuid.NewString(), UserID: userID, IdempotencyKey: key,
-		ResponseJson: string(data), CreatedAt: now,
+	return withSQLiteBusyRetry(ctx, func() error {
+		return sqlcdb.New(db).UpdateImportIdempotency(ctx, sqlcdb.UpdateImportIdempotencyParams{
+			ResponseJson: string(data), UserID: userID, IdempotencyKey: key,
+		})
 	})
+}
+
+func deleteIdempotency(ctx context.Context, db *sql.DB, userID, key string) error {
+	return sqlcdb.New(db).DeleteImportIdempotency(ctx, sqlcdb.DeleteImportIdempotencyParams{
+		UserID: userID, IdempotencyKey: key,
+	})
+}
+
+func releaseIdempotencyClaim(ctx context.Context, db *sql.DB, userID, key string, claimed bool) {
+	if !claimed || key == "" {
+		return
+	}
+	_ = deleteIdempotency(ctx, db, userID, key)
+}
+
+func isUniqueConstraintError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "UNIQUE constraint failed")
 }
 
 func hasMapErr(errs []RowError, row int) bool {

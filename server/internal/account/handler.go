@@ -139,13 +139,18 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_ACCOUNT_INVALID_CREDIT_LIMIT")
 		return
 	}
+	autoTopup, err := parseAutoTopupInput(req)
+	if err != nil {
+		_ = writeAccountError(w, r, err)
+		return
+	}
 	acc, err := Update(r.Context(), h.Store.DB(), info.User.ID, id, UpdateInput{
 		Name:             strings.TrimSpace(req.Name),
 		BankID:           req.BankID,
 		InitialBalance:   balancePtr,
 		CreditLimit:      creditLimit,
 		PaymentAccountID: req.PaymentAccountID,
-		AutoTopup:        parseAutoTopupInput(req),
+		AutoTopup:        autoTopup,
 	})
 	if errors.Is(err, ErrNotFound) {
 		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
@@ -158,6 +163,45 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		AfterAutoTopupConfigured(r.Context(), h.Store.DB(), info.User.ID, id)
 	}
 	_ = h.Audit.Log("account.update", info.User.ID, info.User.Login, clientIP(r), map[string]any{"account_id": id})
+	writeJSON(w, http.StatusOK, acc)
+}
+
+func (h *Handler) ChangeCreditLimit(w http.ResponseWriter, r *http.Request) {
+	info, ok := auth.FromContext(r.Context())
+	if !ok {
+		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
+		return
+	}
+	id := chi.URLParam(r, "id")
+	var req struct {
+		CreditLimit string `json:"credit_limit"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_INVALID_JSON")
+		return
+	}
+	limit, err := money.ParseRubles(req.CreditLimit)
+	if err != nil {
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_ACCOUNT_INVALID_CREDIT_LIMIT")
+		return
+	}
+	acc, err := ChangeCreditLimit(r.Context(), h.Store.DB(), info.User.ID, id, limit)
+	if errors.Is(err, ErrNotFound) {
+		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
+		return
+	}
+	if errors.Is(err, ErrCreditCardLimitDecreaseNotFullyPaid) {
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_CARD_LIMIT_DECREASE_NOT_FULLY_PAID")
+		return
+	}
+	if errors.Is(err, ErrInvalidCreditLimit) {
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_ACCOUNT_INVALID_CREDIT_LIMIT")
+		return
+	}
+	if err := writeAccountError(w, r, err); err != nil {
+		return
+	}
+	_ = h.Audit.Log("account.change_credit_limit", info.User.ID, info.User.Login, clientIP(r), map[string]any{"account_id": id})
 	writeJSON(w, http.StatusOK, acc)
 }
 
@@ -183,6 +227,10 @@ func (h *Handler) SetPrimary(w http.ResponseWriter, r *http.Request) {
 	}
 	if errors.Is(err, ErrArchived) {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_ACCOUNT_PRIMARY_ARCHIVED")
+		return
+	}
+	if errors.Is(err, ErrCreditCardPrimary) {
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_ACCOUNT_PRIMARY_CREDIT_CARD")
 		return
 	}
 	if err != nil {
@@ -234,10 +282,16 @@ func writeAccountError(w http.ResponseWriter, r *http.Request, err error) error 
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_ACCOUNT_BANK_FORBIDDEN")
 	case errors.Is(err, ErrBankNotFound):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_ACCOUNT_BANK_NOT_FOUND")
-	case errors.Is(err, ErrCreditLimitRequired), errors.Is(err, ErrInvalidCreditLimit):
+	case errors.Is(err, ErrCreditLimitRequired):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_ACCOUNT_CREDIT_LIMIT_REQUIRED")
+	case errors.Is(err, ErrInvalidCreditLimit):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_ACCOUNT_INVALID_CREDIT_LIMIT")
 	case errors.Is(err, ErrCreditLimitForbidden):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_ACCOUNT_CREDIT_LIMIT_FORBIDDEN")
+	case errors.Is(err, ErrCreditLimitImmutable):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_ACCOUNT_CREDIT_LIMIT_IMMUTABLE")
+	case errors.Is(err, ErrCreditCardLimitDecreaseNotFullyPaid):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_CARD_LIMIT_DECREASE_NOT_FULLY_PAID")
 	case errors.Is(err, ErrInvalidPaymentAccount):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_ACCOUNT_INVALID_PAYMENT_ACCOUNT")
 	case errors.Is(err, ErrAutoTopupNotAllowed):
@@ -267,25 +321,29 @@ func parseOptionalRubles(s *string) (*int64, error) {
 	return &v, nil
 }
 
-func parseAutoTopupInput(req updateRequest) *AutoTopupInput {
+func parseAutoTopupInput(req updateRequest) (*AutoTopupInput, error) {
 	if req.AutoTopupEnabled == nil {
-		return nil
+		return nil, nil
 	}
 	in := AutoTopupInput{Enabled: *req.AutoTopupEnabled}
 	if req.AutoTopupThreshold != nil {
-		if v, err := money.ParseRubles(*req.AutoTopupThreshold); err == nil {
-			in.Threshold = v
+		v, err := money.ParseRubles(*req.AutoTopupThreshold)
+		if err != nil {
+			return nil, ErrInvalidAutoTopupThreshold
 		}
+		in.Threshold = v
 	}
 	if req.AutoTopupTarget != nil {
-		if v, err := money.ParseRubles(*req.AutoTopupTarget); err == nil {
-			in.Target = v
+		v, err := money.ParseRubles(*req.AutoTopupTarget)
+		if err != nil {
+			return nil, ErrInvalidAutoTopupTarget
 		}
+		in.Target = v
 	}
 	if req.AutoTopupSourceAccountID != nil {
 		in.SourceAccountID = strings.TrimSpace(*req.AutoTopupSourceAccountID)
 	}
-	return &in
+	return &in, nil
 }
 
 func clientIP(r *http.Request) string {

@@ -7,10 +7,16 @@
 		deleteTransaction,
 		getBudgetSummary,
 		getDashboard,
+		listAccounts,
+		listCategories,
+		listMerchants,
+		listTags,
+		listTransactionTemplates,
 		listTransactions,
 		type BudgetSummaryItem,
 		type Dashboard,
-		type Transaction
+		type Transaction,
+		type TransactionTemplate
 	} from '$lib/api/client';
 	import AccountIcon from '$lib/components/AccountIcon.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
@@ -22,17 +28,39 @@
 	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
 	import { confirm } from '$lib/confirm';
 	import { dedupeTransferLegs } from '$lib/transaction-display';
+	import {
+		hasTemplatePrefillWarnings,
+		templateToRepeatFrom
+	} from '$lib/transaction-template-prefill';
+	import { saveTransactionAsTemplate } from '$lib/save-transaction-template';
+	import { fromCents } from '$lib/money';
 	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
 	import { tr } from '$lib/i18n';
 	import { budgetStatusLine } from '$lib/budget-display';
 	import { resolveAutoTopupSourceName } from '$lib/accounts/auto-topup';
 	import { groupAccountsByType, accountGroupKind } from '$lib/accounts/group-by-type';
+	import { aggregateForecastLabelFlags, forecastWithLabelKey } from '$lib/forecast-label';
 	import AccountGroupPanel from '$lib/components/AccountGroupPanel.svelte';
 	import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
+	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
+	import PullToRefresh from '$lib/components/PullToRefresh.svelte';
+	import { refCacheReady, refCacheUpdate, readRefCache } from '$lib/ref-cache';
+	import { refCacheUpdateMatches } from '$lib/ref-cache-watch';
+	import { reportPageLoadFailure } from '$lib/page-load';
+	import { assignIfChanged } from '$lib/state-utils';
+	import { featureFlags, isFeatureEnabled } from '$lib/features';
 
-	let dash = $state<Dashboard | null>(null);
-	let loading = $state(true);
+	const DASHBOARD_PATH = '/api/v1/dashboard';
+	const PAST_TX_PATH = '/api/v1/transactions?kind=manual&limit=10&page=1&sort=date_desc';
+	const PLANNED_TX_PATH = '/api/v1/transactions?kind=future&limit=10&page=1&sort=date_desc';
+	const BUDGET_PATH = '/api/v1/budgets/summary';
+	const TEMPLATES_PATH = '/api/v1/transaction-templates';
+	const HOME_TEMPLATE_LIMIT = 12;
+
+	let dash = $state<Dashboard | null>(readRefCache<Dashboard>(DASHBOARD_PATH));
+	let loading = $state(!refCacheReady(DASHBOARD_PATH));
+	let loadError = $state<string | null>(null);
 	let txOpen = $state(false);
 	let receiptOpen = $state(false);
 	let transferOpen = $state(false);
@@ -43,15 +71,23 @@
 	let newTxType = $state<'expense' | 'income'>('expense');
 
 	const txLimit = 10;
-	let pastTx = $state<Transaction[]>([]);
-	let pastTotal = $state(0);
-	let pastLoading = $state(false);
-	let plannedTx = $state<Transaction[]>([]);
-	let plannedTotal = $state(0);
-	let plannedLoading = $state(false);
-	let budgetItems = $state<BudgetSummaryItem[]>([]);
+	const pastCached = readRefCache<{ data: Transaction[]; meta: { total: number } }>(PAST_TX_PATH);
+	let pastTx = $state<Transaction[]>(pastCached?.data ?? []);
+	let pastTotal = $state(pastCached?.meta.total ?? 0);
+	let pastLoading = $state(!refCacheReady(PAST_TX_PATH));
+	const plannedCached = readRefCache<{ data: Transaction[]; meta: { total: number } }>(
+		PLANNED_TX_PATH
+	);
+	let plannedTx = $state<Transaction[]>(plannedCached?.data ?? []);
+	let plannedTotal = $state(plannedCached?.meta.total ?? 0);
+	let plannedLoading = $state(!refCacheReady(PLANNED_TX_PATH));
+	const budgetCached = readRefCache<{ items: BudgetSummaryItem[] }>(BUDGET_PATH);
+	let budgetItems = $state<BudgetSummaryItem[]>(budgetCached?.items ?? []);
+	const templatesCached = readRefCache<TransactionTemplate[]>(TEMPLATES_PATH);
+	let templates = $state<TransactionTemplate[]>(templatesCached ?? []);
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
+	const homeTemplates = $derived(templates.slice(0, HOME_TEMPLATE_LIMIT));
 	const categoryBudgets = $derived(
 		[...budgetItems].filter((b) => b.scope !== 'all_expense').sort((a, b) => b.percent - a.percent)
 	);
@@ -66,6 +102,12 @@
 	const currency = $derived($user?.currency ?? 'RUB');
 	const accountGroups = $derived(dash ? groupAccountsByType(dash.accounts) : []);
 	const recentTotal = $derived(pastTotal + plannedTotal);
+	const ownForecastFlags = $derived(
+		dash ? aggregateForecastLabelFlags(dash.accounts.filter((a) => a.type !== 'credit_card')) : {}
+	);
+	const creditForecastFlags = $derived(
+		dash ? aggregateForecastLabelFlags(dash.accounts.filter((a) => a.type === 'credit_card')) : {}
+	);
 
 	function budgetProgressClass(status: string) {
 		if (status === 'exceeded') return 'bg-red-500';
@@ -77,19 +119,42 @@
 		void loadAll();
 	});
 
-	async function loadDashboard() {
-		loading = true;
+	$effect(() => {
+		const update = $refCacheUpdate;
+		if (!update || !dash) return;
+		if (refCacheUpdateMatches(update, DASHBOARD_PATH)) {
+			void loadDashboard({ silent: true });
+		}
+		if (refCacheUpdateMatches(update, PAST_TX_PATH)) {
+			void loadPastTx({ silent: true });
+		}
+		if (refCacheUpdateMatches(update, PLANNED_TX_PATH)) {
+			void loadPlannedTx({ silent: true });
+		}
+		if (refCacheUpdateMatches(update, BUDGET_PATH)) {
+			void loadBudget({ silent: true });
+		}
+		if (refCacheUpdateMatches(update, TEMPLATES_PATH)) {
+			void loadTemplates({ silent: true });
+		}
+	});
+
+	async function loadDashboard(opts: { silent?: boolean } = {}) {
+		if (!opts.silent && !refCacheReady(DASHBOARD_PATH)) loading = true;
 		try {
-			dash = await getDashboard();
+			const next = await getDashboard();
+			dash = opts.silent ? assignIfChanged(dash, next) : next;
+			loadError = null;
 		} catch (err) {
-			toast.fromError(err);
+			const msg = reportPageLoadFailure(err, { silent: opts.silent, hasData: !!dash });
+			if (msg) loadError = msg;
 		} finally {
 			loading = false;
 		}
 	}
 
-	async function loadPastTx() {
-		pastLoading = true;
+	async function loadPastTx(opts: { silent?: boolean } = {}) {
+		if (!opts.silent && !refCacheReady(PAST_TX_PATH)) pastLoading = true;
 		try {
 			const res = await listTransactions({
 				kind: 'manual',
@@ -97,17 +162,18 @@
 				page: '1',
 				limit: String(txLimit)
 			});
-			pastTx = res.data;
-			pastTotal = res.meta.total;
+			const next = res.data;
+			pastTx = opts.silent ? assignIfChanged(pastTx, next) : next;
+			pastTotal = opts.silent ? assignIfChanged(pastTotal, res.meta.total) : res.meta.total;
 		} catch (err) {
-			toast.fromError(err);
+			reportPageLoadFailure(err, { silent: opts.silent, hasData: pastTx.length > 0 });
 		} finally {
 			pastLoading = false;
 		}
 	}
 
-	async function loadPlannedTx() {
-		plannedLoading = true;
+	async function loadPlannedTx(opts: { silent?: boolean } = {}) {
+		if (!opts.silent && !refCacheReady(PLANNED_TX_PATH)) plannedLoading = true;
 		try {
 			const res = await listTransactions({
 				kind: 'future',
@@ -115,27 +181,75 @@
 				page: '1',
 				limit: String(txLimit)
 			});
-			plannedTx = res.data;
-			plannedTotal = res.meta.total;
+			const next = res.data;
+			plannedTx = opts.silent ? assignIfChanged(plannedTx, next) : next;
+			plannedTotal = opts.silent ? assignIfChanged(plannedTotal, res.meta.total) : res.meta.total;
 		} catch (err) {
-			toast.fromError(err);
+			reportPageLoadFailure(err, { silent: opts.silent, hasData: plannedTx.length > 0 });
 		} finally {
 			plannedLoading = false;
 		}
 	}
 
-	async function loadBudget() {
+	async function loadBudget(opts: { silent?: boolean } = {}) {
+		if (!isFeatureEnabled('budget')) {
+			budgetItems = [];
+			return;
+		}
 		try {
 			const res = await getBudgetSummary();
-			budgetItems = res.items;
+			const next = res.items;
+			budgetItems = opts.silent ? assignIfChanged(budgetItems, next) : next;
 		} catch {
-			budgetItems = [];
+			if (!opts.silent) budgetItems = [];
 		}
 	}
 
-	async function loadAll() {
-		await loadDashboard();
-		await Promise.all([loadPastTx(), loadPlannedTx(), loadBudget()]);
+	async function loadTemplates(opts: { silent?: boolean } = {}) {
+		if (!isFeatureEnabled('transaction_templates')) {
+			templates = [];
+			return;
+		}
+		try {
+			const next = await listTransactionTemplates();
+			templates = opts.silent ? assignIfChanged(templates, next) : next;
+		} catch {
+			if (!opts.silent) templates = [];
+		}
+	}
+
+	async function loadAll(opts: { silent?: boolean } = {}) {
+		await loadDashboard(opts);
+		await Promise.all([
+			loadPastTx(opts),
+			loadPlannedTx(opts),
+			loadBudget(opts),
+			loadTemplates(opts)
+		]);
+	}
+
+	async function applyTemplate(tpl: TransactionTemplate) {
+		try {
+			const [accounts, expenseCats, incomeCats, merchants, tags] = await Promise.all([
+				listAccounts('active'),
+				listCategories('expense'),
+				listCategories('income'),
+				listMerchants(),
+				listTags()
+			]);
+			const { tx, warnings } = templateToRepeatFrom(tpl, {
+				activeAccountIds: new Set(accounts.map((a) => a.id)),
+				categoryIds: new Set([...expenseCats, ...incomeCats].map((c) => c.id)),
+				merchantIds: new Set(merchants.map((m) => m.id)),
+				tagIds: new Set(tags.map((t) => t.id))
+			});
+			if (hasTemplatePrefillWarnings(warnings)) {
+				toast($_('templates.prefill.missing'));
+			}
+			openRepeat(tx);
+		} catch (err) {
+			toast.fromError(err);
+		}
 	}
 
 	function openNewTransaction(type: 'expense' | 'income') {
@@ -180,6 +294,11 @@
 		txOpen = true;
 	}
 
+	async function saveAsTemplate(tx: Transaction) {
+		const ok = await saveTransactionAsTemplate(tx);
+		if (ok) await loadTemplates({ silent: true });
+	}
+
 	async function removeTx(tx: Transaction) {
 		const msg =
 			tx.type === 'transfer' && tx.transfer_group_id
@@ -190,7 +309,8 @@
 		try {
 			await deleteTransaction(tx.id);
 			toast($_('common.deleted'));
-			await loadAll();
+			// Reload dashboard balances + lists (local filter left balances stale).
+			await loadAll({ silent: true });
 		} catch (err) {
 			toast.fromError(err);
 		}
@@ -201,73 +321,86 @@
 	<title>{$_('dashboard.title')} — {$_('app.title')}</title>
 </svelte:head>
 
+{#snippet budgetCategoryList()}
+	<ul class="space-y-1.5">
+		{#each categoryBudgets as item (item.id)}
+			<li>
+				<div class="flex items-center justify-between gap-2 text-xs">
+					<span class="truncate">{item.name}</span>
+					<span class="shrink-0 tabular-nums" style:color="var(--text-muted)">
+						{item.percent}%
+					</span>
+				</div>
+				<div
+					class="mt-0.5 h-1 overflow-hidden rounded-full"
+					style:background-color="color-mix(in srgb, var(--border) 80%, transparent)"
+				>
+					<div
+						class="h-full {budgetProgressClass(item.status)}"
+						style="width: {Math.min(item.percent, 100)}%"
+					></div>
+				</div>
+			</li>
+		{/each}
+	</ul>
+{/snippet}
+
 {#snippet budgetWidget()}
 	{#if budgetItems.length > 0}
-		<div class="card space-y-2">
-			<div class="flex items-center justify-between gap-2">
-				<p class="text-sm" style:color="var(--text-muted)">{$_('budget.widget.title')}</p>
-				<a href={resolve('/budget')} class="text-xs hover:underline" style:color="var(--primary)">
+		<CollapsibleSection label={$_('budget.widget.title')}>
+			<div class="card space-y-3">
+				{#if allExpenseBudget}
+					<div>
+						<div class="flex items-baseline justify-between gap-2">
+							<span class="truncate text-sm font-medium">{allExpenseBudget.name}</span>
+							<span class="shrink-0 text-xs" style:color="var(--text-muted)">
+								<MoneyDisplay value={allExpenseBudget.spent_display} class="" />
+								/
+								<MoneyDisplay value={allExpenseBudget.planned_display} class="" />
+							</span>
+						</div>
+						<div
+							class="mt-1.5 h-1.5 overflow-hidden rounded-full"
+							style:background-color="color-mix(in srgb, var(--border) 80%, transparent)"
+						>
+							<div
+								class="h-full transition-all {budgetProgressClass(allExpenseBudget.status)}"
+								style="width: {Math.min(allExpenseBudget.percent, 100)}%"
+							></div>
+						</div>
+						<p class="mt-1 text-xs tabular-nums" style:color="var(--text-muted)">
+							{budgetStatusLine(allExpenseBudget)}
+						</p>
+					</div>
+				{/if}
+				{#if categoryBudgets.length > 0}
+					{#if allExpenseBudget}
+						<details class="border-t pt-2" style:border-color="var(--border)">
+							<summary
+								class="cursor-pointer list-none text-xs font-medium select-none [&::-webkit-details-marker]:hidden"
+								style:color="var(--text-muted)"
+							>
+								{tr('budget.widget.categories', {
+									values: { count: String(categoryBudgets.length) }
+								})}
+							</summary>
+							<div class="mt-2">
+								{@render budgetCategoryList()}
+							</div>
+						</details>
+					{:else}
+						{@render budgetCategoryList()}
+					{/if}
+				{/if}
+				<a
+					href={resolve('/budget')}
+					class="inline-block text-xs hover:underline"
+					style:color="var(--primary)"
+				>
 					{$_('budget.widget.more')} →
 				</a>
 			</div>
-			{#if allExpenseBudget}
-				<div>
-					<div class="flex items-baseline justify-between gap-2">
-						<span class="truncate text-sm font-medium">{allExpenseBudget.name}</span>
-						<span class="shrink-0 text-xs" style:color="var(--text-muted)">
-							<MoneyDisplay value={allExpenseBudget.spent_display} class="" />
-							/
-							<MoneyDisplay value={allExpenseBudget.planned_display} class="" />
-						</span>
-					</div>
-					<div
-						class="mt-1.5 h-1.5 overflow-hidden rounded-full"
-						style:background-color="color-mix(in srgb, var(--border) 80%, transparent)"
-					>
-						<div
-							class="h-full transition-all {budgetProgressClass(allExpenseBudget.status)}"
-							style="width: {Math.min(allExpenseBudget.percent, 100)}%"
-						></div>
-					</div>
-					<p class="mt-1 text-xs tabular-nums" style:color="var(--text-muted)">
-						{budgetStatusLine(allExpenseBudget)}
-					</p>
-				</div>
-			{/if}
-			{#if categoryBudgets.length > 0}
-				<details class={allExpenseBudget ? 'border-t pt-2' : ''} style:border-color="var(--border)">
-					<summary
-						class="cursor-pointer list-none text-xs font-medium select-none [&::-webkit-details-marker]:hidden"
-						style:color="var(--text-muted)"
-					>
-						{tr('budget.widget.categories', {
-							values: { count: String(categoryBudgets.length) }
-						})}
-					</summary>
-					<ul class="mt-2 space-y-1.5">
-						{#each categoryBudgets as item (item.id)}
-							<li>
-								<div class="flex items-center justify-between gap-2 text-xs">
-									<span class="truncate">{item.name}</span>
-									<span class="shrink-0 tabular-nums" style:color="var(--text-muted)">
-										{item.percent}%
-									</span>
-								</div>
-								<div
-									class="mt-0.5 h-1 overflow-hidden rounded-full"
-									style:background-color="color-mix(in srgb, var(--border) 80%, transparent)"
-								>
-									<div
-										class="h-full {budgetProgressClass(item.status)}"
-										style="width: {Math.min(item.percent, 100)}%"
-									></div>
-								</div>
-							</li>
-						{/each}
-					</ul>
-				</details>
-			{/if}
-		</div>
+		</CollapsibleSection>
 	{/if}
 {/snippet}
 
@@ -375,199 +508,375 @@
 					<p class="text-sm" style:color="var(--text-muted)">{$_('dashboard.total')}</p>
 					<p class="text-3xl font-semibold tabular-nums">
 						<MoneyDisplay cents={dash.total_balance} {currency} class="" />
+<PullToRefresh onRefresh={() => loadAll({ silent: true })}>
+	<div class="space-y-6">
+		{#if (dash?.inbox_count ?? 0) > 0}
+			<div class="card flex flex-wrap items-center justify-between gap-3">
+				<div>
+					<p class="font-medium">{$_('inbox.title')}</p>
+					<p class="text-sm" style:color="var(--text-muted)">
+						{$_('inbox.homeHint', { values: { count: String(dash?.inbox_count ?? 0) } })}
 					</p>
-					{#if dash.total_forecast !== dash.total_balance}
-						<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
-							{$_('dashboard.withPlans')}:
-							<MoneyDisplay cents={dash.total_forecast} {currency} class="" />
-						</p>
-					{/if}
 				</div>
-				<a href={resolve('/debts')} class="card flex h-full flex-col transition hover:opacity-90">
-					<p class="text-sm" style:color="var(--text-muted)">{$_('debts.title')}</p>
-					<div class="mt-1 space-y-1">
-						{#if hasDebts}
-							{#if dash.debts_summary.i_owe > 0}
-								<p class="tabular-nums" style:color="var(--danger)">
-									{$_('debts.summary.iOwe')}:
-									<MoneyDisplay cents={dash.debts_summary.i_owe} {currency} class="" />
-								</p>
-							{/if}
-							{#if dash.debts_summary.owed_to_me > 0}
-								<p class="tabular-nums" style:color="var(--primary)">
-									{$_('debts.summary.owedToMe')}:
-									<MoneyDisplay cents={dash.debts_summary.owed_to_me} {currency} class="" />
-								</p>
-							{/if}
-						{:else}
-							<p class="text-3xl font-semibold tabular-nums" style:color="var(--primary)">
-								{$_('debts.summary.none')}
-							</p>
-						{/if}
-					</div>
+				<a href={resolve('/transactions/inbox')} class="btn-primary shrink-0">
+					{$_('inbox.open')}
 				</a>
 			</div>
 		{/if}
-
-		{@render budgetWidget()}
-
-		{#if dash.accounts.length === 0}
-			<EmptyStateCard message={$_('dashboard.accountsEmpty')} />
-		{:else}
-			<div class="space-y-6">
-				{#each accountGroups as group (accountGroupKind(group))}
-					{@const kind = accountGroupKind(group)}
-					<AccountGroupPanel {kind} count={group.length}>
-						<div class="grid gap-4 sm:grid-cols-2">
-							{#each group as acc (acc.id)}
-								<a
-									href={resolve(`/accounts/${acc.id}`)}
-									class="card flex items-center gap-4 transition hover:opacity-90"
-								>
-									<AccountIcon type={acc.type} bankIcon={acc.bank_icon} size={48} />
-									<div class="min-w-0 flex-1">
-										<p class="truncate font-medium">{acc.name}</p>
-										<p class="mt-1 text-xl font-semibold tabular-nums">
-											<MoneyDisplay value={acc.balance_display} {currency} class="" />
-										</p>
-										{#if acc.credit_limit_display}
-											<p class="mt-0.5 text-sm tabular-nums" style:color="var(--text-muted)">
-												{$_('accounts.field.creditLimit')}:
-												<MoneyDisplay value={acc.credit_limit_display} {currency} class="" />
-											</p>
-										{/if}
-										{#if acc.type === 'bank'}
-											{@const autoTopupSource = resolveAutoTopupSourceName(acc, dash.accounts)}
-											{#if autoTopupSource}
-												<p class="mt-1 text-sm" style:color="var(--text-muted)">
-													{$_('accounts.autoTopup.status', { values: { source: autoTopupSource } })}
-												</p>
-											{/if}
-										{/if}
-										{#if acc.forecast_balance !== acc.balance}
-											<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
-												{$_('dashboard.withPlans')}:
-												<MoneyDisplay value={acc.forecast_display} {currency} class="" />
-											</p>
-										{/if}
-									</div>
-								</a>
-							{/each}
-						</div>
-					</AccountGroupPanel>
-				{/each}
+		<div class="flex flex-wrap items-center justify-between gap-3">
+			<h1 class="text-2xl font-semibold">{$_('dashboard.title')}</h1>
+			<div class="flex shrink-0 items-center gap-1">
+				{#if dash?.accounts.length === 0}
+					<!-- eslint-disable svelte/no-navigation-without-resolve -- query after resolved path -->
+					<a
+						href={`${resolve('/accounts/new')}?from=${encodeURIComponent('/')}`}
+						class="btn-primary hidden sm:inline-flex min-h-11 items-center"
+					>
+						{$_('accounts.new')}
+					</a>
+					<!-- eslint-enable svelte/no-navigation-without-resolve -->
+				{/if}
+				<NewTransactionButtons
+					onincome={() => openNewTransaction('income')}
+					onexpense={() => openNewTransaction('expense')}
+					ontransfer={() => {
+						editTransfer = null;
+						repeatTransfer = null;
+						transferOpen = true;
+					}}
+				/>
 			</div>
-		{/if}
+		</div>
 
-		<CollapsibleSection
-			label={$_('dashboard.recent')}
-			count={!pastLoading && !plannedLoading ? recentTotal : null}
-		>
-			{#if pastLoading && plannedLoading && pastTotal === 0 && plannedTotal === 0}
-				<p style:color="var(--text-muted)">{$_('common.loading')}</p>
-			{:else}
-				<div class="card overflow-hidden">
-					{#if !pastLoading && !plannedLoading && pastTotal === 0 && plannedTotal === 0}
-						<p
-							class="flex min-h-[7rem] items-center justify-center px-4 py-6 text-center text-sm"
-							style:color="var(--text-muted)"
+		<PageLoadGate {loading} error={loadError} onretry={() => void loadAll()} inline>
+			{#if dash}
+				{#if hasCreditCards}
+					<div class="space-y-4">
+						<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+							<div class="card">
+								<p class="text-sm" style:color="var(--text-muted)">{$_('dashboard.total')}</p>
+								<p class="text-3xl font-semibold tabular-nums">
+									<MoneyDisplay cents={dash.total_balance} {currency} class="" />
+								</p>
+								{#if dash.total_forecast !== dash.total_balance}
+									<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
+										{$_(forecastWithLabelKey(ownForecastFlags))}:
+										<MoneyDisplay cents={dash.total_forecast} {currency} class="" />
+									</p>
+								{:else}
+									<p class="mt-1 text-sm" style:color="var(--text-muted)">
+										{$_('dashboard.noUpcomingSubscriptionsOrRecurring')}
+									</p>
+								{/if}
+							</div>
+							<div class="card">
+								<p class="text-sm" style:color="var(--text-muted)">{$_('dashboard.creditCards')}</p>
+								<p class="text-3xl font-semibold tabular-nums">
+									<MoneyDisplay
+										value={dash.credit_cards_summary!.total_balance_display}
+										{currency}
+										class=""
+									/>
+								</p>
+								<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
+									{$_('accounts.field.creditLimit')}:
+									<MoneyDisplay
+										value={dash.credit_cards_summary!.total_limit_display}
+										{currency}
+										class=""
+									/>
+								</p>
+								{#if dash.credit_cards_summary!.total_forecast !== dash.credit_cards_summary!.total_balance}
+									<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
+										{$_(forecastWithLabelKey(creditForecastFlags))}:
+										<MoneyDisplay
+											value={dash.credit_cards_summary!.total_forecast_display}
+											{currency}
+											class=""
+										/>
+									</p>
+								{/if}
+							</div>
+						</div>
+						<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+							<a href={resolve('/debts')} class="card block self-start transition hover:opacity-90">
+								<p class="text-sm" style:color="var(--text-muted)">{$_('debts.title')}</p>
+								<div class="mt-1 space-y-1">
+									{#if hasDebts}
+										{#if dash.debts_summary.i_owe > 0}
+											<p class="tabular-nums" style:color="var(--danger)">
+												{$_('debts.summary.iOwe')}:
+												<MoneyDisplay cents={dash.debts_summary.i_owe} {currency} class="" />
+											</p>
+										{/if}
+										{#if dash.debts_summary.owed_to_me > 0}
+											<p class="tabular-nums" style:color="var(--primary)">
+												{$_('debts.summary.owedToMe')}:
+												<MoneyDisplay cents={dash.debts_summary.owed_to_me} {currency} class="" />
+											</p>
+										{/if}
+									{:else}
+										<p class="text-3xl font-semibold tabular-nums" style:color="var(--primary)">
+											{$_('debts.summary.none')}
+										</p>
+									{/if}
+								</div>
+							</a>
+						</div>
+					</div>
+				{:else}
+					<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:items-stretch">
+						<div class="card flex h-full flex-col">
+							<p class="text-sm" style:color="var(--text-muted)">{$_('dashboard.total')}</p>
+							<p class="text-3xl font-semibold tabular-nums">
+								<MoneyDisplay cents={dash.total_balance} {currency} class="" />
+							</p>
+							{#if dash.total_forecast !== dash.total_balance}
+								<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
+									{$_(forecastWithLabelKey(ownForecastFlags))}:
+									<MoneyDisplay cents={dash.total_forecast} {currency} class="" />
+								</p>
+							{:else}
+								<p class="mt-1 text-sm" style:color="var(--text-muted)">
+									{$_('dashboard.noUpcomingSubscriptionsOrRecurring')}
+								</p>
+							{/if}
+						</div>
+						<a
+							href={resolve('/debts')}
+							class="card flex h-full flex-col transition hover:opacity-90"
 						>
-							{$_('transactions.empty')}
-						</p>
-					{:else}
-						{#if plannedTotal > 0 || plannedLoading}
-							<details
-								class:border-b={pastTotal > 0 || pastLoading}
-								style:border-color="var(--border)"
-							>
-								<summary
-									class="cursor-pointer list-none px-4 py-3 text-sm font-medium select-none [&::-webkit-details-marker]:hidden"
-								>
-									{$_('dashboard.group.planned')}
-									<span class="ml-1 font-normal tabular-nums" style:color="var(--text-muted)">
-										({plannedTotal})
-									</span>
-								</summary>
-								{#if plannedLoading}
-									<p class="px-4 pb-4 text-sm" style:color="var(--text-muted)">
-										{$_('common.loading')}
-									</p>
+							<p class="text-sm" style:color="var(--text-muted)">{$_('debts.title')}</p>
+							<div class="mt-1 space-y-1">
+								{#if hasDebts}
+									{#if dash.debts_summary.i_owe > 0}
+										<p class="tabular-nums" style:color="var(--danger)">
+											{$_('debts.summary.iOwe')}:
+											<MoneyDisplay cents={dash.debts_summary.i_owe} {currency} class="" />
+										</p>
+									{/if}
+									{#if dash.debts_summary.owed_to_me > 0}
+										<p class="tabular-nums" style:color="var(--primary)">
+											{$_('debts.summary.owedToMe')}:
+											<MoneyDisplay cents={dash.debts_summary.owed_to_me} {currency} class="" />
+										</p>
+									{/if}
 								{:else}
-									<div class="md:overflow-x-auto">
-										<TransactionList
-											transactions={plannedVisible}
-											siblings={txSiblings}
-											{tz}
-											emptyMessage={$_('transactions.empty')}
-											showDescription
-											showAmountSign
-											showEdit
-											showDelete
-											onmakeRecurring={(tx) =>
-												void goto(
-													resolve(
-														`/settings/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`
-													)
-												)}
-											onrepeat={openRepeat}
-											onedit={openEdit}
-											ondelete={(tx) => void removeTx(tx)}
-										/>
-									</div>
-								{/if}
-							</details>
-						{/if}
-
-						{#if pastTotal > 0 || pastLoading}
-							<details open>
-								<summary
-									class="cursor-pointer list-none px-4 py-3 text-sm font-medium select-none [&::-webkit-details-marker]:hidden"
-								>
-									{$_('dashboard.group.past')}
-									<span class="ml-1 font-normal tabular-nums" style:color="var(--text-muted)">
-										({pastTotal})
-									</span>
-								</summary>
-								{#if pastLoading}
-									<p class="px-4 pb-4 text-sm" style:color="var(--text-muted)">
-										{$_('common.loading')}
+									<p class="text-3xl font-semibold tabular-nums" style:color="var(--primary)">
+										{$_('debts.summary.none')}
 									</p>
-								{:else}
-									<div class="md:overflow-x-auto">
-										<TransactionList
-											transactions={pastVisible}
-											siblings={txSiblings}
-											{tz}
-											emptyMessage={$_('transactions.empty')}
-											showDescription
-											showAmountSign
-											showEdit
-											showDelete
-											onmakeRecurring={(tx) =>
-												void goto(
-													resolve(
-														`/settings/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`
-													)
-												)}
-											onrepeat={openRepeat}
-											onedit={openEdit}
-											ondelete={(tx) => void removeTx(tx)}
-										/>
-									</div>
 								{/if}
-							</details>
-						{/if}
-					{/if}
-					<div class="border-t px-4 py-3" style:border-color="var(--border)">
-						<a href={resolve('/transactions')} class="btn-ghost">
-							{$_('transactions.all')}
+							</div>
 						</a>
 					</div>
+				{/if}
+
+				<div class="space-y-6">
+					{#if isFeatureEnabled('transaction_templates', $featureFlags) && homeTemplates.length > 0}
+						<CollapsibleSection label={$_('templates.widget.title')} count={homeTemplates.length}>
+							<div class="card space-y-0.5 px-3 py-2">
+								{#each homeTemplates as tpl (tpl.id)}
+									<button
+										type="button"
+										class="flex w-full items-center justify-between gap-2 rounded-lg px-1 py-1.5 text-left text-sm hover:bg-[color-mix(in_srgb,var(--primary)_8%,transparent)]"
+										onclick={() => void applyTemplate(tpl)}
+									>
+										<span class="min-w-0 truncate">{tpl.name}</span>
+										<span class="shrink-0 tabular-nums" style:color="var(--text-muted)">
+											{#if tpl.amount != null}
+												{fromCents(tpl.amount)}
+											{:else}
+												—
+											{/if}
+										</span>
+									</button>
+								{/each}
+							</div>
+						</CollapsibleSection>
+					{/if}
+
+					{#if isFeatureEnabled('budget', $featureFlags)}
+						{@render budgetWidget()}
+					{/if}
+
+					{#if dash.accounts.length === 0}
+						<EmptyStateCard message={$_('dashboard.accountsEmpty')} />
+					{:else}
+						{#each accountGroups as group (accountGroupKind(group))}
+							{@const kind = accountGroupKind(group)}
+							<AccountGroupPanel {kind} count={group.length}>
+								<div class="grid gap-4 sm:grid-cols-2">
+									{#each group as acc (acc.id)}
+										<a
+											href={resolve(`/accounts/${acc.id}`)}
+											class="card flex items-center gap-4 transition hover:opacity-90"
+										>
+											<AccountIcon type={acc.type} bankIcon={acc.bank_icon} size={48} />
+											<div class="min-w-0 flex-1">
+												<p class="truncate font-medium">{acc.name}</p>
+												<p class="mt-1 text-xl font-semibold tabular-nums">
+													<MoneyDisplay value={acc.balance_display} {currency} class="" />
+												</p>
+												{#if acc.credit_limit_display}
+													<p class="mt-0.5 text-sm tabular-nums" style:color="var(--text-muted)">
+														{$_('accounts.field.creditLimit')}:
+														<MoneyDisplay value={acc.credit_limit_display} {currency} class="" />
+													</p>
+												{/if}
+												{#if acc.type === 'bank' && isFeatureEnabled('balance_maintenance', $featureFlags)}
+													{@const autoTopupSource = resolveAutoTopupSourceName(acc, dash.accounts)}
+													{#if autoTopupSource}
+														<p class="mt-1 text-sm" style:color="var(--text-muted)">
+															{$_('accounts.autoTopup.status', {
+																values: { source: autoTopupSource }
+															})}
+														</p>
+													{/if}
+												{/if}
+												{#if acc.forecast_balance !== acc.balance}
+													<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
+														{$_(forecastWithLabelKey(acc))}:
+														<MoneyDisplay value={acc.forecast_display} {currency} class="" />
+													</p>
+												{/if}
+											</div>
+										</a>
+									{/each}
+								</div>
+							</AccountGroupPanel>
+						{/each}
+					{/if}
 				</div>
+
+				<CollapsibleSection
+					label={$_('dashboard.recent')}
+					count={!pastLoading && !plannedLoading ? recentTotal : null}
+				>
+					{#if pastLoading && plannedLoading && pastTotal === 0 && plannedTotal === 0}
+						<p style:color="var(--text-muted)">{$_('common.loading')}</p>
+					{:else}
+						<div class="card overflow-hidden">
+							{#if !pastLoading && !plannedLoading && pastTotal === 0 && plannedTotal === 0}
+								<p
+									class="flex min-h-[7rem] items-center justify-center px-4 py-6 text-center text-sm"
+									style:color="var(--text-muted)"
+								>
+									{$_('transactions.empty')}
+								</p>
+							{:else}
+								{#if plannedTotal > 0 || plannedLoading}
+									<details
+										class:border-b={pastTotal > 0 || pastLoading}
+										style:border-color="var(--border)"
+									>
+										<summary
+											class="cursor-pointer list-none px-4 py-3 text-sm font-medium select-none [&::-webkit-details-marker]:hidden"
+										>
+											{$_('dashboard.group.planned')}
+											<span class="ml-1 font-normal tabular-nums" style:color="var(--text-muted)">
+												({plannedTotal})
+											</span>
+										</summary>
+										{#if plannedLoading}
+											<p class="px-4 pb-4 text-sm" style:color="var(--text-muted)">
+												{$_('common.loading')}
+											</p>
+										{:else}
+											<div class="pb-4 md:overflow-x-auto">
+												<TransactionList
+													transactions={plannedVisible}
+													siblings={txSiblings}
+													{tz}
+													emptyMessage={$_('transactions.empty')}
+													showDescription
+													showAmountSign
+													showEdit
+													showDelete
+													onmakeRecurring={(tx) =>
+														void goto(
+															resolve(`/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`)
+														)}
+													onmakeSubscription={(tx) =>
+														void goto(
+															resolve(`/subscriptions?from_tx=${encodeURIComponent(tx.id)}`)
+														)}
+													onattachSubscription={(tx) =>
+														void goto(
+															resolve(`/subscriptions?attach_tx=${encodeURIComponent(tx.id)}`)
+														)}
+													onattachCredit={(tx) =>
+														void goto(resolve(`/credits?attach_tx=${encodeURIComponent(tx.id)}`))}
+													onrepeat={openRepeat}
+													onsaveAsTemplate={(tx) => void saveAsTemplate(tx)}
+													onedit={openEdit}
+													ondelete={(tx) => void removeTx(tx)}
+												/>
+											</div>
+										{/if}
+									</details>
+								{/if}
+
+								{#if pastTotal > 0 || pastLoading}
+									<details open>
+										<summary
+											class="cursor-pointer list-none px-4 py-3 text-sm font-medium select-none [&::-webkit-details-marker]:hidden"
+										>
+											{$_('dashboard.group.past')}
+											<span class="ml-1 font-normal tabular-nums" style:color="var(--text-muted)">
+												({pastTotal})
+											</span>
+										</summary>
+										{#if pastLoading}
+											<p class="px-4 pb-4 text-sm" style:color="var(--text-muted)">
+												{$_('common.loading')}
+											</p>
+										{:else}
+											<div class="pb-4 md:overflow-x-auto">
+												<TransactionList
+													transactions={pastVisible}
+													siblings={txSiblings}
+													{tz}
+													emptyMessage={$_('transactions.empty')}
+													showDescription
+													showAmountSign
+													showEdit
+													showDelete
+													onmakeRecurring={(tx) =>
+														void goto(
+															resolve(`/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`)
+														)}
+													onmakeSubscription={(tx) =>
+														void goto(
+															resolve(`/subscriptions?from_tx=${encodeURIComponent(tx.id)}`)
+														)}
+													onattachSubscription={(tx) =>
+														void goto(
+															resolve(`/subscriptions?attach_tx=${encodeURIComponent(tx.id)}`)
+														)}
+													onattachCredit={(tx) =>
+														void goto(resolve(`/credits?attach_tx=${encodeURIComponent(tx.id)}`))}
+													onrepeat={openRepeat}
+													onsaveAsTemplate={(tx) => void saveAsTemplate(tx)}
+													onedit={openEdit}
+													ondelete={(tx) => void removeTx(tx)}
+												/>
+											</div>
+										{/if}
+									</details>
+								{/if}
+							{/if}
+							<div class="border-t px-4 py-3" style:border-color="var(--border)">
+								<a href={resolve('/transactions')} class="btn-ghost">
+									{$_('transactions.all')}
+								</a>
+							</div>
+						</div>
+					{/if}
+				</CollapsibleSection>
 			{/if}
-		</CollapsibleSection>
-	{/if}
-</div>
+		</PageLoadGate>
+	</div>
+</PullToRefresh>
 
 <TransactionForm
 	bind:open={txOpen}
@@ -579,7 +888,7 @@
 		editTx = null;
 		repeatTx = null;
 	}}
-	onsaved={loadAll}
+	onsaved={() => void loadAll({ silent: true })}
 />
 <ReceiptImportForm
 	bind:open={receiptOpen}
@@ -596,5 +905,5 @@
 		editTransfer = null;
 		repeatTransfer = null;
 	}}
-	onsaved={loadAll}
+	onsaved={() => void loadAll({ silent: true })}
 />

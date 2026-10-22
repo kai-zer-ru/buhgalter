@@ -58,6 +58,49 @@ func TestDedupExistsCompositeKey(t *testing.T) {
 		t.Fatal("expected dedup hit for exact composite key")
 	}
 
+	if err := q.InsertNotificationLog(ctx, sqlcdb.InsertNotificationLogParams{
+		ID:          uuid.NewString(),
+		UserID:      userID,
+		TriggerType: TriggerDebtOverdue,
+		Channel:     ChannelTelegram,
+		EntityID:    &entityID,
+		DedupDate:   &dedupDate,
+		Status:      "error",
+		Message:     &message,
+		CreatedAt:   now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	exists, err = DedupExists(ctx, q, userID, TriggerDebtOverdue, ChannelTelegram, entityID, dedupDate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !exists {
+		t.Fatal("sent row must still dedup when an error row exists for the same key")
+	}
+
+	retryEntity := "debt-retry"
+	if err := q.InsertNotificationLog(ctx, sqlcdb.InsertNotificationLogParams{
+		ID:          uuid.NewString(),
+		UserID:      userID,
+		TriggerType: TriggerDebtOverdue,
+		Channel:     ChannelTelegram,
+		EntityID:    &retryEntity,
+		DedupDate:   &dedupDate,
+		Status:      "error",
+		Message:     &message,
+		CreatedAt:   now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	exists, err = DedupExists(ctx, q, userID, TriggerDebtOverdue, ChannelTelegram, retryEntity, dedupDate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exists {
+		t.Fatal("error log must not block retry")
+	}
+
 	cases := []struct {
 		name      string
 		trigger   string

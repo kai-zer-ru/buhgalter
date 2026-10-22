@@ -572,6 +572,37 @@ func (q *Queries) ListAllDebtsByUser(ctx context.Context, userID string) ([]List
 	return items, nil
 }
 
+const listDebtLinksByUser = `-- name: ListDebtLinksByUser :many
+SELECT dtx.debt_id, dtx.transaction_id, dtx.role
+FROM debt_transactions dtx
+INNER JOIN debts d ON d.id = dtx.debt_id
+WHERE d.user_id = ?
+ORDER BY dtx.debt_id, dtx.role
+`
+
+func (q *Queries) ListDebtLinksByUser(ctx context.Context, userID string) ([]DebtTransaction, error) {
+	rows, err := q.db.QueryContext(ctx, listDebtLinksByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []DebtTransaction{}
+	for rows.Next() {
+		var i DebtTransaction
+		if err := rows.Scan(&i.DebtID, &i.TransactionID, &i.Role); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDebtorsByUser = `-- name: ListDebtorsByUser :many
 SELECT id, user_id, name, created_at
 FROM debtors

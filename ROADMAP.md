@@ -15,11 +15,31 @@
 - [v1.2.5](#v125)
 - [v1.3.0](#v130)
 - [v1.3.1](#v131)
+- [v1.3.2](#v132)
+- [v1.4.0](#v140)
+- [v1.4.1](#v141)
+- [v1.5.0](#v150)
+- [v1.5.1](#v151)
+- [v1.5.2](#v152)
+- [v1.5.3](#v153)
+- [v1.5.4](#v154)
+- [v1.5.5](#v155)
+- [v1.6.0](#v160)
+- [v1.7.0](#v170)
+- [v1.7.1](#v171)
+- [v1.8.0](#v180)
+- [v1.9.0](#v190)
+- [v1.9.1](#v191)
+- [v1.10.0](#v1100)
+- [v1.11.0](#v1110)
+- [v1.12.0](#v1120)
+- [v1.13.0](#v1130)
+- [v1.14.0](#v1140)
+- [v1.15.0](#v1150)
 - [Общие планы](#общие-планы)
+- [На подумать](#на-подумать)
 
 ## v1.0.0
-
-Первый стабильный релиз self-hosted приложения для личного учёта финансов.
 
 - [x] Установка: `make build`, Docker (GHCR), бинарники GitHub Releases; `/setup`, миграции SQLite (`001`…`019`)
 - [x] Пользователи: регистрация, сессии, API-токены, админка (пользователи, бэкапы, диагностика), audit log
@@ -167,14 +187,274 @@
         - 9 строка - Переключатель копирования
 - [x] [Release notes](docs/release-notes-v1.3.1.md) · [transactions-display.md](docs/transactions-display.md) · [categories-and-icons.md](docs/categories-and-icons.md) · [ui-navigation.md](docs/ui-navigation.md) · [ui-budget.md](docs/ui-budget.md) · [ui-balance-maintenance.md](docs/ui-balance-maintenance.md)
 
+## v1.3.2
+
+- [x] Фикс добавления кредитов: 
+    - сумма, вводимая вручную
+    - первый платёж сегодня
+- [x] Окно "Расход"/"Доход" - порядок ввода
+- [x] Вёрстка в бюджете (мобюилка)
+- [x] [Release notes](docs/release-notes-v1.3.2.md) · [ui-credits.md](docs/ui-credits.md) · [transactions-display.md](docs/transactions-display.md) · [ui-budget.md](docs/ui-budget.md)
+
+## v1.4.0
+
+- [x] [Android-клиент](docs/android-client.md) — [roadmap](roadmap/android-client.md), [UI](docs/android-client-ui.md), [платформа](docs/android-client-platform.md)
+- [x] Начальный остаток на счёте при редактировании
+- [x] [Точечное обновление UI при refresh](roadmap/android-incremental-ui-updates.md) — assignIfChanged, path-aware refCacheUpdate, SWR на вебе
+- [x] Статистика: подкатегории под спойлером (web + Android)
+- [x] БАГ. Уведомления по долгам: формулировка по направлению («вернуть» / «получить») и «сегодня» вместо «через 0 дн.»
+- [x] БАГ. Select / Combobox / DateTimePicker: выпадающий список «отрывался» от поля (label внутри `.relative`; заметно на Android в профиле) — [ui-dialogs.md](docs/ui-dialogs.md)
+- [x] «Уже платил по графику» — только если в preview есть платежи в прошлом (web + Android)
+- [x] Web e2e Playwright — расширенное покрытие основных экранов
+- [x] Тема «Как на устройстве» (`system`) — default; синхронизация UI с темой ОС (web + Android)
+- [x] Вернуть «Главная» в верхнее меню (в самое начало)
+- [x] Периодические операции - кнопка добавить - перенести наверх (как везде)
+- [x] [Release notes](docs/release-notes-v1.4.0.md) · [ui-api-cache.md](docs/ui-api-cache.md) · [ui-dialogs.md](docs/ui-dialogs.md) · [ui-budget.md](docs/ui-budget.md) · [ui-credit-cards.md](docs/ui-credit-cards.md) · [budget.md](docs/budget.md)
+- [x] Сортировка «Мои средства» на главной и `/accounts`: `cash` → `bank`, внутри типа основной счёт первым ([ui-credit-cards.md](docs/ui-credit-cards.md))
+- [x] Кредитную карту нельзя сделать основным счётом (API + UI web/Android; миграция снимает ошибочный primary)
+- [x] Бюджет. Добавление/редактирование. При выборе категории/подкатегории (в зависимости от типа, включая выбор общего бюджета) выводить уже потраченую сумму, если это текущий или прошлый месяц, согласно фильтру. Веб и Android
+
+## v1.4.1
+
+- [x] Docker CI: ускорение multi-arch сборки — кросс-компиляция на `BUILDPLATFORM` (без QEMU для npm/Go), кэш слоёв (`type=gha` + `ghcr.io/...:buildcache`), `.dockerignore` ([install/docker.md](docs/install/docker.md))
+- [x] Android: офлайн — кеш карточки кредита; outbox: мелочи по кредитам (без create), settle долга, CRUD периодических
+- [x] Сортировка счетов в выпадающих списках
+- [x] Недостающие иконки категорий
+- [x] Редактирование подкатегорий
+- [x] Увеличить кредитный лимит — отдельная операция «Изменить лимит» ([ui-credit-cards.md](docs/ui-credit-cards.md))
+- [x] Автопополнение не в текущий момент а в момент когда выставлено время операции
+- [x] Android: DELETE через native HTTPS (`SslTrust`) — ответ 204 без тела больше не считается ошибкой (удаление переводов/операций)
+- [x] Любая комиссия привязывается к операции, и удалить/отредактировать её нельзя
+- [x] В поля ввода суммы добавить возможность складыва/вычитать
+- [x] Android: своя клавиатура суммы (`MoneyKeypad`) с `+` / `−` — системная decimal часто без «+»
+- [x] Android: кнопка биометрии на экране PIN — в нижнем левом углу клавиатуры (иконка отпечатка)
+- [x] БАГ. Android: после `adb install -r` сессия слетала — `warmRefCache` до `initAuthToken` слал запросы без Bearer, 401 вызывал `clearAuthToken` и удалял токен из Secure Storage
+- [x] БАГ. Web/Android: после удаления/редактирования операции не обновлялись балансы (Android — и список до sync) — web: silent `load`/`loadAll`; Android: `afterOnlineWrite` → `dataRefreshTick` во всех offline wrappers
+- [x] [Release notes](docs/release-notes-v1.4.1.md) · [ui-credit-cards.md](docs/ui-credit-cards.md) · [transactions-display.md](docs/transactions-display.md) · [android-client-platform.md](docs/android-client-platform.md) · [categories-and-icons.md](docs/categories-and-icons.md) · [balance-maintenance.md](docs/balance-maintenance.md) · [install/docker.md](docs/install/docker.md)
+
+## v1.5.0
+
+- [x] [Подписки](roadmap/subscriptions.md) — отдельный экран поверх периодических операций (сводка «в месяц», очередь из 3 дат `upcoming_run_ats`)
+- [x] [Перехват уведомлений банка](roadmap/notification-intercept.md) — Android, push → черновик операции (last4/банк→счёт)
+- [x] [Магазины, теги](roadmap/merchants-tags.md) — справочник + теги; магазин из чека — follow-up после сканера
+- [x] [Включение/отключение функционала в админке](docs/feature-toggles.md) — флаги модулей + правило для новых фич ([план](roadmap/feature-toggles.md))
+- [x] [Шаблоны операций](roadmap/transaction-templates.md) — именованные пресеты для быстрого ручного добавления
+- [x] Учёт подписок и периодических операций текущего месяца в плановом остатке (`forecast_balance`); подпись «С учётом плановых / подписок / обоих»
+- [x] [Release notes](docs/release-notes-v1.5.0.md) · [subscriptions.md](docs/subscriptions.md) · [feature-toggles.md](docs/feature-toggles.md) · [transactions-display.md](docs/transactions-display.md) · [android-client-platform.md](docs/android-client-platform.md)
+
+## v1.5.1
+
+- [x] Исправление работы при клонировании Android-приложения
+- [x] Исправление тормозов в UI на Android
+- [x] БАГ. Перехват уведомлений: привязка банк→счёт — один банк нельзя выбрать у нескольких счетов (сбрасывает предыдущий). Нужно many-to-one: несколько счетов одного банка (напр. 3 в Т-Банке, 2 в Сбере)
+- [x] Android виджеты: суммы скрывались при включённом PIN даже после разблокировки — скрытие только пока нужен lock screen (`shouldHideWidgetAmounts`); опция **«Показывать виджеты при блокировке»** в Настройки → Безопасность (по умолчанию выкл.). «Мои средства» → `/accounts`; «Скоро» — кредит, долг, плановые, подписки, периодические (до 5 ближайших)
+- [x] БАГ. Android: экран выбора счёта для виджета «Счёт» — тема DayNight (палитра виджетов) и отступ под status bar
+- [x] БАГ. Android виджеты: форматирование сумм везде как в UI (`1 500.00 ₽`), не только в «Мои средства»
+- [x] Android виджет «Мои средства»: подпись строки кредитных карт — «Кредитные средства» (не «Карты»). Три строки — наличные, банковские карты, кредитные средства
+- [x] Android: SMS-перехват покупок банка — после push MVP ([notification-intercept.md](roadmap/notification-intercept.md))
+- [x] БАГ. Android: офлайн-добавление операций — после онлайн-write форма без счёта/категории. Списки `/accounts` сохраняются; пустые — seed из `ui/meta`; регресс-тесты `offline-form-after-write`
+- [x] БАГ. Android: подкатегории — устаревший ref-cache после создания (UUID вместо имени; «имя занято» при повторном добавлении)
+- [x] БАГ. Web: категории и справочники — устаревший ref-cache после записи (список не обновлялся до фоновой revalidate; e2e categories)
+- [x] БАГ. Android: SMS банка через приложение «Сообщения» не попадали в черновики (allowlist только bank app; заголовок «Ваш Т-Банк»)
+- [x] БАГ. Android: перевод — кнопка «Вся сумма» неактивна после смены исходящего счёта (устаревший баланс в кэше /accounts)
+- [x] Android: единый источник балансов — `GET /dashboard` обогащает `listAccounts`/`getAccount` и патчит сохранённые списки счетов при обновлении dashboard
+- [x] БАГ. Плановый остаток: еженедельные подписки учитывали только одно списание в текущем месяце вместо всех оставшихся (`forecast_balance` / `upcoming_run_ats`)
+- [x] [Release notes](docs/release-notes-v1.5.1.md) · [android-client-platform.md](docs/android-client-platform.md) · [android-client.md](docs/android-client.md) · [ui-navigation.md](docs/ui-navigation.md) · [notification-intercept.md](roadmap/notification-intercept.md)
+
+## v1.5.2
+
+- [x] БАГ. Web: календарь в подписках (и везде с выбранной датой) — не перелистывал месяцы: `$effect` в `DateTimePicker` сбрасывал `viewMonth` при навигации
+- [x] БАГ. Android: после правки операции на web (разбиение) на главной оставалась одна операция, пока несколько sync/перезапусков — список всех операций и счёта уже показывали две
+- [x] CI/act: тесты SQLite — шаблон мигрированной БД + `synchronous=OFF`; `go test -timeout 30m` (иначе act упирался в 10m на goose/fsync)
+- [x] БАГ. Android: после оплаты кредита в списке оставался только один (синхронизация не чинила, помогал перелогин) — `onCreditUpdated` больше не засевает одноэлементный список; ручной sync обходит SWR-кеш
+- [x] БАГ. Android: офлайн нельзя открыть должника (и другие карточки разделов) — снимки GET больше не стираются после write; прогрев тянет списки и карточки; `getDebtor` собирает деталь из локальных долгов
+- [x] Доработка синхронизации — лента изменений операций (`GET /sync/transaction-changes`): добавление/правка/удаление доходов и расходов (в т.ч. долги и кредиты) подтягивается в Android-кеш по id
+- [x] [Release notes](docs/release-notes-v1.5.2.md) · [android-client-platform.md](docs/android-client-platform.md) · [ui-api-cache.md](docs/ui-api-cache.md) · [data-model.md](docs/data-model.md)
+
+## v1.5.3
+
+- [x] БАГ. Xiaomi (штатный клон / двойные приложения): клон сразу падает, затем чёрный экран; то же у оригинала. После удаления клона, сброса данных и переустановки из релиза — снова чёрный экран на минуты, затем вход **с теми же данными**, хотя сессия должна была сброситься.
+- [x] OEM-клон (MIUI/HyperOS Dual Apps, user 999) не запускает WebView/Capacitor — нативный экран «клонирование не поддерживается»
+- [x] Клон не трогает Keystore/сессию оригинала (не удалять unprefixed ключи Secure Storage при миграции)
+- [x] После удаления приложения сессия и кеш не восстанавливаются из бэкапа ОС (`allowBackup=false`, исключение cloud/device-transfer, маркер в `no_backup`)
+- [x] Холодный старт не висит на чёрном экране: системный сплэш сразу отпускается (в т.ч. night); WebView непрозрачный + important renderer; без блокирующих Google Fonts; Keystore виджетов не на UI-потоке; WorkManager initializer отключён; wipe только если ОС восстановила данные
+- [x] БАГ. Автопополнение в `date_desc` оказывалось ниже триггера (выглядело старше операции); должно быть позже триггера и выше в ленте
+- [x] [Release notes](docs/release-notes-v1.5.3.md) · [balance-maintenance.md](docs/balance-maintenance.md) · [android-client.md](docs/android-client.md) · [android-client-platform.md](docs/android-client-platform.md)
+
+## v1.5.4
+
+- [x] БАГ. Экспорт с одного сервера → импорт на другой: строки с системными категориями (Кредиты, Подписки, Долги, Комиссия, …) падают с `system category is read-only` — импорт мапит на системную категорию и пытается создать подкатегорию
+- [x] Нативный экспорт/импорт «Бухгалтер»: полный перенос учёта между инстансами — счета (тип, банк, лимит, начальный остаток, автопополнение), операции (время, магазин, теги, комиссия перевода), справочники категорий/магазинов/тегов, кредиты с графиком, долги, подписки, периодические, бюджеты, шаблоны
+- [x] Превью импорта: `valid_rows` — строки файла, `list_rows` — записи в журнале (перевод — две записи)
+- [x] Профиль: кнопка «Удалить данные» — сброс учёта к состоянию нового пользователя (операции, счета, долги, кредиты и остальное; логин и профиль сохраняются)
+- [x] БАГ. Импорт помечает как дубли разные операции с одной датой, суммой, счётом и категорией (без времени, описания, подкатегории и счёта назначения). Два автобуса в один день и два перевода с одного счёта пропускались — после импорта балансы расходятся, особенно у кредитных карт
+- [x] Android: перехват уведомлений платёжных приложений (MIR Pay, Samsung Pay, СБПэй, Google Wallet, Huawei Wallet, Mi Pay, ЮMoney) — тот же пайплайн черновиков; счёт по last4 / банку в тексте ([notification-intercept.md](roadmap/notification-intercept.md))
+- [x] Android: из черновиков перехвата — перевод между счетами (пара расход + пополнение, одна сумма) ([notification-intercept.md](roadmap/notification-intercept.md))
+- [x] CI: GitHub Actions на Node 24; Node.js для сборки UI по-прежнему 22
+- [x] [Release notes](docs/release-notes-v1.5.4.md) · [import/buhgalter.md](docs/import/buhgalter.md) · [import/cubux.md](docs/import/cubux.md) · [android-client.md](docs/android-client.md) · [android-client-platform.md](docs/android-client-platform.md) · [notification-intercept.md](roadmap/notification-intercept.md) · [data-model.md](docs/data-model.md)
+
+## v1.5.5
+
+- [x] БАГ. Android: после перевода между счетами в черновиках пара списание+пополнение показывалась как три карточки; чекбоксы ничего не делали; создание и удаление зависали
+- [x] БАГ. Android: черновики перевода — «Создать перевод» без стиля кнопки и кривая вёрстка; в меню счётчик 2 при одной карточке пары
+- [x] [Release notes](docs/release-notes-v1.5.5.md) · [android-client.md](docs/android-client.md) · [android-client-ui.md](docs/android-client-ui.md) · [android-client-platform.md](docs/android-client-platform.md) · [notification-intercept.md](roadmap/notification-intercept.md)
+
+## v1.6.0
+
+- [x] БАГ. Счётчик операций расходился с импортом и между вебом и Android: перевод считался двумя записями, комиссия — отдельно, а лента синхронизации Android прибавляла к `meta.total` уже учтённые строки. В журнале перевод — одна операция, комиссия в счётчик не входит; сами записи в БД не меняются
+- [x] Android: черновики перехвата без чекбоксов и без «удалить выбранные»; у карточки перевода кнопка «Удалить», как у остальных ([notification-intercept.md](roadmap/notification-intercept.md))
+- [x] `make act-keep-image` / `make act-prune` — label + keeper-контейнер, чтобы prune не сносил образ act
+- [x] Android: quick-actions в шторке для черновиков из перехвата уведомлений (принять / отклонить без открытия приложения); тумблер «Уведомления в шторке» в настройках банковских уведомлений — follow-up к [notification-intercept.md](roadmap/notification-intercept.md)
+- [x] [Привязать операцию к оплате кредита](roadmap/credit-payment-link.md) — как у подписок: категория «Кредиты» в форме (вместо подкатегорий — список кредитов) + «Сделать платежом» из журнала; автобэкфилл категории у старых платежей графика
+- [x] Доработка формы платежа по кредиту: при категории «Кредиты» скрыть магазин/теги/описание; время сразу под датой (без спойлера)
+- [x] Android: история уведомлений — либо «Создать операцию», либо «Создать перевод» (уникальная пара в истории, как у черновиков) для строк, которые парсятся как расход/доход; чтобы заново оформить после удаления черновика без ручного ввода суммы ([notification-intercept.md](roadmap/notification-intercept.md))
+- [x] БАГ. Android UI: выпадающие списки (подкатегории и остальные) — при открытии сначала раскрываются вниз, потом прыгают вверх. Держать направление: вниз по умолчанию; вверх только если у низа экрана нет места. После открытия положение не менять при скролле
+- [x] БАГ. Android UI: при возврате из другого приложения (фокус в поле суммы, видна своя клавиатура) всплывает системная — полностью запретить системную клавиатуру там, где используется своя
+- [x] Каталог банков: ВБРР (привязка счёта + перехват push/SMS)
+- [x] [Release notes](docs/release-notes-v1.6.0.md) · [credit-payment-link.md](roadmap/credit-payment-link.md) · [ui-credits.md](docs/ui-credits.md) · [android-client.md](docs/android-client.md) · [android-client-platform.md](docs/android-client-platform.md) · [notification-intercept.md](roadmap/notification-intercept.md) · [import/buhgalter.md](docs/import/buhgalter.md)
+
+## v1.7.0
+
+- [x] [Живые обновления UI](roadmap/realtime-updates.md) — **веб:** WebSocket (запасной SWR с cooldown); сервер пушит `invalidate`, вкладка не долбит GET; REST остаётся для CRUD. **Android:** пока без сокета — SWR cooldown ~1 мин, как сейчас
+- [x] Cooldown фонового SWR на вебе (60 с) + не revalidate скрытую вкладку; при живом сокете — без фонового revalidate на каждый GET
+- [x] `GET /api/v1/realtime` + hub на сервере; публикация после мутаций, import job и scheduler
+- [x] Документация nginx (`Upgrade` для `/api/v1/realtime`)
+- [x] `import.progress` / `done` / `failed` по WebSocket (веб: буфер события по job_id + poll 1,2 с как fallback)
+- [x] Точечный `invalidate`: `hint_paths` / `entities` по типу мутации — клиент не перечитывает весь экран
+- [x] После reconnect — догон `GET /sync/transaction-changes` + soft-reload открытого экрана
+- [x] E2E: две вкладки — операция в одной, баланс во второй без F5
+- [x] БАГ. Импорт CSV: `import.done` через `$effect` опаздывал относительно следующего WS-кадра `invalidate` — экран не доходил до «Импорт завершён». Фикс: sync-подписка `subscribeImportRealtime` в onmessage + `markLocalMutation` на done до echo-invalidate; poll остаётся fallback
+- [x] Точечный realtime `invalidate` (`hint_paths` / `entities`) — без refetch всего экрана на каждое событие
+- [x] Веб-главная: empty-state под общим балансом, если нет ближайших подписок/периодических (прогноз совпадает с балансом)
+- [x] Android: попап «Версии» показывал старый `current_version` после апгрейда сервера — `GET /version/check` попадал в SWR ref-cache (синхронный stale + суточный throttle); исключён из кеша, клик по версии форсирует сеть
+- [x] БАГ. Уже привязанная к подписке операция в меню строки всё ещё предлагала «Сделать подпиской» / «Прикрепить к подписке» — скрыты при наличии `subscription_id` (web и Android)
+- [x] БАГ. Android: SMS «Ваш Т-Банк» (и др.) не попадали в историю / скан шторки — Messages пишет тело в MessagingStyle `EXTRA_MESSAGES`, а не в `EXTRA_TEXT`; пустые extras отбрасывались. Фикс: разбор MessagingStyle + Unicode-дефисы в нормализации отправителя + расширенный allowlist SMS-приложений ([notification-intercept.md](roadmap/notification-intercept.md))
+- [x] БАГ. Привязка операции к подписке не сдвигала очередь `upcoming_run_ats`: раннее списание банка оставалось «лишним», а ближайший платёж (завтра) всё ещё планировался. Фикс: attach закрывает ближайший слот, если дата операции в его окне; история вне окна только линкуется
+- [x] БАГ. Веб: после создания операции `/accounts` показывал балансы `0.00` (e2e `create account → add expense → see balance`). Причина: `preserveAuthMe` + seed счетов из `ui/meta` без балансов в SWR при живом WebSocket (revalidate выключен). Фикс: полный `clearRefCache` на мутациях веба; seed `/accounts*` из meta отключён ([ui-api-cache.md](docs/ui-api-cache.md))
+- [x] [Release notes](docs/release-notes-v1.7.0.md) · [realtime-updates.md](roadmap/realtime-updates.md) · [ui-api-cache.md](docs/ui-api-cache.md) · [install/nginx.md](docs/install/nginx.md)
+
+## v1.7.1
+
+- [x] CI/release: `goreleaser` ждёт и `android-apk`, и `docker`; на теге не гоняем повторный `test` / `ci.yml` (только сборка релиза)
+- [x] CI: push в ветки снова запускает `ci.yml` (`branches` + `tags-ignore`, иначе GitHub не шлёт workflow на branch push)
+- [x] БАГ. Веб: главная могла показывать устаревшие балансы (`0.00`), страница счёта — актуальные. При живом WebSocket SWR не revalidate; первый connect не сбрасывал ledger-кеш. Фикс: invalidate ledger на первом `onopen`, грубый invalidate чистит ref-cache, dashboard патчит `/accounts*`+`/balance`, `listAccounts`/`getAccount` обогащают из dashboard; `hint_paths` для `/transfers` ([ui-api-cache.md](docs/ui-api-cache.md))
+- [x] Сервер: Host `localhost` / `127.0.0.1` / `::1` не обходит ExternalAccess, если клиент не loopback
+- [x] Сервер: ExternalAccess не доверяет `X-Forwarded-Host`; host берётся из `Host` (как ставит nginx) ([install/nginx.md](docs/install/nginx.md))
+- [x] Сервер: бан пользователя удаляет не только сессии, но и API-токены ([user-status.md](docs/api/user-status.md))
+- [x] В балансе отображать ещё с учётом кредитов в текущем месяце
+- [x] БАГ. Плановый остаток: просроченная подписка прошлого месяца плюс списание текущего учитывались оба (`forecast_balance`)
+- [x] Сервер: битый `expires_at` у API-токена считается истёкшим (fail-closed), а не бессрочным ([authentication.md](docs/api/authentication.md))
+- [x] Сервер: смена пароля отзывает чужие сессии (текущая сохраняется; через API-токен — все сессии) ([authentication.md](docs/api/authentication.md))
+- [x] Сервер: архивация/удаление cash/bank переводит остаток и меняет статус в одной транзакции ([accounts-archive-delete.md](docs/accounts-archive-delete.md))
+- [x] Сервер: Create/Update/Transfer пишут операцию, теги и current_balance в одной транзакции
+- [x] Сервер: платёж на кредитку проверяет лимит под блокировкой строки счёта
+- [x] Сервер: списание подписки/периодики и сдвиг next_run — в одной транзакции (нет двойного списания при ошибке Mark)
+- [x] Сервер: восстановление графика кредита учитывает `credit_kind` (ипотека не пересобирается как потребкредит)
+- [x] Сервер: `credits.paid_amount` не превышает тело кредита при автосписании и платеже ([data-model.md](docs/data-model.md))
+- [x] Сервер: импорт — `done` только после успешной записи статуса; `Idempotency-Key` без гонки дубля журнала ([cubux.md](docs/import/cubux.md))
+- [x] Сервер: restore БД не удаляет `*.bak`, пока `Reopen` не успел; при ошибке открытия откат на прежний файл
+- [x] Сервер: `Manager.Reopen` при ошибке `Open` не закрывает живой handle
+- [x] Сервер: scheduler пишет lastRun кредита/подписок/периодики только после успешного ApplyDue
+- [x] Сервер: notify dedup только `sent`; worker не активирует `future`, если плановые уведомления выключены ([notifications.md](docs/notifications.md))
+- [x] БАГ. Сразу после создания операции главная/счета/список расходились (баланс и сама операция), через ~минуту сходились. GET успевал записать ответ в серверный кеш после инвалидации; клиентский SWR принимал in-flight ответ после `clearRefCache`. Фикс: эпоха кеша на сервере и в ref-cache ([ui-api-cache.md](docs/ui-api-cache.md))
+- [x] БАГ. Android: в офлайне (список операций — перелистывание страницы, и то же глобально по приложению) вместо «Сервер недоступен» показывается сырой текст ошибки: код, URL запросов. Нужно единое человекочитаемое сообщение, без технических деталей
+- [x] БАГ. Android: после отпечатка приложение часто само сворачивается; главная и меню (drawer) тормозят на несколько секунд. Фикс: quiet wake не `moveTaskToBack` после PIN/отпечатка/лаунчера; wake при PIN смотрит `AppLockNative`, не скрытие сумм виджетов; пауза отпечатка не flush/background-lock; heavy warm после ~1.8 с ([android-client-platform.md](docs/android-client-platform.md))
+- [x] Сервер: долги и каталоги (merchant/tag/шаблоны операций) — несмапленная ошибка домена → **500**, не 200/201 с пустым телом
+- [x] Сервер: бюджет — auto-copy на GET без 500 при гонке UNIQUE; создание бюджета и `budget_period` в одной транзакции
+- [x] Сервер: apicache — инвалидация GET-кеша только после **успешных** мутаций (2xx), не после 4xx/5xx ([ui-api-cache.md](docs/ui-api-cache.md))
+- [x] Сервер: `PUT /accounts/{id}` — некорректные суммы автопополнения (threshold/target) → 400, а не тихий 0
+- [x] **Docs:** [Release notes](docs/release-notes-v1.7.1.md) · [CHANGELOG.md](CHANGELOG.md) · [ui-api-cache.md](docs/ui-api-cache.md) · [install/nginx.md](docs/install/nginx.md) · [android-client-platform.md](docs/android-client-platform.md)
+
+## v1.8.0
+
+- [x] [Графики /stats и нетто-капитал](roadmap/stats-charts-net-worth.md) — Chart.js на web; `GET /stats/net-worth`; блок на web и Android (без графиков)
+- [x] [Правила категорий + очередь «разобрать»](roadmap/category-rules-inbox.md) — правила (категория → счёт, текст → категория); inbox без категории
+- [x] БАГ. Не сохраняются настройки банковских карт и привязки их к счетам при переустановке приложения — `GET/PUT /user/notification-intercept/bindings` на сервере, синхронизация в Android при входе и при сохранении настроек
+- [x] БАГ. Android: после переустановки «Синхронизировать» минутами тянет `GET /sync/transaction-changes` с `since_id=0` и проигрывает всю ленту (~десятки тысяч событий), UI тормозит. Фикс: после warm только `?watermark=1` / seek без apply; heavy-warm отложен (ручной sync и холодный кеш); фон — align, не paginated replay ([ui-api-cache.md](docs/ui-api-cache.md))
+- [x] БАГ. Android: в карточке черновика перехвата кнопки «Создать операцию» / «Создать перевод» в одном ряду не на всю ширину
+- [x] БАГ. Android: СМС банков из приложения «Сообщения» (`com.android.mms` и OEM) снова не попадают в черновики — allowlist/SMS sender map и remap заголовка
+- [x] БАГ. Бюджет следующего месяца (напр. ноябрь): после удаления строка снова появлялась — `copy_forward` у прошлого месяца не сбрасывался, `summary` заново создавал копию
+- [x] БАГ. Web: ссылка из уведомления `/subscriptions/{id}` (Telegram/MAX) — циклическая перезагрузка; маршрута не было (редактирование только на `/subscriptions?edit=`). Фикс: редирект `/subscriptions/{id}` → `?edit=`
+- [x] БАГ. После create/update/delete операции или перевода балансы и список операций на открытых экранах (web + Android) расходились / обновлялись с задержкой до SWR-cooldown. Фикс: Android — `touchLedgerAfterTransactionMutation` + `afterOnlineWrite` на всех online-ветках; web — soft-reload после локальной мутации (`notifyRealtimeInvalidate`) и discard/retry in-flight GET при смене `cacheEpoch` ([ui-api-cache.md](docs/ui-api-cache.md))
+- [x] БАГ. Web: deep link (напр. `/budget`) → авторизация → главная вместо исходного URL. Фикс: `?next=` при редиректе на `/login`, возврат после входа (`post-login-redirect.ts`)
+- [x] БАГ. Web/Android: при выходе из профиля toast «Требуется авторизация» (иногда два) — `POST /auth/logout` не soft-reload’ит открытые экраны; `toast.fromError` глотает 401
+- [x] БАГ. Android: при создании операции toast с английским native-текстом вроде «Host unreachable» — `isConnectionError` не ловил фразу, `toast.fromError` показывал сырой `err.message`. Фикс: расширен матчер native/OkHttp сообщений
+- [x] **Docs:** [Release notes](docs/release-notes-v1.8.0.md) · [CHANGELOG.md](CHANGELOG.md) · [category-rules.md](docs/category-rules.md) · [ui-stats.md](docs/ui-stats.md) · [ui-api-cache.md](docs/ui-api-cache.md) · [README.md](README.md)
+
+## v1.9.0
+
+Уведомления (кнопки TG/MAX, парсер, шторка) + UX polish. Было черновиком как patch 1.8.1 — поднято до minor (фичи + миграция).
+
+- [x] БАГ. Android: при запуске приложение сразу сворачивается (гонка quiet wake перехвата: sticky Intent extra + HyperOS bring-to-front без `onNewIntent`). Фикс: one-shot token, strip sticky extras, `onResume` → user engaged ([android-client-platform.md](docs/android-client-platform.md))
+- [x] [UX polish](roadmap/ux-polish.md) — без полос прокрутки; PTR текущего экрана; classic / MaterialBased; radius + профиль. Реализовано; **soak ~неделя** — баги отдельными коммитами в 1.9.0
+- [x] БАГ. Web/Android: на `/settings/notifications` кнопка показывает ключ `settings.notifications.save_all` вместо перевода. Нужны ключи ru/en + тест полноты i18n (литеральные ключи из UI — в обоих языках; `make ui-i18n-check`)
+- [x] [Кнопки в Telegram / MAX](roadmap/telegram-max-buttons.md) — исходящие inline-кнопки TG/MAX (все типы по доке); конструктор DnD на web (global + per-template); Android — баннер «в веб»; webhook/CAP-6 — позже
+- [x] Web: UI polish уведомлений — все блоки настроек под спойлерами; в шаблонах только enabled каналы; `toApiKeyboard` без `id` в payload
+- [x] Web/Server: пресеты кнопок по `trigger_type`; у `balance_shortfall` — `{account_url}` + пресет «Открыть счёт»
+- [x] Docs: Android 15+ «Конфиденциальные данные скрыты» при перехвате банковских push — раздел в [README.md](README.md) (Enhanced notifications / ADB `RECEIVE_SENSITIVE_NOTIFICATIONS`)
+- [x] [Улучшение парсера уведомлений](roadmap/bank-notification-income-patterns.md) — ВТБ «Поступление», Сбер SMS «Перевод по СБП», валюта `р`, last4 из `СЧЁТ5159`; vitest ([notification-intercept.md](roadmap/notification-intercept.md))
+- [x] БАГ. Android: **Принять** в шторке черновика банка → «Не удалось отправить часть операций» + ⚠️; правка в форме — ок. Причина: ISO `transaction_date` vs API `YYYY-MM-DD HH:MM:SS` ([shade-accept-sync-failed.md](roadmap/shade-accept-sync-failed.md))
+- [x] [Улучшение уведомлений в шторке](roadmap/notification-intercept.md#quick-actions-в-шторке-v160) — чистый «Магазин» из push (`extractMerchant`) + **Принять** снова открывает форму с prefill (не silent POST); Отклонить без изменений ([notification-merchant-strip.md](roadmap/notification-merchant-strip.md), [shade-accept-open-form.md](roadmap/shade-accept-open-form.md))
+- [x] **Docs:** [Release notes](docs/release-notes-v1.9.0.md) · [CHANGELOG.md](CHANGELOG.md) · [notifications.md](docs/notifications.md) · [android-client-platform.md](docs/android-client-platform.md) · [README.md](README.md) · [shade-accept-sync-failed.md](roadmap/shade-accept-sync-failed.md)
+
+## v1.9.1
+
+Patch: ужесточение перехвата банковских push (меньше мусора в шторке, СБП WB снова работает).
+
+- [x] [Улучшение перехвата уведомлений](roadmap/notification-intercept-harden.md) — единый gate черновиков и уведомлений бухгалтера; «перевод по»→расход / «от»→доход / пара→transfer; allowlist маркетплейсов без маркетинга; provisional без ложных сумм ([notification-intercept.md](roadmap/notification-intercept.md))
+- [x] **Docs:** [Release notes](docs/release-notes-v1.9.1.md) · [CHANGELOG.md](CHANGELOG.md) · [android-client.md](docs/android-client.md) · [android-client-platform.md](docs/android-client-platform.md) · [README.md](README.md)
+
+## v1.10.0
+
+Бывший план v1.9.0 (сдвинут из‑за minor «уведомления + UX»).
+
+- [ ] [Цели накопления](roadmap/savings-goals.md) — копилки, прогресс, напоминания (`savings_goals`)
+- [ ] [Улучшение импорта](roadmap/import-improve.md) — универсальный CSV / выгрузки РФ; dedup; связка с правилами и inbox
+- [ ] [Бюджет: rollover, прогноз, конверты](roadmap/budget-post-mvp.md) — перенос остатка; прогноз всех ожидаемых расходов в scope; доступно = лимит + перенос − spent; «к распределению» из доходов; статус от лимит+перенос
+- [ ] [Будущие обязательства при архивации/удалении счёта](roadmap/account-inactive-future-flows.md) — диалог: rebind на счёт-приёмник (default) или pause; кредиты только rebind; ApplyDue не пишет на inactive
+- [ ] [Сканер чеков](roadmap/receipt-scanner.md) — v1.10; ветка `scan_chek`, уроки в roadmap, не мержить вслепую
+- [ ] QR 54-ФЗ **на устройстве** → prefill; подтверждение; dedup по фискальным полям; Web + Android; flag `receipt_scanner`
+- [ ] Состав позиций — **BYO** [proverkacheka.com](https://proverkacheka.com/) в админке ([README](README.md#сканер-чеков-токен-proverkacheka)); без токена модуль выключен
+- [ ] Прикрепление чека к **уже созданной** операции; mismatch суммы → «Добавить всё равно» / «Отмена»
+- [ ] Опционально: ИИ по фото; вложение фото к операции
+
+## v1.11.0
+
+- [ ] [Разбивка операции на несколько счетов](roadmap/transaction-split-accounts.md)
+- [ ] [PDF-отчёты](roadmap/savings-reports-import.md) — месячная сводка (server-side)
+- [ ] [Синхронизация с выпиской банка](roadmap/bank-sync.md) — РФ: файл выписки → normalize → dedup (не скрейпинг ЛК)
+
+## v1.12.0
+
+- [ ] [Валюта счёта](roadmap/multicurrency.md) — `accounts.currency`, отдельно от `users.currency`; сводки и переводы без тихого смешения валют
+
+## v1.13.0
+
+- [ ] [Семья / команда](roadmap/team-collaboration.md) — household, личные + семейные счета; owner invite (ссылка/QR/код); [спека](roadmap/team-collaboration.md) зафиксирована
+
+## v1.14.0
+
+- [ ] [PostgreSQL](roadmap/postgresql.md) — опциональный драйвер вместо SQLite (K8s / managed DB / нагрузка после team)
+
+## v1.15.0
+
+- _(резерв под следующий minor)_
+
 ## Общие планы
 
-- [ ] [Командная работа](roadmap/team-collaboration.md) — несколько пользователей на одной базе
-- [ ] [PostgreSQL](roadmap/postgresql.md) — опциональная БД вместо SQLite
+Без жёсткой версии — по спросу и после очереди minor-релизов выше. Черновик приоритетов: [roadmap-common-plans-priorities.md](bmad_docs/planning-artifacts/roadmap-common-plans-priorities.md).
+
+- [ ] [Двухфакторная аутентификация](roadmap/two-factor-auth.md) — TOTP; для self-host **спорно** (VPN/reverse proxy vs exposed); решение отложено
 - [ ] [Webhook](roadmap/webhooks.md) — исходящие события для внешних интеграций
-- [ ] [Синхронизация с банками](roadmap/bank-sync.md) — автоматический импорт операций
-- [ ] [Сканер чеков](roadmap/receipt-scanner.md) — расход из фото или QR чека
-- [ ] [Home Assistant](roadmap/home-assistant.md) — интеграция для умного дома
-- [ ] [Кнопки в Telegram / MAX](roadmap/telegram-max-buttons.md) — inline-кнопки в исходящих уведомлениях
-- [ ] [Эволюция уведомлений](roadmap/notifications-evolution.md) — развитие политик/шаблонов/частоты
-- [ ] [Android-клиент](roadmap/android-client.md) — нативное приложение
+- [ ] [Home Assistant](roadmap/home-assistant.md) — custom component или REST-документация
+- [ ] [Эволюция уведомлений](roadmap/notifications-evolution.md) — частота, тихие часы, эскалация, wizard
+- [ ] [Открытие приложения через ссылку](roadmap/app-open-links.md) — https **и локальные** (`http` LAN / `:8765`, localhost) при совпадении с профилем сервера в APK; custom scheme для виджетов; единый builder (notify / Telegram)
+- [ ] [Внутренняя ссылка в уведомлениях](roadmap/app-open-links.md#cap-6--внутренний-base-когда-external_url-пуст) — fallback вместо текста «настройте внешний URL»; LAN / scheme / опциональный internal base
+
+## На подумать
+
+- [ ] [Крипта](roadmap/crypto.md) — пока **не вводим**; блок для обсуждения
+- [ ] [Инвестиции](roadmap/investments.md) — акции/ETF/портфель; отдельный большой модуль, не в ближайших релизах
+
+Указатель по обогащению операций (сроки в отдельных файлах): [transaction-enrichment.md](roadmap/transaction-enrichment.md).
+

@@ -1,0 +1,686 @@
+package accountbalance
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/kai-zer-ru/buhgalter/internal/db"
+	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
+)
+
+func scheduledTestDB(t *testing.T) *sql.DB {
+	t.Helper()
+	mgr, err := db.NewManager(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = mgr.Close() })
+	return mgr.DB()
+}
+
+func seedUserAcc(t *testing.T, database *sql.DB) (userID, accountID string) {
+	t.Helper()
+	ctx := context.Background()
+	userID = "user-1"
+	accountID = "acc-1"
+	_, err := database.ExecContext(ctx, `INSERT INTO users (id, login, password_hash, timezone) VALUES (?, 'test', 'hash', 'UTC')`, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = database.ExecContext(ctx, `
+		INSERT INTO accounts (id, user_id, name, type, initial_balance, current_balance, status, created_at, updated_at)
+		VALUES (?, ?, 'Test', 'cash', 100000, 100000, 'active', datetime('now'), datetime('now'))`,
+		accountID, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return userID, accountID
+}
+
+func seedCategory(t *testing.T, database *sql.DB, userID, catType string) string {
+	t.Helper()
+	id := "cat-" + catType
+	_, err := database.ExecContext(context.Background(), `
+		INSERT INTO categories (id, user_id, name, type, icon, sort_order, is_system, created_at)
+		VALUES (?, ?, ?, ?, 'other', 0, 0, datetime('now'))`,
+		id, userID, "Cat "+catType, catType)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+// atLocal builds a UTC instant on the given day at timeLocal (HH:MM) so it matches schedule.NextRunAt.
+func atLocal(day time.Time, timeLocal string) time.Time {
+	hour, minute := 10, 0
+	if t, err := time.Parse("15:04", timeLocal); err == nil {
+		hour, minute = t.Hour(), t.Minute()
+	}
+	return time.Date(day.Year(), day.Month(), day.Day(), hour, minute, 0, 0, time.UTC)
+}
+
+func insertSubscription(t *testing.T, database *sql.DB, userID, accountID string, amount int64, period string, weekday, dayOfMonth *int64, startDate, timeLocal, nextRunAt string, active int) {
+	t.Helper()
+	upcoming, _ := json.Marshal([]string{
+		nextRunAt,
+		timeutil.FormatUTC(mustParseUTC(t, nextRunAt).AddDate(0, 1, 0)),
+		timeutil.FormatUTC(mustParseUTC(t, nextRunAt).AddDate(0, 2, 0)),
+	})
+	insertSubscriptionWithUpcoming(t, database, userID, accountID, amount, period, weekday, dayOfMonth, startDate, timeLocal, nextRunAt, string(upcoming), active)
+}
+
+func insertSubscriptionWithUpcoming(t *testing.T, database *sql.DB, userID, accountID string, amount int64, period string, weekday, dayOfMonth *int64, startDate, timeLocal, nextRunAt, upcoming string, active int) {
+	t.Helper()
+	_, err := database.ExecContext(context.Background(), `
+		INSERT INTO subscriptions (
+			id, user_id, name, amount, account_id, period, weekday, day_of_month,
+			start_date, time_local, next_run_at, upcoming_run_ats, active, created_at, updated_at
+		) VALUES (?, ?, 'Sub', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+		"sub-1", userID, amount, accountID, period, weekday, dayOfMonth, startDate, timeLocal, nextRunAt, upcoming, active)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func mustParseUTC(t *testing.T, v string) time.Time {
+	t.Helper()
+	parsed, err := timeutil.ParseUTC(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return parsed
+}
+
+func insertRecurring(t *testing.T, database *sql.DB, id, userID, accountID, catID, typ string, amount int64, period string, weekday, dayOfMonth *int64, startDate, timeLocal, nextRunAt string, active int) {
+	t.Helper()
+	_, err := database.ExecContext(context.Background(), `
+		INSERT INTO recurring_operations (
+			id, user_id, type, amount, description, account_id, category_id,
+			period, weekday, day_of_month, start_date, time_local, next_run_at, active,
+			created_at, updated_at
+		) VALUES (?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+		id, userID, typ, amount, accountID, catID, period, weekday, dayOfMonth, startDate, timeLocal, nextRunAt, active)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func futureInMonth(t *testing.T, now time.Time) time.Time {
+	t.Helper()
+	_, monthEnd, err := timeutil.MonthBoundsUTC("UTC", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	monthEndT, err := timeutil.ParseUTC(monthEnd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	future := now.Add(48 * time.Hour)
+	if !future.Before(monthEndT) {
+		future = monthEndT.Add(-time.Hour)
+	}
+	if !future.After(now) {
+		t.Skip("no room for future run in current month")
+	}
+	return future
+}
+
+func nextMonthRun(t *testing.T, now time.Time) time.Time {
+	t.Helper()
+	_, monthEnd, err := timeutil.MonthBoundsUTC("UTC", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	monthEndT, err := timeutil.ParseUTC(monthEnd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return monthEndT.Add(48 * time.Hour)
+}
+
+func TestScheduledEffects_MonthlySubscription(t *testing.T) {
+	database := scheduledTestDB(t)
+	userID, accountID := seedUserAcc(t, database)
+	now := timeutil.NowUTC()
+	next := atLocal(futureInMonth(t, now), "10:00")
+	day := int64(next.Day())
+	insertSubscription(t, database, userID, accountID, 5000, "month", nil, &day,
+		timeutil.FormatUTC(now.AddDate(0, -1, 0)), "10:00", timeutil.FormatUTC(next), 1)
+
+	effects, err := ScheduledEffectsByUser(context.Background(), database, userID, "UTC", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if effects.Deltas[accountID] != -5000 {
+		t.Fatalf("expected -5000, got %d", effects.Deltas[accountID])
+	}
+	if _, ok := effects.HasSubscription[accountID]; !ok {
+		t.Fatal("expected account in HasSubscription")
+	}
+	if _, ok := effects.HasRecurring[accountID]; ok {
+		t.Fatal("expected no HasRecurring")
+	}
+}
+
+func TestScheduledEffects_RecurringIncomeAndExpense(t *testing.T) {
+	database := scheduledTestDB(t)
+	userID, accountID := seedUserAcc(t, database)
+	expCat := seedCategory(t, database, userID, "expense")
+	incCat := seedCategory(t, database, userID, "income")
+	now := timeutil.NowUTC()
+	next := atLocal(futureInMonth(t, now), "09:00")
+	day := int64(next.Day())
+	start := timeutil.FormatUTC(now.AddDate(0, -2, 0))
+	nextStr := timeutil.FormatUTC(next)
+	insertRecurring(t, database, "ro-exp", userID, accountID, expCat, "expense", 3000, "month", nil, &day, start, "09:00", nextStr, 1)
+	insertRecurring(t, database, "ro-inc", userID, accountID, incCat, "income", 10000, "month", nil, &day, start, "09:00", nextStr, 1)
+
+	effects, err := ScheduledEffectsByUser(context.Background(), database, userID, "UTC", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// -3000 + 10000
+	if effects.Deltas[accountID] != 7000 {
+		t.Fatalf("expected 7000, got %d", effects.Deltas[accountID])
+	}
+	if _, ok := effects.HasRecurring[accountID]; !ok {
+		t.Fatal("expected HasRecurring")
+	}
+	if _, ok := effects.HasSubscription[accountID]; ok {
+		t.Fatal("expected no HasSubscription")
+	}
+}
+
+func TestScheduledEffects_WeeklyMultiple(t *testing.T) {
+	database := scheduledTestDB(t)
+	userID, accountID := seedUserAcc(t, database)
+	now := timeutil.NowUTC()
+	_, monthEnd, err := timeutil.MonthBoundsUTC("UTC", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	monthEndT, err := timeutil.ParseUTC(monthEnd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// First run tomorrow; need at least two weekly runs before month end.
+	first := time.Date(now.Year(), now.Month(), now.Day(), 12, 0, 0, 0, time.UTC).AddDate(0, 0, 1)
+	if first.After(monthEndT) || first.AddDate(0, 0, 7).After(monthEndT) {
+		t.Skip("not enough days left in month for two weekly runs")
+	}
+	weekday := int64(first.Weekday())
+	if weekday == 0 {
+		weekday = 7
+	}
+	start := timeutil.FormatUTC(first.AddDate(0, 0, -14))
+	upcoming, _ := json.Marshal([]string{
+		timeutil.FormatUTC(first),
+		timeutil.FormatUTC(first.AddDate(0, 0, 7)),
+		timeutil.FormatUTC(first.AddDate(0, 0, 14)),
+	})
+	insertSubscriptionWithUpcoming(t, database, userID, accountID, 1000, "week", &weekday, nil,
+		start, "12:00", timeutil.FormatUTC(first), string(upcoming), 1)
+
+	effects, err := ScheduledEffectsByUser(context.Background(), database, userID, "UTC", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	for tRun := first; !tRun.After(monthEndT); tRun = tRun.AddDate(0, 0, 7) {
+		count++
+	}
+	want := -int64(count) * 1000
+	if effects.Deltas[accountID] != want {
+		t.Fatalf("expected %d (%d runs), got %d", want, count, effects.Deltas[accountID])
+	}
+}
+
+func TestScheduledEffects_NextMonthIgnored(t *testing.T) {
+	database := scheduledTestDB(t)
+	userID, accountID := seedUserAcc(t, database)
+	now := timeutil.NowUTC()
+	next := nextMonthRun(t, now)
+	day := int64(next.Day())
+	insertSubscription(t, database, userID, accountID, 5000, "month", nil, &day,
+		timeutil.FormatUTC(now), "10:00", timeutil.FormatUTC(next), 1)
+
+	effects, err := ScheduledEffectsByUser(context.Background(), database, userID, "UTC", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if effects.Deltas[accountID] != 0 {
+		t.Fatalf("expected 0, got %d", effects.Deltas[accountID])
+	}
+	if _, ok := effects.HasSubscription[accountID]; ok {
+		t.Fatal("expected no HasSubscription")
+	}
+}
+
+func TestScheduledEffects_TimeLocalAheadOfNextRunDoesNotDoubleMonth(t *testing.T) {
+	database := scheduledTestDB(t)
+	userID, accountID := seedUserAcc(t, database)
+	now := time.Date(2026, 9, 18, 12, 0, 0, 0, time.UTC)
+	day := int64(29)
+	nextRun := "2026-09-29 00:15:00"
+	upcoming, _ := json.Marshal([]string{nextRun, "2026-10-29 00:15:00", "2026-11-28 00:15:00"})
+	insertSubscriptionWithUpcoming(t, database, userID, accountID, 19900, "month", nil, &day,
+		"2026-06-28 16:00:00", "08:15", nextRun, string(upcoming), 1)
+
+	for _, tz := range []string{"Europe/Moscow", "Asia/Irkutsk"} {
+		effects, err := ScheduledEffectsByUser(context.Background(), database, userID, tz, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if effects.Deltas[accountID] != -19900 {
+			t.Fatalf("tz %s: expected -19900 (one September run), got %d", tz, effects.Deltas[accountID])
+		}
+	}
+}
+
+func TestScheduledEffects_InactiveIgnored(t *testing.T) {
+	database := scheduledTestDB(t)
+	userID, accountID := seedUserAcc(t, database)
+	now := timeutil.NowUTC()
+	next := futureInMonth(t, now)
+	day := int64(next.Day())
+	insertSubscription(t, database, userID, accountID, 5000, "month", nil, &day,
+		timeutil.FormatUTC(now.AddDate(0, -1, 0)), "10:00", timeutil.FormatUTC(next), 0)
+
+	effects, err := ScheduledEffectsByUser(context.Background(), database, userID, "UTC", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if effects.Deltas[accountID] != 0 {
+		t.Fatalf("expected 0, got %d", effects.Deltas[accountID])
+	}
+}
+
+func TestScheduledEffects_OverdueIncluded(t *testing.T) {
+	database := scheduledTestDB(t)
+	userID, accountID := seedUserAcc(t, database)
+	now := timeutil.NowUTC()
+	monthStart, _, err := timeutil.MonthBoundsUTC("UTC", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	monthStartT, err := timeutil.ParseUTC(monthStart)
+	if err != nil {
+		t.Fatal(err)
+	}
+	overdue := atLocal(monthStartT.Add(time.Hour), "10:00")
+	if !overdue.Before(now) {
+		t.Skip("month start is not in the past")
+	}
+	day := int64(overdue.Day())
+	insertSubscription(t, database, userID, accountID, 2500, "month", nil, &day,
+		timeutil.FormatUTC(overdue.AddDate(0, -1, 0)), "10:00", timeutil.FormatUTC(overdue), 1)
+
+	effects, err := ScheduledEffectsByUser(context.Background(), database, userID, "UTC", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if effects.Deltas[accountID] != -2500 {
+		t.Fatalf("expected -2500, got %d", effects.Deltas[accountID])
+	}
+}
+
+func TestScheduledEffects_OverduePreviousMonthNotCounted(t *testing.T) {
+	database := scheduledTestDB(t)
+	userID, accountID := seedUserAcc(t, database)
+	now := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+	overdue := time.Date(2026, 9, 29, 10, 0, 0, 0, time.UTC)
+	day := int64(29)
+	insertSubscription(t, database, userID, accountID, 2500, "month", nil, &day,
+		"2026-08-29 10:00:00", "10:00", timeutil.FormatUTC(overdue), 1)
+
+	effects, err := ScheduledEffectsByUser(context.Background(), database, userID, "UTC", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// October run (29th) only; September overdue is outside the current month.
+	if effects.Deltas[accountID] != -2500 {
+		t.Fatalf("expected -2500, got %d", effects.Deltas[accountID])
+	}
+}
+
+func TestForecastsByUser_SubscriptionPlusFutureTx(t *testing.T) {
+	database := scheduledTestDB(t)
+	userID, accountID := seedUserAcc(t, database)
+	now := timeutil.NowUTC()
+	next := atLocal(futureInMonth(t, now), "10:00")
+	day := int64(next.Day())
+	insertSubscription(t, database, userID, accountID, 4000, "month", nil, &day,
+		timeutil.FormatUTC(now.AddDate(0, -1, 0)), "10:00", timeutil.FormatUTC(next), 1)
+
+	futureTx := futureInMonth(t, now)
+	_, err := database.ExecContext(context.Background(), `
+		INSERT INTO transactions (id, user_id, account_id, type, kind, amount, transaction_date, created_at, updated_at)
+		VALUES ('tx-f', ?, ?, 'expense', 'future', 2000, ?, datetime('now'), datetime('now'))`,
+		userID, accountID, timeutil.FormatUTC(futureTx))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := ForecastsByUser(context.Background(), database, userID, "UTC", map[string]int64{accountID: 100000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fc := out[accountID]
+	if !fc.HasFutureThisMonth {
+		t.Fatal("expected has_future_this_month")
+	}
+	if !fc.HasPlannedThisMonth {
+		t.Fatal("expected has_planned_this_month")
+	}
+	if !fc.HasSubscriptionsThisMonth {
+		t.Fatal("expected has_subscriptions_this_month")
+	}
+	if fc.Balance != 94000 {
+		t.Fatalf("expected 94000 (100000-2000-4000), got %d", fc.Balance)
+	}
+}
+
+func TestForecastsByUser_SubscriptionAndRecurring(t *testing.T) {
+	database := scheduledTestDB(t)
+	userID, accountID := seedUserAcc(t, database)
+	expCat := seedCategory(t, database, userID, "expense")
+	now := timeutil.NowUTC()
+	nextDay := futureInMonth(t, now)
+	day := int64(nextDay.Day())
+	start := timeutil.FormatUTC(now.AddDate(0, -1, 0))
+	subNext := timeutil.FormatUTC(atLocal(nextDay, "10:00"))
+	recNext := timeutil.FormatUTC(atLocal(nextDay, "11:00"))
+	insertSubscription(t, database, userID, accountID, 1500, "month", nil, &day, start, "10:00", subNext, 1)
+	insertRecurring(t, database, "ro-1", userID, accountID, expCat, "expense", 2500, "month", nil, &day, start, "11:00", recNext, 1)
+
+	out, err := ForecastsByUser(context.Background(), database, userID, "UTC", map[string]int64{accountID: 100000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fc := out[accountID]
+	if fc.Balance != 96000 {
+		t.Fatalf("expected 96000, got %d", fc.Balance)
+	}
+	if !fc.HasPlannedThisMonth {
+		t.Fatal("expected has_planned_this_month from recurring")
+	}
+	if !fc.HasSubscriptionsThisMonth {
+		t.Fatal("expected has_subscriptions_this_month")
+	}
+}
+
+func TestForecastsByUser_SubscriptionOnlyFlags(t *testing.T) {
+	database := scheduledTestDB(t)
+	userID, accountID := seedUserAcc(t, database)
+	now := timeutil.NowUTC()
+	next := atLocal(futureInMonth(t, now), "10:00")
+	day := int64(next.Day())
+	insertSubscription(t, database, userID, accountID, 4000, "month", nil, &day,
+		timeutil.FormatUTC(now.AddDate(0, -1, 0)), "10:00", timeutil.FormatUTC(next), 1)
+
+	out, err := ForecastsByUser(context.Background(), database, userID, "UTC", map[string]int64{accountID: 100000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fc := out[accountID]
+	if !fc.HasFutureThisMonth || !fc.HasSubscriptionsThisMonth {
+		t.Fatal("expected subscription flags")
+	}
+	if fc.HasPlannedThisMonth {
+		t.Fatal("expected no planned (future/recurring)")
+	}
+	if fc.Balance != 96000 {
+		t.Fatalf("expected 96000, got %d", fc.Balance)
+	}
+}
+
+func insertCredit(t *testing.T, database *sql.DB, id, userID, accountID, status string) {
+	t.Helper()
+	_, err := database.ExecContext(context.Background(), `
+		INSERT INTO credits (id, user_id, name, principal_amount, issue_date, term_months, interest_rate, payment_interval,
+			paid_amount, monthly_payment, debit_account_id, added_retroactively, recorded_at, status, created_at, updated_at)
+		VALUES (?, ?, 'Кредит', 100000, datetime('now'), 12, 0, 'month', 0, 10000, ?, 0, datetime('now'), ?, datetime('now'), datetime('now'))`,
+		id, userID, accountID, status)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func insertCreditPayment(t *testing.T, database *sql.DB, id, creditID string, amount int64, paymentDate, kind string, applied int) {
+	t.Helper()
+	_, err := database.ExecContext(context.Background(), `
+		INSERT INTO credit_payments (id, credit_id, amount, payment_date, kind, is_applied, exclude_from_stats, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, 0, datetime('now'))`,
+		id, creditID, amount, paymentDate, kind, applied)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestScheduledEffects_UnpaidCreditThisMonth(t *testing.T) {
+	database := scheduledTestDB(t)
+	userID, accountID := seedUserAcc(t, database)
+	now := timeutil.NowUTC()
+	due := time.Date(now.Year(), now.Month(), 15, 12, 0, 0, 0, time.UTC)
+	insertCredit(t, database, "cr-1", userID, accountID, "active")
+	insertCreditPayment(t, database, "cp-1", "cr-1", 7500, timeutil.FormatUTC(due), "scheduled", 0)
+
+	effects, err := ScheduledEffectsByUser(context.Background(), database, userID, "UTC", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if effects.Deltas[accountID] != -7500 {
+		t.Fatalf("expected -7500, got %d", effects.Deltas[accountID])
+	}
+	if _, ok := effects.HasCredit[accountID]; !ok {
+		t.Fatal("expected HasCredit")
+	}
+	if _, ok := effects.HasSubscription[accountID]; ok {
+		t.Fatal("expected no HasSubscription")
+	}
+	if _, ok := effects.HasRecurring[accountID]; ok {
+		t.Fatal("expected no HasRecurring")
+	}
+}
+
+func TestScheduledEffects_CreditPlusSubscription(t *testing.T) {
+	database := scheduledTestDB(t)
+	userID, accountID := seedUserAcc(t, database)
+	now := timeutil.NowUTC()
+	next := atLocal(futureInMonth(t, now), "10:00")
+	day := int64(next.Day())
+	insertSubscription(t, database, userID, accountID, 5000, "month", nil, &day,
+		timeutil.FormatUTC(now.AddDate(0, -1, 0)), "10:00", timeutil.FormatUTC(next), 1)
+	insertCredit(t, database, "cr-plus-sub", userID, accountID, "active")
+	insertCreditPayment(t, database, "cp-plus-sub", "cr-plus-sub", 7500,
+		timeutil.FormatUTC(time.Date(now.Year(), now.Month(), 15, 12, 0, 0, 0, time.UTC)), "scheduled", 0)
+
+	effects, err := ScheduledEffectsByUser(context.Background(), database, userID, "UTC", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if effects.Deltas[accountID] != -12500 {
+		t.Fatalf("expected -12500 (subscription 5000 + credit 7500), got %d", effects.Deltas[accountID])
+	}
+	if _, ok := effects.HasCredit[accountID]; !ok {
+		t.Fatal("expected HasCredit")
+	}
+	if _, ok := effects.HasSubscription[accountID]; !ok {
+		t.Fatal("expected HasSubscription")
+	}
+}
+
+func TestScheduledEffects_WeeklyCreditMultiple(t *testing.T) {
+	database := scheduledTestDB(t)
+	userID, accountID := seedUserAcc(t, database)
+	now := timeutil.NowUTC()
+	first := time.Date(now.Year(), now.Month(), 5, 12, 0, 0, 0, time.UTC)
+	second := time.Date(now.Year(), now.Month(), 12, 12, 0, 0, 0, time.UTC)
+	insertCredit(t, database, "cr-week", userID, accountID, "active")
+	insertCreditPayment(t, database, "cp-w1", "cr-week", 1000, timeutil.FormatUTC(first), "scheduled", 0)
+	insertCreditPayment(t, database, "cp-w2", "cr-week", 1000, timeutil.FormatUTC(second), "scheduled", 0)
+
+	effects, err := ScheduledEffectsByUser(context.Background(), database, userID, "UTC", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if effects.Deltas[accountID] != -2000 {
+		t.Fatalf("expected -2000, got %d", effects.Deltas[accountID])
+	}
+}
+
+func TestScheduledEffects_AppliedCreditIgnored(t *testing.T) {
+	database := scheduledTestDB(t)
+	userID, accountID := seedUserAcc(t, database)
+	now := timeutil.NowUTC()
+	due := time.Date(now.Year(), now.Month(), 15, 12, 0, 0, 0, time.UTC)
+	insertCredit(t, database, "cr-paid", userID, accountID, "active")
+	insertCreditPayment(t, database, "cp-paid", "cr-paid", 8000, timeutil.FormatUTC(due), "scheduled", 1)
+
+	effects, err := ScheduledEffectsByUser(context.Background(), database, userID, "UTC", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if effects.Deltas[accountID] != 0 {
+		t.Fatalf("expected 0, got %d", effects.Deltas[accountID])
+	}
+	if _, ok := effects.HasCredit[accountID]; ok {
+		t.Fatal("expected no HasCredit")
+	}
+}
+
+func TestScheduledEffects_OverdueCreditThisMonthIncluded(t *testing.T) {
+	database := scheduledTestDB(t)
+	userID, accountID := seedUserAcc(t, database)
+	now := timeutil.NowUTC()
+	monthStart, _, err := timeutil.MonthBoundsUTC("UTC", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	monthStartT, err := timeutil.ParseUTC(monthStart)
+	if err != nil {
+		t.Fatal(err)
+	}
+	overdue := monthStartT.Add(time.Hour)
+	insertCredit(t, database, "cr-over", userID, accountID, "active")
+	insertCreditPayment(t, database, "cp-over", "cr-over", 3500, timeutil.FormatUTC(overdue), "scheduled", 0)
+
+	effects, err := ScheduledEffectsByUser(context.Background(), database, userID, "UTC", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if effects.Deltas[accountID] != -3500 {
+		t.Fatalf("expected -3500, got %d", effects.Deltas[accountID])
+	}
+}
+
+func TestScheduledEffects_CreditNextMonthIgnored(t *testing.T) {
+	database := scheduledTestDB(t)
+	userID, accountID := seedUserAcc(t, database)
+	now := timeutil.NowUTC()
+	insertCredit(t, database, "cr-next", userID, accountID, "active")
+	insertCreditPayment(t, database, "cp-next", "cr-next", 9000, timeutil.FormatUTC(nextMonthRun(t, now)), "scheduled", 0)
+
+	effects, err := ScheduledEffectsByUser(context.Background(), database, userID, "UTC", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if effects.Deltas[accountID] != 0 {
+		t.Fatalf("expected 0, got %d", effects.Deltas[accountID])
+	}
+}
+
+func TestScheduledEffects_ClosedCreditIgnored(t *testing.T) {
+	database := scheduledTestDB(t)
+	userID, accountID := seedUserAcc(t, database)
+	now := timeutil.NowUTC()
+	due := time.Date(now.Year(), now.Month(), 15, 12, 0, 0, 0, time.UTC)
+	insertCredit(t, database, "cr-closed", userID, accountID, "closed")
+	insertCreditPayment(t, database, "cp-closed", "cr-closed", 6000, timeutil.FormatUTC(due), "scheduled", 0)
+
+	effects, err := ScheduledEffectsByUser(context.Background(), database, userID, "UTC", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if effects.Deltas[accountID] != 0 {
+		t.Fatalf("expected 0, got %d", effects.Deltas[accountID])
+	}
+}
+
+func TestScheduledEffects_NonScheduledCreditKindIgnored(t *testing.T) {
+	database := scheduledTestDB(t)
+	userID, accountID := seedUserAcc(t, database)
+	now := timeutil.NowUTC()
+	due := timeutil.FormatUTC(time.Date(now.Year(), now.Month(), 15, 12, 0, 0, 0, time.UTC))
+	insertCredit(t, database, "cr-kinds", userID, accountID, "active")
+	insertCreditPayment(t, database, "cp-early", "cr-kinds", 1000, due, "early", 0)
+	insertCreditPayment(t, database, "cp-auto", "cr-kinds", 1000, due, "auto", 0)
+	insertCreditPayment(t, database, "cp-retro", "cr-kinds", 1000, due, "retroactive", 0)
+
+	effects, err := ScheduledEffectsByUser(context.Background(), database, userID, "UTC", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if effects.Deltas[accountID] != 0 {
+		t.Fatalf("expected 0, got %d", effects.Deltas[accountID])
+	}
+}
+
+func TestForecastsByUser_CreditOnlyFlags(t *testing.T) {
+	database := scheduledTestDB(t)
+	userID, accountID := seedUserAcc(t, database)
+	now := timeutil.NowUTC()
+	due := time.Date(now.Year(), now.Month(), 15, 12, 0, 0, 0, time.UTC)
+	insertCredit(t, database, "cr-flags", userID, accountID, "active")
+	insertCreditPayment(t, database, "cp-flags", "cr-flags", 4000, timeutil.FormatUTC(due), "scheduled", 0)
+
+	out, err := ForecastsByUser(context.Background(), database, userID, "UTC", map[string]int64{accountID: 100000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fc := out[accountID]
+	if fc.Balance != 96000 {
+		t.Fatalf("expected 96000, got %d", fc.Balance)
+	}
+	if !fc.HasFutureThisMonth {
+		t.Fatal("expected has_future_this_month")
+	}
+	if !fc.HasPlannedThisMonth {
+		t.Fatal("expected has_planned_this_month from credit")
+	}
+	if fc.HasSubscriptionsThisMonth {
+		t.Fatal("expected no has_subscriptions_this_month")
+	}
+}
+
+func TestForecastsByUser_AppliedCreditDoesNotDoubleFuture(t *testing.T) {
+	database := scheduledTestDB(t)
+	userID, accountID := seedUserAcc(t, database)
+	now := timeutil.NowUTC()
+	due := time.Date(now.Year(), now.Month(), 15, 12, 0, 0, 0, time.UTC)
+	insertCredit(t, database, "cr-fut", userID, accountID, "active")
+	insertCreditPayment(t, database, "cp-fut", "cr-fut", 2000, timeutil.FormatUTC(due), "scheduled", 1)
+	_, err := database.ExecContext(context.Background(), `
+		INSERT INTO transactions (id, user_id, account_id, type, kind, amount, transaction_date, created_at, updated_at)
+		VALUES ('tx-credit-f', ?, ?, 'expense', 'future', 2000, ?, datetime('now'), datetime('now'))`,
+		userID, accountID, timeutil.FormatUTC(due))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := ForecastsByUser(context.Background(), database, userID, "UTC", map[string]int64{accountID: 100000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fc := out[accountID]
+	if fc.Balance != 98000 {
+		t.Fatalf("expected 98000 (future only, no schedule double-count), got %d", fc.Balance)
+	}
+	if !fc.HasPlannedThisMonth {
+		t.Fatal("expected has_planned_this_month from future tx")
+	}
+}

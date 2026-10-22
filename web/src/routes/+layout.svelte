@@ -5,14 +5,31 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
 	import { _ } from 'svelte-i18n';
-	import { ApiError, getSetupStatus } from '$lib/api/client';
+	import { ApiError, getDashboard, getSetupStatus } from '$lib/api/client';
+	import { readInboxCount } from '$lib/stores/inbox-count';
+	import { refCacheTick } from '$lib/ref-cache';
 	import { loadUser, logout, user, hasRecentSession, clearSessionHint } from '$lib/stores/auth';
+	import {
+		LOGIN_NEXT_PARAM,
+		loginHrefFor,
+		parsePostLoginPath
+	} from '$lib/auth/post-login-redirect';
 	import { isPublicAppRoute, sessionExpiredTick } from '$lib/auth/session-expired';
 	import { invalidateApiCache } from '$lib/api/cache';
+	import {
+		clearFeatureFlags,
+		featureFlags,
+		featureRequiredForPath,
+		isFeatureEnabled
+	} from '$lib/features';
+	import { clearRefCache, setRefCacheUserId } from '$lib/ref-cache';
+	import { disconnectRealtime } from '$lib/realtime';
 	import { registerServiceWorker } from '$lib/pwa';
 	import { initTheme, syncThemeFromUser } from '$lib/stores/theme';
+	import { initUiStyle } from '$lib/ui-style';
 	import { setLocale } from '$lib/i18n';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import PromptDialog from '$lib/components/PromptDialog.svelte';
 	import AccountTransferConfirmDialog from '$lib/components/AccountTransferConfirmDialog.svelte';
 	import UpdateAvailableModal from '$lib/components/UpdateAvailableModal.svelte';
 	import AppIcon from '$lib/components/AppIcon.svelte';
@@ -28,7 +45,7 @@
 	let ready = $state(false);
 	let bootError = $state<string | null>(null);
 	let navOpen = $state(false);
-	let mobileNavView = $state<'root' | 'settings' | 'admin'>('root');
+	let mobileNavView = $state<'root' | 'other' | 'settings' | 'admin'>('root');
 	let pendingUpdate = $state<PendingVersionUpdate | null>(null);
 	let headerEl = $state<HTMLElement | undefined>();
 
@@ -59,13 +76,35 @@
 	const path = $derived($page.url.pathname);
 	const isSetup = $derived(path === '/setup');
 
+	let inboxCountFromDashboard = $state(0);
+
+	const inboxCount = $derived.by(() => {
+		void $refCacheTick;
+		void $user?.id;
+		return Math.max(readInboxCount(), inboxCountFromDashboard);
+	});
+
+	$effect(() => {
+		if (!$user || bootError) return;
+		void getDashboard()
+			.then((d) => {
+				const n = d.inbox_count;
+				inboxCountFromDashboard = typeof n === 'number' && n > 0 ? n : 0;
+			})
+			.catch(() => {});
+	});
+
 	$effect(() => {
 		if ($sessionExpiredTick === 0) return;
+		disconnectRealtime();
 		clearSessionHint();
+		clearRefCache();
+		clearFeatureFlags();
+		setRefCacheUserId(null);
 		user.set(null);
 		invalidateApiCache();
 		if (ready && !bootError && !isPublicAppRoute(path)) {
-			void goto(resolve('/login'), { replaceState: true });
+			void goto(resolve(loginHrefFor(path, $page.url.search) as '/'), { replaceState: true });
 		}
 	});
 
@@ -73,7 +112,16 @@
 		if (!ready || bootError) return;
 		if (isPublicAppRoute(path)) return;
 		if ($user === null) {
-			void goto(resolve('/login'), { replaceState: true });
+			void goto(resolve(loginHrefFor(path, $page.url.search) as '/'), { replaceState: true });
+		}
+	});
+
+	$effect(() => {
+		if (!ready || bootError || !$user || !$featureFlags) return;
+		if (path === '/feature-disabled') return;
+		const required = featureRequiredForPath(path);
+		if (required && !isFeatureEnabled(required, $featureFlags)) {
+			void goto(resolve('/feature-disabled'), { replaceState: true });
 		}
 	});
 
@@ -81,43 +129,101 @@
 		href: string;
 		labelKey: string;
 		mobileOnly?: boolean;
+		feature?: string;
 		isActive: (pathname: string, search: URLSearchParams) => boolean;
 	};
 
-	const flatNavItems: NavItem[] = [
+	const flatNavItemsAll: NavItem[] = [
 		{
-			href: resolve('/accounts'),
-			labelKey: 'nav.accounts',
-			isActive: (p) => p.startsWith('/accounts')
+			href: resolve('/'),
+			labelKey: 'nav.home',
+			isActive: (p) => p === '/'
 		},
 		{
 			href: resolve('/transactions'),
 			labelKey: 'nav.transactions',
-			isActive: (p) => p.startsWith('/transactions')
-		},
-		{
-			href: resolve('/debts'),
-			labelKey: 'nav.debts',
-			isActive: (p) => p.startsWith('/debts') || p.startsWith('/debtors')
-		},
-		{
-			href: resolve('/credits'),
-			labelKey: 'nav.credits',
-			isActive: (p) => p.startsWith('/credits')
+			isActive: (p) => p.startsWith('/transactions') && !p.startsWith('/transactions/inbox')
 		},
 		{
 			href: resolve('/budget'),
 			labelKey: 'nav.budget',
+			feature: 'budget',
 			isActive: (p) => p.startsWith('/budget')
 		},
 		{
 			href: resolve('/stats'),
 			labelKey: 'nav.stats',
+			feature: 'stats',
 			isActive: (p) => p.startsWith('/stats')
 		}
 	];
 
-	const settingsNavItems: NavDropdownItem[] = [
+	const otherNavItemsAll: (NavDropdownItem & { feature?: string })[] = [
+		{
+			path: '/transactions/inbox',
+			labelKey: 'nav.inbox',
+			isActive: (p) => p.startsWith('/transactions/inbox')
+		},
+		{
+			path: '/accounts',
+			labelKey: 'nav.accounts',
+			isActive: (p) => p.startsWith('/accounts')
+		},
+		{
+			path: '/debts',
+			labelKey: 'nav.debts',
+			feature: 'debts',
+			isActive: (p) => p.startsWith('/debts') || p.startsWith('/debtors')
+		},
+		{
+			path: '/credits',
+			labelKey: 'nav.credits',
+			feature: 'credits',
+			isActive: (p) => p.startsWith('/credits')
+		},
+		{
+			path: '/categories',
+			labelKey: 'nav.categories',
+			isActive: (p) => p.startsWith('/categories')
+		},
+		{
+			path: '/merchants',
+			labelKey: 'nav.merchants',
+			feature: 'merchants_tags',
+			isActive: (p) => p.startsWith('/merchants')
+		},
+		{
+			path: '/tags',
+			labelKey: 'nav.tags',
+			feature: 'merchants_tags',
+			isActive: (p) => p.startsWith('/tags')
+		},
+		{
+			path: '/recurring-operations',
+			labelKey: 'nav.recurring',
+			feature: 'recurring',
+			isActive: (p) => p.startsWith('/recurring-operations')
+		},
+		{
+			path: '/subscriptions',
+			labelKey: 'nav.subscriptions',
+			feature: 'subscriptions',
+			isActive: (p) => p.startsWith('/subscriptions')
+		},
+		{
+			path: '/transaction-templates',
+			labelKey: 'settings.tab.templates',
+			feature: 'transaction_templates',
+			isActive: (p) => p.startsWith('/transaction-templates')
+		},
+		{
+			path: '/category-rules',
+			labelKey: 'categoryRules.title',
+			isActive: (p) => p.startsWith('/category-rules')
+		}
+	];
+
+	const settingsNavItemsAll: (NavDropdownItem & { feature?: string })[] = [
 		{
 			path: '/settings',
 			labelKey: 'settings.tab.profile',
@@ -136,30 +242,44 @@
 		{
 			path: '/settings/notifications',
 			labelKey: 'settings.tab.notifications',
+			feature: 'notifications',
 			isActive: (p) => p === '/settings/notifications'
-		},
-		{
-			path: '/settings/categories',
-			labelKey: 'settings.tab.categories',
-			isActive: (p) => p === '/settings/categories'
 		},
 		{
 			path: '/settings/import',
 			labelKey: 'settings.tab.import',
+			feature: 'import_export',
 			isActive: (p) => p === '/settings/import'
-		},
-		{
-			path: '/settings/recurring-operations',
-			labelKey: 'nav.recurring',
-			isActive: (p) => p.startsWith('/settings/recurring-operations')
 		}
 	];
+
+	const flatNavItems = $derived(
+		flatNavItemsAll.filter((item) => !item.feature || isFeatureEnabled(item.feature, $featureFlags))
+	);
+	const otherNavItems = $derived.by(() => {
+		void $featureFlags;
+		return otherNavItemsAll.filter(
+			(item) =>
+				(!item.feature || isFeatureEnabled(item.feature, $featureFlags)) &&
+				(item.labelKey !== 'nav.inbox' || inboxCount > 0)
+		);
+	});
+	const settingsNavItems = $derived(
+		settingsNavItemsAll.filter(
+			(item) => !item.feature || isFeatureEnabled(item.feature, $featureFlags)
+		)
+	);
 
 	const adminNavItems: NavDropdownItem[] = [
 		{
 			path: '/admin',
 			labelKey: 'admin.tab.system',
 			isActive: (p) => p === '/admin'
+		},
+		{
+			path: '/admin/features',
+			labelKey: 'admin.tab.features',
+			isActive: (p) => p.startsWith('/admin/features')
 		},
 		{
 			path: '/admin/users',
@@ -178,12 +298,46 @@
 		}
 	];
 
+	function isOtherGroupActive(p: string) {
+		return (
+			p.startsWith('/transactions/inbox') ||
+			p.startsWith('/category-rules') ||
+			p.startsWith('/accounts') ||
+			p.startsWith('/debts') ||
+			p.startsWith('/debtors') ||
+			p.startsWith('/credits') ||
+			p.startsWith('/categories') ||
+			p.startsWith('/merchants') ||
+			p.startsWith('/tags') ||
+			p.startsWith('/recurring-operations') ||
+			p.startsWith('/subscriptions') ||
+			p.startsWith('/transaction-templates')
+		);
+	}
+
+	function otherNavItemBadge(labelKey: string): number | undefined {
+		if (labelKey === 'nav.inbox' && inboxCount > 0) return inboxCount;
+		return undefined;
+	}
+
 	function isSettingsGroupActive(p: string) {
 		return p === '/settings' || p.startsWith('/settings/');
 	}
 
 	function isAdminGroupActive(p: string) {
 		return p === '/admin' || p.startsWith('/admin/');
+	}
+
+	function mobileSubmenuTitle() {
+		if (mobileNavView === 'other') return $_('nav.other');
+		if (mobileNavView === 'settings') return $_('nav.settings');
+		return $_('nav.admin');
+	}
+
+	function mobileSubmenuItems(): NavDropdownItem[] {
+		if (mobileNavView === 'other') return otherNavItems;
+		if (mobileNavView === 'settings') return settingsNavItems;
+		return adminNavItems;
 	}
 
 	function navLinkClass(active: boolean, base: string) {
@@ -198,9 +352,9 @@
 		return item.isActive ? item.isActive(path) : path === item.path;
 	}
 
-	async function goReady(route: '/' | '/login' | '/setup') {
+	async function goReady(route: string) {
 		ready = true;
-		await goto(resolve(route));
+		await goto(resolve(route as '/'));
 	}
 
 	async function bootstrap() {
@@ -211,8 +365,10 @@
 		}
 
 		initTheme();
+		initUiStyle();
 
 		const currentPath = $page.url.pathname;
+		const currentSearch = $page.url.search;
 		try {
 			const status = await getSetupStatus();
 			if (!status.configured && currentPath !== '/setup') {
@@ -227,7 +383,7 @@
 			if (status.configured && !['/setup', '/login', '/register'].includes(currentPath)) {
 				const auth = await loadUser();
 				if (auth === 'unauthorized') {
-					await goReady('/login');
+					await goReady(loginHrefFor(currentPath, currentSearch));
 					return;
 				}
 				if (auth === 'network') {
@@ -245,15 +401,21 @@
 							if (update) pendingUpdate = update;
 						});
 					}
-					if (currentPath === '/login' || currentPath === '/register') {
-						await goReady('/');
-						return;
-					}
 				}
+			}
+
+			const currentUser = get(user);
+			if (currentUser && (currentPath === '/login' || currentPath === '/register')) {
+				const next =
+					currentPath === '/login'
+						? parsePostLoginPath($page.url.searchParams.get(LOGIN_NEXT_PARAM), '/')
+						: '/';
+				await goReady(next);
+				return;
 			}
 		} catch (err) {
 			if (err instanceof ApiError && err.status === 401) {
-				await goReady('/login');
+				await goReady(loginHrefFor(currentPath, currentSearch));
 				return;
 			}
 			if (currentPath !== '/setup' && currentPath !== '/login' && currentPath !== '/register') {
@@ -351,10 +513,19 @@
 									<a
 										href={item.href}
 										class={navLinkClass(isNavItemActive(item), 'btn-ghost btn-nav')}
-										aria-current={isNavItemActive(item) ? 'page' : undefined}>{$_(item.labelKey)}</a
+										aria-current={isNavItemActive(item) ? 'page' : undefined}
 									>
+										{$_(item.labelKey)}
+									</a>
 								{/if}
 							{/each}
+							<NavDropdown
+								labelKey="nav.other"
+								items={otherNavItems}
+								isGroupActive={isOtherGroupActive}
+								triggerBadge={inboxCount > 0 ? inboxCount : undefined}
+								itemBadge={otherNavItemBadge}
+							/>
 							<NavDropdown
 								labelKey="nav.settings"
 								items={settingsNavItems}
@@ -386,9 +557,34 @@
 								class={navLinkClass(isNavItemActive(item), 'nav-mobile-link')}
 								aria-current={isNavItemActive(item) ? 'page' : undefined}
 								role="menuitem"
-								onclick={closeNav}>{$_(item.labelKey)}</a
+								onclick={closeNav}
 							>
+								{$_(item.labelKey)}
+							</a>
 						{/each}
+						<button
+							type="button"
+							class={navLinkClass(isOtherGroupActive(path), 'nav-mobile-link nav-mobile-drill')}
+							role="menuitem"
+							onclick={() => (mobileNavView = 'other')}
+						>
+							<span class="flex flex-1 items-center justify-between gap-2">
+								<span>{$_('nav.other')}</span>
+								{#if inboxCount > 0}
+									<span class="nav-badge" aria-label={String(inboxCount)}>{inboxCount}</span>
+								{/if}
+							</span>
+							<svg
+								aria-hidden="true"
+								class="nav-mobile-chevron"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+							>
+								<path d="m9 6 6 6-6 6" />
+							</svg>
+						</button>
 						<button
 							type="button"
 							class={navLinkClass(isSettingsGroupActive(path), 'nav-mobile-link nav-mobile-drill')}
@@ -446,16 +642,27 @@
 							<span>{$_('nav.back')}</span>
 						</button>
 						<p class="nav-mobile-submenu-title">
-							{mobileNavView === 'settings' ? $_('nav.settings') : $_('nav.admin')}
+							{mobileSubmenuTitle()}
 						</p>
-						{#each mobileNavView === 'settings' ? settingsNavItems : adminNavItems as item (item.path)}
+						{#each mobileSubmenuItems() as item (item.path)}
+							{@const badge =
+								mobileNavView === 'other' ? otherNavItemBadge(item.labelKey) : undefined}
 							<a
-								href={resolve(item.path)}
+								href={resolve(item.path as '/')}
 								class={navLinkClass(isDropdownItemActive(item), 'nav-mobile-link')}
 								aria-current={isDropdownItemActive(item) ? 'page' : undefined}
 								role="menuitem"
-								onclick={closeNav}>{$_(item.labelKey)}</a
+								onclick={closeNav}
 							>
+								{#if badge}
+									<span class="flex w-full items-center justify-between gap-2">
+										<span>{$_(item.labelKey)}</span>
+										<span class="nav-badge" aria-label={String(badge)}>{badge}</span>
+									</span>
+								{:else}
+									{$_(item.labelKey)}
+								{/if}
+							</a>
 						{/each}
 					{/if}
 				</div>
@@ -470,6 +677,7 @@
 {/if}
 
 <ConfirmDialog />
+<PromptDialog />
 <AccountTransferConfirmDialog />
 {#if pendingUpdate && $user?.is_admin}
 	<UpdateAvailableModal update={pendingUpdate} onclose={() => (pendingUpdate = null)} />

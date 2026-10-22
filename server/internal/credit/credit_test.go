@@ -2,6 +2,7 @@ package credit
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"path/filepath"
 	"testing"
@@ -135,7 +136,7 @@ func TestCreateListGetCredit(t *testing.T) {
 func TestPreviewSchedule(t *testing.T) {
 	issue := timeutil.NowUTC().AddDate(0, 1, 0)
 
-	preview, monthly, err := PreviewSchedule(PreviewInput{
+	result, err := PreviewSchedule(PreviewInput{
 		Principal:       600_000,
 		IssueDate:       issue,
 		TermMonths:      6,
@@ -145,11 +146,11 @@ func TestPreviewSchedule(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(preview) != 6 {
-		t.Fatalf("preview len %d", len(preview))
+	if len(result.Schedule) != 6 {
+		t.Fatalf("preview len %d", len(result.Schedule))
 	}
-	if monthly <= 0 {
-		t.Fatalf("monthly %d", monthly)
+	if result.CalculatedMonthly <= 0 {
+		t.Fatalf("monthly %d", result.CalculatedMonthly)
 	}
 }
 
@@ -498,15 +499,15 @@ func TestCreateWithInterestRate(t *testing.T) {
 	if c.MonthlyPayment <= 0 {
 		t.Fatalf("monthly %d", c.MonthlyPayment)
 	}
-	preview, monthly, err := PreviewSchedule(PreviewInput{
+	result, err := PreviewSchedule(PreviewInput{
 		Principal: 1_000_000, IssueDate: issue, TermMonths: 12,
 		InterestRate: 12, PaymentInterval: IntervalMonth,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(preview) != 12 || monthly <= 0 {
-		t.Fatalf("preview len %d monthly %d", len(preview), monthly)
+	if len(result.Schedule) != 12 || result.CalculatedMonthly <= 0 {
+		t.Fatalf("preview len %d monthly %d", len(result.Schedule), result.CalculatedMonthly)
 	}
 }
 
@@ -570,6 +571,69 @@ func TestRepairShortSchedules(t *testing.T) {
 	}
 	if len(payments) != 36 {
 		t.Fatalf("after repair: expected 36 payments, got %d", len(payments))
+	}
+}
+
+func TestRepairShortSchedulesMortgage(t *testing.T) {
+	ctx, handle, userID, accountID := seedCreditEnv(t)
+	sqlDB := handle.DB()
+	issue := timeutil.NowUTC().AddDate(0, 1, 0)
+	price := int64(6_000_000)
+
+	c, err := Create(ctx, sqlDB, userID, CreateInput{
+		CreditKind:         CreditKindMortgage,
+		PropertyPrice:      &price,
+		DownPayment:        1_000_000,
+		IssueDate:          issue,
+		TermMonths:         12,
+		InterestRate:       12,
+		PaymentInterval:    IntervalMonth,
+		DebitAccountID:     accountID,
+		CreateTransactions: false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	payments, err := queries(sqlDB).ListCreditPayments(ctx, c.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(payments) != 12 {
+		t.Fatalf("setup: expected 12 payments, got %d", len(payments))
+	}
+	origLast := payments[len(payments)-1].Amount
+	issueParsed, err := timeutil.ParseUTC(c.IssueDate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	consumer, err := GenerateAutoSchedule(
+		c.PrincipalAmount, c.TermMonths, c.MonthlyPayment,
+		IntervalMonth, issueParsed, c.InterestRate, CreditKindConsumer,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if consumer[len(consumer)-1].Amount == origLast {
+		t.Fatal("fixture: consumer last payment matches mortgage")
+	}
+	for i := 8; i < len(payments); i++ {
+		if _, err := sqlDB.ExecContext(ctx, `DELETE FROM credit_payments WHERE id = ?`, payments[i].ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := RepairShortSchedules(ctx, sqlDB); err != nil {
+		t.Fatal(err)
+	}
+	payments, err = queries(sqlDB).ListCreditPayments(ctx, c.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(payments) != 12 {
+		t.Fatalf("after repair: expected 12 payments, got %d", len(payments))
+	}
+	if payments[len(payments)-1].Amount != origLast {
+		t.Fatalf("last payment %d want mortgage %d (consumer would be %d)",
+			payments[len(payments)-1].Amount, origLast, consumer[len(consumer)-1].Amount)
 	}
 }
 
@@ -868,6 +932,64 @@ func TestRepairScheduleOnList(t *testing.T) {
 	}
 }
 
+func TestRepairScheduleOnGetMortgage(t *testing.T) {
+	ctx, handle, userID, accountID := seedCreditEnv(t)
+	sqlDB := handle.DB()
+	issue := timeutil.NowUTC().AddDate(0, 1, 0)
+	price := int64(6_000_000)
+
+	c, err := Create(ctx, sqlDB, userID, CreateInput{
+		CreditKind:         CreditKindMortgage,
+		PropertyPrice:      &price,
+		DownPayment:        1_000_000,
+		IssueDate:          issue,
+		TermMonths:         12,
+		InterestRate:       12,
+		PaymentInterval:    IntervalMonth,
+		DebitAccountID:     accountID,
+		CreateTransactions: false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	orig, err := GetByID(ctx, sqlDB, userID, c.ID, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(orig.Schedule) != 12 {
+		t.Fatalf("setup schedule %d", len(orig.Schedule))
+	}
+	origLast := orig.Schedule[len(orig.Schedule)-1].Amount
+	issueParsed, err := timeutil.ParseUTC(orig.IssueDate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	consumer, err := GenerateAutoSchedule(
+		orig.PrincipalAmount, orig.TermMonths, orig.MonthlyPayment,
+		IntervalMonth, issueParsed, orig.InterestRate, CreditKindConsumer,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if consumer[len(consumer)-1].Amount == origLast {
+		t.Fatal("fixture: consumer last payment matches mortgage")
+	}
+	if _, err := sqlDB.ExecContext(ctx, `DELETE FROM credit_payments WHERE credit_id = ?`, c.ID); err != nil {
+		t.Fatal(err)
+	}
+	got, err := GetByID(ctx, sqlDB, userID, c.ID, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Schedule) != 12 {
+		t.Fatalf("repaired schedule %d", len(got.Schedule))
+	}
+	if got.Schedule[len(got.Schedule)-1].Amount != origLast {
+		t.Fatalf("last payment %d want mortgage %d (consumer would be %d)",
+			got.Schedule[len(got.Schedule)-1].Amount, origLast, consumer[len(consumer)-1].Amount)
+	}
+}
+
 func TestOnTransactionDeleteRevertsAppliedPayment(t *testing.T) {
 	ctx, handle, userID, accountID := seedCreditEnv(t)
 	sqlDB := handle.DB()
@@ -1145,6 +1267,332 @@ func TestCreatePrincipalIncomeNotAllowedForInstallment(t *testing.T) {
 	})
 	if !errors.Is(err, ErrInvalidPrincipalIncome) {
 		t.Fatalf("expected ErrInvalidPrincipalIncome, got %v", err)
+	}
+}
+
+func TestPayNextScheduledAttachExistingTransaction(t *testing.T) {
+	ctx, handle, userID, accountID := seedCreditEnv(t)
+	sqlDB := handle.DB()
+
+	issue := timeutil.NowUTC().AddDate(0, 1, 0)
+	c, err := Create(ctx, sqlDB, userID, CreateInput{
+		PrincipalAmount: 60_000,
+		IssueDate:       issue,
+		TermMonths:      6,
+		PaymentInterval: IntervalMonth,
+		DebitAccountID:  accountID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var otherCat string
+	if err := sqlDB.QueryRowContext(ctx, `
+		SELECT id FROM categories WHERE user_id = ? AND is_system = 0 AND type = 'expense' LIMIT 1`,
+		userID).Scan(&otherCat); err != nil {
+		t.Fatal(err)
+	}
+	txID := "tx-attach-credit"
+	now := timeutil.FormatUTC(timeutil.NowUTC())
+	desc := "Мой платёж"
+	_, err = sqlDB.ExecContext(ctx, `
+		INSERT INTO transactions (
+			id, user_id, account_id, type, kind, amount, description, category_id,
+			transaction_date, affects_balance, created_at, updated_at
+		) VALUES (?, ?, ?, 'expense', 'manual', ?, ?, ?, ?, 1, ?, ?)`,
+		txID, userID, accountID, c.MonthlyPayment, desc, otherCat, now, now, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	paid, err := PayNextScheduled(ctx, sqlDB, userID, c.ID, PayPaymentInput{
+		TransactionID: txID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var linked bool
+	for _, p := range paid.Schedule {
+		if p.IsApplied && p.TransactionID != nil && *p.TransactionID == txID {
+			linked = true
+			break
+		}
+	}
+	if !linked {
+		t.Fatal("expected attached transaction on applied payment")
+	}
+
+	var catName, gotDesc string
+	var subID sql.NullString
+	if err := sqlDB.QueryRowContext(ctx, `
+		SELECT c.name, t.description, t.subcategory_id
+		FROM transactions t
+		JOIN categories c ON c.id = t.category_id
+		WHERE t.id = ?`, txID).Scan(&catName, &gotDesc, &subID); err != nil {
+		t.Fatal(err)
+	}
+	if catName != "Кредиты" {
+		t.Fatalf("expected category Кредиты, got %q", catName)
+	}
+	if gotDesc != desc {
+		t.Fatalf("expected description preserved %q, got %q", desc, gotDesc)
+	}
+	if subID.Valid {
+		t.Fatalf("expected null subcategory, got %v", subID.String)
+	}
+}
+
+func TestPayNextScheduledAttachForbidden(t *testing.T) {
+	ctx, handle, userID, accountID := seedCreditEnv(t)
+	sqlDB := handle.DB()
+
+	issue := timeutil.NowUTC().AddDate(0, 1, 0)
+	c, err := Create(ctx, sqlDB, userID, CreateInput{
+		PrincipalAmount: 60_000,
+		IssueDate:       issue,
+		TermMonths:      6,
+		PaymentInterval: IntervalMonth,
+		DebitAccountID:  accountID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = PayNextScheduled(ctx, sqlDB, userID, c.ID, PayPaymentInput{
+		TransactionID: "missing-tx",
+	})
+	if !errors.Is(err, ErrTransactionNotFound) {
+		t.Fatalf("expected ErrTransactionNotFound, got %v", err)
+	}
+
+	paid, err := PayNextScheduled(ctx, sqlDB, userID, c.ID, PayPaymentInput{
+		Amount: c.MonthlyPayment, PaymentDate: timeutil.NowUTC(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var linkedID string
+	for _, p := range paid.Schedule {
+		if p.IsApplied && p.TransactionID != nil {
+			linkedID = *p.TransactionID
+			break
+		}
+	}
+	if linkedID == "" {
+		t.Fatal("expected linked payment tx")
+	}
+
+	_, err = PayNextScheduled(ctx, sqlDB, userID, c.ID, PayPaymentInput{
+		TransactionID: linkedID,
+	})
+	if !errors.Is(err, ErrAttachForbidden) {
+		t.Fatalf("expected ErrAttachForbidden for already linked tx, got %v", err)
+	}
+}
+
+func TestEnsureCreditPaymentCategories(t *testing.T) {
+	ctx, handle, userID, accountID := seedCreditEnv(t)
+	sqlDB := handle.DB()
+
+	issue := timeutil.NowUTC().AddDate(0, 1, 0)
+	c, err := Create(ctx, sqlDB, userID, CreateInput{
+		PrincipalAmount: 60_000,
+		IssueDate:       issue,
+		TermMonths:      6,
+		PaymentInterval: IntervalMonth,
+		DebitAccountID:  accountID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	paid, err := PayNextScheduled(ctx, sqlDB, userID, c.ID, PayPaymentInput{
+		Amount: c.MonthlyPayment, PaymentDate: timeutil.NowUTC(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var txID string
+	for _, p := range paid.Schedule {
+		if p.IsApplied && p.TransactionID != nil {
+			txID = *p.TransactionID
+			break
+		}
+	}
+	if txID == "" {
+		t.Fatal("expected payment tx")
+	}
+
+	var otherCat string
+	if err := sqlDB.QueryRowContext(ctx, `
+		SELECT id FROM categories WHERE user_id = ? AND is_system = 0 AND type = 'expense' LIMIT 1`,
+		userID).Scan(&otherCat); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.ExecContext(ctx, `
+		UPDATE transactions SET category_id = ?, subcategory_id = NULL WHERE id = ?`,
+		otherCat, txID); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := EnsureCreditPaymentCategories(ctx, sqlDB); err != nil {
+		t.Fatal(err)
+	}
+	var catName string
+	if err := sqlDB.QueryRowContext(ctx, `
+		SELECT c.name FROM transactions t
+		JOIN categories c ON c.id = t.category_id
+		WHERE t.id = ?`, txID).Scan(&catName); err != nil {
+		t.Fatal(err)
+	}
+	if catName != "Кредиты" {
+		t.Fatalf("expected backfill to Кредиты, got %q", catName)
+	}
+
+	// idempotent
+	if err := EnsureCreditPaymentCategories(ctx, sqlDB); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestApplyDuePaymentsCapsPaidAtPrincipal(t *testing.T) {
+	ctx, handle, userID, accountID := seedCreditEnv(t)
+	sqlDB := handle.DB()
+	issue := timeutil.NowUTC().AddDate(0, -1, 0)
+	localTime := timeutil.NowUTC().In(time.FixedZone("MSK", 3*3600)).Format("15:04")
+
+	c, err := Create(ctx, sqlDB, userID, CreateInput{
+		PrincipalAmount:    12_000,
+		IssueDate:          issue,
+		TermMonths:         1,
+		PaymentInterval:    IntervalMonth,
+		DebitAccountID:     accountID,
+		DebitTimeLocal:     &localTime,
+		CreateTransactions: false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	overshoot := c.PrincipalAmount + 50_000
+	_, err = sqlDB.ExecContext(ctx, `
+		UPDATE credit_payments SET payment_date = datetime('now', '-1 day'), amount = ?
+		WHERE credit_id = ?`, overshoot, c.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cutoff, err := TodayCutoffUTC("Europe/Moscow", timeutil.NowUTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := ApplyDuePayments(ctx, sqlDB, userID, cutoff, localTime)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n < 1 {
+		t.Fatalf("applied %d", n)
+	}
+	got, err := GetByID(ctx, sqlDB, userID, c.ID, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.PaidAmount != c.PrincipalAmount {
+		t.Fatalf("paid %d want principal %d", got.PaidAmount, c.PrincipalAmount)
+	}
+}
+
+func TestApplyDuePaymentsCapsPaidAtPrincipalPrecreated(t *testing.T) {
+	ctx, handle, userID, accountID := seedCreditEnv(t)
+	sqlDB := handle.DB()
+	issue := timeutil.NowUTC().AddDate(0, -1, 0)
+	localTime := timeutil.NowUTC().In(time.FixedZone("MSK", 3*3600)).Format("15:04")
+
+	c, err := Create(ctx, sqlDB, userID, CreateInput{
+		PrincipalAmount:    12_000,
+		IssueDate:          issue,
+		TermMonths:         1,
+		PaymentInterval:    IntervalMonth,
+		DebitAccountID:     accountID,
+		DebitTimeLocal:     &localTime,
+		CreateTransactions: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	overshoot := c.PrincipalAmount + 50_000
+	_, err = sqlDB.ExecContext(ctx, `
+		UPDATE credit_payments SET payment_date = datetime('now', '-1 day'), amount = ?
+		WHERE credit_id = ?`, overshoot, c.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cutoff, err := TodayCutoffUTC("Europe/Moscow", timeutil.NowUTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := ApplyDuePayments(ctx, sqlDB, userID, cutoff, localTime)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n < 1 {
+		t.Fatalf("applied %d", n)
+	}
+	got, err := GetByID(ctx, sqlDB, userID, c.ID, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.PaidAmount != c.PrincipalAmount {
+		t.Fatalf("paid %d want principal %d", got.PaidAmount, c.PrincipalAmount)
+	}
+}
+
+func TestRepairMissingScheduleCapsPaidApply(t *testing.T) {
+	ctx, handle, userID, accountID := seedCreditEnv(t)
+	sqlDB := handle.DB()
+	issue := timeutil.NowUTC().AddDate(0, 1, 0)
+
+	c, err := Create(ctx, sqlDB, userID, CreateInput{
+		PrincipalAmount:    100_000,
+		IssueDate:          issue,
+		TermMonths:         3,
+		InterestRate:       24,
+		PaymentInterval:    IntervalMonth,
+		DebitAccountID:     accountID,
+		CreateTransactions: false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var schedSum int64
+	for _, p := range c.Schedule {
+		schedSum += p.Amount
+	}
+	if schedSum <= c.PrincipalAmount {
+		t.Fatalf("need interest schedule sum %d > principal %d", schedSum, c.PrincipalAmount)
+	}
+	if _, err := sqlDB.ExecContext(ctx, `DELETE FROM credit_payments WHERE credit_id = ?`, c.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.ExecContext(ctx, `UPDATE credits SET paid_amount = ? WHERE id = ?`, 10*c.PrincipalAmount, c.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := GetByID(ctx, sqlDB, userID, c.ID, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var appliedSum int64
+	appliedN := 0
+	for _, p := range got.Schedule {
+		if p.IsApplied {
+			appliedSum += p.Amount
+			appliedN++
+		}
+	}
+	if appliedN == len(got.Schedule) {
+		t.Fatalf("overpaid repair applied all %d slots (schedule sum %d principal %d)", appliedN, schedSum, c.PrincipalAmount)
+	}
+	if appliedSum > c.PrincipalAmount {
+		t.Fatalf("applied amounts %d exceed principal %d", appliedSum, c.PrincipalAmount)
 	}
 }
 

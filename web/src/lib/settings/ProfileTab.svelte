@@ -1,32 +1,58 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { _ } from 'svelte-i18n';
-	import { getUserSettings, putUserSettings } from '$lib/api/client';
+	import { deleteUserData, getUserSettings, putUserSettings } from '$lib/api/client';
 	import { user } from '$lib/stores/auth';
-	import { applyTheme } from '$lib/theme';
+	import { applyThemePreference, isThemePreference, type ThemePreference } from '$lib/theme';
+	import { isUiStyle, readUiStyle, setUiStyle, type UiStyle } from '$lib/ui-style';
 	import { setLocale } from '$lib/i18n';
 	import TimezonePicker from '$lib/components/TimezonePicker.svelte';
+	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
 	import Select from '$lib/components/Select.svelte';
+	import { confirm } from '$lib/confirm';
+	import { reportPageLoadFailure } from '$lib/page-load';
 	import { toast } from '$lib/toast';
 
 	let loading = $state(false);
+	let wiping = $state(false);
+	let pageLoading = $state(true);
+	let loadError = $state<string | null>(null);
 	let displayName = $state('');
 	let language = $state('ru');
 	let currency = $state('RUB');
 	let timezone = $state('Europe/Moscow');
-	let theme = $state<'light' | 'dark'>('light');
+	let theme = $state<ThemePreference>('system');
+	let uiStyle = $state<UiStyle>('classic');
 
 	onMount(() => {
-		void loadProfile().catch((err) => toast.fromError(err));
+		uiStyle = readUiStyle();
+		void loadProfile();
 	});
 
+	function onUiStyleChange(value: string) {
+		if (!isUiStyle(value)) return;
+		uiStyle = value;
+		setUiStyle(value);
+	}
+
 	async function loadProfile() {
-		const s = await getUserSettings();
-		displayName = s.display_name;
-		language = s.language;
-		currency = s.currency;
-		timezone = s.timezone;
-		theme = s.theme === 'dark' ? 'dark' : 'light';
+		pageLoading = true;
+		try {
+			const s = await getUserSettings();
+			displayName = s.display_name;
+			language = s.language;
+			currency = s.currency;
+			timezone = s.timezone;
+			theme = isThemePreference(s.theme) ? s.theme : 'system';
+			loadError = null;
+		} catch (err) {
+			const msg = reportPageLoadFailure(err);
+			if (msg) loadError = msg;
+		} finally {
+			pageLoading = false;
+		}
 	}
 
 	async function saveProfile(e: Event) {
@@ -41,7 +67,9 @@
 				theme
 			});
 			localStorage.setItem('theme', updated.theme);
-			applyTheme(updated.theme === 'dark' ? 'dark' : 'light');
+			if (isThemePreference(updated.theme)) {
+				applyThemePreference(updated.theme);
+			}
 			setLocale(updated.language);
 			user.update((u) => (u ? { ...u, ...updated } : u));
 			timezone = updated.timezone;
@@ -52,60 +80,112 @@
 			loading = false;
 		}
 	}
+
+	async function wipeData() {
+		const first = await confirm({
+			title: $_('settings.data.confirm.title'),
+			message: $_('settings.data.confirm.message'),
+			confirmLabel: $_('settings.data.confirm.continue'),
+			danger: true
+		});
+		if (!first) return;
+		const second = await confirm({
+			title: $_('settings.data.confirm.finalTitle'),
+			message: $_('settings.data.confirm.finalMessage'),
+			confirmLabel: $_('settings.data.title'),
+			danger: true
+		});
+		if (!second) return;
+		wiping = true;
+		try {
+			await deleteUserData();
+			toast($_('settings.data.success'));
+			await goto(resolve('/'));
+		} catch (err) {
+			toast.fromError(err);
+		} finally {
+			wiping = false;
+		}
+	}
 </script>
 
-<form class="card max-w-lg space-y-4" onsubmit={saveProfile}>
-	<div>
-		<label class="mb-1.5 block text-sm font-medium" for="login">{$_('settings.login')}</label>
-		<input
-			id="login"
-			class="input cursor-not-allowed opacity-80"
-			type="text"
-			value={$user?.login ?? ''}
-			readonly
-			tabindex="-1"
+<PageLoadGate loading={pageLoading} error={loadError} onretry={() => void loadProfile()}>
+	<form class="card max-w-lg space-y-4" onsubmit={saveProfile}>
+		<div>
+			<label class="mb-1.5 block text-sm font-medium" for="login">{$_('settings.login')}</label>
+			<input
+				id="login"
+				class="input cursor-not-allowed opacity-80"
+				type="text"
+				value={$user?.login ?? ''}
+				readonly
+				tabindex="-1"
+			/>
+			<p class="mt-1 text-xs" style:color="var(--text-muted)">{$_('settings.login.readonly')}</p>
+		</div>
+		<div>
+			<label class="mb-1.5 block text-sm font-medium" for="display"
+				>{$_('register.display_name')}</label
+			>
+			<input id="display" class="input" bind:value={displayName} />
+		</div>
+		<Select
+			id="lang"
+			label={$_('settings.language')}
+			bind:value={language}
+			options={[
+				{ value: 'ru', label: 'Русский' },
+				{ value: 'en', label: 'English' }
+			]}
 		/>
-		<p class="mt-1 text-xs" style:color="var(--text-muted)">{$_('settings.login.readonly')}</p>
-	</div>
-	<div>
-		<label class="mb-1.5 block text-sm font-medium" for="display"
-			>{$_('register.display_name')}</label
+		<Select
+			id="currency"
+			label={$_('settings.currency')}
+			bind:value={currency}
+			options={[
+				{ value: 'RUB', label: 'RUB' },
+				{ value: 'USD', label: 'USD' },
+				{ value: 'EUR', label: 'EUR' }
+			]}
+		/>
+		<TimezonePicker
+			id="tz"
+			label={$_('settings.timezone')}
+			hint={$_('settings.timezone.hint')}
+			bind:value={timezone}
+		/>
+		<Select
+			id="theme"
+			label={$_('settings.theme')}
+			bind:value={theme}
+			options={[
+				{ value: 'system', label: $_('settings.theme.system') },
+				{ value: 'light', label: $_('settings.theme.light') },
+				{ value: 'dark', label: $_('settings.theme.dark') }
+			]}
+		/>
+		<Select
+			id="ui-style"
+			label={$_('settings.ui_style')}
+			value={uiStyle}
+			onchange={onUiStyleChange}
+			options={[
+				{ value: 'classic', label: $_('settings.ui_style.classic') },
+				{ value: 'material', label: $_('settings.ui_style.material') }
+			]}
+		/>
+		<button type="submit" class="btn-primary" disabled={loading || wiping}
+			>{$_('settings.save')}</button
 		>
-		<input id="display" class="input" bind:value={displayName} />
+	</form>
+	<div class="card mt-4 max-w-lg space-y-3">
+		<h2 class="font-medium">{$_('settings.data.title')}</h2>
+		<p class="text-sm" style:color="var(--text-muted)">{$_('settings.data.hint')}</p>
+		<button
+			type="button"
+			class="btn-danger"
+			disabled={loading || wiping}
+			onclick={() => void wipeData()}>{$_('settings.data.title')}</button
+		>
 	</div>
-	<Select
-		id="lang"
-		label={$_('settings.language')}
-		bind:value={language}
-		options={[
-			{ value: 'ru', label: 'Русский' },
-			{ value: 'en', label: 'English' }
-		]}
-	/>
-	<Select
-		id="currency"
-		label={$_('settings.currency')}
-		bind:value={currency}
-		options={[
-			{ value: 'RUB', label: 'RUB' },
-			{ value: 'USD', label: 'USD' },
-			{ value: 'EUR', label: 'EUR' }
-		]}
-	/>
-	<TimezonePicker
-		id="tz"
-		label={$_('settings.timezone')}
-		hint={$_('settings.timezone.hint')}
-		bind:value={timezone}
-	/>
-	<Select
-		id="theme"
-		label={$_('settings.theme')}
-		bind:value={theme}
-		options={[
-			{ value: 'light', label: $_('settings.theme.light') },
-			{ value: 'dark', label: $_('settings.theme.dark') }
-		]}
-	/>
-	<button type="submit" class="btn-primary" disabled={loading}>{$_('settings.save')}</button>
-</form>
+</PageLoadGate>

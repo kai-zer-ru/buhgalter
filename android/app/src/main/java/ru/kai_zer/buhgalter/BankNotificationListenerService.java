@@ -1,0 +1,449 @@
+package ru.kai_zer.buhgalter;
+
+import android.app.Notification;
+import android.content.ComponentName;
+import android.content.Context;
+import android.content.pm.PackageManager;
+import android.os.Build;
+import android.os.Bundle;
+import android.os.Parcelable;
+import android.service.notification.NotificationListenerService;
+import android.service.notification.StatusBarNotification;
+
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
+
+/**
+ * Captures bank app push notifications into {@link NotificationInterceptStore}.
+ * Also writes a debug history of all posts while capture is enabled.
+ * Parsing and draft UI live in the Capacitor WebView (JS).
+ *
+ * <p>On MIUI/HyperOS the system often grants notification access but does not bind the
+ * listener until {@link #requestRebind} / component toggle — see {@link #ensureConnected}.
+ */
+public class BankNotificationListenerService extends NotificationListenerService {
+
+    private static volatile BankNotificationListenerService instance;
+    private static final AtomicReference<CountDownLatch> connectLatch = new AtomicReference<>();
+
+    /**
+     * SMS apps that mirror bank SMS in the notification shade. Keep in sync with
+     * {@code MESSAGING_APP_PACKAGES} in banks.ts.
+     */
+    private static final Set<String> MESSAGING_PACKAGES =
+            Collections.unmodifiableSet(
+                    new HashSet<>(
+                            Arrays.asList(
+                                    "com.google.android.apps.messaging",
+                                    "com.samsung.android.messaging",
+                                    "com.android.mms",
+                                    "com.android.messaging",
+                                    "com.miui.sms",
+                                    "com.xiaomi.mms",
+                                    "com.huawei.message",
+                                    "com.hihonor.message",
+                                    "com.oneplus.mms",
+                                    "com.coloros.mms",
+                                    "com.oplus.mms")));
+
+    @Override
+    public void onListenerConnected() {
+        super.onListenerConnected();
+        instance = this;
+        CountDownLatch latch = connectLatch.getAndSet(null);
+        if (latch != null) {
+            latch.countDown();
+        }
+        // Catch up on shade items the system delivered while we were unbound (MIUI).
+        if (NotificationInterceptStore.isCaptureEnabled(this)) {
+            try {
+                StatusBarNotification[] active = getActiveNotifications();
+                if (active != null) {
+                    boolean anyQueued = false;
+                    for (StatusBarNotification sbn : active) {
+                        if (process(this, sbn, true) == 2) {
+                            anyQueued = true;
+                        }
+                    }
+                    if (anyQueued) {
+                        NotificationInterceptPlugin.emitPendingAvailable();
+                    }
+                }
+            } catch (SecurityException ignored) {
+                // not fully bound yet
+            }
+        }
+    }
+
+    @Override
+    public void onListenerDisconnected() {
+        if (instance == this) {
+            instance = null;
+        }
+        super.onListenerDisconnected();
+    }
+
+    @Override
+    public void onNotificationPosted(StatusBarNotification sbn) {
+        if (!NotificationInterceptStore.isCaptureEnabled(this)) {
+            return;
+        }
+        process(this, sbn, false);
+    }
+
+    static boolean isConnected() {
+        return instance != null;
+    }
+
+    static ComponentName componentName(Context context) {
+        return new ComponentName(context, BankNotificationListenerService.class);
+    }
+
+    /**
+     * Ask the system to bind the listener (permission may already be granted).
+     * Safe to call from the UI / Capacitor bridge thread.
+     *
+     * @return true if connected within timeout
+     */
+    static boolean ensureConnected(Context context, long timeoutMs) {
+        if (instance != null) {
+            return true;
+        }
+        Context app = context.getApplicationContext();
+        CountDownLatch latch = new CountDownLatch(1);
+        connectLatch.set(latch);
+        requestSystemRebind(app);
+
+        try {
+            if (latch.await(timeoutMs, TimeUnit.MILLISECONDS)) {
+                return instance != null;
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+
+        // Still null — force component toggle (helps MIUI after granting access).
+        if (instance == null) {
+            toggleComponent(app);
+            CountDownLatch latch2 = new CountDownLatch(1);
+            connectLatch.set(latch2);
+            requestSystemRebind(app);
+            try {
+                latch2.await(timeoutMs, TimeUnit.MILLISECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+        connectLatch.compareAndSet(latch, null);
+        return instance != null;
+    }
+
+    private static void requestSystemRebind(Context context) {
+        ComponentName cn = componentName(context);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            try {
+                requestRebind(cn);
+            } catch (RuntimeException ignored) {
+                // Some OEMs throw if already binding
+            }
+        }
+    }
+
+    private static void toggleComponent(Context context) {
+        try {
+            PackageManager pm = context.getPackageManager();
+            ComponentName cn = componentName(context);
+            pm.setComponentEnabledSetting(
+                    cn,
+                    PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                    PackageManager.DONT_KILL_APP);
+            pm.setComponentEnabledSetting(
+                    cn,
+                    PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                    PackageManager.DONT_KILL_APP);
+        } catch (RuntimeException ignored) {
+            // ignore OEM quirks
+        }
+    }
+
+    /**
+     * Scan notifications currently in the shade (not dismissed).
+     *
+     * @return number processed, or -1 if the listener is not connected
+     */
+    static int scanActiveNotifications(Context context) {
+        if (!ensureConnected(context, 3500)) {
+            return -1;
+        }
+        BankNotificationListenerService svc = instance;
+        if (svc == null) {
+            return -1;
+        }
+        StatusBarNotification[] active;
+        try {
+            active = svc.getActiveNotifications();
+        } catch (SecurityException e) {
+            return -1;
+        }
+        if (active == null) {
+            return 0;
+        }
+        int n = 0;
+        boolean anyQueued = false;
+        for (StatusBarNotification sbn : active) {
+            int r = process(svc, sbn, true);
+            if (r > 0) {
+                n += 1;
+            }
+            if (r == 2) {
+                anyQueued = true;
+            }
+        }
+        if (anyQueued) {
+            NotificationInterceptPlugin.emitPendingAvailable();
+        }
+        return n;
+    }
+
+    private static String trimCs(CharSequence cs) {
+        return cs != null ? cs.toString().trim() : "";
+    }
+
+    /** Prefer the longest non-empty body among EXTRA_TEXT / BIG_TEXT / TEXT_LINES / MESSAGES. */
+    private static String preferLonger(String current, String candidate) {
+        if (candidate == null || candidate.isEmpty()) {
+            return current != null ? current : "";
+        }
+        if (current == null || current.isEmpty() || candidate.length() > current.length()) {
+            return candidate;
+        }
+        return current;
+    }
+
+    private static String joinCharSequences(CharSequence[] lines) {
+        if (lines == null || lines.length == 0) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (CharSequence line : lines) {
+            String s = trimCs(line);
+            if (s.isEmpty()) {
+                continue;
+            }
+            if (sb.length() > 0) {
+                sb.append('\n');
+            }
+            sb.append(s);
+        }
+        return sb.toString();
+    }
+
+    private static String messagesBodyAndSender(Parcelable[] messages, String[] outSender) {
+        if (messages == null || messages.length == 0) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        String lastSender = "";
+        for (Parcelable p : messages) {
+            if (!(p instanceof Bundle)) {
+                continue;
+            }
+            Bundle msg = (Bundle) p;
+            String msgText = trimCs(msg.getCharSequence("text"));
+            if (msgText.isEmpty()) {
+                continue;
+            }
+            if (sb.length() > 0) {
+                sb.append('\n');
+            }
+            sb.append(msgText);
+            String sender = trimCs(msg.getCharSequence("sender"));
+            if (sender.isEmpty()) {
+                Parcelable person = msg.getParcelable("sender_person");
+                if (person instanceof Bundle) {
+                    sender = trimCs(((Bundle) person).getCharSequence("name"));
+                }
+            }
+            if (!sender.isEmpty()) {
+                lastSender = sender;
+            }
+        }
+        if (outSender != null && outSender.length > 0) {
+            outSender[0] = lastSender;
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Collect body from {@code EXTRA_TEXT}, {@code EXTRA_BIG_TEXT}, {@code EXTRA_TEXT_LINES},
+     * and MessagingStyle {@code EXTRA_MESSAGES} — look in all of them, keep the longest.
+     * Title may come from conversation/sender when {@code EXTRA_TITLE} is empty.
+     */
+    static void fillFromMessagingExtras(Bundle extras, String[] titleTextBig) {
+        if (extras == null || titleTextBig == null || titleTextBig.length < 3) {
+            return;
+        }
+        String title = titleTextBig[0] != null ? titleTextBig[0] : "";
+        String text = titleTextBig[1] != null ? titleTextBig[1] : "";
+        String bigText = titleTextBig[2] != null ? titleTextBig[2] : "";
+
+        // Always merge TEXT_LINES + EXTRA_MESSAGES with EXTRA_TEXT / BIG_TEXT (not only on empty).
+        String best = preferLonger(text, bigText);
+        best = preferLonger(best, joinCharSequences(extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)));
+
+        String[] senderOut = new String[] {""};
+        best = preferLonger(best, messagesBodyAndSender(extras.getParcelableArray(Notification.EXTRA_MESSAGES), senderOut));
+
+        if (title.isEmpty() && senderOut[0] != null && !senderOut[0].isEmpty()) {
+            title = senderOut[0];
+        }
+        if (title.isEmpty()) {
+            title = trimCs(extras.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE));
+        }
+        if (title.isEmpty()) {
+            title = trimCs(extras.getCharSequence(Notification.EXTRA_TITLE_BIG));
+        }
+        if (title.isEmpty()) {
+            title = trimCs(extras.getCharSequence(Notification.EXTRA_SUB_TEXT));
+        }
+
+        titleTextBig[0] = title;
+        // Consolidated body (TEXT + BIG_TEXT + TEXT_LINES + MESSAGES) — longest wins.
+        titleTextBig[1] = best;
+        titleTextBig[2] = "";
+    }
+
+    /**
+     * @param forceHistory write history even when capture is off (manual scan)
+     * @return 0 skipped, 1 history only, 2 queued for JS
+     */
+    static int process(Context context, StatusBarNotification sbn, boolean forceHistory) {
+        if (sbn == null || sbn.isOngoing()) {
+            return 0;
+        }
+
+        String packageName = sbn.getPackageName();
+        if (packageName == null || packageName.isEmpty()) {
+            return 0;
+        }
+
+        Notification notification = sbn.getNotification();
+        if (notification == null) {
+            return 0;
+        }
+        // Group summaries are empty shells — children carry the SMS body.
+        if ((notification.flags & Notification.FLAG_GROUP_SUMMARY) != 0) {
+            return 0;
+        }
+
+        Bundle extras = notification.extras;
+        String title = trimCs(extras != null ? extras.getCharSequence(Notification.EXTRA_TITLE) : null);
+        String text = trimCs(extras != null ? extras.getCharSequence(Notification.EXTRA_TEXT) : null);
+        String bigText =
+                trimCs(extras != null ? extras.getCharSequence(Notification.EXTRA_BIG_TEXT) : null);
+
+        String[] fields = new String[] {title, text, bigText};
+        fillFromMessagingExtras(extras, fields);
+        title = fields[0];
+        text = fields[1];
+        bigText = fields[2];
+
+        if (title.isEmpty() && text.isEmpty() && bigText.isEmpty()) {
+            return 0;
+        }
+
+        long postTime = sbn.getPostTime();
+        String dedupeKey = packageName + "|" + postTime + "|" + title + "|" + text + "|" + bigText;
+        String channel = "push";
+        String effectivePackage = packageName;
+        if (MESSAGING_PACKAGES.contains(packageName)) {
+            String bankPkg = NotificationInterceptStore.packageForSmsSender(context, title);
+            if (bankPkg == null || bankPkg.isEmpty()) {
+                String firstLine = text;
+                int nl = text.indexOf('\n');
+                if (nl > 0) {
+                    firstLine = text.substring(0, nl);
+                }
+                int pipe = firstLine.indexOf('|');
+                if (pipe > 0) {
+                    firstLine = firstLine.substring(pipe + 1).trim();
+                }
+                int dot = firstLine.indexOf('.');
+                if (dot > 0) {
+                    firstLine = firstLine.substring(0, dot);
+                }
+                bankPkg = NotificationInterceptStore.packageForSmsSender(context, firstLine);
+            }
+            if (bankPkg == null || bankPkg.isEmpty()) {
+                bankPkg = NotificationInterceptStore.inferBankPackageFromText(title + " " + text);
+            }
+            if (bankPkg != null && !bankPkg.isEmpty()) {
+                effectivePackage = bankPkg;
+                channel = "sms";
+            }
+        }
+        boolean allowed =
+                NotificationInterceptStore.allowedPackages(context).contains(effectivePackage);
+        boolean captureOn = NotificationInterceptStore.isCaptureEnabled(context);
+        boolean queueForJs =
+                allowed
+                        && captureOn
+                        && DraftNotifyProvisional.shouldQueuePackage(
+                                effectivePackage, title, text, bigText);
+
+        if (forceHistory || captureOn) {
+            try {
+                JSONObject historyItem = new JSONObject();
+                historyItem.put("packageName", packageName);
+                historyItem.put("title", title);
+                historyItem.put("text", text);
+                historyItem.put("bigText", bigText);
+                historyItem.put("postedAt", postTime);
+                historyItem.put("dedupeKey", dedupeKey);
+                historyItem.put("channel", channel);
+                historyItem.put("inAllowlist", allowed);
+                historyItem.put("queued", queueForJs);
+                if (!effectivePackage.equals(packageName)) {
+                    historyItem.put("resolvedPackageName", effectivePackage);
+                }
+                // Primary: same prefs as pending queue (reliable on MIUI).
+                NotificationInterceptStore.appendHistory(context, historyItem);
+                // Legacy file — best effort.
+                NotificationHistoryStore.append(context, historyItem);
+            } catch (JSONException ignored) {
+                // ignore history failures
+            }
+        }
+
+        if (!queueForJs) {
+            return forceHistory || captureOn ? 1 : 0;
+        }
+
+        try {
+            JSONObject item = new JSONObject();
+            item.put("packageName", effectivePackage);
+            item.put("title", title);
+            item.put("text", text);
+            item.put("bigText", bigText);
+            item.put("postedAt", postTime);
+            item.put("dedupeKey", dedupeKey);
+            item.put("channel", channel);
+            NotificationInterceptStore.append(context, item);
+            if (!forceHistory) {
+                InterceptPendingWake.onQueued(
+                        context, dedupeKey, effectivePackage, title, text, bigText);
+            }
+        } catch (JSONException ignored) {
+            // ignore
+        }
+        return 2;
+    }
+}

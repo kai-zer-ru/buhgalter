@@ -6,12 +6,15 @@
 		| '/accounts'
 		| '/settings'
 		| '/settings/password'
+		| '/settings/server'
 		| '/settings/tokens'
 		| '/settings/notifications'
-		| '/settings/categories'
 		| '/settings/import'
-		| '/settings/recurring-operations'
+		| '/transaction-templates'
+		| '/category-rules'
+		| '/transactions/inbox'
 		| '/admin'
+		| '/admin/features'
 		| '/admin/users'
 		| '/admin/backups'
 		| '/admin/diagnostics'
@@ -21,7 +24,12 @@
 		| '/stats'
 		| '/debtors'
 		| '/accounts/new'
-		| '/budget';
+		| '/budget'
+		| '/subscriptions'
+		| '/categories'
+		| '/merchants'
+		| '/tags'
+		| '/recurring-operations';
 
 	export type BreadcrumbItem = {
 		href: BackLinkHref;
@@ -35,7 +43,9 @@
 	} = $props();
 
 	function target(item: BreadcrumbItem): string {
-		return resolve(item.href);
+		// BackLinkHref is a curated set of static routes; casting to full Pathname
+		// pulls in param routes and breaks resolve() overload selection.
+		return resolve(item.href as '/');
 	}
 </script>
 

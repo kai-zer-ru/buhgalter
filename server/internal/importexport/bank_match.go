@@ -40,6 +40,8 @@ var bankAliases = map[string]string{
 	"отп":            "otpbank",
 	"отп банк":       "otpbank",
 	"атб":            "atb",
+	"вбрр":           "vbrr",
+	"vbrr":           "vbrr",
 }
 
 func normalizeBankQuery(s string) string {

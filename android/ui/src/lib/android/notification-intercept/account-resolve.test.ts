@@ -1,0 +1,98 @@
+import { describe, expect, it } from 'vitest';
+import { resolveAccountId } from './account-resolve';
+import type { InterceptSettings, ParsedPurchase } from './types';
+
+const parsed: ParsedPurchase = {
+	bankId: 'tinkoff',
+	packageName: 'com.idamob.tinkoff.android',
+	amount: '10.00',
+	occurredAt: new Date().toISOString(),
+	merchantText: 'Shop',
+	last4: '4321',
+	rawHash: 'h1'
+};
+
+const settings: InterceptSettings = {
+	enabled: true,
+	bankBindings: [
+		{
+			bankId: 'tinkoff',
+			packageName: 'com.idamob.tinkoff.android',
+			accountId: 'acc-bank'
+		}
+	],
+	cardBindings: [{ bankId: 'tinkoff', last4: '4321', accountId: 'acc-card' }]
+};
+
+describe('resolveAccountId', () => {
+	it('prefers last4 binding', () => {
+		expect(resolveAccountId(parsed, settings)).toBe('acc-card');
+	});
+
+	it('falls back to bank binding', () => {
+		expect(resolveAccountId({ ...parsed, last4: undefined }, settings)).toBe('acc-bank');
+		expect(resolveAccountId({ ...parsed, last4: '9999' }, settings)).toBe('acc-bank');
+	});
+
+	it('uses first bank binding when several accounts share the bank', () => {
+		const multi: InterceptSettings = {
+			enabled: true,
+			bankBindings: [
+				{
+					bankId: 'tinkoff',
+					packageName: 'com.idamob.tinkoff.android',
+					accountId: 'acc-a'
+				},
+				{
+					bankId: 'tinkoff',
+					packageName: 'com.idamob.tinkoff.android',
+					accountId: 'acc-b'
+				}
+			],
+			cardBindings: []
+		};
+		expect(resolveAccountId({ ...parsed, last4: undefined }, multi)).toBe('acc-a');
+	});
+
+	it('returns undefined when nothing matches', () => {
+		expect(
+			resolveAccountId(parsed, { enabled: true, bankBindings: [], cardBindings: [] })
+		).toBeUndefined();
+	});
+
+	it('uses bank binding when wallet text inferred the issuer bank', () => {
+		const inferred: ParsedPurchase = {
+			...parsed,
+			bankId: 'tinkoff',
+			packageName: 'ru.nspk.mirpay',
+			last4: undefined
+		};
+		expect(resolveAccountId(inferred, settings)).toBe('acc-bank');
+	});
+
+	it('matches unique last4 on wallet push when bankId is wallet id', () => {
+		const walletParsed: ParsedPurchase = {
+			...parsed,
+			bankId: 'mir_pay',
+			packageName: 'ru.nspk.mirpay'
+		};
+		expect(resolveAccountId(walletParsed, settings)).toBe('acc-card');
+	});
+
+	it('does not guess last4 when several cards share the same digits', () => {
+		const walletParsed: ParsedPurchase = {
+			...parsed,
+			bankId: 'samsung_pay',
+			packageName: 'com.samsung.android.spay'
+		};
+		const ambiguous: InterceptSettings = {
+			enabled: true,
+			bankBindings: [],
+			cardBindings: [
+				{ bankId: 'tinkoff', last4: '4321', accountId: 'acc-card' },
+				{ bankId: 'sberbank', last4: '4321', accountId: 'acc-sber' }
+			]
+		};
+		expect(resolveAccountId(walletParsed, ambiguous)).toBeUndefined();
+	});
+});

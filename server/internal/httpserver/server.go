@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -20,20 +21,28 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/bank"
 	"github.com/kai-zer-ru/buhgalter/internal/budget"
 	"github.com/kai-zer-ru/buhgalter/internal/category"
+	"github.com/kai-zer-ru/buhgalter/internal/categoryrule"
 	"github.com/kai-zer-ru/buhgalter/internal/config"
 	"github.com/kai-zer-ru/buhgalter/internal/credit"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
 	"github.com/kai-zer-ru/buhgalter/internal/debt"
 	"github.com/kai-zer-ru/buhgalter/internal/docs"
+	"github.com/kai-zer-ru/buhgalter/internal/features"
 	"github.com/kai-zer-ru/buhgalter/internal/importexport"
+	"github.com/kai-zer-ru/buhgalter/internal/merchant"
 	appmw "github.com/kai-zer-ru/buhgalter/internal/middleware"
+	"github.com/kai-zer-ru/buhgalter/internal/realtime"
 	"github.com/kai-zer-ru/buhgalter/internal/recurring"
 	"github.com/kai-zer-ru/buhgalter/internal/receipt"
+	"github.com/kai-zer-ru/buhgalter/internal/settingscache"
 	"github.com/kai-zer-ru/buhgalter/internal/setup"
 	"github.com/kai-zer-ru/buhgalter/internal/static"
 	"github.com/kai-zer-ru/buhgalter/internal/stats"
 	"github.com/kai-zer-ru/buhgalter/internal/store"
+	"github.com/kai-zer-ru/buhgalter/internal/subscription"
+	"github.com/kai-zer-ru/buhgalter/internal/tag"
 	"github.com/kai-zer-ru/buhgalter/internal/transaction"
+	"github.com/kai-zer-ru/buhgalter/internal/transactiontemplate"
 	"github.com/kai-zer-ru/buhgalter/internal/ui"
 	"github.com/kai-zer-ru/buhgalter/internal/user"
 	"github.com/kai-zer-ru/buhgalter/internal/versioncheck"
@@ -62,7 +71,7 @@ func (s *Server) Handler() http.Handler {
 	r.Use(appmw.Logger(s.logger, verboseLogs))
 	r.Use(appmw.CORS(s.cfg.CORSOrigins))
 	r.Use(appmw.ExternalAccess(dbHandle, s.cfg.AllowedHosts))
-	r.Use(chimw.Compress(5))
+	r.Use(compressExceptWebSocket(5))
 
 	setupHandler := &setup.Handler{DataDir: s.cfg.DataDir, Store: dbHandle, Audit: s.audit, Backup: s.backup}
 	loginLimit := 5
@@ -93,19 +102,33 @@ func (s *Server) Handler() http.Handler {
 	accountArchiveHandler := &accountArchiveHandler{store: dbHandle, audit: s.audit}
 	accountDeleteHandler := &accountDeleteHandler{store: dbHandle, audit: s.audit}
 	categoryHandler := &category.Handler{Store: dbHandle, Audit: s.audit}
+	categoryRuleHandler := &categoryrule.Handler{Store: dbHandle, Audit: s.audit}
 	transactionHandler := &transaction.Handler{Store: dbHandle, Audit: s.audit}
+	merchantHandler := &merchant.Handler{Store: dbHandle, Audit: s.audit}
+	tagHandler := &tag.Handler{Store: dbHandle, Audit: s.audit}
+	templateHandler := &transactiontemplate.Handler{Store: dbHandle, Audit: s.audit}
 	debtHandler := &debt.Handler{Store: dbHandle, Audit: s.audit}
 	creditHandler := &credit.Handler{Store: dbHandle, Audit: s.audit}
 	recurringHandler := &recurring.Handler{Store: dbHandle, Audit: s.audit}
+	subscriptionHandler := &subscription.Handler{Store: dbHandle, Audit: s.audit}
 	budgetHandler := &budget.Handler{Store: dbHandle, Audit: s.audit}
-	importHandler := &importexport.Handler{Store: dbHandle, Audit: s.audit, Logger: s.logger}
 	statsHandler := &stats.Handler{Store: dbHandle}
 	storeHandler := &store.Handler{Store: dbHandle}
 	receiptHandler := &receipt.Handler{Store: dbHandle, Audit: s.audit, Logger: s.logger}
-	uiHandler := &ui.Handler{Store: dbHandle}
+	uiHandler := &ui.Handler{Store: dbHandle, Version: s.cfg.Version}
 	versionHandler := &versioncheck.Handler{Checker: versioncheck.NewChecker(s.cfg.Version)}
 	apiCache := apicache.New()
+	realtimeHub := realtime.NewHub()
+	apiCache.OnInvalidate = func(userID string, hints apicache.InvalidateHints) {
+		realtimeHub.PublishInvalidateHints(userID, hints.Paths, hints.Entities)
+	}
+	realtime.SetUserDataChangedHandler(func(userID string) {
+		apiCache.InvalidateUserHints(userID, apicache.LedgerHints())
+	})
+	realtime.SetPublisher(realtimeHub.Publish)
 	apiCacheMW := apicache.Middleware(apiCache)
+	realtimeHandler := &realtime.Handler{Hub: realtimeHub}
+	importHandler := &importexport.Handler{Store: dbHandle, Audit: s.audit, Logger: s.logger, Cache: apiCache}
 
 	r.Get("/docs", docs.RedocHandler())
 	r.Get("/docs/", docs.RedocHandler())
@@ -131,41 +154,69 @@ func (s *Server) Handler() http.Handler {
 		api.Group(func(ar chi.Router) {
 			ar.Use(auth.RequireAuth(dbHandle))
 			ar.Use(apiCacheMW)
+			ar.Get("/realtime", realtimeHandler.ServeHTTP)
+			ar.Get("/features", adminHandler.GetFeaturesSnapshot)
+
 			ar.Get("/accounts", accountHandler.List)
 			ar.Post("/accounts", accountHandler.Create)
 			ar.Get("/accounts/summary", transactionHandler.AccountsSummary)
 			ar.Get("/accounts/{id}", accountHandler.Get)
 			ar.Get("/accounts/{id}/balance", transactionHandler.AccountBalance)
 			ar.Put("/accounts/{id}", accountHandler.Update)
+			ar.Put("/accounts/{id}/credit-limit", accountHandler.ChangeCreditLimit)
 			ar.Post("/accounts/{id}/archive", accountArchiveHandler.archiveAccount)
 			ar.Post("/accounts/{id}/unarchive", accountHandler.Unarchive)
 			ar.Post("/accounts/{id}/primary", accountHandler.SetPrimary)
 			ar.Delete("/accounts/{id}", accountDeleteHandler.deleteAccount)
 
+			ar.Get("/transactions/inbox", transactionHandler.Inbox)
+			ar.Get("/transactions/inbox/count", transactionHandler.InboxCount)
 			ar.Get("/transactions", transactionHandler.List)
 			ar.Post("/transactions", transactionHandler.Create)
 			ar.Get("/transactions/{id}", transactionHandler.Get)
 			ar.Put("/transactions/{id}", transactionHandler.Update)
 			ar.Delete("/transactions/{id}", transactionHandler.Delete)
 			ar.Post("/transactions/{id}/activate", transactionHandler.Activate)
+			ar.Get("/sync/transaction-changes", transactionHandler.Changes)
 
-			ar.Get("/recurring-operations", recurringHandler.List)
-			ar.Post("/recurring-operations", recurringHandler.Create)
-			ar.Put("/recurring-operations/{id}", recurringHandler.Update)
-			ar.Delete("/recurring-operations/{id}", recurringHandler.Delete)
+			ar.Group(func(mod chi.Router) {
+				mod.Use(features.RequireFeature(dbHandle, features.Recurring))
+				mod.Get("/recurring-operations", recurringHandler.List)
+				mod.Post("/recurring-operations", recurringHandler.Create)
+				mod.Put("/recurring-operations/{id}", recurringHandler.Update)
+				mod.Delete("/recurring-operations/{id}", recurringHandler.Delete)
+				if os.Getenv("BUHGALTER_E2E") == "1" {
+					mod.Post("/test/recurring-operations/{id}/run-now", recurringHandler.E2ERunNow)
+				}
+			})
 
-			ar.Get("/budgets/summary", budgetHandler.Summary)
-			ar.Get("/budgets", budgetHandler.List)
-			ar.Post("/budgets/copy-from-previous", budgetHandler.CopyFromPrevious)
-			ar.Post("/budgets", budgetHandler.Create)
-			ar.Post("/budgets/{id}/copy-next", budgetHandler.CopyNext)
-			ar.Patch("/budgets/{id}", budgetHandler.Update)
-			ar.Delete("/budgets/{id}", budgetHandler.Delete)
+			ar.Group(func(mod chi.Router) {
+				mod.Use(features.RequireFeature(dbHandle, features.Subscriptions))
+				mod.Get("/subscriptions", subscriptionHandler.List)
+				mod.Get("/subscriptions/summary", subscriptionHandler.Summary)
+				mod.Post("/subscriptions/preview-upcoming", subscriptionHandler.PreviewUpcoming)
+				mod.Post("/subscriptions", subscriptionHandler.Create)
+				mod.Post("/subscriptions/from-recurring/{recurring_id}", subscriptionHandler.ConvertFromRecurring)
+				mod.Put("/subscriptions/{id}", subscriptionHandler.Update)
+				mod.Delete("/subscriptions/{id}", subscriptionHandler.Delete)
+				mod.Get("/subscriptions/{id}/candidate-transactions", subscriptionHandler.Candidates)
+				mod.Post("/subscriptions/{id}/attach-transactions", subscriptionHandler.Attach)
+				if os.Getenv("BUHGALTER_E2E") == "1" {
+					mod.Post("/test/subscriptions/{id}/run-now", subscriptionHandler.E2ERunNow)
+				}
+			})
 
-			if os.Getenv("BUHGALTER_E2E") == "1" {
-				ar.Post("/test/recurring-operations/{id}/run-now", recurringHandler.E2ERunNow)
-				ar.Post("/test/credits/{id}/apply-due", creditHandler.E2EApplyDue)
-			}
+			ar.Group(func(mod chi.Router) {
+				mod.Use(features.RequireFeature(dbHandle, features.Budget))
+				mod.Get("/budgets/summary", budgetHandler.Summary)
+				mod.Get("/budgets/spent-preview", budgetHandler.SpentPreview)
+				mod.Get("/budgets", budgetHandler.List)
+				mod.Post("/budgets/copy-from-previous", budgetHandler.CopyFromPrevious)
+				mod.Post("/budgets", budgetHandler.Create)
+				mod.Post("/budgets/{id}/copy-next", budgetHandler.CopyNext)
+				mod.Patch("/budgets/{id}", budgetHandler.Update)
+				mod.Delete("/budgets/{id}", budgetHandler.Delete)
+			})
 
 			ar.Post("/transfers", transactionHandler.CreateTransfer)
 			ar.Put("/transfers/{group_id}", transactionHandler.UpdateTransfer)
@@ -174,30 +225,64 @@ func (s *Server) Handler() http.Handler {
 			ar.Get("/dashboard", transactionHandler.Dashboard)
 			ar.Get("/version/check", versionHandler.Check)
 
-			ar.Get("/debtors", debtHandler.ListDebtors)
-			ar.Post("/debtors", debtHandler.CreateDebtor)
-			ar.Get("/debtors/{id}", debtHandler.GetDebtor)
-			ar.Put("/debtors/{id}", debtHandler.UpdateDebtor)
-			ar.Delete("/debtors/{id}", debtHandler.DeleteDebtor)
+			ar.Group(func(mod chi.Router) {
+				mod.Use(features.RequireFeature(dbHandle, features.MerchantsTags))
+				mod.Get("/merchants", merchantHandler.List)
+				mod.Post("/merchants", merchantHandler.Create)
+				mod.Get("/merchants/{id}", merchantHandler.Get)
+				mod.Put("/merchants/{id}", merchantHandler.Update)
+				mod.Delete("/merchants/{id}", merchantHandler.Delete)
 
-			ar.Get("/debts/summary", debtHandler.Summary)
-			ar.Get("/debts", debtHandler.ListDebts)
-			ar.Post("/debts", debtHandler.CreateDebt)
-			ar.Get("/debts/{id}", debtHandler.GetDebt)
-			ar.Post("/debts/{id}/settle", debtHandler.SettleDebt)
-			ar.Delete("/debts/{id}", debtHandler.DeleteDebt)
+				mod.Get("/tags", tagHandler.List)
+				mod.Post("/tags", tagHandler.Create)
+				mod.Get("/tags/{id}", tagHandler.Get)
+				mod.Put("/tags/{id}", tagHandler.Update)
+				mod.Delete("/tags/{id}", tagHandler.Delete)
+			})
 
-			ar.Get("/credits", creditHandler.List)
-			ar.Post("/credits", creditHandler.Create)
-			ar.Post("/credits/schedule/preview", creditHandler.PreviewSchedule)
-			ar.Get("/credits/{id}", creditHandler.Get)
-			ar.Put("/credits/{id}", creditHandler.Update)
-			ar.Post("/credits/{id}/payments", creditHandler.AddPayment)
-			ar.Delete("/credits/{id}/payments/{paymentId}", creditHandler.DeletePayment)
-			ar.Patch("/credits/{id}/schedule", creditHandler.UpdateSchedule)
-			ar.Post("/credits/{id}/close", creditHandler.Close)
-			ar.Delete("/credits/{id}", creditHandler.Delete)
-			ar.Get("/credits/{id}/schedule", creditHandler.Schedule)
+			ar.Group(func(mod chi.Router) {
+				mod.Use(features.RequireFeature(dbHandle, features.TransactionTemplates))
+				mod.Get("/transaction-templates", templateHandler.List)
+				mod.Post("/transaction-templates", templateHandler.Create)
+				mod.Put("/transaction-templates/reorder", templateHandler.Reorder)
+				mod.Get("/transaction-templates/{id}", templateHandler.Get)
+				mod.Put("/transaction-templates/{id}", templateHandler.Update)
+				mod.Delete("/transaction-templates/{id}", templateHandler.Delete)
+			})
+
+			ar.Group(func(mod chi.Router) {
+				mod.Use(features.RequireFeature(dbHandle, features.Debts))
+				mod.Get("/debtors", debtHandler.ListDebtors)
+				mod.Post("/debtors", debtHandler.CreateDebtor)
+				mod.Get("/debtors/{id}", debtHandler.GetDebtor)
+				mod.Put("/debtors/{id}", debtHandler.UpdateDebtor)
+				mod.Delete("/debtors/{id}", debtHandler.DeleteDebtor)
+
+				mod.Get("/debts/summary", debtHandler.Summary)
+				mod.Get("/debts", debtHandler.ListDebts)
+				mod.Post("/debts", debtHandler.CreateDebt)
+				mod.Get("/debts/{id}", debtHandler.GetDebt)
+				mod.Post("/debts/{id}/settle", debtHandler.SettleDebt)
+				mod.Delete("/debts/{id}", debtHandler.DeleteDebt)
+			})
+
+			ar.Group(func(mod chi.Router) {
+				mod.Use(features.RequireFeature(dbHandle, features.Credits))
+				mod.Get("/credits", creditHandler.List)
+				mod.Post("/credits", creditHandler.Create)
+				mod.Post("/credits/schedule/preview", creditHandler.PreviewSchedule)
+				mod.Get("/credits/{id}", creditHandler.Get)
+				mod.Put("/credits/{id}", creditHandler.Update)
+				mod.Post("/credits/{id}/payments", creditHandler.AddPayment)
+				mod.Delete("/credits/{id}/payments/{paymentId}", creditHandler.DeletePayment)
+				mod.Patch("/credits/{id}/schedule", creditHandler.UpdateSchedule)
+				mod.Post("/credits/{id}/close", creditHandler.Close)
+				mod.Delete("/credits/{id}", creditHandler.Delete)
+				mod.Get("/credits/{id}/schedule", creditHandler.Schedule)
+				if os.Getenv("BUHGALTER_E2E") == "1" {
+					mod.Post("/test/credits/{id}/apply-due", creditHandler.E2EApplyDue)
+				}
+			})
 
 			ar.Get("/categories", categoryHandler.List)
 			ar.Post("/categories", categoryHandler.Create)
@@ -212,12 +297,13 @@ func (s *Server) Handler() http.Handler {
 			ar.Put("/subcategories/{id}", categoryHandler.UpdateSubcategory)
 			ar.Delete("/subcategories/{id}", categoryHandler.DeleteSubcategory)
 
-			ar.Post("/import/preview", importHandler.Preview)
-			ar.Post("/import/headers", importHandler.Headers)
-			ar.Post("/import", importHandler.Import)
-			ar.Post("/import/jobs", importHandler.CreateJob)
-			ar.Get("/import/jobs/{id}", importHandler.GetJob)
-			ar.Get("/export", importHandler.Export)
+			ar.Get("/category-rules", categoryRuleHandler.List)
+			ar.Post("/category-rules", categoryRuleHandler.Create)
+			ar.Post("/category-rules/evaluate", categoryRuleHandler.Evaluate)
+			ar.Put("/category-rules/order", categoryRuleHandler.Reorder)
+			ar.Get("/category-rules/{id}", categoryRuleHandler.Get)
+			ar.Put("/category-rules/{id}", categoryRuleHandler.Update)
+			ar.Delete("/category-rules/{id}", categoryRuleHandler.Delete)
 
 			ar.Get("/stores", storeHandler.List)
 			ar.Post("/receipts/parse", receiptHandler.Parse)
@@ -226,23 +312,30 @@ func (s *Server) Handler() http.Handler {
 			ar.Post("/receipts/import", receiptHandler.Import)
 			ar.Get("/receipts/{id}", receiptHandler.Get)
 
-			ar.Get("/stats/summary", statsHandler.Summary)
-			ar.Get("/stats/by-category", statsHandler.ByCategory)
-			ar.Get("/stats/by-subcategory", statsHandler.BySubcategory)
-			ar.Get("/stats/by-store", statsHandler.ByStore)
-			ar.Get("/stats/by-period", statsHandler.ByPeriod)
-			ar.Get("/stats/search", statsHandler.Search)
-			ar.Get("/stats/context", statsHandler.Context)
+			ar.Group(func(mod chi.Router) {
+				mod.Use(features.RequireFeature(dbHandle, features.ImportExport))
+				mod.Post("/import/preview", importHandler.Preview)
+				mod.Post("/import/headers", importHandler.Headers)
+				mod.Post("/import", importHandler.Import)
+				mod.Post("/import/jobs", importHandler.CreateJob)
+				mod.Get("/import/jobs/{id}", importHandler.GetJob)
+				mod.Get("/export", importHandler.Export)
+			})
 
-			ar.Get("/budgets/summary", budgetHandler.Summary)
-			ar.Get("/budgets", budgetHandler.List)
-			ar.Post("/budgets/copy-from-previous", budgetHandler.CopyFromPrevious)
-			ar.Post("/budgets", budgetHandler.Create)
-			ar.Post("/budgets/{id}/copy-next", budgetHandler.CopyNext)
-			ar.Patch("/budgets/{id}", budgetHandler.Update)
-			ar.Delete("/budgets/{id}", budgetHandler.Delete)
+			ar.Group(func(mod chi.Router) {
+				mod.Use(features.RequireFeature(dbHandle, features.Stats))
+				mod.Get("/stats/summary", statsHandler.Summary)
+				mod.Get("/stats/by-category", statsHandler.ByCategory)
+				mod.Get("/stats/by-subcategory", statsHandler.BySubcategory)
+				mod.Get("/stats/by-store", statsHandler.ByStore)
+				mod.Get("/stats/by-period", statsHandler.ByPeriod)
+				mod.Get("/stats/search", statsHandler.Search)
+				mod.Get("/stats/context", statsHandler.Context)
+				mod.Get("/stats/net-worth", statsHandler.NetWorth)
+			})
 
 			ar.Get("/ui/meta", uiHandler.Meta)
+			ar.Get("/ui/i18n/{lang}", uiHandler.I18n)
 		})
 
 		api.Route("/user", func(ur chi.Router) {
@@ -250,11 +343,17 @@ func (s *Server) Handler() http.Handler {
 			ur.Use(apiCacheMW)
 			ur.Get("/settings", userHandler.GetSettings)
 			ur.Put("/settings", userHandler.PutSettings)
-			ur.Get("/notifications", userHandler.GetNotifications)
-			ur.Put("/notifications", userHandler.PutNotifications)
-			ur.Post("/notifications/test", userHandler.SendNotificationTest)
-			ur.Post("/notifications/templates/preview", userHandler.PreviewNotificationTemplate)
-			ur.Post("/notifications/templates/reset", userHandler.ResetNotificationTemplates)
+			ur.Delete("/data", userHandler.DeleteData)
+			ur.Group(func(mod chi.Router) {
+				mod.Use(features.RequireFeature(dbHandle, features.Notifications))
+				mod.Get("/notifications", userHandler.GetNotifications)
+				mod.Put("/notifications", userHandler.PutNotifications)
+				mod.Get("/notification-intercept/bindings", userHandler.GetNotificationInterceptBindings)
+				mod.Put("/notification-intercept/bindings", userHandler.PutNotificationInterceptBindings)
+				mod.Post("/notifications/test", userHandler.SendNotificationTest)
+				mod.Post("/notifications/templates/preview", userHandler.PreviewNotificationTemplate)
+				mod.Post("/notifications/templates/reset", userHandler.ResetNotificationTemplates)
+			})
 			ur.Put("/password", userHandler.ChangePassword)
 			ur.Get("/tokens", userHandler.ListTokens)
 			ur.Post("/tokens", userHandler.CreateToken)
@@ -268,6 +367,8 @@ func (s *Server) Handler() http.Handler {
 			ad.Get("/settings", adminHandler.GetSettings)
 			ad.Put("/settings", adminHandler.PutSettings)
 			ad.Put("/settings/notification-secret", adminHandler.PutNotificationSecretKey)
+			ad.Get("/features", adminHandler.GetFeatures)
+			ad.Put("/features", adminHandler.PutFeatures)
 			ad.Get("/users", adminHandler.ListUsers)
 			ad.Post("/users", adminHandler.CreateUser)
 			ad.Put("/users/{id}/status", adminHandler.UpdateUserStatus)
@@ -299,7 +400,8 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 	dbStatus := "connected"
 	httpStatus := http.StatusOK
 
-	if sqlDB := s.manager.DB(); sqlDB == nil {
+	sqlDB := s.manager.DB()
+	if sqlDB == nil {
 		status = "error"
 		dbStatus = "error"
 		httpStatus = http.StatusServiceUnavailable
@@ -309,11 +411,34 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 		httpStatus = http.StatusServiceUnavailable
 	}
 
-	writeJSON(w, httpStatus, map[string]string{
+	payload := map[string]string{
 		"status":  status,
 		"version": s.cfg.Version,
 		"db":      dbStatus,
-	})
+	}
+	if sqlDB != nil {
+		if externalURL, err := settingscache.ExternalURL(r.Context(), sqlDB); err == nil && externalURL.Valid {
+			if u := strings.TrimSpace(externalURL.String); u != "" {
+				payload["external_url"] = u
+			}
+		}
+	}
+
+	writeJSON(w, httpStatus, payload)
+}
+
+func compressExceptWebSocket(level int) func(http.Handler) http.Handler {
+	compress := chimw.Compress(level)
+	return func(next http.Handler) http.Handler {
+		compressed := compress(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
+				next.ServeHTTP(w, r)
+				return
+			}
+			compressed.ServeHTTP(w, r)
+		})
+	}
 }
 
 func BackupDir(dataDir string) string {

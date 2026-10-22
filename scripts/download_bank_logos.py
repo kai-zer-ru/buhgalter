@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT_DIRS = [
     ROOT / "data" / "banks",
     ROOT / "web" / "static" / "banks",
+    ROOT / "android" / "ui" / "static" / "banks",
     ROOT / "server" / "internal" / "bank" / "data" / "banks",
 ]
 JSON_PATH = ROOT / "data" / "banks_ru.json"
@@ -69,6 +70,10 @@ OFFICIAL_URLS: dict[str, str | list[str]] = {
     "wbbank": "https://wb-bank.ru/apple-touch-icon.png",
     "otpbank": "https://www.otpbank.ru/favicon.ico",
     "atb": "https://www.atb.su/local/templates/dt_private/img/svgs/icon_logo.svg",
+    "vbrr": [
+        "https://static.rustore.ru/apk/848879807/content/ICON/b9d63d12-3724-4446-ac4f-9ab399e9fed8.png",
+        "https://favicon.yandex.net/favicon/v2/https://www.vbrr.ru?size=120",
+    ],
 }
 
 FALLBACK_PAGES: dict[str, str] = {

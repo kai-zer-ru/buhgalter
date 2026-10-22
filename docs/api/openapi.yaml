@@ -9,14 +9,21 @@ info:
     Схема: `ErrorResponse` → `error.field`.
 
     **Серверный кеш (in-memory):** успешные ответы `GET` кешируются в процессе сервера (справочники — 5 мин,
-    остальное — 1 мин); при любой мутации кеш пользователя сбрасывается. Веб-клиент ответы не хранит.
-    Подробнее — [ui-api-cache.md](../ui-api-cache.md).
+    остальное — 1 мин); при любой мутации кеш пользователя сбрасывается.
+    Не кешируются: `/health`, `/version/check`, `/export`, preview, import jobs,
+    `GET /sync/transaction-changes`, `GET /realtime` (WebSocket).
+    **Клиент (web):** SWR ref-cache + при живом `GET /realtime` без фонового revalidate; иначе cooldown 60 с.
+    **Android:** SWR ref-cache с cooldown 60 с (сокет в v1.7.0 не используется).
+    Подробнее — [ui-api-cache.md](../ui-api-cache.md), [realtime-updates.md](../../roadmap/realtime-updates.md).
 
     **Счета (UI):** на `/accounts` меню «⋯» вызывает inline-редактирование (`PUT /accounts/{id}`),
-    `POST /accounts/{id}/primary`, `POST /accounts/{id}/archive`, `DELETE /accounts/{id}`.
+    `PUT /accounts/{id}/credit-limit` (кредитные карты), `POST /accounts/{id}/primary`,
+    `POST /accounts/{id}/archive`, `DELETE /accounts/{id}`.
     На `/accounts/{id}` — та же форма редактирования в шапке. Поля: название, банк, начальный баланс.
+    Лимит кредитной карты меняется только через `PUT /accounts/{id}/credit-limit` (см. [ui-credit-cards.md](../ui-credit-cards.md)).
+    В форме «Начальный баланс» — значение `initial_balance`, не текущий `balance_display` (см. [data-model.md](../data-model.md)).
     Подробнее — [ui-row-actions.md](../ui-row-actions.md).
-  version: 1.3.1
+  version: 1.9.1
 servers:
   - url: /api/v1
 paths:
@@ -25,6 +32,7 @@ paths:
       summary: Проверка состояния сервера
       description: |
         Публичный healthcheck без авторизации. Минимальный ответ для Docker и балансировщиков.
+        Опционально `external_url` — из `system_settings` (для подписи домена в Android LAN discovery).
         Расширенная диагностика — `GET /admin/diagnostics` (только admin).
       responses:
         '200':
@@ -47,6 +55,26 @@ paths:
                 status: error
                 version: 1.0.0
                 db: error
+  /realtime:
+    get:
+      summary: Живой канал обновлений (WebSocket)
+      description: |
+        Upgrade до WebSocket. Сервер шлёт JSON-события (`hello`, `ping`, `invalidate`,
+        `import.progress` / `import.done` / `import.failed`).
+        `invalidate` содержит `hint_paths` / `entities` — клиент сбрасывает только эти пути
+        ref-cache и soft-reload совпадающих блоков экрана (без `hint_paths` — грубый сброс).
+        CRUD остаётся на REST. Эндпоинт не кешируется.
+        Android в v1.7.0 сокет не использует (SWR cooldown ~1 мин).
+        Прокси: нужны заголовки `Upgrade` / `Connection` и длинный `proxy_read_timeout`
+        (см. [install/nginx.md](../install/nginx.md)).
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '101':
+          description: Switching Protocols (WebSocket)
+        '401':
+          description: Не авторизован
   /setup/status:
     get:
       summary: Статус начальной настройки
@@ -242,6 +270,32 @@ paths:
           description: Ошибка валидации (пароли не совпадают и т.д.)
         '403':
           description: Регистрация отключена
+  /auth/request-password-reset:
+    post:
+      summary: Запросить сброс пароля
+      description: |
+        Публичный endpoint (без сессии). При существующем логине создаётся запись в
+        `password_reset_requests` и уходит уведомление администраторам (`password_reset`).
+        При неизвестном логине ответ тот же — без перечисления учёток.
+        Rate limit: 5 запросов/мин с IP (`Retry-After: 60` при `429`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [login]
+              properties:
+                login:
+                  type: string
+                  description: Логин пользователя
+      responses:
+        '204':
+          description: Запрос принят (логин существует или нет — одинаковый ответ)
+        '400':
+          description: Пустой login или невалидный JSON (`VALIDATION_ERROR`)
+        '429':
+          description: Превышен лимит запросов с IP (`RATE_LIMITED`)
   /auth/verify:
     get:
       summary: Проверка токена
@@ -254,6 +308,31 @@ paths:
       responses:
         '200':
           description: Результат проверки
+  /features:
+    get:
+      summary: Снимок флагов модулей
+      description: |
+        Инстанс-флаги опциональных модулей для UI (навигация, роуты).
+        Требуется авторизация. При выключенном модуле соответствующий API отвечает 404 `FEATURE_DISABLED`.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Карта key → enabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeatureFlagsSnapshot'
+        '401':
+          description: Не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                unauthorized:
+                  $ref: '#/components/examples/ApiErrorUnauthorized'
   /auth/me:
     get:
       summary: Текущий пользователь
@@ -277,11 +356,40 @@ paths:
       responses:
         '200':
           description: Настройки обновлены
+  /user/data:
+    delete:
+      summary: Удалить учётные данные пользователя
+      description: |
+        Сбрасывает учёт к состоянию нового пользователя: удаляет операции, счета, долги, кредиты,
+        бюджеты, подписки, периодические операции, магазины, теги, шаблоны, категории,
+        журнал уведомлений и задания импорта, затем заново создаёт категории по умолчанию.
+
+        Не изменяет логин, пароль, имя, язык, валюту, часовой пояс, тему, статус,
+        сессии, API-токены и настройки каналов уведомлений.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Данные удалены
+        '401':
+          description: Не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                unauthorized:
+                  $ref: '#/components/examples/ApiErrorUnauthorized'
   /user/password:
     put:
       summary: Смена пароля
+      description: |
+        После успеха остальные сессии пользователя удаляются; текущая сессия (cookie или Bearer session) сохраняется.
+        Смена через API-токен удаляет все сессии. API-токены не отзываются.
       security:
         - sessionCookie: []
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -305,7 +413,7 @@ paths:
                   description: Должен совпадать с new_password
       responses:
         '204':
-          description: Пароль изменён
+          description: Пароль изменён; остальные сессии отозваны
         '400':
           description: |
             Ошибка валидации. Код ответа `VALIDATION_ERROR`; тексты сообщений по ключам:
@@ -337,6 +445,7 @@ paths:
       description: |
         По умолчанию срок действия — 30 дней. Бессрочный токен (`never_expires: true`) допустим,
         но не рекомендуется. Явная дата в `expires_at` (RFC3339) переопределяет срок по умолчанию.
+        Хранимый `expires_at`, который нельзя разобрать, при проверке токена считается истёкшим.
       security:
         - sessionCookie: []
       requestBody:
@@ -422,6 +531,51 @@ paths:
               examples:
                 validation:
                   $ref: '#/components/examples/ApiErrorValidation'
+  /user/notification-intercept/bindings:
+    get:
+      summary: Привязки банков и карт для перехвата уведомлений (Android)
+      description: |
+        Счёт → банк (push/SMS) и карта `*XXXX` → счёт. Хранится на сервере per-user,
+        чтобы настройки переживали переустановку приложения. Включение перехвата и разрешения
+        остаются на устройстве.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Текущие привязки
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationInterceptBindings'
+    put:
+      summary: Заменить привязки перехвата уведомлений
+      description: |
+        Полная замена списков. Счета должны быть активными `bank` или `credit_card` пользователя;
+        `bank_id` — из каталога банков.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationInterceptBindings'
+      responses:
+        '200':
+          description: Сохранённые привязки
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationInterceptBindings'
+        '400':
+          description: Ошибка валидации
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                validation:
+                  $ref: '#/components/examples/ApiErrorValidation'
   /user/notifications/test:
     post:
       summary: Отправить тестовое уведомление
@@ -463,7 +617,8 @@ paths:
     post:
       summary: Предпросмотр шаблона уведомления
       description: |
-        Формирует текст шаблона с тестовыми данными без отправки в мессенджер.
+        Формирует текст шаблона и resolved-клавиатуры Telegram/MAX с тестовыми данными
+        без отправки в мессенджер. Merge: global → template; url/link без http(s) URL отбрасываются (T1).
       security:
         - sessionCookie: []
       requestBody:
@@ -492,8 +647,8 @@ paths:
     post:
       summary: Сбросить пользовательские шаблоны уведомлений
       description: |
-        Если `trigger_type` не передан — сбрасывает все пользовательские шаблоны.
-        Если передан — только для указанного типа.
+        Если `trigger_type` не передан — сбрасывает все пользовательские шаблоны (включая их keyboard).
+        Если передан — только для указанного типа. Global keyboard settings не затрагиваются.
       security:
         - sessionCookie: []
       requestBody:
@@ -520,6 +675,9 @@ paths:
   /admin/settings:
     get:
       summary: Системные настройки
+      description: |
+        Внешний URL и признак заданного ключа уведомлений.
+        Самостоятельная регистрация и модули — `GET/PUT /admin/features` (флаг `registration`).
       security:
         - sessionCookie: []
       responses:
@@ -555,6 +713,53 @@ paths:
               examples:
                 external_url:
                   $ref: '#/components/examples/ApiErrorExternalURL'
+  /admin/features:
+    get:
+      summary: Каталог флагов модулей
+      description: Список известных флагов с метаданными и текущим состоянием (только admin).
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Каталог
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminFeatureFlag'
+    put:
+      summary: Обновить флаги модулей
+      description: |
+        Частичная или полная запись overrides. Неизвестный ключ — 400.
+        При выключенном модуле API модуля отвечает 404 с кодом `FEATURE_DISABLED`.
+        Значение `registration` также отдаётся публично в `GET /setup/status` как `registration_enabled`.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminFeatureFlagsUpdate'
+      responses:
+        '200':
+          description: Актуальный снимок флагов
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeatureFlagsSnapshot'
+        '400':
+          description: Неизвестный ключ или пустое тело
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                unknown_key:
+                  $ref: '#/components/examples/ApiErrorUnknownFeatureFlag'
+                empty:
+                  $ref: '#/components/examples/ApiErrorFeaturesEmpty'
   /admin/settings/notification-secret:
     put:
       summary: Обновить ключ шифрования уведомлений
@@ -649,7 +854,7 @@ paths:
       summary: Изменить статус пользователя
       description: |
         Допустимые переходы: pending→active|banned, active→banned, banned→active.
-        Нельзя менять свой статус. При бане сессии пользователя инвалидируются.
+        Нельзя менять свой статус. При бане сессии и API-токены пользователя удаляются.
       security:
         - sessionCookie: []
       parameters:
@@ -680,6 +885,89 @@ paths:
           description: Недопустимый статус или переход
         '404':
           description: Пользователь не найден
+  /admin/users/{id}/password:
+    put:
+      summary: Сбросить пароль пользователя
+      description: |
+        Только администратор. Задаёт новый пароль; сессии целевого пользователя
+        инвалидируются; ожидающие `password_reset_requests` для пользователя снимаются.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: ID пользователя
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - new_password
+                - new_password_confirm
+              properties:
+                new_password:
+                  type: string
+                  minLength: 8
+                  description: Минимум 8 символов, хотя бы одна буква и одна цифра, не совпадает с login
+                new_password_confirm:
+                  type: string
+                  minLength: 8
+                  description: Должен совпадать с new_password
+      responses:
+        '204':
+          description: Пароль обновлён
+        '400':
+          description: |
+            Ошибка валидации (`VALIDATION_ERROR`): `PASSWORDS_MISMATCH`,
+            `PASSWORD_TOO_SHORT`, `PASSWORD_TOO_WEAK`
+        '404':
+          description: Пользователь не найден
+  /admin/password-reset-requests:
+    get:
+      summary: Ожидающие запросы сброса пароля
+      description: |
+        Только администратор. Список неdismissed записей `password_reset_requests`
+        (для баннера и админки пользователей).
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Список запросов
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PasswordResetRequest'
+        '401':
+          description: Не авторизован
+        '403':
+          description: Не администратор
+  /admin/password-reset-requests/{id}/ack:
+    post:
+      summary: Скрыть запрос сброса пароля из очереди
+      description: |
+        Только администратор. Помечает запрос dismissed (не меняет пароль пользователя).
+        Сам сброс — `PUT /admin/users/{id}/password`.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: ID записи `password_reset_requests`
+      responses:
+        '204':
+          description: Запрос скрыт
+        '404':
+          description: Запрос не найден
   /admin/diagnostics:
     get:
       summary: Диагностика системы
@@ -811,7 +1099,7 @@ paths:
       description: |
         В ответе — актуальный баланс. Сервер кеширует ответ in-memory (TTL 1 мин); сбрасывается при мутациях.
 
-        На странице `/accounts` карточки: меню «⋯» — inline-редактирование (название, банк, начальный баланс),
+        На странице `/accounts` карточки: меню «⋯» — inline-редактирование (название, банк, начальный баланс из `initial_balance`, не текущий `balance_display`),
         основной, архив, удаление (см. `PUT`, `POST .../primary`, `POST .../archive`, `DELETE` для `{id}`).
       security:
         - sessionCookie: []
@@ -862,8 +1150,12 @@ paths:
     put:
       summary: Обновить счёт
       description: |
-        Имя, банк (для `type=bank` / `credit_card`), лимит и счёт для переводов (для `credit_card`),
-        начальный баланс. В UI — inline-форма на `/accounts` или форма на `/accounts/{id}`.
+        Имя, банк (для `type=bank` / `credit_card`), счёт для переводов (для `credit_card`),
+        начальный баланс (`initial_balance` — стартовая сумма, не текущий остаток).
+        Смена `credit_limit` через этот метод запрещена (`ERR_ACCOUNT_CREDIT_LIMIT_IMMUTABLE`);
+        используйте `PUT /accounts/{id}/credit-limit`.
+        После сохранения `current_balance` пересчитывается от нового `initial_balance` и операций.
+        В UI — inline-форма на `/accounts` или форма на `/accounts/{id}`; поле «Начальный баланс» заполняется из `initial_balance` ответа GET, не из `balance_display`.
       security:
         - sessionCookie: []
       parameters:
@@ -885,6 +1177,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Account'
+        '400':
+          description: |
+            В том числе попытка сменить `credit_limit` (`ERR_ACCOUNT_CREDIT_LIMIT_IMMUTABLE`).
     delete:
       summary: Удалить счёт
       description: |
@@ -993,7 +1288,9 @@ paths:
   /accounts/{id}/primary:
     post:
       summary: Назначить основной счёт
-      description: Снимает флаг с прежнего основного среди активных счетов. Архивный счёт назначить нельзя.
+      description: |
+        Снимает флаг с прежнего основного среди активных счетов.
+        Основным может быть только `cash` или `bank` (не кредитная карта). Архивный счёт назначить нельзя.
       security:
         - sessionCookie: []
       parameters:
@@ -1006,7 +1303,42 @@ paths:
         '200':
           description: "Счёт с `is_primary: true`"
         '400':
-          description: Архивный счёт
+          description: Архивный счёт или кредитная карта (`ERR_ACCOUNT_PRIMARY_ARCHIVED` / `ERR_ACCOUNT_PRIMARY_CREDIT_CARD`)
+  /accounts/{id}/credit-limit:
+    put:
+      summary: Изменить кредитный лимит
+      description: |
+        Только для активной кредитной карты (`type=credit_card`).
+        Увеличение: `credit_limit` и `initial_balance` растут на одну и ту же дельту — долг (`лимит − баланс`) не меняется.
+        Уменьшение: только при полном погашении (`balance >=` текущий `credit_limit`); дельта вычитается из `initial_balance` симметрично.
+        Транзакцию не создаёт. Подробнее — [ui-credit-cards.md](../ui-credit-cards.md).
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountCreditLimitChange'
+      responses:
+        '200':
+          description: Счёт с новым лимитом
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '400':
+          description: |
+            Невалидный лимит (`ERR_ACCOUNT_INVALID_CREDIT_LIMIT`), не кредитная карта (`ERR_ACCOUNT_TYPE`),
+            архивный счёт (`ERR_ACCOUNT_ARCHIVED_EDIT`), уменьшение при непогашенном долге
+            (`ERR_CREDIT_CARD_LIMIT_DECREASE_NOT_FULLY_PAID`).
   /accounts/summary:
     get:
       summary: Сводка по активным счетам
@@ -1047,8 +1379,12 @@ paths:
       summary: Главный экран
       description: |
         Общий баланс, карточки счетов (с `type`, `bank_icon`), последние 10 операций.
-        `forecast_balance` и `has_future_this_month` учитывают операции `kind=future`
+        `forecast_balance` и `has_future_this_month` учитывают операции `kind=future`,
+        ещё не исполненные активные подписки и периодические операции,
+        а также неоплаченные `scheduled`-платежи активных кредитов
         в рамках текущего месяца (по часовому поясу пользователя).
+        Флаги `has_planned_this_month` (future и/или периодические и/или кредиты) и
+        `has_subscriptions_this_month` уточняют подпись «С учётом …» в UI.
       security:
         - sessionCookie: []
         - bearerAuth: []
@@ -1059,6 +1395,58 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Dashboard'
+  /sync/transaction-changes:
+    get:
+      summary: Изменения операций с момента последней синхронизации
+      description: |
+        Лента create/update/delete по таблице `transactions` (доход, расход, перевод,
+        операции долгов и кредитов — это тоже строки `transactions`).
+        Клиент передаёт курсор `since_id` (и опционально `since`) из прошлого ответа
+        и применяет события к локальному кешу по `entity_id`.
+        Несколько событий по одной операции схлопываются: в ответе одна запись
+        с актуальным телом (`upsert`) или `deleted`, если строки уже нет.
+        Эндпоинт не кешируется (серверный GET-кеш и клиентский ref-cache).
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: since_id
+          in: query
+          description: Исключающий курсор — id последнего обработанного события (`0` с начала)
+          schema:
+            type: integer
+            format: int64
+            default: 0
+        - name: since
+          in: query
+          description: Опционально — нижняя граница `occurred_at` (UTC, `YYYY-MM-DD HH:MM:SS` или RFC3339)
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Размер страницы сырых событий до схлопывания (по умолчанию 200, максимум 500)
+          schema:
+            type: integer
+            default: 200
+        - name: watermark
+          in: query
+          description: |
+            Если `1` — без `changes`: вернуть только high-water `since_id` (MAX id событий пользователя).
+            Android после полного warm выставляет курсор одним запросом, не проигрывая всю историю.
+          schema:
+            type: string
+            enum: ['1']
+      responses:
+        '200':
+          description: Пакет изменений
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionChanges'
+        '400':
+          description: Некорректный формат `since`
+        '401':
+          description: Не авторизован
   /version/check:
     get:
       summary: Проверка доступного обновления
@@ -1082,6 +1470,62 @@ paths:
                 latest_version: 1.2.2
                 update_available: true
                 release_url: https://github.com/kai-zer-ru/buhgalter/releases/tag/v1.2.2
+  /ui/meta:
+    get:
+      summary: Агрегированные справочники для старта UI
+      description: |
+        Один запрос вместо нескольких: активные/доступные счета (кратко), банки,
+        категории дохода и расхода, должники, активные и закрытые кредиты.
+        Используется веб- и Android-клиентами для прогрева кеша справочников.
+        Сервер кеширует ответ in-memory (TTL как у прочих GET пользователя).
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Справочники
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UIMetaResponse'
+        '401':
+          description: Не авторизован
+  /ui/i18n/{lang}:
+    get:
+      summary: Каталог строк UI для Android
+      description: |
+        Плоский JSON-каталог UI-строк (`ru` / `en`) из `server/ui_locales/` (копия `android/ui/src/lib/i18n/`).
+        Android-клиент запрашивает endpoint, когда версия APK **старше** `current_version` сервера
+        (`GET /version/check`), и мержит ответ поверх bundled `svelte-i18n`.
+        Источник каталогов синхронизируется через `make copy-ui-i18n` / `ui-i18n-check`.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: lang
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [ru, en]
+          description: Код языка UI
+      responses:
+        '200':
+          description: Каталог строк
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UIi18nCatalog'
+              example:
+                version: 1.5.0
+                lang: ru
+                messages:
+                  app.title: Бухгалтер
+                  nav.home: Главная
+        '400':
+          description: Неизвестный язык (`ERR_LANGUAGE`)
+        '401':
+          description: Не авторизован
   /stats/summary:
     get:
       summary: Сводка статистики
@@ -1330,6 +1774,84 @@ paths:
                 $ref: '#/components/schemas/StatsContextSummary'
         '400':
           description: Некорректный период
+  /stats/net-worth:
+    get:
+      summary: Нетто-капитал во времени
+      description: |
+        Текущий снимок и серия по месяцам (конец месяца в timezone пользователя; для текущего месяца — «сейчас»).
+        Без `from`/`to` — последние 12 календарных месяцев; диапазон — не более **120** месяцев (`400`, `ERR_PERIOD_DATE`).
+        Удалённые счета (`status=deleted`) не участвуют. Активы: наличные и банк + «мне должны». Обязательства:
+        «я должен», остаток по активным кредитам, задолженность по кредитным картам (`max(0, credit_limit − balance)`).
+        Суммы в копейках и `*_display`.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/StatsFrom'
+        - $ref: '#/components/parameters/StatsTo'
+        - name: group_by
+          in: query
+          schema:
+            type: string
+            enum: [month]
+            default: month
+          description: Пока поддерживается только `month`
+      responses:
+        '200':
+          description: Текущий нетто и ряд по месяцам
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatsNetWorthResponse'
+        '400':
+          description: Некорректный период или `group_by` (`ERR_PERIOD_DATE`, `ERR_GROUP_BY`)
+  /transactions/inbox:
+    get:
+      summary: Очередь «разобрать»
+      description: |
+        Операции `income`/`expense` с `category_id IS NULL` (без commission legs переводов).
+        Пагинация как у `GET /transactions`.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [date_desc, date_asc]
+      responses:
+        '200':
+          description: Список
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionListResponse'
+  /transactions/inbox/count:
+    get:
+      summary: Счётчик очереди «разобрать»
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [count]
+                properties:
+                  count:
+                    type: integer
   /transactions:
     get:
       summary: Список операций
@@ -1373,6 +1895,16 @@ paths:
         - name: search
           in: query
           description: Подстрока в description
+          schema:
+            type: string
+        - name: merchant_id
+          in: query
+          description: Фильтр по магазину
+          schema:
+            type: string
+        - name: tag_id
+          in: query
+          description: Фильтр по тегу (операции с этим тегом)
           schema:
             type: string
         - name: sort
@@ -1617,6 +2149,427 @@ paths:
           description: |
             Конфликт направления — нельзя «взять в долг» при активном «дал в долг» у того же должника
             и нельзя «дать в долг» при активном «взял в долг».
+  /merchants:
+    get:
+      summary: Список магазинов
+      description: |
+        Справочник магазинов пользователя. Кеш GET TTL 5 мин; сброс при мутациях.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Список
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Merchant'
+    post:
+      summary: Создать магазин
+      description: Get-or-create по имени (без учёта регистра, включая кириллицу).
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MerchantUpsert'
+      responses:
+        '201':
+          description: Создан или найден существующий
+  /merchants/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Магазин по id
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Merchant'
+        '404':
+          description: Не найден
+    put:
+      summary: Обновить магазин
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MerchantUpsert'
+      responses:
+        '200':
+          description: Обновлён
+    delete:
+      summary: Удалить магазин
+      description: У операций `merchant_id` становится null (`ON DELETE SET NULL`).
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Удалён
+  /tags:
+    get:
+      summary: Список тегов
+      description: |
+        Опциональный фильтр `q` — подстрока в имени. Кеш GET TTL 5 мин.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Список
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Tag'
+    post:
+      summary: Создать тег
+      description: Get-or-create по имени.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NameCreate'
+      responses:
+        '201':
+          description: Создан или найден
+  /tags/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Тег по id
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tag'
+        '404':
+          description: Не найден
+    put:
+      summary: Переименовать тег
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NameCreate'
+      responses:
+        '200':
+          description: Обновлён
+    delete:
+      summary: Удалить тег
+      description: Связи в `transaction_tags` удаляются каскадом.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Удалён
+  /transaction-templates:
+    get:
+      summary: Список шаблонов операций
+      description: |
+        Именованные пресеты для быстрого создания операций. Кеш GET TTL 5 мин.
+        Сортировка: `sort_order`, затем имя.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Список
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TransactionTemplate'
+    post:
+      summary: Создать шаблон операции
+      description: |
+        Не создаёт операцию. Лимит — 100 шаблонов на пользователя.
+        Для `transfer` обязательны разные `account_id` и `to_account_id`.
+        `amount` можно не передавать (сумма при создании операции).
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionTemplateUpsert'
+      responses:
+        '201':
+          description: Создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionTemplate'
+        '400':
+          description: Ошибка валидации или лимит
+  /transaction-templates/reorder:
+    put:
+      summary: Изменить порядок шаблонов
+      description: Тело — полный упорядоченный список `ids` всех шаблонов пользователя.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids]
+              properties:
+                ids:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Список после перестановки
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TransactionTemplate'
+        '400':
+          description: Неполный или неверный набор id
+  /transaction-templates/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Шаблон операции по id
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionTemplate'
+        '404':
+          description: Не найден
+    put:
+      summary: Обновить шаблон операции
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionTemplateUpsert'
+      responses:
+        '200':
+          description: Обновлён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionTemplate'
+        '404':
+          description: Не найден
+    delete:
+      summary: Удалить шаблон операции
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Удалён
+  /category-rules:
+    get:
+      summary: Список правил категорий
+      description: |
+        Постоянные правила пользователя для подстановки счёта и (позже) автокатегоризации.
+        Сортировка: `priority` (меньше — раньше), затем `id`. Кеш GET TTL 5 мин.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Список
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CategoryRule'
+    post:
+      summary: Создать правило категории
+      description: |
+        Лимит — 100 правил на пользователя.
+        `category_account`: обязательны `category_id` и `default_account_id`; `pattern` не передаётся.
+        `text_category`: обязательны `category_id` и `pattern`; цель не может быть системной категорией.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryRuleUpsert'
+      responses:
+        '201':
+          description: Создано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryRule'
+        '400':
+          description: Ошибка валидации или лимит
+  /category-rules/evaluate:
+    post:
+      summary: Подсказки правил (без записи)
+      description: |
+        Возвращает совпадения text→category и подсказку счёта для category→account.
+        Не изменяет данные.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryRuleEvaluateRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryRuleEvaluateResult'
+  /category-rules/order:
+    put:
+      summary: Изменить приоритет правил
+      description: Тело — полный упорядоченный список `ids` всех правил пользователя (первый = наивысший приоритет).
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids]
+              properties:
+                ids:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Список после перестановки
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CategoryRule'
+        '400':
+          description: Неполный или неверный набор id
+  /category-rules/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Правило по id
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryRule'
+        '404':
+          description: Не найдено
+    put:
+      summary: Обновить правило
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryRuleUpsert'
+      responses:
+        '200':
+          description: Обновлено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryRule'
+        '404':
+          description: Не найдено
+    delete:
+      summary: Удалить правило
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Удалено
   /debtors:
     get:
       summary: Список должников
@@ -1768,8 +2721,10 @@ paths:
         **Потребительский кредит** (`credit_kind=consumer`, по умолчанию):
         - для `month` / `week` / `two_weeks` — аннуитет от `issue_date`; платежи 1…N−1 равны,
           последний закрывает остаток + проценты за период;
-        - опциональный `monthly_payment` переопределяет расчётный платёж; если сумма совпадает с расчётной
-          в пределах 1 ₽ (копейки), трактуется как автоматическая;
+        - для consumer-кредита и рассрочки (`credit_kind=consumer`) опционально `first_payment_today=true`:
+          первый платёж в дату выдачи, далее с шагом `payment_interval`; для ипотеки игнорируется;
+        - опциональный `monthly_payment` переопределяет расчётный платёж; override не применяется только при точном
+          совпадении с расчётом (целые рубли, отличающиеся от расчёта с копейками — это override);
         - слишком низкий ручной платёж (не покрывает проценты) или слишком высокий (не укладывается в срок)
           → **400** `VALIDATION_ERROR`, ключ `ERR_CREDIT_INVALID_PAYMENT`, поле `error.field=monthly_payment`;
         - для `manual` — только переданные `seed_payments` (ровно `term` строк; сумма подгоняется последним платежом).
@@ -1883,6 +2838,8 @@ paths:
       description: |
         Обновляет ближайший неоплаченный `scheduled` (не создаёт новую строку).
         Если у строки уже есть `transaction_id` (создан при `create_transactions`) — переиспользует операцию.
+        Опциональный `transaction_id` в теле — привязать уже существующий расход: категория «Кредиты»,
+        связь с платежом; `amount` / `payment_date` / `account_id` можно не передавать (берутся из операции).
         После оплаты удаляются дубликаты на тот же календарный день (`early`, лишние `scheduled`).
         Если `payment_date` в будущем, связанная операция остаётся `kind=future`
         до наступления даты операции и учитывается в прогнозе баланса.
@@ -1992,6 +2949,224 @@ paths:
       responses:
         '200':
           description: Кредит с обновлённым графиком
+
+  /subscriptions:
+    get:
+      tags: [Subscriptions]
+      summary: Список подписок
+      operationId: listSubscriptions
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Subscription'
+    post:
+      tags: [Subscriptions]
+      summary: Создать подписку
+      operationId: createSubscription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubscriptionUpsertRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subscription'
+
+  /subscriptions/preview-upcoming:
+    post:
+      tags: [Subscriptions]
+      summary: Предпросмотр трёх ближайших дат списания
+      description: |
+        Считает `upcoming_run_ats` по периоду и якорю без сохранения.
+        Ответ не кешируется.
+      operationId: previewSubscriptionUpcoming
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubscriptionPreviewUpcomingRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionPreviewUpcomingResponse'
+  /subscriptions/summary:
+    get:
+      tags: [Subscriptions]
+      summary: Сводка по подпискам
+      operationId: subscriptionsSummary
+      parameters:
+        - name: upcoming_days
+          in: query
+          schema:
+            type: integer
+            default: 14
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionSummary'
+  /subscriptions/from-recurring/{recurring_id}:
+    post:
+      tags: [Subscriptions]
+      summary: Конвертировать периодическую операцию в подписку
+      operationId: convertRecurringToSubscription
+      parameters:
+        - $ref: '#/components/parameters/RecurringID'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                  nullable: true
+                icon:
+                  type: string
+                  nullable: true
+                website_url:
+                  type: string
+                  nullable: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionConvertResult'
+  /subscriptions/{id}:
+    put:
+      tags: [Subscriptions]
+      summary: Обновить подписку
+      operationId: updateSubscription
+      parameters:
+        - $ref: '#/components/parameters/SubscriptionID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubscriptionUpsertRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subscription'
+    delete:
+      tags: [Subscriptions]
+      summary: Удалить подписку
+      operationId: deleteSubscription
+      parameters:
+        - $ref: '#/components/parameters/SubscriptionID'
+      responses:
+        '204':
+          description: No Content
+  /subscriptions/{id}/candidate-transactions:
+    get:
+      tags: [Subscriptions]
+      summary: Кандидаты для привязки операций
+      operationId: listSubscriptionCandidates
+      parameters:
+        - $ref: '#/components/parameters/SubscriptionID'
+        - name: mode
+          in: query
+          schema:
+            type: string
+            enum: [auto, all]
+        - name: q
+          in: query
+          schema:
+            type: string
+        - name: account_id
+          in: query
+          schema:
+            type: string
+        - name: amount_min
+          in: query
+          schema:
+            type: integer
+        - name: amount_max
+          in: query
+          schema:
+            type: integer
+        - name: date_from
+          in: query
+          schema:
+            type: string
+        - name: date_to
+          in: query
+          schema:
+            type: string
+        - name: min_score
+          in: query
+          schema:
+            type: integer
+        - name: ref_description
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: offset
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionCandidateResult'
+  /subscriptions/{id}/attach-transactions:
+    post:
+      tags: [Subscriptions]
+      summary: Привязать операции к подписке
+      operationId: attachSubscriptionTransactions
+      parameters:
+        - $ref: '#/components/parameters/SubscriptionID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids]
+              properties:
+                ids:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionAttachResult'
+
   /recurring-operations:
     get:
       summary: Список периодических операций
@@ -2088,6 +3263,53 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/BudgetSummaryResponse'
+  /budgets/spent-preview:
+    get:
+      summary: Факт расходов по области без существующего бюджета
+      description: |
+        Считает spent теми же фильтрами, что и сводка бюджетов (`BudgetSpent`),
+        для выбранных `scope` / категории / подкатегории / счёта и месяца.
+        Используется в форме создания и редактирования бюджета.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: month
+          in: query
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}$'
+          description: Календарный месяц (YYYY-MM); без параметра — текущий месяц пользователя
+        - name: scope
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [category, subcategory, all_expense]
+        - name: category_id
+          in: query
+          schema:
+            type: string
+          description: Обязателен при scope=category
+        - name: subcategory_id
+          in: query
+          schema:
+            type: string
+          description: Обязателен при scope=subcategory
+        - name: account_id
+          in: query
+          schema:
+            type: string
+          description: Опционально сужает факт до операций по счёту
+      responses:
+        '200':
+          description: Потраченная сумма за месяц
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BudgetSpentPreview'
+        '400':
+          description: Некорректный scope / категория / подкатегория / счёт / месяц
   /budgets/copy-from-previous:
     post:
       summary: Скопировать все бюджеты с прошлого месяца
@@ -2596,7 +3818,7 @@ paths:
                   format: binary
                 preset:
                   type: string
-                  enum: [cubux, custom]
+                  enum: [buhgalter, cubux, custom]
                   default: cubux
                 deduplicate:
                   type: boolean
@@ -2636,7 +3858,7 @@ paths:
                   format: binary
                 preset:
                   type: string
-                  enum: [cubux, custom]
+                  enum: [buhgalter, cubux, custom]
                 deduplicate:
                   type: boolean
                 confirm:
@@ -2688,7 +3910,7 @@ paths:
                   format: binary
                 preset:
                   type: string
-                  enum: [cubux, custom]
+                  enum: [buhgalter, cubux, custom]
                 deduplicate:
                   type: boolean
                 column_map:
@@ -2738,7 +3960,7 @@ paths:
                   $ref: '#/components/examples/ApiErrorNotFound'
   /export:
     get:
-      summary: Экспорт операций в Cubux CSV
+      summary: Экспорт операций в CSV (Бухгалтер или Cubux)
       security:
         - sessionCookie: []
         - bearerAuth: []
@@ -2761,6 +3983,15 @@ paths:
           in: query
           schema:
             type: string
+        - name: format
+          in: query
+          description: |
+            `cubux` — совместимость с Cubux (по умолчанию); `from`/`to`/`account_id`/`category_id` сужают список операций.
+            `buhgalter` — секционный CSV `#BUHGALTER,1` для полного переноса между инстансами (профиль с timezone, счета, справочники, операции, кредиты, долги, подписки и остальное). Фильтры даты, счёта и категории игнорируются.
+          schema:
+            type: string
+            enum: [cubux, buhgalter]
+            default: cubux
       responses:
         '200':
           description: CSV с BOM
@@ -2839,6 +4070,25 @@ components:
         error:
           code: VALIDATION_ERROR
           message: Некорректные параметры запроса
+    ApiErrorUnauthorized:
+      summary: Не авторизован
+      value:
+        error:
+          code: UNAUTHORIZED
+          message: Требуется авторизация
+    ApiErrorUnknownFeatureFlag:
+      summary: Неизвестный ключ флага модуля
+      value:
+        error:
+          code: VALIDATION_ERROR
+          message: unknown feature flag
+          field: features
+    ApiErrorFeaturesEmpty:
+      summary: Пустое тело обновления флагов
+      value:
+        error:
+          code: VALIDATION_ERROR
+          message: Укажите хотя бы один флаг
     ApiErrorPasswordUnchanged:
       summary: Новый пароль совпадает с текущим
       value:
@@ -2915,6 +4165,11 @@ components:
           type: string
           enum: [connected, error]
           description: Результат ping SQLite
+        external_url:
+          type: string
+          description: |
+            Внешний URL из `system_settings.external_url` (админка), если задан.
+            Для LAN discovery в Android-клиенте; не влияет на проверку доступа.
     VersionCheckResponse:
       type: object
       required: [current_version, update_available]
@@ -2932,6 +4187,123 @@ components:
           type: string
           format: uri
           description: Ссылка на страницу релиза на GitHub
+    UIi18nCatalog:
+      type: object
+      required: [version, lang, messages]
+      properties:
+        version:
+          type: string
+          description: Версия сервера (`-ldflags "-X main.version=…"`)
+        lang:
+          type: string
+          enum: [ru, en]
+          description: Код языка
+        messages:
+          type: object
+          additionalProperties:
+            type: string
+          description: Плоский каталог ключ → строка (как в android/ui i18n JSON)
+    UIMetaAccountRef:
+      type: object
+      required: [id, name, type, status]
+      description: Краткая ссылка на счёт в `GET /ui/meta` (без баланса и настроек)
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          enum: [cash, bank, credit_card]
+        status:
+          type: string
+          enum: [active, archived, deleted]
+        bank_id:
+          type: string
+          nullable: true
+    Bank:
+      type: object
+      required: [id, name, icon_path, sort_order]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        bic:
+          type: string
+          nullable: true
+        icon_path:
+          type: string
+        sort_order:
+          type: integer
+    UIMetaResponse:
+      type: object
+      required:
+        - accounts
+        - banks
+        - expense_categories
+        - income_categories
+        - debtors
+        - active_credits
+        - closed_credits
+      description: Ответ `GET /ui/meta`
+      properties:
+        accounts:
+          type: array
+          items:
+            $ref: '#/components/schemas/UIMetaAccountRef'
+        banks:
+          type: array
+          items:
+            $ref: '#/components/schemas/Bank'
+        expense_categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/Category'
+        income_categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/Category'
+        debtors:
+          type: array
+          items:
+            $ref: '#/components/schemas/Debtor'
+        merchants:
+          type: array
+          items:
+            $ref: '#/components/schemas/Merchant'
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tag'
+        transaction_templates:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransactionTemplate'
+        active_credits:
+          type: array
+          items:
+            $ref: '#/components/schemas/Credit'
+        closed_credits:
+          type: array
+          items:
+            $ref: '#/components/schemas/Credit'
+    PasswordResetRequest:
+      type: object
+      required: [id, user_id, login, display_name, created_at]
+      description: Ожидающий запрос сброса пароля (`GET /admin/password-reset-requests`)
+      properties:
+        id:
+          type: string
+        user_id:
+          type: string
+        login:
+          type: string
+        display_name:
+          type: string
+        created_at:
+          type: string
+          description: RFC3339 UTC
     ApiError:
       type: object
       required: [error]
@@ -2944,9 +4316,9 @@ components:
               type: string
               description: |
                 Код ошибки: UNAUTHORIZED, FORBIDDEN, INVALID_CREDENTIALS, REGISTRATION_DISABLED,
-                USER_PENDING_MODERATION, USER_BANNED, USER_STATUS_INVALID, USER_STATUS_TRANSITION,
-                RATE_LIMITED, VALIDATION_ERROR, INTERNAL_ERROR, NOT_FOUND, CONFLICT,
-                ALREADY_CONFIGURED, SERVICE_UNAVAILABLE.
+                FEATURE_DISABLED, USER_PENDING_MODERATION, USER_BANNED, USER_STATUS_INVALID,
+                USER_STATUS_TRANSITION, RATE_LIMITED, VALIDATION_ERROR, INTERNAL_ERROR, NOT_FOUND,
+                CONFLICT, ALREADY_CONFIGURED, SERVICE_UNAVAILABLE.
                 Для смены пароля и большинства 400 — `VALIDATION_ERROR`; текст в `message`
                 локализуется по ключам (PASSWORDS_MISMATCH, ERR_CHANNEL, ERR_SYSTEM_CATEGORY_PLANNED,
                 ERR_TX_TYPE_CHANGE, ERR_CREDIT_INVALID_PAYMENT, ERR_CREDIT_INVALID_TERM, ERR_CREDIT_INVALID_MORTGAGE, …).
@@ -2987,6 +4359,10 @@ components:
           type: string
         theme:
           type: string
+          enum: [light, dark, system]
+          description: |
+            Тема оформления UI: light, dark или system (как на устройстве / в ОС).
+            По умолчанию у новых пользователей — system.
     AdminUser:
       type: object
       required: [id, login, display_name, is_admin, status, created_at]
@@ -3006,10 +4382,8 @@ components:
           type: string
     AdminSettings:
       type: object
-      required: [registration_enabled, external_url, secret_key_set]
+      required: [external_url, secret_key_set]
       properties:
-        registration_enabled:
-          type: boolean
         external_url:
           type: string
           nullable: true
@@ -3018,12 +4392,46 @@ components:
           description: true, если `notification_secret_key` задан в БД
     AdminSettingsUpdate:
       type: object
-      required: [registration_enabled, external_url]
+      required: [external_url]
       properties:
-        registration_enabled:
-          type: boolean
         external_url:
           type: string
+    FeatureFlagsSnapshot:
+      type: object
+      description: |
+        Снимок инстанс-флагов модулей (`key` → enabled).
+        Ключи: registration, debts, credits, budget, subscriptions, recurring,
+        balance_maintenance, import_export, stats, notifications, merchants_tags,
+        transaction_templates.
+      additionalProperties:
+        type: boolean
+      example:
+        budget: true
+        registration: false
+    AdminFeatureFlag:
+      type: object
+      required: [key, enabled, title_key, description_key, default_enabled]
+      properties:
+        key:
+          type: string
+        enabled:
+          type: boolean
+        title_key:
+          type: string
+          description: Ключ i18n для названия модуля
+        description_key:
+          type: string
+          description: Ключ i18n для описания
+        default_enabled:
+          type: boolean
+    AdminFeatureFlagsUpdate:
+      type: object
+      description: Частичный или полный набор overrides (`key` → enabled). Неизвестный ключ — 400.
+      additionalProperties:
+        type: boolean
+      example:
+        budget: false
+        registration: true
     AdminNotificationSecretKeyUpdate:
       type: object
       required: [notification_secret_key]
@@ -3103,13 +4511,82 @@ components:
           additionalProperties:
             type: string
           description: Публичные BUHGALTER_* переменные (без секретов)
+    NotificationInlineKeyboard:
+      type: object
+      description: |
+        Клавиатура inline-кнопок. Форма `{"rows":[[{button}]]}`.
+        Пустая — `{"rows":[]}`. При send: merge global → trigger → balance_shortfall;
+        кнопки url/link/web_app/open_app/login_url без resolved http(s) URL отбрасываются.
+      required: [rows]
+      properties:
+        rows:
+          type: array
+          items:
+            type: array
+            items:
+              $ref: '#/components/schemas/NotificationKeyboardButton'
+    NotificationKeyboardButton:
+      type: object
+      required: [type, text]
+      properties:
+        type:
+          type: string
+          description: |
+            Telegram: url|callback_data|web_app|login_url|switch_inline_query|
+            switch_inline_query_current_chat|switch_inline_query_chosen_chat|callback_game|pay|copy_text.
+            MAX: callback|link|message|open_app|request_contact|request_geo_location|clipboard.
+        text:
+          type: string
+        url:
+          type: string
+          description: Для url/link/open_app; плейсхолдеры как в шаблонах
+        callback_data:
+          type: string
+        web_app:
+          type: object
+          properties:
+            url:
+              type: string
+        login_url:
+          type: object
+          properties:
+            url:
+              type: string
+            forward_text:
+              type: string
+            bot_username:
+              type: string
+            request_write_access:
+              type: boolean
+        switch_inline_query:
+          type: string
+          nullable: true
+        switch_inline_query_current_chat:
+          type: string
+          nullable: true
+        switch_inline_query_chosen_chat:
+          type: object
+          additionalProperties: true
+        callback_game:
+          type: object
+          additionalProperties: true
+        pay:
+          type: boolean
+        copy_text:
+          type: object
+          properties:
+            text:
+              type: string
+        payload:
+          type: string
+          description: MAX callback/clipboard/message
     NotificationTemplate:
       type: object
-      required: [trigger_type, template, placeholders, is_custom]
+      required: [trigger_type, template, placeholders, is_custom, keyboard_telegram, keyboard_max]
       properties:
         trigger_type:
           type: string
-          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, balance_shortfall, budget_threshold, user_registration, password_reset, test]
+          enum: [debt_overdue, debt_due_soon, credit_payment, subscription_charge, planned_operation, balance_shortfall, budget_threshold, user_registration, password_reset, test]
         template:
           type: string
           description: Текст шаблона
@@ -3127,6 +4604,10 @@ components:
         is_custom:
           type: boolean
           description: true, если шаблон задан пользователем в БД
+        keyboard_telegram:
+          $ref: '#/components/schemas/NotificationInlineKeyboard'
+        keyboard_max:
+          $ref: '#/components/schemas/NotificationInlineKeyboard'
     NotificationSettings:
       type: object
       required:
@@ -3149,6 +4630,8 @@ components:
           owed_debt_overdue_days_limit,
           credit_days_before,
           notification_time_local,
+          keyboard_telegram,
+          keyboard_max,
           templates
         ]
       properties:
@@ -3181,6 +4664,8 @@ components:
           type: boolean
         trigger_credit:
           type: boolean
+        trigger_subscription:
+          type: boolean
         trigger_planned:
           type: boolean
         trigger_negative_balance:
@@ -3189,6 +4674,9 @@ components:
         trigger_budget:
           type: boolean
           description: Уведомления о превышении порога бюджета
+        trigger_auto_topup_disabled:
+          type: boolean
+          description: Уведомление о отключении автопополнения счёта
         trigger_user_registration:
           type: boolean
           description: Только для администратора — уведомление о новой регистрации
@@ -3214,10 +4702,20 @@ components:
           type: integer
           minimum: 0
           maximum: 30
+        subscription_days_before:
+          type: integer
+          minimum: 0
+          maximum: 30
         notification_time_local:
           type: string
           description: Локальное время пользователя для ежедневного запуска cron (HH:MM)
           example: "09:30"
+        keyboard_telegram:
+          $ref: '#/components/schemas/NotificationInlineKeyboard'
+          description: Global-клавиатура Telegram (на каждое исходящее)
+        keyboard_max:
+          $ref: '#/components/schemas/NotificationInlineKeyboard'
+          description: Global-клавиатура MAX
         templates:
           type: array
           items:
@@ -3228,11 +4726,54 @@ components:
       properties:
         trigger_type:
           type: string
-          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, balance_shortfall, budget_threshold, user_registration, password_reset, test]
+          enum: [debt_overdue, debt_due_soon, credit_payment, subscription_charge, planned_operation, balance_shortfall, budget_threshold, user_registration, password_reset, test]
         template:
           type: string
           minLength: 1
           maxLength: 500
+        keyboard_telegram:
+          $ref: '#/components/schemas/NotificationInlineKeyboard'
+          description: Если опущено — сохранить предыдущую keyboard шаблона
+        keyboard_max:
+          $ref: '#/components/schemas/NotificationInlineKeyboard'
+          description: Если опущено — сохранить предыдущую keyboard шаблона
+    NotificationInterceptBankBinding:
+      type: object
+      required: [package_name, bank_id, account_id]
+      properties:
+        package_name:
+          type: string
+          description: Package Android-приложения банка
+        bank_id:
+          type: string
+          description: ID банка из каталога
+        account_id:
+          type: string
+          description: Счёт пользователя для списаний из push этого банка
+    NotificationInterceptCardBinding:
+      type: object
+      required: [bank_id, last4, account_id]
+      properties:
+        bank_id:
+          type: string
+        last4:
+          type: string
+          pattern: '^[0-9]{4}$'
+          description: Последние 4 цифры карты
+        account_id:
+          type: string
+    NotificationInterceptBindings:
+      type: object
+      required: [bank_bindings, card_bindings]
+      properties:
+        bank_bindings:
+          type: array
+          items:
+            $ref: '#/components/schemas/NotificationInterceptBankBinding'
+        card_bindings:
+          type: array
+          items:
+            $ref: '#/components/schemas/NotificationInterceptCardBinding'
     NotificationSettingsUpdate:
       type: object
       properties:
@@ -3261,6 +4802,8 @@ components:
           type: boolean
         trigger_credit:
           type: boolean
+        trigger_subscription:
+          type: boolean
         trigger_planned:
           type: boolean
         trigger_negative_balance:
@@ -3269,6 +4812,9 @@ components:
         trigger_budget:
           type: boolean
           description: Уведомления о превышении порога бюджета
+        trigger_auto_topup_disabled:
+          type: boolean
+          description: Уведомление о отключении автопополнения счёта
         trigger_user_registration:
           type: boolean
           description: Только для администратора — уведомление о новой регистрации
@@ -3294,10 +4840,20 @@ components:
           type: integer
           minimum: 0
           maximum: 30
+        subscription_days_before:
+          type: integer
+          minimum: 0
+          maximum: 30
         notification_time_local:
           type: string
           description: Локальное время пользователя для ежедневного запуска cron (HH:MM)
           pattern: '^([01]\d|2[0-3]):([0-5]\d)$'
+        keyboard_telegram:
+          $ref: '#/components/schemas/NotificationInlineKeyboard'
+          description: Global Telegram keyboard; если опущено — не менять
+        keyboard_max:
+          $ref: '#/components/schemas/NotificationInlineKeyboard'
+          description: Global MAX keyboard; если опущено — не менять
         templates:
           type: array
           items:
@@ -3315,23 +4871,33 @@ components:
       properties:
         trigger_type:
           type: string
-          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, balance_shortfall, budget_threshold, user_registration, password_reset, test]
+          enum: [debt_overdue, debt_due_soon, credit_payment, subscription_charge, planned_operation, balance_shortfall, budget_threshold, user_registration, password_reset, test]
         template:
           type: string
           minLength: 1
           maxLength: 500
+        keyboard_telegram:
+          $ref: '#/components/schemas/NotificationInlineKeyboard'
+          description: Опционально — preview unsaved template keyboard (иначе из БД)
+        keyboard_max:
+          $ref: '#/components/schemas/NotificationInlineKeyboard'
     NotificationPreviewResponse:
       type: object
-      required: [text]
+      required: [text, keyboard_telegram, keyboard_max]
       properties:
         text:
           type: string
+        keyboard_telegram:
+          $ref: '#/components/schemas/NotificationInlineKeyboard'
+        keyboard_max:
+          $ref: '#/components/schemas/NotificationInlineKeyboard'
     NotificationResetRequest:
       type: object
       properties:
         trigger_type:
           type: string
-          enum: [debt_overdue, debt_due_soon, credit_payment, planned_operation, balance_shortfall, budget_threshold, user_registration, password_reset, test]
+          enum: [debt_overdue, debt_due_soon, credit_payment, subscription_charge, planned_operation, balance_shortfall, budget_threshold, user_registration, password_reset, test]
+          description: Сброс шаблона удаляет и keyboard шаблона; global не трогает
     Category:
       type: object
       properties:
@@ -3425,6 +4991,231 @@ components:
         icon:
           type: string
           description: ID иконки из каталога; если не передан — иконка родительской категории
+    NameCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+    TransactionTemplate:
+      type: object
+      required: [id, name, type, sort_order, tags, created_at, updated_at]
+      description: Шаблон операции (пресет полей для формы создания)
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          enum: [income, expense, transfer]
+        account_id:
+          type: string
+          nullable: true
+        to_account_id:
+          type: string
+          nullable: true
+          description: Только для transfer
+        category_id:
+          type: string
+          nullable: true
+        subcategory_id:
+          type: string
+          nullable: true
+        amount:
+          type: integer
+          nullable: true
+          description: Копейки; null — ввести при создании операции
+        description:
+          type: string
+          nullable: true
+        merchant_id:
+          type: string
+          nullable: true
+        icon:
+          type: string
+          nullable: true
+        sort_order:
+          type: integer
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/TagRef'
+        created_at:
+          type: string
+        updated_at:
+          type: string
+    TransactionTemplateUpsert:
+      type: object
+      required: [name, type]
+      properties:
+        name:
+          type: string
+          maxLength: 80
+        type:
+          type: string
+          enum: [income, expense, transfer]
+        account_id:
+          type: string
+          nullable: true
+        to_account_id:
+          type: string
+          nullable: true
+        category_id:
+          type: string
+          nullable: true
+        subcategory_id:
+          type: string
+          nullable: true
+        amount:
+          type: integer
+          nullable: true
+          description: Копейки; не передавать или null — сумма при создании
+        description:
+          type: string
+          nullable: true
+        merchant_id:
+          type: string
+          nullable: true
+        icon:
+          type: string
+          nullable: true
+        tag_ids:
+          type: array
+          items:
+            type: string
+    CategoryRule:
+      type: object
+      required: [id, kind, category_id, priority, created_at, updated_at]
+      description: Правило категоризации или подстановки счёта по категории
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum: [category_account, text_category]
+        pattern:
+          type: string
+          nullable: true
+          description: Подстрока для `text_category` (регистронезависимый match — на этапе apply)
+        category_id:
+          type: string
+          description: Условие для `category_account`; целевая категория для `text_category`
+        subcategory_id:
+          type: string
+          nullable: true
+        default_account_id:
+          type: string
+          nullable: true
+          description: Только для `category_account` — счёт по умолчанию в форме
+        priority:
+          type: integer
+          description: Меньше — выше приоритет
+        created_at:
+          type: string
+        updated_at:
+          type: string
+    CategoryRuleUpsert:
+      type: object
+      required: [kind, category_id]
+      properties:
+        kind:
+          type: string
+          enum: [category_account, text_category]
+        pattern:
+          type: string
+          nullable: true
+          maxLength: 200
+        category_id:
+          type: string
+        subcategory_id:
+          type: string
+          nullable: true
+        default_account_id:
+          type: string
+          nullable: true
+    CategoryRuleEvaluateRequest:
+      type: object
+      properties:
+        description:
+          type: string
+          nullable: true
+        category_id:
+          type: string
+          nullable: true
+        subcategory_id:
+          type: string
+          nullable: true
+    CategoryRuleEvaluateResult:
+      type: object
+      required: [text_matches, ambiguous]
+      properties:
+        text_matches:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryRuleTextMatch'
+        account_suggestion:
+          type: object
+          nullable: true
+          properties:
+            rule_id:
+              type: string
+            account_id:
+              type: string
+        ambiguous:
+          type: boolean
+    CategoryRuleTextMatch:
+      type: object
+      required: [rule_id, pattern, category_id, priority]
+      properties:
+        rule_id:
+          type: string
+        pattern:
+          type: string
+        category_id:
+          type: string
+        subcategory_id:
+          type: string
+          nullable: true
+        priority:
+          type: integer
+    Merchant:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        icon:
+          type: string
+          description: ID иконки из каталога категорий (`data/category_icons.json`)
+        created_at:
+          type: string
+    MerchantUpsert:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        icon:
+          type: string
+          description: ID иконки; пусто при создании → `default`, при обновлении — не менять
+    Tag:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        created_at:
+          type: string
+    TagRef:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
     Transaction:
       type: object
       description: |
@@ -3455,9 +5246,33 @@ components:
         amount_display:
           type: string
           description: Строка для UI, например `"10000.00"` или `"10 000.00"` на клиенте
+        commission:
+          type: integer
+          description: |
+            Только для `type=transfer`: комиссия перевода в копейках (сумма ноги `expense`
+            в группе). В списках и `GET /transactions/{id}` нога комиссии не отдаётся отдельно.
+        commission_display:
+          type: string
+          description: Отформатированная комиссия перевода (если `commission > 0`)
         description:
           type: string
           nullable: true
+          description: Описание / комментарий операции
+        merchant_id:
+          type: string
+          nullable: true
+        merchant_name:
+          type: string
+          nullable: true
+        merchant_icon:
+          type: string
+          nullable: true
+          description: Иконка магазина из справочника
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/TagRef'
+          description: Теги операции
         category_id:
           type: string
           nullable: true
@@ -3501,7 +5316,7 @@ components:
         transfer_is_out:
           type: boolean
           description: |
-            Только для `type=transfer`. `true` — исходящая нога (первая в группе по `created_at ASC`);
+            Только для `type=transfer`. `true` — исходящая нога (первая нога `type=transfer` в группе по `created_at ASC`);
             `false` — входящая. Для UI знака суммы на странице счёта.
         store_id:
           type: string
@@ -3536,6 +5351,49 @@ components:
               type: integer
             total:
               type: integer
+              description: |
+                Число операций в журнале с учётом фильтров. Перевод — одна операция
+                (без фильтра `account_id` в списке исходящая нога; на странице счёта — нога этого счёта).
+                Комиссия перевода в счётчик не входит.
+    TransactionChanges:
+      type: object
+      required: [server_time, since_id, has_more, changes]
+      properties:
+        server_time:
+          type: string
+          description: Время сервера UTC (`YYYY-MM-DD HH:MM:SS`)
+        since_id:
+          type: integer
+          format: int64
+          description: Курсор для следующего запроса (id последнего сырого события в странице)
+        has_more:
+          type: boolean
+        changes:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransactionChange'
+    TransactionChange:
+      type: object
+      required: [id, action, entity_id, occurred_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Id события в `user_change_events`
+        action:
+          type: string
+          enum: [upsert, deleted]
+        entity_id:
+          type: string
+          description: Id операции
+        occurred_at:
+          type: string
+          description: UTC, `YYYY-MM-DD HH:MM:SS`
+        transaction:
+          allOf:
+            - $ref: '#/components/schemas/Transaction'
+          nullable: true
+          description: Тело операции для `upsert`; отсутствует при `deleted`
     TransactionCreate:
       type: object
       required: [account_id, type, amount, transaction_date]
@@ -3565,6 +5423,23 @@ components:
           type: string
           nullable: true
           description: Inline-создание подкатегории
+        merchant_id:
+          type: string
+          nullable: true
+        merchant_name:
+          type: string
+          nullable: true
+          description: Inline get-or-create магазина
+        tag_ids:
+          type: array
+          items:
+            type: string
+          description: Существующие теги
+        tag_names:
+          type: array
+          items:
+            type: string
+          description: Inline get-or-create тегов
         transaction_date:
           type: string
           description: UTC, `YYYY-MM-DD HH:MM:SS`
@@ -3692,6 +5567,8 @@ components:
           type: string
         retail_place:
           type: string
+        Если `tag_ids` и `tag_names` **оба отсутствуют** в JSON — теги операции не меняются.
+        Пустые массивы — снять все теги.
     Transfer:
       type: object
       properties:
@@ -3736,7 +5613,10 @@ components:
         commission:
           type: string
           nullable: true
-          description: Комиссия за перевод, рубли (`"15.00"`). Создаёт расход в системной категории «Комиссия» на счёте-источнике.
+          description: |
+            Комиссия за перевод, рубли (`"15.00"`). Создаёт расход в системной категории «Комиссия»
+            на счёте-источнике (нога группы). В списках нога скрыта; изменить/удалить отдельно нельзя
+            (`ERR_COMMISSION_LINKED`) — только через этот перевод.
         description:
           type: string
           nullable: true
@@ -3763,11 +5643,13 @@ components:
           nullable: true
         initial_balance:
           type: integer
-          description: Копейки
+          description: Начальный остаток, копейки; фиксированная сумма при создании/редактировании счёта (не текущий баланс)
         balance:
           type: integer
+          description: Текущий баланс, копейки (`accounts.current_balance`)
         balance_display:
           type: string
+          description: Текущий баланс для отображения; в форме редактирования счёта не подставлять вместо `initial_balance`
         credit_limit:
           type: integer
           nullable: true
@@ -3805,6 +5687,7 @@ components:
           enum: [active, archived, deleted]
         is_primary:
           type: boolean
+          description: Основной счёт; только `cash`/`bank` (кредитная карта не может быть основной)
         created_at:
           type: string
         updated_at:
@@ -3841,7 +5724,10 @@ components:
           description: Для `bank` и `credit_card`
         credit_limit:
           type: string
-          description: Лимит карты, рубли
+          deprecated: true
+          description: |
+            Устарело. Смена лимита через `PUT /accounts/{id}` запрещена (`ERR_ACCOUNT_CREDIT_LIMIT_IMMUTABLE`).
+            Используйте `PUT /accounts/{id}/credit-limit`. То же значение, что уже на счёте, допускается.
         payment_account_id:
           type: string
           nullable: true
@@ -3856,6 +5742,14 @@ components:
           type: string
         initial_balance:
           type: string
+          description: Начальный остаток, рубли (`"1000.00"`); не путать с текущим `balance_display`
+    AccountCreditLimitChange:
+      type: object
+      required: [credit_limit]
+      properties:
+        credit_limit:
+          type: string
+          description: Новый лимит карты, рубли (`"100000.00"`)
     AccountBalanceSummary:
       type: object
       properties:
@@ -3878,10 +5772,34 @@ components:
           type: string
         forecast_balance:
           type: integer
+          description: |
+            Текущий баланс с учётом плановых операций `kind=future` за месяц,
+            ещё не исполненных активных подписок и периодических операций
+            (прогоны с `next_run_at` в текущем месяце по TZ пользователя; у периодических
+            доход увеличивает прогноз, расход — уменьшает),
+            а также неоплаченных `scheduled`-платежей активных кредитов
+            (`payment_date` в текущем месяце, счёт `debit_account_id`).
         forecast_display:
           type: string
         has_future_this_month:
           type: boolean
+          description: |
+            Есть вклад в прогноз за текущий месяц (`kind=future` и/или подписки/периодические
+            и/или неоплаченные кредиты месяца).
+        has_planned_this_month:
+          type: boolean
+          description: |
+            В прогноз входят плановые операции `kind=future` и/или активные периодические
+            операции текущего месяца и/или неоплаченные `scheduled`-платежи активных кредитов
+            (TZ пользователя).
+        has_subscriptions_this_month:
+          type: boolean
+          description: |
+            В прогноз входят ещё не исполненные активные подписки текущего месяца
+            (TZ пользователя).
+        is_primary:
+          type: boolean
+          description: Основной счёт (`cash`/`bank`); кредитные карты всегда `false`
         credit_limit:
           type: integer
           nullable: true
@@ -3941,6 +5859,9 @@ components:
           type: integer
         total_forecast:
           type: integer
+        inbox_count:
+          type: integer
+          description: Операции income/expense без category_id (очередь «разобрать»)
         credit_cards_summary:
           $ref: '#/components/schemas/CreditCardsSummary'
           nullable: true
@@ -4032,6 +5953,75 @@ components:
           type: integer
         expense:
           type: integer
+    StatsNetWorthSnapshot:
+      type: object
+      required:
+        - as_of
+        - net_worth
+        - net_worth_display
+        - assets
+        - assets_display
+        - liabilities
+        - liabilities_display
+        - cash_bank
+        - cash_bank_display
+        - owed_to_me
+        - owed_to_me_display
+        - i_owe
+        - i_owe_display
+        - credits_remaining
+        - credits_remaining_display
+        - credit_cards_debt
+        - credit_cards_debt_display
+      properties:
+        period:
+          type: string
+          description: Первое число месяца (`YYYY-MM-DD`) для точек ряда; у `current` отсутствует
+        as_of:
+          type: string
+          description: Момент расчёта (UTC, `YYYY-MM-DD HH:MM:SS`)
+        net_worth:
+          type: integer
+        net_worth_display:
+          type: string
+        assets:
+          type: integer
+        assets_display:
+          type: string
+        liabilities:
+          type: integer
+        liabilities_display:
+          type: string
+        cash_bank:
+          type: integer
+        cash_bank_display:
+          type: string
+        owed_to_me:
+          type: integer
+        owed_to_me_display:
+          type: string
+        i_owe:
+          type: integer
+        i_owe_display:
+          type: string
+        credits_remaining:
+          type: integer
+        credits_remaining_display:
+          type: string
+        credit_cards_debt:
+          type: integer
+        credit_cards_debt_display:
+          type: string
+    StatsNetWorthResponse:
+      type: object
+      required: [current, items]
+      properties:
+        current:
+          $ref: '#/components/schemas/StatsNetWorthSnapshot'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/StatsNetWorthSnapshot'
     StatsContextSummary:
       allOf:
         - $ref: '#/components/schemas/StatsSummary'
@@ -4262,18 +6252,23 @@ components:
           description: kind связанной операции (future, manual, …)
     PayCreditPaymentRequest:
       type: object
-      required: [amount, payment_date]
       properties:
         amount:
           oneOf:
             - type: string
             - type: integer
+          description: Обязателен без `transaction_id`; с `transaction_id` можно опустить (сумма операции)
         payment_date:
           type: string
-          description: UTC, YYYY-MM-DD HH:MM:SS
+          description: UTC, YYYY-MM-DD HH:MM:SS; обязателен без `transaction_id`
         account_id:
           type: string
-          description: Счёт для данной оплаты; если не указан — основной счёт кредита (debit_account_id)
+          description: Счёт для данной оплаты; если не указан — основной счёт кредита или счёт операции
+        transaction_id:
+          type: string
+          description: |
+            Существующий расход пользователя для привязки к ближайшему платежу.
+            Не перевод/комиссия, без `subscription_id`, ещё не связанный с кредитом.
     UpdateCreditScheduleRequest:
       type: object
       required: [payments]
@@ -4356,7 +6351,7 @@ components:
           description: |
             Опциональный ежемесячный платёж (копейки). Для consumer — override расчётного с проверкой
             min/max; для mortgage — сумма из договора банка без отклонения «слишком высокий».
-            Совпадение с расчётным в пределах 1 ₽ трактуется как автоматический платёж.
+            Без override — точное совпадение с расчётом или целые рубли, совпадающие с усечённым расчётом.
         debit_account_id:
           type: string
         debit_time_local:
@@ -4382,6 +6377,11 @@ components:
             Только для consumer с interest_rate &gt; 0. Если true — доход на сумму кредита
             на `debit_account_id` в дату выдачи. Недоступно, если в графике есть платёж
             с датой раньше начала текущих суток (TZ пользователя).
+        first_payment_today:
+          type: boolean
+          description: >
+            Для consumer-кредита и рассрочки: первый платёж в дату выдачи. Для ипотеки (`credit_kind=mortgage`)
+            игнорируется.
         create_transactions:
           type: boolean
           description: >
@@ -4526,6 +6526,16 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/BudgetSummaryItem'
+    BudgetSpentPreview:
+      type: object
+      required: [spent, spent_display]
+      properties:
+        spent:
+          type: integer
+          description: Факт в копейках
+        spent_display:
+          type: string
+          description: Факт в рублях для отображения
     BudgetUpsertRequest:
       type: object
       required: [name, scope, amount]
@@ -4554,6 +6564,142 @@ components:
         copy_forward:
           type: boolean
           default: false
+
+    Subscription:
+      type: object
+      required: [id, name, amount, amount_display, account_id, period, start_date, time_local, next_run_at, upcoming_run_ats, active, created_at, updated_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        icon: { type: string, nullable: true }
+        website_url: { type: string, nullable: true }
+        amount: { type: integer }
+        amount_display: { type: string }
+        account_id: { type: string }
+        account_name: { type: string }
+        subcategory_id: { type: string, nullable: true }
+        subcategory_name: { type: string, nullable: true }
+        subcategory_icon: { type: string, nullable: true }
+        period:
+          type: string
+          enum: [week, two_weeks, month, quarter, half_year, year]
+        weekday: { type: integer, nullable: true }
+        day_of_month: { type: integer, nullable: true }
+        start_date: { type: string }
+        time_local: { type: string }
+        next_run_at:
+          type: string
+          description: Курсор следующего списания; всегда равен upcoming_run_ats[0]
+        upcoming_run_ats:
+          type: array
+          description: Ровно три ближайшие даты списания (UTC)
+          minItems: 3
+          maxItems: 3
+          items: { type: string }
+        last_run_at: { type: string, nullable: true }
+        active: { type: boolean }
+        created_at: { type: string }
+        updated_at: { type: string }
+    SubscriptionUpsertRequest:
+      type: object
+      required: [name, amount, account_id, period, start_date]
+      properties:
+        name: { type: string }
+        amount:
+          type: string
+          description: Сумма в рублях
+        description: { type: string, nullable: true }
+        icon: { type: string, nullable: true }
+        website_url: { type: string, nullable: true }
+        account_id: { type: string }
+        period:
+          type: string
+          enum: [week, two_weeks, month, quarter, half_year, year]
+        weekday: { type: integer, nullable: true }
+        day_of_month: { type: integer, nullable: true }
+        start_date: { type: string }
+        time_local: { type: string }
+        active: { type: boolean }
+        upcoming_run_ats:
+          type: array
+          description: |
+            Опционально — три ближайшие даты. Если не переданы, сервер заполняет по периоду.
+            Время нормализуется по time_local в TZ пользователя. next_run_at = [0].
+          minItems: 3
+          maxItems: 3
+          items: { type: string }
+        attach_transaction_id: { type: string, nullable: true }
+    SubscriptionPreviewUpcomingRequest:
+      type: object
+      required: [period, start_date]
+      properties:
+        period:
+          type: string
+          enum: [week, two_weeks, month, quarter, half_year, year]
+        weekday: { type: integer, nullable: true }
+        day_of_month: { type: integer, nullable: true }
+        start_date: { type: string }
+        time_local: { type: string }
+    SubscriptionPreviewUpcomingResponse:
+      type: object
+      required: [upcoming_run_ats]
+      properties:
+        upcoming_run_ats:
+          type: array
+          minItems: 3
+          maxItems: 3
+          items: { type: string }
+    SubscriptionSummary:
+      type: object
+      properties:
+        monthly_total: { type: integer }
+        monthly_total_display: { type: string }
+        yearly_total: { type: integer }
+        yearly_total_display: { type: string }
+        upcoming:
+          type: array
+          items:
+            $ref: '#/components/schemas/Subscription'
+    SubscriptionCandidateResult:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubscriptionCandidate'
+        total: { type: integer }
+    SubscriptionCandidate:
+      type: object
+      properties:
+        id: { type: string }
+        account_id: { type: string }
+        account_name: { type: string }
+        amount: { type: integer }
+        amount_display: { type: string }
+        description: { type: string, nullable: true }
+        category_id: { type: string, nullable: true }
+        category_name: { type: string, nullable: true }
+        subcategory_id: { type: string, nullable: true }
+        subcategory_name: { type: string, nullable: true }
+        transaction_date: { type: string }
+        score: { type: integer }
+        match_reasons:
+          type: array
+          items: { type: string }
+    SubscriptionAttachResult:
+      type: object
+      properties:
+        attached_count: { type: integer }
+        attached_ids:
+          type: array
+          items: { type: string }
+    SubscriptionConvertResult:
+      type: object
+      properties:
+        subscription:
+          $ref: '#/components/schemas/Subscription'
+
     RecurringOperation:
       type: object
       properties:
@@ -4702,6 +6848,11 @@ components:
           description: |
             Опциональный override ежемесячного платежа (копейки). Для mortgage — сумма из договора банка;
             для consumer — с проверкой на min/max. Пусто/null — автоматический расчёт.
+        first_payment_today:
+          type: boolean
+          description: |
+            Для consumer-кредита и рассрочки: первый платёж в дату выдачи. Для ипотеки (`credit_kind=mortgage`)
+            игнорируется.
         seed_payments:
           type: array
           description: Обязателен при payment_interval=manual (ровно term элементов)
@@ -4716,7 +6867,7 @@ components:
                   - type: integer
     PreviewScheduleResponse:
       type: object
-      required: [schedule_preview, calculated_monthly_payment, calculated_monthly_payment_display]
+      required: [schedule_preview, calculated_monthly_payment, calculated_monthly_payment_display, effective_monthly_payment, effective_monthly_payment_display, user_set_monthly_payment]
       properties:
         schedule_preview:
           type: array
@@ -4732,10 +6883,19 @@ components:
                 description: Сумма платежа в копейках
         calculated_monthly_payment:
           type: integer
-          description: Расчётный равный платёж в копейках (до override monthly_payment)
+          description: Автоматически рассчитанный платёж в копейках (без учёта override)
         calculated_monthly_payment_display:
           type: string
-          description: Форматированная сумма для UI (например «600 576,47 ₽»)
+          description: Форматированная автоматическая сумма для UI
+        effective_monthly_payment:
+          type: integer
+          description: Платёж, использованный в графике (override или расчётный)
+        effective_monthly_payment_display:
+          type: string
+          description: Форматированная эффективная сумма для UI
+        user_set_monthly_payment:
+          type: boolean
+          description: true, если переданный monthly_payment применён как override (не совпадает с расчётом)
     ImportReport:
       type: object
       properties:
@@ -4746,6 +6906,15 @@ components:
           description: Сколько строк уже обработано (для async progress)
         valid_rows:
           type: integer
+          description: Строк операций в файле (перевод — одна строка)
+        transfer_rows:
+          type: integer
+          description: Сколько из valid_rows — переводы
+        list_rows:
+          type: integer
+          description: |
+            Сколько операций будет в журнале (`GET /transactions` `meta.total`): равно `valid_rows`.
+            Перевод — одна операция, комиссия в перевод не добавляет строку счётчика.
         skipped_duplicates:
           type: integer
         created_transactions:
@@ -4807,6 +6976,9 @@ components:
               credit_limit:
                 type: string
                 description: Лимит карты, рубли; обязателен при account_type=credit_card и mode=create
+              initial_balance:
+                type: string
+                description: Начальный остаток при mode=create (из секции accounts нативного CSV)
         categories_to_create:
           type: array
           items:

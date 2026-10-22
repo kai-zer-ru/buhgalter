@@ -63,24 +63,35 @@ func writeCached(w http.ResponseWriter, item Response) {
 	_, _ = w.Write(item.Body)
 }
 
+func isWebSocketUpgrade(r *http.Request) bool {
+	return strings.EqualFold(r.Header.Get("Upgrade"), "websocket")
+}
+
 // Middleware caches successful GET responses and invalidates user cache on writes.
 func Middleware(cache *Cache) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// WebSocket upgrade must use the raw ResponseWriter (Hijack).
+			if isWebSocketUpgrade(r) {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			if r.Method == http.MethodGet {
 				if key, ttl, ok := cacheKey(r); ok {
 					if item, hit := cache.Get(key); hit {
 						writeCached(w, item)
 						return
 					}
+					epoch := cache.Epoch()
 					rec := &responseRecorder{ResponseWriter: w}
 					next.ServeHTTP(rec, r)
 					if rec.status == http.StatusOK && rec.body.Len() > 0 {
-						cache.Set(key, Response{
+						cache.SetIfEpoch(key, Response{
 							Status:      rec.status,
 							Body:        append([]byte(nil), rec.body.Bytes()...),
 							ContentType: rec.Header().Get("Content-Type"),
-						}, ttl)
+						}, ttl, epoch)
 					}
 					rec.flush()
 					return
@@ -89,12 +100,16 @@ func Middleware(cache *Cache) func(http.Handler) http.Handler {
 
 			rec := &responseRecorder{ResponseWriter: w}
 			next.ServeHTTP(rec, r)
-			if isMutating(r.Method) {
+			if isMutating(r.Method) && shouldInvalidateAfterWrite(r.URL.Path) && isSuccessStatus(rec.status) {
 				invalidateForRequest(cache, r)
 			}
 			rec.flush()
 		})
 	}
+}
+
+func isSuccessStatus(status int) bool {
+	return status >= http.StatusOK && status < http.StatusMultipleChoices
 }
 
 func isMutating(method string) bool {
@@ -104,6 +119,12 @@ func isMutating(method string) bool {
 	default:
 		return false
 	}
+}
+
+// shouldInvalidateAfterWrite reports whether a mutating request should drop GET cache.
+// POST /import/jobs only queues work; ledger changes happen in the background job.
+func shouldInvalidateAfterWrite(path string) bool {
+	return path != "/api/v1/import/jobs"
 }
 
 func invalidateForRequest(cache *Cache, r *http.Request) {
@@ -118,9 +139,10 @@ func invalidateForRequest(cache *Cache, r *http.Request) {
 		return
 	}
 	if info, ok := auth.FromContext(r.Context()); ok {
-		cache.DeletePrefix("u:" + info.User.ID + ":")
-		if strings.HasPrefix(path, "/api/v1/admin/settings") {
+		cache.InvalidateUserHints(info.User.ID, HintsForMutation(path))
+		if strings.HasPrefix(path, "/api/v1/admin/settings") || strings.HasPrefix(path, "/api/v1/admin/features") {
 			cache.DeletePrefix("g:setup:")
+			cache.Clear()
 		}
 	}
 }
@@ -139,6 +161,8 @@ func cacheKey(r *http.Request) (string, time.Duration, bool) {
 	if strings.HasPrefix(path, "/api/v1/health") ||
 		path == "/api/v1/version/check" ||
 		path == "/api/v1/export" ||
+		path == "/api/v1/sync/transaction-changes" ||
+		path == "/api/v1/realtime" ||
 		strings.Contains(path, "/preview") ||
 		strings.HasPrefix(path, "/api/v1/import/jobs/") {
 		return "", 0, false
@@ -155,7 +179,9 @@ func cacheKey(r *http.Request) (string, time.Duration, bool) {
 	}
 
 	ttl := DataTTL
-	if strings.HasPrefix(path, "/api/v1/categories") || path == "/api/v1/debtors" {
+	if strings.HasPrefix(path, "/api/v1/categories") || path == "/api/v1/debtors" ||
+		path == "/api/v1/merchants" || path == "/api/v1/tags" ||
+		path == "/api/v1/transaction-templates" || path == "/api/v1/category-rules" {
 		ttl = RefDataTTL
 	}
 	return key, ttl, true

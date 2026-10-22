@@ -4,7 +4,11 @@
 	import { page } from '$app/stores';
 	import { _ } from 'svelte-i18n';
 	import { portal } from '$lib/actions/portal';
-	import { actionMenuStyle } from '$lib/dropdown-position';
+	import {
+		actionMenuStyle,
+		dropdownPlacementFor,
+		type DropdownPlacement
+	} from '$lib/dropdown-position';
 	import type { BackLinkHref } from '$lib/components/BackLink.svelte';
 
 	export type NavDropdownItem = {
@@ -16,17 +20,23 @@
 	let {
 		labelKey,
 		items,
-		isGroupActive
+		isGroupActive,
+		triggerBadge,
+		itemBadge
 	}: {
 		labelKey: string;
 		items: NavDropdownItem[];
 		isGroupActive: (pathname: string) => boolean;
+		/** Shown on trigger when set (e.g. inbox count on «Прочее»). */
+		triggerBadge?: number;
+		itemBadge?: (labelKey: string) => number | undefined;
 	} = $props();
 
 	let open = $state(false);
 	let triggerEl: HTMLButtonElement | undefined = $state();
 	let menuEl: HTMLDivElement | undefined = $state();
 	let menuStyle = $state('');
+	let placement = $state<DropdownPlacement | null>(null);
 
 	const pathname = $derived($page.url.pathname);
 	const groupActive = $derived(isGroupActive(pathname));
@@ -35,16 +45,19 @@
 		if (!triggerEl) return;
 		const rowHeight = 40;
 		const menuHeight = Math.min(320, Math.max(items.length, 1) * rowHeight + 8);
-		menuStyle = actionMenuStyle(triggerEl, menuHeight, 'end', menuEl?.offsetWidth);
+		if (!placement) placement = dropdownPlacementFor(triggerEl, menuHeight);
+		menuStyle = actionMenuStyle(triggerEl, menuHeight, 'end', menuEl?.offsetWidth, placement);
 	}
 
 	function close() {
 		open = false;
+		placement = null;
 	}
 
 	function toggle(event: MouseEvent) {
 		event.stopPropagation();
-		open = !open;
+		if (open) close();
+		else open = true;
 	}
 
 	function itemActive(item: NavDropdownItem) {
@@ -115,7 +128,12 @@
 		onpointerdown={onTriggerPointerDown}
 		onkeydown={onTriggerKeydown}
 	>
-		<span>{$_(labelKey)}</span>
+		<span class="inline-flex items-center gap-1.5">
+			<span>{$_(labelKey)}</span>
+			{#if triggerBadge}
+				<span class="nav-badge" aria-label={String(triggerBadge)}>{triggerBadge}</span>
+			{/if}
+		</span>
 		<svg
 			aria-hidden="true"
 			class="h-3.5 w-3.5 shrink-0 opacity-70"
@@ -136,16 +154,22 @@
 			use:portal={document.body}
 		>
 			{#each items as item (item.path)}
+				{@const badge = itemBadge?.(item.labelKey)}
 				<a
-					href={resolve(item.path)}
-					class="block rounded-lg px-3 py-2 text-sm hover:opacity-90 {itemActive(item)
+					href={resolve(item.path as '/')}
+					class="flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm hover:opacity-90 {itemActive(
+						item
+					)
 						? 'nav-link-active'
 						: ''}"
 					role="menuitem"
 					aria-current={itemActive(item) ? 'page' : undefined}
 					onclick={handleItemClick}
 				>
-					{$_(item.labelKey)}
+					<span>{$_(item.labelKey)}</span>
+					{#if badge}
+						<span class="nav-badge" aria-label={String(badge)}>{badge}</span>
+					{/if}
 				</a>
 			{/each}
 		</div>

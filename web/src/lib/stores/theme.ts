@@ -1,15 +1,16 @@
-import { applyTheme } from '$lib/theme';
+import { applyThemePreference, isThemePreference, type ThemePreference } from '$lib/theme';
 
-export function initTheme() {
+export function initTheme(): ThemePreference {
 	const stored = localStorage.getItem('theme');
-	const theme = stored === 'dark' || stored === 'light' ? stored : 'light';
-	applyTheme(theme);
-	return theme;
+	const preference = stored && isThemePreference(stored) ? stored : 'system';
+	applyThemePreference(preference);
+	return preference;
 }
 
 export function syncThemeFromUser(theme: string) {
-	if (theme === 'dark' || theme === 'light') {
-		localStorage.setItem('theme', theme);
-		applyTheme(theme);
+	if (!isThemePreference(theme)) {
+		return;
 	}
+	localStorage.setItem('theme', theme);
+	applyThemePreference(theme);
 }

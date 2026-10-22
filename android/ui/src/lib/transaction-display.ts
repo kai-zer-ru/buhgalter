@@ -1,0 +1,202 @@
+import type { Transaction } from '$lib/api/client';
+import { readRefCache, subcategoriesRefPath } from '$lib/offline/ref-cache';
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isLikelyUuid(value: string): boolean {
+	return UUID_RE.test(value.trim());
+}
+
+/** Prefer cached subcategory label when API name is missing or looks like a raw id. */
+export function resolveTransactionSubcategoryName(
+	tx: Pick<Transaction, 'category_id' | 'subcategory_id' | 'subcategory_name'>
+): string | null | undefined {
+	const raw = tx.subcategory_name;
+	if (!tx.subcategory_id || !tx.category_id) return raw;
+	const looksBad = !raw || raw === tx.subcategory_id || isLikelyUuid(raw);
+	if (!looksBad) return raw;
+	const subs = readRefCache<{ id: string; name: string }[]>(subcategoriesRefPath(tx.category_id));
+	return subs?.find((sub) => sub.id === tx.subcategory_id)?.name ?? raw;
+}
+export function transactionCategoryLabel(
+	tx: Pick<Transaction, 'type' | 'category_name'>,
+	translate: (key: string) => string
+): string {
+	if (tx.type === 'transfer') return translate('transactions.transfer');
+	return tx.category_name ?? tx.type;
+}
+
+/** Out leg of a transfer (first by created_at). */
+export function transferOutLeg(tx: Transaction, siblings: Transaction[]): Transaction {
+	if (!tx.transfer_group_id) return tx;
+	const legs = siblings.filter((t) => t.transfer_group_id === tx.transfer_group_id);
+	if (legs.length === 0) return tx;
+	return legs.reduce((best, cur) => (cur.created_at < best.created_at ? cur : best));
+}
+
+/** Expense leg of a transfer group (commission) — not shown as its own row. */
+export function isTransferCommission(tx: Transaction): boolean {
+	return tx.type === 'expense' && Boolean(tx.transfer_group_id);
+}
+
+/** Hide in-leg rows and transfer-linked commission when they appear in the same list. */
+export function dedupeTransferLegs(transactions: Transaction[]): Transaction[] {
+	const groups = new Map<string, Transaction[]>();
+	for (const tx of transactions) {
+		if (tx.type !== 'transfer' || !tx.transfer_group_id) continue;
+		const list = groups.get(tx.transfer_group_id) ?? [];
+		list.push(tx);
+		groups.set(tx.transfer_group_id, list);
+	}
+	const outIds = new Set<string>();
+	for (const legs of groups.values()) {
+		outIds.add(transferOutLeg(legs[0], legs).id);
+	}
+	return transactions.filter((tx) => {
+		if (isTransferCommission(tx)) return false;
+		if (tx.type !== 'transfer' || !tx.transfer_group_id) return true;
+		return outIds.has(tx.id);
+	});
+}
+
+export function transferRoute(
+	tx: Transaction,
+	siblings: Transaction[] = []
+): { from: string; to: string } {
+	if (tx.type !== 'transfer') {
+		return { from: tx.account_name ?? '', to: '' };
+	}
+
+	const legs = siblings.filter(
+		(t) => t.transfer_group_id && t.transfer_group_id === tx.transfer_group_id
+	);
+
+	if (legs.length >= 2) {
+		const out = transferOutLeg(tx, legs);
+		return {
+			from: out.account_name ?? '',
+			to: out.transfer_account_name ?? ''
+		};
+	}
+
+	// One leg in list (e.g. account filter): direction from API, not from local min(created_at)
+	if (tx.transfer_is_out) {
+		return {
+			from: tx.account_name ?? '',
+			to: tx.transfer_account_name ?? ''
+		};
+	}
+	return {
+		from: tx.transfer_account_name ?? '',
+		to: tx.account_name ?? ''
+	};
+}
+
+export type AccountLabelMode = 'plain' | 'prefix';
+
+/** Account column text: transfer route, expense (from), income (to). */
+export function formatTransactionAccount(
+	tx: Transaction,
+	siblings: Transaction[] = [],
+	mode: AccountLabelMode = 'plain'
+): string {
+	if (tx.type === 'transfer') {
+		const { from, to } = transferRoute(tx, siblings);
+		if (from && to) return `${from} → ${to}`;
+		return from || to;
+	}
+	const name = tx.account_name ?? '';
+	if (!name) return '';
+	if (mode === 'plain') return name;
+	if (tx.type === 'expense') return `с ${name}`;
+	return `на ${name}`;
+}
+
+/** Prefix before amount: +/− for income/expense; on single-account lists transfers use +/− by leg. */
+export function transactionAmountSign(tx: Transaction, opts?: { singleAccount?: boolean }): string {
+	if (tx.type === 'income') return '+';
+	if (tx.type === 'expense') return '−';
+	if (tx.type === 'transfer' && opts?.singleAccount) {
+		return tx.transfer_is_out ? '−' : '+';
+	}
+	return '';
+}
+
+/** Commission shown on the transfer row (API field or sibling expense fallback). */
+export function transferCommissionDisplay(
+	tx: Transaction,
+	siblings: Transaction[] = []
+): string | null {
+	if (tx.type !== 'transfer') return null;
+	if (tx.commission && tx.commission > 0) {
+		return tx.commission_display ?? (tx.commission / 100).toFixed(2);
+	}
+	if (tx.commission_display && !/^0+(?:\.0+)?$/.test(tx.commission_display.trim())) {
+		return tx.commission_display;
+	}
+	if (!tx.transfer_group_id) return null;
+	const commissionLeg = siblings.find(
+		(t) => t.transfer_group_id === tx.transfer_group_id && t.type === 'expense' && t.amount > 0
+	);
+	return commissionLeg?.amount_display ?? null;
+}
+
+/** Income/expense in the transaction form; not credit-linked payments or transfer commission. */
+export function canEditTransaction(tx: Transaction): boolean {
+	if (tx.credit_payment_linked) return false;
+	if (isTransferCommission(tx)) return false;
+	return true;
+}
+
+/** Repeat (duplicate as new) — not credit-linked; not system categories (transfers allowed). */
+export function canRepeatTransaction(tx: Transaction): boolean {
+	if (!canEditTransaction(tx)) return false;
+	if (tx.type !== 'transfer' && tx.category_is_system) return false;
+	return true;
+}
+
+/** Delete from list — debt-linked opening tx may be protected via API `deletable` flag. */
+export function canDeleteTransaction(tx: Transaction): boolean {
+	if (isTransferCommission(tx)) return false;
+	return tx.deletable !== false;
+}
+
+/** Expense not already linked to a subscription — show «Сделать подпиской» / «Прикрепить к подписке». */
+export function canLinkToSubscription(tx: Transaction): boolean {
+	return tx.type === 'expense' && !tx.subscription_id;
+}
+
+export function transferGroupLegs(tx: Transaction, siblings: Transaction[]): Transaction[] {
+	if (!tx.transfer_group_id) return [tx];
+	return siblings.filter((item) => item.transfer_group_id === tx.transfer_group_id);
+}
+
+/** From/to account IDs for transfer edit form (works with a single visible leg). */
+export function transferAccountIds(
+	tx: Transaction,
+	siblings: Transaction[] = []
+): { fromAccountId: string; toAccountId: string } {
+	if (tx.type !== 'transfer' || !tx.transfer_group_id) {
+		return { fromAccountId: tx.account_id, toAccountId: tx.transfer_account_id ?? '' };
+	}
+
+	const legs = siblings.filter((t) => t.transfer_group_id === tx.transfer_group_id);
+	if (legs.length >= 2) {
+		const out = transferOutLeg(tx, legs);
+		return {
+			fromAccountId: out.account_id,
+			toAccountId: out.transfer_account_id ?? ''
+		};
+	}
+
+	if (tx.transfer_is_out) {
+		return {
+			fromAccountId: tx.account_id,
+			toAccountId: tx.transfer_account_id ?? ''
+		};
+	}
+	return {
+		fromAccountId: tx.transfer_account_id ?? '',
+		toAccountId: tx.account_id
+	};
+}

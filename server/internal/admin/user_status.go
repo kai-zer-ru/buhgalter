@@ -63,6 +63,7 @@ func (h *Handler) UpdateUserStatus(w http.ResponseWriter, r *http.Request) {
 
 	if to == auth.UserStatusBanned {
 		_ = auth.DeleteSessionsByUserID(r.Context(), h.Store.DB(), targetID)
+		_ = auth.DeleteAPITokensByUserID(r.Context(), h.Store.DB(), targetID)
 	}
 
 	ip := auth.ClientIP(r)

@@ -12,6 +12,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/features"
 	. "github.com/kai-zer-ru/buhgalter/internal/notify"
 	"github.com/kai-zer-ru/buhgalter/internal/settingscache"
 )
@@ -107,11 +108,14 @@ func TestGetAndUpdateSettings(t *testing.T) {
 func TestPreviewTemplateAndReset(t *testing.T) {
 	ctx, sqlDB, userID := seedNotifyUser(t)
 
-	text, err := PreviewTemplate(ctx, sqlDB, userID, TriggerDebtDueSoon, "Долг {amount} до {due_date}")
+	preview, err := PreviewTemplate(ctx, sqlDB, userID, PreviewInput{
+		TriggerType: TriggerDebtDueSoon,
+		Template:    "Долг {amount} до {due_date}",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if text == "" {
+	if preview.Text == "" {
 		t.Fatal("expected preview text")
 	}
 
@@ -182,6 +186,19 @@ func TestAvailablePlaceholders(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("password_reset placeholders: %v", phReset)
+	}
+	phShortfall := AvailablePlaceholders(TriggerBalanceShortfall)
+	foundAmount, foundAccountURL := false, false
+	for _, p := range phShortfall {
+		if p == "amount" {
+			foundAmount = true
+		}
+		if p == "account_url" {
+			foundAccountURL = true
+		}
+	}
+	if !foundAmount || !foundAccountURL {
+		t.Fatalf("balance_shortfall placeholders: %v", phShortfall)
 	}
 }
 
@@ -258,13 +275,13 @@ func TestPreviewPasswordResetTemplateWithExternalURL(t *testing.T) {
 	}
 
 	template := "Запрос: {display_name} (@{login}), {requested_at}.\n{reset_url}"
-	text, err := PreviewTemplate(ctx, sqlDB, userID, TriggerPasswordReset, template)
+	preview, err := PreviewTemplate(ctx, sqlDB, userID, PreviewInput{TriggerType: TriggerPasswordReset, Template: template})
 	if err != nil {
 		t.Fatal(err)
 	}
 	wantLink := "https://buhgalter.example.com/admin/users?reset=00000000-0000-0000-0000-000000000001"
-	if !strings.Contains(text, wantLink) {
-		t.Fatalf("preview %q should contain %q", text, wantLink)
+	if !strings.Contains(preview.Text, wantLink) {
+		t.Fatalf("preview %q should contain %q", preview.Text, wantLink)
 	}
 }
 
@@ -277,12 +294,12 @@ func TestPreviewPasswordResetTemplateWithoutExternalURL(t *testing.T) {
 	}
 
 	template := "Запрос: {display_name} (@{login}), {requested_at}.\n{reset_url}"
-	text, err := PreviewTemplate(ctx, sqlDB, userID, TriggerPasswordReset, template)
+	preview, err := PreviewTemplate(ctx, sqlDB, userID, PreviewInput{TriggerType: TriggerPasswordReset, Template: template})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(text, "Нет внешней ссылки — настройте внешний URL в админке.") {
-		t.Fatalf("preview %q should contain hint", text)
+	if !strings.Contains(preview.Text, "Нет внешней ссылки — настройте внешний URL в админке.") {
+		t.Fatalf("preview %q should contain hint", preview.Text)
 	}
 }
 
@@ -311,10 +328,11 @@ func TestGetSettingsHidesUserRegistrationWhenDisabled(t *testing.T) {
 		t.Fatal("expected trigger_user_registration to be false when registration is disabled")
 	}
 
-	_, err = sqlDB.ExecContext(ctx, `UPDATE system_settings SET registration_enabled = 1 WHERE id = 1`)
+	_, err = sqlDB.ExecContext(ctx, `INSERT INTO feature_flags (key, enabled, updated_at) VALUES ('registration', 1, datetime('now')) ON CONFLICT(key) DO UPDATE SET enabled = 1`)
 	if err != nil {
 		t.Fatal(err)
 	}
+	features.Invalidate()
 	settings, err = GetSettings(ctx, sqlDB, adminID)
 	if err != nil {
 		t.Fatal(err)
@@ -355,5 +373,87 @@ func TestDeliverNoPanicWithoutSecretKey(t *testing.T) {
 			t.Fatalf("Deliver panicked: %v", rec)
 		}
 	}()
-	Deliver(ctx, sqlDB, settings, userID, TriggerBudgetThreshold, "budget-1", "2026-07-01", "test message")
+	Deliver(ctx, sqlDB, settings, userID, TriggerBudgetThreshold, "budget-1", "2026-07-01", "test message", FormatData{})
+}
+
+func TestKeyboardSettingsRoundTripAndPreview(t *testing.T) {
+	ctx, sqlDB, userID := seedNotifyUser(t)
+	settingscache.Invalidate()
+	_, err := sqlDB.ExecContext(ctx, `UPDATE system_settings SET external_url = ? WHERE id = 1`, "https://app.example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tg := InlineKeyboard{Rows: [][]KeyboardButton{
+		{{Type: "url", Text: "Долги", URL: "{debt_url}"}},
+	}}
+	maxKB := InlineKeyboard{Rows: [][]KeyboardButton{
+		{{Type: "link", Text: "Долги", URL: "{debt_url}"}},
+	}}
+	updated, err := UpdateSettings(ctx, sqlDB, userID, UpdateSettingsInput{
+		KeyboardTelegram: &tg,
+		KeyboardMax:      &maxKB,
+		Templates: []TemplateUpdate{{
+			TriggerType: TriggerDebtDueSoon,
+			Template:    "Долг {amount}",
+			KeyboardTelegram: &InlineKeyboard{Rows: [][]KeyboardButton{
+				{{Type: "callback_data", Text: "OK", CallbackData: "ok"}},
+			}},
+		}},
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.KeyboardTelegram.IsEmpty() || updated.KeyboardTelegram.Rows[0][0].URL != "{debt_url}" {
+		t.Fatalf("global tg: %+v", updated.KeyboardTelegram)
+	}
+	var debtTpl *TemplateView
+	for i := range updated.Templates {
+		if updated.Templates[i].TriggerType == TriggerDebtDueSoon {
+			debtTpl = &updated.Templates[i]
+			break
+		}
+	}
+	if debtTpl == nil || debtTpl.KeyboardTelegram.IsEmpty() {
+		t.Fatalf("template kb: %+v", debtTpl)
+	}
+
+	preview, err := PreviewTemplate(ctx, sqlDB, userID, PreviewInput{
+		TriggerType: TriggerDebtDueSoon,
+		Template:    "Долг {amount}",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview.KeyboardTelegram.ButtonCount() < 2 {
+		t.Fatalf("preview merge expected global+template, got %+v", preview.KeyboardTelegram)
+	}
+	foundURL := false
+	for _, row := range preview.KeyboardTelegram.Rows {
+		for _, btn := range row {
+			if btn.Type == "url" && strings.HasPrefix(btn.URL, "https://app.example.com") {
+				foundURL = true
+			}
+		}
+	}
+	if !foundURL {
+		t.Fatalf("expected resolved debt_url in preview: %+v", preview.KeyboardTelegram)
+	}
+
+	trigger := TriggerDebtDueSoon
+	if err := ResetTemplates(ctx, sqlDB, userID, &trigger); err != nil {
+		t.Fatal(err)
+	}
+	after, err := GetSettings(ctx, sqlDB, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.KeyboardTelegram.IsEmpty() {
+		t.Fatal("reset must not clear global keyboard")
+	}
+	for _, tpl := range after.Templates {
+		if tpl.TriggerType == TriggerDebtDueSoon && (!tpl.KeyboardTelegram.IsEmpty() || tpl.IsCustom) {
+			t.Fatalf("template keyboard should reset: %+v", tpl)
+		}
+	}
 }

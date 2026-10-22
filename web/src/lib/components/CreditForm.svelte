@@ -28,7 +28,13 @@
 		todayDateLocal,
 		toDatetimeLocalValue
 	} from '$lib/dates';
-	import { fromCents, toAPIAmount, toCents, formatMoneyForInput } from '$lib/money';
+	import {
+		fromCents,
+		toAPIAmount,
+		toCents,
+		formatMoneyForInput,
+		formatMoneyInput
+	} from '$lib/money';
 	import { user } from '$lib/stores/auth';
 
 	type Props = {
@@ -58,6 +64,9 @@
 	let paymentOverride = $state<string | null>(null);
 	let editingPayment = $state(false);
 	let paymentDraft = $state('');
+	let firstPaymentToday = $state(false);
+
+	const supportsFirstPaymentToday = $derived(productType !== 'mortgage');
 	let debitAccountId = $state('');
 	let createTransactions = $state(true);
 	let retroactive = $state(false);
@@ -77,7 +86,7 @@
 	const schedulePageSize = 10;
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
-	const principalIncomeBlocked = $derived.by(() => {
+	const hasPastSchedulePayments = $derived.by(() => {
 		if (scheduleRows.length === 0) return false;
 		const todayDay = todayDateLocal(tz).slice(0, 10);
 		return scheduleRows.some((row) => {
@@ -85,6 +94,7 @@
 			return dateOnlyLocalValue(row.date).slice(0, 10) < todayDay;
 		});
 	});
+	const principalIncomeBlocked = $derived(hasPastSchedulePayments);
 	const isManualInterval = $derived(interval === 'manual');
 	const hasDownPayment = $derived.by(() => {
 		if (!downPayment.trim()) return false;
@@ -162,29 +172,34 @@
 	}
 
 	function scheduleParamsKey(): string {
-		return [baseScheduleParamsKey(), paymentOverride ?? ''].join('|');
-	}
-
-	function paymentsClose(a: string, b: string, toleranceCents = 100): boolean {
-		try {
-			return Math.abs(toCents(a) - toCents(b)) <= toleranceCents;
-		} catch {
-			return false;
-		}
+		return [
+			baseScheduleParamsKey(),
+			paymentOverride ?? '',
+			productType !== 'mortgage' && firstPaymentToday ? '1' : '0'
+		].join('|');
 	}
 
 	async function applyPaymentEdit() {
 		const draft = paymentDraft.trim();
-		if (!draft) {
-			paymentOverride = null;
-		} else if (calculatedPayment && paymentsClose(draft, calculatedPayment)) {
-			paymentOverride = null;
-		} else {
-			paymentOverride = draft;
+		let nextOverride: string | null = null;
+		if (draft) {
+			try {
+				const normalized = formatMoneyInput(draft);
+				if (normalized) {
+					nextOverride = normalized;
+				}
+			} catch {
+				toast.error($_('credits.error.invalidPayment'));
+				return;
+			}
 		}
-		editingPayment = false;
+		paymentOverride = nextOverride;
 		lastScheduleKey = '';
-		await refreshSchedule(scheduleParamsKey());
+		try {
+			await refreshSchedule(scheduleParamsKey(), nextOverride ?? undefined);
+		} finally {
+			editingPayment = false;
+		}
 	}
 
 	function startPaymentEdit() {
@@ -210,6 +225,7 @@
 		paymentOverride = null;
 		editingPayment = false;
 		paymentDraft = '';
+		firstPaymentToday = false;
 		retroactive = false;
 		retroactiveDebitCount = 0;
 		principalAffectsBalance = false;
@@ -226,6 +242,10 @@
 
 	$effect(() => {
 		if (principalIncomeBlocked) principalAffectsBalance = false;
+	});
+
+	$effect(() => {
+		if (productType === 'mortgage') firstPaymentToday = false;
 	});
 
 	$effect(() => {
@@ -324,10 +344,15 @@
 		}
 	}
 
-	async function refreshSchedule(expectedKey: string) {
+	async function refreshSchedule(
+		expectedKey: string,
+		explicitOverride: string | null | undefined = undefined
+	) {
 		if (!effectivePrincipal.trim() || !termMonths || isManualInterval) return;
 		scheduleLoading = true;
 		scheduleError = '';
+		const overrideForRequest =
+			explicitOverride !== undefined ? explicitOverride : paymentOverride ? paymentOverride : null;
 		try {
 			const res = await previewCreditSchedule({
 				principal: toAPIAmount(effectivePrincipal),
@@ -336,7 +361,8 @@
 				payment_interval: interval,
 				issue_date: fromDatetimeLocalValue(issueDateLocal, tz),
 				credit_kind: productType === 'mortgage' ? 'mortgage' : 'consumer',
-				monthly_payment: paymentOverride ? toAPIAmount(paymentOverride) : null
+				monthly_payment: overrideForRequest ? toAPIAmount(overrideForRequest) : null,
+				first_payment_today: supportsFirstPaymentToday ? firstPaymentToday : false
 			});
 			if (scheduleParamsKey() !== expectedKey) return;
 			scheduleRows = (res.schedule_preview ?? []).map((row) => ({
@@ -344,6 +370,13 @@
 				amount: formatMoneyForInput(row.amount_display ?? fromCents(row.amount))
 			}));
 			calculatedPayment = res.calculated_monthly_payment_display;
+			if (explicitOverride !== undefined) {
+				paymentOverride = explicitOverride ? formatMoneyInput(explicitOverride) : null;
+			} else if (res.user_set_monthly_payment && res.effective_monthly_payment_display) {
+				paymentOverride = res.effective_monthly_payment_display;
+			} else if (!overrideForRequest) {
+				paymentOverride = null;
+			}
 			lastScheduleKey = expectedKey;
 			schedulePage = 1;
 		} catch (e) {
@@ -418,6 +451,12 @@
 
 	$effect(() => {
 		if (retroactive) return;
+		retroactiveDebitCount = 0;
+	});
+
+	$effect(() => {
+		if (hasPastSchedulePayments) return;
+		retroactive = false;
 		retroactiveDebitCount = 0;
 	});
 
@@ -508,6 +547,7 @@
 				added_retroactively: retroactive,
 				retroactive_debit_count: retroactive ? retroactiveDebitCount : 0,
 				principal_affects_balance: productType === 'credit' ? principalAffectsBalance : false,
+				first_payment_today: supportsFirstPaymentToday ? firstPaymentToday : false,
 				create_transactions: createTransactions,
 				schedule_seed: seed
 			});
@@ -652,6 +692,25 @@
 			</div>
 		{/if}
 
+		{#if supportsFirstPaymentToday}
+			<div class="space-y-1">
+				<div class="flex items-center justify-between gap-4">
+					<div>
+						<p class="text-sm">{$_('credits.field.firstPaymentToday')}</p>
+						<FieldHint text={$_('credits.field.firstPaymentTodayHint')} />
+					</div>
+					<ToggleSwitch
+						checked={firstPaymentToday}
+						label={$_('credits.field.firstPaymentToday')}
+						onchange={() => {
+							firstPaymentToday = !firstPaymentToday;
+							lastScheduleKey = '';
+						}}
+					/>
+				</div>
+			</div>
+		{/if}
+
 		<div class="flex flex-wrap items-center gap-2 text-sm">
 			{#if !isManualInterval && editingPayment}
 				<MoneyInput bind:value={paymentDraft} class="input w-40 tabular-nums" autoFocus />
@@ -694,19 +753,21 @@
 		{/if}
 
 		<div class="space-y-1">
-			<div class="flex items-center justify-between gap-4">
-				<div>
-					<p class="text-sm">{$_('credits.field.retroactive')}</p>
-					<FieldHint text={$_('credits.field.retroactiveHint')} />
+			{#if hasPastSchedulePayments}
+				<div class="flex items-center justify-between gap-4">
+					<div>
+						<p class="text-sm">{$_('credits.field.retroactive')}</p>
+						<FieldHint text={$_('credits.field.retroactiveHint')} />
+					</div>
+					<ToggleSwitch
+						checked={retroactive}
+						label={$_('credits.field.retroactive')}
+						onchange={() => (retroactive = !retroactive)}
+					/>
 				</div>
-				<ToggleSwitch
-					checked={retroactive}
-					label={$_('credits.field.retroactive')}
-					onchange={() => (retroactive = !retroactive)}
-				/>
-			</div>
-			{#if retroactive && retroRowIndices().length > 0}
-				<FieldHint text={$_('credits.field.retroactiveDebitHint')} />
+				{#if retroactive && retroRowIndices().length > 0}
+					<FieldHint text={$_('credits.field.retroactiveDebitHint')} />
+				{/if}
 			{/if}
 		</div>
 

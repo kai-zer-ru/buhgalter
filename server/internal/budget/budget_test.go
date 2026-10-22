@@ -3,7 +3,9 @@ package budget_test
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
@@ -294,6 +296,104 @@ func TestSummaryAllExpenseFirstWithChildrenTotals(t *testing.T) {
 	}
 }
 
+func TestPreviewSpentMatchesSummary(t *testing.T) {
+	ctx, sqlDB, userID, accountID, categoryID := seedBudgetEnv(t)
+	month, err := budget.CurrentMonthQuery(ctx, sqlDB, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cat := categoryID
+	acc := accountID
+	_, err = budget.Create(ctx, sqlDB, userID, budget.Input{
+		Name: "Продукты", Scope: budget.ScopeCategory, CategoryID: &cat,
+		Amount: 30_000, IsActive: true, Month: month,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	txDate := timeutil.FormatUTC(timeutil.NowUTC())
+	if err := sqlcdb.New(sqlDB).InsertTransaction(ctx, sqlcdb.InsertTransactionParams{
+		ID: "tx-preview-1", UserID: userID, AccountID: accountID, Type: "expense", Kind: "manual",
+		Amount: 7_500, CategoryID: &cat, TransactionDate: txDate, AffectsBalance: 1,
+		CreatedAt: txDate, UpdatedAt: txDate,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	summary, err := budget.Summary(ctx, sqlDB, userID, month)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(summary.Items) != 1 || summary.Items[0].Spent != 7_500 {
+		t.Fatalf("summary spent unexpected: %+v", summary.Items)
+	}
+
+	preview, err := budget.PreviewSpent(ctx, sqlDB, userID, budget.SpentPreviewInput{
+		Month: month, Scope: budget.ScopeCategory, CategoryID: &cat,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview.Spent != summary.Items[0].Spent {
+		t.Fatalf("preview spent %d != summary %d", preview.Spent, summary.Items[0].Spent)
+	}
+	if preview.SpentDisplay != summary.Items[0].SpentDisplay {
+		t.Fatalf("preview display %q != summary %q", preview.SpentDisplay, summary.Items[0].SpentDisplay)
+	}
+
+	previewAcc, err := budget.PreviewSpent(ctx, sqlDB, userID, budget.SpentPreviewInput{
+		Month: month, Scope: budget.ScopeCategory, CategoryID: &cat, AccountID: &acc,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if previewAcc.Spent != 7_500 {
+		t.Fatalf("expected account filter spent 7500, got %d", previewAcc.Spent)
+	}
+
+	otherAcc := "acc-other"
+	_, err = sqlDB.ExecContext(ctx, `
+		INSERT INTO accounts (id, user_id, name, type, initial_balance, current_balance, status, created_at, updated_at)
+		VALUES (?, ?, 'Другой', 'cash', 0, 0, 'active', datetime('now'), datetime('now'))`,
+		otherAcc, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	previewOther, err := budget.PreviewSpent(ctx, sqlDB, userID, budget.SpentPreviewInput{
+		Month: month, Scope: budget.ScopeCategory, CategoryID: &cat, AccountID: &otherAcc,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if previewOther.Spent != 0 {
+		t.Fatalf("expected other account spent 0, got %d", previewOther.Spent)
+	}
+
+	allPreview, err := budget.PreviewSpent(ctx, sqlDB, userID, budget.SpentPreviewInput{
+		Month: month, Scope: budget.ScopeAllExpense,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if allPreview.Spent != 7_500 {
+		t.Fatalf("expected all_expense preview 7500, got %d", allPreview.Spent)
+	}
+
+	_, err = budget.PreviewSpent(ctx, sqlDB, userID, budget.SpentPreviewInput{
+		Month: month, Scope: "nope",
+	})
+	if err != budget.ErrInvalidScope {
+		t.Fatalf("expected invalid scope, got %v", err)
+	}
+
+	_, err = budget.PreviewSpent(ctx, sqlDB, userID, budget.SpentPreviewInput{
+		Month: month, Scope: budget.ScopeCategory,
+	})
+	if err != budget.ErrInvalidCategory {
+		t.Fatalf("expected missing category, got %v", err)
+	}
+}
+
 func TestBudgetCopyForwardOnlyNextMonth(t *testing.T) {
 	ctx, sqlDB, userID, _, categoryID := seedBudgetEnv(t)
 	month, err := budget.CurrentMonthQuery(ctx, sqlDB, userID)
@@ -309,7 +409,7 @@ func TestBudgetCopyForwardOnlyNextMonth(t *testing.T) {
 		t.Fatal(err)
 	}
 	cat := categoryID
-	_, err = budget.Create(ctx, sqlDB, userID, budget.Input{
+	created, err := budget.Create(ctx, sqlDB, userID, budget.Input{
 		Name: "Копируемый", Scope: budget.ScopeCategory, CategoryID: &cat,
 		Amount: 10_000, IsActive: true, Month: month, CopyForward: true,
 	})
@@ -326,11 +426,110 @@ func TestBudgetCopyForwardOnlyNextMonth(t *testing.T) {
 	if sumNext.Items[0].CopyForward {
 		t.Fatal("copied budget should have copy_forward=false")
 	}
+	srcAfter, err := budget.Get(ctx, sqlDB, userID, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if srcAfter.CopyForward {
+		t.Fatal("source copy_forward should be cleared after auto-copy to next month")
+	}
 	sumNext2, err := budget.Summary(ctx, sqlDB, userID, next2)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(sumNext2.Items) != 0 {
 		t.Fatalf("expected no budget two months ahead, got %d", len(sumNext2.Items))
+	}
+}
+
+func TestBudgetDeleteAfterAutoCopyDoesNotRecreate(t *testing.T) {
+	ctx, sqlDB, userID, _, categoryID := seedBudgetEnv(t)
+	month, err := budget.CurrentMonthQuery(ctx, sqlDB, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next, err := budget.AddMonths(month, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cat := categoryID
+	_, err = budget.Create(ctx, sqlDB, userID, budget.Input{
+		Name: "Копируемый", Scope: budget.ScopeCategory, CategoryID: &cat,
+		Amount: 10_000, IsActive: true, Month: month, CopyForward: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sumNext, err := budget.Summary(ctx, sqlDB, userID, next)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sumNext.Items) != 1 {
+		t.Fatalf("expected 1 budget in next month, got %d", len(sumNext.Items))
+	}
+	copyID := sumNext.Items[0].ID
+	if err := budget.Delete(ctx, sqlDB, userID, copyID); err != nil {
+		t.Fatal(err)
+	}
+	sumAfterDelete, err := budget.Summary(ctx, sqlDB, userID, next)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sumAfterDelete.Items) != 0 {
+		t.Fatalf("expected no budget after delete and summary reload, got %d", len(sumAfterDelete.Items))
+	}
+}
+
+func TestBudgetConcurrentAutoCopySummary(t *testing.T) {
+	ctx, sqlDB, userID, _, categoryID := seedBudgetEnv(t)
+	month, err := budget.CurrentMonthQuery(ctx, sqlDB, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next, err := budget.AddMonths(month, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cat := categoryID
+	_, err = budget.Create(ctx, sqlDB, userID, budget.Input{
+		Name: "Копируемый", Scope: budget.ScopeCategory, CategoryID: &cat,
+		Amount: 10_000, IsActive: true, Month: month, CopyForward: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const workers = 8
+	var wg sync.WaitGroup
+	errs := make(chan error, workers)
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sum, err := budget.Summary(ctx, sqlDB, userID, next)
+			if err != nil {
+				errs <- err
+				return
+			}
+			if len(sum.Items) != 1 {
+				errs <- fmt.Errorf("expected 1 item, got %d", len(sum.Items))
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent summary: %v", err)
+		}
+	}
+	cnt, err := sqlcdb.New(sqlDB).CountActiveBudgetsByUserMonth(ctx, sqlcdb.CountActiveBudgetsByUserMonthParams{
+		UserID: userID, Month: next,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cnt != 1 {
+		t.Fatalf("expected 1 active budget in %s, got %d", next, cnt)
 	}
 }

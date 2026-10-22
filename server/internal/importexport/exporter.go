@@ -12,8 +12,23 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/transaction"
 )
 
-// ExportCSV returns Cubux-compatible CSV bytes for the given filters.
+func exportFormat(f ExportFilters) string {
+	switch strings.ToLower(strings.TrimSpace(f.Format)) {
+	case "buhgalter":
+		return "buhgalter"
+	default:
+		return "cubux"
+	}
+}
+
+// ExportCSV returns CSV bytes for the given filters (Cubux or native Buhgalter).
 func ExportCSV(ctx context.Context, db *sql.DB, userID, displayName string, f ExportFilters) ([]byte, string, error) {
+	format := exportFormat(f)
+	if format == "buhgalter" {
+		// Full ledger: date/account/category filters are Cubux-only.
+		return exportNative(ctx, db, userID, displayName, ExportFilters{Format: "buhgalter"})
+	}
+
 	from := normalizeExportDate(f.From, false)
 	to := normalizeExportDate(f.To, true)
 
@@ -39,10 +54,12 @@ func ExportCSV(ctx context.Context, db *sql.DB, userID, displayName string, f Ex
 		page++
 	}
 
+	headers := CubuxHeaders
+
 	var buf bytes.Buffer
 	buf.Write([]byte{0xEF, 0xBB, 0xBF}) // UTF-8 BOM
 	w := csv.NewWriter(&buf)
-	_ = w.Write(CubuxHeaders)
+	_ = w.Write(headers)
 
 	seenTransfers := make(map[string]bool)
 	for _, tx := range all {
@@ -55,7 +72,7 @@ func ExportCSV(ctx context.Context, db *sql.DB, userID, displayName string, f Ex
 			}
 			seenTransfers[*tx.TransferGroupID] = true
 		}
-		line := txToCubuxLine(tx, displayName)
+		line := txToExportLine(tx, displayName, format, nil)
 		if line == nil {
 			continue
 		}
@@ -70,6 +87,26 @@ func ExportCSV(ctx context.Context, db *sql.DB, userID, displayName string, f Ex
 
 	filename := fmt.Sprintf("buhgalter_export_%s.csv", time.Now().Format("2006"))
 	return buf.Bytes(), filename, nil
+}
+
+func txToExportLine(tx transaction.Transaction, displayName, format string, subNameByID map[string]string) []string {
+	line := txToCubuxLine(tx, displayName)
+	if line == nil || format != "buhgalter" {
+		return line
+	}
+	merchant := ""
+	if tx.MerchantName != nil {
+		merchant = *tx.MerchantName
+	}
+	commission := ""
+	if tx.Type == "transfer" && tx.Commission > 0 {
+		commission = FormatCubuxAmount(tx.Commission)
+	}
+	subName := ""
+	if tx.SubscriptionID != nil && subNameByID != nil {
+		subName = subNameByID[*tx.SubscriptionID]
+	}
+	return append(line, formatExportTime(tx.TransactionDate), merchant, joinExportTags(tx), commission, tx.ID, subName)
 }
 
 func txToCubuxLine(tx transaction.Transaction, displayName string) []string {
@@ -121,6 +158,32 @@ func formatExportDate(txDate string) string {
 		}
 	}
 	return txDate
+}
+
+func formatExportTime(txDate string) string {
+	txDate = strings.TrimSpace(txDate)
+	if len(txDate) >= 19 && txDate[10] == ' ' {
+		return txDate[11:19]
+	}
+	if len(txDate) >= 16 && txDate[10] == ' ' {
+		return txDate[11:16] + ":00"
+	}
+	return ""
+}
+
+func joinExportTags(tx transaction.Transaction) string {
+	if len(tx.Tags) == 0 {
+		return ""
+	}
+	names := make([]string, 0, len(tx.Tags))
+	for _, tag := range tx.Tags {
+		name := strings.TrimSpace(tag.Name)
+		if name == "" {
+			continue
+		}
+		names = append(names, name)
+	}
+	return strings.Join(names, ", ")
 }
 
 func normalizeExportDate(s string, endOfDay bool) string {

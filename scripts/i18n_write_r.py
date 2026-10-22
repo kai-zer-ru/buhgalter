@@ -24,7 +24,7 @@ MSG_TO_KEY = {
     "нельзя удалить себя": "ERR_CANNOT_DELETE_SELF",
     "язык должен быть ru или en": "ERR_LANGUAGE",
     "валюта должна быть RUB, USD или EUR": "ERR_CURRENCY",
-    "тема должна быть light или dark": "ERR_THEME",
+    "тема должна быть light, dark или system": "ERR_THEME",
     "некорректный часовой пояс": "ERR_TIMEZONE",
     "channel должен быть telegram или max": "ERR_CHANNEL",
     "канал уведомлений не настроен": "ERR_NOTIFICATION_CHANNEL",

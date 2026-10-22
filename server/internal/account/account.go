@@ -12,6 +12,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/accountbalance"
 	"github.com/kai-zer-ru/buhgalter/internal/bank"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/features"
 	"github.com/kai-zer-ru/buhgalter/internal/money"
 )
 
@@ -40,7 +41,7 @@ type Account struct {
 	UpdatedAt                 string  `json:"updated_at"`
 }
 
-func queries(db *sql.DB) *sqlcdb.Queries {
+func queries(db sqlcdb.DBTX) *sqlcdb.Queries {
 	return sqlcdb.New(db)
 }
 
@@ -157,7 +158,7 @@ func ListByUser(ctx context.Context, db *sql.DB, userID, status string) ([]Accou
 	return out, nil
 }
 
-func GetByID(ctx context.Context, db *sql.DB, userID, id string) (Account, error) {
+func GetByID(ctx context.Context, db sqlcdb.DBTX, userID, id string) (Account, error) {
 	row, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: id, UserID: userID})
 	if errors.Is(err, sql.ErrNoRows) {
 		return Account{}, ErrNotFound
@@ -168,7 +169,24 @@ func GetByID(ctx context.Context, db *sql.DB, userID, id string) (Account, error
 	return accountFromGetRow(row), nil
 }
 
+// LockRow takes a write lock on the account row (SQLite deferred tx → reserved).
+func LockRow(ctx context.Context, db sqlcdb.DBTX, userID, id string) error {
+	n, err := queries(db).LockAccountRow(ctx, sqlcdb.LockAccountRowParams{ID: id, UserID: userID})
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 var ErrNotFound = errors.New("account not found")
+var ErrArchived = errors.New("account is archived")
+var ErrCreditCardPrimary = errors.New("credit card cannot be primary")
+var ErrCreditCardArchiveNotFullyPaid = errors.New("credit card must be fully paid before archive")
+var ErrCreditLimitImmutable = errors.New("credit limit cannot be changed via account update")
+var ErrCreditCardLimitDecreaseNotFullyPaid = errors.New("credit card must be fully paid before decreasing limit")
 
 type CreateInput struct {
 	Name             string
@@ -191,13 +209,15 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Acc
 	id := uuid.NewString()
 	now := time.Now().UTC().Format(time.RFC3339)
 	q := queries(db)
-	count, err := q.CountActiveAccountsByUser(ctx, userID)
-	if err != nil {
-		return Account{}, err
-	}
 	isPrimary := int64(0)
-	if count == 0 {
-		isPrimary = 1
+	if !IsCreditCard(in.Type) {
+		count, err := q.CountActivePrimaryEligibleAccountsByUser(ctx, userID)
+		if err != nil {
+			return Account{}, err
+		}
+		if count == 0 {
+			isPrimary = 1
+		}
 	}
 	if err := q.InsertAccount(ctx, sqlcdb.InsertAccountParams{
 		ID:               id,
@@ -258,9 +278,10 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in UpdateInput) 
 		bankID = in.BankID
 	}
 	if existing.Type == "credit_card" {
-		cl := creditLimit
 		if in.CreditLimit != nil {
-			cl = in.CreditLimit
+			if existing.CreditLimit == nil || *in.CreditLimit != *existing.CreditLimit {
+				return Account{}, ErrCreditLimitImmutable
+			}
 		}
 		pa := paymentAccountID
 		if in.PaymentAccountID != nil {
@@ -272,7 +293,7 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in UpdateInput) 
 		}
 		var validatedCL *int64
 		var validatedPA *string
-		validatedCL, validatedPA, err = validateAccountFields(ctx, db, userID, id, existing.Type, bankID, cl, pa)
+		validatedCL, validatedPA, err = validateAccountFields(ctx, db, userID, id, existing.Type, bankID, creditLimit, pa)
 		if err != nil {
 			return Account{}, err
 		}
@@ -309,8 +330,53 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in UpdateInput) 
 	return GetByID(ctx, db, userID, id)
 }
 
-var ErrArchived = errors.New("account is archived")
-var ErrCreditCardArchiveNotFullyPaid = errors.New("credit card must be fully paid before archive")
+// ChangeCreditLimit sets a new credit_limit and adjusts initial_balance by the same delta
+// so debt (limit − balance) stays unchanged on increase. Decrease is allowed only when
+// the card is fully paid (balance >= current credit_limit).
+func ChangeCreditLimit(ctx context.Context, db *sql.DB, userID, id string, newLimit int64) (Account, error) {
+	existing, err := GetByID(ctx, db, userID, id)
+	if err != nil {
+		return Account{}, err
+	}
+	if existing.Status != "active" {
+		return Account{}, ErrArchived
+	}
+	if !IsCreditCard(existing.Type) {
+		return Account{}, ErrInvalidType
+	}
+	if newLimit <= 0 {
+		return Account{}, ErrInvalidCreditLimit
+	}
+	if existing.CreditLimit == nil {
+		return Account{}, ErrCreditLimitRequired
+	}
+	oldLimit := *existing.CreditLimit
+	if newLimit == oldLimit {
+		return existing, nil
+	}
+	delta := newLimit - oldLimit
+	if delta < 0 && existing.Balance < oldLimit {
+		return Account{}, ErrCreditCardLimitDecreaseNotFullyPaid
+	}
+	newCL := newLimit
+	now := time.Now().UTC().Format(time.RFC3339)
+	if err := queries(db).UpdateAccount(ctx, sqlcdb.UpdateAccountParams{
+		Name:             existing.Name,
+		BankID:           existing.BankID,
+		InitialBalance:   existing.InitialBalance + delta,
+		CreditLimit:      &newCL,
+		PaymentAccountID: existing.PaymentAccountID,
+		UpdatedAt:        now,
+		ID:               id,
+		UserID:           userID,
+	}); err != nil {
+		return Account{}, err
+	}
+	if err := accountbalance.Refresh(ctx, db, userID, id); err != nil {
+		return Account{}, err
+	}
+	return GetByID(ctx, db, userID, id)
+}
 
 // RequiresBalanceTransfer reports whether deleting the account must move remaining funds first.
 func RequiresBalanceTransfer(acc Account) bool {
@@ -337,7 +403,7 @@ func validateCreditCardFullyPaid(acc Account) error {
 	return nil
 }
 
-func SetStatus(ctx context.Context, db *sql.DB, userID, id, status string) (Account, error) {
+func SetStatus(ctx context.Context, db sqlcdb.DBTX, userID, id, status string) (Account, error) {
 	existing, err := GetByID(ctx, db, userID, id)
 	if err != nil {
 		return Account{}, err
@@ -395,6 +461,9 @@ func SetPrimary(ctx context.Context, db *sql.DB, userID, id string) (Account, er
 	if acc.Status != "active" {
 		return Account{}, ErrArchived
 	}
+	if IsCreditCard(acc.Type) {
+		return Account{}, ErrCreditCardPrimary
+	}
 
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
@@ -415,7 +484,7 @@ func SetPrimary(ctx context.Context, db *sql.DB, userID, id string) (Account, er
 	return GetByID(ctx, db, userID, id)
 }
 
-func promoteNextPrimary(ctx context.Context, db *sql.DB, userID string) error {
+func promoteNextPrimary(ctx context.Context, db sqlcdb.DBTX, userID string) error {
 	q := queries(db)
 	nextID, err := q.FirstActiveAccountID(ctx, userID)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -430,7 +499,7 @@ func promoteNextPrimary(ctx context.Context, db *sql.DB, userID string) error {
 	return q.SetAccountPrimary(ctx, sqlcdb.SetAccountPrimaryParams{ID: nextID, UserID: userID})
 }
 
-func Delete(ctx context.Context, db *sql.DB, userID, id string) error {
+func Delete(ctx context.Context, db sqlcdb.DBTX, userID, id string) error {
 	_, err := SetStatus(ctx, db, userID, id, "deleted")
 	return err
 }
@@ -578,6 +647,11 @@ func applyAutoTopupSettings(ctx context.Context, db *sql.DB, userID, accountID, 
 	var threshold, target *int64
 	var sourceID *string
 	if in.Enabled {
+		if ok, err := features.IsEnabled(ctx, db, features.BalanceMaintenance); err != nil {
+			return err
+		} else if !ok {
+			return ErrAutoTopupNotAllowed
+		}
 		if err := validateAutoTopupAmounts(in.Threshold, in.Target); err != nil {
 			return err
 		}
@@ -633,7 +707,7 @@ func validateAutoTopupSource(ctx context.Context, db *sql.DB, userID, beneficiar
 	return &sourceID, nil
 }
 
-func disableAutoTopupForInactive(ctx context.Context, db *sql.DB, userID, accountID string) error {
+func disableAutoTopupForInactive(ctx context.Context, db sqlcdb.DBTX, userID, accountID string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	q := queries(db)
 	if err := q.DisableAutoTopupForBeneficiary(ctx, sqlcdb.DisableAutoTopupForBeneficiaryParams{

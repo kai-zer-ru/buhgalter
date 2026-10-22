@@ -17,7 +17,7 @@ test('new account balance field shows placeholder instead of 0.00', async ({ pag
 
 test('recurring operation form amount field starts empty', async ({ page }) => {
 	await createCashAccount(page);
-	await page.goto('/settings/recurring-operations');
+	await page.goto('/recurring-operations');
 	await waitAppReady(page);
 	await page.getByRole('button', { name: 'Добавить' }).click();
 	await expectEmptyMoneyInput(page.locator('#recurring-amount-create'));
@@ -53,12 +53,23 @@ test('typing zero in money field clears on blur', async ({ page }) => {
 	await expect(balance).toHaveValue('');
 });
 
+test('amount field evaluates addition on blur', async ({ page }) => {
+	await page.goto('/accounts/new');
+	await waitAppReady(page);
+	const balance = page.locator('#balance');
+	await balance.fill('7899+500');
+	await balance.blur();
+	await expect(balance).toHaveValue('8 399.00');
+});
+
 test('create account with empty balance defaults to zero', async ({ page }) => {
 	const name = `E2E Zero Balance ${Date.now()}`;
 	await page.goto('/accounts/new');
 	await waitAppReady(page);
 	await page.locator('#name').fill(name);
 	await page.getByRole('button', { name: 'Создать' }).click();
-	await expect(page).toHaveURL(/\/accounts\//, { timeout: 15_000 });
+	await expect(page).not.toHaveURL(/\/accounts\/new/, { timeout: 15_000 });
+	await expect(page).toHaveURL(/\/accounts\/?$/);
+	await expect(page.getByText(name).first()).toBeVisible();
 	await expect(page.getByText('0.00').first()).toBeVisible();
 });

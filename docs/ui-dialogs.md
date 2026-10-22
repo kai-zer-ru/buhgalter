@@ -59,6 +59,7 @@ async function remove() {
 | Формы (`TransactionForm`, `TransferForm`, `DebtForm`, `CreditForm`, …) | `onclose()` — отмена без сохранения |
 | Информационные модалки (API-токен, preview и т.п.) | закрыть, без side effects |
 | `CategoryIconPicker`, выбор иконки | закрыть без выбора |
+| `SubcategoryFormDialog` (создание/правка подкатегории) | `onclose()` — отмена без сохранения |
 | **DateTimePicker** (календарь) | закрыть попап; в режиме с временем — Esc не закрывает, если фокус в поле времени (см. ниже) |
 | **Combobox / Select** (`TimezonePicker`, `Select`, `Combobox`) | закрыть список; если список уже закрыт — не перехватывать Esc у родительской модалки |
 | Вложенные слои | закрывается **верхний** попап (confirm поверх формы — сначала confirm) |
@@ -115,7 +116,8 @@ async function remove() {
 - Сетка Пн–Вс; серые числа — дни **предыдущего и следующего** месяца; по клику выбирается полная дата (месяц переключается).
 - Заголовок месяца — выбор месяца и года; стрелки ‹ › — соседний месяц.
 - Кнопка **«Сегодня»** — выбор текущей даты в часовом поясе пользователя (v1.2.4).
-- С `usePortal` панель открывается **вверх**, если снизу не хватает места (высота измеряется после рендера; логика — `$lib/dropdown-position.ts`).
+- С `usePortal` панель по умолчанию открывается **вниз**; **вверх** — только если снизу не хватает места (высота измеряется после рендера; логика — `$lib/dropdown-position.ts`). Направление **фиксируется** при открытии и не меняется при скролле/resize.
+- Без `usePortal` список/панель якорятся через `top/bottom: 100%` на обёртку **только контрола** (label и hint — снаружи `.relative`), иначе панель «отрывается» от поля.
 - После выбора даты в режиме без раскрытого времени попап закрывается («Готово» или клик вне).
 
 ### Параметры `ConfirmOptions`
@@ -143,6 +145,7 @@ async function remove() {
 - `admin.backups.confirm.restore`
 - `credits.confirm.delete`, `credits.confirm.deletePayment`, `credits.confirm.deleteAppliedPayment`
 - `credits.complete.payFromAccount` (плейсхолдеры `{amount}`, `{account}`)
+- `settings.data.confirm.title`, `settings.data.confirm.message`, `settings.data.confirm.continue`, `settings.data.confirm.finalTitle`, `settings.data.confirm.finalMessage` — сброс учёта в профиле (два шага `confirm({ danger: true })`)
 
 Новые destructive-действия — добавлять ключ `*.confirm.*` и вызывать через `confirm()`.
 
@@ -180,6 +183,7 @@ API: `POST /api/v1/admin/backups/restore` (multipart `file` + `confirm`). См. 
 - Отзыв API-токена
 - Удаление пользователя (админка)
 - Восстановление БД из бэкапа — см. [Восстановление БД](#восстановление-бд)
+- **Профиль** — «Удалить данные»: два подтверждения (`settings.data.confirm.*`), затем `DELETE /api/v1/user/data`
 - **Кредиты** (`/credits`): … подтверждение **«Удалить платёж»** (для оплаченных — `credits.confirm.deleteAppliedPayment`) и удаления кредита — `$lib/confirm`
 
 ## Требование для новых экранов

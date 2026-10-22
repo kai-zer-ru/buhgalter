@@ -1,6 +1,13 @@
 import { test, expect } from '@playwright/test';
-import { ADMIN, waitAppReady } from './helpers/auth';
-import { confirmDialog, rowMenuAction } from './helpers/ui';
+import {
+	ADMIN,
+	apiJSON,
+	deleteAdminUserByLogin,
+	restoreAdminSession,
+	waitAppReady
+} from './helpers/auth';
+import { createCashAccount } from './helpers/setup-data';
+import { confirmDialog, expectToast, rowMenuAction } from './helpers/ui';
 
 test('profile: change display name', async ({ page }) => {
 	const newName = `E2E Display ${Date.now()}`;
@@ -16,6 +23,43 @@ test('profile: change display name', async ({ page }) => {
 
 	await page.locator('#display').fill(ADMIN.displayName);
 	await page.getByRole('button', { name: 'Сохранить' }).click();
+});
+
+test('profile: delete all ledger data', async ({ page }) => {
+	const tag = Date.now();
+	const loginName = `e2ewipe${tag}`;
+	await restoreAdminSession(page);
+	await apiJSON(page, 'POST', '/api/v1/admin/users', {
+		login: loginName,
+		password: 'Wipepass1',
+		password_confirm: 'Wipepass1',
+		display_name: 'Wipe User',
+		is_admin: false
+	});
+	try {
+		await page.context().clearCookies();
+		await page.goto('/login');
+		await waitAppReady(page);
+		await page.locator('#login').fill(loginName);
+		await page.locator('#password').fill('Wipepass1');
+		await page.getByRole('button', { name: 'Войти' }).click();
+		await expect(page).toHaveURL(/\/(\?.*)?$/, { timeout: 15_000 });
+		await waitAppReady(page);
+
+		await createCashAccount(page, `Wipe Acc ${tag}`);
+		await page.goto('/settings');
+		await waitAppReady(page);
+		await page.getByRole('button', { name: 'Удалить данные' }).click();
+		await confirmDialog(page, 'Продолжить');
+		await confirmDialog(page, 'Удалить данные');
+		await expectToast(page, 'success', 'Данные удалены');
+
+		const accounts = await apiJSON<unknown[]>(page, 'GET', '/api/v1/accounts');
+		expect(accounts).toEqual([]);
+	} finally {
+		await restoreAdminSession(page);
+		await deleteAdminUserByLogin(page, loginName);
+	}
 });
 
 test('password tab loads form fields', async ({ page }) => {
@@ -61,7 +105,7 @@ test('tokens: perpetual token shows risk warning', async ({ page }) => {
 test('categories: delete expense category', async ({ page }) => {
 	const name = `E2E Cat Del ${Date.now()}`;
 
-	await page.goto('/settings/categories');
+	await page.goto('/categories');
 	await waitAppReady(page);
 	await page.getByPlaceholder('Название категории').fill(name);
 	await page.getByRole('button', { name: 'Создать' }).click();
@@ -76,7 +120,7 @@ test('categories: delete expense category', async ({ page }) => {
 test('categories: create income category on Доходы tab', async ({ page }) => {
 	const name = `E2E Income ${Date.now()}`;
 
-	await page.goto('/settings/categories');
+	await page.goto('/categories');
 	await waitAppReady(page);
 	await page.getByRole('button', { name: 'Доходы', exact: true }).click();
 	await page.getByPlaceholder('Название категории').fill(name);
@@ -87,7 +131,7 @@ test('categories: create income category on Доходы tab', async ({ page }) 
 test('categories: make primary shows badge', async ({ page }) => {
 	const name = `E2E Primary Cat ${Date.now()}`;
 
-	await page.goto('/settings/categories');
+	await page.goto('/categories');
 	await waitAppReady(page);
 	await page.getByPlaceholder('Название категории').fill(name);
 	await page.getByRole('button', { name: 'Создать' }).click();
@@ -97,4 +141,37 @@ test('categories: make primary shows badge', async ({ page }) => {
 	await row.getByRole('button', { name: 'Действия' }).click();
 	await page.getByRole('menuitem', { name: 'Сделать главной' }).click();
 	await expect(row.getByLabel('Главная категория')).toBeVisible({ timeout: 10_000 });
+});
+
+test('categories: create and edit subcategory via dialog', async ({ page }) => {
+	const catName = `E2E SubCat Parent ${Date.now()}`;
+	const subName = `E2E Sub ${Date.now()}`;
+	const subRenamed = `${subName} Renamed`;
+
+	await page.goto('/categories');
+	await waitAppReady(page);
+	await page.getByPlaceholder('Название категории').fill(catName);
+	await page.getByRole('button', { name: 'Создать' }).click();
+	await expect(page.getByText(catName)).toBeVisible({ timeout: 10_000 });
+
+	const row = page.locator('.space-y-2 > .card').filter({ hasText: catName }).first();
+	await row.getByRole('button', { name: catName }).click();
+	const addSubBtn = row.getByRole('button', { name: 'Добавить подкатегорию' });
+	await expect(addSubBtn).toBeVisible({ timeout: 10_000 });
+	await addSubBtn.click();
+
+	const dialog = page.getByRole('dialog', { name: 'Новая подкатегория' });
+	await expect(dialog).toBeVisible({ timeout: 10_000 });
+	await expect(dialog.getByLabel('Сменить иконку')).toBeVisible();
+	await dialog.getByPlaceholder('Название подкатегории').fill(subName);
+	await dialog.getByRole('button', { name: 'Сохранить' }).click();
+	await expect(row.getByText(subName)).toBeVisible({ timeout: 10_000 });
+
+	const subRow = row.locator('[data-drag-kind="sub"]').filter({ hasText: subName });
+	await rowMenuAction(page, subRow, 'Редактировать');
+	const editDialog = page.getByRole('dialog', { name: 'Редактировать подкатегорию' });
+	await expect(editDialog).toBeVisible({ timeout: 10_000 });
+	await editDialog.getByPlaceholder('Название подкатегории').fill(subRenamed);
+	await editDialog.getByRole('button', { name: 'Сохранить' }).click();
+	await expect(row.getByText(subRenamed)).toBeVisible({ timeout: 10_000 });
 });

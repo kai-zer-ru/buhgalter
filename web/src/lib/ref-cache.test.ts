@@ -1,0 +1,459 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+	clearRefCache,
+	fetchWithRefCache,
+	invalidateRefCacheAfterWrite,
+	notifyRealtimeInvalidate,
+	readAccountsFromOfflineCache,
+	readCategoriesFromOfflineCache,
+	readRefCache,
+	refCacheReady,
+	refCacheUpdate,
+	resetRefCacheForTests,
+	setRealtimeLive,
+	setRefCacheUserId,
+	shouldPersistRefCache,
+	shouldInvalidateRefCacheOnWrite,
+	writeRefCache
+} from './ref-cache';
+
+describe('shouldPersistRefCache', () => {
+	it('caches credit detail and list paths', () => {
+		expect(shouldPersistRefCache('/api/v1/credits/abc-123')).toBe(true);
+		expect(shouldPersistRefCache('/api/v1/credits?status=active')).toBe(true);
+		expect(shouldPersistRefCache('/api/v1/banks')).toBe(true);
+	});
+
+	it('skips setup status (registration flag for public pages)', () => {
+		expect(shouldPersistRefCache('/api/v1/setup/status')).toBe(false);
+	});
+
+	it('skips transaction change feed', () => {
+		expect(shouldPersistRefCache('/api/v1/sync/transaction-changes')).toBe(false);
+	});
+
+	it('skips version check (live server build)', () => {
+		expect(shouldPersistRefCache('/api/v1/version/check')).toBe(false);
+	});
+});
+
+describe('shouldInvalidateRefCacheOnWrite', () => {
+	it('does not bust cache when queuing a background import job', () => {
+		expect(shouldInvalidateRefCacheOnWrite('/api/v1/import/jobs')).toBe(false);
+		expect(shouldInvalidateRefCacheOnWrite('/api/v1/import')).toBe(true);
+		expect(shouldInvalidateRefCacheOnWrite('/api/v1/transactions')).toBe(true);
+	});
+
+	it('does not soft-reload after auth endpoints (logout must not 401 open screens)', () => {
+		expect(shouldInvalidateRefCacheOnWrite('/api/v1/auth/logout')).toBe(false);
+		expect(shouldInvalidateRefCacheOnWrite('/api/v1/auth/login')).toBe(false);
+		expect(shouldInvalidateRefCacheOnWrite('/api/v1/auth/register')).toBe(false);
+	});
+});
+
+describe('web fetchWithRefCache SWR', () => {
+	beforeEach(() => {
+		resetRefCacheForTests();
+		setRefCacheUserId('user-1');
+		vi.useFakeTimers();
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
+		vi.restoreAllMocks();
+	});
+
+	it('returns cached data immediately and revalidates in background', async () => {
+		writeRefCache('/api/v1/dashboard', { total_balance: 100 });
+		let resolveFetch!: (value: { total_balance: number }) => void;
+		const fetcher = vi.fn(
+			() =>
+				new Promise<{ total_balance: number }>((resolve) => {
+					resolveFetch = resolve;
+				})
+		);
+
+		const first = await fetchWithRefCache('/api/v1/dashboard', fetcher);
+		expect(first).toEqual({ total_balance: 100 });
+		expect(fetcher).not.toHaveBeenCalled();
+
+		await vi.advanceTimersByTimeAsync(3_000);
+		expect(fetcher).toHaveBeenCalledOnce();
+
+		resolveFetch({ total_balance: 200 });
+		await vi.waitFor(() =>
+			expect(readRefCache('/api/v1/dashboard')).toEqual({ total_balance: 200 })
+		);
+	});
+
+	it('skips background revalidate while realtime socket is live', async () => {
+		writeRefCache('/api/v1/dashboard', { total_balance: 100 });
+		setRealtimeLive(true);
+		const fetcher = vi.fn(async () => ({ total_balance: 200 }));
+
+		const first = await fetchWithRefCache('/api/v1/dashboard', fetcher);
+		expect(first).toEqual({ total_balance: 100 });
+		await vi.advanceTimersByTimeAsync(65_000);
+		expect(fetcher).not.toHaveBeenCalled();
+	});
+
+	it('emits refCacheUpdate with path when background data changes', async () => {
+		writeRefCache('/api/v1/accounts', [{ id: 'a1' }]);
+		let last: { path: string; seq: number } | null = null;
+		const unsub = refCacheUpdate.subscribe((v) => (last = v));
+
+		await fetchWithRefCache('/api/v1/accounts', async () => [{ id: 'a1' }, { id: 'a2' }]);
+		await vi.advanceTimersByTimeAsync(3_000);
+		await vi.waitFor(() => expect(last?.path).toBe('/api/v1/accounts'));
+		unsub();
+	});
+
+	it('isolates cache per user id', () => {
+		writeRefCache('/api/v1/dashboard', { total_balance: 1 });
+		setRefCacheUserId('user-2');
+		expect(refCacheReady('/api/v1/dashboard')).toBe(false);
+	});
+
+	it('clearRefCache discards in-flight stale body and retries network', async () => {
+		const resolvers: Array<(value: unknown) => void> = [];
+		const fetcher = vi.fn(
+			() =>
+				new Promise<unknown>((resolve) => {
+					resolvers.push(resolve);
+				})
+		);
+
+		const inflight = fetchWithRefCache('/api/v1/dashboard', fetcher);
+		clearRefCache();
+		resolvers[0]!({ total_balance: 0 });
+		await Promise.resolve();
+		expect(fetcher).toHaveBeenCalledTimes(2);
+		resolvers[1]!({ total_balance: 42 });
+		await expect(inflight).resolves.toEqual({ total_balance: 42 });
+		expect(readRefCache('/api/v1/dashboard')).toEqual({ total_balance: 42 });
+	});
+
+	it('notifyRealtimeInvalidate emits soft-reload path *', () => {
+		writeRefCache('/api/v1/dashboard', { total_balance: 1 });
+		let last: { path: string; seq: number } | null = null;
+		const unsub = refCacheUpdate.subscribe((v) => {
+			last = v;
+		});
+		notifyRealtimeInvalidate();
+		expect(refCacheReady('/api/v1/dashboard')).toBe(false);
+		expect(last?.path).toBe('*');
+		unsub();
+	});
+
+	it('clearRefCache drops cache and ignores in-flight revalidate writes', async () => {
+		writeRefCache('/api/v1/debts?settled=false', [{ id: 'old' }]);
+		let resolveFetch!: (value: unknown[]) => void;
+		const fetcher = vi.fn(
+			() =>
+				new Promise<unknown[]>((resolve) => {
+					resolveFetch = resolve;
+				})
+		);
+
+		await fetchWithRefCache('/api/v1/debts?settled=false', fetcher);
+		await vi.advanceTimersByTimeAsync(3_000);
+		clearRefCache();
+		expect(refCacheReady('/api/v1/debts?settled=false')).toBe(false);
+
+		resolveFetch([{ id: 'stale-from-before-mutation' }]);
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(refCacheReady('/api/v1/debts?settled=false')).toBe(false);
+
+		const fresh = await fetchWithRefCache('/api/v1/debts?settled=false', async () => [
+			{ id: 'new' }
+		]);
+		expect(fresh).toEqual([{ id: 'new' }]);
+		expect(readRefCache('/api/v1/debts?settled=false')).toEqual([{ id: 'new' }]);
+	});
+
+	it('preserveAuthMe keeps dictionaries but does not seed zero-balance accounts into SWR', () => {
+		writeRefCache('/api/v1/ui/meta', {
+			accounts: [{ id: 'a1', name: 'Наличные', type: 'cash', status: 'active' }],
+			banks: [],
+			expense_categories: [{ id: 'c1', name: 'Еда' }],
+			income_categories: [],
+			debtors: [],
+			merchants: [],
+			tags: [],
+			active_credits: [],
+			closed_credits: []
+		});
+		writeRefCache('/api/v1/categories?type=expense', [{ id: 'c1', name: 'Еда' }]);
+		writeRefCache('/api/v1/accounts?status=active', [
+			{ id: 'a1', name: 'Наличные', balance: 100, balance_display: '1.00' }
+		]);
+		writeRefCache('/api/v1/dashboard', { total_balance: 1 });
+		clearRefCache({ preserveAuthMe: true });
+		expect(readRefCache('/api/v1/dashboard')).toBeNull();
+		expect(readRefCache('/api/v1/categories?type=expense')).toMatchObject([{ id: 'c1' }]);
+		// Preserved real accounts list stays; ui/meta must not overwrite it with 0.00 stubs.
+		expect(readRefCache('/api/v1/accounts?status=active')).toMatchObject([
+			{ id: 'a1', balance_display: '1.00' }
+		]);
+	});
+
+	it('seedDictionariesFromUIMeta does not write accounts into SWR keys', async () => {
+		const { seedDictionariesFromUIMeta } = await import('./ref-cache');
+		seedDictionariesFromUIMeta({
+			expense_categories: [{ id: 'c1', name: 'Еда' }],
+			income_categories: [],
+			accounts: [{ id: 'a1', name: 'Наличные', type: 'cash', status: 'active' }],
+			banks: [],
+			merchants: [],
+			tags: [],
+			debtors: [],
+			transaction_templates: []
+		});
+		expect(readRefCache('/api/v1/categories?type=expense')).toMatchObject([{ id: 'c1' }]);
+		expect(readRefCache('/api/v1/accounts')).toBeNull();
+		expect(readRefCache('/api/v1/accounts?status=active')).toBeNull();
+	});
+
+	it('with realtime live, empty accounts cache hits network (no ui/meta SWR stubs)', async () => {
+		setRealtimeLive(true);
+		expect(readRefCache('/api/v1/accounts?status=active')).toBeNull();
+
+		const network = vi.fn(async () => [
+			{ id: 'a1', name: 'Наличные', balance: 75_000, balance_display: '750.00' }
+		]);
+		const rows = await fetchWithRefCache('/api/v1/accounts?status=active', network);
+		expect(network).toHaveBeenCalledOnce();
+		expect(rows).toMatchObject([{ balance_display: '750.00' }]);
+	});
+
+	it('invalidateRefCacheAfterWrite clears preserved dictionary cache for the mutated resource', () => {
+		writeRefCache('/api/v1/categories?type=expense', [{ id: 'c1', name: 'Еда' }]);
+		writeRefCache('/api/v1/accounts?status=active', [{ id: 'a1', name: 'Наличные' }]);
+		writeRefCache('/api/v1/dashboard', { total_balance: 1 });
+		clearRefCache({ preserveAuthMe: true });
+		expect(readRefCache('/api/v1/categories?type=expense')).toMatchObject([{ id: 'c1' }]);
+		expect(readRefCache('/api/v1/accounts?status=active')).toMatchObject([{ id: 'a1' }]);
+
+		invalidateRefCacheAfterWrite('/api/v1/categories');
+		expect(readRefCache('/api/v1/categories?type=expense')).toBeNull();
+		expect(readRefCache('/api/v1/accounts?status=active')).toMatchObject([{ id: 'a1' }]);
+
+		invalidateRefCacheAfterWrite('/api/v1/accounts');
+		expect(readRefCache('/api/v1/accounts?status=active')).toBeNull();
+		expect(readRefCache('/api/v1/dashboard')).toBeNull();
+	});
+
+	it('invalidateRefCacheAfterWrite for transactions clears accounts and dashboard', () => {
+		writeRefCache('/api/v1/accounts?status=active', [{ id: 'a1', balance_display: '1000.00' }]);
+		writeRefCache('/api/v1/dashboard', { total_balance: 1 });
+		writeRefCache('/api/v1/transactions?kind=manual', [{ id: 't1' }]);
+		invalidateRefCacheAfterWrite('/api/v1/transactions');
+		expect(readRefCache('/api/v1/accounts?status=active')).toBeNull();
+		expect(readRefCache('/api/v1/dashboard')).toBeNull();
+		expect(readRefCache('/api/v1/transactions?kind=manual')).toBeNull();
+	});
+
+	it('readAccountsFromOfflineCache ignores empty list cache', () => {
+		writeRefCache('/api/v1/ui/meta', {
+			accounts: [{ id: 'a1', name: 'Наличные', type: 'cash', status: 'active' }],
+			banks: [],
+			expense_categories: [],
+			income_categories: [],
+			debtors: [],
+			merchants: [],
+			tags: [],
+			active_credits: [],
+			closed_credits: []
+		});
+		writeRefCache('/api/v1/accounts?status=active', []);
+		expect(readAccountsFromOfflineCache('active')).toMatchObject([{ id: 'a1' }]);
+	});
+
+	it('readCategoriesFromOfflineCache ignores empty list cache', () => {
+		writeRefCache('/api/v1/ui/meta', {
+			expense_categories: [{ id: 'c1', name: 'Еда' }],
+			income_categories: []
+		});
+		writeRefCache('/api/v1/categories?type=expense', []);
+		expect(readCategoriesFromOfflineCache('expense')).toMatchObject([{ id: 'c1', name: 'Еда' }]);
+	});
+
+	it('writing dashboard patches account list and balance caches', () => {
+		writeRefCache('/api/v1/accounts?status=active', [
+			{
+				id: 'a1',
+				name: 'Ozon',
+				type: 'bank',
+				bank_id: null,
+				initial_balance: 0,
+				balance: 0,
+				balance_display: '0.00',
+				status: 'active',
+				is_primary: false,
+				created_at: '',
+				updated_at: ''
+			}
+		]);
+		writeRefCache('/api/v1/dashboard', {
+			total_balance: 44100,
+			total_forecast: 44100,
+			accounts: [
+				{
+					id: 'a1',
+					name: 'Ozon',
+					type: 'bank',
+					balance: 44100,
+					balance_display: '441.00',
+					forecast_balance: 44100,
+					forecast_display: '441.00',
+					has_future_this_month: false,
+					is_primary: false
+				}
+			],
+			recent_transactions: [],
+			debts_summary: {
+				i_owe: 0,
+				owed_to_me: 0,
+				overdue_i_owe: 0,
+				overdue_owed_to_me: 0,
+				active_count: 0
+			}
+		});
+		expect(readRefCache('/api/v1/accounts?status=active')).toMatchObject([
+			{ id: 'a1', balance: 44100, balance_display: '441.00' }
+		]);
+		expect(readRefCache('/api/v1/accounts/a1/balance')).toMatchObject({
+			id: 'a1',
+			balance: 44100,
+			balance_display: '441.00'
+		});
+	});
+
+	it('notifyRealtimeInvalidate clears stale dashboard under live socket', async () => {
+		const { notifyRealtimeInvalidate } = await import('./ref-cache');
+		writeRefCache('/api/v1/dashboard', {
+			total_balance: 0,
+			total_forecast: 0,
+			accounts: [
+				{
+					id: 'a1',
+					name: 'Ozon',
+					type: 'bank',
+					balance: 0,
+					balance_display: '0.00',
+					forecast_balance: 0,
+					forecast_display: '0.00',
+					has_future_this_month: false,
+					is_primary: false
+				}
+			],
+			recent_transactions: [],
+			debts_summary: {
+				i_owe: 0,
+				owed_to_me: 0,
+				overdue_i_owe: 0,
+				overdue_owed_to_me: 0,
+				active_count: 0
+			}
+		});
+		setRealtimeLive(true);
+		notifyRealtimeInvalidate();
+		expect(readRefCache('/api/v1/dashboard')).toBeNull();
+	});
+
+	it('enrichAccountsWithCachedBalances overlays dashboard balances', async () => {
+		const { enrichAccountsWithCachedBalances } = await import('./ref-cache');
+		const rows = enrichAccountsWithCachedBalances(
+			[
+				{
+					id: 'a1',
+					name: 'Ozon',
+					type: 'bank',
+					bank_id: null,
+					initial_balance: 0,
+					balance: 0,
+					balance_display: '0.00',
+					status: 'active',
+					is_primary: false,
+					created_at: '',
+					updated_at: ''
+				}
+			],
+			{
+				total_balance: 44100,
+				total_forecast: 44100,
+				accounts: [
+					{
+						id: 'a1',
+						name: 'Ozon',
+						type: 'bank',
+						balance: 44100,
+						balance_display: '441.00',
+						forecast_balance: 44100,
+						forecast_display: '441.00',
+						has_future_this_month: false,
+						is_primary: false
+					}
+				],
+				recent_transactions: [],
+				debts_summary: {
+					i_owe: 0,
+					owed_to_me: 0,
+					overdue_i_owe: 0,
+					overdue_owed_to_me: 0,
+					active_count: 0
+				}
+			}
+		);
+		expect(rows[0]).toMatchObject({ balance: 44100, balance_display: '441.00' });
+	});
+
+	it('unchanged dashboard write still patches lagging account list', () => {
+		const dash = {
+			total_balance: 44100,
+			total_forecast: 44100,
+			accounts: [
+				{
+					id: 'a1',
+					name: 'Ozon',
+					type: 'bank',
+					balance: 44100,
+					balance_display: '441.00',
+					forecast_balance: 44100,
+					forecast_display: '441.00',
+					has_future_this_month: false,
+					is_primary: false
+				}
+			],
+			recent_transactions: [],
+			debts_summary: {
+				i_owe: 0,
+				owed_to_me: 0,
+				overdue_i_owe: 0,
+				overdue_owed_to_me: 0,
+				active_count: 0
+			}
+		};
+		writeRefCache('/api/v1/dashboard', dash);
+		writeRefCache('/api/v1/accounts?status=active', [
+			{
+				id: 'a1',
+				name: 'Ozon',
+				type: 'bank',
+				bank_id: null,
+				initial_balance: 0,
+				balance: 0,
+				balance_display: '0.00',
+				status: 'active',
+				is_primary: false,
+				created_at: '',
+				updated_at: ''
+			}
+		]);
+		expect(writeRefCache('/api/v1/dashboard', dash)).toBe(false);
+		expect(readRefCache('/api/v1/accounts?status=active')).toMatchObject([
+			{ id: 'a1', balance: 44100, balance_display: '441.00' }
+		]);
+	});
+});

@@ -18,12 +18,17 @@ CREATE TABLE system_settings (
     notification_secret_key TEXT NOT NULL DEFAULT '',
     app_version     TEXT NOT NULL DEFAULT '',
     previous_app_version TEXT,
-    registration_enabled INTEGER NOT NULL DEFAULT 0,
     backup_enabled  INTEGER NOT NULL DEFAULT 0,
     backup_time     TEXT DEFAULT '03:00',
     backup_retention INTEGER NOT NULL DEFAULT 7,
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE feature_flags (
+    key         TEXT PRIMARY KEY,
+    enabled     INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE users (
@@ -35,7 +40,7 @@ CREATE TABLE users (
     language        TEXT NOT NULL DEFAULT 'ru',
     currency        TEXT NOT NULL DEFAULT 'RUB',
     timezone        TEXT NOT NULL DEFAULT 'Europe/Moscow',
-    theme           TEXT NOT NULL DEFAULT 'light',
+    theme           TEXT NOT NULL DEFAULT 'system',
     status          TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'pending', 'banned')),
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
@@ -175,6 +180,49 @@ CREATE TABLE receipt_scan_jobs (
 );
 CREATE INDEX idx_receipt_scan_jobs_user_created ON receipt_scan_jobs(user_id, created_at DESC);
 
+CREATE TABLE subscriptions (
+    id              TEXT PRIMARY KEY,
+    user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name            TEXT NOT NULL,
+    description     TEXT,
+    icon            TEXT,
+    website_url     TEXT,
+    amount          INTEGER NOT NULL CHECK (amount > 0),
+    account_id      TEXT NOT NULL REFERENCES accounts(id),
+    subcategory_id  TEXT REFERENCES subcategories(id),
+    period          TEXT NOT NULL CHECK (period IN ('week', 'two_weeks', 'month', 'quarter', 'half_year', 'year')),
+    weekday         INTEGER CHECK (weekday BETWEEN 1 AND 7),
+    day_of_month    INTEGER CHECK (day_of_month BETWEEN 1 AND 31),
+    start_date      TEXT NOT NULL,
+    time_local      TEXT NOT NULL DEFAULT '00:00',
+    next_run_at     TEXT NOT NULL,
+    upcoming_run_ats TEXT NOT NULL DEFAULT '[]',
+    last_run_at     TEXT,
+    active          INTEGER NOT NULL DEFAULT 1,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_subscriptions_user ON subscriptions(user_id);
+CREATE INDEX idx_subscriptions_due ON subscriptions(user_id, active, next_run_at);
+CREATE INDEX idx_subscriptions_subcategory ON subscriptions(subcategory_id);
+
+CREATE TABLE merchants (
+    id              TEXT PRIMARY KEY,
+    user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name            TEXT NOT NULL COLLATE NOCASE,
+    icon            TEXT NOT NULL DEFAULT 'default',
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(user_id, name)
+);
+
+CREATE TABLE tags (
+    id              TEXT PRIMARY KEY,
+    user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name            TEXT NOT NULL COLLATE NOCASE,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(user_id, name)
+);
+
 CREATE TABLE transactions (
     id                  TEXT PRIMARY KEY,
     user_id             TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -192,6 +240,8 @@ CREATE TABLE transactions (
     receipt_item_index  INTEGER,
     transaction_date    TEXT NOT NULL,
     affects_balance     INTEGER NOT NULL DEFAULT 1,
+    subscription_id     TEXT REFERENCES subscriptions(id) ON DELETE SET NULL,
+    merchant_id         TEXT REFERENCES merchants(id) ON DELETE SET NULL,
     created_at          TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at          TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -200,9 +250,68 @@ CREATE INDEX idx_tx_account ON transactions(account_id);
 CREATE INDEX idx_tx_date ON transactions(transaction_date);
 CREATE INDEX idx_tx_transfer_group ON transactions(transfer_group_id);
 CREATE INDEX idx_tx_kind ON transactions(kind);
+CREATE INDEX idx_tx_subscription ON transactions(subscription_id);
+CREATE INDEX idx_tx_merchant ON transactions(merchant_id);
+
+CREATE TABLE user_change_events (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    entity_type  TEXT NOT NULL CHECK (entity_type IN ('transaction')),
+    entity_id    TEXT NOT NULL,
+    action       TEXT NOT NULL CHECK (action IN ('created', 'updated', 'deleted')),
+    occurred_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_user_change_events_user_id ON user_change_events(user_id, id);
 CREATE INDEX idx_tx_user_account_balance ON transactions(user_id, account_id, kind, type, transaction_date);
 CREATE INDEX idx_tx_store ON transactions(user_id, store_id);
 CREATE INDEX idx_tx_receipt_import ON transactions(receipt_import_id);
+
+CREATE TABLE transaction_tags (
+    transaction_id  TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+    tag_id          TEXT NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+    PRIMARY KEY (transaction_id, tag_id)
+);
+CREATE INDEX idx_transaction_tags_tag ON transaction_tags(tag_id);
+
+CREATE TABLE transaction_templates (
+    id              TEXT PRIMARY KEY,
+    user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name            TEXT NOT NULL,
+    type            TEXT NOT NULL CHECK (type IN ('income', 'expense', 'transfer')),
+    account_id      TEXT REFERENCES accounts(id) ON DELETE SET NULL,
+    to_account_id   TEXT REFERENCES accounts(id) ON DELETE SET NULL,
+    category_id     TEXT REFERENCES categories(id) ON DELETE SET NULL,
+    subcategory_id  TEXT REFERENCES subcategories(id) ON DELETE SET NULL,
+    amount          INTEGER CHECK (amount IS NULL OR amount > 0),
+    description     TEXT,
+    merchant_id     TEXT REFERENCES merchants(id) ON DELETE SET NULL,
+    icon            TEXT,
+    sort_order      INTEGER NOT NULL DEFAULT 0,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_transaction_templates_user ON transaction_templates(user_id, sort_order, name);
+
+CREATE TABLE transaction_template_tags (
+    template_id  TEXT NOT NULL REFERENCES transaction_templates(id) ON DELETE CASCADE,
+    tag_id       TEXT NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+    PRIMARY KEY (template_id, tag_id)
+);
+CREATE INDEX idx_transaction_template_tags_tag ON transaction_template_tags(tag_id);
+
+CREATE TABLE category_rules (
+    id                  TEXT PRIMARY KEY,
+    user_id             TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    kind                TEXT NOT NULL CHECK (kind IN ('category_account', 'text_category')),
+    pattern             TEXT,
+    category_id         TEXT NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+    subcategory_id      TEXT REFERENCES subcategories(id) ON DELETE SET NULL,
+    default_account_id  TEXT REFERENCES accounts(id) ON DELETE SET NULL,
+    priority            INTEGER NOT NULL DEFAULT 0,
+    created_at          TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at          TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_category_rules_user_kind ON category_rules(user_id, kind, priority, id);
 
 CREATE TABLE recurring_operations (
     id              TEXT PRIMARY KEY,
@@ -363,12 +472,16 @@ CREATE TABLE notification_settings (
     trigger_auto_topup_disabled INTEGER NOT NULL DEFAULT 1,
     trigger_user_registration INTEGER NOT NULL DEFAULT 1,
     trigger_password_reset INTEGER NOT NULL DEFAULT 1,
+    trigger_subscription INTEGER NOT NULL DEFAULT 1,
     debt_days_before    INTEGER NOT NULL DEFAULT 1,
     my_debt_overdue_days_limit INTEGER NOT NULL DEFAULT 7,
     owed_debt_overdue_start_after_days INTEGER NOT NULL DEFAULT 0,
     owed_debt_overdue_days_limit INTEGER NOT NULL DEFAULT 7,
     credit_days_before  INTEGER NOT NULL DEFAULT 1,
+    subscription_days_before INTEGER NOT NULL DEFAULT 1,
     notification_time_local TEXT NOT NULL DEFAULT '00:00',
+    keyboard_telegram   TEXT NOT NULL DEFAULT '{"rows":[]}',
+    keyboard_max        TEXT NOT NULL DEFAULT '{"rows":[]}',
     updated_at          TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -394,9 +507,29 @@ CREATE TABLE notification_templates (
                         'user_registration', 'password_reset', 'test'
                     )),
     template        TEXT NOT NULL,
+    keyboard_telegram TEXT NOT NULL DEFAULT '{"rows":[]}',
+    keyboard_max      TEXT NOT NULL DEFAULT '{"rows":[]}',
     updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (user_id, trigger_type)
 );
+
+CREATE TABLE notification_intercept_bank_bindings (
+    user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    account_id    TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    bank_id       TEXT NOT NULL REFERENCES banks(id),
+    package_name  TEXT NOT NULL,
+    PRIMARY KEY (user_id, account_id)
+);
+
+CREATE TABLE notification_intercept_card_bindings (
+    user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    bank_id     TEXT NOT NULL REFERENCES banks(id),
+    last4       TEXT NOT NULL CHECK (length(last4) = 4 AND last4 GLOB '[0-9][0-9][0-9][0-9]'),
+    account_id  TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    PRIMARY KEY (user_id, bank_id, last4)
+);
+CREATE INDEX idx_notification_intercept_card_bindings_user
+    ON notification_intercept_card_bindings (user_id);
 
 CREATE TABLE budgets (
     id              TEXT PRIMARY KEY,

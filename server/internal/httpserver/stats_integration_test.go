@@ -401,3 +401,114 @@ func TestStatsContextAccountIncludesTransfers(t *testing.T) {
 		t.Fatalf("expected 2 operations on account, got %d", ctx.TransactionCount)
 	}
 }
+
+func TestStatsNetWorth(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+	accID := createTestAccount(t, env, "Net worth")
+	expenseCat := getCategoryByType(t, env, "expense")
+
+	createTx(t, env, map[string]any{
+		"account_id": accID, "type": "expense", "amount": "100.00",
+		"category_id": expenseCat, "description": "покупка", "transaction_date": "2026-01-10 11:00:00",
+	})
+
+	resp, err := env.authedRequest(http.MethodGet, "/api/v1/stats/net-worth?from=2026-01-01%2000:00:00&to=2026-01-31%2023:59:59", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("net-worth status %d", resp.StatusCode)
+	}
+	var body struct {
+		Current struct {
+			CashBank int64 `json:"cash_bank"`
+			NetWorth int64 `json:"net_worth"`
+		} `json:"current"`
+		Items []struct {
+			Period string `json:"period"`
+		} `json:"items"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Current.CashBank != 90000 {
+		t.Fatalf("cash_bank want 90000, got %d", body.Current.CashBank)
+	}
+	if body.Current.NetWorth != body.Current.CashBank {
+		t.Fatalf("net_worth should match cash_bank without debts, got %d", body.Current.NetWorth)
+	}
+	var hasJan bool
+	for _, it := range body.Items {
+		if it.Period == "2026-01-01" {
+			hasJan = true
+		}
+	}
+	if !hasJan {
+		t.Fatalf("expected January point in items: %+v", body.Items)
+	}
+}
+
+func TestStatsNetWorthLentDebt(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+	_ = createTestAccount(t, env, "NW debt")
+	createDebt(t, env, map[string]any{
+		"debtor_name": "Катя", "direction": "lent", "amount": "200.00",
+		"affects_balance": false, "debt_date": "2026-01-10 12:00:00",
+	})
+
+	resp, err := env.authedRequest(http.MethodGet, "/api/v1/stats/net-worth", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status %d", resp.StatusCode)
+	}
+	var body struct {
+		Current struct {
+			CashBank int64 `json:"cash_bank"`
+			OwedToMe int64 `json:"owed_to_me"`
+			Assets   int64 `json:"assets"`
+			NetWorth int64 `json:"net_worth"`
+		} `json:"current"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Current.OwedToMe != 20000 {
+		t.Fatalf("owed_to_me want 20000, got %d", body.Current.OwedToMe)
+	}
+	if body.Current.Assets != body.Current.CashBank+20000 {
+		t.Fatalf("assets want %d, got %d", body.Current.CashBank+20000, body.Current.Assets)
+	}
+	if body.Current.NetWorth != body.Current.Assets {
+		t.Fatalf("net_worth want %d, got %d", body.Current.Assets, body.Current.NetWorth)
+	}
+}
+
+func TestStatsNetWorthValidation(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+
+	badGroup, err := env.authedRequest(http.MethodGet, "/api/v1/stats/net-worth?group_by=day", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer badGroup.Body.Close()
+	if badGroup.StatusCode != http.StatusBadRequest {
+		t.Fatalf("group_by=day want 400, got %d", badGroup.StatusCode)
+	}
+
+	wideResp, err := env.authedRequest(http.MethodGet,
+		"/api/v1/stats/net-worth?from=1990-01-01%2000:00:00&to=2099-12-31%2023:59:59", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer wideResp.Body.Close()
+	if wideResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("wide range want 400, got %d", wideResp.StatusCode)
+	}
+}

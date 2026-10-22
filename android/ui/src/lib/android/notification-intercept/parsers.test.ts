@@ -1,0 +1,600 @@
+import { describe, expect, it } from 'vitest';
+import { parseBankNotification } from './parsers';
+import type { RawBankNotification } from './types';
+
+function raw(partial: Partial<RawBankNotification> & { packageName: string }): RawBankNotification {
+	return {
+		title: '',
+		text: '',
+		bigText: '',
+		postedAt: 1_700_000_000_000,
+		dedupeKey: 'k1',
+		...partial
+	};
+}
+
+/** Strict merchant cleanup: no purchase/card/balance chrome or orphan currency. */
+function expectCleanMerchant(actual: string, expected: string | RegExp) {
+	expect(actual).not.toMatch(/оплат|покупк|списан|карта|баланс|доступно/i);
+	expect(actual).not.toMatch(/(?:^|\s)(?:₽|руб\.?|р\.?|RUB)(?:\s|$)/i);
+	if (typeof expected === 'string') expect(actual).toBe(expected);
+	else expect(actual).toMatch(expected);
+}
+
+describe('parseBankNotification', () => {
+	it('parses T-Bank purchase with last4 and merchant (M5)', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'com.idamob.tinkoff.android',
+				title: 'Покупка',
+				text: 'Покупка 1 234,50 ₽. Пятёрочка. Карта *4321'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.bankId).toBe('tinkoff');
+		expect(parsed!.amount).toBe('1234.50');
+		expect(parsed!.last4).toBe('4321');
+		expectCleanMerchant(parsed!.merchantText, /пят/i);
+	});
+
+	it('parses Sber purchase with ₽ orphan cleanup (M3)', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'ru.sberbankmobile',
+				text: 'Покупка 99.00₽ MAGNIT Карта *1111'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.bankId).toBe('sberbank');
+		expect(parsed!.amount).toBe('99.00');
+		expect(parsed!.last4).toBe('1111');
+		expectCleanMerchant(parsed!.merchantText, 'MAGNIT');
+	});
+
+	it('ignores OTP / codes', () => {
+		expect(
+			parseBankNotification(
+				raw({
+					packageName: 'com.idamob.tinkoff.android',
+					text: 'Код 1234 для входа в приложение'
+				})
+			)
+		).toBeNull();
+	});
+
+	it('ignores balance updates', () => {
+		expect(
+			parseBankNotification(
+				raw({
+					packageName: 'ru.sberbankmobile',
+					text: 'Баланс карты *1234: 10 000 ₽'
+				})
+			)
+		).toBeNull();
+	});
+
+	it('parses interest payout as income (not expense)', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'com.wildberries.ru',
+				title: 'WB Банк',
+				text: 'Выплата процентов 5,36 ₽.\nДоступно 29 323,51 ₽'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.kind).toBe('income');
+		expect(parsed!.amount).toBe('5.36');
+		expect(parsed!.bankId).toBe('wbbank');
+		expect(parsed!.merchantText.toLowerCase()).toContain('процент');
+	});
+
+	it('parses top-up / incoming transfer as income', () => {
+		const topup = parseBankNotification(
+			raw({
+				packageName: 'com.idamob.tinkoff.android',
+				text: 'Пополнение на 5 000 ₽. Доступно 12 000 ₽'
+			})
+		);
+		expect(topup).not.toBeNull();
+		expect(topup!.kind).toBe('income');
+		expect(topup!.amount).toBe('5000.00');
+
+		const transfer = parseBankNotification(
+			raw({
+				packageName: 'ru.sberbankmobile',
+				text: 'Перевод от Иван И. 1 500 ₽. Баланс 10 000 ₽'
+			})
+		);
+		expect(transfer).not.toBeNull();
+		expect(transfer!.kind).toBe('income');
+		expect(transfer!.amount).toBe('1500.00');
+		expect(transfer!.merchantText).toMatch(/иван/i);
+	});
+
+	it('ignores unknown packages', () => {
+		expect(
+			parseBankNotification(
+				raw({
+					packageName: 'com.example.other',
+					text: 'Покупка 100 ₽ Shop'
+				})
+			)
+		).toBeNull();
+	});
+
+	it('parses Yandex Pay purchase with available balance line', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'com.yandex.bank',
+				text: 'Покупка на 802.00 RUB, карта *3349. Доступно 5297.64 RUB'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.bankId).toBe('yandex');
+		expect(parsed!.amount).toBe('802.00');
+		expect(parsed!.last4).toBe('3349');
+	});
+
+	it('parses Yandex purchase 4006 with available balance (no merchant title)', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'com.yandex.bank',
+				text: 'Покупка на 4006.00 RUB, карта *3349. Доступно 828.70 RUB'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.amount).toBe('4006.00');
+		expect(parsed!.last4).toBe('3349');
+		expect(parsed!.kind).toBe('purchase');
+	});
+
+	it('parses Yandex cancel and takes merchant from body when title is Карта Пэй', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'com.yandex.bank',
+				title: 'Карта Пэй',
+				text: 'Отмена покупки на 155.00 RUB Поехали!. Доступно 5000.00 RUB'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.kind).toBe('cancel');
+		expect(parsed!.amount).toBe('155.00');
+		expect(parsed!.merchantText.toLowerCase()).toContain('поехали');
+	});
+
+	it('parses matching Yandex taxi purchase for cancel pair', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'com.yandex.bank',
+				title: 'Поехали!',
+				text: 'Покупка на 155.00 RUB, карта *3349. Доступно 4845.00 RUB'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.kind).toBe('purchase');
+		expect(parsed!.amount).toBe('155.00');
+		expect(parsed!.last4).toBe('3349');
+		expect(parsed!.merchantText).toBe('Поехали!');
+	});
+
+	it('uses Yandex title as merchant name (M7)', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'com.yandex.bank',
+				title: 'Народный',
+				text: 'Покупка на 276.96 RUB, карта *6517. Доступно 5020.68 RUB'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.amount).toBe('276.96');
+		expect(parsed!.last4).toBe('6517');
+		expectCleanMerchant(parsed!.merchantText, 'Народный');
+	});
+
+	it('parses Sber SMS purchase with clean merchant (M4)', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'ru.sberbankmobile',
+				title: '900',
+				text: 'Покупка 450.00р MAGNIT Карта *1234 Баланс: 12 340.50р',
+				channel: 'sms',
+				dedupeKey: 'sms|900|1|abc'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.bankId).toBe('sberbank');
+		expect(parsed!.kind).toBe('purchase');
+		expect(parsed!.amount).toBe('450.00');
+		expect(parsed!.last4).toBe('1234');
+		expectCleanMerchant(parsed!.merchantText, 'MAGNIT');
+	});
+
+	it('parses T-Bank SMS purchase', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'com.idamob.tinkoff.android',
+				title: 'T-Bank',
+				text: 'Покупка 89,90 RUB, карта *4321. Пятёрочка. Доступно 5 000 RUB',
+				channel: 'sms'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.bankId).toBe('tinkoff');
+		expect(parsed!.amount).toBe('89.90');
+		expect(parsed!.last4).toBe('4321');
+		expectCleanMerchant(parsed!.merchantText, /пят/i);
+	});
+
+	it('parses T-Bank SMS purchase with dot-separated fields (M6)', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'com.idamob.tinkoff.android',
+				title: 'T-Bank',
+				text: 'Покупка, карта *2552. 56 RUB. STOLOVAYA. Доступно 65,3 RUB',
+				channel: 'sms'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.bankId).toBe('tinkoff');
+		expect(parsed!.kind).toBe('purchase');
+		expect(parsed!.amount).toBe('56.00');
+		expect(parsed!.last4).toBe('2552');
+		expectCleanMerchant(parsed!.merchantText, 'STOLOVAYA');
+	});
+
+	it('parses T-Bank SMS top-up as income', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'com.google.android.apps.messaging',
+				title: 'Ваш Т-Банк',
+				text: 'Пополнение. Счет RUB. 3535,96 ₽. Др. банк. Доступно 3535,96 ₽',
+				channel: 'push'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.bankId).toBe('tinkoff');
+		expect(parsed!.kind).toBe('income');
+		expect(parsed!.amount).toBe('3535.96');
+	});
+
+	it('parses MIR Pay purchase and infers T-Bank from text (M8)', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'ru.nspk.mirpay',
+				title: 'MIR Pay',
+				text: 'Оплата 1 250,00 ₽. Пятёрочка. Карта *4321 Т-Банк'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.kind).toBe('purchase');
+		expect(parsed!.bankId).toBe('tinkoff');
+		expect(parsed!.amount).toBe('1250.00');
+		expect(parsed!.last4).toBe('4321');
+		expectCleanMerchant(parsed!.merchantText, /пят/i);
+		expect(parsed!.packageName).toBe('ru.nspk.mirpay');
+	});
+
+	it('parses Samsung Pay purchase without issuer bank as wallet id (M8)', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'com.samsung.android.spay',
+				title: 'Samsung Pay',
+				text: 'Paid 89.90 RUB MAGNIT'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.kind).toBe('purchase');
+		expect(parsed!.bankId).toBe('samsung_pay');
+		expect(parsed!.amount).toBe('89.90');
+		expectCleanMerchant(parsed!.merchantText, 'MAGNIT');
+	});
+
+	it('parses СБПэй purchase (M8)', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'ru.nspk.sbpay',
+				title: 'СБПэй',
+				text: 'Оплата 500 ₽ Кофейня'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.bankId).toBe('sbp_pay');
+		expect(parsed!.amount).toBe('500.00');
+		expectCleanMerchant(parsed!.merchantText, /кофейн/i);
+	});
+
+	it('does not treat Ozon shop name as Ozon Bank on wallet push', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'ru.nspk.mirpay',
+				title: 'OZON',
+				text: 'Оплата 990 ₽'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.bankId).toBe('mir_pay');
+		expect(parsed!.merchantText).toBe('OZON');
+	});
+
+	it('ignores OTP SMS', () => {
+		expect(
+			parseBankNotification(
+				raw({
+					packageName: 'ru.sberbankmobile',
+					title: '900',
+					text: 'Никому не сообщайте код: 12345. Вход в СберБанк Онлайн.',
+					channel: 'sms'
+				})
+			)
+		).toBeNull();
+	});
+
+	it('parses VTB push списание with bare р and Счет*last4 (regression A)', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'ru.vtb24.mobilebanking.android',
+				title: 'ВТБ Онлайн',
+				text: 'Списание 1000р Счет*1736 Александр Ч. Баланс 8505.12р 10:40'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.kind).toBe('purchase');
+		expect(parsed!.amount).toBe('1000.00');
+		expect(parsed!.last4).toBe('1736');
+		expect(parsed!.bankId).toBe('vtb');
+		expectCleanMerchant(parsed!.merchantText, /александр/i);
+	});
+
+	it('parses VTB push поступление as income with bare р (M9 / B)', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'ru.vtb24.mobilebanking.android',
+				title: 'ВТБ Онлайн',
+				text: 'Поступление 1000р Счет*1736 от АЛЕКСАНДР Ч. Баланс 9505.12р 10:52'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.kind).toBe('income');
+		expect(parsed!.amount).toBe('1000.00');
+		expect(parsed!.last4).toBe('1736');
+		expect(parsed!.bankId).toBe('vtb');
+		expect(parsed!.merchantText.toLowerCase()).toContain('александр');
+		expect(parsed!.merchantText.toLowerCase()).not.toContain('втб');
+	});
+
+	it('parses Sber SMS Перевод по СБП as income with СЧЁТ last4 without * (M10 / C)', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'ru.sberbankmobile',
+				title: '900',
+				text: 'СЧЁТ5159 10:40 Перевод по СБП из ВТБ +1000р от АЛЕКСАНДР Ч.',
+				channel: 'sms'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.kind).toBe('income');
+		expect(parsed!.amount).toBe('1000.00');
+		expect(parsed!.last4).toBe('5159');
+		expect(parsed!.bankId).toBe('sberbank');
+		expect(parsed!.merchantText.toLowerCase()).toContain('александр');
+		expect(parsed!.merchantText).not.toMatch(/\d{1,2}:\d{2}/);
+	});
+
+	it('extracts last4 from Счет5159 and Счёт*5159', () => {
+		const glued = parseBankNotification(
+			raw({
+				packageName: 'ru.sberbankmobile',
+				title: '900',
+				text: 'Счет5159 Перевод по СБП +100р от Иван',
+				channel: 'sms'
+			})
+		);
+		expect(glued).not.toBeNull();
+		expect(glued!.last4).toBe('5159');
+
+		const starred = parseBankNotification(
+			raw({
+				packageName: 'ru.sberbankmobile',
+				title: '900',
+				text: 'Счёт*5159 Перевод по СБП +100р от Иван',
+				channel: 'sms'
+			})
+		);
+		expect(starred).not.toBeNull();
+		expect(starred!.last4).toBe('5159');
+	});
+
+	it('treats solo Перевод по СБП as expense (not income, not ignore)', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'ru.sberbankmobile',
+				title: '900',
+				text: 'Перевод по СБП 1000р на карту *4321',
+				channel: 'sms'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.kind).toBe('purchase');
+		expect(parsed!.amount).toBe('1000.00');
+		expect(parsed!.last4).toBe('4321');
+	});
+
+	it('treats solo Перевод от as income', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'ru.sberbankmobile',
+				title: '900',
+				text: 'Перевод от Мария П. 750р Баланс 2000р',
+				channel: 'sms'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.kind).toBe('income');
+		expect(parsed!.amount).toBe('750.00');
+		expect(parsed!.merchantText).toMatch(/мария/i);
+	});
+
+	it('ignores balance-only with bare р', () => {
+		expect(
+			parseBankNotification(
+				raw({
+					packageName: 'ru.sberbankmobile',
+					text: 'Баланс карты *1234: 10 000р'
+				})
+			)
+		).toBeNull();
+	});
+
+	it('strips Sber push Оплата …00р to clean merchant (M1)', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'ru.sberbankmobile',
+				title: '',
+				text: 'Оплата 450.00р Карта *1234 MAGNIT GM Petro Баланс: 12 340.50р'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.kind).toBe('purchase');
+		expect(parsed!.amount).toBe('450.00');
+		expect(parsed!.last4).toBe('1234');
+		expectCleanMerchant(parsed!.merchantText, 'MAGNIT GM Petro');
+	});
+
+	it('strips VTB bare р purchase to clean merchant (M2)', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'ru.vtb24.mobilebanking.android',
+				title: 'ВТБ Онлайн',
+				text: 'Списание 1000р Счет*1736 MAGNIT GM Petro Баланс 5000р'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.kind).toBe('purchase');
+		expect(parsed!.amount).toBe('1000.00');
+		expect(parsed!.last4).toBe('1736');
+		expectCleanMerchant(parsed!.merchantText, 'MAGNIT GM Petro');
+	});
+
+	it('keeps digits in merchant name that are not amount+currency (M11)', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'ru.sberbankmobile',
+				text: 'Оплата 450.00р Карта *1234 MAGNIT GM Petro 24 Баланс: 12 340.50р'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expectCleanMerchant(parsed!.merchantText, 'MAGNIT GM Petro 24');
+		expect(parsed!.merchantText.length).toBeLessThanOrEqual(80);
+	});
+
+	it('ignores balance-only Баланс without purchase (M11)', () => {
+		expect(
+			parseBankNotification(
+				raw({
+					packageName: 'ru.sberbankmobile',
+					text: 'Баланс 1000р'
+				})
+			)
+		).toBeNull();
+	});
+
+	describe('v1.9.1 harden fixtures', () => {
+		it('A1: WB Кошелёк СБП «по» → expense 500 (not balance, not income)', () => {
+			const parsed = parseBankNotification(
+				raw({
+					packageName: 'com.wildberries.ru',
+					title: 'WB Кошелёк',
+					text: 'Перевод по СБП 500 ₽\nОльга Викторовна К.\nДоступно 26 867,01 ₽'
+				})
+			);
+			expect(parsed).not.toBeNull();
+			expect(parsed!.kind).toBe('purchase');
+			expect(parsed!.amount).toBe('500.00');
+			expect(parsed!.bankId).toBe('wbbank');
+			expect(parsed!.merchantText).toMatch(/ольга\s+викторовна/i);
+			expect(parsed!.merchantText).not.toMatch(/доступно|26867/i);
+		});
+
+		it('A2: WB Оплата частями purchase 1256 (not 125)', () => {
+			const parsed = parseBankNotification(
+				raw({
+					packageName: 'com.wildberries.ru',
+					title: 'Оплата частями',
+					text: 'Списали 1256.00 ₽ . Обновлённый график платежей уже в деталях расс'
+				})
+			);
+			expect(parsed).not.toBeNull();
+			expect(parsed!.kind).toBe('purchase');
+			expect(parsed!.amount).toBe('1256.00');
+		});
+
+		it('B1–B4: WB marketplace marketing → null', () => {
+			expect(
+				parseBankNotification(
+					raw({
+						packageName: 'com.wildberries.ru',
+						title: 'Можно забирать 📦',
+						text: 'Заказ в пункте выдачи, загляните за ним сегодня'
+					})
+				)
+			).toBeNull();
+			expect(
+				parseBankNotification(
+					raw({
+						packageName: 'com.wildberries.ru',
+						title: 'Доставили 📦',
+						text: 'Ваш заказ уже в пункте выдачи. Заходите — он ждёт вас'
+					})
+				)
+			).toBeNull();
+			expect(
+				parseBankNotification(
+					raw({
+						packageName: 'com.wildberries.ru',
+						title: 'Личное приглашение 📩',
+						text: 'В подборку с вау-ценами ->'
+					})
+				)
+			).toBeNull();
+			expect(
+				parseBankNotification(
+					raw({
+						packageName: 'com.wildberries.ru',
+						title: 'Куртки и пуховики от 2 184 ₽',
+						text: 'Тёплые, стильные и с хорошими отзывами. Подобрать ->'
+					})
+				)
+			).toBeNull();
+		});
+
+		it('B5–B7: Ozon marketplace marketing / percent → null', () => {
+			expect(
+				parseBankNotification(
+					raw({
+						packageName: 'ru.ozon.app.android',
+						title: 'Ух ты, что это? 🤩',
+						text: '+1000 ₽ у вас на счёте. Потратьте на покупку одежды и обуви до 29 октября'
+					})
+				)
+			).toBeNull();
+			expect(
+				parseBankNotification(
+					raw({
+						packageName: 'ru.ozon.app.android',
+						title: '💛 Сезон простуд отменяется!',
+						text: 'Соберите аптечку для поддержки иммунитета выгодно ->'
+					})
+				)
+			).toBeNull();
+			expect(
+				parseBankNotification(
+					raw({
+						packageName: 'ru.ozon.app.android',
+						title: 'Пиджак приталенный Befree',
+						text: 'Или джемпер Outventure с выгодой до 80%. Купить сейчас'
+					})
+				)
+			).toBeNull();
+		});
+	});
+});

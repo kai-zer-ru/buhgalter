@@ -60,6 +60,14 @@ release:
       name_template: docker-compose.yaml
     - glob: build/release/.env.example
       name_template: .env.example
+    - glob: android/app/build/outputs/apk/release/app-release.apk
+      name_template: buhgalter-android-{{ .Version }}.apk
+    - glob: android/app/build/outputs/apk/release/app-arm64-v8a-release.apk
+      name_template: buhgalter-android-{{ .Version }}-arm64-v8a.apk
+    - glob: android/app/build/outputs/apk/release/app-armeabi-v7a-release.apk
+      name_template: buhgalter-android-{{ .Version }}-armeabi-v7a.apk
+    - glob: android/app/build/outputs/apk/release/app-x86_64-release.apk
+      name_template: buhgalter-android-{{ .Version }}-x86_64.apk
   header: |
     {{ .Env.RELEASE_CHANGELOG }}
 
@@ -86,3 +94,7 @@ release:
       --restart unless-stopped \
       ghcr.io/kai-zer-ru/buhgalter:{{ .Version }}
     ```
+
+    ## Android
+
+    Вложения **`buhgalter-android-{{ .Version }}.apk`** (universal) и **`buhgalter-android-{{ .Version }}-{abi}.apk`** (`arm64-v8a`, `armeabi-v7a`, `x86_64`). Минимальная версия Android — 8.0 (API 26). Установка поверх предыдущей версии сохраняет данные приложения (URL сервера, токен в secure storage).

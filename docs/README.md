@@ -4,7 +4,7 @@
 
 **Спецификация API:** [api/openapi.yaml](api/openapi.yaml) (интерактивно — `/docs` на запущенном сервере).
 
-История изменений по версиям — [CHANGELOG.md](../CHANGELOG.md).
+История изменений по версиям — [CHANGELOG.md](../CHANGELOG.md). Последний релиз: [release-notes-v1.9.1.md](release-notes-v1.9.1.md).
 
 ---
 
@@ -15,6 +15,9 @@
 | [install/manual.md](install/manual.md) | Сборка и запуск бинарника |
 | [install/docker.md](install/docker.md) | Docker и compose |
 | [install/nginx.md](install/nginx.md) | Reverse proxy и HTTPS |
+| [android-client.md](android-client.md) | Android-приложение: обзор |
+| [android-client-ui.md](android-client-ui.md) | Android: интерфейс и навигация |
+| [android-client-platform.md](android-client-platform.md) | Android: вход, офлайн, виджеты, перехват уведомлений, i18n, discovery, логи, сборка |
 
 Краткий обзор и переменные окружения — в [README.md](../README.md) в корне репозитория.
 
@@ -26,10 +29,19 @@
 |----------|----------|
 | [data-model.md](data-model.md) | Схема БД, миграции, связи сущностей |
 | [sql-access.md](sql-access.md) | Где писать SQL: sqlc vs inline, исключения, миграция legacy |
+| [subscriptions.md](subscriptions.md) | Подписки |
+| [../roadmap/credit-payment-link.md](../roadmap/credit-payment-link.md) | Привязка операции к оплате кредита |
 | [categories-and-icons.md](categories-and-icons.md) | Категории, подкатегории, иконки |
 | [budget.md](budget.md) | Бюджет: помесячные лимиты, копирование, план vs факт, API |
+| [../roadmap/budget-post-mvp.md](../roadmap/budget-post-mvp.md) | (план v1.10) Бюджет: rollover, прогноз ожидаемых расходов, конверты |
 | [transactions-display.md](transactions-display.md) | Отображение операций в UI и API |
-| [receipt-scanner.md](receipt-scanner.md) | Импорт расходов из чеков 54-ФЗ (QR → ФНС) |
+| [receipt-scanner.md](receipt-scanner.md) | Чеки 54-ФЗ: импорт, прикрепление, proverkacheka (v1.10) |
+| [receipt-scanner-proverkacheka.md](receipt-scanner-proverkacheka.md) | Интеграция API (dev) |
+| [../roadmap/transaction-templates.md](../roadmap/transaction-templates.md) | Шаблоны операций для быстрого добавления |
+| [../roadmap/multicurrency.md](../roadmap/multicurrency.md) | (план) Настоящая мультивалютность |
+| [../roadmap/team-collaboration.md](../roadmap/team-collaboration.md) | (план) Семья / команда: личные и общие счета, инвайты; спецификация зафиксирована |
+| [../roadmap/transaction-enrichment.md](../roadmap/transaction-enrichment.md) | (план) Теги, контрагент, split, вложения |
+| [../roadmap/savings-reports-import.md](../roadmap/savings-reports-import.md) | (план) Цели накопления, PDF-отчёты, расширенный импорт |
 | [accounts-archive-delete.md](accounts-archive-delete.md) | Архивация, мягкое удаление счётов, автоперевод остатка |
 | [balance-maintenance.md](balance-maintenance.md) | Автопополнение банковских счетов по порогу баланса |
 
@@ -50,7 +62,9 @@
 | [ui-table-columns.md](ui-table-columns.md) | Порядок колонок таблиц |
 | [ui-pagination.md](ui-pagination.md) | Постраничная навигация (`TransactionPagination`) |
 | [ui-toast.md](ui-toast.md) | In-app toast (успех, ошибка, предупреждение) |
-| [ui-stats.md](ui-stats.md) | Страница `/stats` |
+| [ui-sveltekit-checks.md](ui-sveltekit-checks.md) | `resolve` / typed routes, vitest-моки, частые поломки check |
+| [ui-stats.md](ui-stats.md) | Страница `/stats`: сводка, нетто-капитал, графики (web), таблицы |
+| [../roadmap/stats-charts-net-worth.md](../roadmap/stats-charts-net-worth.md) | Нетто-капитал и графики /stats (спека; реализовано в v1.8.0) |
 | [ui-budget.md](ui-budget.md) | Страница `/budget`, форма, копирование, виджет на главной (спойлер категорий) |
 | [ui-credits.md](ui-credits.md) | Страницы кредитов |
 | [ui-credit-cards.md](ui-credit-cards.md) | Кредитные карты (тип счёта) |
@@ -67,5 +81,16 @@
 | [api/user-status.md](api/user-status.md) | Статус пользователя, модерация, блокировка |
 | [notifications.md](notifications.md) | Уведомления: настройки, периоды, шаблоны, блокировка UI/API |
 | [../roadmap/balance-shortfall-notifications.md](../roadmap/balance-shortfall-notifications.md) | Недостаток средств в тексте уведомлений |
-| [ui-api-cache.md](ui-api-cache.md) | In-memory кеш GET на сервере и справочники в браузере |
+| [ui-api-cache.md](ui-api-cache.md) | Кеш GET на сервере; SWR ref-cache на вебе/Android; мутации и realtime |
+| [../roadmap/realtime-updates.md](../roadmap/realtime-updates.md) | Живые обновления UI: WebSocket на вебе (v1.7.0); Android — SWR |
 | [import/cubux.md](import/cubux.md) | Импорт и экспорт формата Cubux |
+| [import/buhgalter.md](import/buhgalter.md) | Нативный секционный CSV: полный перенос учёта между инстансами |
+| [category-rules.md](category-rules.md) | Правила категорий: category→account, text→category, inbox, evaluate |
+| [../roadmap/category-rules-inbox.md](../roadmap/category-rules-inbox.md) | Спека правил и inbox (реализовано в v1.8.0) |
+| [feature-toggles.md](feature-toggles.md) | Флаги модулей в админке; чеклист для новых фич |
+| [subscriptions.md](subscriptions.md) | Подписки: API, UI, уведомления, плановый остаток, привязка и очередь |
+| [release-notes-v1.9.1.md](release-notes-v1.9.1.md) | Release notes v1.9.1: Android harden перехвата (шторка, СБП WB, по/от/пара) |
+| [release-notes-v1.9.0.md](release-notes-v1.9.0.md) | Release notes v1.9.0: кнопки TG/MAX, UX polish, Android шторка/парсер |
+| [release-notes-v1.8.0.md](release-notes-v1.8.0.md) | Release notes v1.8.0: нетто/графики, правила категорий, inbox, Android bindings |
+| [release-notes-v1.7.1.md](release-notes-v1.7.1.md) | Release notes v1.7.1: надёжность учёта, безопасность, кеш, Android |
+| [release-notes-v1.7.0.md](release-notes-v1.7.0.md) | Release notes v1.7.0: realtime, подписки, Android SMS/версии |

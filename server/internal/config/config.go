@@ -22,6 +22,8 @@ type Config struct {
 	BuildTime     string
 	StaticEmbed   bool
 	LocalesDir    string
+	MDNSEnabled   bool
+	MDNSName      string
 }
 
 func Load(version, installMethod, buildCommit, buildTime string) Config {
@@ -43,6 +45,8 @@ func Load(version, installMethod, buildCommit, buildTime string) Config {
 		BuildTime:     buildTime,
 		StaticEmbed:   envOr("BUHGALTER_STATIC_EMBED", "true") != "false",
 		LocalesDir:    locale.ResolveDir(envOr("BUHGALTER_LOCALES_DIR", "")),
+		MDNSEnabled:   envOr("BUHGALTER_MDNS_ENABLED", "true") != "false",
+		MDNSName:      strings.TrimSpace(envOr("BUHGALTER_MDNS_NAME", "Buhgalter")),
 	}
 
 	// "*" reflects request Origin (required with session cookies; literal "*" is forbidden with credentials).

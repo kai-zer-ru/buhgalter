@@ -1,5 +1,1 @@
-<script lang="ts">
-	import CategoriesTab from '$lib/settings/CategoriesTab.svelte';
-</script>
-
-<CategoriesTab />
+<!-- Legacy URL: redirected in +page.ts -->

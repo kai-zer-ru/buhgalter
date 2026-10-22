@@ -9,7 +9,7 @@ import (
 
 func TestGenerateAutoScheduleEqualParts(t *testing.T) {
 	issue, _ := timeutil.ParseUTC("2024-01-15 00:00:00")
-	entries, err := GenerateAutoSchedule(120000, 12, 10000, IntervalMonth, issue, 0)
+	entries, err := GenerateAutoSchedule(120000, 12, 10000, IntervalMonth, issue, 0, CreditKindConsumer)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,7 @@ func TestGenerateScheduleFromSeed(t *testing.T) {
 
 func TestGenerateScheduleWeekInterval(t *testing.T) {
 	issue, _ := timeutil.ParseUTC("2024-01-01 00:00:00")
-	entries, err := GenerateAutoSchedule(40000, 4, 10000, IntervalWeek, issue, 0)
+	entries, err := GenerateAutoSchedule(40000, 4, 10000, IntervalWeek, issue, 0, CreditKindConsumer)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +149,7 @@ func TestGenerateScheduleFullSeedAdjustsLast(t *testing.T) {
 
 func TestGenerateScheduleLastPaymentAdjustment(t *testing.T) {
 	issue, _ := timeutil.ParseUTC("2024-01-01 00:00:00")
-	entries, err := GenerateAutoSchedule(100001, 3, 33333, IntervalMonth, issue, 0)
+	entries, err := GenerateAutoSchedule(100001, 3, 33333, IntervalMonth, issue, 0, CreditKindConsumer)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,6 +159,29 @@ func TestGenerateScheduleLastPaymentAdjustment(t *testing.T) {
 	}
 	if sum != 100001 {
 		t.Fatalf("sum %d", sum)
+	}
+}
+
+func TestGenerateAutoScheduleUsesCreditKind(t *testing.T) {
+	issue, _ := timeutil.ParseUTC("2024-01-15 00:00:00")
+	principal := int64(5_000_000)
+	term := 12
+	rate := 12.0
+	monthlyMortgage := MonthlyPaymentMortgage(principal, rate, term, issue)
+	mortgage, err := GenerateAutoSchedule(principal, term, monthlyMortgage, IntervalMonth, issue, rate, CreditKindMortgage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	monthlyConsumer := MonthlyPayment(principal, rate, term)
+	consumer, err := GenerateAutoSchedule(principal, term, monthlyConsumer, IntervalMonth, issue, rate, CreditKindConsumer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(mortgage) != term || len(consumer) != term {
+		t.Fatalf("len mortgage=%d consumer=%d want %d", len(mortgage), len(consumer), term)
+	}
+	if mortgage[term-1].Amount == consumer[term-1].Amount {
+		t.Fatal("mortgage last payment should differ from consumer annuity")
 	}
 }
 
@@ -301,8 +324,9 @@ func TestGenerateScheduleMortgageUserSetPaymentSameAsCalculated(t *testing.T) {
 		t.Fatalf("user-set same as calculated: %v", errUser)
 	}
 
+	// Whole-ruble truncation is a real override (same rule as installment), not "same as calculated".
 	rounded := (monthly / 100) * 100
-	preview, resolved, err := PreviewSchedule(PreviewInput{
+	result, err := PreviewSchedule(PreviewInput{
 		Principal: principal, TermMonths: term, InterestRate: rate,
 		PaymentInterval: IntervalMonth, IssueDate: issue, CreditKind: CreditKindMortgage,
 		MonthlyPayment: &rounded,
@@ -310,11 +334,17 @@ func TestGenerateScheduleMortgageUserSetPaymentSameAsCalculated(t *testing.T) {
 	if err != nil {
 		t.Fatalf("preview rounded payment: %v", err)
 	}
-	if len(preview) != term {
-		t.Fatalf("preview len %d, want %d", len(preview), term)
+	if len(result.Schedule) != term {
+		t.Fatalf("preview len %d, want %d", len(result.Schedule), term)
 	}
-	if resolved != monthly {
-		t.Fatalf("resolved monthly %d, want calculated %d", resolved, monthly)
+	if result.CalculatedMonthly != monthly {
+		t.Fatalf("calculated %d, want %d", result.CalculatedMonthly, monthly)
+	}
+	if !result.UserSetPayment {
+		t.Fatal("expected user-set payment for whole-ruble truncation")
+	}
+	if result.EffectiveMonthly != rounded {
+		t.Fatalf("effective monthly %d, want truncated %d", result.EffectiveMonthly, rounded)
 	}
 }
 
@@ -346,5 +376,147 @@ func TestGenerateScheduleMortgageUserSetBankPayment(t *testing.T) {
 	}
 	if entries[term-1].Amount != bankPayment {
 		t.Fatalf("last payment %d want bank payment %d", entries[term-1].Amount, bankPayment)
+	}
+}
+
+func TestGenerateInstallmentFirstPaymentToday(t *testing.T) {
+	issue, _ := timeutil.ParseUTC("2024-01-15 00:00:00")
+	entries, err := GenerateSchedule(ScheduleInput{
+		Principal:         120_000,
+		TermMonths:        12,
+		MonthlyPayment:    10_000,
+		PaymentInterval:   IntervalMonth,
+		IssueDate:         issue,
+		InterestRate:      0,
+		FirstPaymentToday: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 12 {
+		t.Fatalf("expected 12 entries, got %d", len(entries))
+	}
+	first, _ := timeutil.ParseUTC(entries[0].PaymentDate)
+	if !first.Equal(issue) {
+		t.Fatalf("first payment date %v, want %v", first, issue)
+	}
+	second, _ := timeutil.ParseUTC(entries[1].PaymentDate)
+	expectedSecond := issue.AddDate(0, 1, 0)
+	if !second.Equal(expectedSecond) {
+		t.Fatalf("second payment date %v, want %v", second, expectedSecond)
+	}
+}
+
+func TestGenerateCreditFirstPaymentToday(t *testing.T) {
+	issue, _ := timeutil.ParseUTC("2024-01-15 00:00:00")
+	monthly := MonthlyPayment(1_000_000, 12, 12)
+	entries, err := GenerateSchedule(ScheduleInput{
+		Principal:         1_000_000,
+		TermMonths:        12,
+		MonthlyPayment:    monthly,
+		PaymentInterval:   IntervalMonth,
+		IssueDate:         issue,
+		InterestRate:      12,
+		CreditKind:        CreditKindConsumer,
+		FirstPaymentToday: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 12 {
+		t.Fatalf("expected 12 entries, got %d", len(entries))
+	}
+	first, _ := timeutil.ParseUTC(entries[0].PaymentDate)
+	if !first.Equal(issue) {
+		t.Fatalf("first payment date %v, want %v", first, issue)
+	}
+}
+
+func TestResolveScheduleMonthlyWholeRubleOverride(t *testing.T) {
+	calculated := int64(61_737) // 617.37 ₽
+	user := int64(61_800)       // 618.00 ₽
+	if resolvesToCalculatedPayment(calculated, user) {
+		t.Fatal("618 should be treated as custom payment")
+	}
+	_, userSet := resolveScheduleMonthly(493_900, 8, 0, CreditKindConsumer, IntervalWeek, time.Time{}, &user)
+	if !userSet {
+		t.Fatal("expected user-set payment for 618 vs 617.37")
+	}
+}
+
+func TestResolveScheduleMonthlyTruncatedRublesIsOverride(t *testing.T) {
+	// Installment: 1943.00 / 6 → 323.83; user sets 323.00 intentionally.
+	calculated := int64(32_383)
+	truncated := (calculated / 100) * 100 // 323.00
+	if resolvesToCalculatedPayment(calculated, truncated) {
+		t.Fatal("whole-ruble truncation must not erase user payment override")
+	}
+	user := truncated
+	monthly, userSet := resolveScheduleMonthly(
+		194_300, 6, 0, CreditKindConsumer, IntervalWeek, time.Time{}, &user,
+	)
+	if !userSet {
+		t.Fatal("expected user-set payment for 323.00 vs 323.83")
+	}
+	if monthly != truncated {
+		t.Fatalf("effective monthly %d, want %d", monthly, truncated)
+	}
+}
+
+func TestPreviewScheduleUserSetMonthly(t *testing.T) {
+	issue, _ := timeutil.ParseUTC("2024-01-15 00:00:00")
+	custom := int64(9_000)
+	result, err := PreviewSchedule(PreviewInput{
+		Principal:       120_000,
+		IssueDate:       issue,
+		TermMonths:      12,
+		InterestRate:    0,
+		PaymentInterval: IntervalMonth,
+		MonthlyPayment:  &custom,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.CalculatedMonthly != 10_000 {
+		t.Fatalf("calculated %d, want 10000", result.CalculatedMonthly)
+	}
+	if result.EffectiveMonthly != custom {
+		t.Fatalf("effective %d, want %d", result.EffectiveMonthly, custom)
+	}
+	if !result.UserSetPayment {
+		t.Fatal("expected user-set payment")
+	}
+}
+
+func TestPreviewScheduleTruncatedWholeRublesOverride(t *testing.T) {
+	issue, _ := timeutil.ParseUTC("2026-07-24 00:00:00")
+	// 1943.00 / 6 = 323.83 calculated; user sets 323.00
+	custom := int64(32_300)
+	result, err := PreviewSchedule(PreviewInput{
+		Principal:       194_300,
+		IssueDate:       issue,
+		TermMonths:      6,
+		InterestRate:    0,
+		PaymentInterval: IntervalWeek,
+		MonthlyPayment:  &custom,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.CalculatedMonthly != 32_383 {
+		t.Fatalf("calculated %d, want 32383", result.CalculatedMonthly)
+	}
+	if !result.UserSetPayment {
+		t.Fatal("expected user-set payment")
+	}
+	if result.EffectiveMonthly != custom {
+		t.Fatalf("effective %d, want %d", result.EffectiveMonthly, custom)
+	}
+	if len(result.Schedule) < 2 {
+		t.Fatalf("schedule len %d", len(result.Schedule))
+	}
+	// First payments use override; last is adjusted to sum to principal.
+	if result.Schedule[0].Amount != custom {
+		t.Fatalf("first amount %d, want %d", result.Schedule[0].Amount, custom)
 	}
 }

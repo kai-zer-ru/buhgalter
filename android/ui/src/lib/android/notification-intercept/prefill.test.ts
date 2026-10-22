@@ -1,0 +1,140 @@
+import { beforeEach, describe, expect, it } from 'vitest';
+import {
+	interceptTransferRoute,
+	prefillFromDraft,
+	resetInterceptPrefillForTests,
+	setInterceptPrefill,
+	setInterceptTransferPrefill,
+	takeInterceptPrefill,
+	takeInterceptTransferPrefill
+} from './prefill';
+import type { InterceptDraft } from './types';
+
+describe('intercept prefill', () => {
+	beforeEach(() => {
+		resetInterceptPrefillForTests();
+	});
+
+	it('set/take once', () => {
+		setInterceptPrefill({ description: '  Shop  ', amount: '10.00', draftId: 'd1' });
+		expect(takeInterceptPrefill()).toEqual({
+			description: 'Shop',
+			amount: '10.00',
+			accountId: undefined,
+			merchantId: undefined,
+			merchantName: undefined,
+			categoryId: undefined,
+			subcategoryId: undefined,
+			occurredAt: undefined,
+			type: 'expense',
+			draftId: 'd1'
+		});
+		expect(takeInterceptPrefill()).toBeNull();
+	});
+
+	it('keeps category suggestion fields', () => {
+		setInterceptPrefill({
+			amount: '10.00',
+			categoryId: 'cat1',
+			subcategoryId: 'sub1',
+			draftId: 'd1'
+		});
+		expect(takeInterceptPrefill()).toMatchObject({
+			categoryId: 'cat1',
+			subcategoryId: 'sub1'
+		});
+	});
+
+	it('builds prefill from draft', () => {
+		const draft: InterceptDraft = {
+			id: 'd2',
+			createdAt: new Date().toISOString(),
+			parsed: {
+				bankId: 'tinkoff',
+				packageName: 'com.idamob.tinkoff.android',
+				amount: '5.00',
+				occurredAt: '2024-01-01T10:00:00.000Z',
+				merchantText: 'Cafe',
+				rawHash: 'h'
+			},
+			accountId: 'a1',
+			merchantName: 'Cafe'
+		};
+		const prefill = prefillFromDraft(draft);
+		expect(prefill.draftId).toBe('d2');
+		expect(prefill.accountId).toBe('a1');
+		expect(prefill.merchantName).toBe('Cafe');
+		expect(prefill.description).toBeUndefined();
+		expect(prefill.categoryId).toBeUndefined();
+		expect(prefill.type).toBe('expense');
+	});
+
+	it('uses category stored on draft', () => {
+		const draft: InterceptDraft = {
+			id: 'd-cat',
+			createdAt: new Date().toISOString(),
+			parsed: {
+				bankId: 'tinkoff',
+				packageName: 'com.idamob.tinkoff.android',
+				amount: '5.00',
+				occurredAt: '2024-01-01T10:00:00.000Z',
+				merchantText: 'Cafe',
+				rawHash: 'h-cat'
+			},
+			accountId: 'a1',
+			merchantId: 'm1',
+			categoryId: 'cat-stored',
+			subcategoryId: 'sub-stored'
+		};
+		expect(prefillFromDraft(draft)).toMatchObject({
+			categoryId: 'cat-stored',
+			subcategoryId: 'sub-stored'
+		});
+	});
+
+	it('builds transfer create route back to drafts', () => {
+		expect(interceptTransferRoute()).toContain('/transfers/new');
+		expect(interceptTransferRoute()).toContain('from=');
+	});
+
+	it('set/take transfer prefill once', () => {
+		setInterceptTransferPrefill({
+			fromAccountId: 'a1',
+			toAccountId: 'a2',
+			amount: '10.00',
+			description: '  move  ',
+			draftIds: ['d1', 'd2']
+		});
+		expect(takeInterceptTransferPrefill()).toEqual({
+			fromAccountId: 'a1',
+			toAccountId: 'a2',
+			amount: '10.00',
+			description: 'move',
+			occurredAt: undefined,
+			draftIds: ['d1', 'd2']
+		});
+		expect(takeInterceptTransferPrefill()).toBeNull();
+	});
+
+	it('income draft uses label as description, not merchant', () => {
+		const draft: InterceptDraft = {
+			id: 'd3',
+			createdAt: new Date().toISOString(),
+			parsed: {
+				bankId: 'wbbank',
+				packageName: 'com.wildberries.ru',
+				amount: '5.36',
+				occurredAt: '2024-01-01T10:00:00.000Z',
+				merchantText: 'Выплата процентов',
+				rawHash: 'h2',
+				kind: 'income'
+			},
+			accountId: 'a1',
+			merchantName: 'Выплата процентов'
+		};
+		const prefill = prefillFromDraft(draft);
+		expect(prefill.type).toBe('income');
+		expect(prefill.description).toBe('Выплата процентов');
+		expect(prefill.merchantName).toBeUndefined();
+	});
+});

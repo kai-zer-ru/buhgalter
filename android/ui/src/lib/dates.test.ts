@@ -1,0 +1,125 @@
+import { describe, expect, it } from 'vitest';
+import {
+	DISPLAY_DATE_FORMAT,
+	DISPLAY_DATETIME_FORMAT,
+	DISPLAY_DATETIME_SHORT_FORMAT,
+	formatAPIDateForDisplay,
+	formatAPIDateTimeForDisplay,
+	formatAPIDayMonthTimeForDisplay,
+	formatAPIOperationDateTimeForDisplay,
+	formatCreditPaymentDateForDisplay,
+	formatDisplayDate,
+	formatDisplayDateTime,
+	formatDisplayDateTimeShort,
+	formatDisplayDayMonthTime,
+	formatISODateForDisplay,
+	toApiUtcDateTime
+} from './dates';
+
+describe('display format constants', () => {
+	it('documents the three user-facing formats', () => {
+		expect(DISPLAY_DATE_FORMAT).toBe('dd.MM.yyyy');
+		expect(DISPLAY_DATETIME_FORMAT).toBe('dd.MM.yyyy HH:mm:ss');
+		expect(DISPLAY_DATETIME_SHORT_FORMAT).toBe('dd.MM.yyyy HH:mm');
+	});
+});
+
+describe('formatDisplayDate', () => {
+	it('formats as dd.MM.yyyy', () => {
+		expect(formatDisplayDate(new Date(2026, 11, 31))).toBe('31.12.2026');
+	});
+});
+
+describe('formatDisplayDateTime', () => {
+	it('formats with seconds', () => {
+		expect(formatDisplayDateTime(new Date(2026, 11, 31, 12, 0, 5))).toBe('31.12.2026 12:00:05');
+	});
+});
+
+describe('formatDisplayDateTimeShort', () => {
+	it('formats without seconds', () => {
+		expect(formatDisplayDateTimeShort(new Date(2026, 11, 31, 12, 0, 5))).toBe('31.12.2026 12:00');
+	});
+});
+
+describe('formatDisplayDayMonthTime', () => {
+	it('formats Russian day+month+time without year', () => {
+		expect(formatDisplayDayMonthTime(new Date(2027, 4, 4, 9, 22), 'ru')).toBe('4 мая в 09:22');
+	});
+
+	it('formats English day+month+time without year', () => {
+		expect(formatDisplayDayMonthTime(new Date(2027, 4, 4, 9, 22), 'en')).toBe('May 4 at 09:22');
+	});
+});
+
+describe('formatISODateForDisplay', () => {
+	it('converts yyyy-MM-dd to dd.MM.yyyy', () => {
+		expect(formatISODateForDisplay('2026-12-31')).toBe('31.12.2026');
+	});
+});
+
+describe('formatAPIDateForDisplay', () => {
+	it('formats API date in user timezone', () => {
+		expect(formatAPIDateForDisplay('2026-12-31 00:00:00', 'UTC')).toBe('31.12.2026');
+	});
+});
+
+describe('formatAPIDateTimeForDisplay', () => {
+	it('formats API datetime in user timezone', () => {
+		expect(formatAPIDateTimeForDisplay('2026-12-31 08:30:00', 'UTC')).toBe('31.12.2026 08:30:00');
+	});
+
+	it('formats RFC3339 build timestamps', () => {
+		expect(formatAPIDateTimeForDisplay('2026-12-31T04:22:46Z', 'UTC')).toBe('31.12.2026 04:22:46');
+	});
+});
+
+describe('toApiUtcDateTime', () => {
+	it('converts ISO RFC3339 to API Layout UTC', () => {
+		expect(toApiUtcDateTime('2026-10-16T05:54:00.000Z')).toBe('2026-10-16 05:54:00');
+	});
+
+	it('converts offset ISO to UTC Layout', () => {
+		expect(toApiUtcDateTime('2026-10-16T08:54:00+03:00')).toBe('2026-10-16 05:54:00');
+	});
+
+	it('passes through Layout unchanged', () => {
+		expect(toApiUtcDateTime('2026-10-16 05:54:00')).toBe('2026-10-16 05:54:00');
+	});
+});
+
+describe('formatAPIOperationDateTimeForDisplay', () => {
+	it('formats without seconds in user timezone', () => {
+		expect(formatAPIOperationDateTimeForDisplay('2026-12-31 08:30:45', 'UTC')).toBe(
+			'31.12.2026 08:30'
+		);
+	});
+});
+
+describe('formatAPIDayMonthTimeForDisplay', () => {
+	it('formats upcoming subscription date without year', () => {
+		expect(formatAPIDayMonthTimeForDisplay('2027-05-04 09:22:00', 'UTC', 'ru')).toBe(
+			'4 мая в 09:22'
+		);
+	});
+});
+
+describe('formatCreditPaymentDateForDisplay', () => {
+	it('combines midnight payment date with debit_time_local', () => {
+		expect(formatCreditPaymentDateForDisplay('2026-12-31 00:00:00', 'UTC', '11:19')).toBe(
+			'31.12.2026 11:19'
+		);
+	});
+
+	it('keeps explicit payment time when not midnight', () => {
+		expect(formatCreditPaymentDateForDisplay('2026-12-31 08:30:00', 'UTC', '11:19')).toBe(
+			'31.12.2026 08:30'
+		);
+	});
+
+	it('falls back to default formatting without debit time', () => {
+		expect(formatCreditPaymentDateForDisplay('2026-12-31 00:00:00', 'UTC', null)).toBe(
+			'31.12.2026 00:00'
+		);
+	});
+});

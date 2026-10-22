@@ -22,6 +22,8 @@ test('import CSV wizard reaches mapping step', async ({ page }) => {
 	const fileInput = page.locator('input[type="file"]');
 	await fileInput.setInputFiles(path.join(__dirname, 'fixtures', 'sample.csv'));
 	await expect(page.getByText('sample.csv')).toBeVisible({ timeout: 10_000 });
+	await expect(page.getByRole('radio', { name: 'Бухгалтер', exact: true })).toBeVisible();
+	await expect(page.getByRole('radio', { name: 'Пресет Cubux' })).toBeVisible();
 	await page.getByRole('button', { name: 'Далее' }).click();
 
 	await expect(
@@ -34,9 +36,18 @@ test('import CSV wizard reaches mapping step', async ({ page }) => {
 test('export CSV download button is enabled with filters', async ({ page }) => {
 	await page.goto('/settings/import');
 	await waitAppReady(page);
-	await page.getByRole('tab', { name: 'Экспорт', exact: true }).click();
+
+	const exportTab = page.getByRole('tab', { name: 'Экспорт', exact: true });
+	await expect(exportTab).toBeVisible({ timeout: 15_000 });
+	await exportTab.click();
 
 	const downloadBtn = page.getByRole('button', { name: 'Скачать CSV' });
 	await expect(downloadBtn).toBeVisible();
 	await expect(downloadBtn).toBeEnabled();
+	await expect(page.getByRole('radio', { name: 'Бухгалтер', exact: true })).toBeVisible();
+	await expect(page.getByRole('radio', { name: 'Cubux', exact: true })).toBeVisible();
+	await expect(page.getByText(/весь учёт/)).toBeVisible();
+
+	await page.getByRole('radio', { name: 'Cubux', exact: true }).click();
+	await expect(page.getByRole('button', { name: 'Скачать CSV' })).toBeEnabled();
 });

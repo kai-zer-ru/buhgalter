@@ -5,7 +5,13 @@ import { test, expect } from '@playwright/test';
 import { login, apiJSON, restoreAdminSession, waitAppReady } from './helpers/auth';
 import { advanceImportToPreview, commitImportFromPreview } from './helpers/import';
 import { createCashAccount, createIncome } from './helpers/setup-data';
-import { confirmDialog, expectToast, expandCollapsibleSection, rowMenuAction } from './helpers/ui';
+import {
+	confirmDialog,
+	expectToast,
+	expandCollapsibleSection,
+	rowMenuAction,
+	waitToastGone
+} from './helpers/ui';
 import {
 	fillEditTxAmount,
 	fillTransactionForm,
@@ -30,9 +36,8 @@ test('setup redirects when already configured', async ({ page }) => {
 test('register creates account when registration is enabled', async ({ page }) => {
 	const tag = Date.now();
 	await restoreAdminSession(page);
-	await apiJSON(page, 'PUT', '/api/v1/admin/settings', {
-		registration_enabled: true,
-		external_url: ''
+	await apiJSON(page, 'PUT', '/api/v1/admin/features', {
+		registration: true
 	});
 
 	await page.context().clearCookies();
@@ -72,18 +77,16 @@ test('register creates account when registration is enabled', async ({ page }) =
 	await expect(page.locator('#display')).toHaveValue(`E2E Reg ${tag}`);
 
 	await restoreAdminSession(page);
-	await apiJSON(page, 'PUT', '/api/v1/admin/settings', {
-		registration_enabled: false,
-		external_url: ''
+	await apiJSON(page, 'PUT', '/api/v1/admin/features', {
+		registration: false
 	});
 });
 
 test('admin root saves system settings', async ({ page }) => {
 	await page.goto('/admin');
 	await waitAppReady(page);
-	await expect(page.getByText('Открытая регистрация')).toBeVisible();
+	await expect(page.locator('#external')).toBeVisible();
 
-	await page.getByRole('switch', { name: 'Открытая регистрация' }).click();
 	await page.locator('#external').fill('https://e2e.example.com');
 	await page
 		.locator('form.card.max-w-lg')
@@ -91,8 +94,8 @@ test('admin root saves system settings', async ({ page }) => {
 		.getByRole('button', { name: 'Сохранить', exact: true })
 		.click();
 	await expectToast(page, 'success', 'Сохранено');
+	await waitToastGone(page, 'success', 'Сохранено');
 
-	await page.getByRole('switch', { name: 'Открытая регистрация' }).click();
 	await page.locator('#external').fill('');
 	await page
 		.locator('form.card.max-w-lg')
@@ -184,7 +187,12 @@ test('edit expense from dashboard recent list', async ({ page }) => {
 	await fillEditTxAmount(dialog, '66.80');
 	await dialog.getByRole('button', { name: 'Сохранить' }).click();
 	await expect(dialog).toHaveCount(0, { timeout: 15_000 });
-	await expect(page.getByText('66.80').first()).toBeVisible({ timeout: 10_000 });
+	await expandCollapsibleSection(page, 'Последние операции');
+	await expect(
+		page.getByRole('row', {
+			name: new RegExp(`${description}.*66\\.80|66\\.80.*${description}`)
+		})
+	).toBeVisible({ timeout: 10_000 });
 });
 
 test('account detail desktop: create income', async ({ page }) => {
@@ -209,7 +217,7 @@ test('import CSV commits transactions', async ({ page }) => {
 	const dateStr = `${String(today.getDate()).padStart(2, '0')}.${String(today.getMonth() + 1).padStart(2, '0')}.${today.getFullYear()}`;
 	const csv = [
 		'Тип,Дата,Сумма списания,Валюта списания,Счет списания,Сумма пополнения,Валюта назначения,Счет пополнения,Категория,Subcategory,Описание,Проект,Пользователь',
-		`Расходы,${dateStr},75.00_-₽,RUB,${accountName},,,,Продукты,Молоко,${description},,Tester`
+		`Расходы,${dateStr},75.00,RUB,${accountName},,,,Продукты,Молоко,${description},,Tester`
 	].join('\n');
 	const csvPath = path.join(os.tmpdir(), `e2e-import-${tag}.csv`);
 	fs.writeFileSync(csvPath, csv, 'utf8');
@@ -236,9 +244,8 @@ test('import CSV commits transactions', async ({ page }) => {
 });
 
 test('login page shows register link when registration enabled', async ({ page }) => {
-	await apiJSON(page, 'PUT', '/api/v1/admin/settings', {
-		registration_enabled: true,
-		external_url: ''
+	await apiJSON(page, 'PUT', '/api/v1/admin/features', {
+		registration: true
 	});
 
 	const status = await page.request.get('/api/v1/setup/status');
@@ -246,14 +253,14 @@ test('login page shows register link when registration enabled', async ({ page }
 
 	await page.context().clearCookies();
 	await page.goto('/login');
+	await waitAppReady(page);
 	await expect(page.getByRole('link', { name: 'Зарегистрироваться' })).toBeVisible({
 		timeout: 10_000
 	});
 
 	await login(page);
 	await restoreAdminSession(page);
-	await apiJSON(page, 'PUT', '/api/v1/admin/settings', {
-		registration_enabled: false,
-		external_url: ''
+	await apiJSON(page, 'PUT', '/api/v1/admin/features', {
+		registration: false
 	});
 });

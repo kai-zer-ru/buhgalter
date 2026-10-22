@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { apiJSON, formatUTCDateTime, waitAppReady } from './helpers/auth';
+import { ADMIN, apiJSON, formatUTCDateTime, waitAppReady } from './helpers/auth';
 
 const AUTHENTICATED_ROUTES = [
 	'/',
@@ -8,14 +8,15 @@ const AUTHENTICATED_ROUTES = [
 	'/transactions',
 	'/stats',
 	'/credits',
+	'/subscriptions',
 	'/debts',
 	'/settings',
 	'/settings/password',
 	'/settings/tokens',
 	'/settings/notifications',
-	'/settings/categories',
+	'/categories',
 	'/settings/import',
-	'/settings/recurring-operations',
+	'/recurring-operations',
 	'/admin',
 	'/admin/users',
 	'/admin/backups',
@@ -48,6 +49,21 @@ test.describe('public', () => {
 		await page.goto('/');
 		await expect(page.getByText('Загрузка…')).toHaveCount(0, { timeout: 20_000 });
 		await expect(page).toHaveURL(/\/login/);
+	});
+
+	test('deep link returns to target after login', async ({ page }) => {
+		await page.goto('/budget');
+		await expect(page.getByText('Загрузка…')).toHaveCount(0, { timeout: 20_000 });
+		await expect(page).toHaveURL(/\/login\?next=%2Fbudget/);
+		await expect(page.getByRole('button', { name: 'Войти' })).toBeVisible({ timeout: 20_000 });
+
+		await page.locator('#login').fill(ADMIN.login);
+		await page.locator('#password').fill(ADMIN.password);
+		await page.getByRole('button', { name: 'Войти' }).click();
+
+		await expect(page).toHaveURL(/\/budget/, { timeout: 15_000 });
+		await waitAppReady(page);
+		await expect(page.getByRole('button', { name: 'Выйти' })).toBeVisible({ timeout: 10_000 });
 	});
 });
 

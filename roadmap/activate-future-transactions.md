@@ -19,3 +19,4 @@
 - `server/internal/scheduler/` — `FutureRunner`, `runFutureActivation`
 - `server/internal/transaction/` — `ActivateDueFutureTransactions`, `ActivateAllDueFutureTransactions`
 - `server/internal/accountbalance/` — пересчёт балансов после активации
+- `server/internal/notify/worker.go` — `processPlanned` тоже активирует due future **только** если включён `trigger_planned` (без этого шага активация — только `FutureRunner`)

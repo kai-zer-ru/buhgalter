@@ -3,7 +3,11 @@ import type { Transaction } from '$lib/api/client';
 import {
 	canDeleteTransaction,
 	canEditTransaction,
-	canRepeatTransaction
+	canLinkToSubscription,
+	canRepeatTransaction,
+	dedupeTransferLegs,
+	isTransferCommission,
+	transferCommissionDisplay
 } from './transaction-display';
 
 function tx(overrides: Partial<Transaction> = {}): Transaction {
@@ -57,5 +61,59 @@ describe('canDeleteTransaction', () => {
 
 	it('blocks delete when deletable is false', () => {
 		expect(canDeleteTransaction(tx({ deletable: false }))).toBe(false);
+	});
+
+	it('blocks transfer-linked commission', () => {
+		const commission = tx({
+			type: 'expense',
+			transfer_group_id: 'grp-1',
+			category_is_system: true
+		});
+		expect(isTransferCommission(commission)).toBe(true);
+		expect(canEditTransaction(commission)).toBe(false);
+		expect(canDeleteTransaction(commission)).toBe(false);
+	});
+});
+
+describe('canLinkToSubscription', () => {
+	it('allows expense without subscription_id', () => {
+		expect(canLinkToSubscription(tx({ type: 'expense' }))).toBe(true);
+	});
+
+	it('blocks income, transfer, and already linked expense', () => {
+		expect(canLinkToSubscription(tx({ type: 'income' }))).toBe(false);
+		expect(canLinkToSubscription(tx({ type: 'transfer', transfer_group_id: 'grp-1' }))).toBe(false);
+		expect(canLinkToSubscription(tx({ type: 'expense', subscription_id: 'sub-1' }))).toBe(false);
+	});
+});
+
+describe('dedupeTransferLegs', () => {
+	it('hides transfer-linked commission expense', () => {
+		const out = tx({
+			id: 'out',
+			type: 'transfer',
+			transfer_group_id: 'g1',
+			transfer_is_out: true,
+			created_at: '2026-01-01T12:00:00.000Z',
+			commission: 500,
+			commission_display: '5.00'
+		});
+		const inn = tx({
+			id: 'in',
+			type: 'transfer',
+			transfer_group_id: 'g1',
+			transfer_is_out: false,
+			created_at: '2026-01-01T12:00:00.001Z'
+		});
+		const commission = tx({
+			id: 'fee',
+			type: 'expense',
+			transfer_group_id: 'g1',
+			amount: 500,
+			amount_display: '5.00',
+			created_at: '2026-01-01T12:00:00.002Z'
+		});
+		expect(dedupeTransferLegs([out, inn, commission]).map((t) => t.id)).toEqual(['out']);
+		expect(transferCommissionDisplay(out)).toBe('5.00');
 	});
 });

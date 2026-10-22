@@ -1,0 +1,89 @@
+export type RawBankNotification = {
+	packageName: string;
+	title: string;
+	text: string;
+	bigText: string;
+	postedAt: number;
+	dedupeKey: string;
+	/** Capture channel; omitted on older native payloads → treat as push. */
+	channel?: 'push' | 'sms';
+};
+
+/** Debug history row (all posts while capture is on). */
+export type NotificationHistoryItem = RawBankNotification & {
+	inAllowlist: boolean;
+	queued: boolean;
+};
+
+export type BankBinding = {
+	packageName: string;
+	bankId: string;
+	accountId: string;
+};
+
+export type CardBinding = {
+	bankId: string;
+	last4: string;
+	accountId: string;
+};
+
+export type InterceptSettings = {
+	enabled: boolean;
+	/** Shade quick-actions for drafts (default on). Only active while intercept is enabled. */
+	shadeNotifications: boolean;
+	bankBindings: BankBinding[];
+	cardBindings: CardBinding[];
+};
+
+export type ParsedPurchase = {
+	bankId: string;
+	packageName: string;
+	amount: string;
+	currency?: string;
+	occurredAt: string;
+	merchantText: string;
+	last4?: string;
+	rawHash: string;
+	/** Purchase / income draft, or cancel/refund that drops a matching purchase draft. */
+	kind?: 'purchase' | 'income' | 'cancel';
+};
+
+export type InterceptDraft = {
+	id: string;
+	createdAt: string;
+	parsed: ParsedPurchase;
+	accountId?: string;
+	merchantId?: string;
+	merchantName?: string;
+	/** Filled at draft creation so shade Accept does not need WebView. */
+	categoryId?: string;
+	subcategoryId?: string;
+};
+
+export type TransactionCreatePrefill = {
+	description?: string;
+	amount?: string;
+	accountId?: string;
+	merchantId?: string;
+	merchantName?: string;
+	/** Suggested from prior txs of this merchant (same type). */
+	categoryId?: string;
+	subcategoryId?: string;
+	/** ISO datetime */
+	occurredAt?: string;
+	/** expense (default) or income — selects create form type. */
+	type?: 'expense' | 'income';
+	/** Remove this intercept draft after successful create. */
+	draftId?: string;
+};
+
+export type TransferCreatePrefill = {
+	fromAccountId?: string;
+	toAccountId?: string;
+	amount?: string;
+	description?: string;
+	/** ISO datetime */
+	occurredAt?: string;
+	/** Remove these intercept drafts after successful create. */
+	draftIds?: string[];
+};

@@ -1,0 +1,282 @@
+# Android-клиент — платформа
+
+Архитектура, авторизация, сеть, офлайн и сборка. UI — в [android-client-ui.md](android-client-ui.md).
+
+## Структура репозитория
+
+```
+android/
+├── ui/                    # SvelteKit → ui/build
+├── app/                   # Gradle / Capacitor WebView
+├── capacitor.config.json    # webDir: ui/build
+└── package.json             # @capacitor/*
+```
+
+Корневой `web/` и бинарник сервера (`make build`) **не зависят** от Android.
+
+## Capacitor
+
+- Конфиг: `android/capacitor.config.json`
+- `webDir`: `ui/build`
+- Схема WebView: `https` (`localhost` — origin приложения, не API-сервер)
+
+Синхронизация: `make android-sync` (сборка UI + иконки + `npx cap sync android`).
+
+## Авторизация
+
+После выбора сервера экран `/login` предлагает два способа:
+
+| Способ | Маршрут | API | Что сохраняется |
+|--------|---------|-----|-----------------|
+| **Логин / пароль** | `/login/password` | `POST /api/v1/auth/login` | session Bearer (`auth_kind=session`) |
+| **API-токен** | `/login/token` | вставка токена → `GET /api/v1/auth/me` | API-токен (`auth_kind=api_token`) |
+
+Можно вернуться на `/login` (другой способ) или на `/server-setup` (смена сервера).
+
+1. Токен (session или API) хранится в **native secure storage** (`@aparajita/capacitor-secure-storage`) в APK; в **browser** (`vite dev` / обычный Chromium) — memory + `localStorage` (`buhgalter.secure.*`), без вызова Capacitor-плагина (нереализованный bridge зависает на «Загрузка…»). При первом запуске после обновления токен мигрируется из legacy `localStorage` ключа `buhgalter.auth_token`. Вид токена — `localStorage` ключ `buhgalter.auth_kind`.
+2. Все запросы: `Authorization: Bearer <token>`, `credentials: omit`.
+3. **Выход:** для `session` — `POST /api/v1/auth/logout` (если сеть есть), затем локальная очистка; для `api_token` — только локально. **Блокировка приложения** (PIN и биометрия) сбрасывается.
+
+Код: `android/ui/src/lib/platform/auth-token.ts`, экраны `android/ui/src/routes/login/`.
+
+См. также [api/authentication.md](api/authentication.md).
+
+## URL сервера
+
+Профиль сервера в `localStorage` (`buhgalter.server_profile.v1`):
+
+| Поле | Назначение |
+|------|------------|
+| **LAN URL** | Адрес в домашней сети, напр. `http://192.168.1.176:8765` |
+| **Внешний URL** | Опционально: reverse proxy / `external_url` — задаётся в **Настройки → Сервер** |
+| **Домашние Wi‑Fi** | До **5** SSID — только в настройках сервера |
+| **LAN fallback** | Опция в настройках: на домашнем Wi‑Fi при недоступном LAN пробовать внешний URL |
+| **Доверенные HTTPS** | TOFU для self-signed — при сохранении HTTPS в настройках |
+
+**Первый запуск** (`/server-setup`): только LAN discovery + ручной **LAN URL**. Внешний URL и SSID — позже в `/settings/server`.
+
+- `getApiBase()` / `getServerUrl()` возвращают **активный** URL после `refreshActiveServerUrl()` (SSID + профиль).
+- Миграция: старый `buhgalter.server_url` → `lanUrl`.
+- Проверка перед сохранением: `pingServer(origin)` → `GET /api/v1/health` **без** Bearer.
+- **LAN discovery:** на `/server-setup` и в `/settings/server` — mDNS (`_buhgalter._tcp`, ~4 с) параллельно со сканированием Wi‑Fi-подсети (порт **8765**) + ручной ввод. Сервер публикует mDNS при старте (`BUHGALTER_MDNS_ENABLED`, по умолчанию `true`). Если в админке задан **внешний URL**, он возвращается в `GET /api/v1/health` как `external_url` и показывается в списке найденных серверов (домен reverse proxy, не результат reverse DNS по IP).
+- **SSID:** native `WifiSubnet.getSsid()`; Android 10+ требует `ACCESS_FINE_LOCATION` (кнопка «Добавить текущую сеть» запрашивает разрешение).
+- Оба origin должны указывать на **один** инстанс сервера; ref-cache хранится отдельно по URL. Чтение ищет кэш по **любому** сохранённому origin (старый LAN IP, `_no_server` и т.п.). Справочники для форм дополнительно дублируются в **`buhgalter.offline_catalogs.v1`** (без привязки к URL, как `last_user`) при каждом `seedDictionariesFromUIMeta`; при разблокировке PIN — `reconcileOfflineCatalogsOnUnlock()` пересаживает их в ref-cache активного URL. При сворачивании приложения — отложенный `flushRefCacheDisk()` (~2 с, не на паузе отпечатка).
+- Ошибки на `/server-setup` — **одна строка под полем**, без стека toast-уведомлений.
+
+Код: `server-profile.ts`, `server-url.ts`, `server-connect.ts`, `server-setup/+page.svelte`, `settings/server/+page.svelte`.
+
+### Адрес и порт
+
+- Нужен **API-сервер** (`make dev-server` / бинарник), порт по умолчанию **8765**.
+- `make dev-server` читает **корневой** `.env` (`BUHGALTER_ENV_FILE`); после правки `BUHGALTER_ALLOWED_HOSTS` перезапустите сервер.
+- **Не** подходит Vite dev-web (`:5173`) — ответ будет HTML, не JSON.
+- Пример: `http://192.168.1.176:8765` (IP ПК в LAN, не `127.0.0.1` с телефона).
+
+### Доступ с телефона (middleware ExternalAccess)
+
+Сервер проверяет `Host` запроса (`X-Forwarded-Host` не учитывается). Для LAN без `external_url` в настройках добавьте IP или hostname сервера в `.env`:
+
+```env
+BUHGALTER_ALLOWED_HOSTS=192.168.1.176
+```
+
+Либо укажите **external URL** в веб-админке (тот же origin, что вводите в приложении). Иначе ответ **403** — в приложении текст «Сервер отклонил запрос…».
+
+### HTTPS и self-signed
+
+Для **внешнего HTTPS** с самоподписанным или иным недоверенным сертификатом при проверке `/api/v1/health` показывается попап: переключатель **«Доверять этому серверу»** и предупреждение «на свой страх и риск». После включения origin попадает в `trustedOrigins` профиля; запросы к API для этого origin идут через native `SslTrust` (OkHttp с отключённой проверкой только для явно доверенных host). HTTP (LAN) — без изменений (`usesCleartextTraffic`). Ответ **204** без тела (DELETE и т.п.) через `SslTrust` считается успехом — иначе клиент ошибочно бросал `INVALID_RESPONSE`.
+
+Код: `SslTrustPlugin.java`, `ssl-trust.ts`, `client.ts` (`fetchApi` native path), `ServerTrustDialog.svelte`, `server-verify.ts`.
+
+### Bootstrap (`+layout.svelte`)
+
+1. Сначала `initAuthToken()` (чтение Secure Storage), затем `initNativeOfflineSync` / `bootstrap` — иначе `warmRefCache` может уйти без Bearer
+2. Нет URL → `/server-setup`, сброс локального токена
+3. Есть URL, нет пользователя на защищённом маршруте → `/login` (выбор способа входа)
+4. Есть токен → **сразу** экран PIN / биометрии (`unlockWithExistingSession`), даже без кэша `/auth/me`. Профиль берётся из `buhgalter.last_user.v1` (не привязан к URL), затем ref-cache (любой origin LAN/remote), иначе минимальный stub. Офлайн до ответа `/health`; probe + `loadUser` + версии / remote i18n — **только в фоне**. Health **никогда** не блокирует ввод PIN при наличии сессии
+5. Нет токена → `prepareBootstrapConnectivity` (может ждать probe) и дальше login / «Сервер недоступен»
+6. После мутаций ref-cache **не стирает** сохранённые GET-снимки разделов (дашборд, операции, долги, должники, кредиты, счета, статистика и т.д.) — офлайн-экраны остаются открываемыми. Следующий онлайн-GET по этим путям идёт в сеть (`pendingNetworkRefresh`), а не рисует SWR как источник истины. **Балансы** в списках счетов всегда берутся из последнего `GET /dashboard` (`enrichAccountsWithCachedBalances` в `listAccounts` / `getAccount`; при записи dashboard — патч сохранённых `/accounts*`). Если список счетов пуст, его заполняют из `ui/meta` (`seedAccountsFromUIMetaIfEmpty`) — иначе офлайн-форма расхода открывается без счёта и категории. Полный сброс — logout / отключение сервера. Профиль также в `last_user` при логине и успешном `loadUser`
+7. **401 → logout** только если в запросе был Bearer **и** активный URL сервера совпадает с origin, на котором выдан токен (`shouldLogoutOnApi401`); иначе 401 не сбрасывает Secure Storage (другой сервер в том же клиенте)
+8. **OEM dual-app clone не поддерживается** (MIUI/HyperOS Dual Apps, user **999**). Лаунчер — `MainActivity`. Android 12 сплэш: `installSplashScreen` + `keepOnScreen=false` + фон в night (`values-night-v31`). WebView: непрозрачный фон, `RENDERER_PRIORITY_IMPORTANT` (иначе Xiaomi SmartPower уводит renderer под сплэшем). HTML не грузит Google Fonts блокирующим CSS (после `pm clear webview` это ~30 с чёрного экрана). Тема Capacitor — `AppTheme.NoActionBar` с непрозрачным `windowBackground`. В клоне — `CloneBlockedActivity`
+9. **Удаление приложения сбрасывает сессию.** `allowBackup=false`, cloud/device-transfer исключены (`backup_rules` / `data_extraction_rules`). Маркер `install.stamp` в `no_backup`: если ОС восстановила WebView/prefs без маркера (или с чужим `firstInstallTime`) — локальные данные стираются до старта WebView. Обновление APK (`firstInstallTime` старше `lastUpdateTime`) маркер только записывает, кеш не трогает. Скрытие сумм в виджетах и PIN — как раньше; после честного uninstall пользователь снова на `/server-setup`
+
+## Офлайн (outbox)
+
+Каталог: `android/ui/src/lib/offline/`.
+
+- Очередь create / update / delete для **`transaction` | `transfer` | `category` | `debt` | `account` | `budget` | `credit` | `recurring` | `subscription`** (`EntityKind` в `types.ts`). Wrappers: `transactions-api`, `categories-api`, `debts-api` (в т.ч. settle), `accounts-api`, `budgets-api`, `credits-api` (pay/complete/update/schedule/delete payment/delete; **без** create), `recurring-api`, `subscription-api`. Ещё онлайн-only: создание кредита (мастер), удаление счёта насовсем, primary/reorder категорий, подкатегории, настройки профиля, **сброс учёта** (`DELETE /user/data` — полный `clearRefCache` без preserve, очистка outbox и привязок перехвата), attach/find/convert подписок — UI блокирует через `requireOnline()` (toast «только онлайн»).
+- **Coalescing** (create→edit→delete на одной сущности)
+- При появлении сети: `scheduleSyncOutbox()` → FIFO replay через существующие API
+- Синхронизация не стартует без настроенного URL сервера
+- **Справочники (ref-cache):** GET через `request()` кэшируются в `localStorage` (ключ включает URL сервера), **кроме** `/health`, путей с `/preview` (в т.ч. `GET /budgets/spent-preview`), **`GET /setup/status`** (флаг регистрации / bootstrap), **`GET /version/check`** (версия сборки сервера — иначе SWR отдавал старый `current_version`) и **`GET /sync/transaction-changes`**. Кешируются карточки **`GET /credits/{id}`**, **`GET /debtors/{id}`**, **`GET /accounts/{id}`** (+ `/balance`). **Stale-while-revalidate:** при наличии кэша экран рисуется сразу, сеть — в фоне (`ref-cache.ts`, store `refCacheUpdate` по path, legacy `refCacheTick`). `writeRefCache` не пишет и не шлёт `refCacheUpdate`, если сырой JSON совпал с кэшем; для `/api/v1/dashboard` — сравнение без полей `*_display`. При недоступности сервера — только кэш (некэшируемые GET сразу дают miss). `GET /ui/meta` перезаписывает на устройстве словари (`categories`, merchants, tags, banks, debtors, templates). Все persistable GET **не стираются** при write — следующий онлайн-GET форсирует сеть (`pendingNetworkRefresh`); in-flight GET/SWR, начатый до `clearRefCache`, не перезаписывает снимок (`cacheEpoch`). Полный сброс — logout / отключение сервера. При пустом `/accounts` — seed из `ui/meta`. `getDebtor` / `getDebt` / `getAccount` / `getCredit` при офлайн-miss собирают карточку из списков (`section-fallbacks.ts`) — иначе «Долги → должник» падает, если деталь никогда не прогревалась. `onCreditUpdated` патчит уже существующие списки кредитов и **не** засевает `[один кредит]`, если списка нет. `clearRefCache` сбрасывает SWR-cooldown (`lastRevalidatedAt`). `listAccounts` / `listCategories` при офлайн miss читают fallback. `listSubcategories` при офлайн miss возвращает `[]`, не роняя форму. **`assignIfChanged`** в `load({ background: true })` — меньше лишних reactive-прогонов; dashboard через `stableEqual` без `*_display`. Native HTTPS (`SslTrust`) выполняется в пуле потоков + JS-таймаут, чтобы не блокировать очередь CapacitorPlugins. При сворачивании приложения `flushRefCacheDisk` откладывается (~2 с) и **не** вызывается на паузе диалога отпечатка.
+- **Списки операций:** после merge outbox + server (`mergeTransactionLists`) клиент сортирует `transaction_date DESC`, `created_at DESC` — как API `sort=date_desc`. Иначе pending из outbox (FIFO) оказывались сверху в порядке создания (от старых к новым).
+- **Прогрев кэша:** core при старте (без блокировки UI, батчами, после unlock ~400 мс) — главная, словари, списки всех разделов (счета, долги, должники, кредиты, подписки, периодические, бюджет, статистика). Heavy **после паузы ~1.8 с** (тоже батчами, не только ручной sync): карточки каждого кредита / должника / счёта + `stats/context` + tx-index + subcategories. Force warm (`pullFromServer`) идёт сразу, без паузы. SWR-revalidate отключена на время warm (+ grace). **Force warm** обходит SWR и всегда ходит в сеть (`runWithForcedRefCacheNetwork`) — иначе отравленный список кредитов не чинится синхронизацией. Resume — cooldown 5 мин. Пути списков операций — через `transactionsListPath` (query-ключи отсортированы), иначе home/warm писали в разные ключи ref-cache. Главная: `shouldSuppressHomeDataRefresh` только пока warm in-flight; после `dataRefreshTick` — soft-reload (с retry, если warm ещё идёт).
+- **Ошибка загрузки экрана:** при сбое первой загрузки без кеша — `PageLoadGate` с текстом и «Повторить» (не пустой экран); при фоновом SWR с уже показанными данными — только toast. Сеть / cache-miss не показывают URL и native-текст — `formatApiError` → `common.server_unavailable`. См. [android-client-ui.md](android-client-ui.md#ошибка-загрузки-страницы).
+- **Локальное состояние:** `balance-overlay.ts` пересчитывает баланс и прогноз по outbox относительно последнего снимка с сервера; `local-state.ts` применяет дельты к dashboard, счетам и формам. Индекс транзакций (`transaction-index.ts`) нужен для корректного update/delete офлайн.
+- **Синхронизация:** ручной pull (`AndroidDrawerSync`) — кнопка всегда активна (кроме момента sync); в офлайне сначала принудительный `/health`, при успехе — прогрев кэша + replay outbox, при неудаче остаётся офлайн. После прогрева — `GET /sync/transaction-changes?since_id=` (курсор в ref-cache): события create/update/delete операций (включая долги и кредиты) патчат все закешированные списки и индекс по id — так подтягиваются добавление, правка и удаление операции за месяцы назад, которые warm страницы 1 не видит. `meta.total` лента не увеличивает для операции старше текущей страницы и для входящей ноги перевода (это та же операция): число в спойлере берётся из GET списка. `meta.total` лента не увеличивает для операции старше текущей страницы и для входящей ноги перевода (это та же операция): число в спойлере берётся из GET списка. При cooldown фонового warm лента всё равно запрашивается. Фоновый `syncOutbox` — только outbox. После успешной отправки outbox и после **успешного онлайн-write** во всех offline wrappers (`afterOnlineWrite` → `dataRefreshTick` + `scheduleSyncOutbox`) страницы перезагружают данные — иначе delete на списке оставлял бы stale state до ручного sync (пустой outbox → `scheduleSyncOutbox` no-op). Фоновое обновление кэша — через `refCacheTick`. После локального save в outbox — мгновенный re-merge через `localDataTick` / `outboxTick`. Кнопка sync в drawer **не закрывает** меню.
+- **Версии:** `fetchAppVersionInfo()` сравнивает `APP_VERSION` с `current_version` сервера; фоновая сеть **не чаще 1×/сутки** (кэш результата). Клик по версии в drawer открывает попап и **форсирует** повторный `GET /version/check` (`force: true`), чтобы показать актуальную версию сервера сразу после обновления инстанса. **Блокировка** (`VersionBlockScreen`) — только при отставании **мажор** или **минор** (`1.4.x` vs `1.5.x`, `1.x` vs `2.x`). Патч (`1.4.0` vs `1.4.1`) — предупреждение в drawer и попап по клику, без блокировки.
+- **Failed sync:** операции с ошибкой отправки помечаются ⚠️ в списке (tooltip с текстом ошибки); баннер «не отправилось» — только при доступном сервере; в офлайне счётчик в полоске внизу и в drawer.
+- **Outbox при resume / смене сети:** внеочередной probe `/health`; при online — warm cache и `scheduleSyncOutbox`, если очередь не пуста.
+- **Экспорт очереди:** Настройки → Сервер — JSON в буфер обмена (для support).
+- **Ярлыки и share:** static shortcuts «+ Расход/Доход», «Перевод» → deep links; **«Поделиться»** (`ACTION_SEND` text/plain, image/*) → `ShareTargetPlugin` → `/transactions/new?type=expense` с префиллом описания (`share-target.ts`). Вложение файла / OCR — не в MVP.
+- **Перехват уведомлений банка:** `BankNotificationListenerService` + `BankSmsReceiver` + `NotificationInterceptPlugin` → JS-парсеры (allowlist package / SMS-отправителей для банков каталога **и платёжных приложений**: MIR Pay, Samsung Pay, СБПэй, Google Wallet, Huawei Wallet, Mi Pay, ЮMoney) → локальные черновики **расхода или дохода**. OTP/баланс/отказы — игнор; покупки и исходящие «перевод по …» → expense; входящие (пополнение, выплата процентов, «перевод от …») → income. Пара расход+доход (одна сумма, разные счета или банки, окно 2 ч) показывается **одной** карточкой «Возможный перевод» (не тройкой карточек); форма перевода после сохранения снимает оба черновика. Marketplace-шеллы (`com.wildberries.ru`, `ru.ozon.app.android`) — только при title/text кошелька/банка или явном ключе операции; маркетинг/доставка → null. Provisional в шторке и черновики — **один gate** (сумма только с валютой; v1.9.1 — [notification-intercept-harden.md](../roadmap/notification-intercept-harden.md)). Счётчик в меню и на главной — число карточек (пара = 1), не сырых черновиков. Справочники счетов на этом экране грузятся в фоне и не блокируют создание/удаление. **SMS в шторке** от Google / Samsung / OEM Messages — по заголовку отправителя (в т.ч. «Ваш Т-Банк», в т.ч. с Unicode-дефисом) маппятся на банк; тело читается и из `EXTRA_TEXT`, и из MessagingStyle `EXTRA_MESSAGES` (иначе скан шторки пропускал SMS как «пустые»). Кошелёк не в привязке «счёт → банк»: счёт по last4 (если *XXXX* уникален) или по банку в тексте. При создании черновика: категория/подкатегория по истории того же типа и сматченного `merchant_id` (majority категории из последних 100, затем majority непустой подкатегории; иначе primary) — хранится на draft для Accept из шторки. Настройки: `/settings/bank-notifications` (per-user toggle перехвата, тумблер «Уведомления в шторке» + `POST_NOTIFICATIONS`, счёт→банк many-to-one, last4→счёт — **на сервере** `GET/PUT /api/v1/user/notification-intercept/bindings`, локальный кэш + двусторонний sync (merge, не затирание local пустым сервером), переживают переустановку APK; блок NLS; блок SMS `RECEIVE_SMS`; автозапуск/батарея). Черновики — меню «Черновики банка»; история — `BuhgalterNotificationHistory` (+ метка канала push/SMS); у строк, парсящихся как расход/доход — либо «Создать операцию», либо «Создать перевод» при уникальной паре (prefill без постановки в очередь). **Quick-actions (v1.6.0):** после постановки push/SMS в очередь — сразу provisional-уведомление; если UI мёртв и PIN выкл. (`AppLockNative`, не скрытие сумм виджетов) — тихий wake WebView → parse → native-зеркало (пара перевода = одно уведомление) с Accept/Reject; тап / Accept → форма с prefill; операция только после «Сохранить» в форме (не silent POST из шторки). Запуск с лаунчера / PIN / отпечаток отменяют `moveTaskToBack` (one-shot token + strip sticky extras; `onResume` без quiet-сессии помечает user engaged — иначе HyperOS/sticky Intent снова сворачивали приложение сразу после открытия). С PIN-lock полный Accept/Reject после разблокировки. Отмена покупки снимает черновик расхода; дубли push↔SMS и банк↔кошелёк схлопываются (сумма/магазин/last4, 2 ч). Сырые push/SMS только на устройстве. **Фон:** NLS должен жить без UI — на MIUI без автозапуска после «закрыть все» push теряется (смахнул — не восстановить). Rebind: `onResume`, `onListenerConnected`, `BOOT_COMPLETED` / `MY_PACKAGE_REPLACED`.
+- **Тёмная иконка / splash:** `values-night/ic_launcher_background` (#0f172a), splash в night mode — тот же фон до загрузки WebView. Это системный night mode лаунчера, не настройка темы SPA (`system` / light / dark в профиле). **Night bg лаунчера не гарантирован на HyperOS/Xiaomi** (кеш иконки); эталон — Pixel Launcher / AVD. Splash при этом может темнеть независимо.
+- **Themed icon (Material You):** слой `<monochrome>` в adaptive icon (`@drawable/ic_launcher_monochrome`), исходник `ui/static/icon-monochrome-512.png` → `make android-icons`. Работает при включённых тематических иконках ОС (API 33+); на OEM — основной способ «иконка меняет вид».
+- **SystemBars:** Capacitor 8 `SystemBars.setStyle` из `applyTheme` (`system-bars.ts`) — contrast иконок status/nav bar следует **resolved** теме SPA, не только OS night. Cold start до JS может кратко совпадать с device night.
+- **Доступность сервера:** `server-connectivity.ts` — отдельно от «есть Wi‑Fi». При недоступности API (в т.ч. Capacitor `Failed to connect`) включается офлайн-режим: запросы не уходят на сервер, GET берутся из ref-cache, мутации — в outbox. Полоска внизу показывает «Нет соединения» и при наличии очереди — число операций; фоновая проверка `/health` раз в **180 с**; при смене сети / resume приложения — внеочередной probe; кнопка «Синхронизировать» тоже форсирует probe. Опциональный fallback LAN→remote на домашнем SSID.
+
+Плагины: `@capacitor/network`, `@capacitor/preferences`, `@capacitor/app` (кнопка «Назад», блокировка в фоне), встроенный `SystemBars` (стиль status/nav), native `WifiSubnet`, `SslTrust`, `ShareTarget`, `NotificationIntercept`, `WidgetBridge`, `DebugExport`, `LanDiscovery`, `AppInstance` (namespace + `hideSoftKeyboard` + `setPinLockEnabled`); `@aparajita/capacitor-biometric-auth`, `@aparajita/capacitor-secure-storage` (PIN и API-токен).
+## Блокировка приложения
+
+Настройки → **Безопасность** (`/settings/security`).
+
+- **PIN** — 4 цифры; обязателен при включении блокировки; отклоняются простые комбинации (повторы, последовательности, 1234, 1111 и т.п.)
+- **Биометрия** — опционально (отпечаток / Face ID), если устройство поддерживает
+- Блокировка при **холодном старте** и после выбранного **таймаута в фоне** (`appStateChange` → `@capacitor/app`): 30 с / 1 мин / 5 / 10 / 15 / 30 мин / 1 час (по умолчанию **1 мин**). Пауза системного диалога отпечатка **не** считается уходом в фон
+- Включённый PIN дублируется в `AppLockNative` (plain prefs) — quiet wake перехвата не поднимает lock screen
+- Экран PIN / успешный отпечаток / запуск с лаунчера отменяют `moveTaskToBack` quiet wake. Quiet wake — **one-shot token** на Intent (не sticky replay после process death); extras сразу снимаются; `onResume` без активной quiet-сессии = user engaged (HyperOS часто поднимает `singleTask` без `onNewIntent`)
+- **Показывать виджеты при блокировке** — по умолчанию выкл.; если вкл., home-screen виджеты не скрывают суммы при lock screen
+- PIN-hash хранится в **native secure storage** (`@aparajita/capacitor-secure-storage`), не в открытом `localStorage` (в browser — тот же `secure-store` fallback на `buhgalter.secure.*`)
+- **Выход** (drawer), **отключение сервера** (Настройки → Сервер) и **истечение сессии** — `clearAppLock()`: PIN, биометрия, таймаут и опция виджетов удаляются без ввода старого PIN; следующий вход — настройка с нуля
+- Экран разблокировки: `AppLockScreen.svelte` — между auth bootstrap и `AndroidShell`
+
+**Ограничения:** PIN скрывает UI на устройстве; ref-cache и outbox остаются в `localStorage`. API-токен — в secure storage, но не шифрует остальные локальные данные.
+
+Код: `app-lock.ts`, `secure-store.ts`, `AppLockScreen.svelte`, `settings/security/+page.svelte`, `AppLockNative.java`.
+
+Плагины: `@aparajita/capacitor-biometric-auth`, `@aparajita/capacitor-secure-storage`; Android: `USE_BIOMETRIC`.
+
+## Отладочное логирование
+
+Экран: **Настройки → Сервер** — переключатель «Включить логирование».
+
+### Включение и экспорт
+
+1. Включить переключатель — начинается новая сессия лога (предыдущие записи очищаются), toast «Логирование включено».
+2. Повторить проблемный сценарий в приложении.
+3. Выключить переключатель — диалог «Сохранить лог?»: **Скачать** → файл `buhgalter-debug-YYYY-MM-DDTHH-MM-SS.log` в **Загрузки** (Android 10+ через MediaStore; plugin `DebugExportPlugin.java`); **Пропустить** — журнал остаётся в памяти до следующего включения.
+
+В браузере при `npm run dev` (без native) — скачивание через `<a download>`.
+
+### Что пишется
+
+| Категория | Источник | Примеры |
+|-----------|----------|---------|
+| `api` | `client.ts` | `→ GET /accounts`, `← GET /accounts 200 (42ms)`, ошибки с кодом API |
+| `sync` | `offline/sync.ts` | `syncOutbox started/finished`, `warmRefCache`, skip при offline |
+| `cache` | `offline/ref-cache.ts` | SWR hit, revalidate, offline miss |
+| `connectivity` | `serverReachability` store | смена `online` / `offline` / `checking` |
+| `nav` | `+layout.svelte` | смена маршрута |
+| `bootstrap` | `+layout.svelte` | старт приложения |
+| `session` | `setDebugLogEnabled(true)` | снимок окружения при включении |
+| `uncaught` / `unhandledrejection` | глобальные listeners | JS-ошибки |
+
+Лимит — **3000** записей в `localStorage` (`buhgalter.debug_log.entries`); старые отбрасываются. Флаг — `buhgalter.debug_log.enabled`.
+
+### Редактирование секретов
+
+`redactHeaders` / `redactData`: ключи `authorization`, `token`, `password`, `pin`, `secret`, `api_token` → маска; `Authorization: Bearer ***`; длинные строки обрезаются до 2000 символов.
+
+### Формат экспорта
+
+Текстовый файл UTF-8:
+
+1. Заголовок и время экспорта
+2. Блок **Environment** — JSON: версия APK, native/web, userAgent, активный URL, профиль сервера, reachability, счётчики outbox
+3. Блок **Events** — строки `ISO8601 [level] [category] message {json}`
+
+Код: `debug-log.ts`, `debug-export.ts`, UI — `settings/server/+page.svelte`. Тесты: `debug-log.test.ts`.
+
+Серверные HTTP-логи (не путать с клиентским журналом) — `BUHGALTER_LOG_MODE` в `.env`, см. [README.md](../README.md#отладочные-логи).
+
+## Home-screen виджеты
+
+Launcher-виджеты (не карточки на главной в WebView). Реализация: `AppWidgetProvider` + `RemoteViews` в `android/app/.../widgets/`.
+
+| Виджет | Содержание | Тап |
+|--------|------------|-----|
+| Быстрые действия | Расход / Доход / Перевод | формы операций |
+| Баланс | «Мои средства»: наличные / банковские карты / кредитные средства | `/accounts` |
+| Бюджет месяца | план / факт / прогресс | `/budget` |
+| Скоро | до 5 ближайших: кредит, долг, плановые, подписки, периодические | карточка / главная |
+| Один счёт | выбранный счёт (основной по умолчанию); configure — DayNight + отступы system bars | `/accounts/{id}` |
+
+Данные: JSON-снимок в EncryptedSharedPreferences через Capacitor plugin `WidgetBridge` (`publish` / `setLockEnabled` / `clear`). UI публикует снимок после `warmRefCache` и загрузки главной; выход и смена сервера очищают. Фон: WorkManager раз в 60 мин (`WidgetRefreshWorker`, OkHttp + Bearer). Суммы во всех виджетах — как в UI (`formatBalance` / `1 500.00 ₽`). `AppWidgetProvider.onUpdate` только биндит RemoteViews из снимка — **не** ставит `runOnce` (иначе `updateAll` → `ACTION_APPWIDGET_UPDATE` → снова `onUpdate` зацикливает WorkManager и держит CPU ~70%).
+
+Приватность: по умолчанию суммы в виджетах скрыты («Заблокировано» / `••••`), пока нужен экран PIN (`shouldHideWidgetAmounts`). После разблокировки виджеты снова показывают суммы. В Настройки → Безопасность можно включить **«Показывать виджеты при блокировке»** (`showWidgetsWhenLocked`, по умолчанию выкл.) — тогда суммы остаются видимы и при lock screen. Quick actions кликабельны всегда. Без токена — «Откройте приложение и войдите».
+
+Код UI: `android/ui/src/lib/widgets/`.
+
+## Локализация (Android)
+
+Строки UI лежат в `android/ui/src/lib/i18n/{ru,en}.json` и вшиты в APK.
+
+При **рассинхроне версий** (`APP_VERSION` < `current_version` с `GET /api/v1/version/check`) клиент дополнительно запрашивает `GET /api/v1/ui/i18n/{lang}` и мержит каталог поверх bundled (`svelte-i18n` `addMessages`). Кеш в `localStorage` по паре «версия сервера + язык». Офлайн — мягкий сбой (остаются строки APK).
+
+На сервере каталоги копируются в `server/ui_locales/` (`make copy-ui-i18n`, проверка `ui-i18n-check` в CI: parity зеркала + литеральные `$_('…')`/`tr('…')` ключи web и android/ui ⊆ ru/en) и отдаются с версией бинарника. Это отдельно от `server/locales/` (сообщения API/ошибок).
+
+Код: `android/ui/src/lib/i18n/remote-sync.ts`, `server/internal/ui/i18n.go`.
+
+## Сборка и установка
+
+| Команда | Действие |
+|---------|----------|
+| `make android-icons` | Mipmaps из `ui/static/icon-512.png` + monochrome из `icon-monochrome-512.png` |
+| `make android-ui-build` | `category-icons-json` + `npm run build` в `android/ui` |
+| `make prepare-android` | `npm run lint:fix` в `android/ui` (входит в `make prepare`) |
+| `make test-unit` | Go + web/android `svelte-check` + android `vitest` |
+| `make test-e2e-web` | Playwright e2e web UI |
+| `make test-e2e` | = `test-e2e-web` (Android e2e нет — ручная приёмка на устройстве) |
+| `make android-sync` | UI build + icons + cap sync |
+| `make android-apk` | Debug APK |
+| `make android-apk-release` | Release APK: universal + per-ABI (`arm64-v8a`, `armeabi-v7a`, `x86_64`) |
+| `make android-install` | Debug-сборка + `adb install -r` |
+| `make android-install-release` | Release-сборка + `adb install -r` для `app-universal-release.apk` |
+
+Требования: **Android 8.0+** (API 26), JDK 21, Android SDK, **Node.js 22+**, **Pillow** (`pip3 install --user Pillow` — для `make android-icons`). Окружение: `scripts/setup-android-dev.sh`, `scripts/android-env.sh`.
+
+Debug APK: `android/app/build/outputs/apk/debug/app-debug.apk`.  
+Release APK (`make android-apk-release` → `android/app/build/outputs/apk/release/`):
+
+| Файл | Назначение |
+|------|------------|
+| `app-release.apk` | Universal (все ABI) |
+| `app-arm64-v8a-release.apk` | Телефоны arm64 |
+| `app-armeabi-v7a-release.apk` | Старые 32-bit ARM |
+| `app-x86_64-release.apk` | Эмулятор x86_64 |
+
+На GitHub Release: `buhgalter-android-{version}.apk` (universal) и `buhgalter-android-{version}-{abi}.apk`.
+
+CI (`.github/workflows/release.yml`): только сборка релиза (без повторного `test` — его уже прогнал `ci.yml` на коммите). Node 22 (`setup-node@v7`) для сборки UI; экшены GitHub Actions — на Node 24. Job `android-apk` ставит SDK (`platforms;android-36`, `build-tools;36.0.0`), пишет `android/local.properties`, Pillow, собирает `make android-apk-release`, проверяет все четыре APK (`scripts/verify-android-release-apks.sh`), заливает каталог `release/` артефактом. Параллельно `docker` пушит образ в GHCR. Job `goreleaser` ждёт оба (`needs: [android-apk, docker]`), скачивает APK-артефакт в тот же путь и прикрепляет файлы через `release.extra_files` в `.goreleaser.yaml`. Без всех APK релиз падает.
+
+Подпись release APK: `keystore.properties` / GitHub Secrets; `*.jks` в `.gitignore` (см. [android/README.md](../android/README.md)).
+
+## HTTP без TLS
+
+Self-hosted API обычно на `http://` в LAN. Нужно три уровня:
+
+1. `AndroidManifest.xml`: `usesCleartextTraffic="true"` — разрешает HTTP на уровне ОС.
+2. `capacitor.config.json`: `plugins.CapacitorHttp.enabled: true` — `fetch` к API идёт через нативный HTTP (обходит mixed content: WebView на `https://localhost` иначе блокирует запросы к `http://192.168.x.x`).
+3. `android.allowMixedContent: true` — запасной вариант для прочих запросов в WebView.
+
+После смены конфига: `make android-sync` и переустановка APK (`make android-install`).
+
+## Возможности платформы (сводка)
+
+- Отдельный UI в `android/ui/`, drawer-оболочка (~70% ширины; «Главная» первым)
+- Вход: логин/пароль (session) или API-токен; токен в secure storage; экран URL при первом запуске
+- LAN discovery (mDNS + subnet scan); `external_url` в health для подписи домена в списке
+- Два URL + SSID, HTTPS TOFU, офлайн outbox (в т.ч. счета и бюджет) и ref-cache SWR
+- Создание кредита (пошаговый мастер); home-screen виджеты; share-intent; перехват push банков; static shortcuts
+- OEM Dual Apps не поддерживается (`CloneBlockedActivity`); uninstall не восстанавливает сессию из бэкапа ОС
+- Тема `light` | `dark` | `system` (default); SystemBars по resolved теме; themed icon `<monochrome>`
+- Remote i18n при `app < server` (`GET /ui/i18n/{lang}`)
+- Блокировка PIN/биометрия; настраиваемый таймаут в фоне; сброс при выходе и отключении сервера
+- `PageLoadGate` — ошибки начальной загрузки с retry; `gotoReplace` после создания сущностей
+- Отладочное логирование с экспортом в Загрузки
+- Release APK в GitHub Releases (universal + per-ABI)
+
+## См. также
+
+- [android-client-ui.md](android-client-ui.md) — экраны и навигация
+- [roadmap/android-client.md](../roadmap/android-client.md)

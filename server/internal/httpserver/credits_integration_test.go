@@ -656,6 +656,98 @@ func TestFutureCreditPaymentAffectsDashboardForecast(t *testing.T) {
 	}
 }
 
+func TestUnpaidCreditPaymentAffectsDashboardForecast(t *testing.T) {
+	env := setupConfigured(t)
+	env.login(t, "admin", "secret123")
+	accID := createTestAccount(t, env, "WB")
+
+	credit := createCredit(t, env, map[string]any{
+		"name":                "Потреб",
+		"principal_amount":    "50000.00",
+		"issue_date":          time.Now().UTC().Format("2006-01-02 00:00:00"),
+		"term_months":         5,
+		"interest_rate":       0,
+		"debit_account_id":    accID,
+		"added_retroactively": false,
+		"first_payment_today": true,
+	})
+	tz := "Europe/Moscow"
+	monthStart, monthEnd, err := timeutil.MonthBoundsUTC(tz, timeutil.NowUTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	monthStartTime, err := timeutil.ParseUTC(monthStart)
+	if err != nil {
+		t.Fatal(err)
+	}
+	monthEndTime, err := timeutil.ParseUTC(monthEnd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var unpaid int64
+	for _, item := range credit["schedule"].([]any) {
+		row := item.(map[string]any)
+		if row["kind"] != "scheduled" || row["is_applied"] == true {
+			continue
+		}
+		raw, _ := row["payment_date"].(string)
+		if raw == "" {
+			continue
+		}
+		payDate, err := timeutil.ParseUTC(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if payDate.Before(monthStartTime) || payDate.After(monthEndTime) {
+			continue
+		}
+		unpaid += int64(row["amount"].(float64))
+	}
+	if unpaid == 0 {
+		t.Fatal("expected unpaid scheduled payment in current month")
+	}
+
+	dashResp, err := env.authedRequest(http.MethodGet, "/api/v1/dashboard", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dashResp.Body.Close()
+	if dashResp.StatusCode != http.StatusOK {
+		t.Fatalf("dashboard status %d", dashResp.StatusCode)
+	}
+	var dash map[string]any
+	_ = json.NewDecoder(dashResp.Body).Decode(&dash)
+	accounts, ok := dash["accounts"].([]any)
+	if !ok {
+		t.Fatalf("dashboard accounts missing: %v", dash["accounts"])
+	}
+	var target map[string]any
+	for _, item := range accounts {
+		row := item.(map[string]any)
+		if row["id"] == accID {
+			target = row
+			break
+		}
+	}
+	if target == nil {
+		t.Fatalf("account %s not found in dashboard", accID)
+	}
+	balance := int64(target["balance"].(float64))
+	forecast := int64(target["forecast_balance"].(float64))
+	if forecast != balance-unpaid {
+		t.Fatalf("expected forecast %d (balance %d - unpaid %d), got %d", balance-unpaid, balance, unpaid, forecast)
+	}
+	if target["has_planned_this_month"] != true {
+		t.Fatalf("expected has_planned_this_month=true, got %v", target["has_planned_this_month"])
+	}
+	if target["has_subscriptions_this_month"] != false {
+		t.Fatalf("expected has_subscriptions_this_month=false, got %v", target["has_subscriptions_this_month"])
+	}
+	if target["has_future_this_month"] != true {
+		t.Fatalf("expected has_future_this_month=true, got %v", target["has_future_this_month"])
+	}
+}
+
 func TestChangeDebitAccount(t *testing.T) {
 	env := setupConfigured(t)
 	env.login(t, "admin", "secret123")

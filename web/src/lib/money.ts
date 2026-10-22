@@ -34,13 +34,77 @@ export function formatMoneyDisplay(value: string): string {
 	return intPart;
 }
 
-/** Parse display/input string to kopecks (strips spaces). */
-export function toCents(value: string): number {
+/** True when value has binary +/− (not only a leading unary minus). */
+export function hasMoneyExpression(value: string): boolean {
+	const s = value.trim().replace(/\s/g, '').replace(/,/g, '.');
+	if (!s) return false;
+	const body = s.startsWith('-') ? s.slice(1) : s;
+	return /[+-]/.test(body);
+}
+
+/**
+ * Parse a +/− expression into kopecks.
+ * Grammar: term (('+'|'-') term)*; first term may have a leading unary minus.
+ * Returns null if the expression is incomplete or invalid.
+ */
+export function evaluateMoneyExpression(value: string): number | null {
+	const s = value.trim().replace(/\s/g, '').replace(/,/g, '.');
+	if (!s) return null;
+
+	let i = 0;
+	const len = s.length;
+
+	const parseTerm = (): number | null => {
+		const start = i;
+		if (i >= len || !/\d/.test(s[i])) return null;
+		while (i < len && /\d/.test(s[i])) i++;
+		if (i < len && s[i] === '.') {
+			i++;
+			const fracStart = i;
+			while (i < len && /\d/.test(s[i])) i++;
+			if (i - fracStart > 2) return null;
+		}
+		const literal = s.slice(start, i);
+		if (!literal || literal === '.') return null;
+		try {
+			return toCentsLiteral(literal);
+		} catch {
+			return null;
+		}
+	};
+
+	let unary = 1;
+	if (s[i] === '-') {
+		unary = -1;
+		i++;
+	} else if (s[i] === '+') {
+		i++;
+	}
+
+	const first = parseTerm();
+	if (first === null) return null;
+	let total = unary * first;
+
+	while (i < len) {
+		const op = s[i];
+		if (op !== '+' && op !== '-') return null;
+		i++;
+		const term = parseTerm();
+		if (term === null) return null;
+		total = op === '+' ? total + term : total - term;
+	}
+
+	return total;
+}
+
+/** Parse a single money literal (no expression) to kopecks. */
+function toCentsLiteral(value: string): number {
 	const s = value.trim().replace(/\s/g, '').replace(',', '.');
 	if (!s) return 0;
 	const negative = s.startsWith('-');
 	const raw = negative ? s.slice(1) : s;
 	const parts = raw.split('.');
+	if (parts.length > 2) throw new Error('invalid amount');
 	const rubles = parseInt(parts[0] || '0', 10);
 	if (Number.isNaN(rubles)) throw new Error('invalid amount');
 	let kopecks = 0;
@@ -53,6 +117,16 @@ export function toCents(value: string): number {
 	}
 	const total = rubles * 100 + kopecks;
 	return negative ? -total : total;
+}
+
+/** Parse display/input string to kopecks (strips spaces; evaluates +/− expressions). */
+export function toCents(value: string): number {
+	if (hasMoneyExpression(value)) {
+		const evaluated = evaluateMoneyExpression(value);
+		if (evaluated === null) throw new Error('invalid amount');
+		return evaluated;
+	}
+	return toCentsLiteral(value);
 }
 
 /** Format kopecks as display string with thousands separator. */
@@ -70,8 +144,8 @@ export function roundMoney(value: number): number {
 	return Math.round(value * 100) / 100;
 }
 
-/** Format while typing (allows incomplete decimals). */
-export function formatMoneyLive(value: string): string {
+/** Live-format a single money term (no expression operators). */
+function formatMoneyLiveTerm(value: string): string {
 	const trimmed = value.trim();
 	if (!trimmed) return '';
 
@@ -96,11 +170,113 @@ export function formatMoneyLive(value: string): string {
 	return negative ? `-${result}` : result;
 }
 
+type ExprToken = { kind: 'term'; raw: string } | { kind: 'op'; op: '+' | '-' };
+
+/** Split raw input into money terms and binary +/− operators (preserves trailing op). */
+function tokenizeMoneyExpression(value: string): ExprToken[] | null {
+	const s = value.replace(/\s/g, '').replace(/,/g, '.');
+	if (!s) return null;
+
+	const tokens: ExprToken[] = [];
+	let i = 0;
+	const len = s.length;
+
+	// optional unary minus on first term
+	let firstPrefix = '';
+	if (s[i] === '-') {
+		firstPrefix = '-';
+		i++;
+	}
+
+	const readTerm = (prefix: string): string | null => {
+		const start = i;
+		if (i >= len) return prefix ? prefix : null;
+		// empty term after unary minus is allowed while typing ("-")
+		if (!/\d/.test(s[i]) && s[i] !== '.') {
+			return prefix || null;
+		}
+		while (i < len && /\d/.test(s[i])) i++;
+		if (i < len && s[i] === '.') {
+			i++;
+			while (i < len && /\d/.test(s[i])) i++;
+		}
+		const body = s.slice(start, i);
+		if (!body && !prefix) return null;
+		return prefix + body;
+	};
+
+	const first = readTerm(firstPrefix);
+	if (first === null) return null;
+	tokens.push({ kind: 'term', raw: first });
+
+	while (i < len) {
+		const op = s[i];
+		if (op !== '+' && op !== '-') return null;
+		i++;
+		tokens.push({ kind: 'op', op });
+		if (i >= len) break; // trailing operator while typing
+		const term = readTerm('');
+		if (term === null) return null;
+		tokens.push({ kind: 'term', raw: term });
+	}
+
+	return tokens;
+}
+
+/** Format while typing (allows incomplete decimals and +/− expressions). */
+export function formatMoneyLive(value: string): string {
+	const trimmed = value.trim();
+	if (!trimmed) return '';
+
+	if (!hasMoneyExpression(trimmed)) {
+		return formatMoneyLiveTerm(trimmed);
+	}
+
+	const tokens = tokenizeMoneyExpression(trimmed);
+	if (!tokens) {
+		// keep characters that look like an expression draft as much as possible
+		return trimmed.replace(/\s/g, '').replace(/,/g, '.');
+	}
+
+	let result = '';
+	for (const t of tokens) {
+		if (t.kind === 'op') {
+			result += t.op;
+		} else {
+			result += formatMoneyLiveTerm(t.raw);
+		}
+	}
+	return result;
+}
+
+/** Significant chars for cursor mapping: digits, decimal, sign, operators (not spaces). */
+function isSignificantMoneyChar(c: string): boolean {
+	return c === '+' || c === '-' || c === '.' || c === ',' || /\d/.test(c);
+}
+
 /** Map caret index after live formatting (keeps edit position in the middle). */
 export function mapMoneyInputCursor(value: string, cursor: number, formatted: string): number {
 	if (!formatted) return 0;
 
 	const clamped = Math.max(0, Math.min(cursor, value.length));
+
+	if (hasMoneyExpression(value) || hasMoneyExpression(formatted)) {
+		let significant = 0;
+		for (let i = 0; i < clamped; i++) {
+			if (isSignificantMoneyChar(value[i]) && value[i] !== ' ') significant++;
+		}
+		// skip spaces in count above already; commas count as decimal
+		let seen = 0;
+		for (let i = 0; i < formatted.length; i++) {
+			const c = formatted[i];
+			if (c === ' ') continue;
+			if (!isSignificantMoneyChar(c)) continue;
+			seen++;
+			if (seen === significant) return i + 1;
+		}
+		return formatted.length;
+	}
+
 	const dotPos = value.slice(0, clamped).search(/[.,]/);
 	const inFraction = dotPos !== -1;
 
@@ -167,6 +343,10 @@ export function formatMoneyInput(value: string): string {
 		if (cents === 0) return '';
 		return fromCents(cents);
 	} catch {
+		// Incomplete expression (e.g. "7899+") — keep live formatting, do not invent a result.
+		if (hasMoneyExpression(value)) {
+			return formatMoneyLive(value);
+		}
 		const displayed = formatMoneyDisplay(value);
 		try {
 			if (toCents(displayed) === 0) return '';

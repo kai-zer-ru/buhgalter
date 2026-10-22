@@ -1,6 +1,11 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { portal } from '$lib/actions/portal';
-	import { dropdownListStyle } from '$lib/dropdown-position';
+	import {
+		dropdownListStyle,
+		dropdownPlacementFor,
+		type DropdownPlacement
+	} from '$lib/dropdown-position';
 	import SelectOptionIcon from '$lib/components/SelectOptionIcon.svelte';
 	import type { SelectOption } from '$lib/select-options';
 
@@ -15,6 +20,8 @@
 		usePortal = false,
 		emptyLabel = '',
 		controlled = false,
+		searchable = false,
+		searchPlaceholder = '',
 		onchange
 	}: {
 		value?: string;
@@ -27,42 +34,64 @@
 		usePortal?: boolean;
 		emptyLabel?: string;
 		controlled?: boolean;
+		searchable?: boolean;
+		searchPlaceholder?: string;
 		onchange?: (value: string) => void;
 	} = $props();
 
 	let open = $state(false);
 	let triggerEl: HTMLButtonElement | undefined = $state();
-	let listEl: HTMLUListElement | undefined = $state();
+	let panelEl: HTMLDivElement | undefined = $state();
+	let searchEl: HTMLInputElement | undefined = $state();
 	let highlighted = $state(0);
 	let listStyle = $state('');
+	let placement = $state<DropdownPlacement | null>(null);
+	let query = $state('');
 
 	const listId = $derived(`${id}-list`);
+	const searchId = $derived(`${id}-search`);
 
 	const selectedOption = $derived(options.find((option) => option.value === value));
 	const selectedLabel = $derived(selectedOption?.label ?? placeholder);
 
-	const visibleOptions = $derived(
-		options.filter((option) => !option.disabled || option.value === value)
-	);
+	const visibleOptions = $derived.by(() => {
+		const q = searchable ? query.trim().toLowerCase() : '';
+		return options.filter((option) => {
+			if (option.disabled && option.value !== value) return false;
+			if (!q) return true;
+			return option.label.toLowerCase().includes(q);
+		});
+	});
 
 	function positionList() {
 		if (!triggerEl) return;
-		const listHeight = Math.min(224, Math.max(visibleOptions.length, 1) * 40);
-		listStyle = dropdownListStyle(triggerEl, listHeight, usePortal);
+		const searchH = searchable ? 48 : 0;
+		const listHeight = Math.min(224, Math.max(visibleOptions.length, 1) * 40) + searchH;
+		if (!placement) placement = dropdownPlacementFor(triggerEl, listHeight);
+		listStyle = dropdownListStyle(triggerEl, listHeight, usePortal, placement);
 	}
 
 	function close() {
 		open = false;
+		placement = null;
+		query = '';
+	}
+
+	function openList() {
+		open = true;
+		query = '';
+		const index = visibleOptions.findIndex((option) => option.value === value);
+		highlighted = index >= 0 ? index : 0;
+		requestAnimationFrame(() => {
+			positionList();
+			if (searchable) searchEl?.focus();
+		});
 	}
 
 	function toggle() {
 		if (disabled) return;
-		open = !open;
-		if (open) {
-			const index = visibleOptions.findIndex((option) => option.value === value);
-			highlighted = index >= 0 ? index : 0;
-			requestAnimationFrame(positionList);
-		}
+		if (open) close();
+		else openList();
 	}
 
 	function selectOption(next: string) {
@@ -76,7 +105,7 @@
 
 	function onDocumentPointerDown(event: PointerEvent) {
 		const target = event.target as Node;
-		if (triggerEl?.contains(target) || listEl?.contains(target)) return;
+		if (triggerEl?.contains(target) || panelEl?.contains(target)) return;
 		close();
 	}
 
@@ -96,18 +125,22 @@
 		};
 	});
 
-	function onTriggerKeydown(event: KeyboardEvent) {
-		if (!open && (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Enter')) {
-			event.preventDefault();
-			open = true;
-			requestAnimationFrame(positionList);
-			return;
-		}
+	$effect(() => {
+		const len = visibleOptions.length;
 		if (!open) return;
+		const next = Math.min(
+			untrack(() => highlighted),
+			Math.max(len - 1, 0)
+		);
+		if (untrack(() => highlighted) !== next) highlighted = next;
+		requestAnimationFrame(positionList);
+	});
 
+	function onListKeydown(event: KeyboardEvent) {
 		if (event.key === 'Escape') {
 			event.preventDefault();
 			close();
+			triggerEl?.focus();
 			return;
 		}
 		if (event.key === 'ArrowDown') {
@@ -124,70 +157,109 @@
 			if (option && !option.disabled) selectOption(option.value);
 		}
 	}
+
+	function onTriggerKeydown(event: KeyboardEvent) {
+		if (!open && (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Enter')) {
+			event.preventDefault();
+			openList();
+			return;
+		}
+		if (!open) return;
+		onListKeydown(event);
+	}
 </script>
 
-<div class="relative">
+<div>
 	{#if label}
 		<label class="field-label" for={id}>{label}</label>
 	{/if}
-	<button
-		{id}
-		type="button"
-		bind:this={triggerEl}
-		class="input flex w-full min-w-0 cursor-pointer items-center justify-between gap-2 text-left"
-		class:opacity-60={disabled}
-		{disabled}
-		role="combobox"
-		aria-expanded={open}
-		aria-controls={listId}
-		onclick={toggle}
-		onkeydown={onTriggerKeydown}
-	>
-		<span class="flex min-w-0 items-center gap-2">
-			{#if selectedOption?.icon}
-				<SelectOptionIcon icon={selectedOption.icon} />
-			{/if}
-			<span class="min-w-0 truncate" style:color={value ? 'var(--text)' : 'var(--text-muted)'}
-				>{selectedLabel}</span
-			>
-		</span>
-		<span class="shrink-0" aria-hidden="true" style:color="var(--text-muted)">▾</span>
-	</button>
-	{#if open}
-		<ul
-			bind:this={listEl}
-			id={listId}
-			class="popover-panel max-h-56 overflow-y-auto {usePortal ? '' : 'absolute z-20 w-full'}"
-			style={listStyle}
-			role="listbox"
-			use:portal={usePortal ? document.body : null}
+	<!-- relative only around the control: non-portal list uses top/bottom:100% -->
+	<div class="relative">
+		<button
+			{id}
+			type="button"
+			bind:this={triggerEl}
+			class="input flex w-full min-w-0 cursor-pointer items-center justify-between gap-2 text-left"
+			class:opacity-60={disabled}
+			{disabled}
+			role="combobox"
+			aria-expanded={open}
+			aria-controls={listId}
+			onclick={toggle}
+			onkeydown={onTriggerKeydown}
 		>
-			{#if visibleOptions.length === 0}
-				<li class="px-4 py-2 text-sm" style:color="var(--text-muted)">{emptyLabel}</li>
-			{:else}
-				{#each visibleOptions as option, index (option.value)}
-					<li>
-						<button
-							type="button"
-							class="flex w-full cursor-pointer items-center gap-2 px-4 py-2 text-left text-sm hover:opacity-90"
-							class:font-medium={option.value === value}
-							style:background-color={index === highlighted || option.value === value
-								? 'color-mix(in srgb, var(--primary) 12%, transparent)'
-								: 'transparent'}
-							disabled={option.disabled}
-							onmousedown={(event) => event.preventDefault()}
-							onclick={() => selectOption(option.value)}
-						>
-							{#if option.icon}
-								<SelectOptionIcon icon={option.icon} />
-							{/if}
-							<span class="min-w-0 truncate">{option.label}</span>
-						</button>
-					</li>
-				{/each}
-			{/if}
-		</ul>
-	{/if}
+			<span class="flex min-w-0 items-center gap-2">
+				{#if selectedOption?.icon}
+					<SelectOptionIcon icon={selectedOption.icon} />
+				{/if}
+				<span class="min-w-0 truncate" style:color={value ? 'var(--text)' : 'var(--text-muted)'}
+					>{selectedLabel}</span
+				>
+			</span>
+			<span class="shrink-0" aria-hidden="true" style:color="var(--text-muted)">▾</span>
+		</button>
+		{#if open}
+			<div
+				bind:this={panelEl}
+				class="popover-panel flex max-h-56 flex-col overflow-hidden {usePortal
+					? ''
+					: 'absolute z-20 w-full'}"
+				style={listStyle}
+				role="presentation"
+				use:portal={usePortal ? document.body : null}
+				onkeydown={onListKeydown}
+			>
+				{#if searchable}
+					<div class="shrink-0 border-b p-2" style:border-color="var(--border)">
+						<input
+							bind:this={searchEl}
+							id={searchId}
+							type="search"
+							class="input w-full"
+							placeholder={searchPlaceholder}
+							bind:value={query}
+							onkeydown={(event) => {
+								if (
+									event.key === 'Escape' ||
+									event.key === 'ArrowDown' ||
+									event.key === 'ArrowUp' ||
+									event.key === 'Enter'
+								) {
+									onListKeydown(event);
+								}
+							}}
+						/>
+					</div>
+				{/if}
+				<ul id={listId} class="min-h-0 flex-1 overflow-y-auto" role="listbox">
+					{#if visibleOptions.length === 0}
+						<li class="px-4 py-2 text-sm" style:color="var(--text-muted)">{emptyLabel}</li>
+					{:else}
+						{#each visibleOptions as option, index (option.value)}
+							<li>
+								<button
+									type="button"
+									class="flex w-full cursor-pointer items-center gap-2 px-4 py-2 text-left text-sm hover:opacity-90"
+									class:font-medium={option.value === value}
+									style:background-color={index === highlighted || option.value === value
+										? 'color-mix(in srgb, var(--primary) 12%, transparent)'
+										: 'transparent'}
+									disabled={option.disabled}
+									onmousedown={(event) => event.preventDefault()}
+									onclick={() => selectOption(option.value)}
+								>
+									{#if option.icon}
+										<SelectOptionIcon icon={option.icon} />
+									{/if}
+									<span class="min-w-0 truncate">{option.label}</span>
+								</button>
+							</li>
+						{/each}
+					{/if}
+				</ul>
+			</div>
+		{/if}
+	</div>
 	{#if hint}
 		<p class="mt-1 text-xs" style:color="var(--text-muted)">{hint}</p>
 	{/if}

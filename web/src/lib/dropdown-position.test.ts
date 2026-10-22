@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { dropdownListStyle } from './dropdown-position';
+import {
+	decideDropdownPlacement,
+	dropdownListStyle,
+	dropdownPlacementFor
+} from './dropdown-position';
 
 function mockTrigger(rect: { top: number; bottom: number; left?: number; width?: number }) {
 	const el = {
@@ -22,6 +26,9 @@ function mockTrigger(rect: { top: number; bottom: number; left?: number; width?:
 describe('dropdownListStyle', () => {
 	beforeEach(() => {
 		vi.stubGlobal('window', { innerHeight: 800 });
+		vi.stubGlobal('getComputedStyle', () => ({
+			getPropertyValue: () => ''
+		}));
 	});
 
 	afterEach(() => {
@@ -67,6 +74,39 @@ describe('dropdownListStyle', () => {
 	it('uses relative positioning when usePortal is false', () => {
 		const trigger = mockTrigger({ top: 500, bottom: 540 });
 
+		// Caller must wrap only the control in `.relative` (label/hint outside).
 		expect(dropdownListStyle(trigger, 360, false)).toBe('bottom:100%;margin-bottom:4px;top:auto;');
+	});
+
+	it('opens down with relative positioning when space below fits', () => {
+		const trigger = mockTrigger({ top: 100, bottom: 140 });
+
+		expect(dropdownListStyle(trigger, 200, false)).toBe('top:100%;margin-top:4px;');
+	});
+
+	it('keeps locked placement on scroll even if space flips', () => {
+		const trigger = mockTrigger({ top: 500, bottom: 540 });
+
+		const style = dropdownListStyle(trigger, 360, true, 'down');
+
+		expect(style).toContain('top:544px');
+		expect(style).not.toContain('bottom:');
+	});
+
+	it('treats money-keypad inset as bottom obstruction', () => {
+		vi.stubGlobal('document', { documentElement: {} });
+		vi.stubGlobal('getComputedStyle', () => ({
+			getPropertyValue: (key: string) => (key === '--money-keypad-inset' ? '240px' : '')
+		}));
+		// Without inset: spaceBelow = 800-440 = 360 → down. With 240px keypad: 120 < 200+8 → up.
+		const trigger = mockTrigger({ top: 400, bottom: 440 });
+		expect(dropdownPlacementFor(trigger, 200)).toBe('up');
+		expect(dropdownListStyle(trigger, 200, true)).toContain('bottom:');
+	});
+});
+
+describe('decideDropdownPlacement', () => {
+	it('prefers down when both sides are short but below has more room', () => {
+		expect(decideDropdownPlacement(180, 100, 360)).toBe('down');
 	});
 });

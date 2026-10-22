@@ -1,0 +1,153 @@
+import { describe, expect, it } from 'vitest';
+import {
+	KNOWN_BANK_APPS,
+	KNOWN_WALLET_APPS,
+	MARKETPLACE_PACKAGES,
+	allKnownPackages,
+	allKnownSmsSenderEntries,
+	bankIdForPackage,
+	bankIdForSmsSender,
+	bankOrWalletLabelKey,
+	inferBankIdFromText,
+	isAllowlistedPackage,
+	isMarketplacePackage,
+	normalizeSmsSender,
+	resolveRawBankNotification,
+	walletIdForPackage
+} from './banks';
+
+describe('KNOWN_BANK_APPS', () => {
+	it('covers catalog banks with unique packages', () => {
+		expect(KNOWN_BANK_APPS.length).toBeGreaterThanOrEqual(20);
+		const packages = allKnownPackages();
+		expect(new Set(packages).size).toBe(packages.length);
+		const ids = KNOWN_BANK_APPS.map((b) => b.bankId);
+		expect(new Set(ids).size).toBe(ids.length);
+		for (const b of KNOWN_BANK_APPS) {
+			expect(Array.isArray(b.smsSenders)).toBe(true);
+		}
+	});
+
+	it('resolves known packages and aliases', () => {
+		expect(bankIdForPackage('ru.alfabank.mobile.android')).toBe('alfabank');
+		expect(bankIdForPackage('ru.vtb24.mobilebanking.android')).toBe('vtb');
+		expect(bankIdForPackage('com.yandex.bank')).toBe('yandex');
+		expect(bankIdForPackage('com.wildberries.ru')).toBe('wbbank');
+		expect(bankIdForPackage('com.bssys.vbrrretail')).toBe('vbrr');
+		expect(bankIdForPackage('com.unknown')).toBeNull();
+		expect(bankIdForPackage('ru.nspk.mirpay')).toBeNull();
+	});
+
+	it('marks marketplace shells separately from fintech packages', () => {
+		expect(MARKETPLACE_PACKAGES).toContain('com.wildberries.ru');
+		expect(MARKETPLACE_PACKAGES).toContain('ru.ozon.app.android');
+		expect(isMarketplacePackage('com.wildberries.ru')).toBe(true);
+		expect(isMarketplacePackage('ru.ozon.app.android')).toBe(true);
+		expect(isMarketplacePackage('ru.wildberries.fintech')).toBe(false);
+		expect(isMarketplacePackage('ru.ozon.fintech.finance')).toBe(false);
+		expect(bankIdForPackage('ru.wildberries.fintech')).toBe('wbbank');
+		expect(bankIdForPackage('ru.ozon.fintech.finance')).toBe('ozon');
+	});
+});
+
+describe('KNOWN_WALLET_APPS', () => {
+	it('covers wallets with unique packages', () => {
+		expect(KNOWN_WALLET_APPS.length).toBeGreaterThanOrEqual(7);
+		const packages = allKnownPackages();
+		expect(new Set(packages).size).toBe(packages.length);
+		const ids = KNOWN_WALLET_APPS.map((w) => w.walletId);
+		expect(new Set(ids).size).toBe(ids.length);
+		for (const w of KNOWN_WALLET_APPS) {
+			expect(w.packageNames.length).toBeGreaterThan(0);
+		}
+	});
+
+	it('resolves wallet packages and allowlist', () => {
+		expect(walletIdForPackage('ru.nspk.mirpay')).toBe('mir_pay');
+		expect(walletIdForPackage('ru.nspk.sbpay')).toBe('sbp_pay');
+		expect(walletIdForPackage('com.samsung.android.spay')).toBe('samsung_pay');
+		expect(walletIdForPackage('com.samsung.android.spaymini')).toBe('samsung_pay');
+		expect(walletIdForPackage('ru.yandex.money')).toBe('yoomoney');
+		expect(walletIdForPackage('ru.sberbankmobile')).toBeNull();
+		expect(isAllowlistedPackage('ru.nspk.mirpay')).toBe(true);
+		expect(isAllowlistedPackage('com.idamob.tinkoff.android')).toBe(true);
+		expect(isAllowlistedPackage('com.unknown')).toBe(false);
+	});
+
+	it('resolves i18n label keys for banks and wallets', () => {
+		expect(bankOrWalletLabelKey('tinkoff')).toBe('bankNotifications.bank.tinkoff');
+		expect(bankOrWalletLabelKey('mir_pay')).toBe('bankNotifications.wallet.mir_pay');
+		expect(bankOrWalletLabelKey('unknown')).toBeNull();
+	});
+
+	it('infers issuer bank from wallet text, not marketplace brands', () => {
+		expect(inferBankIdFromText('Оплата 500 ₽ карта *1234 Т-Банк')).toBe('tinkoff');
+		expect(inferBankIdFromText('Samsung Pay. Сбербанк *4321')).toBe('sberbank');
+		expect(inferBankIdFromText('Покупка ВБРР *1111')).toBe('vbrr');
+		expect(inferBankIdFromText('Оплата 990 ₽ OZON')).toBeNull();
+		expect(inferBankIdFromText('Покупка WB')).toBeNull();
+	});
+});
+
+describe('SMS senders', () => {
+	it('resolves SMS senders to bankId', () => {
+		expect(bankIdForSmsSender('900')).toBe('sberbank');
+		expect(bankIdForSmsSender('T-Bank')).toBe('tinkoff');
+		expect(bankIdForSmsSender('tinkoff')).toBe('tinkoff');
+		expect(bankIdForSmsSender('Alfa-Bank')).toBe('alfabank');
+		expect(bankIdForSmsSender('VBRR')).toBe('vbrr');
+		expect(bankIdForSmsSender('ВБРР')).toBe('vbrr');
+		expect(bankIdForSmsSender('unknown-sender')).toBeNull();
+	});
+
+	it('normalizes phone-like senders', () => {
+		expect(normalizeSmsSender('+79001234567')).toBe('9001234567');
+		expect(normalizeSmsSender('T-Bank')).toBe('tbank');
+		expect(normalizeSmsSender('Ваш Т-Банк')).toBe('tbank');
+		// Google Messages / OEM titles often use Unicode dash U+2011
+		expect(normalizeSmsSender('Ваш Т‑Банк')).toBe('tbank');
+		expect(normalizeSmsSender('Ваш Т–Банк')).toBe('tbank');
+		expect(bankIdForSmsSender('Ваш Т‑Банк')).toBe('tinkoff');
+		expect(bankIdForSmsSender('TBANK')).toBe('tinkoff');
+		expect(allKnownSmsSenderEntries().some((e) => e.sender === '900')).toBe(true);
+	});
+
+	it('resolves Google Messages notification title to T-Bank', () => {
+		const resolved = resolveRawBankNotification({
+			packageName: 'com.google.android.apps.messaging',
+			title: 'Ваш Т-Банк',
+			text: 'Пополнение. Счет RUB. 3535,96 ₽. Др. банк. Доступно 3535,96 ₽',
+			bigText: '',
+			postedAt: 1,
+			dedupeKey: 'k'
+		});
+		expect(resolved.packageName).toBe('com.idamob.tinkoff.android');
+		expect(resolved.channel).toBe('sms');
+	});
+
+	it('resolves OEM Messages package with Unicode-dash T-Bank title', () => {
+		const resolved = resolveRawBankNotification({
+			packageName: 'com.oplus.mms',
+			title: 'Ваш Т‑Банк',
+			text: 'Покупка 120,00 ₽. Магнит. Карта *1234',
+			bigText: '',
+			postedAt: 1,
+			dedupeKey: 'k2'
+		});
+		expect(resolved.packageName).toBe('com.idamob.tinkoff.android');
+		expect(resolved.channel).toBe('sms');
+	});
+
+	it('resolves AOSP Messages (com.android.mms) with grouped notification body', () => {
+		const resolved = resolveRawBankNotification({
+			packageName: 'com.android.mms',
+			title: 'Ваш Т-Банк',
+			text: '4 сообщения | Пополнение. Счет RUB. 10056,18 ₽. Др. банк. Доступно 10056,18 ₽',
+			bigText: '',
+			postedAt: 1,
+			dedupeKey: 'k3'
+		});
+		expect(resolved.packageName).toBe('com.idamob.tinkoff.android');
+		expect(resolved.channel).toBe('sms');
+	});
+});

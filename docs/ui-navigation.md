@@ -55,7 +55,7 @@
 | `/accounts` | Главная → Счета |
 | `/accounts/new`, `/accounts/[id]` | Главная → Счета → … |
 | `/transactions` | Главная → Все операции |
-| `/debts`, `/credits`, `/stats`, `/budget` | Главная → раздел |
+| `/debts`, `/credits`, `/stats`, `/budget`, `/subscriptions`, `/categories`, `/merchants`, `/tags`, `/recurring-operations`, `/transaction-templates` | Главная → раздел |
 | `/debtors/[id]` | Главная → Долги → должник |
 | `/credits/[id]` | Главная → Кредиты → кредит |
 | `/settings` | Главная → Настройки |
@@ -64,33 +64,47 @@
 
 Badge-метки и спойлеры графика на `/credits` — [ui-credits.md](ui-credits.md).
 
-## Верхнее меню (v1.2.5+)
+## Верхнее меню
 
 **Файл:** `web/src/routes/+layout.svelte`
 
 | Элемент | Поведение |
 |---------|-----------|
-| Плоские пункты | Счета, **Операции**, Долги, Кредиты, **Бюджет**, Статистика (на главную — клик по заголовку приложения в шапке) |
-| «Настройки ▼» | Профиль, Пароль, API-токены, Уведомления, Категории, Импорт/экспорт, Периодические операции |
+| Плоские пункты | **Главная** (первым), **Операции**, **Бюджет**, Статистика (логотип/название в шапке тоже ведут на `/`) |
+| «Прочее ▼» | Счета, Долги, Кредиты, Категории, Магазины, Теги, Периодические операции, Подписки, Шаблоны операций — сразу перед «Настройки» |
+| «Настройки ▼» | Профиль, Пароль, API-токены, Уведомления, Импорт/экспорт |
 | «Админка ▼» | Только для `is_admin`: Система, Пользователи, Бэкапы, Диагностика |
 | Десктоп | `NavDropdown` + `.popover-panel` |
-| Мобилка | Гамбургер; панель `.nav-mobile-panel` под шапкой (не на всю высоту экрана); **drill-down** для «Настройки» и «Админка» — отдельный экран подменю с кнопкой «Назад», без длинного accordion |
-| Активный пункт | `.nav-link-active` по pathname; для групп — любой путь внутри `/settings/*` или `/admin/*` |
+| Мобилка | Гамбургер; панель `.nav-mobile-panel` под шапкой (не на всю высоту экрана); **drill-down** для «Прочее», «Настройки» и «Админка» — отдельный экран подменю с кнопкой «Назад», без длинного accordion |
+| Активный пункт | `.nav-link-active` по pathname; для групп — любой путь внутри группы («Прочее»: `/accounts`, `/debts`, `/debtors`, `/credits`, `/categories`, `/merchants`, `/tags`, `/recurring-operations`, `/subscriptions`, `/transaction-templates`; `/settings/*`; `/admin/*`) |
 | Закрытие | `afterNavigate` сбрасывает меню; backdrop по тапу вне меню |
+
+Канонические URL основных разделов (вне настроек):
+
+| URL | Раздел |
+|-----|--------|
+| `/categories` | Категории (`?type=income` — фильтр доход/расход) |
+| `/merchants` | Магазины |
+| `/tags` | Теги |
+| `/recurring-operations` | Периодические операции (`?from_tx=` — префилл из операции) |
+| `/subscriptions` | Подписки |
+| `/transaction-templates` | Шаблоны операций |
+
+Старые `/settings/categories`, `/settings/recurring-operations` и `/settings/transaction-templates` — редирект `308` на новые пути (с сохранением query).
 
 Канонические URL настроек:
 
 | URL | Раздел |
 |-----|--------|
-| `/settings` | Профиль |
+| `/settings` | Профиль (в т.ч. «Удалить данные») |
 | `/settings/password` | Пароль |
 | `/settings/tokens` | API-токены |
 | `/settings/notifications` | Уведомления |
-| `/settings/categories` | Категории (`?type=income` — фильтр доход/расход) |
-| `/settings/import` | Импорт / экспорт |
-| `/settings/recurring-operations` | Периодические операции (`?from_tx=` — префилл из операции) |
+| `/settings/import` | Импорт / экспорт (Cubux и «Бухгалтер») |
 
-Layout настроек: `web/src/routes/settings/+layout.svelte` — крошки и `h1` для всех подстраниц.
+Layout настроек: `web/src/routes/settings/+layout.svelte` — крошки и `h1` для подстраниц.
+
+`/recurring-operations` — свой `BackLink` + `SectionHeader` с CTA (как `/subscriptions`).
 
 Layout админки: `web/src/routes/admin/+layout.svelte` — крошки, `h1`, `AdminSupportLinks` внизу на всех `/admin/*`.
 
@@ -112,6 +126,8 @@ Touch-targets и карточки таблиц — [ui-stable-layout.md](ui-stab
 
 Чеклист навигации — в этом файле (разделы «Кликабельные сущности», «Где применить»).
 
+Типизированный `resolve` / динамические пути и частые поломки `svelte-check` — [ui-sveltekit-checks.md](ui-sveltekit-checks.md).
+
 ---
 
 ## Вкладки внутри страницы
@@ -120,7 +136,7 @@ Touch-targets и карточки таблиц — [ui-stable-layout.md](ui-stab
 
 | Маршрут | Подвкладки |
 |---------|------------|
-| `/settings/categories` | Расходы / Доходы |
+| `/categories` | Расходы / Доходы |
 | `/settings/import` | Импорт / Экспорт |
 | `/accounts` | Активные / Архивные / Удалённые |
 | `/debts` | Активные / Закрытые |
@@ -129,14 +145,15 @@ Touch-targets и карточки таблиц — [ui-stable-layout.md](ui-stab
 
 `PageTabs` — `$lib/components/PageTabs.svelte`.
 
-### `/settings/recurring-operations` (v1.2)
+### `/recurring-operations` (v1.2)
 
-- Сначала отображается таблица периодических операций.
-- Ниже — кнопка «Добавить», раскрывающая форму создания в этом же экране.
+- Крошки: Главная → Периодические операции; шапка: `SectionHeader` с кнопкой **«Добавить»** (повторное нажатие — **«Отмена»**).
+- Форма создания — карточка под шапкой (как на `/budget`); список ниже.
 - Нажатие «Изменить» открывает inline-форму редактирования внутри блока списка.
 - Одновременно открыта только одна форма редактирования; при открытии другой предыдущая закрывается.
 - Время выполнения по умолчанию — **08:00** в часовом поясе пользователя (поле в блоке «Время выполнения»); в API пустое `time_local` трактуется так же.
 - Планировщик backend создаёт операции по `next_run_at` и **пересчитывает баланс** затронутых счетов (`accounts.current_balance`).
+- Ещё не исполненные прогоны активного recurring в текущем месяце входят в `forecast_balance` вместе с `kind=future`, [подписками](subscriptions.md) и неоплаченными платежами [кредитов](ui-credits.md); подпись «С учётом …» — по флагам, см. [transactions-display.md](transactions-display.md).
 
 ### `/budget` (v1.3)
 

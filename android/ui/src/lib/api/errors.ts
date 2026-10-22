@@ -1,0 +1,48 @@
+import { get } from 'svelte/store';
+import { _ } from 'svelte-i18n';
+import { isServerUnavailableForUser } from '$lib/offline/server-connectivity';
+import { ApiError } from './client';
+
+/**
+ * API codes that group many cases; server always sends a specific localized `message`.
+ * Do not replace it with a generic client label like «Конфликт данных».
+ */
+const GENERIC_API_CODES = new Set([
+	'CONFLICT',
+	'VALIDATION_ERROR',
+	'INTERNAL_ERROR',
+	'NOT_FOUND',
+	'FORBIDDEN',
+	'UNAUTHORIZED',
+	'SERVICE_UNAVAILABLE'
+]);
+
+/** Errors expected before server URL / auth are configured — no user-facing toast.
+ * Also 401/UNAUTHORIZED: logout and session expiry already clear the session. */
+export function isSilentClientError(err: unknown): boolean {
+	if (!(err instanceof ApiError)) return false;
+	if (err.status === 401 || err.code === 'UNAUTHORIZED') return true;
+	return err.code === 'NO_SERVER' || err.code === 'INVALID_RESPONSE';
+}
+
+/** Map API error code to a client-side i18n message (falls back to server message). */
+export function formatApiError(err: unknown, fallbackKey = 'common.error'): string {
+	const t = get(_);
+	if (isServerUnavailableForUser(err)) {
+		return t('common.server_unavailable');
+	}
+	if (err instanceof ApiError) {
+		const message = err.message?.trim();
+		if (message && GENERIC_API_CODES.has(err.code)) {
+			return message;
+		}
+		const byCode = t(`errors.${err.code}`);
+		if (byCode && byCode !== `errors.${err.code}`) {
+			return byCode;
+		}
+		if (message) {
+			return message;
+		}
+	}
+	return t(fallbackKey);
+}

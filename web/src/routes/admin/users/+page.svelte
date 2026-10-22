@@ -16,9 +16,12 @@
 	import { formatAuthUserApiError } from '$lib/auth/api-errors';
 	import { user } from '$lib/stores/auth';
 	import { confirm } from '$lib/confirm';
+	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
+	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
 	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
 	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
+	import { reportPageLoadFailure } from '$lib/page-load';
 	import { toast } from '$lib/toast';
 	import { refreshPendingUsersBanner } from '$lib/stores/admin-pending-users';
 	import { validatePasswordPolicy } from '$lib/password-policy';
@@ -30,6 +33,8 @@
 	let passwordConfirm = $state('');
 	let isAdmin = $state(false);
 	let loading = $state(false);
+	let pageLoading = $state(true);
+	let loadError = $state<string | null>(null);
 
 	let resetOpen = $state(false);
 	let resetUser = $state<AdminUser | null>(null);
@@ -77,15 +82,28 @@
 		return isAdminRole ? $_('admin.users.roleAdmin') : $_('admin.users.roleUser');
 	}
 
-	onMount(async () => {
+	onMount(() => {
+		void reloadUsers();
+	});
+
+	async function reloadUsers() {
 		if (!$user?.is_admin) {
 			await goto(resolve('/'));
 			return;
 		}
-		users = await listAdminUsers();
-		openResetFromQuery();
-		openModerateFromQuery();
-	});
+		pageLoading = true;
+		try {
+			users = await listAdminUsers();
+			loadError = null;
+			openResetFromQuery();
+			openModerateFromQuery();
+		} catch (err) {
+			const msg = reportPageLoadFailure(err, { hasData: users.length > 0 });
+			if (msg) loadError = msg;
+		} finally {
+			pageLoading = false;
+		}
+	}
 
 	$effect(() => {
 		const userId = $page.url.searchParams.get('reset');
@@ -409,65 +427,71 @@
 		</button>
 	</form>
 
-	<div class="card md:overflow-x-auto">
-		<div class="hidden md:block">
-			<table class="w-full table-fixed text-left text-sm">
-				<colgroup>
-					<col />
-					<col />
-					<col class="w-[11rem]" />
-					<col class="w-[9.5rem]" />
-					<col class="w-12" />
-				</colgroup>
-				<thead>
-					<tr style:color="var(--text-muted)">
-						<th class="p-3">{$_('login.login')}</th>
-						<th class="p-3">{$_('register.display_name')}</th>
-						<th class="p-3 whitespace-nowrap">{$_('admin.users.role')}</th>
-						<th class="p-3 whitespace-nowrap">{$_('admin.users.status')}</th>
-						<th class="p-3 w-0"></th>
-					</tr>
-				</thead>
-				<tbody>
+	<PageLoadGate loading={pageLoading} error={loadError} onretry={() => void reloadUsers()} inline>
+		{#if users.length === 0}
+			<EmptyStateCard message={$_('admin.users.empty')} />
+		{:else}
+			<div class="card md:overflow-x-auto">
+				<div class="hidden md:block">
+					<table class="w-full table-fixed text-left text-sm">
+						<colgroup>
+							<col />
+							<col />
+							<col class="w-[11rem]" />
+							<col class="w-[9.5rem]" />
+							<col class="w-12" />
+						</colgroup>
+						<thead>
+							<tr style:color="var(--text-muted)">
+								<th class="p-3">{$_('login.login')}</th>
+								<th class="p-3">{$_('register.display_name')}</th>
+								<th class="p-3 whitespace-nowrap">{$_('admin.users.role')}</th>
+								<th class="p-3 whitespace-nowrap">{$_('admin.users.status')}</th>
+								<th class="p-3 w-0"></th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each users as u (u.id)}
+								<tr class="border-t" style:border-color="var(--border)">
+									<td class="p-3 align-middle">{u.login}</td>
+									<td class="p-3 align-middle">{u.display_name}</td>
+									<td class="p-3 align-middle whitespace-nowrap">{roleLabel(u.is_admin)}</td>
+									<td class="p-3 align-middle whitespace-nowrap">{statusLabel(u.status)}</td>
+									<td class="p-3 w-0 align-middle text-right whitespace-nowrap">
+										<RowActionsMenu actions={rowActions(u)} />
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+				<div class="space-y-3 md:hidden">
 					{#each users as u (u.id)}
-						<tr class="border-t" style:border-color="var(--border)">
-							<td class="p-3 align-middle">{u.login}</td>
-							<td class="p-3 align-middle">{u.display_name}</td>
-							<td class="p-3 align-middle whitespace-nowrap">{roleLabel(u.is_admin)}</td>
-							<td class="p-3 align-middle whitespace-nowrap">{statusLabel(u.status)}</td>
-							<td class="p-3 w-0 align-middle text-right whitespace-nowrap">
+						<article class="rounded-xl border p-4" style:border-color="var(--border)">
+							<div class="flex items-start justify-between gap-2">
+								<p class="font-medium">{u.login}</p>
 								<RowActionsMenu actions={rowActions(u)} />
-							</td>
-						</tr>
+							</div>
+							<dl class="mt-2 grid gap-2 text-sm">
+								<div class="flex justify-between gap-2">
+									<dt style:color="var(--text-muted)">{$_('register.display_name')}</dt>
+									<dd>{u.display_name}</dd>
+								</div>
+								<div class="flex justify-between gap-2">
+									<dt style:color="var(--text-muted)">{$_('admin.users.role')}</dt>
+									<dd>{roleLabel(u.is_admin)}</dd>
+								</div>
+								<div class="flex justify-between gap-2">
+									<dt style:color="var(--text-muted)">{$_('admin.users.status')}</dt>
+									<dd>{statusLabel(u.status)}</dd>
+								</div>
+							</dl>
+						</article>
 					{/each}
-				</tbody>
-			</table>
-		</div>
-		<div class="space-y-3 md:hidden">
-			{#each users as u (u.id)}
-				<article class="rounded-xl border p-4" style:border-color="var(--border)">
-					<div class="flex items-start justify-between gap-2">
-						<p class="font-medium">{u.login}</p>
-						<RowActionsMenu actions={rowActions(u)} />
-					</div>
-					<dl class="mt-2 grid gap-2 text-sm">
-						<div class="flex justify-between gap-2">
-							<dt style:color="var(--text-muted)">{$_('register.display_name')}</dt>
-							<dd>{u.display_name}</dd>
-						</div>
-						<div class="flex justify-between gap-2">
-							<dt style:color="var(--text-muted)">{$_('admin.users.role')}</dt>
-							<dd>{roleLabel(u.is_admin)}</dd>
-						</div>
-						<div class="flex justify-between gap-2">
-							<dt style:color="var(--text-muted)">{$_('admin.users.status')}</dt>
-							<dd>{statusLabel(u.status)}</dd>
-						</div>
-					</dl>
-				</article>
-			{/each}
-		</div>
-	</div>
+				</div>
+			</div>
+		{/if}
+	</PageLoadGate>
 </div>
 
 {#if resetOpen && resetUser}

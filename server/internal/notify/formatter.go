@@ -182,6 +182,44 @@ func RelativeWhen(localeCode string, value string, now time.Time, timezone strin
 	}
 }
 
+// RelativeDays returns a human-readable relative phrase for a day offset
+// (0 → сегодня/today, 1 → завтра/tomorrow, N → через N дн. / in N days).
+func RelativeDays(localeCode string, days int) string {
+	ru := normalizeLocale(localeCode) == "ru"
+	if days <= 0 {
+		if ru {
+			return "сегодня"
+		}
+		return "today"
+	}
+	if days == 1 {
+		if ru {
+			return "завтра"
+		}
+		return "tomorrow"
+	}
+	if ru {
+		return "через " + strconv.Itoa(days) + " дн."
+	}
+	return "in " + strconv.Itoa(days) + " days"
+}
+
+// DebtActionPhrase is the direction-aware verb phrase for debt_due_soon templates.
+// borrowed → «вернуть долг» / «repay debt to»; lent → «получить долг от» / «collect debt from».
+func DebtActionPhrase(localeCode, direction string) string {
+	ru := normalizeLocale(localeCode) == "ru"
+	if strings.TrimSpace(direction) == "lent" {
+		if ru {
+			return "получить долг от"
+		}
+		return "collect debt from"
+	}
+	if ru {
+		return "вернуть долг"
+	}
+	return "repay debt to"
+}
+
 func dayDiff(from, to time.Time) int {
 	yearA, monthA, dayA := from.Date()
 	yearB, monthB, dayB := to.Date()

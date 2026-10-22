@@ -3,8 +3,13 @@
 	 * Date/time picker. Project standards: docs/date-time-display.md,
 	 * props helpers in $lib/datetime-picker-standards.ts
 	 */
+	import { untrack } from 'svelte';
 	import { portal } from '$lib/actions/portal';
-	import { dropdownListStyle } from '$lib/dropdown-position';
+	import {
+		dropdownListStyle,
+		dropdownPlacementFor,
+		type DropdownPlacement
+	} from '$lib/dropdown-position';
 	import FieldHint from '$lib/components/FieldHint.svelte';
 	import { _ } from 'svelte-i18n';
 	import { todayDateLocal } from '$lib/dates';
@@ -25,6 +30,7 @@
 
 	let {
 		value = $bindable(''),
+		timeExpanded = $bindable(false),
 		id = 'datetime',
 		label = '',
 		hint = '',
@@ -34,9 +40,12 @@
 		defaultTime = 'now' as 'now' | 'preserve' | string,
 		required = false,
 		blockPastIncludingToday = false,
-		timezone = ''
+		timezone = '',
+		/** When false, optional time UI is not rendered (parent can host it). */
+		showOptionalTimeUI = true
 	}: {
 		value?: string;
+		timeExpanded?: boolean;
 		id?: string;
 		label?: string;
 		hint?: string;
@@ -48,13 +57,14 @@
 		blockPastIncludingToday?: boolean;
 		/** User TZ for min-date when blockPastIncludingToday; falls back to browser local. */
 		timezone?: string;
+		showOptionalTimeUI?: boolean;
 	} = $props();
 
 	let open = $state(false);
 	let triggerEl: HTMLButtonElement | undefined = $state();
 	let panelEl: HTMLDivElement | undefined = $state();
 	let panelStyle = $state('');
-	let timeExpanded = $state(false);
+	let placement = $state<DropdownPlacement | null>(null);
 	let timeValue = $state('');
 	let viewYear = $state(new Date().getFullYear());
 	let viewMonth = $state(new Date().getMonth() + 1);
@@ -112,12 +122,21 @@
 
 	function syncViewFromValue() {
 		const p = parseDatetimeLocal(value);
-		if (p) {
+		if (!p) return;
+		// Do not read viewYear/viewMonth here: the $effect below would re-run on
+		// prev/next month and snap the calendar back to the selected date.
+		untrack(() => {
 			viewYear = p.year;
 			viewMonth = p.month;
-			timeValue = `${String(p.hour).padStart(2, '0')}:${String(p.minute).padStart(2, '0')}`;
-		}
+		});
 	}
+
+	$effect(() => {
+		const p = parseDatetimeLocal(value);
+		if (!p) return;
+		const next = `${String(p.hour).padStart(2, '0')}:${String(p.minute).padStart(2, '0')}`;
+		if (untrack(() => timeValue) !== next) timeValue = next;
+	});
 
 	function resolveDefaultTime(): { hour: number; minute: number } {
 		if (defaultTime === 'now') {
@@ -221,8 +240,12 @@
 
 	function positionPanel() {
 		if (!triggerEl) return;
-		const height = panelEl?.offsetHeight ?? PANEL_HEIGHT_ESTIMATE;
-		panelStyle = dropdownListStyle(triggerEl, height, usePortal);
+		const measured = panelEl?.offsetHeight ?? 0;
+		const height = measured || PANEL_HEIGHT_ESTIMATE;
+		if (!placement) {
+			placement = dropdownPlacementFor(triggerEl, Math.max(height, PANEL_HEIGHT_ESTIMATE));
+		}
+		panelStyle = dropdownListStyle(triggerEl, height, usePortal, placement);
 	}
 
 	function schedulePositionPanel() {
@@ -243,6 +266,7 @@
 
 	function close() {
 		open = false;
+		placement = null;
 		panelView = 'days';
 	}
 
@@ -294,31 +318,160 @@
 	}
 </script>
 
-<div class="relative">
+<div>
 	{#if label}
 		<label class="field-label" for={id}>{label}</label>
 	{/if}
-	<button
-		{id}
-		type="button"
-		bind:this={triggerEl}
-		class="input flex w-full cursor-pointer items-center justify-between gap-2 text-left"
-		class:opacity-60={disabled}
-		{disabled}
-		aria-expanded={open}
-		onclick={openPanel}
-		onkeydown={onKeydown}
-	>
-		<span
-			class="min-w-0 flex-1 truncate whitespace-nowrap"
-			style:color={value ? 'var(--text)' : 'var(--text-muted)'}
+	<!-- relative only around the control: non-portal panel uses top/bottom:100% -->
+	<div class="relative">
+		<button
+			{id}
+			type="button"
+			bind:this={triggerEl}
+			class="input flex w-full cursor-pointer items-center justify-between gap-2 text-left"
+			class:opacity-60={disabled}
+			{disabled}
+			aria-expanded={open}
+			onclick={openPanel}
+			onkeydown={onKeydown}
 		>
-			{displayLabel || '—'}
-		</span>
-		<span aria-hidden="true" style:color="var(--text-muted)">📅</span>
-	</button>
+			<span
+				class="min-w-0 flex-1 truncate whitespace-nowrap"
+				style:color={value ? 'var(--text)' : 'var(--text-muted)'}
+			>
+				{displayLabel || '—'}
+			</span>
+			<span aria-hidden="true" style:color="var(--text-muted)">📅</span>
+		</button>
 
-	{#if timeMode === 'optional'}
+		{#if open}
+			<div
+				bind:this={panelEl}
+				class="popover-panel w-72 p-3 {usePortal ? '' : 'absolute z-20'}"
+				style={panelStyle}
+				use:portal={usePortal ? document.body : null}
+			>
+				{#if panelView === 'days'}
+					<div class="mb-2 flex items-center justify-between gap-2">
+						<button type="button" class="btn-ghost px-2 py-1" onclick={prevMonth}>‹</button>
+						<button
+							type="button"
+							class="text-sm font-medium capitalize hover:underline"
+							onclick={openMonthsView}
+						>
+							{monthLabel}
+						</button>
+						<button type="button" class="btn-ghost px-2 py-1" onclick={nextMonth}>›</button>
+					</div>
+					<div
+						class="mb-1 grid grid-cols-7 gap-1 text-center text-xs"
+						style:color="var(--text-muted)"
+					>
+						{#each weekdays as weekday (weekday)}
+							<span>{weekday}</span>
+						{/each}
+					</div>
+					<div class="datetime-days-grid grid grid-cols-7 gap-1">
+						{#each cells as cell, index (`${cell.year}-${cell.month}-${cell.day}-${index}`)}
+							<button
+								type="button"
+								class="datetime-day-btn h-9 rounded-lg px-0 py-2 text-sm transition"
+								class:datetime-day-muted={!cell.inMonth}
+								class:datetime-day-selected={isSelectedCell(cell)}
+								class:datetime-day-today={isTodayCell(cell)}
+								class:datetime-day-disabled={isDisabledCell(cell)}
+								class:cursor-pointer={!isDisabledCell(cell)}
+								disabled={isDisabledCell(cell)}
+								onclick={() => setDate(cell.year, cell.month, cell.day)}
+							>
+								{cell.day}
+							</button>
+						{/each}
+					</div>
+				{:else if panelView === 'months'}
+					<div class="mb-2 flex items-center justify-between gap-2">
+						<button type="button" class="btn-ghost px-2 py-1" onclick={() => viewYear--}>‹</button>
+						<button
+							type="button"
+							class="text-sm font-medium hover:underline"
+							onclick={openYearsView}
+						>
+							{viewYear}
+						</button>
+						<button type="button" class="btn-ghost px-2 py-1" onclick={() => viewYear++}>›</button>
+					</div>
+					<div class="grid grid-cols-3 gap-2">
+						{#each monthShortNames as name, index (index)}
+							<button
+								type="button"
+								class="cursor-pointer rounded-lg px-2 py-2 text-sm capitalize transition hover:bg-[color-mix(in_srgb,var(--border)_45%,transparent)]"
+								class:font-semibold={viewMonth === index + 1}
+								style:background-color={viewMonth === index + 1
+									? 'color-mix(in srgb, var(--primary) 28%, transparent)'
+									: 'transparent'}
+								onclick={() => selectMonth(index + 1)}
+							>
+								{name}
+							</button>
+						{/each}
+					</div>
+				{:else}
+					<div class="mb-2 flex items-center justify-between gap-2">
+						<button type="button" class="btn-ghost px-2 py-1" onclick={prevYearPage}>‹</button>
+						<span class="text-sm font-medium">
+							{yearPageYears[0]}–{yearPageYears[yearPageYears.length - 1]}
+						</span>
+						<button type="button" class="btn-ghost px-2 py-1" onclick={nextYearPage}>›</button>
+					</div>
+					<div class="grid grid-cols-3 gap-2">
+						{#each yearPageYears as year (year)}
+							<button
+								type="button"
+								class="cursor-pointer rounded-lg px-2 py-2 text-sm transition hover:bg-[color-mix(in_srgb,var(--border)_45%,transparent)]"
+								class:font-semibold={viewYear === year}
+								style:background-color={viewYear === year
+									? 'color-mix(in srgb, var(--primary) 28%, transparent)'
+									: 'transparent'}
+								onclick={() => selectYear(year)}
+							>
+								{year}
+							</button>
+						{/each}
+					</div>
+				{/if}
+				{#if timeMode === 'visible' && panelView === 'days'}
+					<div class="mt-3 border-t pt-3" style:border-color="var(--border)">
+						<label class="mb-1 block text-xs" style:color="var(--text-muted)" for="{id}-time">
+							{$_('datetime.time')}
+						</label>
+						<input
+							id="{id}-time"
+							type="time"
+							class="input w-full"
+							bind:value={timeValue}
+							onchange={applyTime}
+						/>
+					</div>
+				{/if}
+				<div class="mt-3 flex justify-end gap-2">
+					{#if panelView === 'days' && !blockPastIncludingToday}
+						<button
+							type="button"
+							class="btn-ghost datetime-footer-btn text-sm"
+							onclick={selectToday}
+						>
+							{$_('datetime.today')}
+						</button>
+					{/if}
+					<button type="button" class="btn-ghost datetime-footer-btn text-sm" onclick={close}>
+						{$_('datetime.done')}
+					</button>
+				</div>
+			</div>
+		{/if}
+	</div>
+
+	{#if timeMode === 'optional' && showOptionalTimeUI}
 		<details bind:open={timeExpanded} class="mt-2">
 			<summary class="cursor-pointer text-sm" style:color="var(--text-muted)">
 				{$_('transactions.field.timeOptional')}
@@ -328,124 +481,6 @@
 				<FieldHint text={$_('transactions.field.timeHint')} />
 			</div>
 		</details>
-	{/if}
-
-	{#if open}
-		<div
-			bind:this={panelEl}
-			class="popover-panel w-72 p-3 {usePortal ? '' : 'absolute z-20'}"
-			style={panelStyle}
-			use:portal={usePortal ? document.body : null}
-		>
-			{#if panelView === 'days'}
-				<div class="mb-2 flex items-center justify-between gap-2">
-					<button type="button" class="btn-ghost px-2 py-1" onclick={prevMonth}>‹</button>
-					<button
-						type="button"
-						class="text-sm font-medium capitalize hover:underline"
-						onclick={openMonthsView}
-					>
-						{monthLabel}
-					</button>
-					<button type="button" class="btn-ghost px-2 py-1" onclick={nextMonth}>›</button>
-				</div>
-				<div
-					class="mb-1 grid grid-cols-7 gap-1 text-center text-xs"
-					style:color="var(--text-muted)"
-				>
-					{#each weekdays as weekday (weekday)}
-						<span>{weekday}</span>
-					{/each}
-				</div>
-				<div class="datetime-days-grid grid grid-cols-7 gap-1">
-					{#each cells as cell, index (`${cell.year}-${cell.month}-${cell.day}-${index}`)}
-						<button
-							type="button"
-							class="datetime-day-btn h-9 rounded-lg px-0 py-2 text-sm transition"
-							class:datetime-day-muted={!cell.inMonth}
-							class:datetime-day-selected={isSelectedCell(cell)}
-							class:datetime-day-today={isTodayCell(cell)}
-							class:datetime-day-disabled={isDisabledCell(cell)}
-							class:cursor-pointer={!isDisabledCell(cell)}
-							disabled={isDisabledCell(cell)}
-							onclick={() => setDate(cell.year, cell.month, cell.day)}
-						>
-							{cell.day}
-						</button>
-					{/each}
-				</div>
-			{:else if panelView === 'months'}
-				<div class="mb-2 flex items-center justify-between gap-2">
-					<button type="button" class="btn-ghost px-2 py-1" onclick={() => viewYear--}>‹</button>
-					<button type="button" class="text-sm font-medium hover:underline" onclick={openYearsView}>
-						{viewYear}
-					</button>
-					<button type="button" class="btn-ghost px-2 py-1" onclick={() => viewYear++}>›</button>
-				</div>
-				<div class="grid grid-cols-3 gap-2">
-					{#each monthShortNames as name, index (index)}
-						<button
-							type="button"
-							class="cursor-pointer rounded-lg px-2 py-2 text-sm capitalize transition hover:bg-[color-mix(in_srgb,var(--border)_45%,transparent)]"
-							class:font-semibold={viewMonth === index + 1}
-							style:background-color={viewMonth === index + 1
-								? 'color-mix(in srgb, var(--primary) 28%, transparent)'
-								: 'transparent'}
-							onclick={() => selectMonth(index + 1)}
-						>
-							{name}
-						</button>
-					{/each}
-				</div>
-			{:else}
-				<div class="mb-2 flex items-center justify-between gap-2">
-					<button type="button" class="btn-ghost px-2 py-1" onclick={prevYearPage}>‹</button>
-					<span class="text-sm font-medium">
-						{yearPageYears[0]}–{yearPageYears[yearPageYears.length - 1]}
-					</span>
-					<button type="button" class="btn-ghost px-2 py-1" onclick={nextYearPage}>›</button>
-				</div>
-				<div class="grid grid-cols-3 gap-2">
-					{#each yearPageYears as year (year)}
-						<button
-							type="button"
-							class="cursor-pointer rounded-lg px-2 py-2 text-sm transition hover:bg-[color-mix(in_srgb,var(--border)_45%,transparent)]"
-							class:font-semibold={viewYear === year}
-							style:background-color={viewYear === year
-								? 'color-mix(in srgb, var(--primary) 28%, transparent)'
-								: 'transparent'}
-							onclick={() => selectYear(year)}
-						>
-							{year}
-						</button>
-					{/each}
-				</div>
-			{/if}
-			{#if timeMode === 'visible' && panelView === 'days'}
-				<div class="mt-3 border-t pt-3" style:border-color="var(--border)">
-					<label class="mb-1 block text-xs" style:color="var(--text-muted)" for="{id}-time">
-						{$_('datetime.time')}
-					</label>
-					<input
-						id="{id}-time"
-						type="time"
-						class="input w-full"
-						bind:value={timeValue}
-						onchange={applyTime}
-					/>
-				</div>
-			{/if}
-			<div class="mt-3 flex justify-end gap-2">
-				{#if panelView === 'days' && !blockPastIncludingToday}
-					<button type="button" class="btn-ghost datetime-footer-btn text-sm" onclick={selectToday}>
-						{$_('datetime.today')}
-					</button>
-				{/if}
-				<button type="button" class="btn-ghost datetime-footer-btn text-sm" onclick={close}>
-					{$_('datetime.done')}
-				</button>
-			</div>
-		</div>
 	{/if}
 	{#if hint}
 		<FieldHint text={hint} />

@@ -1,4 +1,4 @@
-VERSION ?= 1.3.1
+VERSION ?= 1.9.1
 INSTALL_METHOD ?= manual
 BUILD_COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILD_TIME ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -6,8 +6,10 @@ LDFLAGS := -X main.version=$(VERSION) -X main.installMethod=$(INSTALL_METHOD) -X
 
 OPENAPI_SRC := docs/api/openapi.yaml
 OPENAPI_DST := server/internal/docs/openapi.yaml
+UI_I18N_SRC := android/ui/src/lib/i18n
+UI_I18N_DST := server/ui_locales
 
-.PHONY: dev dev-server dev-web build web-build category-icons-json copy-static copy-openapi openapi-check inline-sql-check server-build fix-build-perms test test-unit test-e2e test-coverage lint lint-go prepare prepare-go prepare-web prepare-gen prepare-sql-check docker-build act-push act-release tag-release migrate ci sqlc sqlc-check download-bank-logos download-marketplace-logos clear version
+.PHONY: dev dev-server dev-web build build-arm web-build category-icons-json copy-static copy-openapi check-openapi-examples openapi-check copy-ui-i18n check-ui-i18n-keys ui-i18n-check inline-sql-check server-build server-build-arm fix-build-perms test test-unit test-e2e test-e2e-web test-coverage lint lint-go prepare prepare-go prepare-web prepare-android prepare-gen prepare-sql-check docker-build act-push act-release act-keep-image act-prune tag-release migrate ci sqlc sqlc-check download-bank-logos download-marketplace-logos clear version android-icons android-ui-build android-sync android-apk android-apk-release android-install android-install-release android-ensure-sdk
 
 DOCKER_COMPOSE := docker compose -f docker/docker-compose.yml
 
@@ -26,12 +28,32 @@ fix-build-perms:
 copy-openapi:
 	cp $(OPENAPI_SRC) $(OPENAPI_DST)
 
-openapi-check: copy-openapi
+check-openapi-examples:
 	@python3 scripts/check_openapi_error_examples.py $(OPENAPI_SRC)
+
+# CI: sync + validate examples + require committed artifacts.
+openapi-check: copy-openapi check-openapi-examples
 	@git diff --exit-code -- $(OPENAPI_SRC) $(OPENAPI_DST) || \
 		(echo "openapi: run 'make copy-openapi' and commit $(OPENAPI_SRC) and $(OPENAPI_DST)" && exit 1)
 
-build: fix-build-perms category-icons-json web-build copy-static copy-openapi server-build
+copy-ui-i18n:
+	cp $(UI_I18N_SRC)/ru.json $(UI_I18N_DST)/ru.json
+	cp $(UI_I18N_SRC)/en.json $(UI_I18N_DST)/en.json
+
+# Literal $_('…')/tr('…') keys in web + android/ui ⊆ both ru.json and en.json.
+check-ui-i18n-keys:
+	@python3 scripts/check_ui_i18n_keys.py
+
+# CI: sync + require committed server/ui_locales + key completeness.
+ui-i18n-check: copy-ui-i18n check-ui-i18n-keys
+	@git diff --exit-code -- $(UI_I18N_DST)/ru.json $(UI_I18N_DST)/en.json || \
+		(echo "ui-i18n: run 'make copy-ui-i18n' and commit $(UI_I18N_DST)/{ru,en}.json" && exit 1)
+
+build: fix-build-perms category-icons-json web-build copy-static copy-openapi copy-ui-i18n server-build
+
+# linux/arm64 (aarch64) — Raspberry Pi 3/4/5 и другие ARM64-хосты.
+# Бинарник: bin/buhgalter-linux-arm64 (не перезаписывает нативный bin/buhgalter).
+build-arm: fix-build-perms category-icons-json web-build copy-static copy-openapi copy-ui-i18n server-build-arm
 
 category-icons-json:
 	python3 scripts/build_category_icons_json.py
@@ -44,41 +66,111 @@ copy-static:
 	rm -rf server/internal/static/dist/*
 	cp -r web/build/* server/internal/static/dist/
 
-server-build: copy-openapi
+server-build: copy-openapi copy-ui-i18n
 	mkdir -p bin
 	cd server && go build -tags=embedstatic -ldflags "$(LDFLAGS)" -o ../bin/buhgalter ./cmd/buhgalter
 	@cp -f bin/buhgalter buhgalter 2>/dev/null || true
 	@cp -f bin/buhgalter buhgalter 2>/dev/null || true
 	@cp -f bin/buhgalter buhgalter 2>/dev/null || true
 
+server-build-arm: copy-openapi copy-ui-i18n
+	mkdir -p bin
+	cd server && CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -tags=embedstatic -ldflags "$(LDFLAGS)" -o ../bin/buhgalter-linux-arm64 ./cmd/buhgalter
+	@echo "ARM64 binary: bin/buhgalter-linux-arm64"
+
 test: test-unit test-e2e
 
-test-unit: copy-openapi
-	cd server && go test ./...
+test-unit: copy-openapi copy-ui-i18n
+	cd server && go test -timeout 30m ./...
 	cd web && npm run check
+	cd web && npm run test:unit
+	cd android/ui && npm run check
+	cd android/ui && npm run test:unit
 
 test-coverage:
 	cd server && go test ./internal/money/... ./internal/transaction/... ./internal/credit/... ./internal/importexport/... ./internal/auth/... ./internal/notify/... -cover
 
-test-e2e: build
+test-e2e: build test-e2e-web
+
+test-e2e-web:
 	cd web && npm exec playwright install chromium
 	cd web && npm exec playwright test
 
 lint-go:
-	cd server && golangci-lint run ./...
+	@test -n "$(GOLANGCI_LINT)" || (echo "golangci-lint not found" >&2; exit 1)
+	cd server && $(GOLANGCI_LINT) run ./...
 
-ACT_PLATFORM := -P ubuntu-latest=catthehacker/ubuntu:full-latest
+ACT_IMAGE ?= catthehacker/ubuntu:full-latest
+ACT_PLATFORM := -P ubuntu-latest=$(ACT_IMAGE)
+# Keeper: label + stopped-контейнер, чтобы prune не сносил тяжёлый образ act.
+ACT_KEEP_LABEL ?= keep=true
+ACT_KEEP_CONTAINER ?= buhgalter-act-keep
+# act по умолчанию: concurrent-jobs=CPU и --pull=true (каждый раз тянет образ).
+ACT_CONCURRENT_JOBS ?= 2
+# Без --artifact-server-path upload/download-artifact падают с ACTIONS_RUNTIME_TOKEN.
+ACT_ARTIFACT_PATH ?= $(CURDIR)/.artifacts
+# Общие флаги: не перекачивать/не пересобирать уже локальные образы; локальный artifact server.
+ACT_FLAGS = --pull=false --rebuild=false --artifact-server-path $(ACT_ARTIFACT_PATH) --concurrent-jobs
 
+# Usage: make act-push [N]  — N потоков (по умолчанию ACT_CONCURRENT_JOBS=2)
+# Также: make act-push ACT_CONCURRENT_JOBS=4
 act-push:
 	@git rev-parse HEAD >/dev/null 2>&1 || (echo "act-push: нужен хотя бы один git commit (без него checkout в act удаляет исходники)" && exit 1)
-	act push $(ACT_PLATFORM) -W .github/workflows/ci.yml
+	@mkdir -p "$(ACT_ARTIFACT_PATH)"
+	@jobs='$(word 2,$(MAKECMDGOALS))'; \
+	jobs="$${jobs:-$(ACT_CONCURRENT_JOBS)}"; \
+	case "$$jobs" in ''|*[!0-9]*|0*) echo "act-push: concurrent jobs must be a positive integer (got '$$jobs')"; exit 1;; esac; \
+	act push $(ACT_PLATFORM) $(ACT_FLAGS) $$jobs -W .github/workflows/ci.yml
 
 # Локальная проверка release.yml (нужен GITHUB_TOKEN; публикация на GitHub — только с реальным токеном).
 # Пример: GITHUB_TOKEN=ghp_... make act-release
+# Usage: make act-release [N]
 act-release:
 	@git rev-parse HEAD >/dev/null 2>&1 || (echo "act-release: нужен хотя бы один git commit" && exit 1)
 	@test -n "$$GITHUB_TOKEN" || (echo "act-release: задайте GITHUB_TOKEN (Personal Access Token с repo)" && exit 1)
-	act push $(ACT_PLATFORM) -W .github/workflows/release.yml -e .github/act/tag-push.json -s GITHUB_TOKEN=$$GITHUB_TOKEN
+	@mkdir -p "$(ACT_ARTIFACT_PATH)"
+	@jobs='$(word 2,$(MAKECMDGOALS))'; \
+	jobs="$${jobs:-$(ACT_CONCURRENT_JOBS)}"; \
+	case "$$jobs" in ''|*[!0-9]*|0*) echo "act-release: concurrent jobs must be a positive integer (got '$$jobs')"; exit 1;; esac; \
+	act push $(ACT_PLATFORM) $(ACT_FLAGS) $$jobs -W .github/workflows/release.yml -e .github/act/tag-push.json -s GITHUB_TOKEN=$$GITHUB_TOKEN
+
+# Пометить образ act (LABEL keep=true) и создать stopped-контейнер-keeper.
+# После этого: make act-prune  или  docker system prune -a --filter 'label!=keep=true'
+act-keep-image:
+	@command -v docker >/dev/null || (echo "act-keep-image: docker not found" && exit 1)
+	@img='$(ACT_IMAGE)'; \
+	keep='$(ACT_KEEP_CONTAINER)'; \
+	label='$(ACT_KEEP_LABEL)'; \
+	docker image inspect "$$img" >/dev/null 2>&1 || docker pull "$$img"; \
+	cur=$$(docker image inspect -f '{{index .Config.Labels "keep"}}' "$$img" 2>/dev/null || true); \
+	if [ "$$cur" != "true" ]; then \
+		echo "act-keep-image: labeling $$img ($$label)"; \
+		cid=$$(docker create "$$img"); \
+		docker commit --change "LABEL $$label" "$$cid" "$$img" >/dev/null; \
+		docker rm "$$cid" >/dev/null; \
+	else \
+		echo "act-keep-image: $$img already labeled"; \
+	fi; \
+	want=$$(docker image inspect -f '{{.Id}}' "$$img"); \
+	have=$$(docker inspect -f '{{.Image}}' "$$keep" 2>/dev/null || true); \
+	if [ "$$have" != "$$want" ]; then \
+		docker rm -f "$$keep" >/dev/null 2>&1 || true; \
+		docker create --name "$$keep" --label "$$label" "$$img" >/dev/null; \
+		echo "act-keep-image: keeper $$keep → $$img"; \
+	else \
+		echo "act-keep-image: keeper $$keep already up to date"; \
+	fi; \
+	echo "act-keep-image: prune safely with: make act-prune"
+
+# system prune -a, не трогая образы/контейнеры с LABEL keep=true (см. act-keep-image).
+act-prune:
+	@command -v docker >/dev/null || (echo "act-prune: docker not found" && exit 1)
+	docker system prune -af --filter 'label!=$(ACT_KEEP_LABEL)'
+
+# Secondary goals for `make act-push 1` / `make act-release 2` (make иначе ищет target с таким именем).
+.PHONY: 1 2 3 4 5 6 7 8 9 10 12 16 32
+1 2 3 4 5 6 7 8 9 10 12 16 32:
+	@:
 
 # Сборка текущей версии из VERSION и публикация аннотированного тега vX.Y.Z на origin.
 tag-release:
@@ -87,35 +179,59 @@ tag-release:
 
 lint: lint-go
 	cd web && npm run lint
+	cd android/ui && npm run lint
 
 # Автофикс форматирования, линтера и сгенерированных артефактов перед коммитом / make ci.
-prepare: prepare-go prepare-web prepare-gen prepare-sql-check
+# prepare-gen: sync + ui-i18n-check; openapi/sqlc git-diff checks — в make ci.
+# Prefer a user-built binary (e.g. after Arch upgrades go ahead of golangci-lint package).
+GOLANGCI_LINT ?= $(firstword $(wildcard $(shell go env GOPATH 2>/dev/null)/bin/golangci-lint) $(shell command -v golangci-lint 2>/dev/null))
 
+prepare: prepare-go prepare-web prepare-android prepare-gen prepare-sql-check
+
+# golangci-lint must be built with a Go >= the runtime toolchain (GOROOT), including patch:
+# export data version bumps on go1.27.x patches → typecheck panic if lint was built with an older patch.
+# Arch often ships go ahead of the golangci-lint package; prefer a rebuilt $GOPATH/bin binary.
 prepare-go:
-	cd server && golangci-lint fmt ./...
-	cd server && golangci-lint run --fix ./...
+	@test -n "$(GOLANGCI_LINT)" || (echo "golangci-lint not found in PATH or \$$(go env GOPATH)/bin" >&2; exit 1)
+	@go_ver=$$(go env GOVERSION | sed -E 's/^go([0-9]+\.[0-9]+\.[0-9]+).*/\1/; t; s/^go([0-9]+\.[0-9]+).*/\1.0/'); \
+	lint_ver=$$($(GOLANGCI_LINT) version 2>/dev/null | sed -En 's/.*built with go([0-9]+\.[0-9]+\.[0-9]+).*/\1/p; t; s/.*built with go([0-9]+\.[0-9]+).*/\1.0/p'); \
+	if [ -n "$$lint_ver" ] && [ "$$go_ver" != "$$lint_ver" ] && \
+	   [ "$$(printf '%s\n' "$$lint_ver" "$$go_ver" | sort -V | tail -1)" = "$$go_ver" ]; then \
+		echo "golangci-lint was built with go$$lint_ver, but runtime is go$$go_ver." >&2; \
+		echo "Rebuild the linter with the current Go, then ensure it is first on PATH:" >&2; \
+		echo "  go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0" >&2; \
+		echo "  export PATH=\"\$$(go env GOPATH)/bin:\$$PATH\"" >&2; \
+		exit 1; \
+	fi
+	cd server && $(GOLANGCI_LINT) fmt ./...
+	cd server && $(GOLANGCI_LINT) run --fix ./...
 
 prepare-web:
 	cd web && npm run lint:fix
 
-prepare-gen: sqlc category-icons-json openapi-check
+prepare-android:
+	cd android/ui && npm run lint:fix
+
+prepare-gen: sqlc category-icons-json copy-openapi check-openapi-examples ui-i18n-check
 
 prepare-sql-check: sqlc-check inline-sql-check
 
 DOCKER_IMAGE_TAG ?= buhgalter:local
 
 docker-build:
-	docker build \
+	docker buildx build \
 		-f docker/Dockerfile \
 		--build-arg VERSION=$(VERSION) \
 		--build-arg INSTALL_METHOD=docker \
 		--build-arg BUILD_COMMIT=$(BUILD_COMMIT) \
 		--build-arg BUILD_TIME=$(BUILD_TIME) \
+		--load \
 		-t $(DOCKER_IMAGE_TAG) \
 		.
 
-ci: lint-go sqlc-check inline-sql-check openapi-check category-icons-json
+ci: lint-go sqlc-check inline-sql-check openapi-check ui-i18n-check category-icons-json
 	cd web && npm ci && npm run lint
+	cd android/ui && npm ci && npm run lint
 	$(MAKE) test
 	$(MAKE) docker-build
 
@@ -146,8 +262,8 @@ generate-category-icons:
 dev:
 	@echo "Use two terminals: make dev-server  |  make dev-web"
 
-dev-server: copy-openapi
-	cd server && BUHGALTER_STATIC_EMBED=false go run ./cmd/buhgalter
+dev-server: copy-openapi copy-ui-i18n
+	cd server && BUHGALTER_STATIC_EMBED=false BUHGALTER_ENV_FILE=$(CURDIR)/.env go run ./cmd/buhgalter
 
 dev-web:
 	cd web && npm run dev -- --host
@@ -190,3 +306,121 @@ version:
 	fi
 	@chmod +x scripts/set_version.sh
 	@scripts/set_version.sh $(VERSION_GOAL)
+
+android-icons:
+	python3 scripts/android-icons.py
+
+ANDROID_APK := android/app/build/outputs/apk/debug/app-debug.apk
+ANDROID_APK_DEBUG_DIR := android/app/build/outputs/apk/debug
+ANDROID_APK_RELEASE_DIR := android/app/build/outputs/apk/release
+ANDROID_APK_RELEASE := $(ANDROID_APK_RELEASE_DIR)/app-release.apk
+ANDROID_APK_RELEASE_UNIVERSAL := $(ANDROID_APK_RELEASE_DIR)/app-universal-release.apk
+ANDROID_APK_RELEASE_ARM64 := $(ANDROID_APK_RELEASE_DIR)/app-arm64-v8a-release.apk
+ANDROID_APK_RELEASE_ARMV7 := $(ANDROID_APK_RELEASE_DIR)/app-armeabi-v7a-release.apk
+ANDROID_APK_RELEASE_X86_64 := $(ANDROID_APK_RELEASE_DIR)/app-x86_64-release.apk
+
+android-ui-build: category-icons-json
+	cd android/ui && npm install && npm run build
+
+android-sync: android-ui-build android-icons
+	cd android && npm install
+	cd android && npx cap sync android
+
+android-apk: android-sync
+	@$(MAKE) --no-print-directory android-ensure-sdk
+	set -e; \
+	if [ -f scripts/android-env.sh ]; then . scripts/android-env.sh; fi; \
+	if [ -z "$$JAVA_HOME" ] || [ ! -x "$$JAVA_HOME/bin/java" ]; then \
+		echo "ERROR: JAVA_HOME is unset or invalid: '$$JAVA_HOME'"; \
+		echo "  CI: actions/setup-java; local: source scripts/android-env.sh"; \
+		exit 1; \
+	fi; \
+	export PATH="$$JAVA_HOME/bin:$$PATH"; \
+	echo "Gradle with JAVA_HOME=$$JAVA_HOME"; \
+	cd android && ./gradlew assembleDebug --stacktrace --no-daemon
+	@echo "APK: $(ANDROID_APK)"
+
+android-apk-release: android-sync
+	@$(MAKE) --no-print-directory android-ensure-sdk
+	set -e; \
+	if [ -f scripts/android-env.sh ]; then . scripts/android-env.sh; fi; \
+	if [ -z "$$JAVA_HOME" ] || [ ! -x "$$JAVA_HOME/bin/java" ]; then \
+		echo "ERROR: JAVA_HOME is unset or invalid: '$$JAVA_HOME'"; \
+		echo "  CI: actions/setup-java; local: source scripts/android-env.sh"; \
+		exit 1; \
+	fi; \
+	export PATH="$$JAVA_HOME/bin:$$PATH"; \
+	echo "Gradle with JAVA_HOME=$$JAVA_HOME"; \
+	cd android && ./gradlew assembleRelease --stacktrace --no-daemon
+	@test -f "$(ANDROID_APK_RELEASE_UNIVERSAL)" || (echo "ERROR: missing $(ANDROID_APK_RELEASE_UNIVERSAL)"; ls -la "$(ANDROID_APK_RELEASE_DIR)" || true; exit 1)
+	cp -f "$(ANDROID_APK_RELEASE_UNIVERSAL)" "$(ANDROID_APK_RELEASE)"
+	@echo "Release APKs:"
+	@ls -lh "$(ANDROID_APK_RELEASE)" \
+		"$(ANDROID_APK_RELEASE_ARM64)" \
+		"$(ANDROID_APK_RELEASE_ARMV7)" \
+		"$(ANDROID_APK_RELEASE_X86_64)"
+	@bash scripts/verify-android-release-apks.sh "$(ANDROID_APK_RELEASE_DIR)"
+
+# Ensure android/local.properties exists and sdk.dir is a real directory.
+android-ensure-sdk:
+	@SDK=""; \
+	if [ -f android/local.properties ]; then \
+		SDK=$$(grep '^sdk.dir=' android/local.properties | cut -d= -f2-); \
+	fi; \
+	if [ -z "$$SDK" ] || [ ! -d "$$SDK" ]; then \
+		SDK="$${ANDROID_SDK_ROOT:-$${ANDROID_HOME:-}}"; \
+	fi; \
+	if [ -z "$$SDK" ] || [ ! -d "$$SDK" ]; then \
+		echo "ERROR: Android SDK not found."; \
+		if [ -f android/local.properties ]; then \
+			echo "  android/local.properties: $$(grep '^sdk.dir=' android/local.properties)"; \
+		fi; \
+		echo "  Run: ./scripts/setup-android-dev.sh"; \
+		echo "  Then: source scripts/android-env.sh"; \
+		exit 1; \
+	fi; \
+	if [ ! -f android/local.properties ] || ! grep -qF "sdk.dir=$$SDK" android/local.properties; then \
+		printf 'sdk.dir=%s\n' "$$SDK" > android/local.properties; \
+		echo "Wrote android/local.properties (sdk.dir=$$SDK)"; \
+	fi; \
+	echo "android SDK: $$(grep '^sdk.dir=' android/local.properties)"
+	@echo "JAVA_HOME=$${JAVA_HOME:-<unset>}"
+	@if [ -n "$$JAVA_HOME" ] && [ -x "$$JAVA_HOME/bin/java" ]; then \
+		"$$JAVA_HOME/bin/java" -version; \
+	elif command -v java >/dev/null 2>&1; then \
+		java -version; \
+	else \
+		echo "ERROR: java not found. Set JAVA_HOME (CI: setup-java; local: source scripts/android-env.sh)."; \
+		exit 1; \
+	fi
+android-install: android-apk
+	@apk="$(ANDROID_APK)"; \
+	if [ ! -f "$$apk" ]; then \
+		if [ -f "$(ANDROID_APK_DEBUG_DIR)/app-universal-debug.apk" ]; then \
+			apk="$(ANDROID_APK_DEBUG_DIR)/app-universal-debug.apk"; \
+		else \
+			abi=$$(adb shell getprop ro.product.cpu.abi 2>/dev/null | tr -d '\r'); \
+			case "$$abi" in \
+				arm64-v8a|armeabi-v7a|x86_64) \
+					candidate="$(ANDROID_APK_DEBUG_DIR)/app-$$abi-debug.apk"; \
+					if [ -f "$$candidate" ]; then apk="$$candidate"; fi ;; \
+			esac; \
+		fi; \
+	fi; \
+	if [ ! -f "$$apk" ]; then \
+		echo "APK not found (expected $(ANDROID_APK))"; \
+		ls -1 "$(ANDROID_APK_DEBUG_DIR)"/*.apk 2>/dev/null || true; \
+		exit 1; \
+	fi; \
+	echo "Installing $$apk"; \
+	adb install -r "$$apk"
+
+android-install-release: android-apk-release
+	@apk="$(ANDROID_APK_RELEASE_UNIVERSAL)"; \
+	if [ ! -f "$$apk" ]; then \
+		echo "APK not found (expected $$apk)"; \
+		ls -1 "$(ANDROID_APK_RELEASE_DIR)"/*.apk 2>/dev/null || true; \
+		exit 1; \
+	fi; \
+	echo "Installing $$apk"; \
+	adb install -r "$$apk"

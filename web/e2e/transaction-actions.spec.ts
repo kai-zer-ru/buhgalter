@@ -179,25 +179,68 @@ test('make transaction recurring opens prefilled form', async ({ page }) => {
 	await rowMenuAction(page, row, 'Сделать периодической');
 
 	await waitAppReady(page);
-	await expect(page).toHaveURL(/\/settings\/recurring-operations\/?$/);
+	await expect(page).toHaveURL(/\/recurring-operations\/?$/);
 	await expect(page.locator('#recurring-amount-create')).toHaveValue(/88\.50/);
 	await expect(page.locator('#recurring-description-create')).toHaveValue(description);
 	await expect(page.getByText('Форма заполнена по операции')).toBeVisible();
 });
 
 test('delete expense from dashboard recent list', async ({ page }) => {
+	const tag = Date.now();
 	const account = await createCashAccount(page);
-	await createExpense(page, account.id, '77.00', 'E2E dashboard delete');
+	const description = `E2E dashboard delete ${tag}`;
+	await createExpense(page, account.id, '77.00', description);
 
 	await page.goto('/');
 	await waitAppReady(page);
+	const accountCard = page.getByRole('link', { name: new RegExp(account.name) });
+	// initial 1000 − expense 77
+	await expect(accountCard.getByText('923.00 ₽')).toBeVisible({ timeout: 10_000 });
 	await expandCollapsibleSection(page, 'Последние операции');
 
-	const row = page.getByRole('row', { name: /77\.00/ });
+	const row = page.getByRole('row', { name: new RegExp(description) });
 	await rowMenuAction(page, row, 'Удалить');
 	await confirmDialog(page);
 
-	await expect(page.getByRole('row', { name: /77\.00/ })).toHaveCount(0, { timeout: 10_000 });
+	await expect(page.getByRole('row', { name: new RegExp(description) })).toHaveCount(0, {
+		timeout: 10_000
+	});
+	// balance restored without full page reload
+	await expect(accountCard.getByText('1 000.00 ₽')).toBeVisible({ timeout: 10_000 });
+});
+
+test('edit expense from dashboard updates balance', async ({ page }) => {
+	const tag = Date.now();
+	const account = await createCashAccount(page);
+	const description = `E2E dashboard edit bal ${tag}`;
+	await createExpense(page, account.id, '50.00', description);
+
+	await page.goto('/');
+	await waitAppReady(page);
+	const accountCard = page.getByRole('link', { name: new RegExp(account.name) });
+	// initial 1000 − 50
+	await expect(accountCard.getByText('950.00 ₽')).toBeVisible({ timeout: 10_000 });
+	await expandCollapsibleSection(page, 'Последние операции');
+
+	const row = page.getByRole('row', { name: new RegExp(description) });
+	await rowMenuAction(page, row, 'Изменить');
+	const dialog = page.getByRole('dialog');
+	await fillEditTxAmount(dialog, '150', /150(\.00)?/);
+	await dialog.getByRole('button', { name: 'Сохранить' }).click();
+	await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+
+	// 1000 − 150 — balance is authoritative; dashboard recent is only limit=10 and
+	// shared e2e DB traffic can push this row off the preview after silent reload.
+	await expect(accountCard.getByText('850.00 ₽')).toBeVisible({ timeout: 10_000 });
+
+	await page.goto('/transactions');
+	await waitAppReady(page);
+	await selectCombobox(page, 'tx-filter-account', { label: account.name });
+	await expect(
+		page.getByRole('row', {
+			name: new RegExp(`${description}.*150\\.00|150\\.00.*${description}`)
+		})
+	).toBeVisible({ timeout: 10_000 });
 });
 
 test('transfer form excludes selected account from opposite select', async ({ page }) => {
@@ -252,12 +295,15 @@ test('create transfer with commission', async ({ page }) => {
 	await waitAppReady(page);
 	await selectCombobox(page, 'tx-filter-account', { label: from.name });
 
-	await expect(
-		page.getByRole('row', { name: new RegExp(`${from.name}.*${to.name}.*100`) })
-	).toBeVisible({ timeout: 10_000 });
-	await expect(page.getByRole('row', { name: new RegExp(`${from.name}.*5\\.00`) })).toBeVisible({
-		timeout: 10_000
+	const transferRow = page.getByRole('row', {
+		name: new RegExp(`${from.name}.*${to.name}.*100`)
 	});
+	await expect(transferRow).toBeVisible({ timeout: 10_000 });
+	await expect(transferRow.getByText(/комиссия/i)).toBeVisible();
+	await expect(transferRow.getByText('5.00')).toBeVisible();
+	await expect(page.getByRole('row', { name: new RegExp(`с ${from.name}.*5\\.00`) })).toHaveCount(
+		0
+	);
 });
 
 test('dashboard: past transactions in open spoiler, planned collapsed', async ({ page }) => {

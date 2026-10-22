@@ -29,15 +29,17 @@ func sumInt64(v interface{}, err error) (int64, error) {
 }
 
 type Forecast struct {
-	Balance            int64
-	HasFutureThisMonth bool
+	Balance                   int64
+	HasFutureThisMonth        bool // any contribution (compat)
+	HasPlannedThisMonth       bool // kind=future and/or recurring and/or unpaid credits
+	HasSubscriptionsThisMonth bool
 }
 
-func queries(db *sql.DB) *sqlcdb.Queries {
+func queries(db sqlcdb.DBTX) *sqlcdb.Queries {
 	return sqlcdb.New(db)
 }
 
-func computeDeltas(ctx context.Context, db *sql.DB, userID, cutoff string) (income, expense, transferOut, transferIn map[string]int64, err error) {
+func computeDeltas(ctx context.Context, db sqlcdb.DBTX, userID, cutoff string) (income, expense, transferOut, transferIn map[string]int64, err error) {
 	q := queries(db)
 	income = make(map[string]int64)
 	expense = make(map[string]int64)
@@ -103,8 +105,12 @@ func computeDeltas(ctx context.Context, db *sql.DB, userID, cutoff string) (inco
 }
 
 // ComputeAll returns current balances for every account of the user.
-func ComputeAll(ctx context.Context, db *sql.DB, userID string) (map[string]int64, error) {
-	cutoff := timeutil.FormatUTC(timeutil.NowUTC())
+func ComputeAll(ctx context.Context, db sqlcdb.DBTX, userID string) (map[string]int64, error) {
+	return ComputeAllAsOf(ctx, db, userID, timeutil.FormatUTC(timeutil.NowUTC()))
+}
+
+// ComputeAllAsOf returns account balances including only manual operations with transaction_date <= cutoff (UTC).
+func ComputeAllAsOf(ctx context.Context, db sqlcdb.DBTX, userID, cutoff string) (map[string]int64, error) {
 	accounts, err := queries(db).ListAllAccountIDsByUser(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -123,7 +129,7 @@ func ComputeAll(ctx context.Context, db *sql.DB, userID string) (map[string]int6
 }
 
 // Refresh updates stored current_balance for the given accounts (or all if none specified).
-func Refresh(ctx context.Context, db *sql.DB, userID string, accountIDs ...string) error {
+func Refresh(ctx context.Context, db sqlcdb.DBTX, userID string, accountIDs ...string) error {
 	computed, err := ComputeAll(ctx, db, userID)
 	if err != nil {
 		return err
@@ -168,7 +174,8 @@ func BackfillAll(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
-// ForecastsByUser returns month forecast per account in one batch.
+// ForecastsByUser returns month forecast per account in one batch
+// (kind=future txs + pending active subscriptions, recurring, and unpaid credits).
 func ForecastsByUser(ctx context.Context, db *sql.DB, userID, tz string, balances map[string]int64) (map[string]Forecast, error) {
 	monthStart, monthEnd, err := timeutil.MonthBoundsUTC(tz, timeutil.NowUTC())
 	if err != nil {
@@ -177,7 +184,7 @@ func ForecastsByUser(ctx context.Context, db *sql.DB, userID, tz string, balance
 	q := queries(db)
 	out := make(map[string]Forecast, len(balances))
 	for id, bal := range balances {
-		out[id] = Forecast{Balance: bal, HasFutureThisMonth: false}
+		out[id] = Forecast{Balance: bal}
 	}
 
 	futureAccounts, err := q.AccountsWithFutureInMonth(ctx, sqlcdb.AccountsWithFutureInMonthParams{
@@ -249,10 +256,24 @@ func ForecastsByUser(ctx context.Context, db *sql.DB, userID, tz string, balance
 		ftIn[row.AccountID] = total
 	}
 
+	scheduled, err := ScheduledEffectsByUser(ctx, db, userID, tz, timeutil.NowUTC())
+	if err != nil {
+		return nil, err
+	}
+
 	for id, base := range balances {
-		forecast := base + fi[id] - fe[id] + ftIn[id] - ftOut[id]
-		_, hasFuture := futureSet[id]
-		out[id] = Forecast{Balance: forecast, HasFutureThisMonth: hasFuture}
+		forecast := base + fi[id] - fe[id] + ftIn[id] - ftOut[id] + scheduled.Deltas[id]
+		_, hasFutureTx := futureSet[id]
+		_, hasRecurring := scheduled.HasRecurring[id]
+		_, hasSubs := scheduled.HasSubscription[id]
+		_, hasCredit := scheduled.HasCredit[id]
+		hasPlanned := hasFutureTx || hasRecurring || hasCredit
+		out[id] = Forecast{
+			Balance:                   forecast,
+			HasFutureThisMonth:        hasPlanned || hasSubs,
+			HasPlannedThisMonth:       hasPlanned,
+			HasSubscriptionsThisMonth: hasSubs,
+		}
 	}
 	return out, nil
 }

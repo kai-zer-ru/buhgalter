@@ -7,7 +7,6 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/kai-zer-ru/buhgalter/internal/account"
 	"github.com/kai-zer-ru/buhgalter/internal/apperror"
 	"github.com/kai-zer-ru/buhgalter/internal/audit"
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
@@ -34,43 +33,8 @@ func (h *accountArchiveHandler) archiveAccount(w http.ResponseWriter, r *http.Re
 		}
 	}
 
-	acc, err := account.GetByID(r.Context(), h.store.DB(), info.User.ID, id)
-	if errors.Is(err, account.ErrNotFound) {
-		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
-		return
-	}
-	if err != nil {
-		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
-		return
-	}
-
-	transferAmount, err := accountTransferAmount(r.Context(), h.store.DB(), info.User.ID, acc)
-	if err != nil {
-		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
-		return
-	}
-
-	if cashBankBalanceNeedsTransfer(acc, transferAmount) {
-		toID := parseTransferToAccountID(r, req)
-		if err := transferBalanceBeforeInactive(
-			r.Context(), h.store.DB(), info.User.ID, id, toID, transferAmount,
-			account.ArchiveTransferDescription(acc.Name),
-		); writeAccountTransferError(w, r, err) {
-			return
-		}
-	}
-
-	updated, err := account.SetStatus(r.Context(), h.store.DB(), info.User.ID, id, "archived")
-	if errors.Is(err, account.ErrNotFound) {
-		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
-		return
-	}
-	if errors.Is(err, account.ErrCreditCardArchiveNotFullyPaid) {
-		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_CARD_ARCHIVE_NOT_FULLY_PAID")
-		return
-	}
-	if err != nil {
-		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+	updated, err := inactivateAccount(r.Context(), h.store.DB(), info.User.ID, id, "archived", parseTransferToAccountID(r, req))
+	if writeInactivateAccountError(w, r, err) {
 		return
 	}
 

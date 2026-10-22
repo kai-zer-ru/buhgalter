@@ -8,6 +8,7 @@
 
 	const pages = [
 		{ path: '/admin', titleKey: 'admin.tab.system' },
+		{ path: '/admin/features', titleKey: 'admin.tab.features' },
 		{ path: '/admin/users', titleKey: 'admin.tab.users' },
 		{ path: '/admin/backups', titleKey: 'admin.tab.backups' },
 		{ path: '/admin/diagnostics', titleKey: 'admin.tab.diagnostics' }

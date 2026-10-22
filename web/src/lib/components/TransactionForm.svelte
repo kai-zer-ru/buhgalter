@@ -1,19 +1,30 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import {
 		createTransaction,
 		updateTransaction,
+		evaluateCategoryRules,
 		listAccounts,
 		listCategories,
 		listSubcategories,
 		listStores,
+		listMerchants,
+		listTags,
+		listCredits,
+		addCreditPayment,
 		type Account,
 		type Category,
 		type Store,
+		type Credit,
 		type Subcategory,
+		type Merchant,
+		type Tag,
+		type TagRef,
 		type Transaction
 	} from '$lib/api/client';
 	import { fromDatetimeLocalValue, nowDatetimeLocal, toDatetimeLocalValue } from '$lib/dates';
+	import { buildDatetimeLocal, parseDatetimeLocal } from '$lib/datetime-picker';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
 	import {
 		operationDatetimePickerCreate,
@@ -21,11 +32,12 @@
 	} from '$lib/datetime-picker-standards';
 	import FieldHint from '$lib/components/FieldHint.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
+	import Combobox from '$lib/components/Combobox.svelte';
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import { defaultAccountId } from '$lib/accounts';
 	import { creditCardExpenseWarning, isCreditCard } from '$lib/credit-card';
-	import { formatMoneyForInput, toAPIAmount, toCents } from '$lib/money';
+	import { formatMoneyForInput, fromCents, toAPIAmount, toCents } from '$lib/money';
 	import {
 		accountSelectOptions,
 		categorySelectOptions,
@@ -33,6 +45,10 @@
 	} from '$lib/select-options';
 	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
+
+	function isCreditsExpenseCategory(cat: Category | undefined): boolean {
+		return Boolean(cat?.is_system && cat.name === 'Кредиты');
+	}
 
 	type Props = {
 		open: boolean;
@@ -42,6 +58,7 @@
 		repeatFrom?: Transaction | null;
 		onclose: () => void;
 		onsaved: () => void;
+		onsavedTx?: (tx: Transaction) => void;
 	};
 
 	let {
@@ -51,7 +68,8 @@
 		transaction = null,
 		repeatFrom = null,
 		onclose,
-		onsaved
+		onsaved,
+		onsavedTx
 	}: Props = $props();
 
 	let txType = $state<'expense' | 'income'>('expense');
@@ -59,7 +77,13 @@
 	let selectedAccount = $state('');
 	let categoryId = $state('');
 	let subcategoryId = $state('');
-	let newSubcategory = $state('');
+	let subcategoryQuery = $state('');
+	let creditId = $state('');
+	let activeCredits = $state<Credit[]>([]);
+	let merchantId = $state('');
+	let merchantQuery = $state('');
+	let selectedTags = $state<TagRef[]>([]);
+	let tagInput = $state('');
 	let description = $state('');
 	let dateTimeValue = $state('');
 	let accounts = $state<Account[]>([]);
@@ -67,7 +91,14 @@
 	let subcategories = $state<Subcategory[]>([]);
 	let stores = $state<Store[]>([]);
 	let storeId = $state('');
+	let merchants = $state<Merchant[]>([]);
+	let allTags = $state<Tag[]>([]);
 	let saving = $state(false);
+	let optionalDetailsOpen = $state(false);
+	let timeExpanded = $state(false);
+	let timeInput = $state('');
+	let ruleHint = $state('');
+	let evaluateTimer: ReturnType<typeof setTimeout> | undefined;
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
 	const editing = $derived(!!transaction);
@@ -75,12 +106,17 @@
 	const accountOptions = $derived(accountSelectOptions(accounts));
 	const pickableCategories = $derived.by(() => {
 		const userCats = categories.filter((cat) => !cat.is_system);
-		if ((!editing && !repeatFrom) || !categoryId) return userCats;
-		const current = categories.find((cat) => cat.id === categoryId);
-		if (current?.is_system && !userCats.some((cat) => cat.id === categoryId)) {
-			return [...userCats, current];
+		const creditsCat = categories.find((cat) => isCreditsExpenseCategory(cat));
+		let list = userCats;
+		if (txType === 'expense' && creditsCat && !editing) {
+			list = [...userCats, creditsCat];
 		}
-		return userCats;
+		if ((!editing && !repeatFrom) || !categoryId) return list;
+		const current = categories.find((cat) => cat.id === categoryId);
+		if (current?.is_system && !list.some((cat) => cat.id === categoryId)) {
+			return [...list, current];
+		}
+		return list;
 	});
 	const categoryOptions = $derived(categorySelectOptions(pickableCategories));
 	const subcategoryOptions = $derived([
@@ -92,6 +128,42 @@
 		...stores.map((store) => ({ value: store.id, label: store.name }))
 	]);
 	const showStore = $derived(txType === 'expense' && stores.length > 0);
+	const selectedCategory = $derived(categories.find((c) => c.id === categoryId));
+	const isCreditPaymentMode = $derived(
+		!editing && txType === 'expense' && isCreditsExpenseCategory(selectedCategory)
+	);
+	const subcategoryOptions = $derived(subcategorySelectOptions(subcategories));
+	const creditOptions = $derived(
+		activeCredits.map((c) => ({
+			value: c.id,
+			label: c.name?.trim() || $_('credits.unnamed')
+		}))
+	);
+	const merchantOptions = $derived(
+		merchants.map((m) => ({
+			value: m.id,
+			label: m.name,
+			icon: { type: 'category' as const, icon: m.icon || 'default' }
+		}))
+	);
+	const newSubcategoryName = $derived(subcategoryId ? '' : subcategoryQuery.trim());
+	const newMerchantName = $derived(merchantId ? '' : merchantQuery.trim());
+
+	$effect(() => {
+		const p = parseDatetimeLocal(dateTimeValue);
+		if (!p) return;
+		const next = `${String(p.hour).padStart(2, '0')}:${String(p.minute).padStart(2, '0')}`;
+		if (untrack(() => timeInput) !== next) timeInput = next;
+	});
+
+	const tagSuggestions = $derived.by(() => {
+		const q = tagInput.trim().toLowerCase();
+		const selected = new Set(selectedTags.map((t) => t.name.toLowerCase()));
+		return allTags
+			.filter((t) => !selected.has(t.name.toLowerCase()))
+			.filter((t) => !q || t.name.toLowerCase().includes(q))
+			.slice(0, 8);
+	});
 
 	const isFuture = $derived.by(() => {
 		if (!dateTimeValue) return false;
@@ -116,7 +188,12 @@
 
 	$effect(() => {
 		if (!open) return;
-		void init(transaction, repeatFrom, defaultType);
+		// Capture props as deps; run init untracked so its $state writes / tz reads
+		// cannot re-enter this effect (effect_update_depth_exceeded on edit/repeat).
+		const editSource = transaction;
+		const repeatSource = repeatFrom;
+		const createType = defaultType;
+		void untrack(() => init(editSource, repeatSource, createType));
 	});
 
 	async function init(
@@ -130,47 +207,97 @@
 			selectedAccount = editSource.account_id;
 			categoryId = editSource.category_id ?? '';
 			subcategoryId = editSource.subcategory_id ?? '';
-			newSubcategory = '';
+			subcategoryQuery = editSource.subcategory_name ?? '';
+			merchantId = editSource.merchant_id ?? '';
+			merchantQuery = editSource.merchant_name ?? '';
+			selectedTags = [...(editSource.tags ?? [])];
+			tagInput = '';
 			description = editSource.description ?? '';
 			storeId = editSource.store_id ?? '';
 			dateTimeValue = toDatetimeLocalValue(editSource.transaction_date, tz);
+			dateTimeValue = toDatetimeLocalValue(
+				editSource.transaction_date,
+				untrack(() => tz)
+			);
+			timeExpanded = false;
+			optionalDetailsOpen = Boolean(merchantId || selectedTags.length || description.trim());
 		} else if (repeatSource) {
 			txType = repeatSource.type === 'income' ? 'income' : 'expense';
 			amount = formatMoneyForInput(repeatSource.amount_display);
 			selectedAccount = repeatSource.account_id;
 			categoryId = repeatSource.category_id ?? '';
 			subcategoryId = repeatSource.subcategory_id ?? '';
-			newSubcategory = '';
+			subcategoryQuery = repeatSource.subcategory_name ?? '';
+			merchantId = repeatSource.merchant_id ?? '';
+			merchantQuery = repeatSource.merchant_name ?? '';
+			selectedTags = [...(repeatSource.tags ?? [])];
+			tagInput = '';
 			description = repeatSource.description ?? '';
-			dateTimeValue = nowDatetimeLocal(tz);
+			dateTimeValue = nowDatetimeLocal(untrack(() => tz));
+			timeExpanded = false;
+			optionalDetailsOpen = Boolean(merchantId || selectedTags.length || description.trim());
 		} else {
 			txType = createType;
 			amount = '';
 			selectedAccount = '';
 			categoryId = '';
 			subcategoryId = '';
-			newSubcategory = '';
+			subcategoryQuery = '';
+			merchantId = '';
+			merchantQuery = '';
+			timeExpanded = false;
+			optionalDetailsOpen = false;
+			selectedTags = [];
+			tagInput = '';
 			description = '';
 			storeId = '';
 			dateTimeValue = nowDatetimeLocal(tz);
+			dateTimeValue = nowDatetimeLocal(untrack(() => tz));
 		}
 		accounts = await listAccounts('active');
 		stores = await listStores();
+		accounts = (await listAccounts('active').catch(() => [] as Account[])) ?? [];
 		if (!editSource && !repeatSource) {
 			selectedAccount = defaultAccountId(accounts, accountId);
 		}
-		await loadCategories();
+		const [merchantsRes, tagsRes] = await Promise.allSettled([listMerchants(), listTags()]);
+		merchants = merchantsRes.status === 'fulfilled' ? merchantsRes.value : [];
+		allTags = tagsRes.status === 'fulfilled' ? tagsRes.value : [];
+		try {
+			await loadCategories();
+		} catch {
+			categories = [];
+			subcategories = [];
+		}
+		if (!editSource) scheduleRuleEvaluate();
 	}
 
 	async function loadCategories() {
-		categories = await listCategories(txType);
-		const selectable = categories.filter((c) => !c.is_system);
+		try {
+			categories = await listCategories(txType);
+		} catch {
+			categories = [];
+		}
+		const selectable = pickableCategories;
 		if (!categoryId && selectable.length) {
 			categoryId = selectable.find((c) => c.is_primary)?.id ?? selectable[0].id;
 		}
 		if (categoryId && !categories.some((c) => c.id === categoryId)) {
 			categoryId = selectable.find((c) => c.is_primary)?.id ?? selectable[0]?.id ?? '';
 		}
+		const cat = categories.find((c) => c.id === categoryId);
+		if (!editing && txType === 'expense' && isCreditsExpenseCategory(cat)) {
+			subcategories = [];
+			creditId = '';
+			try {
+				activeCredits = await listCredits({ status: 'active' });
+			} catch {
+				activeCredits = [];
+			}
+			return;
+		}
+		activeCredits = [];
+		creditId = '';
 		if (categoryId) {
 			subcategories = await listSubcategories(categoryId);
 		} else {
@@ -178,16 +305,117 @@
 		}
 	}
 
+	function clearOptionalDetails() {
+		merchantId = '';
+		merchantQuery = '';
+		selectedTags = [];
+		tagInput = '';
+		description = '';
+		optionalDetailsOpen = false;
+	}
+
+	function scheduleRuleEvaluate() {
+		if (editing) return;
+		if (evaluateTimer) clearTimeout(evaluateTimer);
+		evaluateTimer = setTimeout(() => void runRuleEvaluate(), 350);
+	}
+
+	async function runRuleEvaluate() {
+		if (!open || editing) return;
+		try {
+			const res = await evaluateCategoryRules({
+				description: description.trim() || undefined,
+				category_id: categoryId || undefined,
+				subcategory_id: subcategoryId || undefined
+			});
+			if (
+				res.account_suggestion?.account_id &&
+				accounts.some((a) => a.id === res.account_suggestion!.account_id)
+			) {
+				selectedAccount = res.account_suggestion.account_id;
+			}
+			if (res.text_matches.length === 1 && !categoryId) {
+				categoryId = res.text_matches[0].category_id;
+				if (res.text_matches[0].subcategory_id) {
+					subcategoryId = res.text_matches[0].subcategory_id;
+				}
+				await onCategoryChange();
+				ruleHint = $_('categoryRules.hintApplied');
+			} else if (res.text_matches.length > 1) {
+				ruleHint = $_('categoryRules.hintAmbiguous');
+			} else {
+				ruleHint = '';
+			}
+		} catch {
+			ruleHint = '';
+		}
+	}
+
 	async function onCategoryChange() {
+		creditId = '';
+		activeCredits = [];
 		subcategoryId = '';
-		newSubcategory = '';
+		subcategoryQuery = '';
+		const cat = categories.find((c) => c.id === categoryId);
+		if (!editing && txType === 'expense' && isCreditsExpenseCategory(cat)) {
+			subcategories = [];
+			clearOptionalDetails();
+			try {
+				activeCredits = await listCredits({ status: 'active' });
+			} catch {
+				activeCredits = [];
+			}
+			return;
+		}
 		subcategories = categoryId ? await listSubcategories(categoryId) : [];
+		scheduleRuleEvaluate();
+	}
+
+	function onCreditChange() {
+		const credit = activeCredits.find((c) => c.id === creditId);
+		if (!credit) return;
+		if (credit.next_payment_amount != null && credit.next_payment_amount > 0) {
+			amount = formatMoneyForInput(fromCents(credit.next_payment_amount));
+		} else if (credit.monthly_payment > 0) {
+			amount = formatMoneyForInput(fromCents(credit.monthly_payment));
+		}
+		if (credit.next_payment_date) {
+			dateTimeValue = toDatetimeLocalValue(credit.next_payment_date, tz);
+		}
+		if (credit.debit_account_id && accounts.some((a) => a.id === credit.debit_account_id)) {
+			selectedAccount = credit.debit_account_id;
+		}
+	}
+
+	function applyOperationTime() {
+		timeExpanded = true;
+		const p = parseDatetimeLocal(dateTimeValue);
+		if (!p) return;
+		const [h, m] = (timeInput || '00:00').split(':').map(Number);
+		dateTimeValue = buildDatetimeLocal(p.year, p.month, p.day, h || 0, m || 0);
 	}
 
 	async function save(e: Event) {
 		e.preventDefault();
 		saving = true;
 		try {
+			if (isCreditPaymentMode) {
+				if (!creditId) {
+					toast.error($_('credits.error.pickCredit'));
+					return;
+				}
+				await addCreditPayment(creditId, {
+					amount: toAPIAmount(amount),
+					payment_date: fromDatetimeLocalValue(dateTimeValue, tz),
+					account_id: selectedAccount || undefined
+				});
+				open = false;
+				toast($_('common.saved'));
+				onsaved();
+				return;
+			}
+			const tagIds = selectedTags.filter((t) => t.id).map((t) => t.id);
+			const tagNames = selectedTags.filter((t) => !t.id).map((t) => t.name);
 			const payload = {
 				account_id: selectedAccount,
 				type: txType,
@@ -197,15 +425,23 @@
 				subcategory_id: newSubcategory ? undefined : subcategoryId || undefined,
 				subcategory_name: newSubcategory || undefined,
 				store_id: storeId || undefined,
+				subcategory_id: newSubcategoryName ? undefined : subcategoryId || undefined,
+				subcategory_name: newSubcategoryName || undefined,
+				merchant_id: newMerchantName ? undefined : merchantId || undefined,
+				merchant_name: newMerchantName || undefined,
+				tag_ids: tagIds,
+				tag_names: tagNames,
 				transaction_date: fromDatetimeLocalValue(dateTimeValue, tz)
 			};
+			let saved: Transaction;
 			if (transaction) {
-				await updateTransaction(transaction.id, payload);
+				saved = await updateTransaction(transaction.id, payload);
 			} else {
-				await createTransaction(payload);
+				saved = await createTransaction(payload);
 			}
 			open = false;
 			toast($_('common.saved'));
+			onsavedTx?.(saved);
 			onsaved();
 		} catch (err) {
 			toast.fromError(err);
@@ -217,6 +453,32 @@
 	function close() {
 		open = false;
 		onclose();
+	}
+
+	function addTag(name: string, id = '') {
+		const trimmed = name.trim();
+		if (!trimmed) return;
+		if (selectedTags.some((t) => t.name.toLowerCase() === trimmed.toLowerCase())) {
+			tagInput = '';
+			return;
+		}
+		selectedTags = [...selectedTags, { id, name: trimmed }];
+		tagInput = '';
+	}
+
+	function removeTag(name: string) {
+		selectedTags = selectedTags.filter((t) => t.name !== name);
+	}
+
+	function onTagKeydown(e: KeyboardEvent) {
+		if (e.key === 'Enter') {
+			e.preventDefault();
+			const match = tagSuggestions.find(
+				(t) => t.name.toLowerCase() === tagInput.trim().toLowerCase()
+			);
+			if (match) addTag(match.name, match.id);
+			else addTag(tagInput);
+		}
 	}
 </script>
 
@@ -236,13 +498,6 @@
 			</p>
 		{/if}
 
-		<div>
-			<label class="mb-1 block text-sm font-medium" for="tx-amount"
-				>{$_('transactions.field.amount')}</label
-			>
-			<MoneyInput id="tx-amount" bind:value={amount} required />
-		</div>
-
 		<Select
 			id="tx-account"
 			label={$_('transactions.field.account')}
@@ -259,6 +514,9 @@
 			usePortal
 			onchange={() => void onCategoryChange()}
 		/>
+		{#if ruleHint}
+			<p class="text-sm" style:color="var(--primary)">{ruleHint}</p>
+		{/if}
 
 		{#if showStore}
 			<Select
@@ -271,36 +529,49 @@
 		{/if}
 
 		<div>
+		{#if isCreditPaymentMode}
 			<Select
+				id="tx-credit"
+				label={$_('credits.field.credit')}
+				bind:value={creditId}
+				options={creditOptions}
+				usePortal
+				onchange={onCreditChange}
+			/>
+			{#if activeCredits.length === 0}
+				<p class="text-sm" style:color="var(--text-muted)">{$_('credits.empty')}</p>
+			{/if}
+		{:else}
+			<Combobox
 				id="tx-sub"
 				label={$_('transactions.field.subcategory')}
 				bind:value={subcategoryId}
+				bind:query={subcategoryQuery}
 				options={subcategoryOptions}
 				usePortal
-				onchange={() => {
-					if (subcategoryId) newSubcategory = '';
-				}}
+				allowCreate
+				onchange={() => scheduleRuleEvaluate()}
+				placeholder={$_('transactions.field.newSubcategory')}
+				createLabel={$_('transactions.field.createNamed', {
+					values: { name: subcategoryQuery.trim() || '…' }
+				})}
+				emptyLabel={$_('common.notFound')}
 			/>
-			{#if !subcategoryId}
-				<input
-					class="input mt-2 w-full"
-					placeholder={$_('transactions.field.newSubcategory')}
-					bind:value={newSubcategory}
-				/>
-			{/if}
-		</div>
+		{/if}
 
 		<div>
-			<label class="mb-1 block text-sm font-medium" for="tx-desc"
-				>{$_('transactions.field.description')}</label
+			<label class="mb-1 block text-sm font-medium" for="tx-amount"
+				>{$_('transactions.field.amount')}</label
 			>
-			<input id="tx-desc" class="input w-full" bind:value={description} />
+			<MoneyInput id="tx-amount" bind:value={amount} required />
 		</div>
 
 		<DateTimePicker
 			id="tx-date"
 			label={$_('transactions.field.dateOnly')}
 			bind:value={dateTimeValue}
+			bind:timeExpanded
+			showOptionalTimeUI={false}
 			{...editing ? operationDatetimePickerEdit : operationDatetimePickerCreate}
 			usePortal
 			required
@@ -311,6 +582,106 @@
 				<FieldHint text={$_('transactions.field.plannedHint')} />
 			</div>
 		{/if}
+
+		{#snippet timeField()}
+			<div>
+				<label class="mb-1 block text-sm font-medium" for="tx-time"
+					>{$_('transactions.field.timeOptional')}</label
+				>
+				<input
+					id="tx-time"
+					type="time"
+					class="input w-full"
+					bind:value={timeInput}
+					onchange={applyOperationTime}
+				/>
+				<FieldHint text={$_('transactions.field.timeHint')} />
+			</div>
+		{/snippet}
+
+		{#if isCreditPaymentMode}
+			{@render timeField()}
+		{:else}
+			<details bind:open={optionalDetailsOpen}>
+				<summary class="cursor-pointer text-sm" style:color="var(--text-muted)">
+					{$_('transactions.field.optionalDetails')}
+				</summary>
+				<div class="mt-3 space-y-4">
+					{@render timeField()}
+
+					<div>
+						<label class="mb-1 block text-sm font-medium" for="tx-desc"
+							>{$_('transactions.field.description')}</label
+						>
+						<input
+							id="tx-desc"
+							class="input w-full"
+							bind:value={description}
+							oninput={() => scheduleRuleEvaluate()}
+						/>
+					</div>
+
+					<Combobox
+						id="tx-merchant"
+						label={$_('transactions.field.merchant')}
+						bind:value={merchantId}
+						bind:query={merchantQuery}
+						options={merchantOptions}
+						usePortal
+						allowCreate
+						placeholder={$_('transactions.field.newMerchant')}
+						createLabel={$_('transactions.field.createNamed', {
+							values: { name: merchantQuery.trim() || '…' }
+						})}
+						emptyLabel={$_('common.notFound')}
+					/>
+
+					<div>
+						<span class="mb-1 block text-sm font-medium">{$_('transactions.field.tags')}</span>
+						{#if selectedTags.length}
+							<div class="mb-2 flex flex-wrap gap-2">
+								{#each selectedTags as t (t.name)}
+									<button
+										type="button"
+										class="rounded-md px-2 py-1 text-sm"
+										style:background="var(--surface-2)"
+										onclick={() => removeTag(t.name)}
+									>
+										{t.name} ×
+									</button>
+								{/each}
+							</div>
+						{/if}
+						<input
+							id="tx-tags"
+							class="input w-full"
+							placeholder={$_('transactions.field.tagsHint')}
+							bind:value={tagInput}
+							onkeydown={onTagKeydown}
+						/>
+						{#if tagInput.trim() && tagSuggestions.length}
+							<ul
+								class="mt-1 max-h-40 overflow-auto rounded-md border text-sm"
+								style:border-color="var(--border)"
+							>
+								{#each tagSuggestions as sug (sug.id)}
+									<li>
+										<button
+											type="button"
+											class="block w-full px-3 py-2 text-left hover:opacity-80"
+											onclick={() => addTag(sug.name, sug.id)}
+										>
+											{sug.name}
+										</button>
+									</li>
+								{/each}
+							</ul>
+						{/if}
+					</div>
+				</div>
+			</details>
+		{/if}
+
 		{#if creditCardNegativeWarning}
 			<p class="text-sm" style:color="var(--warning)">
 				{$_('accounts.creditCard.negativeBalance')}

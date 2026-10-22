@@ -1,12 +1,9 @@
--- name: GetRegistrationEnabled :one
-SELECT registration_enabled FROM system_settings WHERE id = 1;
-
 -- name: GetAdminSettings :one
-SELECT registration_enabled, external_url, notification_secret_key
+SELECT external_url, notification_secret_key
 FROM system_settings WHERE id = 1;
 
 -- name: GetSetupStatus :one
-SELECT registration_enabled, external_url FROM system_settings WHERE id = 1;
+SELECT external_url FROM system_settings WHERE id = 1;
 
 -- name: GetDiagnosticsSettings :one
 SELECT external_url, previous_app_version FROM system_settings WHERE id = 1;
@@ -31,7 +28,7 @@ SELECT backup_enabled, backup_time, backup_retention FROM system_settings WHERE 
 
 -- name: UpdateAdminSettings :exec
 UPDATE system_settings
-SET registration_enabled = ?, external_url = ?, updated_at = datetime('now')
+SET external_url = ?, updated_at = datetime('now')
 WHERE id = 1;
 
 -- name: UpdateNotificationSecretKey :exec
@@ -41,7 +38,7 @@ WHERE id = 1;
 
 -- name: CompleteSetup :exec
 UPDATE system_settings
-SET is_configured = 1, external_url = ?, registration_enabled = ?, updated_at = datetime('now')
+SET is_configured = 1, external_url = ?, updated_at = datetime('now')
 WHERE id = 1;
 
 -- name: UpdateDBPath :exec

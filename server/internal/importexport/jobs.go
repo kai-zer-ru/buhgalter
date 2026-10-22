@@ -79,13 +79,15 @@ func setImportJobDone(ctx context.Context, db *sql.DB, userID, jobID string, rep
 		return err
 	}
 	reportJSON := string(data)
-	return sqlcdb.New(db).SetImportJobDone(ctx, sqlcdb.SetImportJobDoneParams{
-		Status:     string(ImportJobDone),
-		ReportJson: &reportJSON,
-		FinishedAt: &now,
-		UpdatedAt:  now,
-		ID:         jobID,
-		UserID:     userID,
+	return withSQLiteBusyRetry(ctx, func() error {
+		return sqlcdb.New(db).SetImportJobDone(ctx, sqlcdb.SetImportJobDoneParams{
+			Status:     string(ImportJobDone),
+			ReportJson: &reportJSON,
+			FinishedAt: &now,
+			UpdatedAt:  now,
+			ID:         jobID,
+			UserID:     userID,
+		})
 	})
 }
 

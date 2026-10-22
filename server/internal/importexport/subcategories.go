@@ -70,6 +70,8 @@ func buildSubcategoryMappings(
 				s.Mode = "existing"
 				s.SubcategoryID = &sub.ID
 				s.SubcategoryName = &sub.Name
+			} else if res.catIsSystem[catID] {
+				continue
 			}
 		}
 		out = append(out, s)

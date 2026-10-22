@@ -1,4 +1,5 @@
 import type { Account, Bank, Category, Subcategory, UIMetaAccountRef } from '$lib/api/client';
+import { sortAccountsForSelect } from '$lib/accounts';
 
 export type SelectOptionIcon =
 	| { type: 'account'; accountType: Account['type']; bankIcon?: string | null }
@@ -61,7 +62,7 @@ export function accountSelectOptions(
 	accounts: readonly Account[],
 	label?: (acc: Account) => string
 ): SelectOption[] {
-	return accounts.map((acc) => accountSelectOption(acc, label?.(acc)));
+	return sortAccountsForSelect(accounts).map((acc) => accountSelectOption(acc, label?.(acc)));
 }
 
 export function accountRefSelectOption(
