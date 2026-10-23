@@ -333,16 +333,32 @@ func TestExportNativeIgnoresDateFilters(t *testing.T) {
 		t.Fatalf("native export missing out-of-range dates: %s", text[len(text)-min(800, len(text)):])
 	}
 
-	cubux, _, err := ExportCSV(ctx, sqlDB, userID, "User", ExportFilters{From: "2025-01-01", To: today})
+	omitted, _, err := ExportCSV(ctx, sqlDB, userID, "User", ExportFilters{From: "2025-01-01", To: today})
 	if err != nil {
 		t.Fatal(err)
 	}
-	cubuxText := string(cubux)
-	if strings.Contains(cubuxText, "15.06.2020") {
-		t.Fatal("cubux export should honor from=2025-01-01")
+	omittedText := string(omitted)
+	if !strings.Contains(omittedText, "#BUHGALTER") || !strings.Contains(omittedText, "15.06.2020") {
+		t.Fatal("export without format must be a full buhgalter dump, including rows outside from/to")
 	}
-	if !strings.Contains(cubuxText, "15.06.2025") {
-		t.Fatal("cubux export missing in-range row")
+
+	for _, format := range []string{"cubux", "CUBUX", "foo"} {
+		cubux, _, err := ExportCSV(ctx, sqlDB, userID, "User", ExportFilters{
+			Format: format, From: "2025-01-01", To: today,
+		})
+		if err != nil {
+			t.Fatalf("format %q: %v", format, err)
+		}
+		cubuxText := string(cubux)
+		if strings.Contains(cubuxText, "#BUHGALTER") {
+			t.Fatalf("format %q must stay flat cubux", format)
+		}
+		if strings.Contains(cubuxText, "15.06.2020") {
+			t.Fatalf("format %q should honor from=2025-01-01", format)
+		}
+		if !strings.Contains(cubuxText, "15.06.2025") {
+			t.Fatalf("format %q missing in-range row", format)
+		}
 	}
 }
 

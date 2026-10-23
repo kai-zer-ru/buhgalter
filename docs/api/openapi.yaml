@@ -3851,12 +3851,14 @@ paths:
         - name: format
           in: query
           description: |
-            `cubux` — совместимость с Cubux (по умолчанию); `from`/`to`/`account_id`/`category_id` сужают список операций.
+            По умолчанию `buhgalter`. Нет параметра, пустая строка и пробелы — тоже. Сравнение после обрезки пробелов и нижнего регистра: `buhgalter` и `cubux` (`BUHGALTER` — полный дамп, `CUBUX` — Cubux).
             `buhgalter` — секционный CSV `#BUHGALTER,1` для полного переноса между инстансами (профиль с timezone, счета, справочники, операции, кредиты, долги, подписки и остальное). Фильтры даты, счёта и категории игнорируются.
+            `cubux` — только это значение; `from`/`to`/`account_id`/`category_id` сужают список операций.
+            Любое другое значение после такого сравнения (например `foo`) — Cubux, ответ 200.
           schema:
             type: string
             enum: [cubux, buhgalter]
-            default: cubux
+            default: buhgalter
       responses:
         '200':
           description: CSV с BOM

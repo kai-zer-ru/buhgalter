@@ -14,8 +14,10 @@ import (
 
 func exportFormat(f ExportFilters) string {
 	switch strings.ToLower(strings.TrimSpace(f.Format)) {
-	case "buhgalter":
+	case "", "buhgalter":
 		return "buhgalter"
+	case "cubux":
+		return "cubux"
 	default:
 		return "cubux"
 	}

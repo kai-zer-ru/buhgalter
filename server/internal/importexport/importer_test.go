@@ -198,6 +198,47 @@ func TestExportCSV(t *testing.T) {
 	if string(out[:3]) != "\xef\xbb\xbf" {
 		t.Fatal("expected UTF-8 BOM")
 	}
+	text := string(out)
+	if !strings.Contains(text, "#BUHGALTER") || !strings.Contains(text, "#SECTION") {
+		t.Fatal("empty format must be native buhgalter CSV with sections")
+	}
+}
+
+func TestExportFormatEdges(t *testing.T) {
+	ctx, sqlDB, userID := seedImportUser(t)
+	if _, err := Import(ctx, sqlDB, userID, "sample.csv", sampleCSVRows(), ImportOptions{
+		Preset: "cubux", Deduplicate: true, Confirm: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		format string
+		native bool
+	}{
+		{format: "", native: true},
+		{format: "   ", native: true},
+		{format: "buhgalter", native: true},
+		{format: "BUHGALTER", native: true},
+		{format: " BUHGALTER ", native: true},
+		{format: "cubux", native: false},
+		{format: "CUBUX", native: false},
+		{format: " cubux ", native: false},
+		{format: "foo", native: false},
+	}
+	for _, tc := range cases {
+		out, _, err := ExportCSV(ctx, sqlDB, userID, "User", ExportFilters{Format: tc.format})
+		if err != nil {
+			t.Fatalf("format %q: %v", tc.format, err)
+		}
+		if len(out) < 3 || string(out[:3]) != "\xef\xbb\xbf" {
+			t.Fatalf("format %q: expected UTF-8 BOM", tc.format)
+		}
+		hasNative := strings.Contains(string(out), "#BUHGALTER")
+		if hasNative != tc.native {
+			t.Fatalf("format %q: native=%v want %v", tc.format, hasNative, tc.native)
+		}
+	}
 }
 
 func TestExportCSVBuhgalterFormat(t *testing.T) {
