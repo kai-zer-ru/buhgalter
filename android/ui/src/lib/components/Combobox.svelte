@@ -12,6 +12,8 @@
 	export type ComboboxOption = {
 		value: string;
 		label: string;
+		/** Extra strings for filter and exact match. The visible text stays `label`. */
+		keywords?: string[];
 		disabled?: boolean;
 		icon?: SelectOptionIconType;
 	};
@@ -61,15 +63,28 @@
 	const CREATE_VALUE = '__create__';
 
 	const trimmedQuery = $derived(query.trim());
-	const exactMatch = $derived(
-		options.find((option) => option.label.toLowerCase() === trimmedQuery.toLowerCase())
-	);
+
+	function optionNeedles(option: ComboboxOption): string[] {
+		const raw = [option.label, ...(option.keywords ?? [])];
+		const out: string[] = [];
+		for (const item of raw) {
+			const text = item.trim().toLowerCase();
+			if (text) out.push(text);
+		}
+		return out;
+	}
+
+	const exactMatch = $derived.by(() => {
+		const q = trimmedQuery.toLowerCase();
+		if (!q) return undefined;
+		return options.find((option) => optionNeedles(option).includes(q));
+	});
 
 	const visibleOptions = $derived.by(() => {
 		const q = trimmedQuery.toLowerCase();
 		const list =
 			filterOptions && q
-				? options.filter((option) => option.label.toLowerCase().includes(q))
+				? options.filter((option) => optionNeedles(option).some((text) => text.includes(q)))
 				: options;
 		const filtered = list.filter((option) => !option.disabled || option.value === value);
 		if (allowCreate && trimmedQuery && !exactMatch) {
@@ -225,6 +240,10 @@
 		}
 		if (event.key === 'Enter') {
 			event.preventDefault();
+			if (exactMatch) {
+				selectOption(exactMatch.value);
+				return;
+			}
 			const option = visibleOptions[highlighted];
 			if (option && !option.disabled) selectOption(option.value);
 		}

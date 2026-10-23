@@ -1256,6 +1256,7 @@ export type Merchant = {
 	id: string;
 	name: string;
 	icon: string;
+	aliases?: string[];
 	created_at: string;
 };
 
@@ -1871,17 +1872,34 @@ export function listMerchants() {
 		});
 }
 
-export function createMerchant(name: string, icon?: string) {
+export function createMerchant(name: string, icon?: string, aliases?: string[]) {
+	const body: { name: string; icon: string; aliases?: string[] } = {
+		name,
+		icon: icon?.trim() || 'default'
+	};
+	if (aliases !== undefined) body.aliases = aliases;
 	return request<Merchant>('/api/v1/merchants', {
 		method: 'POST',
-		body: JSON.stringify({ name, icon: icon?.trim() || 'default' })
+		body: JSON.stringify(body)
 	});
 }
 
-export function updateMerchant(id: string, name: string, icon?: string) {
+export function updateMerchant(id: string, name: string, icon?: string, aliases?: string[]) {
+	const body: { name: string; icon: string; aliases?: string[] } = {
+		name,
+		icon: icon?.trim() || 'default'
+	};
+	if (aliases !== undefined) body.aliases = aliases;
 	return request<Merchant>(`/api/v1/merchants/${id}`, {
 		method: 'PUT',
-		body: JSON.stringify({ name, icon: icon?.trim() || 'default' })
+		body: JSON.stringify(body)
+	});
+}
+
+export function mergeMerchants(id: string, sourceIds: string[]) {
+	return request<Merchant>(`/api/v1/merchants/${id}/merge`, {
+		method: 'POST',
+		body: JSON.stringify({ source_ids: sourceIds })
 	});
 }
 

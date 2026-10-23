@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import bundledRu from './ru.json';
 import { syncRemoteI18nOnMismatch } from './remote-sync';
 
 const addMessages = vi.fn();
@@ -32,8 +33,9 @@ vi.mock('$lib/api/client', () => ({
 
 /** Enough keys to pass remoteCatalogUsable (bundled ru.json × 0.85). */
 function fullCatalog(extra: Record<string, string>): Record<string, string> {
+	const need = Math.floor(Object.keys(bundledRu).length * 0.85);
 	const base: Record<string, string> = {};
-	for (let i = 0; i < 1200; i++) base[`test.key.${i}`] = 'x';
+	for (let i = 0; i < need; i++) base[`test.key.${i}`] = 'x';
 	return { ...base, ...extra };
 }
 

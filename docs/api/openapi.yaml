@@ -2133,7 +2133,10 @@ paths:
                   $ref: '#/components/schemas/Merchant'
     post:
       summary: Создать магазин
-      description: Get-or-create по имени (без учёта регистра, включая кириллицу).
+      description: |
+        Get-or-create по основному имени или алиасу (без учёта регистра, включая кириллицу).
+        Поле `aliases` при создании нового магазина сохраняется; без поля список пустой.
+        Если магазин уже найден, возвращается он, список алиасов не меняется.
       security:
         - sessionCookie: []
         - bearerAuth: []
@@ -2169,6 +2172,9 @@ paths:
           description: Не найден
     put:
       summary: Обновить магазин
+      description: |
+        Поле `aliases` заменяет список. Без поля список не меняется.
+        Переименование в собственный алиас забирает это имя, алиас исчезает.
       security:
         - sessionCookie: []
         - bearerAuth: []
@@ -2190,6 +2196,51 @@ paths:
       responses:
         '204':
           description: Удалён
+  /merchants/{id}/merge:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Магазин, который остаётся
+        schema:
+          type: string
+    post:
+      summary: Объединить магазины
+      description: |
+        Цель остаётся: имя и иконка не меняются. Имена и алиасы источников становятся алиасами
+        (дубликаты основного имени цели отбрасываются). `transactions.merchant_id` источников
+        переписывается на цель, источники удаляются. В журнале и в `merchant_name` после этого
+        только основное имя цели. Если имя источника уже занято третьим магазином, объединение откатывается.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MerchantMerge'
+      responses:
+        '200':
+          description: Магазин-цель с алиасами
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Merchant'
+        '400':
+          description: Не указаны другие магазины
+        '404':
+          description: Магазин не найден
+        '409':
+          description: Имя занято третьим магазином, объединение отменено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: CONFLICT
+                  message: Такое имя магазина или алиас уже занято
   /tags:
     get:
       summary: Список тегов
@@ -5014,6 +5065,9 @@ components:
           type: integer
     Merchant:
       type: object
+      description: |
+        Основное имя и алиасы. То же тело отдают `GET /merchants` и `GET /ui/meta`.
+        В журнале операций и в `merchant_name` видно только `name`.
       properties:
         id:
           type: string
@@ -5022,6 +5076,11 @@ components:
         icon:
           type: string
           description: ID иконки из каталога категорий (`data/category_icons.json`)
+        aliases:
+          type: array
+          description: Другие написания имени. Пустой список — `[]`.
+          items:
+            type: string
         created_at:
           type: string
     MerchantUpsert:
@@ -5033,6 +5092,22 @@ components:
         icon:
           type: string
           description: ID иконки; пусто при создании → `default`, при обновлении — не менять
+        aliases:
+          type: array
+          description: |
+            При создании сохраняется (нет поля — пустой список).
+            При обновлении заменяет список; нет поля — список не меняется.
+          items:
+            type: string
+    MerchantMerge:
+      type: object
+      required: [source_ids]
+      properties:
+        source_ids:
+          type: array
+          description: Магазины, которые вливаются в цель
+          items:
+            type: string
     Tag:
       type: object
       properties:

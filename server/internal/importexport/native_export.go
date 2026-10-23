@@ -70,7 +70,15 @@ func exportNative(ctx context.Context, db *sql.DB, userID, displayName string, f
 	}
 	merchRows := make([][]string, 0, len(merchants))
 	for _, m := range merchants {
-		merchRows = append(merchRows, []string{m.Name, m.Icon})
+		aliases := m.Aliases
+		if aliases == nil {
+			aliases = []string{}
+		}
+		raw, err := json.Marshal(aliases)
+		if err != nil {
+			return nil, "", err
+		}
+		merchRows = append(merchRows, []string{m.Name, m.Icon, string(raw)})
 	}
 	tags, err := tag.List(ctx, db, userID, "")
 	if err != nil {

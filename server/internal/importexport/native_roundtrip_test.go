@@ -346,6 +346,78 @@ func TestExportNativeIgnoresDateFilters(t *testing.T) {
 	}
 }
 
+func TestNativeMerchantAliasesRoundtrip(t *testing.T) {
+	ctx, sqlDB, srcUser := seedImportUser(t)
+	created, err := merchant.CreateWithAliases(ctx, sqlDB, srcUser, "Пятёрочка", "shopping", []string{"Pyaterochka", "Пятёрочка у дома"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(created.Aliases) != 2 {
+		t.Fatalf("aliases=%v", created.Aliases)
+	}
+	out, _, err := ExportCSV(ctx, sqlDB, srcUser, "Import", ExportFilters{Format: "buhgalter"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(out), "aliases") || !strings.Contains(string(out), "Pyaterochka") {
+		t.Fatalf("export missing aliases: %s", out)
+	}
+
+	hash, err := auth.HashPassword("secret123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dstUser, err := auth.CreateUser(ctx, sqlDB, "alias-dst", hash, "Alias", false, auth.UserStatusActive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Import(ctx, sqlDB, dstUser, "native.csv", out, ImportOptions{
+		Preset: "buhgalter", Confirm: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := merchant.List(ctx, sqlDB, dstUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found *merchant.Merchant
+	for i := range got {
+		if got[i].Name == "Пятёрочка" {
+			found = &got[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("merchants=%+v", got)
+	}
+	if found.Icon != "shopping" || len(found.Aliases) != 2 || !aliasFold(found.Aliases, "Pyaterochka") || !aliasFold(found.Aliases, "Пятёрочка у дома") {
+		t.Fatalf("imported=%+v", found)
+	}
+}
+
+func TestNativeMerchantImportWithoutAliasColumn(t *testing.T) {
+	ctx, sqlDB, userID := seedImportUser(t)
+	data, err := writeNativeCSV([]nativeSection{
+		{sectionMerchants, []string{"name", "icon"}, [][]string{{"Магнит", "default"}}},
+		{sectionTx, BuhgalterHeaders, nil},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Import(ctx, sqlDB, userID, "old.csv", data, ImportOptions{
+		Preset: "buhgalter", Confirm: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := merchant.List(ctx, sqlDB, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Name != "Магнит" || len(got[0].Aliases) != 0 {
+		t.Fatalf("imported=%+v", got)
+	}
+}
+
 func countUserTransactions(t *testing.T, ctx context.Context, db *sql.DB, userID string) int {
 	t.Helper()
 	var n int
