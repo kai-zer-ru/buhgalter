@@ -128,9 +128,10 @@
 | Безопасность | `/settings/security` |
 | Сервер | `/settings/server` |
 | API-токены | `/settings/tokens` |
-| Уведомления | `/settings/notifications` |
 | Банковские уведомления | `/settings/bank-notifications` (push банков и кошельков + SMS; тумблер «Уведомления в шторке» — Accept/Reject без открытия приложения; черновики — `/settings/bank-notifications/drafts`; уникальная пара расход+пополнение — одна карточка перевода) |
 | Импорт / экспорт | `/settings/import` — Cubux (операции) и [«Бухгалтер»](import/buhgalter.md) (полный перенос учёта) |
+
+Пункта «Уведомления» в хабе нет. Страница `/settings/notifications` по прямому адресу остаётся и показывает баннер «Настройте уведомления в веб-версии».
 
 ### Админка (`/admin`)
 

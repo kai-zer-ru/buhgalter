@@ -406,7 +406,7 @@
 - [x] БАГ. `/docs` — Redoc «Invalid reference token: TransactionListResponse» (битый `$ref` у `GET /transactions/inbox`). Фикс: схема `TransactionList`; path-параметры `SubscriptionID` / `RecurringID`; e2e ждёт отрисованное меню, не пустой `<redoc>`
 - [x] [Глобальные кнопки в шаблоне](roadmap/notification-template-global-buttons.md) — в каждом шаблоне TG/MAX кнопки по умолчанию всегда в сообщении: их можно переставлять, нельзя удалить; свои кнопки добавляются отдельно
 - [x] [Алиасы магазинов](roadmap/merchant-aliases.md) — несколько имён и объединение уже созданных; в форме операции поиск по основному имени и алиасам, в списке только основное
-- [ ] [Android: скрыть раздел «Уведомления» в «Настройках»](roadmap/android-hide-notification-settings.md) — пункт настроек каналов TG/MAX убран с телефона; перехват банка остаётся
+- [x] [Android: скрыть раздел «Уведомления» в «Настройках»](roadmap/android-hide-notification-settings.md) — пункт настроек каналов TG/MAX убран с телефона; перехват банка остаётся
 - [ ] БАГ. Экспорт: `GET /api/v1/export` без `format` отдаёт Cubux; должен быть формат «Бухгалтер» ([export-default-format.md](roadmap/export-default-format.md))
 
 ## v1.10.0

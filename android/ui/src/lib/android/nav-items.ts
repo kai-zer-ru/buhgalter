@@ -139,12 +139,6 @@ export function androidSettingsNavItems(): AndroidNavItem[] {
 			isActive: (p) => p === '/settings/tokens'
 		},
 		{
-			href: resolve('/settings/notifications'),
-			labelKey: 'settings.tab.notifications',
-			feature: 'notifications',
-			isActive: (p) => p === '/settings/notifications'
-		},
-		{
 			href: resolve('/settings/bank-notifications'),
 			labelKey: 'settings.tab.bankNotifications',
 			isActive: (p) =>
