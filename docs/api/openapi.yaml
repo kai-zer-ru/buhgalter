@@ -4335,8 +4335,11 @@ components:
       type: object
       description: |
         Клавиатура inline-кнопок. Форма `{"rows":[[{button}]]}`.
-        Пустая — `{"rows":[]}`. При send: merge global → trigger → balance_shortfall;
-        кнопки url/link/web_app/open_app/login_url без resolved http(s) URL отбрасываются.
+        Пустая — `{"rows":[]}`.
+        У шаблона может быть `placement`: ряды токенов `g:<id>` (кнопка по умолчанию) и `l:<id>` (своя).
+        Нет `placement` — при отправке сначала ряды global, затем ряды шаблона, затем balance_shortfall.
+        Есть `placement` — этот порядок, а глобальные id, которых в нём нет, дописываются в конец перед balance_shortfall.
+        Кнопки url/link/web_app/open_app/login_url без resolved http(s) URL отбрасываются.
       required: [rows]
       properties:
         rows:
@@ -4345,10 +4348,20 @@ components:
             type: array
             items:
               $ref: '#/components/schemas/NotificationKeyboardButton'
+        placement:
+          type: array
+          description: Порядок кнопок шаблона. Только у keyboard шаблона; у global поле игнорируется.
+          items:
+            type: array
+            items:
+              type: string
     NotificationKeyboardButton:
       type: object
       required: [type, text]
       properties:
+        id:
+          type: string
+          description: Стабильный id в хранимом JSON. В payload Telegram и MAX не передаётся.
         type:
           type: string
           description: |

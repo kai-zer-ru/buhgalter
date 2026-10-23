@@ -3,7 +3,11 @@ import { moveId } from '$lib/drag-reorder';
 
 export type KeyboardProvider = 'telegram' | 'max';
 
-export type EditableKeyboardButton = NotificationKeyboardButton & { id: string };
+export type EditableKeyboardButton = NotificationKeyboardButton & {
+	id: string;
+	/** Global button shown inside a template: reorderable, not editable or deletable. */
+	locked?: boolean;
+};
 
 export type EditableKeyboard = {
 	rows: EditableKeyboardButton[][];
@@ -67,8 +71,28 @@ export function normalizeInlineKeyboard(
 	kb: NotificationInlineKeyboard | null | undefined
 ): NotificationInlineKeyboard {
 	if (!kb || !Array.isArray(kb.rows)) return emptyInlineKeyboard();
-	return {
+	const out: NotificationInlineKeyboard = {
 		rows: kb.rows.map((row) => (Array.isArray(row) ? row.map((b) => ({ ...b })) : []))
+	};
+	if (Array.isArray(kb.placement)) {
+		out.placement = kb.placement.map((row) => (Array.isArray(row) ? [...row] : []));
+	}
+	return out;
+}
+
+/** Fill missing button ids in place-shaped copy so template placement can refer to them. */
+export function ensureKeyboardIds(
+	kb: NotificationInlineKeyboard | null | undefined
+): NotificationInlineKeyboard {
+	const normalized = normalizeInlineKeyboard(kb);
+	return {
+		...normalized,
+		rows: normalized.rows.map((row) =>
+			row.map((btn) => ({
+				...btn,
+				id: btn.id?.trim() ? btn.id : nextKeyboardId('btn')
+			}))
+		)
 	};
 }
 
@@ -80,7 +104,7 @@ export function toEditableKeyboard(
 		rows: normalized.rows.map((row) =>
 			row.map((btn) => ({
 				...btn,
-				id: nextKeyboardId('btn')
+				id: btn.id?.trim() ? btn.id : nextKeyboardId('btn')
 			}))
 		)
 	};
@@ -94,8 +118,103 @@ export function toApiKeyboard(kb: EditableKeyboard): NotificationInlineKeyboard 
 	};
 }
 
+function storedButton(
+	btn: NotificationKeyboardButton,
+	fallback: string,
+	locked: boolean
+): EditableKeyboardButton {
+	return {
+		...btn,
+		id: btn.id?.trim() || fallback,
+		locked: locked || undefined
+	};
+}
+
+/** Visual rows for a template: global buttons locked in, then the saved order. */
+export function composeTemplateRows(
+	globalKb: NotificationInlineKeyboard | null | undefined,
+	templateKb: NotificationInlineKeyboard | null | undefined
+): EditableKeyboardButton[][] {
+	const global = normalizeInlineKeyboard(globalKb);
+	const template = normalizeInlineKeyboard(templateKb);
+	const globalButtons = global.rows.flatMap((row, rowIndex) =>
+		row.map((btn, colIndex) => storedButton(btn, `g-auto-${rowIndex}-${colIndex}`, true))
+	);
+	const localButtons = template.rows.flatMap((row, rowIndex) =>
+		row.map((btn, colIndex) => storedButton(btn, `l-auto-${rowIndex}-${colIndex}`, false))
+	);
+	const gByID = new Map(globalButtons.map((btn) => [btn.id, btn]));
+	const lByID = new Map(localButtons.map((btn) => [btn.id, btn]));
+	if (!template.placement || template.placement.length === 0) {
+		const globalRows = global.rows.map((row, rowIndex) =>
+			row.map((btn, colIndex) => storedButton(btn, `g-auto-${rowIndex}-${colIndex}`, true))
+		);
+		const localRows = template.rows.map((row, rowIndex) =>
+			row.map((btn, colIndex) => storedButton(btn, `l-auto-${rowIndex}-${colIndex}`, false))
+		);
+		return [...globalRows, ...localRows];
+	}
+	const usedG = new Set<string>();
+	const usedL = new Set<string>();
+	const rows: EditableKeyboardButton[][] = [];
+	for (const prow of template.placement) {
+		const row: EditableKeyboardButton[] = [];
+		for (const token of prow) {
+			if (token.startsWith('g:')) {
+				const btn = gByID.get(token.slice(2));
+				if (!btn) continue;
+				row.push({ ...btn, locked: true });
+				usedG.add(btn.id);
+			} else if (token.startsWith('l:')) {
+				const btn = lByID.get(token.slice(2));
+				if (!btn) continue;
+				row.push({ ...btn, locked: undefined });
+				usedL.add(btn.id);
+			}
+		}
+		if (row.length > 0) rows.push(row);
+	}
+	for (const [rowIndex, grow] of global.rows.entries()) {
+		const pending = grow
+			.map((btn, colIndex) => storedButton(btn, `g-auto-${rowIndex}-${colIndex}`, true))
+			.filter((btn) => !usedG.has(btn.id));
+		if (pending.length > 0) rows.push(pending);
+	}
+	for (const [rowIndex, lrow] of template.rows.entries()) {
+		const pending = lrow
+			.map((btn, colIndex) => storedButton(btn, `l-auto-${rowIndex}-${colIndex}`, false))
+			.filter((btn) => !usedL.has(btn.id));
+		if (pending.length > 0) rows.push(pending);
+	}
+	return rows;
+}
+
+/** Split a template canvas back into local rows plus placement tokens. */
+export function splitTemplateKeyboard(
+	rows: EditableKeyboardButton[][]
+): NotificationInlineKeyboard {
+	const locals: NotificationKeyboardButton[][] = [];
+	const placement: string[][] = [];
+	for (const row of rows) {
+		const tokens: string[] = [];
+		for (const btn of row) {
+			if (btn.locked) {
+				tokens.push(`g:${btn.id}`);
+				continue;
+			}
+			tokens.push(`l:${btn.id}`);
+			locals.push([stripEmptyButtonFields(btn)]);
+		}
+		if (tokens.length > 0) placement.push(tokens);
+	}
+	const out: NotificationInlineKeyboard = { rows: locals };
+	if (placement.length > 0) out.placement = placement;
+	return out;
+}
+
 function stripEmptyButtonFields(btn: EditableKeyboardButton): NotificationKeyboardButton {
 	const out: NotificationKeyboardButton = { type: btn.type, text: btn.text };
+	if (btn.id?.trim()) out.id = btn.id;
 	if (btn.url) out.url = btn.url;
 	if (btn.callback_data) out.callback_data = btn.callback_data;
 	if (btn.web_app?.url) out.web_app = { url: btn.web_app.url };

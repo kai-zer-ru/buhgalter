@@ -15,6 +15,7 @@
 	import { user } from '$lib/stores/auth';
 	import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
+	import PageTabs from '$lib/components/PageTabs.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
 	import { featureFlags, isFeatureEnabled } from '$lib/features';
@@ -22,6 +23,7 @@
 	import KeyboardBuilder from '$lib/settings/KeyboardBuilder.svelte';
 	import {
 		emptyInlineKeyboard,
+		ensureKeyboardIds,
 		normalizeInlineKeyboard,
 		validateInlineKeyboard,
 		type KeyboardProvider,
@@ -73,6 +75,8 @@
 	>({});
 	let globalKeyboardTelegram = $state<NotificationInlineKeyboard>(emptyInlineKeyboard());
 	let globalKeyboardMax = $state<NotificationInlineKeyboard>(emptyInlineKeyboard());
+	/** True when this session minted ids for global buttons that are not stored yet. */
+	let globalIdsDirty = $state(false);
 	let globalKeyboardTab = $state<KeyboardProvider>('telegram');
 	let persistedNotificationState = $state({
 		telegramEnabled: false,
@@ -242,16 +246,18 @@
 			data.templates.map((tpl) => [
 				tpl.trigger_type,
 				{
-					telegram: normalizeInlineKeyboard(tpl.keyboard_telegram),
-					max: normalizeInlineKeyboard(tpl.keyboard_max)
+					telegram: ensureKeyboardIds(tpl.keyboard_telegram),
+					max: ensureKeyboardIds(tpl.keyboard_max)
 				}
 			])
 		);
 		templateKeyboardTab = {};
 		previewText = {};
 		previewKeyboards = {};
-		globalKeyboardTelegram = normalizeInlineKeyboard(data.keyboard_telegram);
-		globalKeyboardMax = normalizeInlineKeyboard(data.keyboard_max);
+		globalIdsDirty =
+			keyboardNeedsIds(data.keyboard_telegram) || keyboardNeedsIds(data.keyboard_max);
+		globalKeyboardTelegram = ensureKeyboardIds(data.keyboard_telegram);
+		globalKeyboardMax = ensureKeyboardIds(data.keyboard_max);
 		persistedNotificationState = {
 			telegramEnabled: data.telegram_enabled,
 			telegramChatId: data.telegram_chat_id ?? '',
@@ -260,6 +266,10 @@
 			maxUserId: data.max_user_id ? String(data.max_user_id) : '',
 			maxRecipientId: data.max_recipient_id ? String(data.max_recipient_id) : ''
 		};
+	}
+
+	function keyboardNeedsIds(kb: NotificationInlineKeyboard | null | undefined): boolean {
+		return (kb?.rows ?? []).some((row) => row.some((btn) => !btn.id?.trim()));
 	}
 
 	function keyboardValidationMessage(err: KeyboardValidationError): string {
@@ -272,8 +282,8 @@
 		if (templateKeyboards[triggerType]) return templateKeyboards[triggerType];
 		const tpl = templates.find((t) => t.trigger_type === triggerType);
 		const next = {
-			telegram: normalizeInlineKeyboard(tpl?.keyboard_telegram),
-			max: normalizeInlineKeyboard(tpl?.keyboard_max)
+			telegram: ensureKeyboardIds(tpl?.keyboard_telegram),
+			max: ensureKeyboardIds(tpl?.keyboard_max)
 		};
 		templateKeyboards = { ...templateKeyboards, [triggerType]: next };
 		return next;
@@ -283,6 +293,13 @@
 		const preferred = templateKeyboardTab[triggerType] ?? 'telegram';
 		if (preferred === 'telegram' && telegramEnabled) return 'telegram';
 		if (preferred === 'max' && maxEnabled) return 'max';
+		if (telegramEnabled) return 'telegram';
+		return 'max';
+	}
+
+	function globalKeyboardTabFor(): KeyboardProvider {
+		if (globalKeyboardTab === 'telegram' && telegramEnabled) return 'telegram';
+		if (globalKeyboardTab === 'max' && maxEnabled) return 'max';
 		if (telegramEnabled) return 'telegram';
 		return 'max';
 	}
@@ -578,22 +595,29 @@
 
 	async function saveGlobalKeyboards() {
 		if (!notificationSecretConfigured) return;
-		const tgErr = validateInlineKeyboard('telegram', globalKeyboardTelegram);
-		if (tgErr) {
-			toast.error(keyboardValidationMessage(tgErr));
-			return;
+		const payload: {
+			keyboard_telegram?: NotificationInlineKeyboard;
+			keyboard_max?: NotificationInlineKeyboard;
+		} = {};
+		if (telegramEnabled) {
+			const tgErr = validateInlineKeyboard('telegram', globalKeyboardTelegram);
+			if (tgErr) {
+				toast.error(keyboardValidationMessage(tgErr));
+				return;
+			}
+			payload.keyboard_telegram = normalizeInlineKeyboard(globalKeyboardTelegram);
 		}
-		const maxErr = validateInlineKeyboard('max', globalKeyboardMax);
-		if (maxErr) {
-			toast.error(keyboardValidationMessage(maxErr));
-			return;
+		if (maxEnabled) {
+			const maxErr = validateInlineKeyboard('max', globalKeyboardMax);
+			if (maxErr) {
+				toast.error(keyboardValidationMessage(maxErr));
+				return;
+			}
+			payload.keyboard_max = normalizeInlineKeyboard(globalKeyboardMax);
 		}
 		loading = true;
 		try {
-			await putNotificationSettings({
-				keyboard_telegram: normalizeInlineKeyboard(globalKeyboardTelegram),
-				keyboard_max: normalizeInlineKeyboard(globalKeyboardMax)
-			});
+			await putNotificationSettings(payload);
 			await loadNotifications();
 			toast($_('settings.notifications.success.block_saved'));
 		} catch (err) {
@@ -625,6 +649,12 @@
 		loading = true;
 		try {
 			await putNotificationSettings({
+				...(globalIdsDirty
+					? {
+							keyboard_telegram: normalizeInlineKeyboard(globalKeyboardTelegram),
+							keyboard_max: normalizeInlineKeyboard(globalKeyboardMax)
+						}
+					: {}),
 				templates: [
 					{
 						trigger_type: triggerType,
@@ -1095,34 +1125,27 @@
 							<p class="text-sm" style:color="var(--text-muted)">
 								{$_('settings.notifications.keyboard.global_hint')}
 							</p>
-							<div class="flex flex-wrap gap-2">
-								<button
-									type="button"
-									class="btn-ghost"
-									class:ring-2={globalKeyboardTab === 'telegram'}
-									style:--tw-ring-color="var(--primary)"
-									onclick={() => (globalKeyboardTab = 'telegram')}
-								>
-									{$_('settings.notifications.channel.telegram')}
-								</button>
-								<button
-									type="button"
-									class="btn-ghost"
-									class:ring-2={globalKeyboardTab === 'max'}
-									style:--tw-ring-color="var(--primary)"
-									onclick={() => (globalKeyboardTab = 'max')}
-								>
-									{$_('settings.notifications.channel.max')}
-								</button>
-							</div>
-							{#if globalKeyboardTab === 'telegram'}
+							{#if telegramEnabled && maxEnabled}
+								<PageTabs
+									active={globalKeyboardTabFor()}
+									tabs={[
+										{
+											id: 'telegram',
+											label: $_('settings.notifications.channel.telegram')
+										},
+										{ id: 'max', label: $_('settings.notifications.channel.max') }
+									]}
+									onchange={(next) => (globalKeyboardTab = next as KeyboardProvider)}
+								/>
+							{/if}
+							{#if globalKeyboardTabFor() === 'telegram' && telegramEnabled}
 								<KeyboardBuilder
 									provider="telegram"
 									bind:keyboard={globalKeyboardTelegram}
 									scope="global-tg"
 									triggerType={null}
 								/>
-							{:else}
+							{:else if globalKeyboardTabFor() === 'max' && maxEnabled}
 								<KeyboardBuilder
 									provider="max"
 									bind:keyboard={globalKeyboardMax}
@@ -1197,6 +1220,9 @@
 										<p class="text-sm font-medium">
 											{$_('settings.notifications.keyboard.template_title')}
 										</p>
+										<p class="text-xs" style:color="var(--text-muted)">
+											{$_('settings.notifications.keyboard.template_global_hint')}
+										</p>
 										{#if telegramEnabled && maxEnabled}
 											<div class="flex flex-wrap gap-2">
 												<button
@@ -1225,6 +1251,7 @@
 											<KeyboardBuilder
 												provider="telegram"
 												keyboard={tplKb.telegram}
+												includeGlobal={globalKeyboardTelegram}
 												disabled={!editable}
 												scope={`tpl-${tpl.trigger_type}-tg`}
 												triggerType={tpl.trigger_type}
@@ -1234,6 +1261,7 @@
 											<KeyboardBuilder
 												provider="max"
 												keyboard={tplKb.max}
+												includeGlobal={globalKeyboardMax}
 												disabled={!editable}
 												scope={`tpl-${tpl.trigger_type}-max`}
 												triggerType={tpl.trigger_type}

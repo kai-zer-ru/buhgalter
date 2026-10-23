@@ -153,6 +153,8 @@ export type UserSettings = {
 };
 
 export type NotificationKeyboardButton = {
+	/** Stable id in stored JSON. Not sent to Telegram/MAX. */
+	id?: string;
 	type: string;
 	text: string;
 	url?: string;
@@ -175,6 +177,8 @@ export type NotificationKeyboardButton = {
 
 export type NotificationInlineKeyboard = {
 	rows: NotificationKeyboardButton[][];
+	/** Template order: `g:<id>` global, `l:<id>` local. Absent → global rows, then local rows. */
+	placement?: string[][];
 };
 
 export type NotificationTemplate = {

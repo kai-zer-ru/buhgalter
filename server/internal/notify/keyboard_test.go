@@ -122,10 +122,14 @@ func TestToTelegramAndMaxPayload(t *testing.T) {
 		{{Type: "url", Text: "Open", URL: "https://ex.com"}},
 		{{Type: "link", Text: "Max", URL: "https://max.ex"}},
 	}}
+	kb.Rows[0][0].ID = "stored-id"
 	tg := kb.ToTelegramReplyMarkup()
 	raw, _ := json.Marshal(tg)
 	if !strings.Contains(string(raw), `"inline_keyboard"`) || !strings.Contains(string(raw), `"url":"https://ex.com"`) {
 		t.Fatalf("tg: %s", raw)
+	}
+	if strings.Contains(string(raw), `"id"`) {
+		t.Fatalf("telegram payload must omit id: %s", raw)
 	}
 	maxAtt := kb.ToMaxInlineKeyboardAttachment()
 	raw, _ = json.Marshal(maxAtt)
@@ -153,4 +157,73 @@ func TestPrepareChannelKeyboardMergeAndFilter(t *testing.T) {
 	if kb2 == nil || len(kb2.Rows) != 1 || kb2.Rows[0][0].Text != "G" {
 		t.Fatalf("filtered url: %+v", kb2)
 	}
+}
+
+func TestArrangeTemplateKeyboardMatrix(t *testing.T) {
+	t.Parallel()
+	global := &InlineKeyboard{Rows: [][]KeyboardButton{
+		{
+			{ID: "g1", Type: "callback_data", Text: "G1", CallbackData: "g1"},
+			{ID: "g2", Type: "callback_data", Text: "G2", CallbackData: "g2"},
+		},
+	}}
+	local := &InlineKeyboard{Rows: [][]KeyboardButton{
+		{{ID: "l1", Type: "callback_data", Text: "L", CallbackData: "l"}},
+	}}
+
+	legacy := ArrangeTemplateKeyboard(global, local)
+	if got := buttonTexts(legacy); strings.Join(got, ",") != "G1,G2,L" {
+		t.Fatalf("legacy: %v", got)
+	}
+
+	placed := *local
+	placed.Placement = [][]string{{"g:g1", "l:l1"}, {"g:g2"}}
+	if got := buttonTexts(ArrangeTemplateKeyboard(global, &placed)); strings.Join(got, ",") != "G1,L,G2" {
+		t.Fatalf("placed: %v", got)
+	}
+
+	missing := placed
+	missing.Placement = [][]string{{"l:l1"}}
+	if got := buttonTexts(ArrangeTemplateKeyboard(global, &missing)); strings.Join(got, ",") != "L,G1,G2" {
+		t.Fatalf("missing globals appended: %v", got)
+	}
+
+	gone := placed
+	gone.Placement = [][]string{{"g:gone", "l:l1", "g:g2"}}
+	if got := buttonTexts(ArrangeTemplateKeyboard(global, &gone)); strings.Join(got, ",") != "L,G2,G1" {
+		t.Fatalf("unknown global dropped, g1 appended: %v", got)
+	}
+
+	normalized := NormalizeTemplateKeyboard(global, missing)
+	if len(normalized.Placement) != 3 ||
+		normalized.Placement[0][0] != "l:l1" ||
+		normalized.Placement[1][0] != "g:g1" ||
+		normalized.Placement[2][0] != "g:g2" {
+		t.Fatalf("normalize: %+v", normalized.Placement)
+	}
+
+	emptyGlobal := ArrangeTemplateKeyboard(nil, local)
+	if got := buttonTexts(emptyGlobal); strings.Join(got, ",") != "L" {
+		t.Fatalf("empty global: %v", got)
+	}
+
+	rawGlobal := `{"rows":[[{"id":"g1","type":"url","text":"G","url":"{debt_url}"}]]}`
+	rawTrigger := `{"rows":[[{"id":"l1","type":"callback_data","text":"L","callback_data":"l"}]],"placement":[["g:g1","l:l1"]]}`
+	kb := PrepareChannelKeyboard(rawGlobal, rawTrigger, `{"rows":[[{"type":"callback_data","text":"S","callback_data":"s"}]]}`, FormatData{"debt_url": ""}, FormatData{}, ChannelTelegram)
+	if kb == nil || len(kb.Rows) != 2 || kb.Rows[0][0].Text != "L" || kb.Rows[1][0].Text != "S" {
+		t.Fatalf("T1 drops unresolved global url, shortfall stays last: %+v", kb)
+	}
+}
+
+func buttonTexts(kb *InlineKeyboard) []string {
+	if kb == nil {
+		return nil
+	}
+	var out []string
+	for _, row := range kb.Rows {
+		for _, btn := range row {
+			out = append(out, btn.Text)
+		}
+	}
+	return out
 }

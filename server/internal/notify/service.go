@@ -381,20 +381,26 @@ func UpdateSettings(ctx context.Context, db *sql.DB, userID string, in UpdateSet
 		settings.MaxToken = encrypted
 	}
 	if in.KeyboardTelegram != nil {
-		if err := ValidateTelegramKeyboard(*in.KeyboardTelegram); err != nil {
+		kb := *in.KeyboardTelegram
+		kb.Placement = nil
+		EnsureButtonIDs(&kb)
+		if err := ValidateTelegramKeyboard(kb); err != nil {
 			return SettingsView{}, err
 		}
-		raw, err := MarshalInlineKeyboard(*in.KeyboardTelegram)
+		raw, err := MarshalInlineKeyboard(kb)
 		if err != nil {
 			return SettingsView{}, err
 		}
 		settings.KeyboardTelegram = raw
 	}
 	if in.KeyboardMax != nil {
-		if err := ValidateMaxKeyboard(*in.KeyboardMax); err != nil {
+		kb := *in.KeyboardMax
+		kb.Placement = nil
+		EnsureButtonIDs(&kb)
+		if err := ValidateMaxKeyboard(kb); err != nil {
 			return SettingsView{}, err
 		}
-		raw, err := MarshalInlineKeyboard(*in.KeyboardMax)
+		raw, err := MarshalInlineKeyboard(kb)
 		if err != nil {
 			return SettingsView{}, err
 		}
@@ -442,20 +448,24 @@ func UpdateSettings(ctx context.Context, db *sql.DB, userID string, in UpdateSet
 			kbMax = keyboardJSONOrEmpty(existing.KeyboardMax)
 		}
 		if tpl.KeyboardTelegram != nil {
-			if err := ValidateTelegramKeyboard(*tpl.KeyboardTelegram); err != nil {
+			globalKB, _ := ParseInlineKeyboard(settings.KeyboardTelegram)
+			normalized := NormalizeTemplateKeyboard(&globalKB, *tpl.KeyboardTelegram)
+			if err := ValidateTelegramKeyboard(normalized); err != nil {
 				return SettingsView{}, err
 			}
-			raw, err := MarshalInlineKeyboard(*tpl.KeyboardTelegram)
+			raw, err := MarshalInlineKeyboard(normalized)
 			if err != nil {
 				return SettingsView{}, err
 			}
 			kbTG = raw
 		}
 		if tpl.KeyboardMax != nil {
-			if err := ValidateMaxKeyboard(*tpl.KeyboardMax); err != nil {
+			globalKB, _ := ParseInlineKeyboard(settings.KeyboardMax)
+			normalized := NormalizeTemplateKeyboard(&globalKB, *tpl.KeyboardMax)
+			if err := ValidateMaxKeyboard(normalized); err != nil {
 				return SettingsView{}, err
 			}
-			raw, err := MarshalInlineKeyboard(*tpl.KeyboardMax)
+			raw, err := MarshalInlineKeyboard(normalized)
 			if err != nil {
 				return SettingsView{}, err
 			}
