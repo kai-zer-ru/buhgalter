@@ -1,5 +1,6 @@
 import { expect, type Page } from '@playwright/test';
 import { waitAppReady } from './auth';
+import { expectApiDocsRendered } from './docs';
 
 /** Target max time from navigation start until the page is interactive. Exceeding logs a warning only. */
 export const MAX_PAGE_LOAD_MS = 1000;
@@ -12,7 +13,7 @@ export function warnIfPageLoadSlow(elapsed: number, label: string, maxMs = MAX_P
 
 async function waitForRouteReady(page: Page, route: string) {
 	if (route === '/docs') {
-		await expect(page.locator('redoc')).toBeVisible({ timeout: 20_000 });
+		await expectApiDocsRendered(page);
 		return;
 	}
 	if (route === '/login' || route === '/register') {
