@@ -408,6 +408,7 @@
 - [x] [Алиасы магазинов](roadmap/merchant-aliases.md) — несколько имён и объединение уже созданных; в форме операции поиск по основному имени и алиасам, в списке только основное
 - [x] [Android: скрыть раздел «Уведомления» в «Настройках»](roadmap/android-hide-notification-settings.md) — пункт настроек каналов TG/MAX убран с телефона; перехват банка остаётся
 - [x] БАГ. Экспорт: `GET /api/v1/export` без `format` отдаёт Cubux; должен быть формат «Бухгалтер» ([export-default-format.md](roadmap/export-default-format.md))
+- [x] **Docs:** [Release notes](docs/release-notes-v1.9.2.md) · [CHANGELOG.md](CHANGELOG.md) · [notifications.md](docs/notifications.md) · [data-model.md](docs/data-model.md) · [import/buhgalter.md](docs/import/buhgalter.md) · [android-client-ui.md](docs/android-client-ui.md) · [README.md](README.md)
 
 ## v1.10.0
 
