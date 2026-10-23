@@ -170,6 +170,7 @@ export function shouldPersistRefCache(path: string): boolean {
 	if (REF_CACHE_SKIP.has(pathOnly)) return false;
 	if (pathOnly.includes('/preview')) return false;
 	if (pathOnly.includes('/import/jobs/')) return false;
+	if (pathOnly.includes('/receipts/scan-jobs/')) return false;
 	return true;
 }
 
@@ -178,6 +179,7 @@ export function shouldPersistRefCache(path: string): boolean {
 export function shouldInvalidateRefCacheOnWrite(path: string): boolean {
 	const pathOnly = path.split('?')[0] ?? path;
 	if (pathOnly === '/api/v1/import/jobs') return false;
+	if (pathOnly === '/api/v1/receipts/scan-jobs') return false;
 	if (pathOnly.startsWith('/api/v1/auth/')) return false;
 	return true;
 }

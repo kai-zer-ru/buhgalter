@@ -1,4 +1,4 @@
-VERSION ?= 1.9.1
+VERSION ?= 1.10.0
 INSTALL_METHOD ?= manual
 BUILD_COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILD_TIME ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -324,6 +324,7 @@ android-ui-build: category-icons-json
 
 android-sync: android-ui-build android-icons
 	cd android && npm install
+	bash scripts/ensure-android-native-deps.sh "$(CURDIR)"
 	cd android && npx cap sync android
 
 android-apk: android-sync
@@ -350,6 +351,7 @@ android-apk-release: android-sync
 		exit 1; \
 	fi; \
 	export PATH="$$JAVA_HOME/bin:$$PATH"; \
+	bash scripts/ensure-android-debug-keystore.sh "$(CURDIR)"; \
 	echo "Gradle with JAVA_HOME=$$JAVA_HOME"; \
 	cd android && ./gradlew assembleRelease --stacktrace --no-daemon
 	@test -f "$(ANDROID_APK_RELEASE_UNIVERSAL)" || (echo "ERROR: missing $(ANDROID_APK_RELEASE_UNIVERSAL)"; ls -la "$(ANDROID_APK_RELEASE_DIR)" || true; exit 1)

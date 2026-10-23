@@ -19,6 +19,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/db"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/notify"
+	"github.com/kai-zer-ru/buhgalter/internal/receipt"
 	"github.com/kai-zer-ru/buhgalter/internal/settingscache"
 )
 
@@ -30,8 +31,9 @@ type Handler struct {
 }
 
 type settingsResponse struct {
-	ExternalURL  string `json:"external_url"`
-	SecretKeySet bool   `json:"secret_key_set"`
+	ExternalURL        string `json:"external_url"`
+	SecretKeySet       bool   `json:"secret_key_set"`
+	ReceiptAPITokenSet bool   `json:"receipt_api_token_set"`
 }
 
 type settingsRequest struct {
@@ -40,6 +42,10 @@ type settingsRequest struct {
 
 type notificationSecretKeyRequest struct {
 	NotificationSecretKey string `json:"notification_secret_key"`
+}
+
+type receiptAPITokenRequest struct {
+	ReceiptAPIToken string `json:"receipt_api_token"`
 }
 
 type userItem struct {
@@ -92,6 +98,12 @@ func (h *Handler) GetSettings(w http.ResponseWriter, r *http.Request) {
 		resp.ExternalURL = *row.ExternalUrl
 	}
 	resp.SecretKeySet = strings.TrimSpace(row.NotificationSecretKey) != ""
+	tokenSet, err := receipt.APIConfigured(r.Context(), h.Store.DB())
+	if err != nil {
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	}
+	resp.ReceiptAPITokenSet = tokenSet
 	writeJSON(w, http.StatusOK, resp)
 }
 
@@ -175,6 +187,62 @@ func (h *Handler) PutNotificationSecretKey(w http.ResponseWriter, r *http.Reques
 		resp.ExternalURL = *row.ExternalUrl
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) PutReceiptAPIToken(w http.ResponseWriter, r *http.Request) {
+	info, ok := auth.FromContext(r.Context())
+	if !ok {
+		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
+		return
+	}
+
+	var req receiptAPITokenRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_INVALID_JSON")
+		return
+	}
+	token := strings.TrimSpace(req.ReceiptAPIToken)
+	if token == "" {
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_RECEIPT_API_TOKEN_EMPTY")
+		return
+	}
+	if err := receipt.StoreAPIToken(r.Context(), h.Store.DB(), token); err != nil {
+		if strings.Contains(err.Error(), "notification secret") {
+			apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_SECRET_KEY_EMPTY")
+			return
+		}
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	}
+
+	ip := auth.ClientIP(r)
+	_ = h.Audit.Log("admin.settings.receipt_api_token.update", info.User.ID, info.User.Login, ip, map[string]any{
+		"receipt_api_token_set": true,
+	})
+
+	resp, err := h.buildSettingsResponse(r.Context())
+	if err != nil {
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) buildSettingsResponse(ctx context.Context) (settingsResponse, error) {
+	row, err := sqlcdb.New(h.Store.DB()).GetAdminSettings(ctx)
+	if err != nil {
+		return settingsResponse{}, err
+	}
+	resp := settingsResponse{SecretKeySet: strings.TrimSpace(row.NotificationSecretKey) != ""}
+	if row.ExternalUrl != nil {
+		resp.ExternalURL = *row.ExternalUrl
+	}
+	tokenSet, err := receipt.APIConfigured(ctx, h.Store.DB())
+	if err != nil {
+		return settingsResponse{}, err
+	}
+	resp.ReceiptAPITokenSet = tokenSet
+	return resp, nil
 }
 
 func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {

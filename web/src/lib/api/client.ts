@@ -261,6 +261,7 @@ export type NotificationPreviewResponse = {
 export type AdminSettings = {
 	external_url: string;
 	secret_key_set: boolean;
+	receipt_api_token_set?: boolean;
 };
 
 export type AdminSettingsUpdate = {
@@ -535,6 +536,13 @@ export function putAdminNotificationSecretKey(notificationSecretKey: string) {
 	return request<AdminSettings>('/api/v1/admin/settings/notification-secret', {
 		method: 'PUT',
 		body: JSON.stringify({ notification_secret_key: notificationSecretKey })
+	});
+}
+
+export function putAdminReceiptApiToken(receiptApiToken: string) {
+	return request<AdminSettings>('/api/v1/admin/settings/receipt-api-token', {
+		method: 'PUT',
+		body: JSON.stringify({ receipt_api_token: receiptApiToken })
 	});
 }
 
@@ -1289,20 +1297,6 @@ export function createTransaction(payload: TransactionWritePayload) {
 	});
 }
 
-export function updateTransaction(
-	id: string,
-	payload: {
-		account_id: string;
-		type: 'income' | 'expense';
-		amount: string;
-		description?: string;
-		category_id?: string;
-		subcategory_id?: string;
-		subcategory_name?: string;
-		store_id?: string;
-		transaction_date: string;
-	}
-) {
 export function updateTransaction(id: string, payload: TransactionWritePayload) {
 	return request<Transaction>(`/api/v1/transactions/${id}`, {
 		method: 'PUT',
@@ -1731,6 +1725,13 @@ export type ParsedReceipt = {
 	retail_place?: string;
 	items: ReceiptItem[];
 	fns_check_url: string;
+	already_imported?: boolean;
+	already_in_ledger?: boolean;
+};
+
+export type ReceiptDetailItem = ReceiptItem & {
+	category_name?: string;
+	subcategory_name?: string;
 };
 
 export type ReceiptDetail = {
@@ -1742,7 +1743,7 @@ export type ReceiptDetail = {
 	transaction_date: string;
 	total_sum: number;
 	total_sum_display: string;
-	items: ReceiptItem[];
+	items: ReceiptDetailItem[];
 	fns_check_url: string;
 	highlight_item_index?: number;
 	user_inn?: string;
@@ -1788,7 +1789,8 @@ export function createReceiptScanJob(file: File) {
 }
 
 export function getReceiptScanJob(id: string) {
-	return request<ReceiptScanJob>(`/api/v1/receipts/scan-jobs/${encodeURIComponent(id)}`);
+	const nonce = Date.now();
+	return request<ReceiptScanJob>(`/api/v1/receipts/scan-jobs/${encodeURIComponent(id)}?_=${nonce}`);
 }
 
 export async function pollReceiptScanJob(
@@ -1800,8 +1802,8 @@ export async function pollReceiptScanJob(
 		shouldAbort?: () => boolean;
 	}
 ): Promise<ParsedReceipt> {
-	const intervalMs = opts?.intervalMs ?? 800;
-	const deadline = Date.now() + (opts?.timeoutMs ?? 120_000);
+	const intervalMs = opts?.intervalMs ?? 350;
+	const deadline = Date.now() + (opts?.timeoutMs ?? 180_000);
 	for (;;) {
 		if (opts?.shouldAbort?.()) {
 			throw new ApiError('ERR_ABORTED', 'Aborted', 0);
@@ -1815,7 +1817,9 @@ export async function pollReceiptScanJob(
 			if (job.result) {
 				return job.result;
 			}
-			throw new ApiError('ERR_RECEIPT_SCAN', 'ERR_RECEIPT_SCAN', 500);
+			// Rare race: status flipped before result_json is visible — keep polling.
+			await new Promise((resolve) => setTimeout(resolve, intervalMs));
+			continue;
 		}
 		if (job.status === 'failed') {
 			const code = job.error_message ?? 'ERR_RECEIPT_SCAN';
@@ -1845,6 +1849,36 @@ export function importReceipt(payload: {
 			body: JSON.stringify(payload)
 		}
 	);
+}
+
+export function attachReceipt(payload: {
+	transaction_id: string;
+	fiscal_drive_number: string;
+	fiscal_document_number: string;
+	fiscal_sign: string;
+	receipt: ParsedReceipt;
+	items: Array<{
+		index: number;
+		category_id?: string;
+		subcategory_id?: string | null;
+		include: boolean;
+	}>;
+	acknowledge_sum_mismatch?: boolean;
+}) {
+	return request<{ receipt_import_id: string; transaction: Transaction }>(
+		'/api/v1/receipts/attach',
+		{
+			method: 'POST',
+			body: JSON.stringify(payload)
+		}
+	);
+}
+
+export function detachReceipt(transactionId: string) {
+	return request<{ transaction: Transaction }>('/api/v1/receipts/detach', {
+		method: 'POST',
+		body: JSON.stringify({ transaction_id: transactionId })
+	});
 }
 
 export function getReceipt(id: string, transactionId?: string) {

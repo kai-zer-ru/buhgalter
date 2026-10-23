@@ -23,14 +23,14 @@ const (
 )
 
 type row struct {
-	Service     string `json:"service"`
-	Reachable   bool   `json:"reachable"`
-	HasItems    bool   `json:"has_items"`
-	AuthNeeded  string `json:"auth_needed"`
-	FreeTier    string `json:"free_tier"`
-	Status      int    `json:"status,omitempty"`
-	Latency     string `json:"latency"`
-	Notes       string `json:"notes"`
+	Service    string `json:"service"`
+	Reachable  bool   `json:"reachable"`
+	HasItems   bool   `json:"has_items"`
+	AuthNeeded string `json:"auth_needed"`
+	FreeTier   string `json:"free_tier"`
+	Status     int    `json:"status,omitempty"`
+	Latency    string `json:"latency"`
+	Notes      string `json:"notes"`
 }
 
 func main() {
@@ -48,7 +48,10 @@ func main() {
 		if !r.Reachable {
 			return r
 		}
-		var created struct{ Success bool; UserToken, ID string }
+		var created struct {
+			Success       bool
+			UserToken, ID string
+		}
 		_ = json.Unmarshal([]byte(r.Notes), &created)
 		if !created.Success {
 			r.Notes = "request failed: " + trunc(r.Notes)
@@ -138,9 +141,6 @@ func probe(c *http.Client, name string, fn func() row, auth, free, hint string) 
 		r.Notes = hint
 	}
 	r.Latency = time.Since(start).Round(time.Millisecond).String()
-	if r.Status == 0 && !r.Reachable && r.Notes == hint {
-		// keep hint
-	}
 	return r
 }
 
@@ -239,35 +239,6 @@ func walkItems(v any) int {
 	default:
 		return 0
 	}
-}
-
-func findStore(b []byte) string {
-	var any map[string]any
-	_ = json.Unmarshal(b, &any)
-	return walkStore(any)
-}
-
-func walkStore(v any) string {
-	switch t := v.(type) {
-	case map[string]any:
-		for _, k := range []string{"retailPlace", "user", "StoreName"} {
-			if s, ok := t[k].(string); ok && strings.TrimSpace(s) != "" {
-				return s
-			}
-		}
-		for _, c := range t {
-			if s := walkStore(c); s != "" {
-				return s
-			}
-		}
-	case []any:
-		for _, c := range t {
-			if s := walkStore(c); s != "" {
-				return s
-			}
-		}
-	}
-	return ""
 }
 
 func trunc(s string) string {

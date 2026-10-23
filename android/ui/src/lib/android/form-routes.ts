@@ -120,6 +120,31 @@ export function creditCreateStepPath(step: CreditCreateStep, from?: string): App
 	return withFromQuery(`/credits/new/${step}`, from);
 }
 
+export function receiptImportPath(opts?: { from?: string; accountId?: string }): AppHref {
+	const params = new URLSearchParams();
+	if (opts?.from) params.set('from', opts.from);
+	if (opts?.accountId) params.set('account', opts.accountId);
+	const q = params.toString();
+	return href(q ? `/receipts/import?${q}` : '/receipts/import');
+}
+
+export function receiptAttachPath(transactionId: string, from?: string): AppHref {
+	const params = new URLSearchParams({ attach_tx: transactionId });
+	if (from) params.set('from', from);
+	return href(`/receipts/attach?${params}`);
+}
+
+export function receiptViewPath(
+	receiptImportId: string,
+	opts?: { transactionId?: string; from?: string }
+): AppHref {
+	const params = new URLSearchParams();
+	if (opts?.transactionId) params.set('transaction_id', opts.transactionId);
+	if (opts?.from) params.set('from', opts.from);
+	const q = params.toString();
+	return href(q ? `/receipts/${receiptImportId}?${q}` : `/receipts/${receiptImportId}`);
+}
+
 export function creditActionPath(
 	creditId: string,
 	action: CreditFormAction,

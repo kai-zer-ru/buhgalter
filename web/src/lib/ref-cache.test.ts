@@ -35,9 +35,17 @@ describe('shouldPersistRefCache', () => {
 	it('skips version check (live server build)', () => {
 		expect(shouldPersistRefCache('/api/v1/version/check')).toBe(false);
 	});
+
+	it('skips receipt scan job status (must poll network)', () => {
+		expect(shouldPersistRefCache('/api/v1/receipts/scan-jobs/abc')).toBe(false);
+	});
 });
 
 describe('shouldInvalidateRefCacheOnWrite', () => {
+	it('does not bust cache when queuing a receipt scan job', () => {
+		expect(shouldInvalidateRefCacheOnWrite('/api/v1/receipts/scan-jobs')).toBe(false);
+	});
+
 	it('does not bust cache when queuing a background import job', () => {
 		expect(shouldInvalidateRefCacheOnWrite('/api/v1/import/jobs')).toBe(false);
 		expect(shouldInvalidateRefCacheOnWrite('/api/v1/import')).toBe(true);

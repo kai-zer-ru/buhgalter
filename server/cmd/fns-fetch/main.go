@@ -26,10 +26,10 @@ func main() {
 		os.Exit(1)
 	}
 	_ = enc.Encode(map[string]any{
-		"store":  out.StoreName,
-		"total":  out.TotalSum,
-		"items":  len(out.Items),
-		"first":  itemName(out),
+		"store":   out.StoreName,
+		"total":   out.TotalSum,
+		"items":   len(out.Items),
+		"first":   itemName(out),
 		"receipt": out,
 	})
 }

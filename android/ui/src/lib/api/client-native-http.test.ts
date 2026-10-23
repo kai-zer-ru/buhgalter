@@ -70,6 +70,10 @@ vi.mock('$lib/platform/abort-timeout', () => ({
 	abortTimeout: () => undefined
 }));
 
+vi.mock('$lib/receipt/compress-photo', () => ({
+	compressReceiptPhoto: (file: File) => Promise.resolve(file)
+}));
+
 describe('native HTTPS API client', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
@@ -99,5 +103,40 @@ describe('native HTTPS API client', () => {
 
 		const { deleteTransaction } = await import('./client');
 		await expect(deleteTransaction('tx-1')).resolves.toBeUndefined();
+	});
+
+	it('waits longer for multipart bodies than for JSON', async () => {
+		const { apiAbortTimeoutMs } = await import('./client');
+		expect(apiAbortTimeoutMs(new FormData())).toBe(180_000);
+		expect(apiAbortTimeoutMs(JSON.stringify({ a: 1 }))).toBe(12_000);
+		expect(apiAbortTimeoutMs(undefined)).toBe(12_000);
+	});
+
+	it('sends receipt scan upload as native multipart on HTTPS', async () => {
+		nativeHttpRequest.mockResolvedValue({
+			status: 201,
+			ok: true,
+			body: JSON.stringify({ id: 'job-1', status: 'queued' })
+		});
+
+		const file = new File([new Uint8Array([9, 8, 7])], 'chek.jpg', { type: 'image/jpeg' });
+		const { createReceiptScanJob } = await import('./client');
+		await createReceiptScanJob(file);
+
+		expect(nativeHttpRequest).toHaveBeenCalledWith(
+			'https://buh.example.com/api/v1/receipts/scan-jobs',
+			expect.objectContaining({
+				method: 'POST',
+				body: undefined,
+				multipart: [
+					{
+						name: 'image',
+						filename: 'chek.jpg',
+						mime: 'image/jpeg',
+						base64: 'CQgH'
+					}
+				]
+			})
+		);
 	});
 });

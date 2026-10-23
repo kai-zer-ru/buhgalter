@@ -93,7 +93,7 @@ func (c *Client) fetchMobile(ctx context.Context, qr string, p QRParams) (Parsed
 }
 
 type mobileTicketResponse struct {
-	Status       int    `json:"status"`
+	Status       int `json:"status"`
 	Organization struct {
 		Name string `json:"name"`
 	} `json:"organization"`

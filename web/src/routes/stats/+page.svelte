@@ -62,6 +62,11 @@
 	import StatsCharts from '$lib/components/StatsCharts.svelte';
 	import { user } from '$lib/stores/auth';
 	import { toast } from '$lib/toast';
+	import { get } from 'svelte/store';
+	import { featureFlags } from '$lib/features';
+	import { isReceiptScannerAvailable } from '$lib/receipt/receipt-scanner-enabled';
+
+	const receiptScannerActive = $derived(isReceiptScannerAvailable($featureFlags));
 
 	let loading = $state(true);
 	let loadError = $state<string | null>(null);
@@ -215,7 +220,7 @@
 			categories = Object.values(uniqueByID).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
 			debtorByName = toDebtorMap(meta.debtors);
 			creditByName = toCreditMap([...meta.active_credits, ...meta.closed_credits]);
-			stores = await listStores();
+			stores = isReceiptScannerAvailable(get(featureFlags)) ? await listStores() : [];
 			metaLoaded = true;
 		} catch (err) {
 			toast.fromError(err);
@@ -255,21 +260,10 @@
 		try {
 			const params = statsParams();
 			const month = budgetMonthKey();
-			const [summaryRes, categoryRes, periodRes, budgetRes, storeRes] = await Promise.all([
-				getStatsSummary(params),
-				getStatsByCategory(params),
-				getStatsByPeriod({ ...params, group_by: groupBy }),
-				getBudgetSummary(month).catch(() => ({
-					items: [] as BudgetSummaryItem[],
-					month,
-					can_copy_from_previous: false
-				})),
-				stores.length > 0 ? getStatsByStore(params) : Promise.resolve({ items: [] as StatsStoreItem[] })
-			]);
 			const netWorthPromise = showNetWorthGlobal
 				? getStatsNetWorth(netWorthParams()).catch(() => null)
 				: Promise.resolve(null);
-			const [summaryRes, categoryRes, subcategoryRes, periodRes, budgetRes, netWorthRes] =
+			const [summaryRes, categoryRes, subcategoryRes, periodRes, budgetRes, storeRes, netWorthRes] =
 				await Promise.all([
 					getStatsSummary(params),
 					getStatsByCategory(params),
@@ -280,6 +274,9 @@
 						month,
 						can_copy_from_previous: false
 					})),
+					stores.length > 0
+						? getStatsByStore(params)
+						: Promise.resolve({ items: [] as StatsStoreItem[] }),
 					netWorthPromise
 				]);
 			summary = summaryRes;
@@ -453,7 +450,7 @@
 				options={categoryOptions}
 				usePortal
 			/>
-			{#if stores.length > 0}
+			{#if receiptScannerActive && stores.length > 0}
 				<Select
 					id="stats-store"
 					label={$_('stats.filters.store')}
@@ -579,7 +576,7 @@
 				{/if}
 			</div>
 
-			{#if stores.length > 0 && byStore.length > 0 && showCategoryExpense}
+			{#if receiptScannerActive && stores.length > 0 && byStore.length > 0 && showCategoryExpense}
 				<div class="card md:overflow-x-auto">
 					<h2 class="mb-2 text-lg font-medium">{$_('stats.byStore')}</h2>
 					<table class="w-full text-left text-sm">
@@ -596,7 +593,7 @@
 								<tr class="border-t" style:border-color="var(--border)">
 									<td class="p-3">{row.store_name}</td>
 									<td class="p-3 text-right tabular-nums">
-										<MoneyDisplay value={formatMoneyForDisplay(row.total)} />
+										<MoneyDisplay cents={row.total} />
 									</td>
 									<td class="p-3 text-right tabular-nums">{row.percentage}%</td>
 									<td class="p-3 text-right tabular-nums">{row.count}</td>

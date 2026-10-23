@@ -1,7 +1,6 @@
 export type ReceiptRowState = {
 	index: number;
 	include: boolean;
-	selected: boolean;
 	categoryId: string;
 	subcategoryId: string;
 };
@@ -10,20 +9,19 @@ export function initReceiptRows(count: number): ReceiptRowState[] {
 	return Array.from({ length: count }, (_, index) => ({
 		index,
 		include: true,
-		selected: false,
 		categoryId: '',
 		subcategoryId: ''
 	}));
 }
 
-export function applyCategoryToSelected(
+export function applyCategoryToUnassigned(
 	rows: ReceiptRowState[],
 	categoryId: string,
 	subcategoryId = ''
 ): ReceiptRowState[] {
 	if (!categoryId) return rows;
 	return rows.map((row) =>
-		row.selected ? { ...row, categoryId, subcategoryId, selected: false } : row
+		row.include && row.categoryId === '' ? { ...row, categoryId, subcategoryId } : row
 	);
 }
 

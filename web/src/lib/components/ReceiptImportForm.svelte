@@ -7,7 +7,6 @@
 		listCategories,
 		listSubcategories,
 		parseReceipt,
-		createReceiptScanJob,
 		getReceiptScanJob,
 		pollReceiptScanJob,
 		ApiError,
@@ -19,27 +18,27 @@
 	import ModalShell from '$lib/components/ModalShell.svelte';
 	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
 	import Select from '$lib/components/Select.svelte';
+	import ReceiptInlineSubcategoryField from '$lib/components/ReceiptInlineSubcategoryField.svelte';
 	import { defaultAccountId } from '$lib/accounts';
 	import { formatMoneyForDisplay } from '$lib/money-display';
 	import {
-		applyCategoryToSelected,
+		applyCategoryToUnassigned,
 		countIncludedRows,
 		formatReceiptItemSum,
 		includedRowsMissingCategory,
 		initReceiptRows,
 		type ReceiptRowState
 	} from '$lib/receipt/receipt-items';
-	import { startQrScanner, type QrScannerHandle } from '$lib/receipt/parse-qr';
+	import {
+		decodeQrFromImageFile,
+		startQrScanner,
+		type QrScannerHandle
+	} from '$lib/receipt/parse-qr';
 	import {
 		clearActiveReceiptScanJobId,
-		getActiveReceiptScanJobId,
-		saveActiveReceiptScanJobId
+		getActiveReceiptScanJobId
 	} from '$lib/receipt/scan-job-session';
-	import {
-		accountSelectOptions,
-		categorySelectOptions,
-		subcategorySelectOptions
-	} from '$lib/select-options';
+	import { accountSelectOptions, categorySelectOptions } from '$lib/select-options';
 	import { toast } from '$lib/toast';
 	import { formatApiError } from '$lib/api/errors';
 
@@ -68,21 +67,35 @@
 	let accounts = $state<Account[]>([]);
 	let categories = $state<Category[]>([]);
 	let subcategoriesByRow = $state<Record<number, Subcategory[]>>({});
+	let bulkSubcategories = $state<Subcategory[]>([]);
 	let scannerHandle = $state<QrScannerHandle | null>(null);
 	let decodeRun = 0;
+	let wasOpen = false;
 
 	const busy = $derived(loading || scanning);
 	const categoryOptions = $derived(categorySelectOptions(categories.filter((c) => !c.is_system)));
 	const accountOptions = $derived(accountSelectOptions(accounts));
 	const includedCount = $derived(countIncludedRows(rows));
 	const missingCategory = $derived(includedRowsMissingCategory(rows));
+	const receiptBlocked = $derived(Boolean(receipt?.already_imported));
+	const modalMaxWidth = $derived(receiptBlocked ? 'max-w-lg' : 'max-w-6xl');
 
 	$effect(() => {
 		if (!open) {
-			void stopScanner();
+			if (wasOpen) {
+				scanPollingToken++;
+				void stopScanner();
+				loading = false;
+				loadingPhase = null;
+				pollingJobId = null;
+			}
+			wasOpen = false;
 			return;
 		}
-		void initOnOpen();
+		if (!wasOpen) {
+			wasOpen = true;
+			void initOnOpen();
+		}
 	});
 
 	onDestroy(() => {
@@ -99,6 +112,8 @@
 		rows = [];
 		bulkCategoryId = '';
 		bulkSubcategoryId = '';
+		subcategoriesByRow = {};
+		bulkSubcategories = [];
 	}
 
 	function fullResetForm() {
@@ -128,6 +143,12 @@
 		selectedAccount = defaultAccountId(accs, accountId);
 	}
 
+	async function ensureMetaLoaded() {
+		if (accounts.length === 0 || categories.length === 0) {
+			await loadMeta();
+		}
+	}
+
 	async function stopScanner() {
 		if (scannerHandle) {
 			await scannerHandle.stop().catch(() => undefined);
@@ -136,11 +157,19 @@
 		scanning = false;
 	}
 
-	function applyParsedReceipt(parsed: ParsedReceipt) {
+	async function applyParsedReceipt(parsed: ParsedReceipt) {
 		receipt = parsed;
-		rows = initReceiptRows(parsed.items.length);
 		step = 'confirm';
 		error = '';
+		if (parsed.already_imported) {
+			return;
+		}
+		await ensureMetaLoaded();
+		rows = initReceiptRows(parsed.items.length);
+		subcategoriesByRow = {};
+		bulkCategoryId = '';
+		bulkSubcategoryId = '';
+		bulkSubcategories = [];
 	}
 
 	function setLoadingPhase(status: string) {
@@ -156,9 +185,6 @@
 	}
 
 	async function pollScanJob(jobId: string, pollToken: number) {
-		if (pollingJobId === jobId) {
-			return;
-		}
 		pollingJobId = jobId;
 		loading = true;
 		error = '';
@@ -171,7 +197,7 @@
 				}
 			});
 			if (pollToken !== scanPollingToken) return;
-			applyParsedReceipt(parsed);
+			await applyParsedReceipt(parsed);
 			clearActiveReceiptScanJobId();
 		} catch (e) {
 			if (pollToken !== scanPollingToken) return;
@@ -182,6 +208,8 @@
 			if (pollToken === scanPollingToken) {
 				loading = false;
 				loadingPhase = null;
+			}
+			if (pollingJobId === jobId) {
 				pollingJobId = null;
 			}
 		}
@@ -198,18 +226,25 @@
 				return;
 			}
 			if (job.status === 'done' && job.result) {
-				applyParsedReceipt(job.result);
+				await applyParsedReceipt(job.result);
 				clearActiveReceiptScanJobId();
 				return;
 			}
 			if (job.status === 'failed') {
 				showScanError(
-					new ApiError(job.error_message ?? 'ERR_RECEIPT_SCAN', job.error_message ?? 'ERR_RECEIPT_SCAN', 400)
+					new ApiError(
+						job.error_message ?? 'ERR_RECEIPT_SCAN',
+						job.error_message ?? 'ERR_RECEIPT_SCAN',
+						400
+					)
 				);
 				clearActiveReceiptScanJobId();
 			}
 		} catch {
 			clearActiveReceiptScanJobId();
+			loading = false;
+			loadingPhase = null;
+			pollingJobId = null;
 		}
 	}
 
@@ -229,10 +264,28 @@
 		loadingPhase = 'scan';
 		error = '';
 		try {
-			const job = await createReceiptScanJob(file);
+			const qr = await decodeQrFromImageFile(file);
 			if (run !== decodeRun || pollToken !== scanPollingToken) return;
-			saveActiveReceiptScanJobId(job.id);
-			await pollScanJob(job.id, pollToken);
+			if (qr) {
+				loadingPhase = 'fns';
+				try {
+					const parsed = await parseReceipt(qr);
+					if (run !== decodeRun || pollToken !== scanPollingToken) return;
+					await applyParsedReceipt(parsed);
+				} catch (e) {
+					if (run !== decodeRun || pollToken !== scanPollingToken) return;
+					showScanError(e);
+				} finally {
+					if (run === decodeRun && pollToken === scanPollingToken) {
+						loading = false;
+						loadingPhase = null;
+					}
+				}
+				return;
+			}
+			error = $_('receipt.parseError');
+			loading = false;
+			loadingPhase = null;
 		} catch (e) {
 			if (run !== decodeRun || pollToken !== scanPollingToken) return;
 			showScanError(e);
@@ -271,7 +324,7 @@
 			if (run !== decodeRun) return;
 			const parsed = await parseReceipt(qr);
 			if (run !== decodeRun) return;
-			applyParsedReceipt(parsed);
+			await applyParsedReceipt(parsed);
 		} catch (e) {
 			if (run !== decodeRun) return;
 			showScanError(e);
@@ -292,8 +345,22 @@
 		subcategoriesByRow = { ...subcategoriesByRow, [rowIndex]: subs };
 	}
 
-	function applyBulkCategory() {
-		rows = applyCategoryToSelected(rows, bulkCategoryId, bulkSubcategoryId);
+	async function loadBulkSubcategories(categoryId: string) {
+		if (!categoryId) {
+			bulkSubcategories = [];
+			return;
+		}
+		bulkSubcategories = await listSubcategories(categoryId);
+	}
+
+	function applyBulkToUnassigned() {
+		rows = applyCategoryToUnassigned(rows, bulkCategoryId, bulkSubcategoryId);
+		if (!bulkCategoryId) return;
+		for (const row of rows) {
+			if (row.include && row.categoryId === bulkCategoryId) {
+				void loadSubcategories(row.index, bulkCategoryId);
+			}
+		}
 	}
 
 	async function save() {
@@ -333,32 +400,35 @@
 	}
 </script>
 
-<ModalShell bind:open title={$_('receipt.title')} maxWidth="max-w-3xl" onclose={handleClose}>
+<ModalShell bind:open title={$_('receipt.title')} maxWidth={modalMaxWidth} onclose={handleClose}>
 	{#if step === 'input'}
 		<div class="space-y-4">
 			<p class="text-sm" style:color="var(--text-muted)">{$_('receipt.intro')}</p>
-			<div class="flex flex-wrap gap-2">
-				<button type="button" class="btn-primary min-h-11" disabled={busy} onclick={toggleScanner}>
+			<div class="flex flex-wrap items-center gap-2">
+				<button
+					type="button"
+					class="btn-primary btn-inline inline-flex min-h-11 items-center justify-center"
+					disabled={busy}
+					onclick={toggleScanner}
+				>
 					{scanning ? $_('receipt.stopScan') : $_('receipt.scan')}
 				</button>
 				<label
-					class="btn-ghost min-h-11 cursor-pointer"
+					class="btn-ghost btn-inline btn-file inline-flex min-h-11 cursor-pointer items-center justify-center"
 					class:opacity-50={busy}
 					class:pointer-events-none={busy}
 					aria-disabled={busy}
 				>
 					{$_('receipt.upload')}
-					<input
-						type="file"
-						accept="image/*"
-						class="hidden"
-						disabled={busy}
-						onchange={handleFileChange}
-					/>
+					<input type="file" accept="image/*" disabled={busy} onchange={handleFileChange} />
 				</label>
 			</div>
 			{#if scanning}
-				<div id="receipt-qr-reader" class="overflow-hidden rounded-lg border" style:border-color="var(--border)"></div>
+				<div
+					id="receipt-qr-reader"
+					class="overflow-hidden rounded-lg border"
+					style:border-color="var(--border)"
+				></div>
 			{/if}
 			{#if loading}
 				<p class="text-sm" role="status" aria-live="polite">
@@ -370,100 +440,154 @@
 			{/if}
 		</div>
 	{:else if receipt}
-		<div class="space-y-4">
-			<div class="rounded-lg border p-3 text-sm" style:border-color="var(--border)">
-				<p class="font-medium">{receipt.store_name || '—'}</p>
-				<p style:color="var(--text-muted)">
-					{$_('receipt.docNumber')}: {receipt.fiscal_document_number} ·
-					{formatMoneyForDisplay(receipt.total_sum / 100)}
-				</p>
-			</div>
-
-			<Select
-				id="receipt-account"
-				label={$_('transactions.field.account')}
-				bind:value={selectedAccount}
-				options={accountOptions}
-				usePortal
-			/>
-
-			<div class="flex flex-wrap items-end gap-2 rounded-lg border p-3" style:border-color="var(--border)">
-				<div class="min-w-[12rem] flex-1">
-					<Select
-						id="receipt-bulk-category"
-						label={$_('receipt.applyCategory')}
-						bind:value={bulkCategoryId}
-						options={categoryOptions}
-						usePortal
-					/>
+		{#if receiptBlocked}
+			<div class="space-y-4">
+				<p class="text-sm text-amber-700" role="alert">{$_('receipt.alreadyImported')}</p>
+				<div class="flex justify-end">
+					<button type="button" class="btn-ghost min-h-11" onclick={() => (step = 'input')}>
+						{$_('common.back')}
+					</button>
 				</div>
-				<button type="button" class="btn-primary min-h-11" disabled={!bulkCategoryId} onclick={applyBulkCategory}>
-					{$_('receipt.apply')}
-				</button>
 			</div>
+		{:else}
+			<div class="space-y-4">
+				<div class="rounded-lg border p-3 text-sm" style:border-color="var(--border)">
+					<p class="font-medium">{receipt.store_name || '—'}</p>
+					<p style:color="var(--text-muted)">
+						{$_('receipt.docNumber')}: {receipt.fiscal_document_number} ·
+						{formatMoneyForDisplay({ cents: receipt.total_sum })}
+					</p>
+				</div>
 
-			<div class="overflow-x-auto">
-				<table class="w-full text-sm">
-					<thead>
-						<tr style:color="var(--text-muted)">
-							<th class="p-2 text-left"></th>
-							<th class="p-2 text-left"></th>
-							<th class="p-2 text-left">{$_('receipt.col.item')}</th>
-							<th class="p-2 text-right">{$_('receipt.col.sum')}</th>
-							<th class="p-2 text-left">{$_('transactions.col.category')}</th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each rows as row (row.index)}
-							<tr class="border-t" style:border-color="var(--border)">
-								<td class="p-2">
-									<input type="checkbox" bind:checked={row.include} aria-label={$_('receipt.include')} />
-								</td>
-								<td class="p-2">
-									<input type="checkbox" bind:checked={row.selected} aria-label={$_('receipt.select')} />
-								</td>
-								<td class="p-2">{receipt.items[row.index]?.name ?? ''}</td>
-								<td class="p-2 text-right tabular-nums">
-									<MoneyDisplay value={formatReceiptItemSum(receipt.items[row.index]?.sum ?? 0)} />
-								</td>
-								<td class="p-2">
-									<Select
-										id={`receipt-cat-${row.index}`}
-										bind:value={row.categoryId}
-										options={categoryOptions}
-										usePortal
-										onchange={() => {
-											row.subcategoryId = '';
-											void loadSubcategories(row.index, row.categoryId);
-										}}
-									/>
-								</td>
+				<Select
+					id="receipt-account"
+					label={$_('transactions.field.account')}
+					bind:value={selectedAccount}
+					options={accountOptions}
+					usePortal
+				/>
+
+				<div class="space-y-2 rounded-lg border p-3" style:border-color="var(--border)">
+					<p class="text-sm font-medium">{$_('receipt.bulkCategory')}</p>
+					<p class="text-xs" style:color="var(--text-muted)">{$_('receipt.bulkCategoryHint')}</p>
+					<div class="flex flex-wrap items-end gap-2">
+						<div class="min-w-[12rem] flex-1">
+							<Select
+								id="receipt-bulk-category"
+								label={$_('transactions.field.category')}
+								placeholder={$_('receipt.selectCategory')}
+								bind:value={bulkCategoryId}
+								options={categoryOptions}
+								usePortal
+								onchange={() => {
+									bulkSubcategoryId = '';
+									void loadBulkSubcategories(bulkCategoryId);
+								}}
+							/>
+						</div>
+						<div class="min-w-[14rem] flex-1">
+							<span class="mb-1 block text-sm font-medium"
+								>{$_('transactions.field.subcategory')}</span
+							>
+							<ReceiptInlineSubcategoryField
+								id="receipt-bulk-subcategory"
+								categoryId={bulkCategoryId}
+								bind:value={bulkSubcategoryId}
+								subcategories={bulkSubcategories}
+								onSubcategoriesChange={(subs) => {
+									bulkSubcategories = subs;
+								}}
+							/>
+						</div>
+						<button
+							type="button"
+							class="btn-primary min-h-11"
+							disabled={!bulkCategoryId}
+							onclick={applyBulkToUnassigned}
+						>
+							{$_('receipt.applyUnassigned')}
+						</button>
+					</div>
+				</div>
+
+				<div class="overflow-x-auto">
+					<table class="w-full text-sm">
+						<thead>
+							<tr style:color="var(--text-muted)">
+								<th class="p-2 text-left"></th>
+								<th class="p-2 text-left">{$_('receipt.col.item')}</th>
+								<th class="p-2 text-right">{$_('receipt.col.sum')}</th>
+								<th class="p-2 text-left">{$_('transactions.col.category')}</th>
+								<th class="p-2 text-left">{$_('transactions.field.subcategory')}</th>
 							</tr>
-						{/each}
-					</tbody>
-				</table>
-			</div>
+						</thead>
+						<tbody>
+							{#each rows as row (row.index)}
+								<tr class="border-t" style:border-color="var(--border)">
+									<td class="p-2">
+										<input
+											type="checkbox"
+											bind:checked={row.include}
+											aria-label={$_('receipt.include')}
+										/>
+									</td>
+									<td class="p-2">{receipt.items[row.index]?.name ?? ''}</td>
+									<td class="p-2 text-right tabular-nums">
+										<MoneyDisplay
+											value={formatReceiptItemSum(receipt.items[row.index]?.sum ?? 0)}
+										/>
+									</td>
+									<td class="p-2">
+										<Select
+											id={`receipt-cat-${row.index}`}
+											placeholder={$_('receipt.selectCategory')}
+											bind:value={row.categoryId}
+											options={categoryOptions}
+											usePortal
+											onchange={() => {
+												row.subcategoryId = '';
+												void loadSubcategories(row.index, row.categoryId);
+											}}
+										/>
+									</td>
+									<td class="p-2">
+										<ReceiptInlineSubcategoryField
+											id={`receipt-subcat-${row.index}`}
+											categoryId={row.categoryId}
+											bind:value={row.subcategoryId}
+											subcategories={subcategoriesByRow[row.index] ?? []}
+											onSubcategoriesChange={(subs) => {
+												subcategoriesByRow = { ...subcategoriesByRow, [row.index]: subs };
+											}}
+										/>
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
 
-			{#if missingCategory}
-				<p class="text-sm text-amber-600">{$_('receipt.categoryRequired')}</p>
-			{/if}
-			{#if error}
-				<p class="text-sm text-red-600">{error}</p>
-			{/if}
+				{#if missingCategory}
+					<p class="text-sm text-amber-600">{$_('receipt.categoryRequired')}</p>
+				{/if}
+				{#if error}
+					<p class="text-sm text-red-600">{error}</p>
+				{/if}
 
-			<div class="flex justify-end gap-2">
-				<button type="button" class="btn-ghost min-h-11" onclick={() => (step = 'input')}>
-					{$_('common.back')}
-				</button>
-				<button
-					type="button"
-					class="btn-primary min-h-11"
-					disabled={saving || missingCategory || includedCount === 0}
-					onclick={save}
-				>
-					{$_('receipt.create', { values: { count: includedCount } })}
-				</button>
+				<div class="flex justify-end gap-2">
+					<button type="button" class="btn-ghost min-h-11" onclick={() => (step = 'input')}>
+						{$_('common.back')}
+					</button>
+					<button
+						type="button"
+						class="btn-primary min-h-11"
+						disabled={saving || missingCategory || includedCount === 0}
+						onclick={save}
+					>
+						{$_('receipt.create', { values: { count: includedCount } })}
+					</button>
+				</div>
 			</div>
-		</div>
+		{/if}
 	{/if}
 </ModalShell>

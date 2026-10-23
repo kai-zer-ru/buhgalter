@@ -1,4 +1,4 @@
--- Note: on DBs that already applied legacy 043_receipt_scan_jobs, this file is skipped;
+-- Note: on DBs that already applied legacy 043 as 057_receipt_scan_jobs (renamed), this file is skipped;
 -- table is created by 046_subscriptions_ensure.sql instead.
 -- +goose Up
 CREATE TABLE subscriptions (

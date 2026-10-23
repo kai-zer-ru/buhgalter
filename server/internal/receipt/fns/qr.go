@@ -33,7 +33,7 @@ func ParseQR(raw string) (QRParams, error) {
 	if raw == "" {
 		return QRParams{}, ErrInvalidQR
 	}
-	values := url.Values{}
+	var values url.Values
 	if strings.Contains(raw, "?") {
 		u, err := url.Parse(raw)
 		if err != nil {

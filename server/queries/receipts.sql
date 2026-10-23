@@ -34,3 +34,54 @@ INSERT INTO receipt_imports (
 SELECT receipt_item_index
 FROM transactions
 WHERE id = ? AND user_id = ? AND receipt_import_id = ?;
+
+-- name: AttachReceiptToTransaction :execrows
+UPDATE transactions
+SET receipt_import_id = ?,
+    receipt_item_index = NULL,
+    store_id = COALESCE(store_id, ?),
+    updated_at = ?
+WHERE id = ? AND user_id = ? AND type = 'expense' AND receipt_import_id IS NULL;
+
+-- name: DetachReceiptFromTransaction :execrows
+UPDATE transactions
+SET receipt_import_id = NULL,
+    receipt_item_index = NULL,
+    updated_at = ?
+WHERE id = ? AND user_id = ? AND receipt_import_id IS NOT NULL;
+
+-- name: ListReceiptLinkedTransactions :many
+SELECT t.id, t.receipt_item_index
+FROM transactions t
+WHERE t.user_id = ? AND t.receipt_import_id = ?
+ORDER BY t.receipt_item_index ASC, t.transaction_date ASC, t.id ASC;
+
+-- name: ListReceiptLinkedTransactionCategories :many
+SELECT t.receipt_item_index, t.category_id, t.subcategory_id
+FROM transactions t
+WHERE t.user_id = ? AND t.receipt_import_id = ?
+  AND t.category_id IS NOT NULL AND t.category_id != ''
+  AND t.receipt_item_index IS NOT NULL;
+
+-- name: ListReceiptImportItemCategories :many
+SELECT item_index, category_id, subcategory_id
+FROM receipt_import_item_categories
+WHERE user_id = ? AND receipt_import_id = ?
+ORDER BY item_index ASC;
+
+-- name: UpsertReceiptImportItemCategory :exec
+INSERT INTO receipt_import_item_categories (
+    receipt_import_id, item_index, user_id, category_id, subcategory_id
+) VALUES (?, ?, ?, ?, ?)
+ON CONFLICT(receipt_import_id, item_index) DO UPDATE SET
+    category_id = excluded.category_id,
+    subcategory_id = excluded.subcategory_id;
+
+-- name: DeleteReceiptImportItemCategories :exec
+DELETE FROM receipt_import_item_categories
+WHERE user_id = ? AND receipt_import_id = ?;
+
+-- name: CountReceiptLinkedTransactions :one
+SELECT COUNT(*) AS n
+FROM transactions t
+WHERE t.user_id = ? AND t.receipt_import_id = ?;

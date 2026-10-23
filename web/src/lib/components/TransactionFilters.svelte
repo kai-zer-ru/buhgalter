@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { _ } from 'svelte-i18n';
-	import type { Account, Category, Store } from '$lib/api/client';
-	import type { Account, Category, Merchant, Tag } from '$lib/api/client';
+	import type { Account, Category, Merchant, Store, Tag } from '$lib/api/client';
 	import { categorySelectLabel } from '$lib/category-label';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
 	import { dateOnlyPicker } from '$lib/datetime-picker-standards';
@@ -29,6 +28,7 @@
 		showCategory?: boolean;
 		showType?: boolean;
 		showKind?: boolean;
+		showStoreFilter?: boolean;
 		expandSearchToEnd?: boolean;
 		onreset: () => void;
 	};
@@ -53,6 +53,7 @@
 		showCategory = true,
 		showType = true,
 		showKind = true,
+		showStoreFilter = true,
 		expandSearchToEnd = false,
 		onreset
 	}: Props = $props();
@@ -161,7 +162,7 @@
 			/>
 		{/if}
 
-		{#if stores.length > 0}
+		{#if showStoreFilter && stores.length > 0}
 			<Select
 				id="tx-filter-store"
 				label={$_('transactions.filters.store')}

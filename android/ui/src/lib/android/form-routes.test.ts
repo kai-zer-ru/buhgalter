@@ -10,7 +10,9 @@ import {
 	debtSettlePath,
 	parseFormReturnPath,
 	subscriptionEditPath,
-	subscriptionNewPath
+	subscriptionNewPath,
+	receiptImportPath,
+	receiptAttachPath
 } from './form-routes';
 
 describe('form-routes', () => {
@@ -61,6 +63,16 @@ describe('form-routes', () => {
 		);
 		expect(subscriptionEditPath('s1', '/subscriptions')).toBe(
 			'/subscriptions/s1/edit?from=%2Fsubscriptions'
+		);
+	});
+
+	it('builds receipt form paths', () => {
+		expect(receiptImportPath({ from: '/' })).toBe('/receipts/import?from=%2F');
+		expect(receiptImportPath({ from: '/accounts/a1', accountId: 'a1' })).toBe(
+			'/receipts/import?from=%2Faccounts%2Fa1&account=a1'
+		);
+		expect(receiptAttachPath('tx1', '/transactions')).toBe(
+			'/receipts/attach?attach_tx=tx1&from=%2Ftransactions'
 		);
 	});
 });

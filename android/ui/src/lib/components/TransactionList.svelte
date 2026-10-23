@@ -1,7 +1,14 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { _ } from 'svelte-i18n';
-	import type { Transaction } from '$lib/api/client';
+	import { detachReceipt, type Transaction } from '$lib/api/client';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
+	import { receiptViewPath } from '$lib/android/form-routes';
+	import { formatApiError } from '$lib/api/errors';
+	import { confirm } from '$lib/confirm';
+	import { toast } from '$lib/toast';
+	import IconButton from '$lib/components/IconButton.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
 	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
 	import TransactionAccountCell from '$lib/components/TransactionAccountCell.svelte';
@@ -15,8 +22,10 @@
 		canEditTransaction,
 		canRepeatTransaction,
 		canDeleteTransaction,
-		canLinkToSubscription
+		canLinkToSubscription,
+		canAttachReceipt
 	} from '$lib/transaction-display';
+	import { isReceiptScannerEnabled } from '$lib/receipt/receipt-module';
 	import { isPendingTransaction, pendingSyncFailed } from '$lib/offline/pending-display';
 	import TransactionCategoryCell from '$lib/components/TransactionCategoryCell.svelte';
 	import TransactionMerchantTags from '$lib/components/TransactionMerchantTags.svelte';
@@ -42,6 +51,8 @@
 		onmakeSubscription,
 		onattachSubscription,
 		onattachCredit,
+		onattachReceipt,
+		onreceiptChanged,
 		descriptionExtra
 	}: {
 		transactions: Transaction[];
@@ -62,12 +73,15 @@
 		onmakeSubscription?: (tx: Transaction) => void;
 		onattachSubscription?: (tx: Transaction) => void;
 		onattachCredit?: (tx: Transaction) => void;
+		onattachReceipt?: (tx: Transaction) => void;
+		onreceiptChanged?: () => void;
 		descriptionExtra?: Snippet<[Transaction]>;
 	} = $props();
 
 	const templatesEnabled = $derived(isFeatureEnabled('transaction_templates', $featureFlags));
 	const recurringEnabled = $derived(isFeatureEnabled('recurring', $featureFlags));
 	const subscriptionsEnabled = $derived(isFeatureEnabled('subscriptions', $featureFlags));
+	const receiptScannerActive = $derived(isReceiptScannerEnabled($featureFlags));
 	const compactLayout = isNativeApp();
 
 	const showActions = $derived(
@@ -79,9 +93,50 @@
 			(onmakeRecurring && recurringEnabled) ||
 			(onmakeSubscription && subscriptionsEnabled) ||
 			(onattachSubscription && subscriptionsEnabled) ||
-			onattachCredit
+			onattachCredit ||
+			(onattachReceipt && receiptScannerActive) ||
+			(onreceiptChanged && receiptScannerActive)
 		)
 	);
+
+	function canDetachReceipt(tx: Transaction): boolean {
+		return Boolean(
+			receiptScannerActive &&
+			onreceiptChanged &&
+			tx.type === 'expense' &&
+			tx.receipt_import_id &&
+			!tx.transfer_group_id
+		);
+	}
+
+	function openReceiptView(tx: Transaction) {
+		if (!tx.receipt_import_id) return;
+		void goto(
+			resolve(
+				receiptViewPath(tx.receipt_import_id, {
+					transactionId: tx.id
+				})
+			)
+		);
+	}
+
+	async function detachReceiptFromRow(tx: Transaction) {
+		const ok = await confirm({
+			title: $_('receipt.detach.title'),
+			message: $_('receipt.detach.message'),
+			confirmLabel: $_('receipt.detach.confirm'),
+			cancelLabel: $_('common.cancel'),
+			danger: true
+		});
+		if (!ok) return;
+		try {
+			await detachReceipt(tx.id);
+			toast.success($_('receipt.detach.success'));
+			onreceiptChanged?.();
+		} catch (e) {
+			toast.error(formatApiError(e, 'receipt.detach.error'));
+		}
+	}
 
 	function canMakeRecurring(tx: Transaction): boolean {
 		return Boolean(onmakeRecurring && tx.type !== 'transfer' && !tx.category_is_system);
@@ -145,6 +200,21 @@
 				onclick: () => onattachCredit?.(tx)
 			});
 		}
+		if (receiptScannerActive && onattachReceipt && canAttachReceipt(tx)) {
+			actions.push({
+				icon: 'receipt',
+				label: $_('receipt.attach.menu'),
+				onclick: () => onattachReceipt?.(tx)
+			});
+		}
+		if (canDetachReceipt(tx)) {
+			actions.push({
+				icon: 'delete',
+				label: $_('receipt.detach.menu'),
+				variant: 'danger',
+				onclick: () => void detachReceiptFromRow(tx)
+			});
+		}
 		if (showEdit && onedit && canEditTransaction(tx)) {
 			actions.push({
 				icon: 'edit',
@@ -190,12 +260,22 @@
 					</div>
 					<div class="flex shrink-0 items-start gap-2">
 						<div class="text-right">
-							<p class="text-sm font-semibold tabular-nums">
-								{showAmountSign ? transactionAmountSign(tx, { singleAccount }) : ''}<MoneyDisplay
-									value={tx.amount_display}
-									class=""
-								/>
-							</p>
+							<div class="inline-flex items-center justify-end gap-1">
+								<p class="text-sm font-semibold tabular-nums">
+									{showAmountSign ? transactionAmountSign(tx, { singleAccount }) : ''}<MoneyDisplay
+										value={tx.amount_display}
+										class=""
+									/>
+								</p>
+								{#if tx.receipt_import_id}
+									<IconButton
+										icon="receipt"
+										label={$_('receipt.view')}
+										class="!h-8 !w-8"
+										onclick={() => openReceiptView(tx)}
+									/>
+								{/if}
+							</div>
 							{#if commissionDisplay}
 								<p class="text-xs tabular-nums" style:color="var(--text-muted)">
 									{$_('transactions.commission')}:
@@ -289,11 +369,19 @@
 							</td>
 						{/if}
 						<td class="p-3 align-middle whitespace-nowrap tabular-nums font-medium">
-							<div>
+							<div class="inline-flex items-center gap-1">
 								{showAmountSign ? transactionAmountSign(tx, { singleAccount }) : ''}<MoneyDisplay
 									value={tx.amount_display}
 									class=""
 								/>
+								{#if tx.receipt_import_id}
+									<IconButton
+										icon="receipt"
+										label={$_('receipt.view')}
+										class="!h-8 !w-8"
+										onclick={() => openReceiptView(tx)}
+									/>
+								{/if}
 							</div>
 							{#if commissionDisplay}
 								<div class="text-xs font-normal" style:color="var(--text-muted)">
@@ -355,12 +443,22 @@
 					</div>
 					<div class="flex shrink-0 items-start gap-2">
 						<div class="text-right">
-							<p class="text-sm font-semibold tabular-nums">
-								{showAmountSign ? transactionAmountSign(tx, { singleAccount }) : ''}<MoneyDisplay
-									value={tx.amount_display}
-									class=""
-								/>
-							</p>
+							<div class="inline-flex items-center justify-end gap-1">
+								<p class="text-sm font-semibold tabular-nums">
+									{showAmountSign ? transactionAmountSign(tx, { singleAccount }) : ''}<MoneyDisplay
+										value={tx.amount_display}
+										class=""
+									/>
+								</p>
+								{#if tx.receipt_import_id}
+									<IconButton
+										icon="receipt"
+										label={$_('receipt.view')}
+										class="!h-8 !w-8"
+										onclick={() => openReceiptView(tx)}
+									/>
+								{/if}
+							</div>
 							{#if commissionDisplay}
 								<p class="text-xs tabular-nums" style:color="var(--text-muted)">
 									{$_('transactions.commission')}:

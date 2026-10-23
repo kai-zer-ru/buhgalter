@@ -2,6 +2,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect } from '@playwright/test';
 import { apiJSON, waitAppReady } from './helpers/auth';
+import { enableReceiptScannerFeatures, mockReceiptParseRoute } from './helpers/receipt-scanner';
 import { createCashAccount } from './helpers/setup-data';
 import { selectCombobox } from './helpers/transactions';
 
@@ -19,34 +20,78 @@ const mockReceipt = {
 	fns_check_url: 'https://proverkacheka.nalog.ru/?fn=7288940700123456'
 };
 
+async function getExpenseCategories(page: import('@playwright/test').Page) {
+	return apiJSON<{ id: string; name: string; is_system?: boolean }[]>(
+		page,
+		'GET',
+		'/api/v1/categories?type=expense'
+	);
+}
+
 async function getExpenseCategoryId(page: import('@playwright/test').Page) {
-	const cats = await apiJSON<{ id: string }[]>(page, 'GET', '/api/v1/categories?type=expense');
+	const cats = await getExpenseCategories(page);
 	return cats[0].id;
 }
 
 test('receipt import form creates expense from photo scan job', async ({ page }) => {
+	await enableReceiptScannerFeatures(page);
 	const tag = Date.now();
+	const fiscalDoc = String(tag).slice(-5);
 	const account = await createCashAccount(page, `E2E Receipt ${tag}`);
-	const categoryId = await getExpenseCategoryId(page);
+	const scannedReceipt = {
+		...mockReceipt,
+		fiscal_document_number: fiscalDoc
+	};
 
-	await page.route('**/api/v1/receipts/scan-jobs', async (route) => {
-		if (route.request().method() === 'POST') {
-			await route.fulfill({
-				status: 202,
-				contentType: 'application/json',
-				body: JSON.stringify({ id: 'scan-job-1', status: 'queued' })
-			});
-			return;
-		}
-		await route.continue();
+	await mockReceiptParseRoute(page, scannedReceipt);
+
+	await page.goto('/transactions');
+	await waitAppReady(page);
+	await page.getByRole('button', { name: 'Чек', exact: true }).click();
+
+	const dialog = page.getByRole('dialog');
+	await dialog.locator('input[type="file"]').setInputFiles(qrFixture);
+	await expect(dialog.getByText('E2E Магазин')).toBeVisible({ timeout: 20_000 });
+
+	await selectCombobox(page, 'receipt-account', { label: account.name });
+	await selectCombobox(page, 'receipt-cat-0', { index: 1 });
+
+	await dialog.getByRole('button', { name: /Создать 1 операций/ }).click();
+	await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+
+	await selectCombobox(page, 'tx-filter-account', { label: account.name });
+	await expect(page.getByRole('row', { name: /E2E Товар.*150\.00/ })).toBeVisible({
+		timeout: 10_000
 	});
+});
 
-	await page.route('**/api/v1/receipts/scan-jobs/scan-job-1', async (route) => {
-		await route.fulfill({
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify({ id: 'scan-job-1', status: 'done', result: mockReceipt })
-		});
+test('receipt bulk category applies only to unassigned included rows', async ({ page }) => {
+	await enableReceiptScannerFeatures(page);
+	const tag = Date.now();
+	const fiscalDoc = String(tag).slice(-5);
+	const account = await createCashAccount(page, `E2E Receipt Bulk ${tag}`);
+	const userCats = (await getExpenseCategories(page)).filter((c) => !c.is_system);
+	expect(userCats.length).toBeGreaterThanOrEqual(2);
+	const [catManual, catBulk] = userCats;
+
+	const scannedReceipt = {
+		...mockReceipt,
+		fiscal_document_number: fiscalDoc,
+		total_sum: 25000,
+		items: [
+			{ name: 'E2E Bulk A', quantity: 1, price: 10000, sum: 10000 },
+			{ name: 'E2E Bulk B', quantity: 1, price: 15000, sum: 15000 }
+		]
+	};
+
+	await mockReceiptParseRoute(page, scannedReceipt);
+
+	let importBody: {
+		items: { index: number; category_id?: string; include: boolean }[];
+	} | null = null;
+	await page.route('**/api/v1/receipts/import', async (route) => {
+		importBody = route.request().postDataJSON() as typeof importBody;
+		await route.continue();
 	});
 
 	await page.goto('/transactions');
@@ -57,32 +102,30 @@ test('receipt import form creates expense from photo scan job', async ({ page })
 	await dialog.locator('input[type="file"]').setInputFiles(qrFixture);
 	await expect(dialog.getByText('E2E Магазин')).toBeVisible({ timeout: 20_000 });
 
-	await selectCombobox(page, 'receipt-cat-0', { index: 1 });
+	await selectCombobox(page, 'receipt-account', { label: account.name });
+	await selectCombobox(page, 'receipt-cat-0', { label: catManual.name });
+	await selectCombobox(page, 'receipt-bulk-category', { label: catBulk.name });
+	await dialog.getByRole('button', { name: 'Проставить без категории' }).click();
 
-	await page.route('**/api/v1/receipts/import', async (route) => {
-		await route.fulfill({
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify({
-				receipt_import_id: 'import-1',
-				transactions: [
-					{
-						id: 'tx-1',
-						description: `E2E Товар. Чек №${mockReceipt.fiscal_document_number}, сумма 150.00`
-					}
-				]
-			})
-		});
-	});
-
-	await dialog.getByRole('button', { name: /Создать 1 операций/ }).click();
+	await dialog.getByRole('button', { name: /Создать 2 операций/ }).click();
 	await expect(dialog).toHaveCount(0, { timeout: 15_000 });
 
+	expect(importBody).not.toBeNull();
+	const items = importBody!.items;
+	expect(items.find((i) => i.index === 0)?.category_id).toBe(catManual.id);
+	expect(items.find((i) => i.index === 1)?.category_id).toBe(catBulk.id);
+
 	await selectCombobox(page, 'tx-filter-account', { label: account.name });
-	await expect(page.getByRole('row', { name: /E2E Товар.*150\.00/ })).toBeVisible({ timeout: 10_000 });
+	await expect(
+		page.getByRole('row').filter({ hasText: 'E2E Bulk A' }).filter({ hasText: '100.00' })
+	).toBeVisible({ timeout: 10_000 });
+	await expect(
+		page.getByRole('row').filter({ hasText: 'E2E Bulk B' }).filter({ hasText: '150.00' })
+	).toBeVisible({ timeout: 10_000 });
 });
 
 test('receipt icon opens detail dialog with FNS link', async ({ page }) => {
+	await enableReceiptScannerFeatures(page);
 	const tag = Date.now();
 	const account = await createCashAccount(page, `E2E Receipt View ${tag}`);
 	const categoryId = await getExpenseCategoryId(page);
@@ -125,4 +168,62 @@ test('receipt icon opens detail dialog with FNS link', async ({ page }) => {
 
 	expect(imported.receipt_import_id).toBeTruthy();
 	expect(imported.transactions[0]?.description).toContain(`Чек №${fiscalDoc}`);
+});
+
+test('attach receipt to existing expense with sum mismatch confirm', async ({ page }) => {
+	await enableReceiptScannerFeatures(page);
+	const tag = Date.now();
+	const account = await createCashAccount(page, `E2E Attach ${tag}`);
+	const categoryId = await getExpenseCategoryId(page);
+
+	const tx = await apiJSON<{ id: string }>(page, 'POST', '/api/v1/transactions', {
+		account_id: account.id,
+		type: 'expense',
+		amount: '100.00',
+		category_id: categoryId,
+		description: `E2E attach ${tag}`,
+		transaction_date: '2026-03-01 12:00:00'
+	});
+
+	await mockReceiptParseRoute(page, {
+		...mockReceipt,
+		total_sum: 15000,
+		fiscal_document_number: 'attach-doc'
+	});
+
+	let attachBody: { acknowledge_sum_mismatch?: boolean } | null = null;
+	await page.route('**/api/v1/receipts/attach', async (route) => {
+		attachBody = route.request().postDataJSON() as { acknowledge_sum_mismatch?: boolean };
+		await route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				receipt_import_id: 'attach-import-1',
+				transaction: { ...tx, receipt_import_id: 'attach-import-1' }
+			})
+		});
+	});
+
+	await page.goto('/transactions');
+	await waitAppReady(page);
+	await selectCombobox(page, 'tx-filter-account', { label: account.name });
+
+	const row = page.getByRole('row', { name: new RegExp(`E2E attach ${tag}`) });
+	await expect(row).toBeVisible({ timeout: 10_000 });
+	await row.getByRole('button', { name: 'Действия' }).click();
+	await page.getByRole('menuitem', { name: 'Прикрепить чек' }).click();
+
+	const dialog = page.getByRole('dialog').filter({ hasText: 'Прикрепить чек' });
+	await dialog.locator('input[type="file"]').setInputFiles(qrFixture);
+	await expect(dialog.getByText('E2E Магазин')).toBeVisible({ timeout: 20_000 });
+	// Category pre-filled from transaction; confirm attach.
+	await dialog.getByRole('button', { name: 'Прикрепить', exact: true }).click();
+
+	const confirmDialog = page.getByRole('alertdialog');
+	await expect(confirmDialog.getByText(/100\.00/)).toBeVisible();
+	await expect(confirmDialog.getByText(/150\.00/)).toBeVisible();
+	await confirmDialog.getByRole('button', { name: 'Добавить всё равно' }).click();
+
+	await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+	expect(attachBody?.acknowledge_sum_mismatch).toBe(true);
 });

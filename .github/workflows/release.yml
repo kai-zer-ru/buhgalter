@@ -40,12 +40,7 @@ jobs:
             echo "ANDROID_KEY_ALIAS=${{ secrets.ANDROID_KEY_ALIAS }}" >> "$GITHUB_ENV"
             echo "ANDROID_KEY_PASSWORD=${{ secrets.ANDROID_KEY_PASSWORD }}" >> "$GITHUB_ENV"
           else
-            mkdir -p "$HOME/.android"
-            if [ ! -f "$HOME/.android/debug.keystore" ]; then
-              keytool -genkey -v -keystore "$HOME/.android/debug.keystore" -storepass android \
-                -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 \
-                -dname "CN=Android Debug,O=Android,C=US"
-            fi
+            bash scripts/ensure-android-debug-keystore.sh "$GITHUB_WORKSPACE"
             echo "::warning::ANDROID_KEYSTORE_BASE64 not set — APK signed with debug keystore"
           fi
       - name: Write android/local.properties

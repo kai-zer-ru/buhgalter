@@ -12,6 +12,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/db"
 	"github.com/kai-zer-ru/buhgalter/internal/receipt/fns"
 	"github.com/kai-zer-ru/buhgalter/internal/store"
+	"github.com/kai-zer-ru/buhgalter/internal/transaction"
 )
 
 type receiptSeed struct {
@@ -129,6 +130,9 @@ func TestImport_createsStoreAndTransactions(t *testing.T) {
 	if detail.HighlightItemIndex == nil || *detail.HighlightItemIndex != 0 {
 		t.Fatalf("expected highlight index 0, got %v", detail.HighlightItemIndex)
 	}
+	if detail.Items[0].CategoryName == "" {
+		t.Fatalf("expected category_name on linked item, got %+v", detail.Items[0])
+	}
 }
 
 func TestImport_duplicateRejected(t *testing.T) {
@@ -149,5 +153,68 @@ func TestImport_duplicateRejected(t *testing.T) {
 	}
 	if _, err := Import(ctx, env.mgr.DB(), env.userID, in); err != ErrDuplicate {
 		t.Fatalf("expected ErrDuplicate, got %v", err)
+	}
+}
+
+func TestImport_duplicateAfterAttach(t *testing.T) {
+	env := seedReceiptEnv(t)
+	ctx := context.Background()
+	receipt := sampleParsedReceipt()
+	cat := env.expenseID
+	txRow, err := transaction.Create(ctx, env.mgr.DB(), env.userID, transaction.CreateInput{
+		AccountID: env.accountID, Type: "expense", Amount: receipt.TotalSum,
+		CategoryID: &cat, TransactionDate: receipt.DateTime,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Attach(ctx, env.mgr.DB(), env.userID, AttachInput{
+		TransactionID: txRow.ID, FiscalDriveNumber: receipt.FiscalDriveNumber,
+		FiscalDocumentNumber: receipt.FiscalDocumentNumber, FiscalSign: receipt.FiscalSign,
+		Receipt: receipt, Items: attachItemsForReceipt(receipt, cat),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_, err = Import(ctx, env.mgr.DB(), env.userID, ImportInput{
+		AccountID: env.accountID, FiscalDriveNumber: receipt.FiscalDriveNumber,
+		FiscalDocumentNumber: receipt.FiscalDocumentNumber, FiscalSign: receipt.FiscalSign,
+		Receipt: receipt,
+		Items:   []ImportItemInput{{Index: 0, CategoryID: &cat, Include: true}, {Index: 1, CategoryID: &cat, Include: true}},
+	})
+	if err != ErrDuplicate {
+		t.Fatalf("expected ErrDuplicate after attach, got %v", err)
+	}
+}
+
+func TestAttach_linksReceiptToExpense(t *testing.T) {
+	env := seedReceiptEnv(t)
+	ctx := context.Background()
+	receipt := sampleParsedReceipt()
+	cat := env.expenseID
+	amount := receipt.TotalSum
+	txRow, err := transaction.Create(ctx, env.mgr.DB(), env.userID, transaction.CreateInput{
+		AccountID:       env.accountID,
+		Type:            "expense",
+		Amount:          amount,
+		CategoryID:      &cat,
+		TransactionDate: receipt.DateTime,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Attach(ctx, env.mgr.DB(), env.userID, AttachInput{
+		TransactionID:        txRow.ID,
+		FiscalDriveNumber:    receipt.FiscalDriveNumber,
+		FiscalDocumentNumber: receipt.FiscalDocumentNumber,
+		FiscalSign:           receipt.FiscalSign,
+		Receipt:              receipt,
+		Items:                attachItemsForReceipt(receipt, cat),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Transaction.ReceiptImportID == nil || *result.Transaction.ReceiptImportID != result.ReceiptImportID {
+		t.Fatalf("expected receipt_import_id on transaction, got %+v", result.Transaction)
 	}
 }

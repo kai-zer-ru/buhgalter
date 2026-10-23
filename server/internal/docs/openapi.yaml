@@ -23,7 +23,7 @@ info:
     Лимит кредитной карты меняется только через `PUT /accounts/{id}/credit-limit` (см. [ui-credit-cards.md](../ui-credit-cards.md)).
     В форме «Начальный баланс» — значение `initial_balance`, не текущий `balance_display` (см. [data-model.md](../data-model.md)).
     Подробнее — [ui-row-actions.md](../ui-row-actions.md).
-  version: 1.9.1
+  version: 1.10.0
 servers:
   - url: /api/v1
 paths:
@@ -314,6 +314,7 @@ paths:
       description: |
         Инстанс-флаги опциональных модулей для UI (навигация, роуты).
         Требуется авторизация. При выключенном модуле соответствующий API отвечает 404 `FEATURE_DISABLED`.
+        Дополнительно для сканера чеков: `receipt_api_token_set` (boolean) — настроен ли токен proverkacheka.
       security:
         - sessionCookie: []
         - bearerAuth: []
@@ -787,6 +788,38 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
               examples:
+                secret_key:
+                  $ref: '#/components/examples/ApiErrorSecretKeyInvalid'
+  /admin/settings/receipt-api-token:
+    put:
+      summary: Задать токен API proverkacheka (сканер чеков)
+      description: |
+        Write-only: принимает `receipt_api_token`, шифрует ключом уведомлений (`notification_secret_key` должен быть задан).
+        Значение токена не возвращается; в ответе — `receipt_api_token_set`.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminReceiptApiTokenUpdate'
+      responses:
+        '200':
+          description: Настройки обновлены
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminSettings'
+        '400':
+          description: Пустой токен или не задан ключ уведомлений
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                token_empty:
+                  $ref: '#/components/examples/ApiErrorReceiptApiTokenEmpty'
                 secret_key:
                   $ref: '#/components/examples/ApiErrorSecretKeyInvalid'
   /admin/users:
@@ -1590,7 +1623,9 @@ paths:
       summary: Статистика по подкатегориям
       description: |
         Агрегация по подкатегориям с привязкой к родительской категории.
-        В веб-интерфейсе `/stats` не отображается; endpoint доступен для API-клиентов.
+        Учитывает `transactions.subcategory_id` и, для attach чека (одна операция без `receipt_item_index`),
+        строки `receipt_import_item_categories` с суммой позиции из payload чека.
+        В UI `/stats` — спойлер подкатегорий у каждой категории.
       security:
         - sessionCookie: []
         - bearerAuth: []
@@ -3677,6 +3712,77 @@ paths:
           description: Некорректные позиции (`ERR_RECEIPT_ITEMS`)
         '409':
           description: Чек уже импортирован (`ERR_RECEIPT_DUPLICATE`)
+  /receipts/attach:
+    post:
+      summary: Прикрепить чек к существующему расходу
+      description: |
+        Создаёт или переиспользует `receipt_imports` по fiscal-ключу и проставляет `receipt_import_id` на операции.
+        Сумма операции и итог чека должны совпадать (коп.), иначе 409 `ERR_RECEIPT_SUM_MISMATCH` с полями `transaction_amount` и `receipt_total_sum`, либо повтор с `acknowledge_sum_mismatch: true`.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReceiptAttachRequest'
+      responses:
+        '200':
+          description: Чек прикреплён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReceiptAttachResult'
+        '400':
+          description: Некорректная операция или fiscal-ключ (`ERR_RECEIPT_ATTACH_NOT_EXPENSE`, `ERR_RECEIPT_QR`)
+        '404':
+          description: Операция не найдена (`ERR_RECEIPT_NOT_FOUND`)
+        '409':
+          description: Суммы различаются (`ERR_RECEIPT_SUM_MISMATCH`) или чек уже на операции (`ERR_RECEIPT_ALREADY_ATTACHED`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReceiptSumMismatchError'
+        '503':
+          description: Токен API чеков не настроен (`ERR_RECEIPT_API_NOT_CONFIGURED`)
+  /receipts/detach:
+    post:
+      summary: Открепить чек от операции
+      description: |
+        Сбрасывает `receipt_import_id` и `receipt_item_index` на указанной операции.
+        Запись `receipt_imports` не удаляется (другие операции и fiscal-кэш могут ссылаться на неё).
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [transaction_id]
+              properties:
+                transaction_id:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Чек откреплён
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [transaction]
+                properties:
+                  transaction:
+                    $ref: '#/components/schemas/Transaction'
+        '400':
+          description: Нет `transaction_id` (`ERR_RECEIPT_DETACH_TRANSACTION`)
+        '404':
+          description: Операция не найдена или чек не был прикреплён (`ERR_RECEIPT_NOT_FOUND`, `ERR_RECEIPT_NOT_ATTACHED`)
+        '503':
+          description: Токен API чеков не настроен (`ERR_RECEIPT_API_NOT_CONFIGURED`)
   /receipts/{id}:
     get:
       summary: Данные импортированного чека
@@ -4125,6 +4231,12 @@ components:
         error:
           code: VALIDATION_ERROR
           message: Ключ должен содержать ровно 32 символа
+    ApiErrorReceiptApiTokenEmpty:
+      summary: Пустой токен proverkacheka
+      value:
+        error:
+          code: VALIDATION_ERROR
+          message: ERR_RECEIPT_API_TOKEN_EMPTY
     ApiErrorRestoreConfirm:
       summary: Подтверждение восстановления
       value:
@@ -4390,6 +4502,16 @@ components:
         secret_key_set:
           type: boolean
           description: true, если `notification_secret_key` задан в БД
+        receipt_api_token_set:
+          type: boolean
+          description: true, если токен proverkacheka зашифрован в `system_settings`
+    AdminReceiptApiTokenUpdate:
+      type: object
+      required: [receipt_api_token]
+      properties:
+        receipt_api_token:
+          type: string
+          description: Токен с proverkacheka.com (не возвращается в GET)
     AdminSettingsUpdate:
       type: object
       required: [external_url]
@@ -5449,6 +5571,8 @@ components:
       description: |
         Тело как при создании. `type` должен совпадать с существующей операцией.
         Дата в будущем переводит операцию в `kind=future`.
+        Если `tag_ids` и `tag_names` **оба отсутствуют** в JSON — теги операции не меняются.
+        Пустые массивы — снять все теги.
     Store:
       type: object
       properties:
@@ -5498,6 +5622,12 @@ components:
             $ref: '#/components/schemas/ReceiptItem'
         fns_check_url:
           type: string
+        already_imported:
+          type: boolean
+          description: true, если чек с этим fiscal-ключом уже сохранён (import/attach)
+        already_in_ledger:
+          type: boolean
+          description: true, если к чеку уже привязана хотя бы одна операция
     ReceiptImportRequest:
       type: object
       required: [account_id, fiscal_drive_number, fiscal_document_number, fiscal_sign, receipt, items]
@@ -5526,6 +5656,65 @@ components:
                 nullable: true
               include:
                 type: boolean
+    ReceiptAttachRequest:
+      type: object
+      required: [transaction_id, fiscal_drive_number, fiscal_document_number, fiscal_sign, receipt, items]
+      properties:
+        transaction_id:
+          type: string
+        fiscal_drive_number:
+          type: string
+        fiscal_document_number:
+          type: string
+        fiscal_sign:
+          type: string
+        receipt:
+          $ref: '#/components/schemas/ParsedReceipt'
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [index, include]
+            properties:
+              index:
+                type: integer
+              category_id:
+                type: string
+              subcategory_id:
+                type: string
+                nullable: true
+              include:
+                type: boolean
+                description: Для attach должно быть true для каждой позиции чека
+        acknowledge_sum_mismatch:
+          type: boolean
+          default: false
+    ReceiptAttachResult:
+      type: object
+      properties:
+        receipt_import_id:
+          type: string
+        transaction:
+          $ref: '#/components/schemas/Transaction'
+    ReceiptSumMismatchError:
+      type: object
+      properties:
+        error:
+          type: object
+          required: [code, message, transaction_amount, receipt_total_sum]
+          properties:
+            code:
+              type: string
+              enum: [ERR_RECEIPT_SUM_MISMATCH]
+            message:
+              type: string
+            transaction_amount:
+              type: integer
+              description: Сумма операции в копейках
+            receipt_total_sum:
+              type: integer
+              description: Итог чека в копейках
     ReceiptImportResult:
       type: object
       properties:
@@ -5557,7 +5746,7 @@ components:
         items:
           type: array
           items:
-            $ref: '#/components/schemas/ReceiptItem'
+            $ref: '#/components/schemas/ReceiptDetailItem'
         fns_check_url:
           type: string
         highlight_item_index:
@@ -5567,8 +5756,16 @@ components:
           type: string
         retail_place:
           type: string
-        Если `tag_ids` и `tag_names` **оба отсутствуют** в JSON — теги операции не меняются.
-        Пустые массивы — снять все теги.
+    ReceiptDetailItem:
+      allOf:
+        - $ref: '#/components/schemas/ReceiptItem'
+        - type: object
+          properties:
+            category_name:
+              type: string
+              description: Категория операции, связанной с позицией (import) или attach
+            subcategory_name:
+              type: string
     Transfer:
       type: object
       properties:

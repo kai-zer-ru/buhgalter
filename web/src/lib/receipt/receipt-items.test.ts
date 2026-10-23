@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-	applyCategoryToSelected,
+	applyCategoryToUnassigned,
 	countIncludedRows,
 	includedRowsMissingCategory,
 	initReceiptRows
@@ -10,19 +10,34 @@ describe('receipt-items', () => {
 	it('initReceiptRows creates included rows', () => {
 		const rows = initReceiptRows(3);
 		expect(rows).toHaveLength(3);
-		expect(rows.every((row) => row.include && !row.selected)).toBe(true);
+		expect(rows.every((row) => row.include && row.categoryId === '')).toBe(true);
 	});
 
-	it('applyCategoryToSelected updates only selected rows', () => {
+	it('applyCategoryToUnassigned updates only included rows without category', () => {
 		const rows = initReceiptRows(3);
-		rows[0].selected = true;
-		rows[2].selected = true;
-		const updated = applyCategoryToSelected(rows, 'cat-1', 'sub-1');
-		expect(updated[0].categoryId).toBe('cat-1');
-		expect(updated[0].subcategoryId).toBe('sub-1');
-		expect(updated[0].selected).toBe(false);
+		rows[0].categoryId = 'existing-cat';
+		rows[1].include = false;
+		const updated = applyCategoryToUnassigned(rows, 'cat-1', 'sub-1');
+		expect(updated[0].categoryId).toBe('existing-cat');
+		expect(updated[0].subcategoryId).toBe('');
 		expect(updated[1].categoryId).toBe('');
 		expect(updated[2].categoryId).toBe('cat-1');
+		expect(updated[2].subcategoryId).toBe('sub-1');
+	});
+
+	it('applyCategoryToUnassigned no-op without categoryId', () => {
+		const rows = initReceiptRows(2);
+		const updated = applyCategoryToUnassigned(rows, '', 'sub-1');
+		expect(updated).toEqual(rows);
+	});
+
+	it('applyCategoryToUnassigned clears nothing when all have categories', () => {
+		const rows = initReceiptRows(2);
+		rows[0].categoryId = 'a';
+		rows[1].categoryId = 'b';
+		const updated = applyCategoryToUnassigned(rows, 'bulk', 'sub');
+		expect(updated[0].categoryId).toBe('a');
+		expect(updated[1].categoryId).toBe('b');
 	});
 
 	it('countIncludedRows and missing category', () => {

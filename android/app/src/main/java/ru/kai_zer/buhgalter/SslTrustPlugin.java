@@ -2,6 +2,8 @@ package ru.kai_zer.buhgalter;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.util.Base64;
+import android.util.Log;
 
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -25,10 +27,13 @@ import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
 import okhttp3.MediaType;
+import okhttp3.MultipartBody;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
+
+import org.json.JSONObject;
 
 @CapacitorPlugin(name = "SslTrust")
 public class SslTrustPlugin extends Plugin {
@@ -76,11 +81,21 @@ public class SslTrustPlugin extends Plugin {
         boolean skipVerify = allowUntrusted || isTrustedOrigin(origin);
         JSObject headersObj = call.getObject("headers");
         String bodyStr = call.getString("body");
+        // One file as flat strings: a nested multipart array often arrives empty on Android.
+        String imageBase64 = call.getString("imageBase64");
+        String imageName = call.getString("imageName", "receipt.jpg");
+        String imageMime = call.getString("imageMime", "image/jpeg");
+        boolean flatImage = imageBase64 != null && !imageBase64.isEmpty();
+        JSArray multipartArr = call.getArray("multipart");
+        boolean hasMultipart =
+                flatImage || (multipartArr != null && multipartArr.length() > 0);
 
         HTTP_EXECUTOR.execute(
                 () -> {
                     try {
-                        OkHttpClient client = buildClient(skipVerify);
+                        // Multipart matches the JS budget in ssl-trust.ts (photo upload).
+                        OkHttpClient client =
+                                buildClient(skipVerify, hasMultipart ? 180 : 12);
                         Request.Builder builder = new Request.Builder().url(url);
 
                         if (headersObj != null) {
@@ -89,6 +104,10 @@ public class SslTrustPlugin extends Plugin {
                                 String key = keys.next();
                                 String value = headersObj.getString(key);
                                 if (value != null) {
+                                    if (hasMultipart
+                                            && "content-type".equalsIgnoreCase(key)) {
+                                        continue;
+                                    }
                                     builder.addHeader(key, value);
                                 }
                             }
@@ -96,6 +115,50 @@ public class SslTrustPlugin extends Plugin {
 
                         if ("GET".equals(method) || "HEAD".equals(method)) {
                             builder.method(method, null);
+                        } else if (flatImage) {
+                            byte[] data = Base64.decode(imageBase64, Base64.DEFAULT);
+                            MediaType mt =
+                                    imageMime != null && !imageMime.isEmpty()
+                                            ? MediaType.parse(imageMime)
+                                            : MediaType.parse("image/jpeg");
+                            MultipartBody body =
+                                    new MultipartBody.Builder()
+                                            .setType(MultipartBody.FORM)
+                                            .addFormDataPart(
+                                                    "image",
+                                                    imageName != null && !imageName.isEmpty()
+                                                            ? imageName
+                                                            : "receipt.jpg",
+                                                    RequestBody.create(data, mt))
+                                            .build();
+                            builder.method(method, body);
+                        } else if (hasMultipart) {
+                            MultipartBody.Builder mpBuilder =
+                                    new MultipartBody.Builder().setType(MultipartBody.FORM);
+                            for (int i = 0; i < multipartArr.length(); i++) {
+                                JSONObject raw = multipartArr.optJSONObject(i);
+                                if (raw == null) continue;
+                                JSObject part = JSObject.fromJSONObject(raw);
+                                String name = part.getString("name");
+                                if (name == null || name.isEmpty()) continue;
+                                String filename = part.getString("filename");
+                                String base64 = part.getString("base64");
+                                if (filename != null && base64 != null) {
+                                    byte[] data = Base64.decode(base64, Base64.DEFAULT);
+                                    String mime = part.getString("mime");
+                                    MediaType mt =
+                                            mime != null && !mime.isEmpty()
+                                                    ? MediaType.parse(mime)
+                                                    : MediaType.parse("application/octet-stream");
+                                    mpBuilder.addFormDataPart(
+                                            name, filename, RequestBody.create(data, mt));
+                                } else {
+                                    String value = part.getString("value");
+                                    mpBuilder.addFormDataPart(
+                                            name, value != null ? value : "");
+                                }
+                            }
+                            builder.method(method, mpBuilder.build());
                         } else {
                             RequestBody body =
                                     bodyStr != null
@@ -119,6 +182,7 @@ public class SslTrustPlugin extends Plugin {
                             | javax.net.ssl.SSLPeerUnverifiedException e) {
                         resolveError(call, "SSL_CERTIFICATE", e.getMessage());
                     } catch (Exception e) {
+                        Log.e("SslTrust", "request failed", e);
                         String msg = e.getMessage() != null ? e.getMessage() : "request failed";
                         String lower = msg.toLowerCase();
                         if (lower.contains("certificate")
@@ -157,12 +221,12 @@ public class SslTrustPlugin extends Plugin {
         return scheme + "://" + host;
     }
 
-    private OkHttpClient buildClient(boolean trustAll) {
+    private OkHttpClient buildClient(boolean trustAll, int timeoutSec) {
         OkHttpClient.Builder builder =
                 new OkHttpClient.Builder()
-                        .connectTimeout(12, TimeUnit.SECONDS)
-                        .readTimeout(12, TimeUnit.SECONDS)
-                        .writeTimeout(12, TimeUnit.SECONDS);
+                        .connectTimeout(timeoutSec, TimeUnit.SECONDS)
+                        .readTimeout(timeoutSec, TimeUnit.SECONDS)
+                        .writeTimeout(timeoutSec, TimeUnit.SECONDS);
         if (!trustAll) {
             return builder.build();
         }

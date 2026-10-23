@@ -39,6 +39,7 @@ describe('shouldPersistRefCache', () => {
 		expect(shouldPersistRefCache('/api/v1/health')).toBe(false);
 		expect(shouldPersistRefCache('/api/v1/setup/status')).toBe(false);
 		expect(shouldPersistRefCache('/api/v1/version/check')).toBe(false);
+		expect(shouldPersistRefCache('/api/v1/receipts/scan-jobs/abc')).toBe(false);
 	});
 });
 

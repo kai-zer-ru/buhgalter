@@ -20,10 +20,13 @@ import (
 )
 
 var (
-	ErrDuplicate       = errors.New("receipt already imported")
-	ErrNotFound        = errors.New("receipt not found")
-	ErrInvalidItem     = errors.New("invalid receipt item")
-	ErrNoItemsSelected = errors.New("no items selected")
+	ErrDuplicate        = errors.New("receipt already imported")
+	ErrNotFound         = errors.New("receipt not found")
+	ErrInvalidItem      = errors.New("invalid receipt item")
+	ErrNoItemsSelected  = errors.New("no items selected")
+	ErrAttachNotExpense = errors.New("attach not expense")
+	ErrAlreadyAttached  = errors.New("receipt already attached")
+	ErrInvalidFiscalKey = errors.New("invalid fiscal key")
 )
 
 type Fetcher interface {
@@ -47,24 +50,24 @@ type ImportInput struct {
 }
 
 type ImportResult struct {
-	ReceiptImportID string              `json:"receipt_import_id"`
+	ReceiptImportID string                    `json:"receipt_import_id"`
 	Transactions    []transaction.Transaction `json:"transactions"`
 }
 
 type Detail struct {
-	ID                   string     `json:"id"`
-	StoreName            string     `json:"store_name,omitempty"`
-	FiscalDocumentNumber string     `json:"fiscal_document_number"`
-	FiscalDriveNumber    string     `json:"fiscal_drive_number"`
-	FiscalSign           string     `json:"fiscal_sign"`
-	TransactionDate      string     `json:"transaction_date"`
-	TotalSum             int64      `json:"total_sum"`
-	TotalSumDisplay      string     `json:"total_sum_display"`
-	Items                []fns.Item `json:"items"`
-	FNSCheckURL          string     `json:"fns_check_url"`
-	HighlightItemIndex   *int       `json:"highlight_item_index,omitempty"`
-	UserINN              string     `json:"user_inn,omitempty"`
-	RetailPlace          string     `json:"retail_place,omitempty"`
+	ID                   string       `json:"id"`
+	StoreName            string       `json:"store_name,omitempty"`
+	FiscalDocumentNumber string       `json:"fiscal_document_number"`
+	FiscalDriveNumber    string       `json:"fiscal_drive_number"`
+	FiscalSign           string       `json:"fiscal_sign"`
+	TransactionDate      string       `json:"transaction_date"`
+	TotalSum             int64        `json:"total_sum"`
+	TotalSumDisplay      string       `json:"total_sum_display"`
+	Items                []DetailItem `json:"items"`
+	FNSCheckURL          string       `json:"fns_check_url"`
+	HighlightItemIndex   *int         `json:"highlight_item_index,omitempty"`
+	UserINN              string       `json:"user_inn,omitempty"`
+	RetailPlace          string       `json:"retail_place,omitempty"`
 }
 
 func queries(db sqlcdb.DBTX) *sqlcdb.Queries {
@@ -95,7 +98,6 @@ func GetByID(ctx context.Context, db *sql.DB, userID, id, transactionID string) 
 		TransactionDate:      row.TransactionDate,
 		TotalSum:             row.TotalSum,
 		TotalSumDisplay:      money.FormatRubles(row.TotalSum),
-		Items:                payload.Items,
 		FNSCheckURL:          row.FnsCheckUrl,
 		UserINN:              payload.UserINN,
 		RetailPlace:          payload.RetailPlace,
@@ -105,6 +107,8 @@ func GetByID(ctx context.Context, db *sql.DB, userID, id, transactionID string) 
 	} else if payload.StoreName != "" {
 		detail.StoreName = payload.StoreName
 	}
+	byIndex, attachCat := loadLinkedCategories(ctx, db, userID, id)
+	detail.Items = detailItemsFromPayload(payload.Items, byIndex, attachCat)
 	if transactionID != "" {
 		receiptID := id
 		idx, err := queries(db).GetTransactionReceiptItemIndex(ctx, sqlcdb.GetTransactionReceiptItemIndexParams{
@@ -147,11 +151,13 @@ func Import(ctx context.Context, db *sql.DB, userID string, in ImportInput) (Imp
 	defer func() { _ = tx.Rollback() }()
 
 	q := queries(tx)
+	fn, fd, fp := NormalizeFiscalKey(in.FiscalDriveNumber, in.FiscalDocumentNumber, in.FiscalSign, in.Receipt)
+	in.FiscalDriveNumber, in.FiscalDocumentNumber, in.FiscalSign = fn, fd, fp
 	if _, err := q.GetReceiptImportByFiscalKey(ctx, sqlcdb.GetReceiptImportByFiscalKeyParams{
 		UserID:               userID,
-		FiscalDriveNumber:    in.FiscalDriveNumber,
-		FiscalDocumentNumber: in.FiscalDocumentNumber,
-		FiscalSign:           in.FiscalSign,
+		FiscalDriveNumber:    fn,
+		FiscalDocumentNumber: fd,
+		FiscalSign:           fp,
 	}); err == nil {
 		return ImportResult{}, ErrDuplicate
 	} else if !errors.Is(err, sql.ErrNoRows) {

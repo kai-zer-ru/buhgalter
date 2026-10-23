@@ -21,19 +21,20 @@ func (q *Queries) CompleteSetup(ctx context.Context, externalUrl *string) error 
 }
 
 const getAdminSettings = `-- name: GetAdminSettings :one
-SELECT external_url, notification_secret_key
+SELECT external_url, notification_secret_key, receipt_api_token_encrypted
 FROM system_settings WHERE id = 1
 `
 
 type GetAdminSettingsRow struct {
-	ExternalUrl           *string `json:"external_url"`
-	NotificationSecretKey string  `json:"notification_secret_key"`
+	ExternalUrl              *string `json:"external_url"`
+	NotificationSecretKey    string  `json:"notification_secret_key"`
+	ReceiptApiTokenEncrypted string  `json:"receipt_api_token_encrypted"`
 }
 
 func (q *Queries) GetAdminSettings(ctx context.Context) (GetAdminSettingsRow, error) {
 	row := q.db.QueryRowContext(ctx, getAdminSettings)
 	var i GetAdminSettingsRow
-	err := row.Scan(&i.ExternalUrl, &i.NotificationSecretKey)
+	err := row.Scan(&i.ExternalUrl, &i.NotificationSecretKey, &i.ReceiptApiTokenEncrypted)
 	return i, err
 }
 
@@ -125,6 +126,17 @@ func (q *Queries) GetNotificationSecretKey(ctx context.Context) (string, error) 
 	return notification_secret_key, err
 }
 
+const getReceiptAPITokenEncrypted = `-- name: GetReceiptAPITokenEncrypted :one
+SELECT receipt_api_token_encrypted FROM system_settings WHERE id = 1
+`
+
+func (q *Queries) GetReceiptAPITokenEncrypted(ctx context.Context) (string, error) {
+	row := q.db.QueryRowContext(ctx, getReceiptAPITokenEncrypted)
+	var receipt_api_token_encrypted string
+	err := row.Scan(&receipt_api_token_encrypted)
+	return receipt_api_token_encrypted, err
+}
+
 const getSetupStatus = `-- name: GetSetupStatus :one
 SELECT external_url FROM system_settings WHERE id = 1
 `
@@ -208,5 +220,16 @@ WHERE id = 1
 
 func (q *Queries) UpdateNotificationSecretKey(ctx context.Context, notificationSecretKey string) error {
 	_, err := q.db.ExecContext(ctx, updateNotificationSecretKey, notificationSecretKey)
+	return err
+}
+
+const updateReceiptAPIToken = `-- name: UpdateReceiptAPIToken :exec
+UPDATE system_settings
+SET receipt_api_token_encrypted = ?, updated_at = datetime('now')
+WHERE id = 1
+`
+
+func (q *Queries) UpdateReceiptAPIToken(ctx context.Context, receiptApiTokenEncrypted string) error {
+	_, err := q.db.ExecContext(ctx, updateReceiptAPIToken, receiptApiTokenEncrypted)
 	return err
 }

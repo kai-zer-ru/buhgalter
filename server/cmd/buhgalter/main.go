@@ -33,7 +33,7 @@ import (
 )
 
 var (
-	version       = "1.9.1"
+	version       = "1.10.0"
 	installMethod = "dev"
 	buildCommit   = "unknown"
 	buildTime     = ""

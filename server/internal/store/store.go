@@ -28,6 +28,9 @@ func normalizeName(name string) string {
 }
 
 func List(ctx context.Context, db *sql.DB, userID string) ([]Store, error) {
+	if err := SyncFromMerchants(ctx, db, userID); err != nil {
+		return nil, err
+	}
 	rows, err := queries(db).ListStoresByUser(ctx, userID)
 	if err != nil {
 		return nil, err

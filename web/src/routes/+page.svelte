@@ -50,6 +50,9 @@
 	import { reportPageLoadFailure } from '$lib/page-load';
 	import { assignIfChanged } from '$lib/state-utils';
 	import { featureFlags, isFeatureEnabled } from '$lib/features';
+	import { isReceiptScannerAvailable } from '$lib/receipt/receipt-scanner-enabled';
+
+	const receiptScannerActive = $derived(isReceiptScannerAvailable($featureFlags));
 
 	const DASHBOARD_PATH = '/api/v1/dashboard';
 	const PAST_TX_PATH = '/api/v1/transactions?kind=manual&limit=10&page=1&sort=date_desc';
@@ -404,110 +407,6 @@
 	{/if}
 {/snippet}
 
-<div class="space-y-6">
-	<div class="flex flex-wrap items-center justify-between gap-3">
-		<h1 class="text-2xl font-semibold">{$_('dashboard.title')}</h1>
-		<div class="flex shrink-0 items-center gap-1">
-			{#if dash?.accounts.length === 0}
-				<a
-					href={resolve('/accounts/new')}
-					class="btn-primary hidden sm:inline-flex min-h-11 items-center"
-				>
-					{$_('accounts.new')}
-				</a>
-			{/if}
-			<NewTransactionButtons
-				onincome={() => openNewTransaction('income')}
-				onexpense={() => openNewTransaction('expense')}
-				onreceipt={() => (receiptOpen = true)}
-				ontransfer={() => {
-					editTransfer = null;
-					repeatTransfer = null;
-					transferOpen = true;
-				}}
-			/>
-		</div>
-	</div>
-
-	{#if loading}
-		<p style:color="var(--text-muted)">{$_('common.loading')}</p>
-	{:else if dash}
-		{#if hasCreditCards}
-			<div class="space-y-4">
-				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-					<div class="card">
-						<p class="text-sm" style:color="var(--text-muted)">{$_('dashboard.total')}</p>
-						<p class="text-3xl font-semibold tabular-nums">
-							<MoneyDisplay cents={dash.total_balance} {currency} class="" />
-						</p>
-						{#if dash.total_forecast !== dash.total_balance}
-							<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
-								{$_('dashboard.withPlans')}:
-								<MoneyDisplay cents={dash.total_forecast} {currency} class="" />
-							</p>
-						{/if}
-					</div>
-					<div class="card">
-						<p class="text-sm" style:color="var(--text-muted)">{$_('dashboard.creditCards')}</p>
-						<p class="text-3xl font-semibold tabular-nums">
-							<MoneyDisplay
-								value={dash.credit_cards_summary!.total_balance_display}
-								{currency}
-								class=""
-							/>
-						</p>
-						<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
-							{$_('accounts.field.creditLimit')}:
-							<MoneyDisplay
-								value={dash.credit_cards_summary!.total_limit_display}
-								{currency}
-								class=""
-							/>
-						</p>
-						{#if dash.credit_cards_summary!.total_forecast !== dash.credit_cards_summary!.total_balance}
-							<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
-								{$_('dashboard.withPlans')}:
-								<MoneyDisplay
-									value={dash.credit_cards_summary!.total_forecast_display}
-									{currency}
-									class=""
-								/>
-							</p>
-						{/if}
-					</div>
-				</div>
-				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-					<a href={resolve('/debts')} class="card block self-start transition hover:opacity-90">
-						<p class="text-sm" style:color="var(--text-muted)">{$_('debts.title')}</p>
-						<div class="mt-1 space-y-1">
-							{#if hasDebts}
-								{#if dash.debts_summary.i_owe > 0}
-									<p class="tabular-nums" style:color="var(--danger)">
-										{$_('debts.summary.iOwe')}:
-										<MoneyDisplay cents={dash.debts_summary.i_owe} {currency} class="" />
-									</p>
-								{/if}
-								{#if dash.debts_summary.owed_to_me > 0}
-									<p class="tabular-nums" style:color="var(--primary)">
-										{$_('debts.summary.owedToMe')}:
-										<MoneyDisplay cents={dash.debts_summary.owed_to_me} {currency} class="" />
-									</p>
-								{/if}
-							{:else}
-								<p class="text-3xl font-semibold tabular-nums" style:color="var(--primary)">
-									{$_('debts.summary.none')}
-								</p>
-							{/if}
-						</div>
-					</a>
-				</div>
-			</div>
-		{:else}
-			<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:items-stretch">
-				<div class="card flex h-full flex-col">
-					<p class="text-sm" style:color="var(--text-muted)">{$_('dashboard.total')}</p>
-					<p class="text-3xl font-semibold tabular-nums">
-						<MoneyDisplay cents={dash.total_balance} {currency} class="" />
 <PullToRefresh onRefresh={() => loadAll({ silent: true })}>
 	<div class="space-y-6">
 		{#if (dash?.inbox_count ?? 0) > 0}
@@ -539,6 +438,7 @@
 				<NewTransactionButtons
 					onincome={() => openNewTransaction('income')}
 					onexpense={() => openNewTransaction('expense')}
+					onreceipt={receiptScannerActive ? () => (receiptOpen = true) : undefined}
 					ontransfer={() => {
 						editTransfer = null;
 						repeatTransfer = null;
@@ -806,6 +706,7 @@
 														)}
 													onattachCredit={(tx) =>
 														void goto(resolve(`/credits?attach_tx=${encodeURIComponent(tx.id)}`))}
+													onreceiptAttached={() => void loadAll({ silent: true })}
 													onrepeat={openRepeat}
 													onsaveAsTemplate={(tx) => void saveAsTemplate(tx)}
 													onedit={openEdit}
@@ -855,6 +756,7 @@
 														)}
 													onattachCredit={(tx) =>
 														void goto(resolve(`/credits?attach_tx=${encodeURIComponent(tx.id)}`))}
+													onreceiptAttached={() => void loadAll({ silent: true })}
 													onrepeat={openRepeat}
 													onsaveAsTemplate={(tx) => void saveAsTemplate(tx)}
 													onedit={openEdit}

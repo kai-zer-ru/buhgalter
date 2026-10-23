@@ -677,6 +677,45 @@ func (q *Queries) ListDueFutureTransactions(ctx context.Context, arg ListDueFutu
 	return items, nil
 }
 
+const listExpenseTransactionsMissingStoreWithMerchant = `-- name: ListExpenseTransactionsMissingStoreWithMerchant :many
+SELECT t.id, m.name AS merchant_name
+FROM transactions t
+JOIN merchants m ON m.id = t.merchant_id AND m.user_id = t.user_id
+WHERE t.user_id = ?
+  AND t.type = 'expense'
+  AND t.merchant_id IS NOT NULL
+  AND trim(t.merchant_id) != ''
+  AND t.store_id IS NULL
+`
+
+type ListExpenseTransactionsMissingStoreWithMerchantRow struct {
+	ID           string `json:"id"`
+	MerchantName string `json:"merchant_name"`
+}
+
+func (q *Queries) ListExpenseTransactionsMissingStoreWithMerchant(ctx context.Context, userID string) ([]ListExpenseTransactionsMissingStoreWithMerchantRow, error) {
+	rows, err := q.db.QueryContext(ctx, listExpenseTransactionsMissingStoreWithMerchant, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListExpenseTransactionsMissingStoreWithMerchantRow{}
+	for rows.Next() {
+		var i ListExpenseTransactionsMissingStoreWithMerchantRow
+		if err := rows.Scan(&i.ID, &i.MerchantName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listInboxTransactionsDateAsc = `-- name: ListInboxTransactionsDateAsc :many
 SELECT
     t.id,
@@ -1871,6 +1910,29 @@ func (q *Queries) ReassignTransactionsCategoryByFilter(ctx context.Context, arg 
 		arg.UserID,
 		arg.CategoryID_2,
 		arg.Type,
+	)
+	return err
+}
+
+const setTransactionStoreID = `-- name: SetTransactionStoreID :exec
+UPDATE transactions
+SET store_id = ?, updated_at = ?
+WHERE id = ? AND user_id = ? AND store_id IS NULL
+`
+
+type SetTransactionStoreIDParams struct {
+	StoreID   *string `json:"store_id"`
+	UpdatedAt string  `json:"updated_at"`
+	ID        string  `json:"id"`
+	UserID    string  `json:"user_id"`
+}
+
+func (q *Queries) SetTransactionStoreID(ctx context.Context, arg SetTransactionStoreIDParams) error {
+	_, err := q.db.ExecContext(ctx, setTransactionStoreID,
+		arg.StoreID,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
 	)
 	return err
 }

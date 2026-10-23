@@ -8,6 +8,7 @@
 |----------|------------|
 | [android-client-ui.md](android-client-ui.md) | Интерфейс: оболочка, навигация, экраны |
 | [android-client-platform.md](android-client-platform.md) | Платформа: авторизация, сервер, офлайн, сборка |
+| [android-client-receipts.md](android-client-receipts.md) | Сканер чеков (маршруты, online-only) |
 
 Сборка APK: [android/README.md](../android/README.md) (**Node.js 22+**, JDK 21, Android SDK). Дорожная карта: [roadmap/android-client.md](../roadmap/android-client.md).
 

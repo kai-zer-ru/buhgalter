@@ -5,10 +5,12 @@
 	let {
 		onincome,
 		onexpense,
+		onreceipt,
 		ontransfer
 	}: {
 		onincome: () => void;
 		onexpense: () => void;
+		onreceipt?: () => void;
 		ontransfer?: () => void;
 	} = $props();
 </script>
@@ -20,6 +22,9 @@
 	onclick={onincome}
 />
 <IconButton icon="expense" label={$_('transactions.type.expense')} onclick={onexpense} />
+{#if onreceipt}
+	<IconButton icon="receipt" label={$_('receipt.title')} onclick={onreceipt} />
+{/if}
 {#if ontransfer}
 	<IconButton icon="transfer" label={$_('transactions.transfer')} onclick={ontransfer} />
 {/if}

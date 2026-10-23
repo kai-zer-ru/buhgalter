@@ -1,25 +1,33 @@
 <script lang="ts">
 	import { _ } from 'svelte-i18n';
-	import { getReceipt, type ReceiptDetail } from '$lib/api/client';
+	import { detachReceipt, getReceipt, type ReceiptDetail } from '$lib/api/client';
 	import ModalShell from '$lib/components/ModalShell.svelte';
 	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
+	import { confirm } from '$lib/confirm';
 	import { formatReceiptItemSum } from '$lib/receipt/receipt-items';
+	import { toast } from '$lib/toast';
+	import { formatApiError } from '$lib/api/errors';
 
 	type Props = {
 		open: boolean;
 		receiptImportId: string;
 		transactionId?: string;
+		canDetach?: boolean;
 		onclose: () => void;
+		ondetached?: () => void;
 	};
 
 	let {
 		open = $bindable(),
 		receiptImportId,
 		transactionId = '',
-		onclose
+		canDetach = false,
+		onclose,
+		ondetached
 	}: Props = $props();
 
 	let loading = $state(false);
+	let detaching = $state(false);
 	let error = $state('');
 	let detail = $state<ReceiptDetail | null>(null);
 
@@ -38,6 +46,31 @@
 			error = e instanceof Error ? e.message : $_('receipt.loadError');
 		} finally {
 			loading = false;
+		}
+	}
+
+	async function handleDetach() {
+		if (!transactionId || detaching) return;
+		const ok = await confirm({
+			title: $_('receipt.detach.title'),
+			message: $_('receipt.detach.message'),
+			confirmLabel: $_('receipt.detach.confirm'),
+			cancelLabel: $_('common.cancel'),
+			danger: true
+		});
+		if (!ok) return;
+		detaching = true;
+		error = '';
+		try {
+			await detachReceipt(transactionId);
+			toast.success($_('receipt.detach.success'));
+			open = false;
+			onclose();
+			ondetached?.();
+		} catch (e) {
+			error = formatApiError(e, 'receipt.detach.error');
+		} finally {
+			detaching = false;
 		}
 	}
 </script>
@@ -67,6 +100,7 @@
 							<th class="p-2 text-left">{$_('receipt.col.item')}</th>
 							<th class="p-2 text-right">{$_('receipt.col.qty')}</th>
 							<th class="p-2 text-right">{$_('receipt.col.sum')}</th>
+							<th class="p-2 text-left">{$_('transactions.col.category')}</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -84,20 +118,41 @@
 								<td class="p-2 text-right tabular-nums">
 									<MoneyDisplay value={formatReceiptItemSum(item.sum)} />
 								</td>
+								<td class="p-2 text-sm" style:color="var(--text-muted)">
+									{#if item.category_name}
+										{item.category_name}{item.subcategory_name ? ` · ${item.subcategory_name}` : ''}
+									{:else}
+										—
+									{/if}
+								</td>
 							</tr>
 						{/each}
 					</tbody>
 				</table>
 			</div>
 
-			<a
-				class="btn-ghost inline-flex min-h-11 items-center"
-				href={detail.fns_check_url}
-				target="_blank"
-				rel="noopener noreferrer"
-			>
-				{$_('receipt.openFns')}
-			</a>
+			<div class="flex flex-wrap gap-2">
+				<!-- eslint-disable svelte/no-navigation-without-resolve -- external FNS check URL -->
+				<a
+					class="btn-ghost inline-flex min-h-11 items-center"
+					href={detail.fns_check_url}
+					target="_blank"
+					rel="noopener noreferrer"
+				>
+					{$_('receipt.openFns')}
+				</a>
+				<!-- eslint-enable svelte/no-navigation-without-resolve -->
+				{#if canDetach && transactionId}
+					<button
+						type="button"
+						class="btn-ghost min-h-11 text-red-600"
+						disabled={detaching}
+						onclick={handleDetach}
+					>
+						{$_('receipt.detach.confirm')}
+					</button>
+				{/if}
+			</div>
 		</div>
 	{/if}
 </ModalShell>

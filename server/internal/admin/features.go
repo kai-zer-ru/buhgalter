@@ -1,12 +1,14 @@
 package admin
 
 import (
+	"database/sql"
 	"encoding/json"
 	"net/http"
 
 	"github.com/kai-zer-ru/buhgalter/internal/apperror"
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	"github.com/kai-zer-ru/buhgalter/internal/features"
+	"github.com/kai-zer-ru/buhgalter/internal/receipt"
 )
 
 type adminFlagItem struct {
@@ -24,7 +26,20 @@ func (h *Handler) GetFeaturesSnapshot(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
+	if err := enrichReceiptScannerSnapshot(r, h.Store.DB(), snap); err != nil {
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	}
 	writeJSON(w, http.StatusOK, snap)
+}
+
+func enrichReceiptScannerSnapshot(r *http.Request, db *sql.DB, snap map[string]bool) error {
+	configured, err := receipt.APIConfigured(r.Context(), db)
+	if err != nil {
+		return err
+	}
+	snap["receipt_api_token_set"] = configured
+	return nil
 }
 
 // GetFeatures returns catalog metadata + enabled state for the admin form.

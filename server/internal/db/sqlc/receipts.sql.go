@@ -9,6 +9,92 @@ import (
 	"context"
 )
 
+const attachReceiptToTransaction = `-- name: AttachReceiptToTransaction :execrows
+UPDATE transactions
+SET receipt_import_id = ?,
+    receipt_item_index = NULL,
+    store_id = COALESCE(store_id, ?),
+    updated_at = ?
+WHERE id = ? AND user_id = ? AND type = 'expense' AND receipt_import_id IS NULL
+`
+
+type AttachReceiptToTransactionParams struct {
+	ReceiptImportID *string `json:"receipt_import_id"`
+	StoreID         *string `json:"store_id"`
+	UpdatedAt       string  `json:"updated_at"`
+	ID              string  `json:"id"`
+	UserID          string  `json:"user_id"`
+}
+
+func (q *Queries) AttachReceiptToTransaction(ctx context.Context, arg AttachReceiptToTransactionParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, attachReceiptToTransaction,
+		arg.ReceiptImportID,
+		arg.StoreID,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const countReceiptLinkedTransactions = `-- name: CountReceiptLinkedTransactions :one
+SELECT COUNT(*) AS n
+FROM transactions t
+WHERE t.user_id = ? AND t.receipt_import_id = ?
+`
+
+type CountReceiptLinkedTransactionsParams struct {
+	UserID          string  `json:"user_id"`
+	ReceiptImportID *string `json:"receipt_import_id"`
+}
+
+func (q *Queries) CountReceiptLinkedTransactions(ctx context.Context, arg CountReceiptLinkedTransactionsParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countReceiptLinkedTransactions, arg.UserID, arg.ReceiptImportID)
+	var n int64
+	err := row.Scan(&n)
+	return n, err
+}
+
+const deleteReceiptImportItemCategories = `-- name: DeleteReceiptImportItemCategories :exec
+DELETE FROM receipt_import_item_categories
+WHERE user_id = ? AND receipt_import_id = ?
+`
+
+type DeleteReceiptImportItemCategoriesParams struct {
+	UserID          string `json:"user_id"`
+	ReceiptImportID string `json:"receipt_import_id"`
+}
+
+func (q *Queries) DeleteReceiptImportItemCategories(ctx context.Context, arg DeleteReceiptImportItemCategoriesParams) error {
+	_, err := q.db.ExecContext(ctx, deleteReceiptImportItemCategories, arg.UserID, arg.ReceiptImportID)
+	return err
+}
+
+const detachReceiptFromTransaction = `-- name: DetachReceiptFromTransaction :execrows
+UPDATE transactions
+SET receipt_import_id = NULL,
+    receipt_item_index = NULL,
+    updated_at = ?
+WHERE id = ? AND user_id = ? AND receipt_import_id IS NOT NULL
+`
+
+type DetachReceiptFromTransactionParams struct {
+	UpdatedAt string `json:"updated_at"`
+	ID        string `json:"id"`
+	UserID    string `json:"user_id"`
+}
+
+func (q *Queries) DetachReceiptFromTransaction(ctx context.Context, arg DetachReceiptFromTransactionParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, detachReceiptFromTransaction, arg.UpdatedAt, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const getReceiptImportByFiscalKey = `-- name: GetReceiptImportByFiscalKey :one
 SELECT id
 FROM receipt_imports
@@ -149,6 +235,157 @@ func (q *Queries) InsertReceiptImport(ctx context.Context, arg InsertReceiptImpo
 		arg.PayloadJson,
 		arg.FnsCheckUrl,
 		arg.CreatedAt,
+	)
+	return err
+}
+
+const listReceiptImportItemCategories = `-- name: ListReceiptImportItemCategories :many
+SELECT item_index, category_id, subcategory_id
+FROM receipt_import_item_categories
+WHERE user_id = ? AND receipt_import_id = ?
+ORDER BY item_index ASC
+`
+
+type ListReceiptImportItemCategoriesParams struct {
+	UserID          string `json:"user_id"`
+	ReceiptImportID string `json:"receipt_import_id"`
+}
+
+type ListReceiptImportItemCategoriesRow struct {
+	ItemIndex     int64   `json:"item_index"`
+	CategoryID    string  `json:"category_id"`
+	SubcategoryID *string `json:"subcategory_id"`
+}
+
+func (q *Queries) ListReceiptImportItemCategories(ctx context.Context, arg ListReceiptImportItemCategoriesParams) ([]ListReceiptImportItemCategoriesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listReceiptImportItemCategories, arg.UserID, arg.ReceiptImportID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListReceiptImportItemCategoriesRow{}
+	for rows.Next() {
+		var i ListReceiptImportItemCategoriesRow
+		if err := rows.Scan(&i.ItemIndex, &i.CategoryID, &i.SubcategoryID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listReceiptLinkedTransactionCategories = `-- name: ListReceiptLinkedTransactionCategories :many
+SELECT t.receipt_item_index, t.category_id, t.subcategory_id
+FROM transactions t
+WHERE t.user_id = ? AND t.receipt_import_id = ?
+  AND t.category_id IS NOT NULL AND t.category_id != ''
+  AND t.receipt_item_index IS NOT NULL
+`
+
+type ListReceiptLinkedTransactionCategoriesParams struct {
+	UserID          string  `json:"user_id"`
+	ReceiptImportID *string `json:"receipt_import_id"`
+}
+
+type ListReceiptLinkedTransactionCategoriesRow struct {
+	ReceiptItemIndex *int64  `json:"receipt_item_index"`
+	CategoryID       *string `json:"category_id"`
+	SubcategoryID    *string `json:"subcategory_id"`
+}
+
+func (q *Queries) ListReceiptLinkedTransactionCategories(ctx context.Context, arg ListReceiptLinkedTransactionCategoriesParams) ([]ListReceiptLinkedTransactionCategoriesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listReceiptLinkedTransactionCategories, arg.UserID, arg.ReceiptImportID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListReceiptLinkedTransactionCategoriesRow{}
+	for rows.Next() {
+		var i ListReceiptLinkedTransactionCategoriesRow
+		if err := rows.Scan(&i.ReceiptItemIndex, &i.CategoryID, &i.SubcategoryID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listReceiptLinkedTransactions = `-- name: ListReceiptLinkedTransactions :many
+SELECT t.id, t.receipt_item_index
+FROM transactions t
+WHERE t.user_id = ? AND t.receipt_import_id = ?
+ORDER BY t.receipt_item_index ASC, t.transaction_date ASC, t.id ASC
+`
+
+type ListReceiptLinkedTransactionsParams struct {
+	UserID          string  `json:"user_id"`
+	ReceiptImportID *string `json:"receipt_import_id"`
+}
+
+type ListReceiptLinkedTransactionsRow struct {
+	ID               string `json:"id"`
+	ReceiptItemIndex *int64 `json:"receipt_item_index"`
+}
+
+func (q *Queries) ListReceiptLinkedTransactions(ctx context.Context, arg ListReceiptLinkedTransactionsParams) ([]ListReceiptLinkedTransactionsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listReceiptLinkedTransactions, arg.UserID, arg.ReceiptImportID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListReceiptLinkedTransactionsRow{}
+	for rows.Next() {
+		var i ListReceiptLinkedTransactionsRow
+		if err := rows.Scan(&i.ID, &i.ReceiptItemIndex); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const upsertReceiptImportItemCategory = `-- name: UpsertReceiptImportItemCategory :exec
+INSERT INTO receipt_import_item_categories (
+    receipt_import_id, item_index, user_id, category_id, subcategory_id
+) VALUES (?, ?, ?, ?, ?)
+ON CONFLICT(receipt_import_id, item_index) DO UPDATE SET
+    category_id = excluded.category_id,
+    subcategory_id = excluded.subcategory_id
+`
+
+type UpsertReceiptImportItemCategoryParams struct {
+	ReceiptImportID string  `json:"receipt_import_id"`
+	ItemIndex       int64   `json:"item_index"`
+	UserID          string  `json:"user_id"`
+	CategoryID      string  `json:"category_id"`
+	SubcategoryID   *string `json:"subcategory_id"`
+}
+
+func (q *Queries) UpsertReceiptImportItemCategory(ctx context.Context, arg UpsertReceiptImportItemCategoryParams) error {
+	_, err := q.db.ExecContext(ctx, upsertReceiptImportItemCategory,
+		arg.ReceiptImportID,
+		arg.ItemIndex,
+		arg.UserID,
+		arg.CategoryID,
+		arg.SubcategoryID,
 	)
 	return err
 }

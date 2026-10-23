@@ -85,6 +85,8 @@ cd android/ui && npm install && npm run dev
 
 После изменений: `make android-sync`, затем Run в Android Studio (каталог `android/`).
 
+`android-sync` проверяет, что в `node_modules/@capacitor/android` есть `capacitor/build.gradle`; если пакет установился неполностью — автоматически выполнится `npm ci` в `android/`.
+
 **Application ID:** `ru.kai_zer.buhgalter`
 
 `local.properties` создаётся скриптом установки и в git не попадает.
@@ -92,6 +94,8 @@ cd android/ui && npm install && npm run dev
 ## Подпись release APK
 
 Локально: `android/keystore.properties` по образцу `keystore.properties.example`. Файл `.jks` **не коммитить** (в корневом `.gitignore`: `*.jks`); хранить отдельно и бэкапить пароль.
+
+Без своего keystore `make android-apk-release` создаёт `~/.android/debug.keystore` (как CI без secrets) — только для установки на своё устройство, не для магазина.
 
 CI (GitHub Secrets): `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. Без secrets CI подпишет debug-keystore (предупреждение в логе).
 

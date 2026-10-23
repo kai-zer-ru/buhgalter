@@ -1,6 +1,6 @@
 # Сканер чеков
 
-Текущий код (v1.3+): [docs/receipt-scanner.md](../docs/receipt-scanner.md). Целевой переработанный релиз — **v1.10.0** ([ROADMAP](../ROADMAP.md#v1100)): QR на устройстве, BYO состав (proverkacheka), прикрепление к существующим операциям, опционально ИИ и вложение фото. Web + Android.
+Текущий код: [docs/receipt-scanner.md](../docs/receipt-scanner.md). Релиз — **v1.10.0** ([ROADMAP](../ROADMAP.md#v1100)): один пункт, Web + Android. QR на устройстве, BYO состав (proverkacheka), import и прикрепление к существующей операции. ИИ по фото и вложение снимка — [общие планы](../ROADMAP.md#общие-планы), не v1.10.
 
 Feature flag: `receipt_scanner` (см. [feature-toggles.md](feature-toggles.md)). Модуль активен только с токеном API в админке — см. [README](../README.md#сканер-чеков-токен-proverkacheka).
 
@@ -18,10 +18,9 @@ Feature flag: `receipt_scanner` (см. [feature-toggles.md](feature-toggles.md))
 
 ## Scope v1.10.0 (сканер)
 
-1. QR на устройстве (Android + web).
-2. BYO proverkacheka в админке.
-3. Attach к существующей операции.
-4. Опционально: ИИ по фото, вложение снимка.
+Один функционал. Подробности — в [docs/receipt-scanner.md](../docs/receipt-scanner.md): QR на устройстве (Android + web), BYO proverkacheka в админке, import и attach, категории строк, дедуп, открепление, магазин чека.
+
+ИИ по фото и вложение снимка — не этот релиз.
 
 ## Зависимости
 

@@ -32,6 +32,8 @@ import { isServerOfflineMode } from '$lib/offline/server-connectivity';
 import { getApiBase } from '$lib/platform/server-url';
 import { normalizeServerUrl } from '$lib/platform/server-origin';
 import { isNativeApp } from '$lib/platform/native';
+import { compressReceiptPhoto } from '$lib/receipt/compress-photo';
+import { formDataToNativeMultipart } from '$lib/platform/form-data-native';
 import {
 	isHttpsOrigin,
 	isOriginTrusted,
@@ -61,6 +63,11 @@ export class ApiError extends Error {
 /** HTTP statuses that usually mean the server or proxy is temporarily down. */
 export function isTransientHttpError(status: number): boolean {
 	return status === 408 || status === 502 || status === 503 || status === 504;
+}
+
+/** FormData (receipt photo) must outlive the default 12s abort or the client drops a 202 and never polls. */
+export function apiAbortTimeoutMs(body: BodyInit | null | undefined): number {
+	return typeof FormData !== 'undefined' && body instanceof FormData ? 180_000 : 12_000;
 }
 
 function shouldLogoutOn401(path: string): boolean {
@@ -95,17 +102,22 @@ async function fetchApi<T>(
 
 	if (isNativeApp() && isHttpsOrigin(base) && isOriginTrusted(base)) {
 		const url = `${base}${path}`;
+		const multipart =
+			init?.body instanceof FormData ? await formDataToNativeMultipart(init.body) : undefined;
 		const body =
-			typeof init?.body === 'string'
-				? init.body
-				: init?.body && !(init.body instanceof FormData)
-					? String(init.body)
-					: undefined;
+			multipart !== undefined
+				? undefined
+				: typeof init?.body === 'string'
+					? init.body
+					: init?.body && !(init.body instanceof FormData)
+						? String(init.body)
+						: undefined;
 		try {
 			const result = await nativeHttpRequest(url, {
 				method,
 				headers,
 				body,
+				multipart,
 				allowUntrusted: true
 			});
 			const apiErr = nativeResultToApiError(result);
@@ -159,10 +171,9 @@ async function fetchApi<T>(
 	}
 
 	try {
-		const timeoutSignal = abortTimeout(12_000);
+		const timeoutSignal = abortTimeout(apiAbortTimeoutMs(init?.body));
 		const res = await fetch(`${base}${path}`, {
 			credentials: 'omit',
-			signal: init?.signal ?? timeoutSignal,
 			headers: {
 				Accept: 'application/json',
 				'Accept-Language': acceptLanguage(),
@@ -172,7 +183,8 @@ async function fetchApi<T>(
 					: {}),
 				...init?.headers
 			},
-			...init
+			...init,
+			signal: init?.signal ?? timeoutSignal
 		});
 
 		if (!res.ok) {
@@ -1042,6 +1054,9 @@ export type Transaction = {
 	transfer_is_out?: boolean;
 	credit_payment_linked?: boolean;
 	subscription_id?: string | null;
+	receipt_import_id?: string | null;
+	store_id?: string | null;
+	store_name?: string | null;
 	transaction_date: string;
 	created_at: string;
 	updated_at: string;
@@ -2402,6 +2417,173 @@ export function createImportJob(opts: ImportOptions) {
 
 export function getImportJob(id: string) {
 	return request<ImportJob>(`/api/v1/import/jobs/${encodeURIComponent(id)}`);
+}
+
+export type ReceiptItem = {
+	name: string;
+	quantity: number;
+	price: number;
+	sum: number;
+};
+
+export type ParsedReceipt = {
+	fiscal_drive_number: string;
+	fiscal_document_number: string;
+	fiscal_sign: string;
+	date_time: string;
+	total_sum: number;
+	store_name: string;
+	user_inn?: string;
+	retail_place?: string;
+	items: ReceiptItem[];
+	fns_check_url: string;
+	already_imported?: boolean;
+	already_in_ledger?: boolean;
+};
+
+export type ReceiptDetailItem = ReceiptItem & {
+	category_name?: string;
+	subcategory_name?: string;
+};
+
+export type ReceiptDetail = {
+	id: string;
+	store_name?: string;
+	fiscal_document_number: string;
+	fiscal_drive_number: string;
+	fiscal_sign: string;
+	transaction_date: string;
+	total_sum: number;
+	total_sum_display: string;
+	items: ReceiptDetailItem[];
+	fns_check_url: string;
+	highlight_item_index?: number;
+	user_inn?: string;
+	retail_place?: string;
+};
+
+export function parseReceipt(qr: string) {
+	return request<ParsedReceipt>('/api/v1/receipts/parse', {
+		method: 'POST',
+		body: JSON.stringify({ qr })
+	});
+}
+
+export type ReceiptScanJob = {
+	id: string;
+	status: 'queued' | 'running' | 'done' | 'failed';
+	error_message?: string;
+	result?: ParsedReceipt;
+	created_at?: string;
+	started_at?: string;
+	finished_at?: string;
+};
+
+export async function createReceiptScanJob(file: File) {
+	const image = await compressReceiptPhoto(file);
+	const form = new FormData();
+	form.append('image', image);
+	return request<ReceiptScanJob>('/api/v1/receipts/scan-jobs', {
+		method: 'POST',
+		body: form
+	});
+}
+
+export function getReceiptScanJob(id: string) {
+	const nonce = Date.now();
+	return request<ReceiptScanJob>(`/api/v1/receipts/scan-jobs/${encodeURIComponent(id)}?_=${nonce}`);
+}
+
+export async function pollReceiptScanJob(
+	id: string,
+	opts?: {
+		intervalMs?: number;
+		timeoutMs?: number;
+		onStatus?: (job: ReceiptScanJob) => void;
+		shouldAbort?: () => boolean;
+	}
+): Promise<ParsedReceipt> {
+	const intervalMs = opts?.intervalMs ?? 350;
+	const deadline = Date.now() + (opts?.timeoutMs ?? 180_000);
+	for (;;) {
+		if (opts?.shouldAbort?.()) {
+			throw new ApiError('ERR_ABORTED', 'Aborted', 0);
+		}
+		if (Date.now() > deadline) {
+			throw new ApiError('ERR_RECEIPT_SCAN', 'ERR_RECEIPT_SCAN', 504);
+		}
+		const job = await getReceiptScanJob(id);
+		opts?.onStatus?.(job);
+		if (job.status === 'done') {
+			if (job.result) {
+				return job.result;
+			}
+			await new Promise((resolve) => setTimeout(resolve, intervalMs));
+			continue;
+		}
+		if (job.status === 'failed') {
+			const code = job.error_message ?? 'ERR_RECEIPT_SCAN';
+			throw new ApiError(code, code, 400);
+		}
+		await new Promise((resolve) => setTimeout(resolve, intervalMs));
+	}
+}
+
+export function importReceipt(payload: {
+	account_id: string;
+	fiscal_drive_number: string;
+	fiscal_document_number: string;
+	fiscal_sign: string;
+	receipt: ParsedReceipt;
+	items: Array<{
+		index: number;
+		category_id?: string;
+		subcategory_id?: string | null;
+		include: boolean;
+	}>;
+}) {
+	return request<{ receipt_import_id: string; transactions: Transaction[] }>(
+		'/api/v1/receipts/import',
+		{
+			method: 'POST',
+			body: JSON.stringify(payload)
+		}
+	);
+}
+
+export function detachReceipt(transactionId: string) {
+	return request<{ transaction: Transaction }>('/api/v1/receipts/detach', {
+		method: 'POST',
+		body: JSON.stringify({ transaction_id: transactionId })
+	});
+}
+
+export function attachReceipt(payload: {
+	transaction_id: string;
+	fiscal_drive_number: string;
+	fiscal_document_number: string;
+	fiscal_sign: string;
+	receipt: ParsedReceipt;
+	items: Array<{
+		index: number;
+		category_id?: string;
+		subcategory_id?: string | null;
+		include: boolean;
+	}>;
+	acknowledge_sum_mismatch?: boolean;
+}) {
+	return request<{ receipt_import_id: string; transaction: Transaction }>(
+		'/api/v1/receipts/attach',
+		{
+			method: 'POST',
+			body: JSON.stringify(payload)
+		}
+	);
+}
+
+export function getReceipt(id: string, transactionId?: string) {
+	const q = transactionId ? `?transaction_id=${encodeURIComponent(transactionId)}` : '';
+	return request<ReceiptDetail>(`/api/v1/receipts/${id}${q}`);
 }
 
 export { exportCSVUrl };

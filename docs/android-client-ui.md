@@ -190,7 +190,8 @@
 
 - Сводка по счетам (включая кредитные карты), карточка долгов, виджет бюджета месяца — как в веб-дашборде
 - Последние операции (ручные и плановые)
-- Создание дохода / расхода / перевода; из меню операции — повтор, «сделать периодической» (`/recurring-operations?from_tx=`), «сделать подпиской» / «прикрепить к подписке» (`/subscriptions/new?from_tx=` / `/subscriptions?attach_tx=`)
+- Создание дохода / расхода / перевода; из меню операции — повтор, «сделать периодической» (`/recurring-operations?from_tx=`), «сделать подпиской» / «прикрепить к подписке» (`/subscriptions/new?from_tx=` / `/subscriptions?attach_tx=`), **«прикрепить чек»** (`/receipts/attach?attach_tx=` — online-only, модуль `receipt_scanner` + токен на сервере; см. [receipt-scanner.md](receipt-scanner.md))
+- **Import чека** — кнопка **«Чек»** → `/receipts/import` (online-only). **Attach / просмотр / открепление** — меню операции, маршруты `/receipts/attach`, `/receipts/[id]`. Подробно: [android-client-receipts.md](android-client-receipts.md), [receipt-scanner.md](receipt-scanner.md).
 
 ## Ошибка загрузки страницы
 

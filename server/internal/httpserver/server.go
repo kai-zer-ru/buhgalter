@@ -32,8 +32,8 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/merchant"
 	appmw "github.com/kai-zer-ru/buhgalter/internal/middleware"
 	"github.com/kai-zer-ru/buhgalter/internal/realtime"
-	"github.com/kai-zer-ru/buhgalter/internal/recurring"
 	"github.com/kai-zer-ru/buhgalter/internal/receipt"
+	"github.com/kai-zer-ru/buhgalter/internal/recurring"
 	"github.com/kai-zer-ru/buhgalter/internal/settingscache"
 	"github.com/kai-zer-ru/buhgalter/internal/setup"
 	"github.com/kai-zer-ru/buhgalter/internal/static"
@@ -306,11 +306,17 @@ func (s *Server) Handler() http.Handler {
 			ar.Delete("/category-rules/{id}", categoryRuleHandler.Delete)
 
 			ar.Get("/stores", storeHandler.List)
-			ar.Post("/receipts/parse", receiptHandler.Parse)
-			ar.Post("/receipts/scan-jobs", receiptHandler.CreateScanJob)
-			ar.Get("/receipts/scan-jobs/{id}", receiptHandler.GetScanJob)
-			ar.Post("/receipts/import", receiptHandler.Import)
-			ar.Get("/receipts/{id}", receiptHandler.Get)
+			ar.Group(func(mod chi.Router) {
+				mod.Use(features.RequireFeature(dbHandle, features.ReceiptScanner))
+				mod.Use(receipt.RequireAPIConfigured(dbHandle))
+				mod.Post("/receipts/parse", receiptHandler.Parse)
+				mod.Post("/receipts/scan-jobs", receiptHandler.CreateScanJob)
+				mod.Get("/receipts/scan-jobs/{id}", receiptHandler.GetScanJob)
+				mod.Post("/receipts/import", receiptHandler.Import)
+				mod.Post("/receipts/attach", receiptHandler.Attach)
+				mod.Post("/receipts/detach", receiptHandler.Detach)
+				mod.Get("/receipts/{id}", receiptHandler.Get)
+			})
 
 			ar.Group(func(mod chi.Router) {
 				mod.Use(features.RequireFeature(dbHandle, features.ImportExport))
@@ -367,6 +373,7 @@ func (s *Server) Handler() http.Handler {
 			ad.Get("/settings", adminHandler.GetSettings)
 			ad.Put("/settings", adminHandler.PutSettings)
 			ad.Put("/settings/notification-secret", adminHandler.PutNotificationSecretKey)
+			ad.Put("/settings/receipt-api-token", adminHandler.PutReceiptAPIToken)
 			ad.Get("/features", adminHandler.GetFeatures)
 			ad.Put("/features", adminHandler.PutFeatures)
 			ad.Get("/users", adminHandler.ListUsers)

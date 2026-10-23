@@ -18,6 +18,7 @@
 | [android-client.md](android-client.md) | Android-приложение: обзор |
 | [android-client-ui.md](android-client-ui.md) | Android: интерфейс и навигация |
 | [android-client-platform.md](android-client-platform.md) | Android: вход, офлайн, виджеты, перехват уведомлений, i18n, discovery, логи, сборка |
+| [android-client-receipts.md](android-client-receipts.md) | Android: сканер чеков |
 
 Краткий обзор и переменные окружения — в [README.md](../README.md) в корне репозитория.
 

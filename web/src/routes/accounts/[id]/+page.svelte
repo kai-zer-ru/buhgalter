@@ -47,7 +47,11 @@
 	import { isCreditCard } from '$lib/credit-card';
 	import { forecastWithLabelKey } from '$lib/forecast-label';
 	import { saveTransactionAsTemplate } from '$lib/save-transaction-template';
+	import { get } from 'svelte/store';
 	import { featureFlags, isFeatureEnabled } from '$lib/features';
+	import { isReceiptScannerAvailable } from '$lib/receipt/receipt-scanner-enabled';
+
+	const receiptScannerActive = $derived(isReceiptScannerAvailable($featureFlags));
 	import {
 		promptArchiveAccount,
 		executeArchiveAccount,
@@ -178,7 +182,6 @@
 			type: typeFilter,
 			category_id: categoryFilter,
 			store_id: storeFilter,
-			search: searchFilter
 			search: searchFilter,
 			merchant_id: merchantFilter,
 			tag_id: tagFilter
@@ -214,20 +217,6 @@
 		]);
 		if (!opts.silent && !hasCache) loading = true;
 		try {
-			const [account, accountBalance, bankList, expenseCats, incomeCats, accountList, storeList] =
-				await Promise.all([
-					getAccount(id),
-					getAccountBalance(id),
-					listBanks(),
-					listCategories('expense'),
-					listCategories('income'),
-					listAccounts(),
-					listStores()
-				]);
-			acc = account;
-			accBalance = accountBalance;
-			banks = bankList;
-			allAccounts = accountList;
 			const [
 				account,
 				accountBalance,
@@ -235,6 +224,7 @@
 				expenseCats,
 				incomeCats,
 				accountList,
+				storeList,
 				merchantList,
 				tagList
 			] = await Promise.all([
@@ -244,6 +234,7 @@
 				listCategories('expense'),
 				listCategories('income'),
 				listAccounts(),
+				listStores(),
 				listMerchants(),
 				listTags()
 			]);
@@ -253,12 +244,12 @@
 			allAccounts = opts.silent ? assignIfChanged(allAccounts, accountList) : accountList;
 			const uniqueCatsByID: Record<string, Category> = {};
 			for (const cat of [...expenseCats, ...incomeCats]) uniqueCatsByID[cat.id] = cat;
-			categories = Object.values(uniqueCatsByID).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
-			stores = storeList;
 			const nextCategories = Object.values(uniqueCatsByID).sort((a, b) =>
 				a.name.localeCompare(b.name, 'ru')
 			);
 			categories = opts.silent ? assignIfChanged(categories, nextCategories) : nextCategories;
+			const nextStores = isReceiptScannerAvailable(get(featureFlags)) ? storeList : [];
+			stores = opts.silent ? assignIfChanged(stores, nextStores) : nextStores;
 			merchants = opts.silent ? assignIfChanged(merchants, merchantList) : merchantList;
 			tags = opts.silent ? assignIfChanged(tags, tagList) : tagList;
 			name = account.name;
@@ -744,6 +735,7 @@
 												<NewTransactionButtons
 													onincome={() => openNewTransaction('income')}
 													onexpense={() => openNewTransaction('expense')}
+													onreceipt={receiptScannerActive ? () => (receiptOpen = true) : undefined}
 													ontransfer={() => {
 														editTransfer = null;
 														repeatTransfer = null;
@@ -759,38 +751,6 @@
 											</div>
 										</div>
 									{/if}
-								{/if}
-								{#if accBalance ? accBalance.forecast_balance !== accBalance.balance : false}
-									<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
-										{$_('dashboard.withPlans')}:
-										<MoneyDisplay
-											value={accBalance?.forecast_display ?? acc.balance_display}
-											currency={$user?.currency ?? 'RUB'}
-											class=""
-										/>
-									</p>
-								{/if}
-							</div>
-							{#if acc.status === 'active'}
-								<div class="flex shrink-0 items-center gap-1">
-									<div class="hidden items-center gap-1 md:flex">
-										<NewTransactionButtons
-											onincome={() => openNewTransaction('income')}
-											onexpense={() => openNewTransaction('expense')}
-											onreceipt={() => (receiptOpen = true)}
-											ontransfer={() => {
-												editTransfer = null;
-												repeatTransfer = null;
-												transferOpen = true;
-											}}
-										/>
-									</div>
-									<div class="md:hidden">
-										<RowActionsMenu actions={accountActions(true)} />
-									</div>
-									<div class="hidden md:block">
-										<RowActionsMenu actions={accountActions(false)} />
-									</div>
 								</div>
 							{/if}
 						</div>
@@ -806,11 +766,14 @@
 						{categories}
 						{merchants}
 						{tags}
+						{stores}
+						showStoreFilter={receiptScannerActive}
 						showAccount={false}
 						expandSearchToEnd={true}
 						onreset={resetFilters}
 						bind:type={typeFilter}
 						bind:categoryId={categoryFilter}
+						bind:storeId={storeFilter}
 						bind:kind={kindFilter}
 						bind:search={searchFilter}
 						bind:merchantId={merchantFilter}
@@ -849,6 +812,9 @@
 							onattachCredit={accountTxReadOnly
 								? undefined
 								: (tx) => void goto(resolve(`/credits?attach_tx=${encodeURIComponent(tx.id)}`))}
+							onreceiptAttached={accountTxReadOnly
+								? undefined
+								: () => void loadTransactions({ silent: true })}
 							onrepeat={openRepeat}
 							onsaveAsTemplate={(tx) => void saveAsTemplate(tx)}
 							onedit={accountTxReadOnly ? undefined : openEdit}
@@ -864,49 +830,6 @@
 						</p>
 					{/if}
 				</div>
-			</div>
-		</div>
-
-		<div class="relative space-y-3">
-			<TransactionFilters
-				bind:fromLocal
-				bind:toLocal
-				accountId=""
-				accounts={[]}
-				{categories}
-				{stores}
-				showAccount={false}
-				expandSearchToEnd={true}
-				onreset={resetFilters}
-				bind:type={typeFilter}
-				bind:categoryId={categoryFilter}
-				bind:storeId={storeFilter}
-				bind:kind={kindFilter}
-				bind:search={searchFilter}
-			/>
-
-			<TransactionContextStats params={accountStatsContextParams()} transactionCount={txTotal} />
-
-			<div class:opacity-60={filterLoading} class="card md:overflow-x-auto">
-				<TransactionList
-					transactions={visibleTx}
-					siblings={transactions}
-					{tz}
-					emptyMessage={$_('transactions.empty')}
-					showDescription
-					showAmountSign
-					singleAccount
-					showEdit={!accountTxReadOnly}
-					showDelete={!accountTxReadOnly}
-					onmakeRecurring={accountTxReadOnly
-						? undefined
-						: (tx) =>
-								void goto(
-									resolve(`/settings/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`)
-								)}
-					onrepeat={openRepeat}
-					onedit={accountTxReadOnly ? undefined : openEdit}
-					ondelete={accountTxReadOnly ? undefined : (tx) => void removeTx(tx)}
 				<TransactionPagination
 					page={txPage}
 					limit={txLimit}

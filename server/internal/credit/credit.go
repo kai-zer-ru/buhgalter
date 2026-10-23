@@ -1024,7 +1024,7 @@ func Delete(ctx context.Context, db *sql.DB, userID, id, mode string) error {
 				AccountID: row.AccountID, Type: row.Type, Kind: row.Kind,
 				Amount: row.Amount, Description: &desc,
 				CategoryID: row.CategoryID, SubcategoryID: row.SubcategoryID,
-				StoreID: row.StoreID,
+				StoreID:         row.StoreID,
 				TransactionDate: row.TransactionDate, UpdatedAt: nowStr,
 				ID: *txID, UserID: userID,
 			}); err != nil {

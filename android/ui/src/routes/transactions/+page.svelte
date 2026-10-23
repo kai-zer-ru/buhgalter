@@ -26,11 +26,16 @@
 	import NewTransactionButtons from '$lib/components/NewTransactionButtons.svelte';
 	import { resolveAppPath } from '$lib/android/form-nav';
 	import {
+		receiptAttachPath,
+		receiptImportPath,
 		transactionEditPath,
 		transactionNewPath,
 		transferEditPath,
 		transferNewPath
 	} from '$lib/android/form-routes';
+	import { featureFlags } from '$lib/features';
+	import { isReceiptScannerEnabled } from '$lib/receipt/receipt-module';
+	import { requireOnline } from '$lib/offline/require-online';
 	import TransactionContextStats from '$lib/components/TransactionContextStats.svelte';
 	import TransactionFilters from '$lib/components/TransactionFilters.svelte';
 	import TransactionList from '$lib/components/TransactionList.svelte';
@@ -78,6 +83,7 @@
 	let lastFiltersKey = $state('');
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
+	const receiptScannerActive = $derived(isReceiptScannerEnabled($featureFlags));
 	const splitMode = $derived(!kind);
 	const transactions = $derived.by(() => {
 		void $outboxTick;
@@ -396,6 +402,20 @@
 		void goto(resolve(`/credits?attach_tx=${encodeURIComponent(tx.id)}`));
 	}
 
+	function openAttachReceipt(tx: Transaction) {
+		if (!requireOnline()) return;
+		void goto(resolve(receiptAttachPath(tx.id, '/transactions')));
+	}
+
+	function openReceiptImport() {
+		if (!requireOnline()) return;
+		void goto(resolve(receiptImportPath({ from: listFrom })));
+	}
+
+	function onReceiptChanged() {
+		void load(false, { background: true });
+	}
+
 	async function removeTx(tx: Transaction) {
 		const ok = await confirm({
 			message: $_('transactions.confirm.delete'),
@@ -435,6 +455,7 @@
 				<NewTransactionButtons
 					onincome={() => openNewTransaction('income')}
 					onexpense={() => openNewTransaction('expense')}
+					onreceipt={receiptScannerActive ? openReceiptImport : undefined}
 					ontransfer={() => void goto(resolve(transferNewPath({ from: listFrom })))}
 				/>
 			</div>
@@ -508,6 +529,8 @@
 												onmakeSubscription={openMakeSubscription}
 												onattachSubscription={openAttachSubscription}
 												onattachCredit={openAttachCredit}
+												onattachReceipt={openAttachReceipt}
+												onreceiptChanged={onReceiptChanged}
 												onedit={openEdit}
 												ondelete={(tx) => void removeTx(tx)}
 											/>
@@ -547,6 +570,8 @@
 												onmakeSubscription={openMakeSubscription}
 												onattachSubscription={openAttachSubscription}
 												onattachCredit={openAttachCredit}
+												onattachReceipt={openAttachReceipt}
+												onreceiptChanged={onReceiptChanged}
 												onedit={openEdit}
 												ondelete={(tx) => void removeTx(tx)}
 											/>
@@ -584,6 +609,8 @@
 							onmakeSubscription={openMakeSubscription}
 							onattachSubscription={openAttachSubscription}
 							onattachCredit={openAttachCredit}
+							onattachReceipt={openAttachReceipt}
+							onreceiptChanged={onReceiptChanged}
 							onedit={openEdit}
 							ondelete={(tx) => void removeTx(tx)}
 						/>

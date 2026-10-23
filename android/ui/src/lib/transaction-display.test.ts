@@ -3,6 +3,7 @@ import type { Transaction } from '$lib/api/client';
 import {
 	canDeleteTransaction,
 	canEditTransaction,
+	canAttachReceipt,
 	canLinkToSubscription,
 	canRepeatTransaction,
 	dedupeTransferLegs,
@@ -75,6 +76,18 @@ describe('canDeleteTransaction', () => {
 		expect(isTransferCommission(commission)).toBe(true);
 		expect(canEditTransaction(commission)).toBe(false);
 		expect(canDeleteTransaction(commission)).toBe(false);
+	});
+});
+
+describe('canAttachReceipt', () => {
+	it('allows expense without receipt', () => {
+		expect(canAttachReceipt(tx({ type: 'expense' }))).toBe(true);
+	});
+
+	it('blocks when receipt or system category', () => {
+		expect(canAttachReceipt(tx({ type: 'expense', receipt_import_id: 'r1' }))).toBe(false);
+		expect(canAttachReceipt(tx({ type: 'expense', category_is_system: true }))).toBe(false);
+		expect(canAttachReceipt(tx({ type: 'income' }))).toBe(false);
 	});
 });
 

@@ -56,7 +56,14 @@ func getScanJobRecord(ctx context.Context, db *sql.DB, userID, jobID string) (Sc
 	if err != nil {
 		return ScanJob{}, err
 	}
-	return scanJobFromRow(row)
+	job, err := scanJobFromRow(row)
+	if err != nil {
+		return ScanJob{}, err
+	}
+	if job.Result != nil {
+		applyLedgerFlags(ctx, db, userID, job.Result)
+	}
+	return job, nil
 }
 
 func setScanJobRunning(ctx context.Context, db *sql.DB, userID, jobID string) error {

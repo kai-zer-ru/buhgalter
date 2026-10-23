@@ -45,6 +45,8 @@
 	} from '$lib/select-options';
 	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
+	import { featureFlags } from '$lib/features';
+	import { isReceiptScannerAvailable } from '$lib/receipt/receipt-scanner-enabled';
 
 	function isCreditsExpenseCategory(cat: Category | undefined): boolean {
 		return Boolean(cat?.is_system && cat.name === 'Кредиты');
@@ -119,15 +121,12 @@
 		return list;
 	});
 	const categoryOptions = $derived(categorySelectOptions(pickableCategories));
-	const subcategoryOptions = $derived([
-		{ value: '', label: '—' },
-		...subcategorySelectOptions(subcategories)
-	]);
 	const storeOptions = $derived([
 		{ value: '', label: '—' },
 		...stores.map((store) => ({ value: store.id, label: store.name }))
 	]);
-	const showStore = $derived(txType === 'expense' && stores.length > 0);
+	const receiptScannerActive = $derived(isReceiptScannerAvailable($featureFlags));
+	const showStore = $derived(txType === 'expense' && stores.length > 0 && receiptScannerActive);
 	const selectedCategory = $derived(categories.find((c) => c.id === categoryId));
 	const isCreditPaymentMode = $derived(
 		!editing && txType === 'expense' && isCreditsExpenseCategory(selectedCategory)
@@ -422,11 +421,9 @@
 				amount: toAPIAmount(amount),
 				description: description || undefined,
 				category_id: categoryId || undefined,
-				subcategory_id: newSubcategory ? undefined : subcategoryId || undefined,
-				subcategory_name: newSubcategory || undefined,
-				store_id: storeId || undefined,
 				subcategory_id: newSubcategoryName ? undefined : subcategoryId || undefined,
 				subcategory_name: newSubcategoryName || undefined,
+				store_id: storeId || undefined,
 				merchant_id: newMerchantName ? undefined : merchantId || undefined,
 				merchant_name: newMerchantName || undefined,
 				tag_ids: tagIds,
@@ -529,164 +526,165 @@
 		{/if}
 
 		<div>
-		{#if isCreditPaymentMode}
-			<Select
-				id="tx-credit"
-				label={$_('credits.field.credit')}
-				bind:value={creditId}
-				options={creditOptions}
-				usePortal
-				onchange={onCreditChange}
-			/>
-			{#if activeCredits.length === 0}
-				<p class="text-sm" style:color="var(--text-muted)">{$_('credits.empty')}</p>
-			{/if}
-		{:else}
-			<Combobox
-				id="tx-sub"
-				label={$_('transactions.field.subcategory')}
-				bind:value={subcategoryId}
-				bind:query={subcategoryQuery}
-				options={subcategoryOptions}
-				usePortal
-				allowCreate
-				onchange={() => scheduleRuleEvaluate()}
-				placeholder={$_('transactions.field.newSubcategory')}
-				createLabel={$_('transactions.field.createNamed', {
-					values: { name: subcategoryQuery.trim() || '…' }
-				})}
-				emptyLabel={$_('common.notFound')}
-			/>
-		{/if}
-
-		<div>
-			<label class="mb-1 block text-sm font-medium" for="tx-amount"
-				>{$_('transactions.field.amount')}</label
-			>
-			<MoneyInput id="tx-amount" bind:value={amount} required />
-		</div>
-
-		<DateTimePicker
-			id="tx-date"
-			label={$_('transactions.field.dateOnly')}
-			bind:value={dateTimeValue}
-			bind:timeExpanded
-			showOptionalTimeUI={false}
-			{...editing ? operationDatetimePickerEdit : operationDatetimePickerCreate}
-			usePortal
-			required
-		/>
-		{#if isFuture}
-			<div class="space-y-1">
-				<p class="text-sm" style:color="var(--primary)">📅 {$_('transactions.planned')}</p>
-				<FieldHint text={$_('transactions.field.plannedHint')} />
-			</div>
-		{/if}
-
-		{#snippet timeField()}
-			<div>
-				<label class="mb-1 block text-sm font-medium" for="tx-time"
-					>{$_('transactions.field.timeOptional')}</label
-				>
-				<input
-					id="tx-time"
-					type="time"
-					class="input w-full"
-					bind:value={timeInput}
-					onchange={applyOperationTime}
+			{#if isCreditPaymentMode}
+				<Select
+					id="tx-credit"
+					label={$_('credits.field.credit')}
+					bind:value={creditId}
+					options={creditOptions}
+					usePortal
+					onchange={onCreditChange}
 				/>
-				<FieldHint text={$_('transactions.field.timeHint')} />
+				{#if activeCredits.length === 0}
+					<p class="text-sm" style:color="var(--text-muted)">{$_('credits.empty')}</p>
+				{/if}
+			{:else}
+				<Combobox
+					id="tx-sub"
+					label={$_('transactions.field.subcategory')}
+					bind:value={subcategoryId}
+					bind:query={subcategoryQuery}
+					options={subcategoryOptions}
+					usePortal
+					allowCreate
+					onchange={() => scheduleRuleEvaluate()}
+					placeholder={$_('transactions.field.newSubcategory')}
+					createLabel={$_('transactions.field.createNamed', {
+						values: { name: subcategoryQuery.trim() || '…' }
+					})}
+					emptyLabel={$_('common.notFound')}
+				/>
+			{/if}
+
+			<div>
+				<label class="mb-1 block text-sm font-medium" for="tx-amount"
+					>{$_('transactions.field.amount')}</label
+				>
+				<MoneyInput id="tx-amount" bind:value={amount} required />
 			</div>
-		{/snippet}
 
-		{#if isCreditPaymentMode}
-			{@render timeField()}
-		{:else}
-			<details bind:open={optionalDetailsOpen}>
-				<summary class="cursor-pointer text-sm" style:color="var(--text-muted)">
-					{$_('transactions.field.optionalDetails')}
-				</summary>
-				<div class="mt-3 space-y-4">
-					{@render timeField()}
+			<DateTimePicker
+				id="tx-date"
+				label={$_('transactions.field.dateOnly')}
+				bind:value={dateTimeValue}
+				bind:timeExpanded
+				showOptionalTimeUI={false}
+				{...editing ? operationDatetimePickerEdit : operationDatetimePickerCreate}
+				usePortal
+				required
+			/>
+			{#if isFuture}
+				<div class="space-y-1">
+					<p class="text-sm" style:color="var(--primary)">📅 {$_('transactions.planned')}</p>
+					<FieldHint text={$_('transactions.field.plannedHint')} />
+				</div>
+			{/if}
 
-					<div>
-						<label class="mb-1 block text-sm font-medium" for="tx-desc"
-							>{$_('transactions.field.description')}</label
-						>
-						<input
-							id="tx-desc"
-							class="input w-full"
-							bind:value={description}
-							oninput={() => scheduleRuleEvaluate()}
-						/>
-					</div>
-
-					<Combobox
-						id="tx-merchant"
-						label={$_('transactions.field.merchant')}
-						bind:value={merchantId}
-						bind:query={merchantQuery}
-						options={merchantOptions}
-						usePortal
-						allowCreate
-						placeholder={$_('transactions.field.newMerchant')}
-						createLabel={$_('transactions.field.createNamed', {
-							values: { name: merchantQuery.trim() || '…' }
-						})}
-						emptyLabel={$_('common.notFound')}
+			{#snippet timeField()}
+				<div>
+					<label class="mb-1 block text-sm font-medium" for="tx-time"
+						>{$_('transactions.field.timeOptional')}</label
+					>
+					<input
+						id="tx-time"
+						type="time"
+						class="input w-full"
+						bind:value={timeInput}
+						onchange={applyOperationTime}
 					/>
+					<FieldHint text={$_('transactions.field.timeHint')} />
+				</div>
+			{/snippet}
 
-					<div>
-						<span class="mb-1 block text-sm font-medium">{$_('transactions.field.tags')}</span>
-						{#if selectedTags.length}
-							<div class="mb-2 flex flex-wrap gap-2">
-								{#each selectedTags as t (t.name)}
-									<button
-										type="button"
-										class="rounded-md px-2 py-1 text-sm"
-										style:background="var(--surface-2)"
-										onclick={() => removeTag(t.name)}
-									>
-										{t.name} ×
-									</button>
-								{/each}
-							</div>
-						{/if}
-						<input
-							id="tx-tags"
-							class="input w-full"
-							placeholder={$_('transactions.field.tagsHint')}
-							bind:value={tagInput}
-							onkeydown={onTagKeydown}
-						/>
-						{#if tagInput.trim() && tagSuggestions.length}
-							<ul
-								class="mt-1 max-h-40 overflow-auto rounded-md border text-sm"
-								style:border-color="var(--border)"
+			{#if isCreditPaymentMode}
+				{@render timeField()}
+			{:else}
+				<details bind:open={optionalDetailsOpen}>
+					<summary class="cursor-pointer text-sm" style:color="var(--text-muted)">
+						{$_('transactions.field.optionalDetails')}
+					</summary>
+					<div class="mt-3 space-y-4">
+						{@render timeField()}
+
+						<div>
+							<label class="mb-1 block text-sm font-medium" for="tx-desc"
+								>{$_('transactions.field.description')}</label
 							>
-								{#each tagSuggestions as sug (sug.id)}
-									<li>
+							<input
+								id="tx-desc"
+								class="input w-full"
+								bind:value={description}
+								oninput={() => scheduleRuleEvaluate()}
+							/>
+						</div>
+
+						<Combobox
+							id="tx-merchant"
+							label={$_('transactions.field.merchant')}
+							bind:value={merchantId}
+							bind:query={merchantQuery}
+							options={merchantOptions}
+							usePortal
+							allowCreate
+							placeholder={$_('transactions.field.newMerchant')}
+							createLabel={$_('transactions.field.createNamed', {
+								values: { name: merchantQuery.trim() || '…' }
+							})}
+							emptyLabel={$_('common.notFound')}
+						/>
+
+						<div>
+							<span class="mb-1 block text-sm font-medium">{$_('transactions.field.tags')}</span>
+							{#if selectedTags.length}
+								<div class="mb-2 flex flex-wrap gap-2">
+									{#each selectedTags as t (t.name)}
 										<button
 											type="button"
-											class="block w-full px-3 py-2 text-left hover:opacity-80"
-											onclick={() => addTag(sug.name, sug.id)}
+											class="rounded-md px-2 py-1 text-sm"
+											style:background="var(--surface-2)"
+											onclick={() => removeTag(t.name)}
 										>
-											{sug.name}
+											{t.name} ×
 										</button>
-									</li>
-								{/each}
-							</ul>
-						{/if}
+									{/each}
+								</div>
+							{/if}
+							<input
+								id="tx-tags"
+								class="input w-full"
+								placeholder={$_('transactions.field.tagsHint')}
+								bind:value={tagInput}
+								onkeydown={onTagKeydown}
+							/>
+							{#if tagInput.trim() && tagSuggestions.length}
+								<ul
+									class="mt-1 max-h-40 overflow-auto rounded-md border text-sm"
+									style:border-color="var(--border)"
+								>
+									{#each tagSuggestions as sug (sug.id)}
+										<li>
+											<button
+												type="button"
+												class="block w-full px-3 py-2 text-left hover:opacity-80"
+												onclick={() => addTag(sug.name, sug.id)}
+											>
+												{sug.name}
+											</button>
+										</li>
+									{/each}
+								</ul>
+							{/if}
+						</div>
 					</div>
-				</div>
-			</details>
-		{/if}
+				</details>
+			{/if}
 
-		{#if creditCardNegativeWarning}
-			<p class="text-sm" style:color="var(--warning)">
-				{$_('accounts.creditCard.negativeBalance')}
-			</p>
-		{/if}
+			{#if creditCardNegativeWarning}
+				<p class="text-sm" style:color="var(--warning)">
+					{$_('accounts.creditCard.negativeBalance')}
+				</p>
+			{/if}
+		</div>
 	</form>
 
 	{#snippet footer()}

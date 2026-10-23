@@ -18,6 +18,15 @@ function isPublicAppPath(pathname: string): boolean {
 	return pathname === '/login' || pathname === '/register' || pathname === '/setup';
 }
 
+async function ackPendingPasswordResetRequests(page: Page) {
+	const res = await page.request.get('/api/v1/admin/password-reset-requests');
+	if (!res.ok()) return;
+	const pending = (await res.json()) as { id: string }[];
+	for (const req of pending) {
+		await page.request.post(`/api/v1/admin/password-reset-requests/${req.id}/ack`);
+	}
+}
+
 export async function waitAppReady(page: Page) {
 	await expect(page.getByText('Загрузка…')).toHaveCount(0, { timeout: 20_000 });
 	const pathname = new URL(page.url()).pathname;
@@ -37,6 +46,7 @@ export async function waitAppReady(page: Page) {
 		await expect(crashed).toHaveCount(0, { timeout: 15_000 });
 	}
 
+	await ackPendingPasswordResetRequests(page);
 	await dismissBlockingModals(page);
 }
 

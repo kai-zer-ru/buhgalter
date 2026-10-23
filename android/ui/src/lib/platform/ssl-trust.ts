@@ -2,6 +2,7 @@ import { ApiError } from '$lib/api/client';
 import { getServerProfile, type ServerProfile } from '$lib/platform/server-profile';
 import { isNativeApp } from '$lib/platform/native';
 import { normalizeServerUrl } from '$lib/platform/server-origin';
+import type { NativeMultipartPart } from '$lib/platform/form-data-native';
 import { SslTrust, type NativeHttpResult } from '$lib/platform/ssl-trust-native';
 
 export function isHttpsOrigin(origin: string): boolean {
@@ -27,6 +28,8 @@ export async function syncTrustedOriginsToNative(origins: string[]): Promise<voi
 }
 
 const NATIVE_HTTP_TIMEOUT_MS = 15_000;
+// A few seconds above OkHttp's 180s multipart budget so a late 202 is not replaced by this timer.
+const NATIVE_HTTP_MULTIPART_TIMEOUT_MS = 185_000;
 
 export async function nativeHttpRequest(
 	url: string,
@@ -34,6 +37,7 @@ export async function nativeHttpRequest(
 		method?: string;
 		headers?: Record<string, string>;
 		body?: string;
+		multipart?: NativeMultipartPart[];
 		allowUntrusted?: boolean;
 	} = {}
 ): Promise<NativeHttpResult> {
@@ -41,19 +45,29 @@ export async function nativeHttpRequest(
 		return { errorCode: 'UNREACHABLE', message: 'native only' };
 	}
 	try {
+		const parts = opts.multipart ?? [];
+		const singleFile = parts.length === 1 && 'base64' in parts[0] ? parts[0] : null;
 		const request = SslTrust.request({
 			url,
 			method: opts.method ?? 'GET',
 			headers: opts.headers,
 			body: opts.body,
+			multipart: singleFile ? undefined : opts.multipart,
+			imageBase64: singleFile ? singleFile.base64 : undefined,
+			imageName: singleFile ? singleFile.filename : undefined,
+			imageMime: singleFile ? singleFile.mime : undefined,
 			allowUntrusted: opts.allowUntrusted ?? false
 		});
 		// Belt-and-suspenders: Capacitor plugin queue can stall; JS must not hang forever.
 		let timer: ReturnType<typeof setTimeout> | undefined;
+		const timeoutMs =
+			opts.multipart && opts.multipart.length > 0
+				? NATIVE_HTTP_MULTIPART_TIMEOUT_MS
+				: NATIVE_HTTP_TIMEOUT_MS;
 		const timeout = new Promise<NativeHttpResult>((resolve) => {
 			timer = setTimeout(() => {
 				resolve({ errorCode: 'UNREACHABLE', message: 'Request timed out' });
-			}, NATIVE_HTTP_TIMEOUT_MS);
+			}, timeoutMs);
 		});
 		try {
 			return await Promise.race([request, timeout]);

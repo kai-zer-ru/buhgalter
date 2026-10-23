@@ -299,6 +299,15 @@ type PasswordResetRequest struct {
 	DismissedAt *string `json:"dismissed_at"`
 }
 
+type ReceiptFiscalPreview struct {
+	UserID               string `json:"user_id"`
+	FiscalDriveNumber    string `json:"fiscal_drive_number"`
+	FiscalDocumentNumber string `json:"fiscal_document_number"`
+	FiscalSign           string `json:"fiscal_sign"`
+	ResultJson           string `json:"result_json"`
+	FetchedAt            string `json:"fetched_at"`
+}
+
 type ReceiptImport struct {
 	ID                   string  `json:"id"`
 	UserID               string  `json:"user_id"`
@@ -311,6 +320,14 @@ type ReceiptImport struct {
 	PayloadJson          string  `json:"payload_json"`
 	FnsCheckUrl          string  `json:"fns_check_url"`
 	CreatedAt            string  `json:"created_at"`
+}
+
+type ReceiptImportItemCategory struct {
+	ReceiptImportID string  `json:"receipt_import_id"`
+	ItemIndex       int64   `json:"item_index"`
+	UserID          string  `json:"user_id"`
+	CategoryID      string  `json:"category_id"`
+	SubcategoryID   *string `json:"subcategory_id"`
 }
 
 type ReceiptScanJob struct {
@@ -406,18 +423,19 @@ type Subscription struct {
 }
 
 type SystemSetting struct {
-	ID                    int64   `json:"id"`
-	IsConfigured          int64   `json:"is_configured"`
-	DbPath                string  `json:"db_path"`
-	ExternalUrl           *string `json:"external_url"`
-	NotificationSecretKey string  `json:"notification_secret_key"`
-	AppVersion            string  `json:"app_version"`
-	PreviousAppVersion    *string `json:"previous_app_version"`
-	BackupEnabled         int64   `json:"backup_enabled"`
-	BackupTime            *string `json:"backup_time"`
-	BackupRetention       int64   `json:"backup_retention"`
-	CreatedAt             string  `json:"created_at"`
-	UpdatedAt             string  `json:"updated_at"`
+	ID                       int64   `json:"id"`
+	IsConfigured             int64   `json:"is_configured"`
+	DbPath                   string  `json:"db_path"`
+	ExternalUrl              *string `json:"external_url"`
+	NotificationSecretKey    string  `json:"notification_secret_key"`
+	ReceiptApiTokenEncrypted string  `json:"receipt_api_token_encrypted"`
+	AppVersion               string  `json:"app_version"`
+	PreviousAppVersion       *string `json:"previous_app_version"`
+	BackupEnabled            int64   `json:"backup_enabled"`
+	BackupTime               *string `json:"backup_time"`
+	BackupRetention          int64   `json:"backup_retention"`
+	CreatedAt                string  `json:"created_at"`
+	UpdatedAt                string  `json:"updated_at"`
 }
 
 type Tag struct {

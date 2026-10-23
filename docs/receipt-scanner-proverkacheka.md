@@ -8,7 +8,7 @@ Dev- и ops-документ к [receipt-scanner.md](receipt-scanner.md). Про
 |-----------|------------|
 | Клиент (web / Android) | Сканирует QR 54-ФЗ, шлёт строку `qrraw` на `POST /api/v1/receipts/parse` или через scan-job после decode на сервере |
 | Сервер | Хранит токен инстанса, вызывает `POST https://proverkacheka.com/api/v1/check/get`, нормализует ответ в `ParsedReceipt` |
-| Админка | Write-only установка токена; `GET /admin/settings` — только `receipt_api_token_set: true/false` |
+| Админка | `PUT /api/v1/admin/settings/receipt-api-token` (write-only); `GET /api/v1/admin/settings` — `receipt_api_token_set: true/false` |
 
 Эффективное включение модуля: `features.receipt_scanner === true` **и** `receipt_api_token_set === true`.
 
@@ -33,6 +33,7 @@ curl -sS -X POST 'https://proverkacheka.com/api/v1/check/get' \
 - Колонка в `system_settings` (имя на усмотрение миграции, например `receipt_proverkacheka_token`), шифрование как у `notification_secret_key`.
 - Пакет `internal/receipt/proverkacheka` — HTTP-клиент, маппинг JSON → `fns.ParsedReceipt`.
 - `Fetcher` / цепочка lookup: при настроенном токене — только proverkacheka; без токена — `503` / `ERR_RECEIPT_API_NOT_CONFIGURED`, без silent fallback «Покупка по чеку».
+- **Preview без лишнего HTTP:** после успешного `check/get` ответ сохраняется в `receipt_fiscal_previews` (ключ user + fn + i + fp). `ParseForUser` читает эту таблицу первой; fallback — `receipt_imports`, затем `receipt_scan_jobs`; к proverkacheka — **один** `check/get`, только если в БД нет валидного снимка.
 - Middleware: `RequireFeature("receipt_scanner")` на группу `/receipts/*`.
 - OpenAPI: новые коды ошибок, `POST /receipts/attach`, admin PUT token.
 

@@ -1,6 +1,9 @@
 -- name: GetAdminSettings :one
-SELECT external_url, notification_secret_key
+SELECT external_url, notification_secret_key, receipt_api_token_encrypted
 FROM system_settings WHERE id = 1;
+
+-- name: GetReceiptAPITokenEncrypted :one
+SELECT receipt_api_token_encrypted FROM system_settings WHERE id = 1;
 
 -- name: GetSetupStatus :one
 SELECT external_url FROM system_settings WHERE id = 1;
@@ -34,6 +37,11 @@ WHERE id = 1;
 -- name: UpdateNotificationSecretKey :exec
 UPDATE system_settings
 SET notification_secret_key = ?, updated_at = datetime('now')
+WHERE id = 1;
+
+-- name: UpdateReceiptAPIToken :exec
+UPDATE system_settings
+SET receipt_api_token_encrypted = ?, updated_at = datetime('now')
 WHERE id = 1;
 
 -- name: CompleteSetup :exec

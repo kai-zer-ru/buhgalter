@@ -7,8 +7,40 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kai-zer-ru/buhgalter/internal/features"
 	"github.com/kai-zer-ru/buhgalter/internal/receipt/fns"
 )
+
+const testNotificationSecret = "12345678901234567890123456789012"
+
+func enableReceiptScanner(t *testing.T, env *testEnv) {
+	t.Helper()
+	features.Invalidate()
+	if _, err := env.db.Exec(
+		`UPDATE system_settings SET notification_secret_key = ? WHERE id = 1`,
+		testNotificationSecret,
+	); err != nil {
+		t.Fatal(err)
+	}
+	secretBody, _ := json.Marshal(map[string]string{"receipt_api_token": "integration-test-token"})
+	secretResp, err := env.authedRequest(http.MethodPut, "/api/v1/admin/settings/receipt-api-token", bytes.NewReader(secretBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	secretResp.Body.Close()
+	if secretResp.StatusCode != http.StatusOK {
+		t.Fatalf("receipt-api-token status %d", secretResp.StatusCode)
+	}
+	flagsBody, _ := json.Marshal(map[string]bool{features.ReceiptScanner: true})
+	flagsResp, err := env.authedRequest(http.MethodPut, "/api/v1/admin/features", bytes.NewReader(flagsBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	flagsResp.Body.Close()
+	if flagsResp.StatusCode != http.StatusOK {
+		t.Fatalf("features status %d", flagsResp.StatusCode)
+	}
+}
 
 func sampleAPIReceipt() fns.ParsedReceipt {
 	dt := time.Date(2026, 1, 15, 10, 30, 0, 0, time.UTC)
@@ -29,6 +61,7 @@ func sampleAPIReceipt() fns.ParsedReceipt {
 func TestReceiptImportAndGet(t *testing.T) {
 	env := setupConfigured(t)
 	env.login(t, "admin", "secret123")
+	enableReceiptScanner(t, env)
 	accID := createTestAccount(t, env, "Чеки")
 	catID := getExpenseCategory(t, env)
 	receipt := sampleAPIReceipt()
@@ -114,6 +147,7 @@ func TestReceiptImportAndGet(t *testing.T) {
 func TestStatsByStore(t *testing.T) {
 	env := setupConfigured(t)
 	env.login(t, "admin", "secret123")
+	enableReceiptScanner(t, env)
 	accID := createTestAccount(t, env, "Магазины")
 	catID := getExpenseCategory(t, env)
 	receipt := sampleAPIReceipt()
@@ -135,6 +169,9 @@ func TestStatsByStore(t *testing.T) {
 		t.Fatal(err)
 	}
 	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("import status %d", resp.StatusCode)
+	}
 
 	statsResp, err := env.authedRequest(http.MethodGet, "/api/v1/stats/by-store?type=expense", nil)
 	if err != nil {

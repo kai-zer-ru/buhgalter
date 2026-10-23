@@ -16,6 +16,7 @@ CREATE TABLE system_settings (
     db_path         TEXT NOT NULL DEFAULT '',
     external_url    TEXT,
     notification_secret_key TEXT NOT NULL DEFAULT '',
+    receipt_api_token_encrypted TEXT NOT NULL DEFAULT '',
     app_version     TEXT NOT NULL DEFAULT '',
     previous_app_version TEXT,
     backup_enabled  INTEGER NOT NULL DEFAULT 0,
@@ -167,6 +168,16 @@ CREATE TABLE receipt_imports (
 );
 CREATE INDEX idx_receipt_imports_user ON receipt_imports(user_id);
 
+CREATE TABLE receipt_import_item_categories (
+    receipt_import_id   TEXT NOT NULL REFERENCES receipt_imports(id) ON DELETE CASCADE,
+    item_index          INTEGER NOT NULL,
+    user_id             TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    category_id         TEXT NOT NULL,
+    subcategory_id      TEXT,
+    PRIMARY KEY (receipt_import_id, item_index)
+);
+CREATE INDEX idx_receipt_item_cat_user ON receipt_import_item_categories(user_id, receipt_import_id);
+
 CREATE TABLE receipt_scan_jobs (
     id                      TEXT PRIMARY KEY,
     user_id                 TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -179,6 +190,17 @@ CREATE TABLE receipt_scan_jobs (
     updated_at              TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX idx_receipt_scan_jobs_user_created ON receipt_scan_jobs(user_id, created_at DESC);
+
+CREATE TABLE receipt_fiscal_previews (
+    user_id                 TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    fiscal_drive_number     TEXT NOT NULL,
+    fiscal_document_number  TEXT NOT NULL,
+    fiscal_sign             TEXT NOT NULL,
+    result_json             TEXT NOT NULL,
+    fetched_at              TEXT NOT NULL,
+    PRIMARY KEY (user_id, fiscal_drive_number, fiscal_document_number, fiscal_sign)
+);
+CREATE INDEX idx_receipt_fiscal_previews_user_fetched ON receipt_fiscal_previews(user_id, fetched_at DESC);
 
 CREATE TABLE subscriptions (
     id              TEXT PRIMARY KEY,

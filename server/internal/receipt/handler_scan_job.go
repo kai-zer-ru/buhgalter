@@ -25,6 +25,8 @@ func scanErrorCode(err error, stage string) error {
 		}
 	case "fns":
 		switch {
+		case errors.Is(err, ErrAPINotConfigured):
+			return errors.New("ERR_RECEIPT_API_NOT_CONFIGURED")
 		case errors.Is(err, fns.ErrInvalidQR):
 			return errors.New("ERR_RECEIPT_QR")
 		case errors.Is(err, fns.ErrNotFound):
@@ -128,7 +130,7 @@ func (h *Handler) runScanJob(jobID, userID, login, ip string, imageData []byte) 
 		return
 	}
 
-	result, err := Parse(ctx, h.fetcher(), qr)
+	result, err := ParseForUser(ctx, h.Store.DB(), userID, qr, h.fetcher())
 	if err != nil {
 		_ = setScanJobFailed(ctx, h.Store.DB(), userID, jobID, scanErrorCode(err, "fns"))
 		_ = h.Audit.Log("receipt.scan.failed", userID, login, ip, map[string]any{

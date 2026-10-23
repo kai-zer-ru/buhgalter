@@ -144,6 +144,54 @@ WHERE t.user_id = ?
   AND (? = '' OR t.transaction_date <= ?)
   AND (? = '' OR t.description LIKE '%' || ? || '%')
   AND (? = '' OR t.store_id = ?)
+  AND NOT (
+    t.receipt_import_id IS NOT NULL
+    AND t.receipt_item_index IS NULL
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM credit_payments cp
+    WHERE cp.transaction_id = t.id
+      AND cp.exclude_from_stats = 1
+  )
+GROUP BY c.id, c.name, c.icon, s.id, s.name
+ORDER BY total DESC;
+
+-- name: StatsBySubcategoryReceiptLines :many
+-- Attach: one transaction per receipt; subcategories per line in receipt_import_item_categories.
+SELECT
+    c.id AS category_id,
+    c.name AS category_name,
+    c.icon AS category_icon,
+    s.id AS subcategory_id,
+    s.name AS subcategory_name,
+    CAST(COALESCE(SUM(
+        CASE
+            WHEN COALESCE(CAST(json_extract(ri.payload_json, '$.items[' || ric.item_index || '].sum') AS INTEGER), 0) > 0
+            THEN CAST(json_extract(ri.payload_json, '$.items[' || ric.item_index || '].sum') AS INTEGER)
+            ELSE COALESCE(CAST(json_extract(ri.payload_json, '$.items[' || ric.item_index || '].price') AS INTEGER), 0)
+        END
+    ), 0) AS INTEGER) AS total,
+    COUNT(*) AS tx_count
+FROM transactions t
+JOIN receipt_imports ri ON ri.id = t.receipt_import_id AND ri.user_id = t.user_id
+JOIN receipt_import_item_categories ric ON ric.receipt_import_id = t.receipt_import_id AND ric.user_id = t.user_id
+JOIN categories c ON c.id = ric.category_id
+JOIN subcategories s ON s.id = ric.subcategory_id
+WHERE t.user_id = ?
+  AND t.receipt_import_id IS NOT NULL
+  AND t.receipt_item_index IS NULL
+  AND ric.subcategory_id IS NOT NULL
+  AND trim(ric.subcategory_id) != ''
+  AND t.type IN ('income', 'expense')
+  AND (? = '' OR t.account_id = ?)
+  AND (? = '' OR ric.category_id = ?)
+  AND (? = '' OR t.type = ?)
+  AND (? = '' OR t.kind = ?)
+  AND (? = '' OR t.transaction_date >= ?)
+  AND (? = '' OR t.transaction_date <= ?)
+  AND (? = '' OR t.description LIKE '%' || ? || '%')
+  AND (? = '' OR t.store_id = ?)
   AND NOT EXISTS (
     SELECT 1
     FROM credit_payments cp

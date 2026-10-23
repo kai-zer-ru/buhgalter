@@ -43,8 +43,12 @@
 		transferNewPath,
 		accountChargeFeePath,
 		accountChangeLimitPath,
-		accountAutoTopupPath
+		accountAutoTopupPath,
+		receiptAttachPath,
+		receiptImportPath
 	} from '$lib/android/form-routes';
+	import { isReceiptScannerEnabled } from '$lib/receipt/receipt-module';
+	import { requireOnline } from '$lib/offline/require-online';
 	import NewTransactionButtons from '$lib/components/NewTransactionButtons.svelte';
 	import TransactionContextStats from '$lib/components/TransactionContextStats.svelte';
 	import TransactionList from '$lib/components/TransactionList.svelte';
@@ -60,7 +64,6 @@
 		promptDeleteAccount,
 		executeDeleteAccount
 	} from '$lib/accounts/account-inactive-prompt';
-	import { requireOnline } from '$lib/offline/require-online';
 	import { confirm } from '$lib/confirm';
 	import { toast } from '$lib/toast';
 	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
@@ -108,6 +111,7 @@
 	const id = $derived($page.params.id ?? '');
 	const accountFrom = $derived(id ? `/accounts/${id}` : '/accounts');
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
+	const receiptScannerActive = $derived(isReceiptScannerEnabled($featureFlags));
 	const transactions = $derived.by(() => {
 		void $outboxTick;
 		void $localDataTick;
@@ -580,6 +584,21 @@
 		void goto(resolve(`/credits?attach_tx=${encodeURIComponent(tx.id)}`));
 	}
 
+	function openAttachReceipt(tx: Transaction) {
+		if (!requireOnline()) return;
+		const from = `/accounts/${id}`;
+		void goto(resolve(receiptAttachPath(tx.id, from)));
+	}
+
+	function openReceiptImport() {
+		if (!requireOnline()) return;
+		void goto(resolve(receiptImportPath({ from: accountFrom, accountId: id })));
+	}
+
+	function onReceiptChanged() {
+		void loadTransactions({ background: true });
+	}
+
 	async function resetFilters() {
 		fromLocal = '';
 		toLocal = '';
@@ -771,6 +790,7 @@
 												<NewTransactionButtons
 													onincome={() => openNewTransaction('income')}
 													onexpense={() => openNewTransaction('expense')}
+													onreceipt={receiptScannerActive ? openReceiptImport : undefined}
 													ontransfer={openTransfer}
 												/>
 											</div>
@@ -830,6 +850,8 @@
 							onmakeSubscription={openMakeSubscription}
 							onattachSubscription={openAttachSubscription}
 							onattachCredit={accountTxReadOnly ? undefined : openAttachCredit}
+							onattachReceipt={accountTxReadOnly ? undefined : openAttachReceipt}
+							onreceiptChanged={accountTxReadOnly ? undefined : onReceiptChanged}
 							onedit={accountTxReadOnly ? undefined : openEdit}
 							ondelete={accountTxReadOnly ? undefined : (tx) => void removeTx(tx)}
 						/>

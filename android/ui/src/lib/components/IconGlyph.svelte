@@ -172,4 +172,16 @@
 		<path d="M12 10v8" />
 		<path d="M17 10v8" />
 	</svg>
+{:else if icon === 'receipt'}
+	<svg
+		aria-hidden="true"
+		class={className}
+		viewBox="0 0 24 24"
+		fill="none"
+		stroke="currentColor"
+		stroke-width="2"
+	>
+		<path d="M4 2h16v20l-4-2-4 2-4-2-4 2V2Z" />
+		<path d="M8 7h8M8 11h8M8 15h5" />
+	</svg>
 {/if}

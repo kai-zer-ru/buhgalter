@@ -341,11 +341,15 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Tra
 	if err := validatePlannedForCategory(ctx, db, userID, in.CategoryID, kind); err != nil {
 		return Transaction{}, err
 	}
-	if err := validateStoreForType(in.Type, in.StoreID); err != nil {
+	resolvedStoreID, err := resolveStoreIDForExpense(ctx, db, userID, in.Type, merchantID, in.StoreID, nil)
+	if err != nil {
 		return Transaction{}, err
 	}
-	if in.StoreID != nil && *in.StoreID != "" {
-		if err := validateStoreOwner(ctx, db, userID, *in.StoreID); err != nil {
+	if err := validateStoreForType(in.Type, resolvedStoreID); err != nil {
+		return Transaction{}, err
+	}
+	if resolvedStoreID != nil && *resolvedStoreID != "" {
+		if err := validateStoreOwner(ctx, db, userID, *resolvedStoreID); err != nil {
 			return Transaction{}, err
 		}
 	}
@@ -370,7 +374,7 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Tra
 		SubcategoryID:     subID,
 		TransferGroupID:   nil,
 		TransferAccountID: nil,
-		StoreID:           in.StoreID,
+		StoreID:           resolvedStoreID,
 		ReceiptImportID:   nil,
 		ReceiptItemIndex:  nil,
 		TransactionDate:   txDate,
@@ -465,11 +469,15 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in UpdateInput) 
 	if err := validatePlannedForCategory(ctx, db, userID, in.CategoryID, kind); err != nil {
 		return Transaction{}, err
 	}
-	if err := validateStoreForType(in.Type, in.StoreID); err != nil {
+	resolvedStoreID, err := resolveStoreIDForExpense(ctx, db, userID, in.Type, merchantID, in.StoreID, existing.ReceiptImportID)
+	if err != nil {
 		return Transaction{}, err
 	}
-	if in.StoreID != nil && *in.StoreID != "" {
-		if err := validateStoreOwner(ctx, db, userID, *in.StoreID); err != nil {
+	if err := validateStoreForType(in.Type, resolvedStoreID); err != nil {
+		return Transaction{}, err
+	}
+	if resolvedStoreID != nil && *resolvedStoreID != "" {
+		if err := validateStoreOwner(ctx, db, userID, *resolvedStoreID); err != nil {
 			return Transaction{}, err
 		}
 	}
@@ -489,7 +497,7 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in UpdateInput) 
 		CategoryID:      in.CategoryID,
 		SubcategoryID:   subID,
 		MerchantID:      merchantID,
-		StoreID:         in.StoreID,
+		StoreID:         resolvedStoreID,
 		TransactionDate: timeutil.FormatUTC(in.TransactionDate),
 		UpdatedAt:       now,
 		ID:              id,
@@ -527,6 +535,7 @@ func GetByID(ctx context.Context, db *sql.DB, userID, id string) (Transaction, e
 		return Transaction{}, err
 	}
 	tx.Tags = tags
+	enrichReceiptCategoryDisplay(ctx, db, userID, &tx)
 	return tx, nil
 }
 
@@ -699,6 +708,7 @@ func List(ctx context.Context, db *sql.DB, userID string, f ListFilters) (ListRe
 	if err := attachTags(ctx, db, items); err != nil {
 		return ListResult{}, err
 	}
+	enrichReceiptCategoryDisplayBatch(ctx, db, userID, items)
 	return ListResult{
 		Data: items,
 		Meta: ListMeta{Page: f.Page, Limit: f.Limit, Total: total},
@@ -723,6 +733,7 @@ func ListRecent(ctx context.Context, db *sql.DB, userID string, limit int) ([]Tr
 	if err := attachTags(ctx, db, out); err != nil {
 		return nil, err
 	}
+	enrichReceiptCategoryDisplayBatch(ctx, db, userID, out)
 	return out, nil
 }
 

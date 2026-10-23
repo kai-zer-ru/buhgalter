@@ -150,16 +150,22 @@ func (s *Service) BySubcategory(ctx context.Context, userID string, f Filters) (
 	if err != nil {
 		return nil, err
 	}
-	rows, err := queries(s.db).StatsBySubcategory(ctx, toSubcategoryParams(userID, f))
+	q := queries(s.db)
+	rows, err := q.StatsBySubcategory(ctx, toSubcategoryParams(userID, f))
 	if err != nil {
 		return nil, err
 	}
+	receiptRows, err := q.StatsBySubcategoryReceiptLines(ctx, toSubcategoryReceiptLinesParams(userID, f))
+	if err != nil {
+		return nil, err
+	}
+	merged := mergeSubcategoryStatsRows(rows, receiptRows)
 	var total int64
-	for _, row := range rows {
+	for _, row := range merged {
 		total += row.Total
 	}
-	out := make([]SubcategoryItem, 0, len(rows))
-	for _, row := range rows {
+	out := make([]SubcategoryItem, 0, len(merged))
+	for _, row := range merged {
 		out = append(out, SubcategoryItem{
 			CategoryID:      row.CategoryID,
 			CategoryName:    row.CategoryName,
@@ -172,6 +178,79 @@ func (s *Service) BySubcategory(ctx context.Context, userID string, f Filters) (
 		})
 	}
 	return out, nil
+}
+
+type subcategoryStatsRow struct {
+	CategoryID      string
+	CategoryName    string
+	CategoryIcon    string
+	SubcategoryID   string
+	SubcategoryName string
+	Total           int64
+	TxCount         int64
+}
+
+func mergeSubcategoryStatsRows(
+	txRows []sqlcdb.StatsBySubcategoryRow,
+	receiptRows []sqlcdb.StatsBySubcategoryReceiptLinesRow,
+) []subcategoryStatsRow {
+	type key struct {
+		categoryID    string
+		subcategoryID string
+	}
+	byKey := map[key]subcategoryStatsRow{}
+	for _, row := range txRows {
+		k := key{row.CategoryID, row.SubcategoryID}
+		existing, ok := byKey[k]
+		if !ok {
+			byKey[k] = subcategoryStatsRow{
+				CategoryID:      row.CategoryID,
+				CategoryName:    row.CategoryName,
+				CategoryIcon:    row.CategoryIcon,
+				SubcategoryID:   row.SubcategoryID,
+				SubcategoryName: row.SubcategoryName,
+				Total:           row.Total,
+				TxCount:         row.TxCount,
+			}
+			continue
+		}
+		existing.Total += row.Total
+		existing.TxCount += row.TxCount
+		byKey[k] = existing
+	}
+	for _, row := range receiptRows {
+		k := key{row.CategoryID, row.SubcategoryID}
+		existing, ok := byKey[k]
+		if !ok {
+			byKey[k] = subcategoryStatsRow{
+				CategoryID:      row.CategoryID,
+				CategoryName:    row.CategoryName,
+				CategoryIcon:    row.CategoryIcon,
+				SubcategoryID:   row.SubcategoryID,
+				SubcategoryName: row.SubcategoryName,
+				Total:           row.Total,
+				TxCount:         row.TxCount,
+			}
+			continue
+		}
+		existing.Total += row.Total
+		existing.TxCount += row.TxCount
+		byKey[k] = existing
+	}
+	out := make([]subcategoryStatsRow, 0, len(byKey))
+	for _, row := range byKey {
+		out = append(out, row)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Total != out[j].Total {
+			return out[i].Total > out[j].Total
+		}
+		if out[i].CategoryName != out[j].CategoryName {
+			return out[i].CategoryName < out[j].CategoryName
+		}
+		return out[i].SubcategoryName < out[j].SubcategoryName
+	})
+	return out
 }
 
 func (s *Service) ByStore(ctx context.Context, userID string, f Filters) ([]StoreItem, error) {
@@ -516,6 +595,33 @@ func toCategoryParams(userID string, f Filters) sqlcdb.StatsByCategoryParams {
 func toSubcategoryParams(userID string, f Filters) sqlcdb.StatsBySubcategoryParams {
 	p := toSummaryParams(userID, f)
 	return sqlcdb.StatsBySubcategoryParams(p)
+}
+
+func toSubcategoryReceiptLinesParams(userID string, f Filters) sqlcdb.StatsBySubcategoryReceiptLinesParams {
+	p := toSummaryParams(userID, f)
+	categoryID := ""
+	if p.CategoryID != nil {
+		categoryID = *p.CategoryID
+	}
+	return sqlcdb.StatsBySubcategoryReceiptLinesParams{
+		UserID:            p.UserID,
+		Column2:           p.Column2,
+		AccountID:         p.AccountID,
+		Column4:           p.Column4,
+		CategoryID:        categoryID,
+		Column6:           p.Column6,
+		Type:              p.Type,
+		Column8:           p.Column8,
+		Kind:              p.Kind,
+		Column10:          p.Column10,
+		TransactionDate:   p.TransactionDate,
+		Column12:          p.Column12,
+		TransactionDate_2: p.TransactionDate_2,
+		Column14:          p.Column14,
+		Column15:          p.Column15,
+		Column16:          p.Column16,
+		StoreID:           p.StoreID,
+	}
 }
 
 func toPeriodParams(userID string, f Filters) sqlcdb.StatsPeriodRowsParams {

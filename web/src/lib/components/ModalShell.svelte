@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import { portal } from '$lib/actions/portal';
 	import { pushModalEscape } from '$lib/modal-escape';
 
 	let {
@@ -26,6 +27,7 @@
 
 {#if open}
 	<div
+		use:portal={typeof document !== 'undefined' ? document.body : null}
 		class="modal-backdrop fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center sm:p-4"
 		role="presentation"
 		onclick={onclose}

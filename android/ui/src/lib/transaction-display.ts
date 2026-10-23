@@ -166,6 +166,16 @@ export function canLinkToSubscription(tx: Transaction): boolean {
 	return tx.type === 'expense' && !tx.subscription_id;
 }
 
+/** Expense eligible for receipt attach (scanner module gated in UI). */
+export function canAttachReceipt(tx: Transaction): boolean {
+	return (
+		tx.type === 'expense' &&
+		!tx.receipt_import_id &&
+		!tx.transfer_group_id &&
+		!tx.category_is_system
+	);
+}
+
 export function transferGroupLegs(tx: Transaction, siblings: Transaction[]): Transaction[] {
 	if (!tx.transfer_group_id) return [tx];
 	return siblings.filter((item) => item.transfer_group_id === tx.transfer_group_id);

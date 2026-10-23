@@ -1,4 +1,5 @@
 import { registerPlugin } from '@capacitor/core';
+import type { NativeMultipartPart } from '$lib/platform/form-data-native';
 
 export type NativeHttpErrorCode = 'SSL_CERTIFICATE' | 'UNREACHABLE';
 
@@ -17,6 +18,11 @@ export interface SslTrustPlugin {
 		method?: string;
 		headers?: Record<string, string>;
 		body?: string;
+		multipart?: NativeMultipartPart[];
+		/** Single file upload. Avoids a nested multipart array, which Android often drops. */
+		imageBase64?: string;
+		imageName?: string;
+		imageMime?: string;
 		allowUntrusted?: boolean;
 	}): Promise<NativeHttpResult>;
 }

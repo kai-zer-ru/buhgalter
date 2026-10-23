@@ -61,6 +61,15 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        // HyperOS crashes in deliverResultsIfNeeded when a gallery intent has null extras.
+        if (data != null && data.getExtras() == null) {
+            data.putExtra("buhgalter_pick", true);
+        }
+        super.onActivityResult(requestCode, resultCode, data);
+    }
+
+    @Override
     public void onUserInteraction() {
         super.onUserInteraction();
         cancelQuietWakeHide();

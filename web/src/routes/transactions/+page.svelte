@@ -38,6 +38,11 @@
 	import { assignIfChanged } from '$lib/state-utils';
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
 	import PullToRefresh from '$lib/components/PullToRefresh.svelte';
+	import { get } from 'svelte/store';
+	import { featureFlags } from '$lib/features';
+	import { isReceiptScannerAvailable } from '$lib/receipt/receipt-scanner-enabled';
+
+	const receiptScannerActive = $derived(isReceiptScannerAvailable($featureFlags));
 
 	const UI_META_PATH = '/api/v1/ui/meta';
 
@@ -207,8 +212,11 @@
 			});
 			if (msg) loadError = msg;
 		}
-		categories = Object.values(uniqueByID).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
-		stores = await listStores();
+		if (isReceiptScannerAvailable(get(featureFlags))) {
+			stores = await listStores();
+		} else {
+			stores = [];
+		}
 	}
 
 	async function loadSplit(opts: { silent?: boolean } = {}) {
@@ -405,171 +413,13 @@
 			]}
 		/>
 
-	<div class="flex flex-wrap items-center justify-between gap-3">
-		<h1 class="text-2xl font-semibold">{$_('transactions.all')}</h1>
-		<div class="flex shrink-0 items-center gap-1">
-			<NewTransactionButtons
-				onincome={() => openNewTransaction('income')}
-				onexpense={() => openNewTransaction('expense')}
-				onreceipt={() => (receiptOpen = true)}
-				ontransfer={() => {
-					editTransfer = null;
-					repeatTransfer = null;
-					transferOpen = true;
-				}}
-			/>
-		</div>
-	</div>
-
-	<TransactionFilters
-		bind:fromLocal
-		bind:toLocal
-		bind:type
-		bind:categoryId
-		bind:storeId
-		bind:accountId
-		bind:kind
-		bind:search
-		{accounts}
-		{categories}
-		{stores}
-		onreset={resetFilters}
-	/>
-
-	<TransactionContextStats params={statsContextParams()} transactionCount={listTransactionCount} />
-
-	{#if loading}
-		<p style:color="var(--text-muted)">{$_('common.loading')}</p>
-	{:else if splitMode}
-		<div class="relative space-y-3">
-			<div class="card overflow-hidden" class:opacity-60={filterLoading}>
-				{#if !pastLoading && !plannedLoading && pastTotal === 0 && plannedTotal === 0}
-					<p
-						class="flex min-h-[7rem] items-center justify-center px-4 py-6 text-center text-sm"
-						style:color="var(--text-muted)"
-					>
-						{$_('transactions.empty')}
-					</p>
-				{:else}
-					{#if plannedTotal > 0 || plannedLoading}
-						<details
-							class:border-b={pastTotal > 0 || pastLoading}
-							style:border-color="var(--border)"
-						>
-							<summary
-								class="cursor-pointer list-none px-4 py-3 text-sm font-medium select-none [&::-webkit-details-marker]:hidden"
-							>
-								{$_('dashboard.group.planned')}
-								<span class="ml-1 font-normal tabular-nums" style:color="var(--text-muted)">
-									({plannedTotal})
-								</span>
-							</summary>
-							{#if plannedLoading}
-								<p class="px-4 pb-4 text-sm" style:color="var(--text-muted)">
-									{$_('common.loading')}
-								</p>
-							{:else}
-								<div class="md:overflow-x-auto">
-									<TransactionList
-										transactions={plannedVisible}
-										siblings={txSiblings}
-										{tz}
-										emptyMessage={$_('transactions.empty')}
-										showDescription
-										showAmountSign
-										showEdit
-										showDelete
-										onmakeRecurring={(tx) =>
-											void goto(
-												resolve(
-													`/settings/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`
-												)
-											)}
-										onrepeat={openRepeat}
-										onedit={openEdit}
-										ondelete={(tx) => void removeTx(tx)}
-									/>
-								</div>
-							{/if}
-						</details>
-					{/if}
-
-					{#if pastTotal > 0 || pastLoading}
-						<details open>
-							<summary
-								class="cursor-pointer list-none px-4 py-3 text-sm font-medium select-none [&::-webkit-details-marker]:hidden"
-							>
-								{$_('dashboard.group.past')}
-								<span class="ml-1 font-normal tabular-nums" style:color="var(--text-muted)">
-									({pastTotal})
-								</span>
-							</summary>
-							{#if pastLoading}
-								<p class="px-4 pb-4 text-sm" style:color="var(--text-muted)">
-									{$_('common.loading')}
-								</p>
-							{:else}
-								<div class="md:overflow-x-auto">
-									<TransactionList
-										transactions={pastVisible}
-										siblings={txSiblings}
-										{tz}
-										emptyMessage={$_('transactions.empty')}
-										showDescription
-										showAmountSign
-										showEdit
-										showDelete
-										onmakeRecurring={(tx) =>
-											void goto(
-												resolve(
-													`/settings/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`
-												)
-											)}
-										onrepeat={openRepeat}
-										onedit={openEdit}
-										ondelete={(tx) => void removeTx(tx)}
-									/>
-								</div>
-							{/if}
-						</details>
-					{/if}
-				{/if}
-			</div>
-			{#if filterLoading}
-				<p
-					class="absolute inset-0 flex items-center justify-center text-sm"
-					style:color="var(--text-muted)"
-				>
-					{$_('common.loading')}
-				</p>
-			{/if}
-		</div>
-		<TransactionPagination {page} {limit} total={pastTotal} onchange={onPageChange} />
-	{:else}
-		<div class="relative space-y-3">
-			<div class="card md:overflow-x-auto" class:opacity-60={filterLoading}>
-				<TransactionList
-					transactions={visibleTx}
-					siblings={transactions}
-					{tz}
-					emptyMessage={$_('transactions.empty')}
-					showDescription
-					showAmountSign
-					showEdit
-					showDelete
-					onmakeRecurring={(tx) =>
-						void goto(
-							resolve(`/settings/recurring-operations?from_tx=${encodeURIComponent(tx.id)}`)
-						)}
-					onrepeat={openRepeat}
-					onedit={openEdit}
-					ondelete={(tx) => void removeTx(tx)}
 		<div class="flex flex-wrap items-center justify-between gap-3">
 			<h1 class="text-2xl font-semibold">{$_('transactions.all')}</h1>
 			<div class="flex shrink-0 items-center gap-1">
 				<NewTransactionButtons
 					onincome={() => openNewTransaction('income')}
 					onexpense={() => openNewTransaction('expense')}
+					onreceipt={receiptScannerActive ? () => (receiptOpen = true) : undefined}
 					ontransfer={() => {
 						editTransfer = null;
 						repeatTransfer = null;
@@ -584,6 +434,7 @@
 			bind:toLocal
 			bind:type
 			bind:categoryId
+			bind:storeId
 			bind:accountId
 			bind:kind
 			bind:search
@@ -593,6 +444,8 @@
 			{categories}
 			{merchants}
 			{tags}
+			{stores}
+			showStoreFilter={receiptScannerActive}
 			onreset={resetFilters}
 		/>
 
@@ -653,6 +506,7 @@
 													)}
 												onattachCredit={(tx) =>
 													void goto(resolve(`/credits?attach_tx=${encodeURIComponent(tx.id)}`))}
+												onreceiptAttached={() => void load(false, { silent: true })}
 												onrepeat={openRepeat}
 												onsaveAsTemplate={(tx) => void saveAsTemplate(tx)}
 												onedit={openEdit}
@@ -700,6 +554,7 @@
 													)}
 												onattachCredit={(tx) =>
 													void goto(resolve(`/credits?attach_tx=${encodeURIComponent(tx.id)}`))}
+												onreceiptAttached={() => void load(false, { silent: true })}
 												onrepeat={openRepeat}
 												onsaveAsTemplate={(tx) => void saveAsTemplate(tx)}
 												onedit={openEdit}
@@ -741,6 +596,7 @@
 								void goto(resolve(`/subscriptions?attach_tx=${encodeURIComponent(tx.id)}`))}
 							onattachCredit={(tx) =>
 								void goto(resolve(`/credits?attach_tx=${encodeURIComponent(tx.id)}`))}
+							onreceiptAttached={() => void load(false, { silent: true })}
 							onrepeat={openRepeat}
 							onsaveAsTemplate={(tx) => void saveAsTemplate(tx)}
 							onedit={openEdit}
@@ -774,11 +630,7 @@
 	}}
 	onsaved={() => void load(false, { silent: true })}
 />
-<ReceiptImportForm
-	bind:open={receiptOpen}
-	onclose={() => (receiptOpen = false)}
-	onsaved={load}
-/>
+<ReceiptImportForm bind:open={receiptOpen} onclose={() => (receiptOpen = false)} onsaved={load} />
 <TransferForm
 	bind:open={transferOpen}
 	editTx={editTransfer}

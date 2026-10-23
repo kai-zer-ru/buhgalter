@@ -298,6 +298,7 @@ erDiagram
 ```
 
 `system_settings` — глобальная строка `id = 1`, без `user_id`.  
+`receipt_proverkacheka_token` (v1.10) — зашифрованный токен [proverkacheka.com](https://proverkacheka.com/) для состава чека; в `GET /admin/settings` только `receipt_api_token_set`, не значение ([receipt-scanner.md](receipt-scanner.md)).  
 `users.theme`: `light` | `dark` | `system` («Как на устройстве»); **default `system`** у новых пользователей (`schema.sql`, `InsertUser`). В UI resolved light/dark через `prefers-color-scheme`.  
 **Сброс учёта:** `DELETE /api/v1/user/data` удаляет ledger пользователя (счета, операции, долги, кредиты, бюджеты, подписки, периодические операции, магазины, теги, шаблоны, категории, журнал уведомлений, задания импорта) и заново создаёт категории по умолчанию. Не трогает профиль, пароль, сессии, API-токены и настройки каналов уведомлений.  
 Переводы: две ноги в `transactions` с общим `transfer_group_id` (самоссылка, не отдельная таблица).
@@ -319,8 +320,10 @@ erDiagram
 
 ## Магазины и чеки
 
-- `stores` — магазины из чеков (`name`, `name_normalized`); уникальность `(user_id, name_normalized)`; без ручного CRUD.
-- `receipt_imports` — один чек на запись; fiscal-ключ, `payload_json` (снимок ФНС), `fns_check_url`; дедупликация повторного импорта.
+- `stores` — точки продаж для фильтров и статистики (`name`, `name_normalized`); уникальность `(user_id, name_normalized)`; без отдельного CRUD в UI. Строки создаются из **чеков** и **синхронизируются с каталогом `merchants`** (то же имя → одна запись); у расходов с `merchant_id` при сохранении и при `GET /stores` проставляется `store_id`.
+- `receipt_imports` — один чек на запись; fiscal-ключ, `payload_json` (нормализованный снимок preview, v1.10 — proverkacheka), `fns_check_url`; dedup при **import**; при **attach** — reuse по fiscal key.
+- `receipt_import_item_categories` — категория/подкатегория по индексу позиции чека (attach: одна операция на весь чек).
+- `receipt_fiscal_previews` — кэш ответа proverkacheka по `(user_id, fn, i, fp)`; `result_json` (`ParsedReceipt`), `fetched_at`; заполняется при успешном preview, чтобы не дергать API повторно.
 - Несколько `transactions` могут ссылаться на один `receipt_import_id` (позиции чека).
 - **Лента изменений (v1.5.2):** таблица `user_change_events` (триггеры на INSERT/UPDATE/DELETE `transactions`). Android при sync запрашивает `GET /sync/transaction-changes?since_id=` и патчит кеш списков по id — добавление, правку и удаление операции, в том числе старой, которую полный прогрев страницы 1 не перечитывает. Счётчик `meta.total` эта лента не увеличивает для строки старше страницы и для входящей ноги перевода.
 
@@ -430,6 +433,7 @@ erDiagram
 | transactions | `internal/transaction` | `transactions.sql` | sqlc |
 | stores | `internal/store` | `stores.sql` | sqlc |
 | receipt_imports | `internal/receipt` | `receipts.sql` | sqlc |
+| receipt_fiscal_previews | `internal/receipt` | `receipt_fiscal_previews.sql` | sqlc |
 | transactions | `internal/transaction` | `transactions.sql`, `user_change_events.sql` | sqlc |
 | debtors, debts | `internal/debt` | `debts.sql` | sqlc |
 | credits | `internal/credit` | `credits.sql` | sqlc |

@@ -406,20 +406,14 @@ Patch: ужесточение перехвата банковских push (ме
 
 ## v1.10.0
 
-Бывший план v1.9.0 (сдвинут из‑за minor «уведомления + UX»).
+- [ ] [Сканер чеков](roadmap/receipt-scanner.md) — один функционал, Web + Android. QR 54-ФЗ читается на устройстве (камера и файл); состав — BYO [proverkacheka.com](https://proverkacheka.com/) (токен в админке, без токена модуль выключен); import и прикрепление к уже созданной операции, категории строк, дедуп, открепление, магазин чека. Подробно: [docs/receipt-scanner.md](docs/receipt-scanner.md)
+
+## v1.11.0
 
 - [ ] [Цели накопления](roadmap/savings-goals.md) — копилки, прогресс, напоминания (`savings_goals`)
 - [ ] [Улучшение импорта](roadmap/import-improve.md) — универсальный CSV / выгрузки РФ; dedup; связка с правилами и inbox
 - [ ] [Бюджет: rollover, прогноз, конверты](roadmap/budget-post-mvp.md) — перенос остатка; прогноз всех ожидаемых расходов в scope; доступно = лимит + перенос − spent; «к распределению» из доходов; статус от лимит+перенос
 - [ ] [Будущие обязательства при архивации/удалении счёта](roadmap/account-inactive-future-flows.md) — диалог: rebind на счёт-приёмник (default) или pause; кредиты только rebind; ApplyDue не пишет на inactive
-- [ ] [Сканер чеков](roadmap/receipt-scanner.md) — v1.10; ветка `scan_chek`, уроки в roadmap, не мержить вслепую
-- [ ] QR 54-ФЗ **на устройстве** → prefill; подтверждение; dedup по фискальным полям; Web + Android; flag `receipt_scanner`
-- [ ] Состав позиций — **BYO** [proverkacheka.com](https://proverkacheka.com/) в админке ([README](README.md#сканер-чеков-токен-proverkacheka)); без токена модуль выключен
-- [ ] Прикрепление чека к **уже созданной** операции; mismatch суммы → «Добавить всё равно» / «Отмена»
-- [ ] Опционально: ИИ по фото; вложение фото к операции
-
-## v1.11.0
-
 - [ ] [Разбивка операции на несколько счетов](roadmap/transaction-split-accounts.md)
 - [ ] [PDF-отчёты](roadmap/savings-reports-import.md) — месячная сводка (server-side)
 - [ ] [Синхронизация с выпиской банка](roadmap/bank-sync.md) — РФ: файл выписки → normalize → dedup (не скрейпинг ЛК)
@@ -436,14 +430,12 @@ Patch: ужесточение перехвата банковских push (ме
 
 - [ ] [PostgreSQL](roadmap/postgresql.md) — опциональный драйвер вместо SQLite (K8s / managed DB / нагрузка после team)
 
-## v1.15.0
-
-- _(резерв под следующий minor)_
 
 ## Общие планы
 
 Без жёсткой версии — по спросу и после очереди minor-релизов выше. Черновик приоритетов: [roadmap-common-plans-priorities.md](bmad_docs/planning-artifacts/roadmap-common-plans-priorities.md).
 
+- [ ] ИИ по фото чека и вложение снимка к операции — не в v1.10; [docs/receipt-scanner.md](docs/receipt-scanner.md#позже-ии-и-вложение-фото)
 - [ ] [Двухфакторная аутентификация](roadmap/two-factor-auth.md) — TOTP; для self-host **спорно** (VPN/reverse proxy vs exposed); решение отложено
 - [ ] [Webhook](roadmap/webhooks.md) — исходящие события для внешних интеграций
 - [ ] [Home Assistant](roadmap/home-assistant.md) — custom component или REST-документация

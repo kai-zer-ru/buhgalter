@@ -15,11 +15,11 @@ import (
 )
 
 var (
-	ErrNotFound    = errors.New("receipt not found")
-	ErrUnavailable = errors.New("fns unavailable")
-	ErrFetchFailed = errors.New("fns fetch failed")
-	defaultBaseURL = "https://proverkacheka.nalog.ru:9999"
-	defaultTimeout = 25 * time.Second
+	ErrNotFound          = errors.New("receipt not found")
+	ErrUnavailable       = errors.New("fns unavailable")
+	ErrFetchFailed       = errors.New("fns fetch failed")
+	defaultBaseURL       = "https://proverkacheka.nalog.ru:9999"
+	defaultTimeout       = 25 * time.Second
 	proverkachekaTimeout = 8 * time.Second
 )
 
@@ -41,6 +41,8 @@ type ParsedReceipt struct {
 	RetailPlace          string    `json:"retail_place,omitempty"`
 	Items                []Item    `json:"items"`
 	FNSCheckURL          string    `json:"fns_check_url"`
+	AlreadyImported      bool      `json:"already_imported,omitempty"`
+	AlreadyInLedger      bool      `json:"already_in_ledger,omitempty"`
 }
 
 type Payload struct {
@@ -186,6 +188,11 @@ func (c *Client) fetchProverkacheka(ctx context.Context, p QRParams) (ParsedRece
 	return parseReceiptResponse(p, data)
 }
 
+// ParseReceiptResponse maps FNS-shaped receipt JSON bytes to ParsedReceipt.
+func ParseReceiptResponse(p QRParams, data []byte) (ParsedReceipt, error) {
+	return parseReceiptResponse(p, data)
+}
+
 func parseReceiptResponse(p QRParams, data []byte) (ParsedReceipt, error) {
 	var wrapped ticketResponse
 	if err := json.Unmarshal(data, &wrapped); err == nil {
@@ -309,6 +316,36 @@ func PayloadFromJSON(raw string) (Payload, error) {
 		return Payload{}, err
 	}
 	return p, nil
+}
+
+// ParsedFromPayload rebuilds ParsedReceipt from stored import payload.
+func ParsedFromPayload(p Payload, fnsCheckURL string) (ParsedReceipt, error) {
+	dt, err := time.Parse(time.RFC3339, p.DateTime)
+	if err != nil {
+		return ParsedReceipt{}, err
+	}
+	url := strings.TrimSpace(fnsCheckURL)
+	if url == "" {
+		url = CheckURL(QRParams{
+			FiscalDriveNumber:    p.FiscalDriveNumber,
+			FiscalDocumentNumber: p.FiscalDocumentNumber,
+			FiscalSign:           p.FiscalSign,
+			TotalSumKopecks:      p.TotalSum,
+			DateTime:             dt,
+		})
+	}
+	return ParsedReceipt{
+		FiscalDriveNumber:    p.FiscalDriveNumber,
+		FiscalDocumentNumber: p.FiscalDocumentNumber,
+		FiscalSign:           p.FiscalSign,
+		DateTime:             dt,
+		TotalSum:             p.TotalSum,
+		StoreName:            p.StoreName,
+		UserINN:              p.UserINN,
+		RetailPlace:          p.RetailPlace,
+		Items:                p.Items,
+		FNSCheckURL:          url,
+	}, nil
 }
 
 func FormatItemSum(kopecks int64) string {

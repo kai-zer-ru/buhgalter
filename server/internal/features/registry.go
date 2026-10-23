@@ -14,6 +14,7 @@ const (
 	Notifications        = "notifications"
 	MerchantsTags        = "merchants_tags"
 	TransactionTemplates = "transaction_templates"
+	ReceiptScanner       = "receipt_scanner"
 )
 
 // Flag describes a known feature flag in the code registry.
@@ -97,6 +98,12 @@ var Registry = []Flag{
 		TitleKey:       "features.transaction_templates.title",
 		DescriptionKey: "features.transaction_templates.description",
 		DefaultEnabled: true,
+	},
+	{
+		Key:            ReceiptScanner,
+		TitleKey:       "features.receipt_scanner.title",
+		DescriptionKey: "features.receipt_scanner.description",
+		DefaultEnabled: false,
 	},
 }
 

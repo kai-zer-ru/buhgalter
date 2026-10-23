@@ -234,6 +234,10 @@ WHERE t.user_id = ?
   AND (? = '' OR t.transaction_date <= ?)
   AND (? = '' OR t.description LIKE '%' || ? || '%')
   AND (? = '' OR t.store_id = ?)
+  AND NOT (
+    t.receipt_import_id IS NOT NULL
+    AND t.receipt_item_index IS NULL
+  )
   AND NOT EXISTS (
     SELECT 1
     FROM credit_payments cp
@@ -301,6 +305,130 @@ func (q *Queries) StatsBySubcategory(ctx context.Context, arg StatsBySubcategory
 	items := []StatsBySubcategoryRow{}
 	for rows.Next() {
 		var i StatsBySubcategoryRow
+		if err := rows.Scan(
+			&i.CategoryID,
+			&i.CategoryName,
+			&i.CategoryIcon,
+			&i.SubcategoryID,
+			&i.SubcategoryName,
+			&i.Total,
+			&i.TxCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const statsBySubcategoryReceiptLines = `-- name: StatsBySubcategoryReceiptLines :many
+SELECT
+    c.id AS category_id,
+    c.name AS category_name,
+    c.icon AS category_icon,
+    s.id AS subcategory_id,
+    s.name AS subcategory_name,
+    CAST(COALESCE(SUM(
+        CASE
+            WHEN COALESCE(CAST(json_extract(ri.payload_json, '$.items[' || ric.item_index || '].sum') AS INTEGER), 0) > 0
+            THEN CAST(json_extract(ri.payload_json, '$.items[' || ric.item_index || '].sum') AS INTEGER)
+            ELSE COALESCE(CAST(json_extract(ri.payload_json, '$.items[' || ric.item_index || '].price') AS INTEGER), 0)
+        END
+    ), 0) AS INTEGER) AS total,
+    COUNT(*) AS tx_count
+FROM transactions t
+JOIN receipt_imports ri ON ri.id = t.receipt_import_id AND ri.user_id = t.user_id
+JOIN receipt_import_item_categories ric ON ric.receipt_import_id = t.receipt_import_id AND ric.user_id = t.user_id
+JOIN categories c ON c.id = ric.category_id
+JOIN subcategories s ON s.id = ric.subcategory_id
+WHERE t.user_id = ?
+  AND t.receipt_import_id IS NOT NULL
+  AND t.receipt_item_index IS NULL
+  AND ric.subcategory_id IS NOT NULL
+  AND trim(ric.subcategory_id) != ''
+  AND t.type IN ('income', 'expense')
+  AND (? = '' OR t.account_id = ?)
+  AND (? = '' OR ric.category_id = ?)
+  AND (? = '' OR t.type = ?)
+  AND (? = '' OR t.kind = ?)
+  AND (? = '' OR t.transaction_date >= ?)
+  AND (? = '' OR t.transaction_date <= ?)
+  AND (? = '' OR t.description LIKE '%' || ? || '%')
+  AND (? = '' OR t.store_id = ?)
+  AND NOT EXISTS (
+    SELECT 1
+    FROM credit_payments cp
+    WHERE cp.transaction_id = t.id
+      AND cp.exclude_from_stats = 1
+  )
+GROUP BY c.id, c.name, c.icon, s.id, s.name
+ORDER BY total DESC
+`
+
+type StatsBySubcategoryReceiptLinesParams struct {
+	UserID            string      `json:"user_id"`
+	Column2           interface{} `json:"column_2"`
+	AccountID         string      `json:"account_id"`
+	Column4           interface{} `json:"column_4"`
+	CategoryID        string      `json:"category_id"`
+	Column6           interface{} `json:"column_6"`
+	Type              string      `json:"type"`
+	Column8           interface{} `json:"column_8"`
+	Kind              string      `json:"kind"`
+	Column10          interface{} `json:"column_10"`
+	TransactionDate   string      `json:"transaction_date"`
+	Column12          interface{} `json:"column_12"`
+	TransactionDate_2 string      `json:"transaction_date_2"`
+	Column14          interface{} `json:"column_14"`
+	Column15          *string     `json:"column_15"`
+	Column16          interface{} `json:"column_16"`
+	StoreID           *string     `json:"store_id"`
+}
+
+type StatsBySubcategoryReceiptLinesRow struct {
+	CategoryID      string `json:"category_id"`
+	CategoryName    string `json:"category_name"`
+	CategoryIcon    string `json:"category_icon"`
+	SubcategoryID   string `json:"subcategory_id"`
+	SubcategoryName string `json:"subcategory_name"`
+	Total           int64  `json:"total"`
+	TxCount         int64  `json:"tx_count"`
+}
+
+// Attach: one transaction per receipt; subcategories per line in receipt_import_item_categories.
+func (q *Queries) StatsBySubcategoryReceiptLines(ctx context.Context, arg StatsBySubcategoryReceiptLinesParams) ([]StatsBySubcategoryReceiptLinesRow, error) {
+	rows, err := q.db.QueryContext(ctx, statsBySubcategoryReceiptLines,
+		arg.UserID,
+		arg.Column2,
+		arg.AccountID,
+		arg.Column4,
+		arg.CategoryID,
+		arg.Column6,
+		arg.Type,
+		arg.Column8,
+		arg.Kind,
+		arg.Column10,
+		arg.TransactionDate,
+		arg.Column12,
+		arg.TransactionDate_2,
+		arg.Column14,
+		arg.Column15,
+		arg.Column16,
+		arg.StoreID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []StatsBySubcategoryReceiptLinesRow{}
+	for rows.Next() {
+		var i StatsBySubcategoryReceiptLinesRow
 		if err := rows.Scan(
 			&i.CategoryID,
 			&i.CategoryName,

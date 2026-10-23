@@ -39,6 +39,39 @@ func (q *Queries) FailInterruptedReceiptScanJobs(ctx context.Context, arg FailIn
 	return result.RowsAffected()
 }
 
+const getDoneScanJobResultByFiscalKey = `-- name: GetDoneScanJobResultByFiscalKey :one
+SELECT result_json
+FROM receipt_scan_jobs
+WHERE user_id = ?
+  AND status = 'done'
+  AND result_json IS NOT NULL
+  AND TRIM(result_json) != ''
+  AND json_extract(result_json, '$.fiscal_drive_number') = ?2
+  AND json_extract(result_json, '$.fiscal_document_number') = ?3
+  AND json_extract(result_json, '$.fiscal_sign') = ?4
+ORDER BY finished_at DESC
+LIMIT 1
+`
+
+type GetDoneScanJobResultByFiscalKeyParams struct {
+	UserID               string  `json:"user_id"`
+	FiscalDriveNumber    *string `json:"fiscal_drive_number"`
+	FiscalDocumentNumber *string `json:"fiscal_document_number"`
+	FiscalSign           *string `json:"fiscal_sign"`
+}
+
+func (q *Queries) GetDoneScanJobResultByFiscalKey(ctx context.Context, arg GetDoneScanJobResultByFiscalKeyParams) (*string, error) {
+	row := q.db.QueryRowContext(ctx, getDoneScanJobResultByFiscalKey,
+		arg.UserID,
+		arg.FiscalDriveNumber,
+		arg.FiscalDocumentNumber,
+		arg.FiscalSign,
+	)
+	var result_json *string
+	err := row.Scan(&result_json)
+	return result_json, err
+}
+
 const getReceiptScanJob = `-- name: GetReceiptScanJob :one
 SELECT id, status, error_message, result_json, created_at, started_at, finished_at
 FROM receipt_scan_jobs

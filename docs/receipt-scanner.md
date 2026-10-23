@@ -1,249 +1,151 @@
-# Сканер чеков (54-ФЗ)
+# Сканер чеков (54-ФЗ) — v1.10
 
-Импорт расходов из российских кассовых чеков: QR на чеке → API ФНС → подтверждение позиций → пакетное создание операций.
+Импорт расходов и **прикрепление чека** к уже созданной операции по QR кассового чека РФ. Состав позиций — через **proverkacheka.com** (токен инстанса в админке), не через «бесплатный» API ФНС с VPS.
 
-Связанные документы: [data-model.md](data-model.md), [transactions-display.md](transactions-display.md), [api/openapi.yaml](api/openapi.yaml).
+Связанные документы: [data-model.md](data-model.md), [transactions-display.md](transactions-display.md), [feature-toggles.md](feature-toggles.md), [api/openapi.yaml](api/openapi.yaml), [README](../README.md#сканер-чеков-токен-proverkacheka), [receipt-scanner-proverkacheka.md](receipt-scanner-proverkacheka.md).
 
-## Поток
+## Включение на инстансе
 
-1. Пользователь сканирует QR **камерой** (QR в браузере → `POST /receipts/parse`) или загружает **фото чека** (`POST /receipts/scan-jobs`, async на сервере).
-2. Сервер запрашивает данные у ФНС (цепочка бэкендов, см. ниже); для фото — после распознавания QR на сервере.
-3. UI показывает магазин, дату, итог и таблицу позиций; пользователь выбирает счёт, категории (в т.ч. массово для выбранных строк).
-4. `POST /api/v1/receipts/import` — в одной транзакции БД: магазин (`getOrCreate`), запись `receipt_imports`, N операций `expense`.
-5. В списке операций у импортированных позиций — иконка чека; попап `GET /api/v1/receipts/{id}` с полным чеком и ссылкой на ФНС.
+| Условие | Где |
+|--------|-----|
+| Feature flag `receipt_scanner` | Админка → модули ([feature-toggles.md](feature-toggles.md)) |
+| Токен API proverkacheka | Админка → **API чеков** (write-only; см. README) |
 
-Фото обрабатывается асинхронно (как CSV-импорт): клиент опрашивает `GET /receipts/scan-jobs/{id}` до `done`/`failed`. Изображение не хранится. На сервере учитывается EXIF-поворот и несколько проходов распознавания (кроп нижней части, порог, масштаб).
+**Эффективно модуль работает**, только если **оба** условия выполнены. Иначе клиенты не показывают «Чек» / attach; API `/receipts/*` → **404** `FEATURE_DISABLED` или **503** `ERR_RECEIPT_API_NOT_CONFIGURED`.
 
-## Прикрепление чека к существующей операции (v1.10)
+Инструкция получения токена у провайдера — в **[README](../README.md#сканер-чеков-токен-proverkacheka)** (открытая дока репозитория).
 
-К **уже созданному** расходу можно привязать чек, не создавая новую операцию из импорта.
+## Поток: новый импорт
 
-### Когда доступно
+1. QR читается **на устройстве** (web и Android): кнопка камеры и загрузка файла. Дальше `POST /api/v1/receipts/parse` с `{ "qr": "..." }` — на сервер уходит строка, не картинка. Сервер по ней запрашивает состав у proverkacheka. `POST /receipts/scan-jobs` клиенты для этого не вызывают.
+2. Сервер вызывает **proverkacheka** `POST /api/v1/check/get` (`token` + `qrraw`), нормализует ответ в preview (`ParsedReceipt`: магазин, дата, итог, `items[]`). Успешный ответ сохраняется в **`receipt_fiscal_previews`** (ключ user + fn + i + fp); повторный preview того же чека идёт из БД без запроса к провайдеру.
+3. UI подтверждения import (web; Android — parity при появлении экрана):
+   - **Счёт** для всех создаваемых расходов.
+   - Таблица позиций: вкл/выкл строку, название, сумма, **категория**, **подкатегория** (expense, не system).
+   - Блок **«Общая категория»**: категория + подкатегория (опционально).
+   - Кнопка **«Проставить без категории»** — для всех **включённых** строк, у которых категория ещё не выбрана, подставляет общую категорию/подкатегорию; уже заданные вручную **не перезаписывает** (удобно для смешанных чеков: продукты + лекарства + бытовое).
+   - Подсказка: сначала массово однотипное, затем вручную отдельные позиции.
+   - Сохранение недоступно, пока у каждой **включённой** строки нет категории.
+4. `POST /api/v1/receipts/import` — в одной транзакции БД: `stores` (getOrCreate), `receipt_imports`, N операций `expense`.
+5. В журнале — иконка чека; попап `GET /api/v1/receipts/{id}?transaction_id=…` с подсветкой позиции и **категорией/подкатегорией** по каждой строке (из связанных операций).
 
-- Тип операции — **расход** (`expense`), не перевод и не привязанная служебная строка.
-- У операции ещё **нет** `receipt_import_id` (один чек на операцию; повторное прикрепление — сначала отвязка, если появится в продукте).
-- Модуль сканера **включён** (`receipt_scanner`) и на инстансе **настроен** токен API состава чека (см. ниже).
+### Категория в журнале (import и attach)
+
+Для всех операций с одним `receipt_import_id` колонка категории строится **по всем позициям чека** (операции import с `receipt_item_index` и/или строки `receipt_import_item_categories` при attach):
+
+| Ситуация | Что показываем |
+|----------|----------------|
+| Одна категория, **разные** подкатегории | **Только категория** |
+| **Разные** категории | **Все категории** (через запятую) |
+| Одна категория и **одна** подкатегория на всех позициях | **Категория и подкатегория** |
+
+Повторный **import** того же чека (ключ `fiscal_drive_number` + `fiscal_document_number` + `fiscal_sign`) → **409** `ERR_RECEIPT_DUPLICATE`.
+
+## Поток: прикрепить к существующей операции
+
+Отдельный сценарий: **не** создаёт новые операции, только связывает чек с уже созданным **расходом**.
+
+### Условия
+
+- `type = expense`, без `receipt_import_id`.
+- Модуль включён (flag + токен).
 
 ### UX (web и Android)
 
-1. В меню строки операции (как «Прикрепить к подписке» / «Сделать платёж по кредиту») — **«Прикрепить чек»**.
-2. Скан QR камерой или загрузка фото → тот же preview, что при импорте (магазин, дата, позиции).
-3. **Сравнение сумм:** сумма операции в копейках (`transactions.amount`) и итог чека (`total_sum` из preview, в копейках). Сравнение **строгое**, без допуска.
-4. Если суммы **совпадают** — сразу подтверждение прикрепления (краткий итог: магазин, № чека, сумма).
-5. Если **не совпадают** — диалог-предупреждение с обеими суммами в рублях, кнопки **«Добавить всё равно»** (primary) и **«Отмена»**. Паттерн — in-page `confirm()` ([ui-dialogs.md](ui-dialogs.md)), не `window.confirm`.
-6. После успеха — у операции иконка чека; попап чека без подсветки отдельной позиции (`receipt_item_index` пуст), если чек привязан целиком к одной операции.
+1. Меню строки — **«Прикрепить чек»** (как подписка / платёж по кредиту).
+2. Scan / фото → preview, как при import.
+3. Таблица позиций: **категория / подкатегория** на каждую строку; блок **«Общая категория»** и **«Проставить без категории»** (как import). По умолчанию подставляется категория/подкатегория **текущей операции**, если есть.
+4. **Сумма:** `transactions.amount` (коп.) vs `receipt.total_sum` (коп.) — **строгое** равенство.
+5. Совпало — подтверждение; не совпало — [ui-dialogs.md](ui-dialogs.md): **«Добавить всё равно»** / **«Отмена»**. Сохранение недоступно, пока у **каждой** позиции чека не выбрана категория.
+6. Успех: `receipt_import_id` на операции; категории строк — в `receipt_import_item_categories`; `receipt_item_index` на операции **не** задаётся (одна операция на весь чек).
+7. **Статистика расходов:** подкатегории attach-строк попадают в `GET /stats/by-subcategory` (сумма по позиции из payload чека). Import — через `subcategory_id` на каждой созданной операции. См. [ui-stats.md](ui-stats.md).
+8. **Открепить чек:** меню строки или кнопка в просмотре чека → `POST /api/v1/receipts/detach` с `{ "transaction_id" }`; сбрасывает `receipt_import_id` / `receipt_item_index` на **этой** операции; при отсутствии других связей категории строк attach удаляются.
 
-Импорт «N позиций → N новых операций» и прикрепление к **одной** существующей операции — **разные** сценарии; второй не создаёт дубликатов суммы в журнале, только связывает метаданные и JSON чека.
+### API attach
 
-### API (контракт v1.10)
+| Метод | Путь |
+|-------|------|
+| `POST` | `/api/v1/receipts/attach` |
 
-| Метод | Путь | Назначение |
-|-------|------|------------|
-| `POST` | `/api/v1/receipts/attach` | Привязать распознанный чек к `transaction_id` |
-
-Тело (черновик):
+Тело:
 
 ```json
 {
-  "transaction_id": "…",
+  "transaction_id": "uuid",
   "fiscal_drive_number": "…",
   "fiscal_document_number": "…",
   "fiscal_sign": "…",
   "receipt": { },
+  "items": [
+    { "index": 0, "category_id": "uuid", "subcategory_id": null, "include": true }
+  ],
   "acknowledge_sum_mismatch": false
 }
 ```
 
-- Поле `receipt` — тот же объект preview, что после `parse` / `scan-jobs` (сервер сохраняет снимок в `receipt_imports`).
-- Если `|tx.amount - receipt.total_sum| != 0` и `acknowledge_sum_mismatch !== true` → **409** `ERR_RECEIPT_SUM_MISMATCH` с `transaction_amount`, `receipt_total_sum` (копейки) для текста предупреждения в UI.
-- Если чек с такими фискальными реквизитами уже есть у пользователя — **переиспользовать** существующую запись `receipt_imports`, не **409** `ERR_RECEIPT_DUPLICATE` (duplicate относится к повторному **импорту** новых операций).
-- Операция должна принадлежать пользователю; иначе **404**.
+Поле `items` — по одной записи на **каждую** позицию в `receipt.items`; `include` для attach всегда `true`.
+
+| Код | Когда |
+|-----|--------|
+| **409** `ERR_RECEIPT_SUM_MISMATCH` | Суммы различаются и `acknowledge_sum_mismatch !== true`; тело с `transaction_amount`, `receipt_total_sum` (коп.) |
+| **404** | Операция не найдена / чужая |
+| **409** `ERR_RECEIPT_DUPLICATE` | Import — чек с таким fiscal-ключом уже есть; attach — чек уже привязан к другой операции |
 
 Ответ: `{ "receipt_import_id", "transaction": { … } }`.
 
-## Состав чека: proverkacheka и админка (v1.10)
+## API (сводка)
 
-Для **списка позиций** на типичном self-host вместо цепочки публичных эндпоинтов ФНС — **BYO-токен** [proverkacheka.com](https://proverkacheka.com/): один на **весь инстанс**, задаёт администратор (аналог секрета уведомлений). Без токена модуль сканера **не работает**, даже если включён feature flag `receipt_scanner` (см. [feature-toggles.md](feature-toggles.md)).
+| Метод | Путь | Назначение |
+|-------|------|------------|
+| `POST` | `/api/v1/receipts/parse` | Preview по строке QR |
+| `POST` | `/api/v1/receipts/scan-jobs` | Фото → async job |
+| `GET` | `/api/v1/receipts/scan-jobs/{id}` | Статус job |
+| `POST` | `/api/v1/receipts/import` | Import → N расходов |
+| `POST` | `/api/v1/receipts/attach` | Attach к одной операции |
+| `POST` | `/api/v1/receipts/detach` | Открепить чек от операции |
+| `GET` | `/api/v1/receipts/{id}` | Детали чека |
+| `GET` | `/api/v1/stores` | Справочник магазинов |
+| `PUT` | `/api/v1/admin/settings/receipt-api-token` | Задать токен (admin) |
 
-### Как получить токен proverkacheka
+Ошибки модуля: `ERR_RECEIPT_API_NOT_CONFIGURED`, `ERR_RECEIPT_QR`, `ERR_RECEIPT_NOT_FOUND`, `ERR_RECEIPT_DUPLICATE`, `ERR_RECEIPT_SUM_MISMATCH`, `ERR_RECEIPT_ITEMS`, `ERR_FNS_UNAVAILABLE` (legacy / провайдер недоступен).
 
-1. Зарегистрируйтесь на [proverkacheka.com](https://proverkacheka.com/) (email / логин по правилам сайта).
-2. Войдите в личный кабинет.
-3. Откройте раздел профиля / настроек API (на сайте обычно **«Токен доступа к API»** или аналог в профиле).
-4. Скопируйте токен. Не публикуйте его в чатах и git; на инстансе buhgalter он хранится только в зашифрованном виде в БД.
+## UI (web)
 
-Проверка вручную (подставьте свой токен и строку QR с чека):
+- **«Чек»** в `NewTransactionButtons` (главная, `/transactions`, `/accounts/[id]`) — при включённом модуле.
+- **«Прикрепить чек»** в меню строки расхода.
+- Магазин в `TransactionForm`, фильтр «Магазин», блок **«По магазинам»** на `/stats` — при наличии данных.
 
-```bash
-curl -sS -X POST 'https://proverkacheka.com/api/v1/check/get' \
-  -H 'Content-Type: application/json' \
-  -d '{"token":"ВАШ_ТОКЕН","qrraw":"t=20260706T1753&s=4047.50&fn=7384440900988131&i=6614&fp=0538715847&n=1"}'
-```
+Android — те же сценарии в `android/ui/` ([android-client-receipts.md](android-client-receipts.md)): full-screen `/receipts/import`, `/receipts/attach`, `/receipts/[id]`; кнопка «Чек» на главной / операциях / счёте; **online-only**.
 
-В ответе должны быть товары (`items` / поля по документации провайдера), не только итог.
+## Модель данных
 
-### Куда ввести в buhgalter
+- `stores`, `receipt_imports`, `receipt_fiscal_previews`, `receipt_scan_jobs` — см. [data-model.md](data-model.md).
+- `transactions.store_id`, `receipt_import_id`, `receipt_item_index`.
+- Токен API: `system_settings` (шифрование как `notification_secret_key`); в GET админки только `receipt_api_token_set`.
 
-Админка инстанса → настройки → **API чеков** (write-only: в `GET` только флаг `receipt_api_token_set: true`, без значения). После сохранения перезапуск не требуется.
-
-Подробности для разработчиков — [receipt-scanner-proverkacheka.md](receipt-scanner-proverkacheka.md).
-
-## Ограничения v1
-
-- Только QR 54-ФЗ (без OCR без QR, без зарубежных чеков).
-- Нужен интернет для ФНС.
-- Магазины создаются автоматически из чеков; ручного CRUD магазинов нет.
-- Изображение чека не хранится — только JSON-снимок ответа ФНС в `receipt_imports.payload_json`.
-
-## Формат description операции
-
-Для каждой включённой позиции:
+## Формат description (import по позициям)
 
 ```
 {название позиции}. Чек №{fiscal_document_number}, сумма {total_display}
 ```
 
-`total_display` — итог **всего чека** (не позиции), в рублях с копейками.
+`total_display` — итог **всего чека** в рублях с копейками.
 
-## API
+## Позже: ИИ и вложение фото
 
-| Метод | Путь | Назначение |
-|-------|------|------------|
-| `POST` | `/api/v1/receipts/parse` | `{ "qr": "..." }` → preview (камера) |
-| `POST` | `/api/v1/receipts/scan-jobs` | multipart `image` → `202`, async job |
-| `GET` | `/api/v1/receipts/scan-jobs/{id}` | статус job; `result` — `ParsedReceipt` при `done` |
-| `POST` | `/api/v1/receipts/import` | Подтверждение и создание операций |
-| `POST` | `/api/v1/receipts/attach` | Прикрепить чек к существующей операции (v1.10) |
-| `GET` | `/api/v1/receipts/{id}` | Полные данные чека; query `transaction_id` — подсветка позиции |
-| `GET` | `/api/v1/stores` | Список магазинов пользователя |
+Не входит в v1.10. В [общих планах](../ROADMAP.md#общие-планы).
 
-Повторный импорт того же чека (ключ `fiscal_drive_number` + `fiscal_document_number` + `fiscal_sign`) → **409** `ERR_RECEIPT_DUPLICATE`.
+- **ИИ по фото** — распознать чек без читаемого QR или подсказать категории по снимку. В v1.10 QR читается на устройстве, состав позиций даёт только proverkacheka.
+- **Вложение снимка к операции** — хранить фото чека рядом с операцией. В v1.10 файл на сервер не уходит; в БД остаётся JSON в `receipt_imports.payload_json`.
 
-## UI
+## Ограничения
 
-- Кнопка **«Чек»** в `NewTransactionButtons` на главной, `/transactions`, `/accounts/[id]`.
-- Магазин в форме расхода (`TransactionForm`) — если есть хотя бы один магазин.
-- Фильтр «Магазин» в операциях и статистике — только при `stores.length > 0`.
-- Блок **«По магазинам»** на `/stats` — только расходы, при наличии данных.
+- QR 54-ФЗ; зарубежные чеки — вне scope.
+- Сколько чеков можно запросить у proverkacheka, задаёт тариф провайдера, не buhgalter.
+- Без токена proverkacheka — **нет** состава позиций (не обещать silent fallback «Покупка по чеку» в v1.10).
+- Фото чека на сервере не хранится; в БД — JSON снимок в `receipt_imports.payload_json`.
+- Нет ручного CRUD магазинов.
 
-## Зависимость от ФНС (текущая реализация до v1.10)
+## Legacy (до v1.10, не развивать)
 
-> **План v1.10:** основной источник состава — **proverkacheka** по токену из админки; блок ниже — legacy-цепочка без BYO-ключа.
-
-Сервер пробует несколько источников (в порядке приоритета):
-
-| Источник | Позиции | Доступ с сервера | Примечание |
-|----------|---------|------------------|------------|
-| `irkkt-mobile.nalog.ru:8888` (v2) | да | да | Нужен `BUHGALTER_FNS_SESSION_ID` (сессия приложения «Проверка чеков») |
-| `proverkacheka.nalog.ru:9999` (GET) | да | часто нет (timeout) | Работает из некоторых сетей |
-| `kkt-online.nalog.ru` (openapikkt) | нет | да | Только проверка подлинности чека |
-| QR-fallback | 1 строка | всегда | После успешной проверки на kkt-online: сумма и дата из QR, позиция «Покупка по чеку» |
-
-Переменная окружения `BUHGALTER_FNS_SESSION_ID` — `sessionId` из мобильного API ФНС (SMS-авторизация в приложении «Проверка чеков»). С ней сервер получает полный чек с позициями через `irkkt-mobile`.
-
-### Как получить `BUHGALTER_FNS_SESSION_ID`
-
-Это **не** сессия buhgalter (cookie в браузере). Это токен мобильного API ФНС (`irkkt-mobile.nalog.ru:8888`), тот же, что приложение «Проверка чеков» шлёт в заголовке `sessionId`.
-
-**Важно:**
-
-- Сессия **чувствительная** — как пароль к вашему номеру в API ФНС. Не коммитьте в git, храните только в `.env` на сервере.
-- Обычно **живёт ~24 часа**, потом запросы к ФНС снова без позиций (fallback). Нужно обновить значение в `.env` и перезапустить buhgalter.
-- API неофициальный (как у сторонних клиентов); ФНС может менять правила без предупреждения.
-
-#### Способ 1 — перехват трафика приложения (рекомендуется)
-
-Подходит для Android/iOS без root.
-
-1. Установите официальное приложение **«Проверка чеков»** ФНС:
-   - [Google Play](https://play.google.com/store/apps/details?id=ru.fns.billchecker) (`ru.fns.billchecker`)
-   - [App Store](https://apps.apple.com/ru/app/id1169353005)
-2. На телефоне войдите по номеру телефона и SMS-коду (как в обычном приложении).
-3. Настройте перехват HTTPS на телефоне:
-   - **Android:** [mitmproxy](https://mitmproxy.org/), [HTTP Toolkit](https://httptoolkit.com/) или Charles; установите CA-сертификат прокси (в Android 7+ для приложений иногда нужен root или эмулятор — проще эмулятор Android Studio).
-   - **iOS:** Charles / Proxyman / mitmproxy + доверие сертификату в настройках.
-4. В приложении отсканируйте любой чек (или откройте уже сохранённый).
-5. В логах прокси найдите запрос к `irkkt-mobile.nalog.ru:8888`, например:
-   - `POST /v2/ticket`
-   - `GET /v2/tickets/...`
-6. Скопируйте значение заголовка **`sessionId`** (длинная строка, не путать с cookie сайта ФНС).
-
-Пример заголовка в mitmproxy:
-
-```http
-POST https://irkkt-mobile.nalog.ru:8888/v2/ticket
-sessionId: a1b2c3d4e5f6....ваша_строка....
-Content-Type: application/json
-```
-
-#### Способ 2 — файл настроек Android (root / эмулятор)
-
-Если есть root или Android-эмулятор с доступом к данным приложения:
-
-1. Войдите в «Проверка чеков» на устройстве.
-2. Прочитайте файл (через `adb shell` с root или из бэкапа):
-
-```text
-/data/data/ru.fns.billchecker/shared_prefs/ru.fns.billchecker_preferences.xml
-```
-
-3. Найдите ключ **`KEY_ACCESS_TOKEN`** — его значение и есть `sessionId` для `BUHGALTER_FNS_SESSION_ID`.
-
-На нерутованном телефоне иногда помогает `adb backup` (устаревающий способ; на новых Android часто недоступен).
-
-#### Способ 3 — SMS-авторизация через API (для продвинутых)
-
-Тот же поток, что у скриптов вроде [get-receipts](https://github.com/valiotti/get-receipts):
-
-1. `POST https://irkkt-mobile.nalog.ru:8888/v2/auth/phone/request` — тело JSON: `phone`, `client_secret`, `os`.
-2. Ввести код из SMS.
-3. `POST https://irkkt-mobile.nalog.ru:8888/v2/auth/phone/verify` — `phone`, `code`, `client_secret`, `os`.
-4. В ответе JSON: **`sessionId`** и **`refresh_token`**.
-
-`client_secret` привязан к версии приложения и периодически меняется; его извлекают из APK «Проверка чеков» (декомпиляция / анализ `VERSION`). buhgalter **не** выполняет этот вход сам — только использует уже готовый `sessionId`.
-
-Обновление без повторного SMS (пока жив `refresh_token`):
-
-`POST https://irkkt-mobile.nalog.ru:8888/v2/mobile/users/refresh` с `refresh_token` и `client_secret` → новый `sessionId`.
-
-Автообновление в buhgalter пока **не реализовано** — вручную копируйте новый `sessionId` в `.env`.
-
-### Куда прописать и как проверить
-
-**Локально / бинарник** — в `.env` рядом с `buhgalter` или в окружении:
-
-```bash
-BUHGALTER_FNS_SESSION_ID=ваш_sessionId_из_приложения
-```
-
-**Docker** — в `.env` рядом с `docker-compose.yml` (см. [docker/.env.example](../docker/.env.example)).
-
-**Dev:**
-
-```bash
-export BUHGALTER_FNS_SESSION_ID='...'
-make dev-server
-```
-
-Проверка без UI (из каталога `server/`):
-
-```bash
-BUHGALTER_FNS_SESSION_ID='...' go run ./cmd/fns-fetch/
-```
-
-Успех: в JSON несколько `items`, заполнен `store_name`. Ошибка `mobile unauthorized` — сессия пустая, просрочена или скопирована неверно.
-
-Проверка через API buhgalter:
-
-```bash
-curl -sS -X POST 'http://localhost:8765/api/v1/receipts/parse' \
-  -H 'Content-Type: application/json' \
-  -H 'Cookie: session=ВАША_СЕССИЯ_BUHGALTER' \
-  -d '{"qr":"t=20260706T1753&s=4047.50&fn=7384440900988131&i=6614&fp=0538715847&n=1"}'
-```
-
-В ответе должны быть реальные названия товаров, а не одна строка «Покупка по чеку».
-
-Без session ID и при недоступности `:9999` импорт всё равно возможен: чек валидируется через kkt-online, в UI одна позиция на всю сумму (магазин пустой — можно указать вручную при импорте).
-
-При полной недоступности ФНС — `502` `ERR_FNS_UNAVAILABLE`.
+Ранее использовались цепочка ФНС (`BUHGALTER_FNS_SESSION_ID`, `:9999`, kkt-online) и fallback «Покупка по чеку». Для self-host это **не** целевой путь v1.10. Подробности для миграции старых инстансов — [receipt-scanner-proverkacheka.md](receipt-scanner-proverkacheka.md) (§ Legacy). Env `BUHGALTER_FNS_SESSION_ID` в [docker/.env.example](../docker/.env.example) — только справка, не замена токена proverkacheka.
