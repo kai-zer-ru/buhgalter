@@ -84,11 +84,6 @@ WHERE id = ? AND user_id = ?;
 DELETE FROM budgets
 WHERE id = ? AND user_id = ?;
 
--- name: ClearBudgetCopyForward :execrows
-UPDATE budgets
-SET copy_forward = 0, updated_at = ?
-WHERE id = ? AND user_id = ?;
-
 -- name: ReassignBudgetsCategory :exec
 UPDATE budgets
 SET category_id = ?, updated_at = ?

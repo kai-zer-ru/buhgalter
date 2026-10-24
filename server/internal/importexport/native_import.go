@@ -693,8 +693,10 @@ func importNativeBudgets(ctx context.Context, db *sql.DB, r *resolver, nf *Nativ
 		in := budget.Input{
 			Name: nativeCell(table, row, "name"), Scope: nativeCell(table, row, "scope"),
 			Amount: amt, Month: nativeCell(table, row, "month"),
-			CopyForward:    parseCSVBool(nativeCell(table, row, "copy_forward")),
-			AlertAtPercent: 90, IsActive: parseCSVBool(nativeCell(table, row, "is_active")),
+			CopyForward:     parseCSVBool(nativeCell(table, row, "copy_forward")),
+			AlertAtPercent:  90,
+			IsActive:        parseCSVBool(nativeCell(table, row, "is_active")),
+			SkipCopyForward: true,
 		}
 		if v := parseOptionalInt(nativeCell(table, row, "alert_at_percent")); v != nil {
 			in.AlertAtPercent = *v

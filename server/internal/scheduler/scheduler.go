@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kai-zer-ru/buhgalter/internal/budget"
 	"github.com/kai-zer-ru/buhgalter/internal/credit"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/features"
@@ -29,12 +30,19 @@ type Scheduler struct {
 	Recurring           *RecurringRunner
 	Subscription        *SubscriptionRunner
 	Future              *FutureRunner
+	Budget              *BudgetRunner
 	Logger              *slog.Logger
 	stop                chan struct{}
 	mu                  sync.Mutex
 	creditLastRun       map[string]string
 	recurringLastRun    map[string]string
 	subscriptionLastRun map[string]string
+	budgetCopyLastRun   map[string]string
+}
+
+// BudgetRunner copies a missing next month on the 1st in each user's timezone.
+type BudgetRunner struct {
+	DB *sql.DB
 }
 
 type RecurringRunner struct {
@@ -63,6 +71,7 @@ func New(creditRunner *CreditRunner, recurringRunner *RecurringRunner, subscript
 		creditLastRun:       make(map[string]string),
 		recurringLastRun:    make(map[string]string),
 		subscriptionLastRun: make(map[string]string),
+		budgetCopyLastRun:   make(map[string]string),
 	}
 }
 
@@ -80,6 +89,7 @@ func (s *Scheduler) loop() {
 	if s.Future != nil {
 		s.runFutureActivation()
 	}
+	s.runBudgetCopyForward(time.Now())
 	for {
 		select {
 		case <-s.stop:
@@ -97,6 +107,7 @@ func (s *Scheduler) loop() {
 			if s.Future != nil {
 				s.runFutureActivation()
 			}
+			s.runBudgetCopyForward(now)
 		}
 	}
 }
@@ -238,6 +249,51 @@ func (s *Scheduler) runSubscriptions(now time.Time) {
 		if applied > 0 {
 			s.Logger.Info("subscriptions applied", "user_id", u.ID, "count", applied)
 			realtime.NotifyUserDataChanged(u.ID)
+		}
+	}
+}
+
+func (s *Scheduler) runBudgetCopyForward(now time.Time) {
+	if s.Budget == nil || s.Budget.DB == nil {
+		return
+	}
+	ctx := context.Background()
+	if enabled, err := features.IsEnabled(ctx, s.Budget.DB, features.Budget); err != nil || !enabled {
+		return
+	}
+	users, err := sqlcdb.New(s.Budget.DB).ListUsersWithTimezone(ctx)
+	if err != nil {
+		if s.Logger != nil {
+			s.Logger.Error("budget copy-forward: list users", "err", err)
+		}
+		return
+	}
+	for _, u := range users {
+		tz := u.Timezone
+		if tz == "" {
+			tz = "UTC"
+		}
+		loc, err := time.LoadLocation(tz)
+		if err != nil {
+			continue
+		}
+		local := now.In(loc)
+		if local.Day() != 1 {
+			continue
+		}
+		dateKey := local.Format("2006-01-02")
+		if !s.tryClaim(s.budgetCopyLastRun, u.ID, dateKey) {
+			continue
+		}
+		n, err := budget.CopyMissingNextMonthOnDate(ctx, s.Budget.DB, u.ID, local)
+		if n > 0 && s.Logger != nil {
+			s.Logger.Info("budget copy-forward created", "user_id", u.ID, "count", n)
+		}
+		if err != nil {
+			s.unclaim(s.budgetCopyLastRun, u.ID, dateKey)
+			if s.Logger != nil {
+				s.Logger.Error("budget copy-forward failed", "user_id", u.ID, "err", err)
+			}
 		}
 	}
 }

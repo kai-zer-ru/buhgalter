@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { apiJSON, waitAppReady } from './helpers/auth';
 import { createCashAccount, createExpense } from './helpers/setup-data';
 import { selectLabeledCombobox } from './helpers/combobox';
+import { rowMenuAction } from './helpers/ui';
 
 test('budget: create limit → expense → progress', async ({ page }) => {
 	const accountName = `Budget Acc ${Date.now()}`;
@@ -108,4 +109,59 @@ test('budget form: scope field visibility', async ({ page }) => {
 	await expect(categoryField).toBeVisible();
 	await expect(subcategoryField).toBeVisible();
 	await expect(amountField).toBeVisible();
+});
+
+test('budget: copy forward writes only the next month', async ({ page }) => {
+	const budgetName = `Копия E2E ${Date.now()}`;
+	const meta = await apiJSON<{
+		expense_categories: { id: string; name: string; is_system: boolean }[];
+	}>(page, 'GET', '/api/v1/ui/meta');
+	const summary = await apiJSON<{
+		items: { scope: string; category_id?: string }[];
+	}>(page, 'GET', '/api/v1/budgets/summary');
+	const usedCategoryIds = new Set(
+		summary.items
+			.filter((i) => i.scope === 'category' && i.category_id)
+			.map((i) => i.category_id as string)
+	);
+	const category = meta.expense_categories.find((c) => !c.is_system && !usedCategoryIds.has(c.id))!;
+
+	await page.goto('/budget');
+	await waitAppReady(page);
+	await page.getByRole('button', { name: 'Добавить' }).click();
+	await page.getByLabel('Название').fill(budgetName);
+	await selectLabeledCombobox(page, 'Область', { label: 'Категория' });
+	await selectLabeledCombobox(page, 'Категория', { label: category.name });
+	await page.getByLabel('Лимит').fill('1000');
+	const copySwitch = page.getByRole('switch', { name: 'Копировать на следующий месяц' });
+	await expect(page.getByText('Сохранение пишет только следующий месяц')).toBeVisible();
+	await copySwitch.click();
+	await page.getByRole('button', { name: 'Создать' }).click();
+
+	const card = page.getByRole('article').filter({ hasText: budgetName });
+	await expect(card).toBeVisible({ timeout: 10_000 });
+	await expect(card).toContainText('Копируется: да');
+
+	await page.getByRole('button', { name: 'Следующий месяц' }).click();
+	const nextCard = page.getByRole('article').filter({ hasText: budgetName });
+	await expect(nextCard).toBeVisible({ timeout: 10_000 });
+	await expect(nextCard).toContainText(/1[\s\u00a0\u202f]?000\.00/);
+	await expect(nextCard).toContainText('Копируется: нет');
+
+	await page.getByRole('button', { name: 'Предыдущий месяц' }).click();
+	const currentCard = page.getByRole('article').filter({ hasText: budgetName });
+	await expect(currentCard).toBeVisible({ timeout: 10_000 });
+	await rowMenuAction(page, currentCard, 'Изменить');
+	await currentCard.getByLabel('Лимит').fill('2500');
+	await currentCard.getByRole('switch', { name: 'Копировать на следующий месяц' }).click();
+	await currentCard.getByRole('button', { name: 'Сохранить' }).click();
+	await expect(currentCard).toContainText('Копируется: нет');
+	await expect(currentCard).toContainText(/2[\s\u00a0\u202f]?500\.00/);
+
+	await page.getByRole('button', { name: 'Следующий месяц' }).click();
+	const unchanged = page.getByRole('article').filter({ hasText: budgetName });
+	await expect(unchanged).toBeVisible({ timeout: 10_000 });
+	await expect(unchanged).toContainText(/1[\s\u00a0\u202f]?000\.00/);
+	await expect(unchanged).not.toContainText(/2[\s\u00a0\u202f]?500\.00/);
+	await expect(unchanged).toContainText('Копируется: нет');
 });

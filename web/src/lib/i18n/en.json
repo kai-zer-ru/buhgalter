@@ -1298,7 +1298,7 @@
 	"budget.scope.subcategory": "Subcategory",
 	"budget.scope.all_expense": "All expenses",
 	"budget.field.copy_forward": "Copy to next month",
-	"budget.field.copy_forward_hint": "When you open the next month, this budget is created automatically (once, without further copying).",
+	"budget.field.copy_forward_hint": "Saving writes only the next month and turns copying off there. The month after next appears on the 1st if copying is enabled for the next month.",
 	"budget.copy_status": "Copies forward: {value}",
 	"budget.copy_status.yes": "yes",
 	"budget.copy_status.no": "no",

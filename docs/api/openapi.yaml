@@ -6769,7 +6769,7 @@ components:
           description: Календарный месяц бюджета (YYYY-MM)
         copy_forward:
           type: boolean
-          description: Авто-копирование на следующий месяц при первом открытии
+          description: Сохранение уже наступившего месяца сразу записывает только следующий месяц и выключает у него копирование. Месяц через один создаётся 1-го числа, если у следующего месяца копирование включено
         alert_at_percent:
           type: integer
           description: Порог уведомления; по умолчанию 90
@@ -6805,6 +6805,7 @@ components:
               type: string
             copy_forward:
               type: boolean
+              description: Сохранение уже наступившего месяца сразу записывает только следующий месяц и выключает у него копирование. Месяц через один создаётся 1-го числа, если у следующего месяца копирование включено
             children_planned:
               type: integer
               description: Сумма planned дочерних бюджетов (только all_expense)
@@ -6865,6 +6866,7 @@ components:
         copy_forward:
           type: boolean
           default: false
+          description: Нет поля — false. У уже наступившего месяца true сразу записывает только следующий месяц и выключает там копирование. Будущий месяц только включает флаг
 
     Subscription:
       type: object

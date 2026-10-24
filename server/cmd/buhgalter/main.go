@@ -112,6 +112,7 @@ func main() {
 		DB:     manager.DB(),
 		Logger: logger,
 	}, logger)
+	creditSched.Budget = &appsched.BudgetRunner{DB: manager.DB()}
 	creditSched.Start()
 	defer creditSched.Stop()
 

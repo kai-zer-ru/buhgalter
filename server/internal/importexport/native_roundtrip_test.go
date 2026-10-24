@@ -10,10 +10,54 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/account"
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	"github.com/kai-zer-ru/buhgalter/internal/bank"
+	"github.com/kai-zer-ru/buhgalter/internal/budget"
 	"github.com/kai-zer-ru/buhgalter/internal/merchant"
 	"github.com/kai-zer-ru/buhgalter/internal/tag"
 	"github.com/kai-zer-ru/buhgalter/internal/transaction"
 )
+
+func TestNativeImportStartedMonthDoesNotCopyForward(t *testing.T) {
+	ctx, sqlDB, userID := seedImportUser(t)
+	month, err := budget.CurrentMonthQuery(ctx, sqlDB, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next, err := budget.AddMonths(month, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := writeNativeCSV([]nativeSection{
+		{sectionTx, BuhgalterHeaders, nil},
+		{sectionBudgets, nativeBudgetHeaders, [][]string{
+			{"src", "Текущий", "all_expense", "", "", "100.00", "", month, "1", "0", "90", "1"},
+			{"nxt", "Следующий из файла", "all_expense", "", "", "50.00", "", next, "0", "0", "80", "1"},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rep, err := Import(ctx, sqlDB, userID, "budgets.csv", data, ImportOptions{Preset: "buhgalter", Confirm: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.Errors) != 0 {
+		t.Fatalf("import errors: %+v", rep.Errors)
+	}
+	items, err := budget.List(ctx, sqlDB, userID, next)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].Name != "Следующий из файла" || items[0].Amount != 5_000 || items[0].CopyForward {
+		t.Fatalf("next month is not the file row: %+v", items)
+	}
+	current, err := budget.List(ctx, sqlDB, userID, month)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(current) != 1 || !current[0].CopyForward || current[0].Amount != 10_000 {
+		t.Fatalf("started month: %+v", current)
+	}
+}
 
 func TestNativeCSVParseSections(t *testing.T) {
 	data, err := writeNativeCSV([]nativeSection{

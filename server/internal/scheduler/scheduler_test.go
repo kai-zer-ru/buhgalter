@@ -11,6 +11,7 @@ import (
 
 	"github.com/kai-zer-ru/buhgalter/internal/db"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/features"
 )
 
 func testScheduler(t *testing.T) (*Scheduler, *sql.DB, string) {
@@ -126,5 +127,118 @@ func TestLastRunNotStampedWhenApplyDueFails(t *testing.T) {
 	if s.creditLastRun[uid] != want || s.recurringLastRun[uid] != want || s.subscriptionLastRun[uid] != want {
 		t.Fatalf("retry after repair lastRun credit=%q recurring=%q sub=%q want %q",
 			s.creditLastRun[uid], s.recurringLastRun[uid], s.subscriptionLastRun[uid], want)
+	}
+}
+
+func TestBudgetCopyForwardRunsOnceOnTheFirst(t *testing.T) {
+	s, sqlDB, uid := testScheduler(t)
+	s.Budget = &BudgetRunner{DB: sqlDB}
+	// 2026-10-31 11:00 UTC is 2026-11-01 01:00 in Pacific/Kiritimati (UTC+14)
+	// and still 31 October in UTC and Europe/Moscow.
+	setSchedulerTimezone(t, sqlDB, uid, "Pacific/Kiritimati")
+	if _, err := sqlDB.Exec(`
+		INSERT INTO budgets (
+			id, user_id, name, scope, amount, period, month, copy_forward,
+			alert_at_percent, is_active, created_at, updated_at
+		) VALUES ('b-nov', ?, 'Ноябрь', 'all_expense', 10000, 'month', '2026-11', 1, 90, 1, '2026-11-01 00:00:00', '2026-11-01 00:00:00')`, uid); err != nil {
+		t.Fatal(err)
+	}
+	countMonth := func(month string) int {
+		t.Helper()
+		var n int
+		if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM budgets WHERE user_id = ? AND month = ?`, uid, month).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	localFirst := time.Date(2026, 10, 31, 11, 0, 0, 0, time.UTC)
+	s.runBudgetCopyForward(localFirst)
+	if countMonth("2026-12") != 1 {
+		t.Fatalf("december rows = %d", countMonth("2026-12"))
+	}
+	if _, err := sqlDB.Exec(`DELETE FROM budgets WHERE user_id = ? AND month = '2026-12'`, uid); err != nil {
+		t.Fatal(err)
+	}
+	s.runBudgetCopyForward(localFirst)
+	if countMonth("2026-12") != 0 {
+		t.Fatal("same local day created december again")
+	}
+	// 2026-11-01 11:00 UTC is 2 November in Kiritimati and 1 November in Moscow.
+	s.runBudgetCopyForward(time.Date(2026, 11, 1, 11, 0, 0, 0, time.UTC))
+	if countMonth("2026-12") != 0 {
+		t.Fatal("2 November created december")
+	}
+}
+
+func TestBudgetCopyForwardRetriesSameDayAfterError(t *testing.T) {
+	s, sqlDB, uid := testScheduler(t)
+	s.Budget = &BudgetRunner{DB: sqlDB}
+	setSchedulerTimezone(t, sqlDB, uid, "Pacific/Kiritimati")
+	if _, err := sqlDB.Exec(`
+		INSERT INTO budgets (
+			id, user_id, name, scope, amount, period, month, copy_forward,
+			alert_at_percent, is_active, created_at, updated_at
+		) VALUES ('b-nov', ?, 'Ноябрь', 'all_expense', 10000, 'month', '2026-11', 1, 90, 1, '2026-11-01 00:00:00', '2026-11-01 00:00:00')`, uid); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`ALTER TABLE budgets RENAME TO budgets_off`); err != nil {
+		t.Fatal(err)
+	}
+	restored := false
+	restore := func() {
+		if restored {
+			return
+		}
+		if _, err := sqlDB.Exec(`ALTER TABLE budgets_off RENAME TO budgets`); err != nil {
+			t.Fatal(err)
+		}
+		restored = true
+	}
+	t.Cleanup(restore)
+	localFirst := time.Date(2026, 10, 31, 11, 0, 0, 0, time.UTC)
+	s.runBudgetCopyForward(localFirst)
+	restore()
+	s.runBudgetCopyForward(localFirst)
+	var n int
+	if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM budgets WHERE user_id = ? AND month = '2026-12'`, uid).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("retry after error created %d rows", n)
+	}
+}
+
+func TestBudgetCopyForwardSkipsWhenFeatureOff(t *testing.T) {
+	s, sqlDB, uid := testScheduler(t)
+	s.Budget = &BudgetRunner{DB: sqlDB}
+	setSchedulerTimezone(t, sqlDB, uid, "Pacific/Kiritimati")
+	if _, err := sqlDB.Exec(`
+		INSERT INTO budgets (
+			id, user_id, name, scope, amount, period, month, copy_forward,
+			alert_at_percent, is_active, created_at, updated_at
+		) VALUES ('b-nov', ?, 'Ноябрь', 'all_expense', 10000, 'month', '2026-11', 1, 90, 1, '2026-11-01 00:00:00', '2026-11-01 00:00:00')`, uid); err != nil {
+		t.Fatal(err)
+	}
+	if err := features.SetOne(context.Background(), sqlDB, features.Budget, false); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = features.SetOne(context.Background(), sqlDB, features.Budget, true)
+		features.Invalidate()
+	})
+	s.runBudgetCopyForward(time.Date(2026, 10, 31, 11, 0, 0, 0, time.UTC))
+	var n int
+	if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM budgets WHERE user_id = ? AND month = '2026-12'`, uid).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("feature off created %d rows", n)
+	}
+}
+
+func setSchedulerTimezone(t *testing.T, sqlDB *sql.DB, userID, tz string) {
+	t.Helper()
+	if _, err := sqlDB.Exec(`UPDATE users SET timezone = ? WHERE id = ?`, tz, userID); err != nil {
+		t.Fatal(err)
 	}
 }

@@ -112,6 +112,9 @@ type Input struct {
 	CopyForward    bool
 	AlertAtPercent int64
 	IsActive       bool
+	// SkipCopyForward keeps a direct insert from also writing month+1.
+	// Native import already has every month in the file.
+	SkipCopyForward bool
 }
 
 func queries(db sqlcdb.DBTX) *sqlcdb.Queries { return sqlcdb.New(db) }
@@ -119,9 +122,6 @@ func queries(db sqlcdb.DBTX) *sqlcdb.Queries { return sqlcdb.New(db) }
 func List(ctx context.Context, db *sql.DB, userID, month string) ([]Budget, error) {
 	month, err := resolveMonth(ctx, db, userID, month)
 	if err != nil {
-		return nil, err
-	}
-	if err := prepareMonthForLoad(ctx, db, userID, month); err != nil {
 		return nil, err
 	}
 	rows, err := listBudgetRows(ctx, db, userID, month)
@@ -184,8 +184,13 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in Input, month 
 	if err := checkActiveUniqueness(ctx, db, userID, in, id); err != nil {
 		return Budget{}, err
 	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return Budget{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
 	now := timeutil.FormatUTC(timeutil.NowUTC())
-	n, err := queries(db).UpdateBudget(ctx, sqlcdb.UpdateBudgetParams{
+	n, err := queries(tx).UpdateBudget(ctx, sqlcdb.UpdateBudgetParams{
 		Name:           in.Name,
 		Scope:          in.Scope,
 		CategoryID:     in.CategoryID,
@@ -199,6 +204,9 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in Input, month 
 		ID:             id,
 		UserID:         userID,
 	})
+	if isUniqueConstraintError(err) {
+		return Budget{}, ErrDuplicateActive
+	}
 	if err != nil {
 		return Budget{}, err
 	}
@@ -206,29 +214,17 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in Input, month 
 		return Budget{}, ErrNotFound
 	}
 	if month != "" && existing.Amount != in.Amount {
-		tz, err := userTimezone(ctx, db, userID)
-		if err != nil {
+		if err := setPeriodPlanned(ctx, tx, userID, id, month, in.Amount); err != nil {
 			return Budget{}, err
 		}
-		year, mon, err := parseMonth(month)
-		if err != nil {
-			return Budget{}, ErrInvalidMonth
-		}
-		periodStart, _, err := monthBoundsExclusive(tz, year, mon)
-		if err != nil {
+	}
+	if !in.SkipCopyForward {
+		if err := copyForwardOnSave(ctx, tx, userID, in); err != nil {
 			return Budget{}, err
 		}
-		if _, err := ensurePeriod(ctx, db, id, periodStart, in.Amount); err != nil {
-			return Budget{}, err
-		}
-		if _, err := queries(db).UpdateBudgetPeriodPlannedAmount(ctx, sqlcdb.UpdateBudgetPeriodPlannedAmountParams{
-			PlannedAmount: in.Amount,
-			UpdatedAt:     now,
-			BudgetID:      id,
-			PeriodStart:   periodStart,
-		}); err != nil {
-			return Budget{}, err
-		}
+	}
+	if err := tx.Commit(); err != nil {
+		return Budget{}, err
 	}
 	return Get(ctx, db, userID, id)
 }
@@ -247,9 +243,6 @@ func Delete(ctx context.Context, db *sql.DB, userID, id string) error {
 func Summary(ctx context.Context, db *sql.DB, userID, month string) (SummaryResult, error) {
 	month, err := resolveMonth(ctx, db, userID, month)
 	if err != nil {
-		return SummaryResult{}, err
-	}
-	if err := prepareMonthForLoad(ctx, db, userID, month); err != nil {
 		return SummaryResult{}, err
 	}
 	canCopy, err := canCopyFromPrevious(ctx, db, userID, month)
@@ -316,7 +309,33 @@ func Summary(ctx context.Context, db *sql.DB, userID, month string) (SummaryResu
 	return SummaryResult{Items: out, Month: month, CanCopyFromPrevious: canCopy}, nil
 }
 
-func ensurePeriod(ctx context.Context, db *sql.DB, budgetID, periodStart string, planned int64) (Period, error) {
+func setPeriodPlanned(ctx context.Context, db sqlcdb.DBTX, userID, budgetID, month string, amount int64) error {
+	tz, err := userTimezone(ctx, db, userID)
+	if err != nil {
+		return err
+	}
+	year, mon, err := parseMonth(month)
+	if err != nil {
+		return ErrInvalidMonth
+	}
+	periodStart, _, err := monthBoundsExclusive(tz, year, mon)
+	if err != nil {
+		return err
+	}
+	if _, err := ensurePeriod(ctx, db, budgetID, periodStart, amount); err != nil {
+		return err
+	}
+	now := timeutil.FormatUTC(timeutil.NowUTC())
+	_, err = queries(db).UpdateBudgetPeriodPlannedAmount(ctx, sqlcdb.UpdateBudgetPeriodPlannedAmountParams{
+		PlannedAmount: amount,
+		UpdatedAt:     now,
+		BudgetID:      budgetID,
+		PeriodStart:   periodStart,
+	})
+	return err
+}
+
+func ensurePeriod(ctx context.Context, db sqlcdb.DBTX, budgetID, periodStart string, planned int64) (Period, error) {
 	row, err := queries(db).GetBudgetPeriod(ctx, sqlcdb.GetBudgetPeriodParams{
 		BudgetID: budgetID, PeriodStart: periodStart,
 	})
@@ -385,7 +404,7 @@ func computeStatus(spent, planned, alertAt int64) (int, string) {
 	return percent, StatusOK
 }
 
-func validateInput(ctx context.Context, db *sql.DB, userID string, in Input) error {
+func validateInput(ctx context.Context, db sqlcdb.DBTX, userID string, in Input) error {
 	if in.Name == "" {
 		return fmt.Errorf("name required")
 	}
@@ -442,7 +461,7 @@ func validateInput(ctx context.Context, db *sql.DB, userID string, in Input) err
 	return nil
 }
 
-func resolveScopeRefs(ctx context.Context, db *sql.DB, userID string, in Input) (Input, error) {
+func resolveScopeRefs(ctx context.Context, db sqlcdb.DBTX, userID string, in Input) (Input, error) {
 	if in.Scope != ScopeSubcategory {
 		return in, nil
 	}
@@ -463,7 +482,7 @@ func resolveScopeRefs(ctx context.Context, db *sql.DB, userID string, in Input) 
 	return in, nil
 }
 
-func validateExpenseCategory(ctx context.Context, db *sql.DB, userID, categoryID string) error {
+func validateExpenseCategory(ctx context.Context, db sqlcdb.DBTX, userID, categoryID string) error {
 	cat, err := queries(db).GetCategoryByID(ctx, sqlcdb.GetCategoryByIDParams{
 		ID: categoryID, UserID: userID,
 	})
@@ -479,7 +498,7 @@ func validateExpenseCategory(ctx context.Context, db *sql.DB, userID, categoryID
 	return nil
 }
 
-func checkActiveUniqueness(ctx context.Context, db *sql.DB, userID string, in Input, excludeID string) error {
+func checkActiveUniqueness(ctx context.Context, db sqlcdb.DBTX, userID string, in Input, excludeID string) error {
 	if !in.IsActive {
 		return nil
 	}
@@ -508,7 +527,7 @@ func isUniqueConstraintError(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed")
 }
 
-func userTimezone(ctx context.Context, db *sql.DB, userID string) (string, error) {
+func userTimezone(ctx context.Context, db sqlcdb.DBTX, userID string) (string, error) {
 	tz, err := queries(db).GetUserTimezone(ctx, userID)
 	if err != nil {
 		return "", err
@@ -587,6 +606,10 @@ func MonthBounds(ctx context.Context, db *sql.DB, userID, month string) (start, 
 
 // CurrentMonthQuery returns YYYY-MM for the user's current month.
 func CurrentMonthQuery(ctx context.Context, db *sql.DB, userID string) (string, error) {
+	return currentMonth(ctx, db, userID)
+}
+
+func currentMonth(ctx context.Context, db sqlcdb.DBTX, userID string) (string, error) {
 	tz, err := userTimezone(ctx, db, userID)
 	if err != nil {
 		return "", err

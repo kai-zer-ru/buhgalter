@@ -418,7 +418,7 @@ erDiagram
 
 - Факт (`spent`) не денормализуется — запрос к `transactions` с теми же предикатами, что `StatsByCategory`.
 - Уникальность: один активный бюджет на `(user_id, scope, category_id, subcategory_id, month)` — без `account_id` (см. `039_budget_scope_unique.sql`).
-- Периоды создаются лениво при `GET summary`.
+- Период создаётся при сохранении бюджета и когда проход 1-го числа создаёт следующий месяц. Если записи ещё нет, `GET summary` создаёт её при чтении.
 
 Подробнее: [budget.md](budget.md).
 
