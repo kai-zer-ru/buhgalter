@@ -41,7 +41,7 @@ func queries(db *sql.DB) *sqlcdb.Queries {
 
 `make inline-sql-check` (`scripts/check_inline_sql.py`) сканирует `server/**/*.go`, кроме `*_test.go` и `internal/db/sqlc/`.  
 Находит вызовы `.Exec` / `.Query` / `.QueryRow` с raw string, содержащим SQL-ключевые слова.  
-Проверка входит в `make ci` и workflow `ci.yml`.
+Проверка входит в `make prepare`, `make ci` и workflow `ci.yml`.
 
 ## Запрещено
 

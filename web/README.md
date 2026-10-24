@@ -11,6 +11,6 @@ make dev-server   # API на :8765 без встроенного фронта
 make dev-web      # Vite на http://localhost:5173 (прокси API)
 ```
 
-Проверка типов: `cd web && npm run check`. E2E: `make test-e2e` (из корня).
+Проверки кода (fmt, lint, типы): `make prepare` (или точечно `cd web && npm run check`). Тесты: `make test` (vitest и Playwright) или `make test-unit` без e2e.
 
 Общие команды, структура проекта и документация UI — в [README.md](../README.md) и [docs/README.md](../docs/README.md).

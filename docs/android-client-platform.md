@@ -223,8 +223,10 @@ Launcher-виджеты (не карточки на главной в WebView). 
 |---------|----------|
 | `make android-icons` | Mipmaps из `ui/static/icon-512.png` + monochrome из `icon-monochrome-512.png` |
 | `make android-ui-build` | `category-icons-json` + `npm run build` в `android/ui` |
-| `make prepare-android` | `npm run lint:fix` в `android/ui` (входит в `make prepare`) |
-| `make test-unit` | Go + web/android `svelte-check` + android `vitest` |
+| `make prepare` | fmt, lint, `svelte-check`, генерация и копии: sqlc, OpenAPI, UI i18n, иконки категорий |
+| `make prepare-android` | `lint:fix` и `lint` в `android/ui` (входит в `make prepare`; `svelte-check` — следом, `prepare-ui-check`) |
+| `make test` | Go test, vitest web и android, Playwright web |
+| `make test-unit` | то же без e2e |
 | `make test-e2e-web` | Playwright e2e web UI |
 | `make test-e2e` | = `test-e2e-web` (Android e2e нет — ручная приёмка на устройстве) |
 | `make android-sync` | UI build + icons + cap sync |

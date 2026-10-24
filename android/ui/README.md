@@ -8,6 +8,6 @@
 cd android/ui && npm install && npm run dev
 ```
 
-Из корня: `make prepare-android`, `make test-unit` (включает `npm run check` + vitest). Playwright e2e для Android **не используется** — приёмка на устройстве вручную.
+Из корня: `make prepare` (включая `prepare-android`: lint, затем `svelte-check`), `make test` (vitest `android/ui` вместе с тестами server и web; `make test-unit` — без e2e). Playwright e2e для Android **не используется** — приёмка на устройстве вручную.
 
 Документация: [docs/android-client.md](../docs/android-client.md), [UI](../docs/android-client-ui.md), [платформа](../docs/android-client-platform.md).

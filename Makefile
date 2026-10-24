@@ -9,7 +9,7 @@ OPENAPI_DST := server/internal/docs/openapi.yaml
 UI_I18N_SRC := android/ui/src/lib/i18n
 UI_I18N_DST := server/ui_locales
 
-.PHONY: dev dev-server dev-web build build-arm web-build category-icons-json copy-static copy-openapi check-openapi-examples openapi-check copy-ui-i18n check-ui-i18n-keys ui-i18n-check inline-sql-check server-build server-build-arm fix-build-perms test test-unit test-e2e test-e2e-web test-coverage lint lint-go prepare prepare-go prepare-web prepare-android prepare-gen prepare-sql-check docker-build act-push act-release act-keep-image act-prune tag-release migrate ci sqlc sqlc-check download-bank-logos download-marketplace-logos clear version android-icons android-ui-build android-sync android-apk android-apk-release android-install android-install-release android-ensure-sdk
+.PHONY: dev dev-server dev-web build build-arm web-build category-icons-json copy-static copy-openapi check-openapi-examples openapi-check copy-ui-i18n check-ui-i18n-keys ui-i18n-check inline-sql-check server-build server-build-arm fix-build-perms test test-unit test-server test-web test-android test-e2e test-e2e-web test-coverage lint lint-go prepare prepare-go prepare-web prepare-android prepare-gen prepare-sql-check prepare-ui-check docker-build act-push act-release act-keep-image act-prune tag-release migrate ci sqlc sqlc-check download-bank-logos download-marketplace-logos clear version android-icons android-ui-build android-sync android-apk android-apk-release android-install android-install-release android-ensure-sdk
 
 DOCKER_COMPOSE := docker compose -f docker/docker-compose.yml
 
@@ -78,13 +78,19 @@ server-build-arm: copy-openapi copy-ui-i18n
 	cd server && CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -tags=embedstatic -ldflags "$(LDFLAGS)" -o ../bin/buhgalter-linux-arm64 ./cmd/buhgalter
 	@echo "ARM64 binary: bin/buhgalter-linux-arm64"
 
+# Все тесты: server (go test), web (vitest), android (vitest) и web e2e (Playwright).
+# Android e2e нет — приёмка на устройстве. Проверки кода — make prepare.
 test: test-unit test-e2e
 
-test-unit: copy-openapi copy-ui-i18n
+test-unit: test-server test-web test-android
+
+test-server: copy-openapi copy-ui-i18n
 	cd server && go test -timeout 30m ./...
-	cd web && npm run check
+
+test-web: category-icons-json
 	cd web && npm run test:unit
-	cd android/ui && npm run check
+
+test-android: category-icons-json
 	cd android/ui && npm run test:unit
 
 test-coverage:
@@ -181,12 +187,13 @@ lint: lint-go
 	cd web && npm run lint
 	cd android/ui && npm run lint
 
-# Автофикс форматирования, линтера и сгенерированных артефактов перед коммитом / make ci.
-# prepare-gen: sync + ui-i18n-check; openapi/sqlc git-diff checks — в make ci.
+# Подготовка кода перед коммитом и деплоем: автофикс, все проверки, генерация и копии.
+# prepare-go/web/android — fmt и lint; prepare-gen — sqlc, иконки, OpenAPI, UI i18n;
+# prepare-sql-check — sqlc-check и inline-sql; prepare-ui-check — svelte-check.
 # Prefer a user-built binary (e.g. after Arch upgrades go ahead of golangci-lint package).
 GOLANGCI_LINT ?= $(firstword $(wildcard $(shell go env GOPATH 2>/dev/null)/bin/golangci-lint) $(shell command -v golangci-lint 2>/dev/null))
 
-prepare: prepare-go prepare-web prepare-android prepare-gen prepare-sql-check
+prepare: prepare-go prepare-web prepare-android prepare-gen prepare-sql-check prepare-ui-check
 
 # golangci-lint must be built with a Go >= the runtime toolchain (GOROOT), including patch:
 # export data version bumps on go1.27.x patches → typecheck panic if lint was built with an older patch.
@@ -207,14 +214,18 @@ prepare-go:
 	cd server && $(GOLANGCI_LINT) run --fix ./...
 
 prepare-web:
-	cd web && npm run lint:fix
+	cd web && npm run lint:fix && npm run lint
 
 prepare-android:
-	cd android/ui && npm run lint:fix
+	cd android/ui && npm run lint:fix && npm run lint
 
-prepare-gen: sqlc category-icons-json copy-openapi check-openapi-examples ui-i18n-check
+prepare-gen: sqlc category-icons-json openapi-check ui-i18n-check
 
 prepare-sql-check: sqlc-check inline-sql-check
+
+prepare-ui-check: category-icons-json
+	cd web && npm run check
+	cd android/ui && npm run check
 
 DOCKER_IMAGE_TAG ?= buhgalter:local
 
@@ -230,8 +241,8 @@ docker-build:
 		.
 
 ci: lint-go sqlc-check inline-sql-check openapi-check ui-i18n-check category-icons-json
-	cd web && npm ci && npm run lint
-	cd android/ui && npm ci && npm run lint
+	cd web && npm ci && npm run lint && npm run check
+	cd android/ui && npm ci && npm run lint && npm run check
 	$(MAKE) test
 	$(MAKE) docker-build
 

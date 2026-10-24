@@ -2,7 +2,7 @@
 
 Типичные поломки `svelte-check` / Android `vitest` в `web/` и `android/ui/`. Цель — не повторять одни и те же ошибки при обёртке навигации в `resolve()` и при правках `$lib/*`.
 
-`make test-unit` гоняет: Go tests → `web` check → `web` vitest → `android/ui` check → `android/ui` vitest.
+`make prepare` гоняет проверки кода, включая `svelte-check` в `web` и `android/ui`. `make test` — тесты: Go, vitest web, vitest android, Playwright web. `make test-unit` — то же без e2e.
 
 ---
 

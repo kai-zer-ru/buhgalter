@@ -54,8 +54,9 @@ make android-install          # собрать debug и установить н�
 make android-install-release  # собрать release и установить universal APK (adb)
 
 # Из корня репо: prepare/test покрывают и android/ui
-make prepare                  # + prepare-android (lint:fix)
-make test-unit                # + android/ui check + vitest
+make prepare                  # fmt, lint, svelte-check, генерация и копии
+make test                     # go test + vitest web/android + web e2e
+make test-unit                # то же без e2e (android — vitest)
 ```
 
 Иконки лаунчера — из `ui/static/icon-512.png` + mono `icon-monochrome-512.png` (`make android-icons`).

@@ -513,11 +513,12 @@ make dev-web      # фронтенд на http://localhost:5173
 ```
 
 ```bash
-make test         # go test + web/android check + android vitest + web e2e
-make test-unit    # без e2e
+make prepare      # fmt, lint, svelte-check, генерация и копии (sqlc, OpenAPI, UI i18n, иконки)
+make test         # go test + web vitest + android vitest + web e2e
+make test-unit    # то же без e2e
 make test-e2e-web
-make lint-go
-make ci           # lint + тесты + build + docker-build
+make lint         # lint без автофикса: Go, web, android/ui
+make ci           # проверки без автофикса + тесты + build + docker-build
 make clear        # очистка БД, логов, бэкапов и артефактов сборки
 ```
 
