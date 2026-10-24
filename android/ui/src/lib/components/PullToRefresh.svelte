@@ -199,6 +199,7 @@
 	bind:this={rootEl}
 	class="pull-to-refresh"
 	class:pull-to-refresh-active={indicatorVisible}
+	role="presentation"
 	aria-busy={refreshing}
 	use:nonPassiveTouchMove
 	ontouchstart={onTouchStart}

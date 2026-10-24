@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"embed"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -96,7 +97,33 @@ func migrate(db *sql.DB) error {
 	if err := goose.SetDialect("sqlite3"); err != nil {
 		return err
 	}
-	return goose.Up(db, "migrations")
+	// UpByOne, not Up: receipt migrations 057 and 059 ALTER columns that a
+	// scan_chek database may already have. SQLite has no ADD COLUMN IF NOT EXISTS,
+	// so a duplicate-column error is replayed statement-by-statement and that
+	// version is recorded. Any other error still fails the startup.
+	for {
+		err := goose.UpByOne(db, "migrations")
+		if err == nil {
+			continue
+		}
+		if errors.Is(err, goose.ErrNoNextVersion) {
+			return nil
+		}
+		before, verErr := goose.GetDBVersion(db)
+		if verErr != nil {
+			return err
+		}
+		if recErr := recoverDuplicateReceiptColumn(db, err); recErr != nil {
+			return recErr
+		}
+		after, verErr := goose.GetDBVersion(db)
+		if verErr != nil {
+			return verErr
+		}
+		if after <= before {
+			return fmt.Errorf("migration did not advance from %d: %w", before, err)
+		}
+	}
 }
 
 // recoverInterruptedAccountRebuild handles a partial run of migration 033:

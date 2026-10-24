@@ -259,6 +259,37 @@ describe('ensureMerchantsTagsFromTransaction', () => {
 		expect(merchants?.[0]?.id.startsWith('local:')).toBe(true);
 		expect(readRefCache<{ name: string }[]>('/api/v1/tags')?.[0]?.name).toBe('отпуск');
 	});
+
+	it('does not create a local merchant when the name matches an alias', () => {
+		writeRefCache('/api/v1/merchants', [
+			{
+				id: 'm1',
+				name: 'Пятёрочка',
+				icon: 'default',
+				aliases: ['Pyaterochka'],
+				created_at: '2026-01-01T00:00:00Z'
+			}
+		]);
+		ensureMerchantsTagsFromTransaction(
+			{
+				id: 'tx2',
+				account_id: 'a1',
+				type: 'expense',
+				kind: 'manual',
+				amount: 100,
+				amount_display: '1.00',
+				description: null,
+				category_id: null,
+				subcategory_id: null,
+				transaction_date: '2026-07-08 10:00:00',
+				created_at: '2026-07-08T10:00:00Z',
+				updated_at: '2026-07-08T10:00:00Z'
+			},
+			{ merchantName: 'pyaterochka' }
+		);
+		const merchants = readRefCache<{ id: string }[]>('/api/v1/merchants');
+		expect(merchants?.map((m) => m.id)).toEqual(['m1']);
+	});
 });
 
 describe('subcategory ref-cache mutations', () => {

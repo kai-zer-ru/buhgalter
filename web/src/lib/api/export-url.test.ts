@@ -14,6 +14,17 @@ describe('exportCSVUrl', () => {
 		).toBe('/api/v1/export?format=buhgalter');
 	});
 
+	it('treats a missing format as buhgalter and drops filters', () => {
+		expect(
+			exportCSVUrl({
+				from: '2025-01-01',
+				to: '2025-12-31',
+				account_id: 'acc-1',
+				category_id: 'cat-1'
+			})
+		).toBe('/api/v1/export?format=buhgalter');
+	});
+
 	it('keeps Cubux range filters', () => {
 		expect(
 			exportCSVUrl({

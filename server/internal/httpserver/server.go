@@ -232,6 +232,7 @@ func (s *Server) Handler() http.Handler {
 				mod.Get("/merchants/{id}", merchantHandler.Get)
 				mod.Put("/merchants/{id}", merchantHandler.Update)
 				mod.Delete("/merchants/{id}", merchantHandler.Delete)
+				mod.Post("/merchants/{id}/merge", merchantHandler.Merge)
 
 				mod.Get("/tags", tagHandler.List)
 				mod.Post("/tags", tagHandler.Create)

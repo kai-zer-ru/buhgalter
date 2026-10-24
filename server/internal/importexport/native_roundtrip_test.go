@@ -333,16 +333,104 @@ func TestExportNativeIgnoresDateFilters(t *testing.T) {
 		t.Fatalf("native export missing out-of-range dates: %s", text[len(text)-min(800, len(text)):])
 	}
 
-	cubux, _, err := ExportCSV(ctx, sqlDB, userID, "User", ExportFilters{From: "2025-01-01", To: today})
+	omitted, _, err := ExportCSV(ctx, sqlDB, userID, "User", ExportFilters{From: "2025-01-01", To: today})
 	if err != nil {
 		t.Fatal(err)
 	}
-	cubuxText := string(cubux)
-	if strings.Contains(cubuxText, "15.06.2020") {
-		t.Fatal("cubux export should honor from=2025-01-01")
+	omittedText := string(omitted)
+	if !strings.Contains(omittedText, "#BUHGALTER") || !strings.Contains(omittedText, "15.06.2020") {
+		t.Fatal("export without format must be a full buhgalter dump, including rows outside from/to")
 	}
-	if !strings.Contains(cubuxText, "15.06.2025") {
-		t.Fatal("cubux export missing in-range row")
+
+	for _, format := range []string{"cubux", "CUBUX", "foo"} {
+		cubux, _, err := ExportCSV(ctx, sqlDB, userID, "User", ExportFilters{
+			Format: format, From: "2025-01-01", To: today,
+		})
+		if err != nil {
+			t.Fatalf("format %q: %v", format, err)
+		}
+		cubuxText := string(cubux)
+		if strings.Contains(cubuxText, "#BUHGALTER") {
+			t.Fatalf("format %q must stay flat cubux", format)
+		}
+		if strings.Contains(cubuxText, "15.06.2020") {
+			t.Fatalf("format %q should honor from=2025-01-01", format)
+		}
+		if !strings.Contains(cubuxText, "15.06.2025") {
+			t.Fatalf("format %q missing in-range row", format)
+		}
+	}
+}
+
+func TestNativeMerchantAliasesRoundtrip(t *testing.T) {
+	ctx, sqlDB, srcUser := seedImportUser(t)
+	created, err := merchant.CreateWithAliases(ctx, sqlDB, srcUser, "Пятёрочка", "shopping", []string{"Pyaterochka", "Пятёрочка у дома"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(created.Aliases) != 2 {
+		t.Fatalf("aliases=%v", created.Aliases)
+	}
+	out, _, err := ExportCSV(ctx, sqlDB, srcUser, "Import", ExportFilters{Format: "buhgalter"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(out), "aliases") || !strings.Contains(string(out), "Pyaterochka") {
+		t.Fatalf("export missing aliases: %s", out)
+	}
+
+	hash, err := auth.HashPassword("secret123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dstUser, err := auth.CreateUser(ctx, sqlDB, "alias-dst", hash, "Alias", false, auth.UserStatusActive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Import(ctx, sqlDB, dstUser, "native.csv", out, ImportOptions{
+		Preset: "buhgalter", Confirm: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := merchant.List(ctx, sqlDB, dstUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found *merchant.Merchant
+	for i := range got {
+		if got[i].Name == "Пятёрочка" {
+			found = &got[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("merchants=%+v", got)
+	}
+	if found.Icon != "shopping" || len(found.Aliases) != 2 || !aliasFold(found.Aliases, "Pyaterochka") || !aliasFold(found.Aliases, "Пятёрочка у дома") {
+		t.Fatalf("imported=%+v", found)
+	}
+}
+
+func TestNativeMerchantImportWithoutAliasColumn(t *testing.T) {
+	ctx, sqlDB, userID := seedImportUser(t)
+	data, err := writeNativeCSV([]nativeSection{
+		{sectionMerchants, []string{"name", "icon"}, [][]string{{"Магнит", "default"}}},
+		{sectionTx, BuhgalterHeaders, nil},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Import(ctx, sqlDB, userID, "old.csv", data, ImportOptions{
+		Preset: "buhgalter", Confirm: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := merchant.List(ctx, sqlDB, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Name != "Магнит" || len(got[0].Aliases) != 0 {
+		t.Fatalf("imported=%+v", got)
 	}
 }
 

@@ -226,6 +226,14 @@ type Merchant struct {
 	CreatedAt string `json:"created_at"`
 }
 
+type MerchantAlias struct {
+	ID         string `json:"id"`
+	UserID     string `json:"user_id"`
+	MerchantID string `json:"merchant_id"`
+	Name       string `json:"name"`
+	CreatedAt  string `json:"created_at"`
+}
+
 type NotificationInterceptBankBinding struct {
 	UserID      string `json:"user_id"`
 	AccountID   string `json:"account_id"`

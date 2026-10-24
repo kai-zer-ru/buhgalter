@@ -3,6 +3,7 @@ package importexport
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -188,12 +189,21 @@ func (r *resolver) importNativeCatalogs(ctx context.Context, nf *NativeFile) err
 		return err
 	}
 	if table, ok := nf.Sections[sectionMerchants]; ok {
+		hasAliases := nativeHeaderHas(table, "aliases")
 		for _, row := range table.Rows {
 			name := nativeCell(table, row, "name")
 			if name == "" {
 				continue
 			}
-			if _, err := merchant.Create(ctx, r.db, r.userID, name, nativeCell(table, row, "icon")); err != nil && err != merchant.ErrNameTaken {
+			var aliases []string
+			if hasAliases {
+				parsed, err := parseMerchantAliases(nativeCell(table, row, "aliases"))
+				if err != nil {
+					return err
+				}
+				aliases = parsed
+			}
+			if _, err := merchant.CreateWithAliases(ctx, r.db, r.userID, name, nativeCell(table, row, "icon"), aliases); err != nil {
 				return err
 			}
 		}
@@ -210,6 +220,27 @@ func (r *resolver) importNativeCatalogs(ctx context.Context, nf *NativeFile) err
 		}
 	}
 	return nil
+}
+
+func parseMerchantAliases(raw string) ([]string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return []string{}, nil
+	}
+	var names []string
+	if err := json.Unmarshal([]byte(raw), &names); err != nil {
+		return nil, fmt.Errorf("merchant aliases: %w", err)
+	}
+	return names, nil
+}
+
+func aliasFold(aliases []string, name string) bool {
+	for _, alias := range aliases {
+		if strings.EqualFold(strings.TrimSpace(alias), strings.TrimSpace(name)) {
+			return true
+		}
+	}
+	return false
 }
 
 func importNativeCategories(ctx context.Context, r *resolver, nf *NativeFile) error {
@@ -738,7 +769,7 @@ func importNativeTemplates(ctx context.Context, db *sql.DB, r *resolver, nf *Nat
 			} else {
 				list, _ := merchant.List(ctx, db, r.userID)
 				for i := range list {
-					if strings.EqualFold(list[i].Name, mn) {
+					if strings.EqualFold(list[i].Name, mn) || aliasFold(list[i].Aliases, mn) {
 						id := list[i].ID
 						in.MerchantID = &id
 						break

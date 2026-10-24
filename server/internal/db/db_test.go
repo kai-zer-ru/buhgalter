@@ -79,3 +79,71 @@ func TestRecoverInterruptedAccountRebuild(t *testing.T) {
 	}
 	_ = os.Remove(path)
 }
+
+// v1.9.2 owns goose version 56 (merchant_aliases). Receipt migrations are 057–061.
+// Re-applying them must succeed when those objects already exist, and 062 must
+// recreate merchant_aliases if version 56 was recorded without that table.
+func TestReceiptMigrationsAfterMerchantAliasVersion(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.db")
+
+	mgr, err := NewManager(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = mgr.Close() })
+
+	assertMigrationChain(t, mgr.DB())
+
+	if _, err := mgr.DB().Exec(`DROP TABLE merchant_aliases`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mgr.DB().Exec(`DELETE FROM goose_db_version WHERE version_id >= 57`); err != nil {
+		t.Fatal(err)
+	}
+	if err := migrate(mgr.DB()); err != nil {
+		t.Fatal(err)
+	}
+	assertMigrationChain(t, mgr.DB())
+}
+
+func assertMigrationChain(t *testing.T, sqlDB *sql.DB) {
+	t.Helper()
+	var version int
+	if err := sqlDB.QueryRow(`SELECT COALESCE(MAX(version_id), 0) FROM goose_db_version WHERE is_applied = 1`).Scan(&version); err != nil {
+		t.Fatal(err)
+	}
+	if version != 62 {
+		t.Fatalf("goose version %d, want 62", version)
+	}
+	for _, table := range []string{
+		"merchant_aliases",
+		"receipt_scan_jobs",
+		"stores",
+		"receipt_imports",
+		"receipt_fiscal_previews",
+		"receipt_import_item_categories",
+	} {
+		var n int
+		if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?`, table).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		if n != 1 {
+			t.Fatalf("table %s count %d", table, n)
+		}
+	}
+	var cols int
+	if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('system_settings') WHERE name = 'receipt_api_token_encrypted'`).Scan(&cols); err != nil {
+		t.Fatal(err)
+	}
+	if cols != 1 {
+		t.Fatalf("receipt_api_token_encrypted columns %d", cols)
+	}
+	var idx int
+	if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'idx_tx_store'`).Scan(&idx); err != nil {
+		t.Fatal(err)
+	}
+	if idx != 1 {
+		t.Fatalf("idx_tx_store count %d", idx)
+	}
+}

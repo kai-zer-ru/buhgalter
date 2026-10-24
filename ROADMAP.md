@@ -30,12 +30,12 @@
 - [v1.8.0](#v180)
 - [v1.9.0](#v190)
 - [v1.9.1](#v191)
+- [v1.9.2](#v192)
 - [v1.10.0](#v1100)
 - [v1.11.0](#v1110)
 - [v1.12.0](#v1120)
 - [v1.13.0](#v1130)
 - [v1.14.0](#v1140)
-- [v1.15.0](#v1150)
 - [Общие планы](#общие-планы)
 - [На подумать](#на-подумать)
 
@@ -383,8 +383,6 @@
 
 ## v1.9.0
 
-Уведомления (кнопки TG/MAX, парсер, шторка) + UX polish. Было черновиком как patch 1.8.1 — поднято до minor (фичи + миграция).
-
 - [x] БАГ. Android: при запуске приложение сразу сворачивается (гонка quiet wake перехвата: sticky Intent extra + HyperOS bring-to-front без `onNewIntent`). Фикс: one-shot token, strip sticky extras, `onResume` → user engaged ([android-client-platform.md](docs/android-client-platform.md))
 - [x] [UX polish](roadmap/ux-polish.md) — без полос прокрутки; PTR текущего экрана; classic / MaterialBased; radius + профиль. Реализовано; **soak ~неделя** — баги отдельными коммитами в 1.9.0
 - [x] БАГ. Web/Android: на `/settings/notifications` кнопка показывает ключ `settings.notifications.save_all` вместо перевода. Нужны ключи ru/en + тест полноты i18n (литеральные ключи из UI — в обоих языках; `make ui-i18n-check`)
@@ -399,10 +397,17 @@
 
 ## v1.9.1
 
-Patch: ужесточение перехвата банковских push (меньше мусора в шторке, СБП WB снова работает).
-
 - [x] [Улучшение перехвата уведомлений](roadmap/notification-intercept-harden.md) — единый gate черновиков и уведомлений бухгалтера; «перевод по»→расход / «от»→доход / пара→transfer; allowlist маркетплейсов без маркетинга; provisional без ложных сумм ([notification-intercept.md](roadmap/notification-intercept.md))
 - [x] **Docs:** [Release notes](docs/release-notes-v1.9.1.md) · [CHANGELOG.md](CHANGELOG.md) · [android-client.md](docs/android-client.md) · [android-client-platform.md](docs/android-client-platform.md) · [README.md](README.md)
+
+## v1.9.2
+
+- [x] БАГ. `/docs` — Redoc «Invalid reference token: TransactionListResponse» (битый `$ref` у `GET /transactions/inbox`). Фикс: схема `TransactionList`; path-параметры `SubscriptionID` / `RecurringID`; e2e ждёт отрисованное меню, не пустой `<redoc>`
+- [x] [Глобальные кнопки в шаблоне](roadmap/notification-template-global-buttons.md) — в каждом шаблоне TG/MAX кнопки по умолчанию всегда в сообщении: их можно переставлять, нельзя удалить; свои кнопки добавляются отдельно
+- [x] [Алиасы магазинов](roadmap/merchant-aliases.md) — несколько имён и объединение уже созданных; в форме операции поиск по основному имени и алиасам, в списке только основное
+- [x] [Android: скрыть раздел «Уведомления» в «Настройках»](roadmap/android-hide-notification-settings.md) — пункт настроек каналов TG/MAX убран с телефона; перехват банка остаётся
+- [x] БАГ. Экспорт: `GET /api/v1/export` без `format` отдаёт Cubux; должен быть формат «Бухгалтер» ([export-default-format.md](roadmap/export-default-format.md))
+- [x] **Docs:** [Release notes](docs/release-notes-v1.9.2.md) · [CHANGELOG.md](CHANGELOG.md) · [notifications.md](docs/notifications.md) · [data-model.md](docs/data-model.md) · [import/buhgalter.md](docs/import/buhgalter.md) · [android-client-ui.md](docs/android-client-ui.md) · [README.md](README.md)
 
 ## v1.10.0
 

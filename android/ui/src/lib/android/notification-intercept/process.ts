@@ -81,7 +81,7 @@ export async function processPendingBankNotificationsDetailed(): Promise<Process
 		return { added: 0, cancelled: 0 };
 	}
 
-	let merchants: { id: string; name: string }[];
+	let merchants: { id: string; name: string; aliases?: string[] }[];
 	try {
 		merchants = await listMerchants();
 	} catch {
@@ -124,7 +124,7 @@ export async function processPendingBankNotificationsDetailed(): Promise<Process
 export async function ingestRawNotification(
 	raw: RawBankNotification,
 	settings: ReturnType<typeof loadInterceptSettings>,
-	merchants: { id: string; name: string }[],
+	merchants: { id: string; name: string; aliases?: string[] }[],
 	userId: string
 ): Promise<boolean> {
 	const parsed = parseBankNotification(raw);

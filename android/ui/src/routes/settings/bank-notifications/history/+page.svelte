@@ -8,6 +8,7 @@
 	import { transactionNewPath, transferNewPath } from '$lib/android/form-routes';
 	import { toast } from '$lib/toast';
 	import { listMerchants } from '$lib/api/client';
+	import { toMerchantRefs } from '$lib/android/notification-intercept/merchant-match';
 	import { bankIdForPackage, walletIdForPackage } from '$lib/android/notification-intercept/banks';
 	import { parseBankNotification } from '$lib/android/notification-intercept/parsers';
 	import {
@@ -36,7 +37,7 @@
 	let scanning = $state(false);
 	let creatingKey = $state<string | null>(null);
 	let debug = $state<NativeListenerDebugState | null>(null);
-	let merchants = $state<{ id: string; name: string }[]>([]);
+	let merchants = $state<{ id: string; name: string; aliases?: string[] }[]>([]);
 
 	function refresh() {
 		if (!isNativeApp()) {
@@ -54,7 +55,7 @@
 		refresh();
 		void listMerchants()
 			.then((rows) => {
-				merchants = rows.map((m) => ({ id: m.id, name: m.name }));
+				merchants = toMerchantRefs(rows);
 			})
 			.catch(() => {
 				merchants = [];

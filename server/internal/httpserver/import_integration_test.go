@@ -367,7 +367,7 @@ func TestExportRoundtrip(t *testing.T) {
 	}, "roundtrip.csv", csv)
 	importResp.Body.Close()
 
-	req, _ := http.NewRequest(http.MethodGet, env.server.URL+"/api/v1/export?from=2025-01-01&to=2025-01-31", nil)
+	req, _ := http.NewRequest(http.MethodGet, env.server.URL+"/api/v1/export?from=2025-01-01&to=2025-01-31&format=cubux", nil)
 	req.AddCookie(&http.Cookie{Name: "session", Value: env.cookie})
 	exportResp := mustDo(t, req)
 	defer exportResp.Body.Close()

@@ -36,7 +36,7 @@ var nativeAccountHeaders = []string{
 
 var nativeCategoryHeaders = []string{"name", "type", "icon", "sort_order", "is_primary", "is_system"}
 var nativeSubcatHeaders = []string{"category", "category_type", "name", "icon", "sort_order"}
-var nativeMerchantHeaders = []string{"name", "icon"}
+var nativeMerchantHeaders = []string{"name", "icon", "aliases"}
 var nativeTagHeaders = []string{"name"}
 var nativeCreditHeaders = []string{
 	"id", "name", "kind", "principal", "property_price", "down_payment", "down_payment_affects_balance",
@@ -181,6 +181,15 @@ func writeNativeCSV(sections []nativeSection) ([]byte, error) {
 func nativeCell(table RawTable, row RawRow, names ...string) string {
 	idx := cubuxFieldIndex(table.Headers)
 	return cellAt(row, idx, names...)
+}
+
+func nativeHeaderHas(table RawTable, name string) bool {
+	for _, header := range table.Headers {
+		if strings.EqualFold(strings.TrimSpace(header), name) {
+			return true
+		}
+	}
+	return false
 }
 
 func csvBool(v bool) string {

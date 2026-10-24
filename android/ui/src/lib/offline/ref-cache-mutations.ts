@@ -299,7 +299,12 @@ export function ensureMerchantsTagsFromTransaction(
 		});
 	} else if (opts?.merchantName) {
 		const existing = readRefCache<Merchant[]>(MERCHANTS_PATH);
-		const byName = existing?.find((m) => m.name.toLowerCase() === opts.merchantName!.toLowerCase());
+		const wanted = opts.merchantName.toLowerCase();
+		const byName = existing?.find(
+			(m) =>
+				m.name.toLowerCase() === wanted ||
+				(m.aliases ?? []).some((alias) => alias.toLowerCase() === wanted)
+		);
 		if (!byName) {
 			ensureMerchantInCache({
 				id: makeLocalKey(),

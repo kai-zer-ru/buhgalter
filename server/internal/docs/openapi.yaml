@@ -1865,11 +1865,13 @@ paths:
             enum: [date_desc, date_asc]
       responses:
         '200':
-          description: Список
+          description: |
+            Список. `meta.total` — число операций в очереди (без категории), не весь журнал.
+            Форма ответа та же, что у `TransactionList`; текст поля `meta.total` в этой схеме — про журнал.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TransactionListResponse'
+                $ref: '#/components/schemas/TransactionList'
   /transactions/inbox/count:
     get:
       summary: Счётчик очереди «разобрать»
@@ -2203,7 +2205,10 @@ paths:
                   $ref: '#/components/schemas/Merchant'
     post:
       summary: Создать магазин
-      description: Get-or-create по имени (без учёта регистра, включая кириллицу).
+      description: |
+        Get-or-create по основному имени или алиасу (без учёта регистра, включая кириллицу).
+        Поле `aliases` при создании нового магазина сохраняется; без поля список пустой.
+        Если магазин уже найден, возвращается он, список алиасов не меняется.
       security:
         - sessionCookie: []
         - bearerAuth: []
@@ -2239,6 +2244,9 @@ paths:
           description: Не найден
     put:
       summary: Обновить магазин
+      description: |
+        Поле `aliases` заменяет список. Без поля список не меняется.
+        Переименование в собственный алиас забирает это имя, алиас исчезает.
       security:
         - sessionCookie: []
         - bearerAuth: []
@@ -2260,6 +2268,51 @@ paths:
       responses:
         '204':
           description: Удалён
+  /merchants/{id}/merge:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Магазин, который остаётся
+        schema:
+          type: string
+    post:
+      summary: Объединить магазины
+      description: |
+        Цель остаётся: имя и иконка не меняются. Имена и алиасы источников становятся алиасами
+        (дубликаты основного имени цели отбрасываются). `transactions.merchant_id` источников
+        переписывается на цель, источники удаляются. В журнале и в `merchant_name` после этого
+        только основное имя цели. Если имя источника уже занято третьим магазином, объединение откатывается.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MerchantMerge'
+      responses:
+        '200':
+          description: Магазин-цель с алиасами
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Merchant'
+        '400':
+          description: Не указаны другие магазины
+        '404':
+          description: Магазин не найден
+        '409':
+          description: Имя занято третьим магазином, объединение отменено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: CONFLICT
+                  message: Такое имя магазина или алиас уже занято
   /tags:
     get:
       summary: Список тегов
@@ -4092,12 +4145,14 @@ paths:
         - name: format
           in: query
           description: |
-            `cubux` — совместимость с Cubux (по умолчанию); `from`/`to`/`account_id`/`category_id` сужают список операций.
+            По умолчанию `buhgalter`. Нет параметра, пустая строка и пробелы — тоже. Сравнение после обрезки пробелов и нижнего регистра: `buhgalter` и `cubux` (`BUHGALTER` — полный дамп, `CUBUX` — Cubux).
             `buhgalter` — секционный CSV `#BUHGALTER,1` для полного переноса между инстансами (профиль с timezone, счета, справочники, операции, кредиты, долги, подписки и остальное). Фильтры даты, счёта и категории игнорируются.
+            `cubux` — только это значение; `from`/`to`/`account_id`/`category_id` сужают список операций.
+            Любое другое значение после такого сравнения (например `foo`) — Cubux, ответ 200.
           schema:
             type: string
             enum: [cubux, buhgalter]
-            default: cubux
+            default: buhgalter
       responses:
         '200':
           description: CSV с BOM
@@ -4169,6 +4224,18 @@ components:
         type: boolean
         default: false
       description: Учитывать операции `kind=future` в сводке (`true` / `1`)
+    SubscriptionID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    RecurringID:
+      name: recurring_id
+      in: path
+      required: true
+      schema:
+        type: string
   examples:
     ApiErrorValidation:
       summary: Ошибка валидации (общая)
@@ -4637,8 +4704,11 @@ components:
       type: object
       description: |
         Клавиатура inline-кнопок. Форма `{"rows":[[{button}]]}`.
-        Пустая — `{"rows":[]}`. При send: merge global → trigger → balance_shortfall;
-        кнопки url/link/web_app/open_app/login_url без resolved http(s) URL отбрасываются.
+        Пустая — `{"rows":[]}`.
+        У шаблона может быть `placement`: ряды токенов `g:<id>` (кнопка по умолчанию) и `l:<id>` (своя).
+        Нет `placement` — при отправке сначала ряды global, затем ряды шаблона, затем balance_shortfall.
+        Есть `placement` — этот порядок, а глобальные id, которых в нём нет, дописываются в конец перед balance_shortfall.
+        Кнопки url/link/web_app/open_app/login_url без resolved http(s) URL отбрасываются.
       required: [rows]
       properties:
         rows:
@@ -4647,10 +4717,20 @@ components:
             type: array
             items:
               $ref: '#/components/schemas/NotificationKeyboardButton'
+        placement:
+          type: array
+          description: Порядок кнопок шаблона. Только у keyboard шаблона; у global поле игнорируется.
+          items:
+            type: array
+            items:
+              type: string
     NotificationKeyboardButton:
       type: object
       required: [type, text]
       properties:
+        id:
+          type: string
+          description: Стабильный id в хранимом JSON. В payload Telegram и MAX не передаётся.
         type:
           type: string
           description: |
@@ -5303,6 +5383,9 @@ components:
           type: integer
     Merchant:
       type: object
+      description: |
+        Основное имя и алиасы. То же тело отдают `GET /merchants` и `GET /ui/meta`.
+        В журнале операций и в `merchant_name` видно только `name`.
       properties:
         id:
           type: string
@@ -5311,6 +5394,11 @@ components:
         icon:
           type: string
           description: ID иконки из каталога категорий (`data/category_icons.json`)
+        aliases:
+          type: array
+          description: Другие написания имени. Пустой список — `[]`.
+          items:
+            type: string
         created_at:
           type: string
     MerchantUpsert:
@@ -5322,6 +5410,22 @@ components:
         icon:
           type: string
           description: ID иконки; пусто при создании → `default`, при обновлении — не менять
+        aliases:
+          type: array
+          description: |
+            При создании сохраняется (нет поля — пустой список).
+            При обновлении заменяет список; нет поля — список не меняется.
+          items:
+            type: string
+    MerchantMerge:
+      type: object
+      required: [source_ids]
+      properties:
+        source_ids:
+          type: array
+          description: Магазины, которые вливаются в цель
+          items:
+            type: string
     Tag:
       type: object
       properties:

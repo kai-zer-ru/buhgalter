@@ -24,6 +24,9 @@ FILE_EXCEPTIONS: dict[str, list[re.Pattern[str]]] = {
     "internal/admin/handler.go": [
         re.compile(r"goose_db_version", re.I),
     ],
+    "internal/db/receipt_column_repair.go": [
+        re.compile(r"goose_db_version", re.I),
+    ],
 }
 
 DB_CALL = re.compile(r"\.(Exec|Query|QueryRow)(Context)?\s*\(", re.MULTILINE)

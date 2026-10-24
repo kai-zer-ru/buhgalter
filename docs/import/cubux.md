@@ -99,7 +99,7 @@ UI: `/settings/import` — wizard:
 
 ## Экспорт
 
-`GET /api/v1/export?from=2025-01-01&to=2025-12-31&account_id=uuid` (`format=cubux` по умолчанию). `format=buhgalter` — [полный перенос учёта](buhgalter.md), без фильтров даты/счёта/категории.
+`GET /api/v1/export?format=cubux&from=2025-01-01&to=2025-12-31&account_id=uuid` (регистр не важен: `CUBUX` — то же). Без `format`, пустая строка и пробелы — формат «Бухгалтер». `format=buhgalter` — [полный перенос учёта](buhgalter.md), без фильтров даты/счёта/категории. Неизвестное значение (`format=foo`) остаётся Cubux.
 
 - Content-Type: `text/csv; charset=utf-8`
 - Content-Disposition: `attachment; filename="buhgalter_export_YYYY.csv"`

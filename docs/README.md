@@ -4,7 +4,7 @@
 
 **Спецификация API:** [api/openapi.yaml](api/openapi.yaml) (интерактивно — `/docs` на запущенном сервере).
 
-История изменений по версиям — [CHANGELOG.md](../CHANGELOG.md). Последний релиз: [release-notes-v1.9.1.md](release-notes-v1.9.1.md).
+История изменений по версиям — [CHANGELOG.md](../CHANGELOG.md). Последний релиз: [release-notes-v1.9.2.md](release-notes-v1.9.2.md).
 
 ---
 
@@ -90,6 +90,7 @@
 | [../roadmap/category-rules-inbox.md](../roadmap/category-rules-inbox.md) | Спека правил и inbox (реализовано в v1.8.0) |
 | [feature-toggles.md](feature-toggles.md) | Флаги модулей в админке; чеклист для новых фич |
 | [subscriptions.md](subscriptions.md) | Подписки: API, UI, уведомления, плановый остаток, привязка и очередь |
+| [release-notes-v1.9.2.md](release-notes-v1.9.2.md) | Release notes v1.9.2: алиасы магазинов, кнопки в шаблоне, экспорт без format |
 | [release-notes-v1.9.1.md](release-notes-v1.9.1.md) | Release notes v1.9.1: Android harden перехвата (шторка, СБП WB, по/от/пара) |
 | [release-notes-v1.9.0.md](release-notes-v1.9.0.md) | Release notes v1.9.0: кнопки TG/MAX, UX polish, Android шторка/парсер |
 | [release-notes-v1.8.0.md](release-notes-v1.8.0.md) | Release notes v1.8.0: нетто/графики, правила категорий, inbox, Android bindings |

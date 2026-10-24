@@ -107,8 +107,13 @@ func HintsForMutation(apiPath string) InvalidateHints {
 		}
 	case strings.HasPrefix(path, "/api/v1/merchants"):
 		return InvalidateHints{
-			Paths:    []string{"/api/v1/merchants"},
-			Entities: []string{"merchant"},
+			Paths: []string{
+				"/api/v1/merchants",
+				"/api/v1/ui/meta",
+				"/api/v1/transactions",
+				"/api/v1/transaction-templates",
+			},
+			Entities: []string{"merchant", "transaction"},
 		}
 	case strings.HasPrefix(path, "/api/v1/tags"):
 		return InvalidateHints{

@@ -77,6 +77,11 @@ erDiagram
         TEXT icon
     }
 
+    merchant_aliases {
+        TEXT name
+        TEXT merchant_id
+    }
+
     tags {
         TEXT name
     }
@@ -268,6 +273,7 @@ erDiagram
     categories ||--o{ transactions : category_id
     subcategories ||--o{ transactions : subcategory_id
     merchants ||--o{ transactions : merchant_id
+    merchants ||--o{ merchant_aliases : has
     transactions ||--o{ transaction_tags : has
     users ||--o{ user_change_events : owns
     tags ||--o{ transaction_tags : has
@@ -302,6 +308,10 @@ erDiagram
 `users.theme`: `light` | `dark` | `system` («Как на устройстве»); **default `system`** у новых пользователей (`schema.sql`, `InsertUser`). В UI resolved light/dark через `prefers-color-scheme`.  
 **Сброс учёта:** `DELETE /api/v1/user/data` удаляет ledger пользователя (счета, операции, долги, кредиты, бюджеты, подписки, периодические операции, магазины, теги, шаблоны, категории, журнал уведомлений, задания импорта) и заново создаёт категории по умолчанию. Не трогает профиль, пароль, сессии, API-токены и настройки каналов уведомлений.  
 Переводы: две ноги в `transactions` с общим `transfer_group_id` (самоссылка, не отдельная таблица).
+
+## Магазины
+
+У магазина одно основное имя (`merchants.name`) и алиасы (`merchant_aliases`, уникальны в пределах пользователя). Сравнение имён — trim и `EqualFold`. В журнале и в `merchant_name` операции видно только основное имя. Объединение переписывает `transactions.merchant_id` на магазин-цель и удаляет источники; имя и иконка цели не меняются.
 
 ## Категории и иконки
 
@@ -484,5 +494,6 @@ erDiagram
   - `040_account_deleted_status.sql`, `041_account_auto_topup.sql` — удаление счетов, автопополнение
   - `042_primary_not_credit_card.sql` — кредитная карта не может быть основным счётом
   - `052_user_change_events.sql` — лента изменений операций для Android-sync
+  - `056_merchant_aliases.sql` — алиасы магазина (v1.9.2). Номер занят этим релизом; чеки — `057`…`061`. Если версия 56 уже записана старой цепочкой чеков, таблицу создаёт `062_merchant_aliases_ensure.sql`
 
 Уже применённые миграции **не переписывать** — только новые файлы в конец цепочки. После каждой миграции обновлять `server/schema.sql` и при необходимости запускать `make sqlc`.

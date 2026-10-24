@@ -17,3 +17,14 @@ func TestWriteErrorUnmapped(t *testing.T) {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestWriteErrorInvalidMerge(t *testing.T) {
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/merchants/id/merge", nil)
+	if !writeError(rec, req, ErrInvalidMerge) {
+		t.Fatal("expected handled error")
+	}
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}

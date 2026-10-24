@@ -1,6 +1,6 @@
 -- +goose Up
 -- Cached ParsedReceipt from proverkacheka (per user + fiscal key) to avoid repeat API calls.
-CREATE TABLE receipt_fiscal_previews (
+CREATE TABLE IF NOT EXISTS receipt_fiscal_previews (
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     fiscal_drive_number TEXT NOT NULL,
     fiscal_document_number TEXT NOT NULL,
@@ -9,7 +9,7 @@ CREATE TABLE receipt_fiscal_previews (
     fetched_at TEXT NOT NULL,
     PRIMARY KEY (user_id, fiscal_drive_number, fiscal_document_number, fiscal_sign)
 );
-CREATE INDEX idx_receipt_fiscal_previews_user_fetched ON receipt_fiscal_previews (user_id, fetched_at DESC);
+CREATE INDEX IF NOT EXISTS idx_receipt_fiscal_previews_user_fetched ON receipt_fiscal_previews (user_id, fetched_at DESC);
 
 -- +goose Down
 DROP TABLE receipt_fiscal_previews;

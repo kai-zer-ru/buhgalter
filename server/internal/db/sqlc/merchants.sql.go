@@ -27,6 +27,21 @@ func (q *Queries) DeleteMerchant(ctx context.Context, arg DeleteMerchantParams) 
 	return result.RowsAffected()
 }
 
+const deleteMerchantAliasesByMerchant = `-- name: DeleteMerchantAliasesByMerchant :exec
+DELETE FROM merchant_aliases
+WHERE merchant_id = ? AND user_id = ?
+`
+
+type DeleteMerchantAliasesByMerchantParams struct {
+	MerchantID string `json:"merchant_id"`
+	UserID     string `json:"user_id"`
+}
+
+func (q *Queries) DeleteMerchantAliasesByMerchant(ctx context.Context, arg DeleteMerchantAliasesByMerchantParams) error {
+	_, err := q.db.ExecContext(ctx, deleteMerchantAliasesByMerchant, arg.MerchantID, arg.UserID)
+	return err
+}
+
 const getMerchantByID = `-- name: GetMerchantByID :one
 SELECT id, user_id, name, icon, created_at
 FROM merchants
@@ -99,6 +114,66 @@ func (q *Queries) InsertMerchant(ctx context.Context, arg InsertMerchantParams) 
 	return err
 }
 
+const insertMerchantAlias = `-- name: InsertMerchantAlias :exec
+INSERT INTO merchant_aliases (id, user_id, merchant_id, name, created_at)
+VALUES (?, ?, ?, ?, ?)
+`
+
+type InsertMerchantAliasParams struct {
+	ID         string `json:"id"`
+	UserID     string `json:"user_id"`
+	MerchantID string `json:"merchant_id"`
+	Name       string `json:"name"`
+	CreatedAt  string `json:"created_at"`
+}
+
+func (q *Queries) InsertMerchantAlias(ctx context.Context, arg InsertMerchantAliasParams) error {
+	_, err := q.db.ExecContext(ctx, insertMerchantAlias,
+		arg.ID,
+		arg.UserID,
+		arg.MerchantID,
+		arg.Name,
+		arg.CreatedAt,
+	)
+	return err
+}
+
+const listMerchantAliasesByUser = `-- name: ListMerchantAliasesByUser :many
+SELECT id, user_id, merchant_id, name, created_at
+FROM merchant_aliases
+WHERE user_id = ?
+ORDER BY name COLLATE NOCASE ASC, id ASC
+`
+
+func (q *Queries) ListMerchantAliasesByUser(ctx context.Context, userID string) ([]MerchantAlias, error) {
+	rows, err := q.db.QueryContext(ctx, listMerchantAliasesByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []MerchantAlias{}
+	for rows.Next() {
+		var i MerchantAlias
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.MerchantID,
+			&i.Name,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMerchantsByUser = `-- name: ListMerchantsByUser :many
 SELECT id, user_id, name, icon, created_at
 FROM merchants
@@ -133,6 +208,40 @@ func (q *Queries) ListMerchantsByUser(ctx context.Context, userID string) ([]Mer
 		return nil, err
 	}
 	return items, nil
+}
+
+const reassignTemplateMerchant = `-- name: ReassignTemplateMerchant :exec
+UPDATE transaction_templates
+SET merchant_id = ?1
+WHERE user_id = ?2 AND merchant_id = ?3
+`
+
+type ReassignTemplateMerchantParams struct {
+	TargetID *string `json:"target_id"`
+	UserID   string  `json:"user_id"`
+	SourceID *string `json:"source_id"`
+}
+
+func (q *Queries) ReassignTemplateMerchant(ctx context.Context, arg ReassignTemplateMerchantParams) error {
+	_, err := q.db.ExecContext(ctx, reassignTemplateMerchant, arg.TargetID, arg.UserID, arg.SourceID)
+	return err
+}
+
+const reassignTransactionsMerchant = `-- name: ReassignTransactionsMerchant :exec
+UPDATE transactions
+SET merchant_id = ?1
+WHERE user_id = ?2 AND merchant_id = ?3
+`
+
+type ReassignTransactionsMerchantParams struct {
+	TargetID *string `json:"target_id"`
+	UserID   string  `json:"user_id"`
+	SourceID *string `json:"source_id"`
+}
+
+func (q *Queries) ReassignTransactionsMerchant(ctx context.Context, arg ReassignTransactionsMerchantParams) error {
+	_, err := q.db.ExecContext(ctx, reassignTransactionsMerchant, arg.TargetID, arg.UserID, arg.SourceID)
+	return err
 }
 
 const updateMerchant = `-- name: UpdateMerchant :execrows

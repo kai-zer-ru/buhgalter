@@ -35,7 +35,7 @@ func ResolveKeyboardPlaceholders(kb *InlineKeyboard, data FormatData) *InlineKey
 	if kb == nil || kb.IsEmpty() {
 		return kb
 	}
-	out := &InlineKeyboard{Rows: make([][]KeyboardButton, 0, len(kb.Rows))}
+	out := &InlineKeyboard{Rows: make([][]KeyboardButton, 0, len(kb.Rows)), Placement: kb.Placement}
 	for _, row := range kb.Rows {
 		cp := make([]KeyboardButton, len(row))
 		for i, btn := range row {
@@ -142,7 +142,159 @@ func isResolvedHTTPURL(u string) bool {
 	return strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://")
 }
 
-// PrepareChannelKeyboard merges global+trigger[+shortfall], resolves placeholders per zone, applies T1.
+// ArrangeTemplateKeyboard builds the template zone.
+// No placement: global rows, then local rows.
+// With placement: tokens g:<id> / l:<id>. A global id that is missing from placement
+// is appended (original row grouping). A token whose global id is gone is dropped.
+// balance_shortfall is not part of this zone.
+func ArrangeTemplateKeyboard(global, trigger *InlineKeyboard) *InlineKeyboard {
+	if trigger == nil || len(trigger.Placement) == 0 {
+		return MergeKeyboards(global, trigger, nil)
+	}
+	gIndex := map[string]KeyboardButton{}
+	if global != nil {
+		for _, row := range global.Rows {
+			for _, btn := range row {
+				if id := strings.TrimSpace(btn.ID); id != "" {
+					gIndex[id] = btn
+				}
+			}
+		}
+	}
+	lIndex := map[string]KeyboardButton{}
+	for _, row := range trigger.Rows {
+		for _, btn := range row {
+			if id := strings.TrimSpace(btn.ID); id != "" {
+				lIndex[id] = btn
+			}
+		}
+	}
+	usedG := map[string]bool{}
+	usedL := map[string]bool{}
+	out := &InlineKeyboard{Rows: make([][]KeyboardButton, 0)}
+	for _, prow := range trigger.Placement {
+		row := make([]KeyboardButton, 0, len(prow))
+		for _, token := range prow {
+			token = strings.TrimSpace(token)
+			switch {
+			case strings.HasPrefix(token, "g:"):
+				id := strings.TrimPrefix(token, "g:")
+				btn, ok := gIndex[id]
+				if !ok {
+					continue
+				}
+				row = append(row, btn)
+				usedG[id] = true
+			case strings.HasPrefix(token, "l:"):
+				id := strings.TrimPrefix(token, "l:")
+				btn, ok := lIndex[id]
+				if !ok {
+					continue
+				}
+				row = append(row, btn)
+				usedL[id] = true
+			}
+		}
+		if len(row) > 0 {
+			out.Rows = append(out.Rows, row)
+		}
+	}
+	appendUnused := func(src *InlineKeyboard, index map[string]KeyboardButton, used map[string]bool) {
+		if src == nil {
+			return
+		}
+		for _, srcRow := range src.Rows {
+			pending := make([]KeyboardButton, 0)
+			for _, btn := range srcRow {
+				id := strings.TrimSpace(btn.ID)
+				if id == "" || !used[id] {
+					if id != "" {
+						if _, ok := index[id]; ok {
+							used[id] = true
+						}
+					}
+					pending = append(pending, btn)
+				}
+			}
+			if len(pending) > 0 {
+				out.Rows = append(out.Rows, pending)
+			}
+		}
+	}
+	appendUnused(global, gIndex, usedG)
+	appendUnused(trigger, lIndex, usedL)
+	if out.IsEmpty() {
+		return nil
+	}
+	return out
+}
+
+// NormalizeTemplateKeyboard keeps local rows and puts every live global id back into placement.
+// Empty placement stays empty (legacy order). Global keyboard itself is not modified.
+func NormalizeTemplateKeyboard(global *InlineKeyboard, trigger InlineKeyboard) InlineKeyboard {
+	EnsureButtonIDs(&trigger)
+	if len(trigger.Placement) == 0 {
+		trigger.Placement = nil
+		return trigger
+	}
+	knownG := map[string]bool{}
+	gIDs := make([]string, 0)
+	if global != nil {
+		for _, row := range global.Rows {
+			for _, btn := range row {
+				id := strings.TrimSpace(btn.ID)
+				if id == "" || knownG[id] {
+					continue
+				}
+				knownG[id] = true
+				gIDs = append(gIDs, id)
+			}
+		}
+	}
+	knownL := map[string]bool{}
+	for _, row := range trigger.Rows {
+		for _, btn := range row {
+			if id := strings.TrimSpace(btn.ID); id != "" {
+				knownL[id] = true
+			}
+		}
+	}
+	usedG := map[string]bool{}
+	placement := make([][]string, 0, len(trigger.Placement))
+	for _, prow := range trigger.Placement {
+		row := make([]string, 0, len(prow))
+		for _, token := range prow {
+			token = strings.TrimSpace(token)
+			switch {
+			case strings.HasPrefix(token, "g:"):
+				id := strings.TrimPrefix(token, "g:")
+				if !knownG[id] || usedG[id] {
+					continue
+				}
+				usedG[id] = true
+				row = append(row, "g:"+id)
+			case strings.HasPrefix(token, "l:"):
+				id := strings.TrimPrefix(token, "l:")
+				if !knownL[id] {
+					continue
+				}
+				row = append(row, "l:"+id)
+			}
+		}
+		if len(row) > 0 {
+			placement = append(placement, row)
+		}
+	}
+	for _, id := range gIDs {
+		if !usedG[id] {
+			placement = append(placement, []string{"g:" + id})
+		}
+	}
+	trigger.Placement = placement
+	return trigger
+}
+
+// PrepareChannelKeyboard arranges global+trigger, appends shortfall, resolves placeholders per zone, applies T1.
 // shortfallData == nil skips the shortfall zone. When non-nil, shortfall keys overlay data
 // (so {amount} in the shortfall keyboard is the shortfall sum, not the main trigger amount).
 func PrepareChannelKeyboard(
@@ -161,7 +313,8 @@ func PrepareChannelKeyboard(
 		sf, _ := ParseInlineKeyboard(shortfallRaw)
 		shortfallResolved = ResolveKeyboardPlaceholders(&sf, overlayFormatData(data, shortfallData))
 	}
-	merged := MergeKeyboards(globalResolved, triggerResolved, shortfallResolved)
+	arranged := ArrangeTemplateKeyboard(globalResolved, triggerResolved)
+	merged := MergeKeyboards(arranged, shortfallResolved, nil)
 	return FilterUnresolvedURLButtons(merged)
 }
 

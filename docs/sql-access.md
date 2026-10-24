@@ -33,6 +33,7 @@ func queries(db *sql.DB) *sqlcdb.Queries {
 | `server/internal/db/manager.go` | `VACUUM INTO`, `PRAGMA wal_checkpoint` | операции SQLite, не доменные таблицы |
 | `server/internal/accountbalance/hook.go` | `pragma_table_info(...)` | метаданные схемы SQLite |
 | `admin/handler.go` | `SELECT version_id FROM goose_db_version` | инфраструктура миграций |
+| `internal/db/receipt_column_repair.go` | `INSERT INTO goose_db_version` | повтор миграций 057/059, если колонка чека уже есть |
 
 Новые исключения добавлять только с явным обоснованием в PR (и строкой в `FILE_EXCEPTIONS` в `scripts/check_inline_sql.py`).
 

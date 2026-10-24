@@ -60,8 +60,48 @@ func TestHandlerExport(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("export %d", rec.Code)
 	}
-	if rec.Header().Get("Content-Type") == "" {
-		t.Fatal("expected content type")
+	if ct := rec.Header().Get("Content-Type"); ct != "text/csv; charset=utf-8" {
+		t.Fatalf("content-type %q", ct)
+	}
+	body := rec.Body.Bytes()
+	if !bytes.HasPrefix(body, []byte{0xEF, 0xBB, 0xBF}) {
+		t.Fatal("expected UTF-8 BOM")
+	}
+	if !bytes.Contains(body, []byte("#BUHGALTER")) || !bytes.Contains(body, []byte("#SECTION")) {
+		t.Fatalf("expected native sections, got %s", rec.Body.String()[:min(180, rec.Body.Len())])
+	}
+}
+
+func TestHandlerExportFormatQuery(t *testing.T) {
+	ctx, handle, userID := seedImportHandle(t)
+	if _, err := Import(ctx, handle.DB(), userID, "sample.csv", sampleCSVRows(), ImportOptions{
+		Preset: "cubux", Deduplicate: true, Confirm: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h := &Handler{Store: handle, Audit: audit.New(filepath.Join(t.TempDir(), "audit")), Logger: slog.Default()}
+
+	cases := []struct {
+		raw    string
+		native bool
+	}{
+		{raw: "/export?format=", native: true},
+		{raw: "/export?format=%20%20", native: true},
+		{raw: "/export?format=foo", native: false},
+		{raw: "/export?format=CUBUX", native: false},
+	}
+	for _, tc := range cases {
+		req := importAuthRequest(userID, httptest.NewRequest(http.MethodGet, tc.raw, nil))
+		rec := httptest.NewRecorder()
+		h.Export(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: status %d", tc.raw, rec.Code)
+		}
+		body := rec.Body.Bytes()
+		hasNative := bytes.Contains(body, []byte("#BUHGALTER"))
+		if hasNative != tc.native {
+			t.Fatalf("%s: native=%v want %v", tc.raw, hasNative, tc.native)
+		}
 	}
 }
 

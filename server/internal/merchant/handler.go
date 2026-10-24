@@ -19,8 +19,13 @@ type Handler struct {
 }
 
 type upsertRequest struct {
-	Name string `json:"name"`
-	Icon string `json:"icon"`
+	Name    string    `json:"name"`
+	Icon    string    `json:"icon"`
+	Aliases *[]string `json:"aliases"`
+}
+
+type mergeRequest struct {
+	SourceIDs []string `json:"source_ids"`
 }
 
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
@@ -51,7 +56,11 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_INVALID_JSON")
 		return
 	}
-	m, err := Create(r.Context(), h.Store.DB(), info.User.ID, req.Name, req.Icon)
+	var aliases []string
+	if req.Aliases != nil {
+		aliases = *req.Aliases
+	}
+	m, err := CreateWithAliases(r.Context(), h.Store.DB(), info.User.ID, req.Name, req.Icon, aliases)
 	if writeError(w, r, err) {
 		return
 	}
@@ -85,7 +94,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_INVALID_JSON")
 		return
 	}
-	m, err := Update(r.Context(), h.Store.DB(), info.User.ID, id, req.Name, req.Icon)
+	m, err := Update(r.Context(), h.Store.DB(), info.User.ID, id, req.Name, req.Icon, req.Aliases)
 	if writeError(w, r, err) {
 		return
 	}
@@ -111,6 +120,28 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (h *Handler) Merge(w http.ResponseWriter, r *http.Request) {
+	info, ok := auth.FromContext(r.Context())
+	if !ok {
+		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
+		return
+	}
+	id := chi.URLParam(r, "id")
+	var req mergeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_INVALID_JSON")
+		return
+	}
+	m, err := Merge(r.Context(), h.Store.DB(), info.User.ID, id, req.SourceIDs)
+	if writeError(w, r, err) {
+		return
+	}
+	_ = h.Audit.Log("merchant.merge", info.User.ID, info.User.Login, clientIP(r), map[string]any{
+		"merchant_id": id, "source_ids": req.SourceIDs,
+	})
+	writeJSON(w, http.StatusOK, m)
+}
+
 func writeError(w http.ResponseWriter, r *http.Request, err error) bool {
 	if err == nil {
 		return false
@@ -122,6 +153,8 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) bool {
 		apperror.WriteR(w, r, http.StatusConflict, apperror.Conflict, "CONFLICT_MERCHANT_NAME")
 	case errors.Is(err, ErrInvalidName):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_MERCHANT_NAME_REQUIRED")
+	case errors.Is(err, ErrInvalidMerge):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_MERCHANT_MERGE")
 	default:
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 	}

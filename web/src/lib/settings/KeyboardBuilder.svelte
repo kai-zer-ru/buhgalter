@@ -9,6 +9,7 @@
 		addButtonToRow,
 		addRow,
 		buttonTypesFor,
+		composeTemplateRows,
 		createLinkPreset,
 		linkPresetsForTrigger,
 		moveButton,
@@ -16,6 +17,7 @@
 		normalizeInlineKeyboard,
 		removeButton,
 		removeRow,
+		splitTemplateKeyboard,
 		toApiKeyboard,
 		toEditableKeyboard,
 		updateButton,
@@ -33,6 +35,11 @@
 		scope?: string;
 		/** Template trigger_type; null/undefined → global multi-presets. */
 		triggerType?: string | null;
+		/**
+		 * When set, this builder is a template: global buttons of the channel are shown
+		 * inside the layout (locked). Omit on the global keyboard editor.
+		 */
+		includeGlobal?: NotificationInlineKeyboard | null;
 		onchange?: (keyboard: NotificationInlineKeyboard) => void;
 	};
 
@@ -42,11 +49,29 @@
 		disabled = false,
 		scope = 'kb',
 		triggerType = null,
+		includeGlobal = undefined,
 		onchange
 	}: Props = $props();
 
-	let editable = $state<EditableKeyboard>(toEditableKeyboard(keyboard));
-	let lastExternalJson = $state(JSON.stringify(normalizeInlineKeyboard(keyboard)));
+	function visualFromProps(): EditableKeyboard {
+		if (includeGlobal !== undefined) {
+			return { rows: composeTemplateRows(includeGlobal, keyboard) };
+		}
+		return toEditableKeyboard(keyboard);
+	}
+
+	function externalKey(): string {
+		if (includeGlobal !== undefined) {
+			return JSON.stringify({
+				t: normalizeInlineKeyboard(keyboard),
+				g: normalizeInlineKeyboard(includeGlobal)
+			});
+		}
+		return JSON.stringify(normalizeInlineKeyboard(keyboard));
+	}
+
+	let editable = $state<EditableKeyboard>(visualFromProps());
+	let lastExternalJson = $state(externalKey());
 	let dragGhost = $state<DragGhostView | null>(null);
 	let draggingId = $state<string | null>(null);
 	let overId = $state<string | null>(null);
@@ -61,19 +86,30 @@
 	const linkPresets = $derived(linkPresetsForTrigger(triggerType));
 
 	$effect(() => {
-		const incoming = JSON.stringify(normalizeInlineKeyboard(keyboard));
+		const incoming = externalKey();
 		if (incoming !== lastExternalJson) {
 			lastExternalJson = incoming;
-			editable = toEditableKeyboard(keyboard);
+			editable = visualFromProps();
 		}
 	});
 
 	function commit(next: EditableKeyboard) {
 		editable = next;
-		const api = toApiKeyboard(next);
-		lastExternalJson = JSON.stringify(api);
+		const api =
+			includeGlobal !== undefined ? splitTemplateKeyboard(next.rows) : toApiKeyboard(next);
+		lastExternalJson = externalKeyFrom(api);
 		keyboard = api;
 		onchange?.(api);
+	}
+
+	function externalKeyFrom(api: NotificationInlineKeyboard): string {
+		if (includeGlobal !== undefined) {
+			return JSON.stringify({
+				t: normalizeInlineKeyboard(api),
+				g: normalizeInlineKeyboard(includeGlobal)
+			});
+		}
+		return JSON.stringify(normalizeInlineKeyboard(api));
 	}
 
 	function dragBindings(onDrop: (from: string, to: string) => void) {
@@ -121,15 +157,28 @@
 		if (next) commit({ rows: next });
 	}
 
+	function rowHasLocked(rowIndex: number) {
+		return editable.rows[rowIndex]?.some((btn) => btn.locked) ?? false;
+	}
+
 	function onRemoveRow(rowIndex: number) {
+		if (rowHasLocked(rowIndex)) return;
 		commit({ rows: removeRow(editable.rows, rowIndex) });
 	}
 
 	function onRemoveButton(buttonId: string) {
+		const locked = editable.rows.some((row) =>
+			row.some((btn) => btn.id === buttonId && btn.locked)
+		);
+		if (locked) return;
 		commit({ rows: removeButton(editable.rows, buttonId) });
 	}
 
 	function onPatchButton(buttonId: string, patch: Partial<EditableKeyboardButton>) {
+		const locked = editable.rows.some((row) =>
+			row.some((btn) => btn.id === buttonId && btn.locked)
+		);
+		if (locked) return;
 		commit({ rows: updateButton(editable.rows, buttonId, patch) });
 	}
 
@@ -206,13 +255,21 @@
 					>
 						{$_('settings.notifications.keyboard.add_button')}
 					</button>
-					<button type="button" class="btn-ghost" {disabled} onclick={() => onRemoveRow(rowIndex)}>
-						{$_('settings.notifications.keyboard.remove_row')}
-					</button>
+					{#if !rowHasLocked(rowIndex)}
+						<button
+							type="button"
+							class="btn-ghost"
+							{disabled}
+							onclick={() => onRemoveRow(rowIndex)}
+						>
+							{$_('settings.notifications.keyboard.remove_row')}
+						</button>
+					{/if}
 				</div>
 
 				<div class="flex flex-wrap gap-2">
 					{#each row as btn (btn.id)}
+						{@const fieldDisabled = disabled || !!btn.locked}
 						<div
 							class="min-w-[14rem] flex-1 rounded border p-2 space-y-2 transition-opacity"
 							style:border-color={overId === btn.id ? 'var(--primary)' : 'var(--border)'}
@@ -220,6 +277,7 @@
 							data-drag-id={btn.id}
 							data-drag-kind={`${scope}-btn`}
 							data-testid={`keyboard-btn-${btn.id}`}
+							data-locked={btn.locked ? 'true' : 'false'}
 						>
 							<div class="flex items-center gap-1">
 								<span
@@ -236,14 +294,20 @@
 								>
 									⠿
 								</span>
-								<button
-									type="button"
-									class="btn-ghost ml-auto text-xs"
-									{disabled}
-									onclick={() => onRemoveButton(btn.id)}
-								>
-									{$_('settings.notifications.keyboard.remove_button')}
-								</button>
+								{#if btn.locked}
+									<span class="ml-auto text-xs" style:color="var(--text-muted)">
+										{$_('settings.notifications.keyboard.locked_global')}
+									</span>
+								{:else}
+									<button
+										type="button"
+										class="btn-ghost ml-auto text-xs"
+										{disabled}
+										onclick={() => onRemoveButton(btn.id)}
+									>
+										{$_('settings.notifications.keyboard.remove_button')}
+									</button>
+								{/if}
 							</div>
 
 							<label class="block space-y-1 text-xs">
@@ -252,7 +316,7 @@
 									id={`${scope}-type-${btn.id}`}
 									value={btn.type}
 									options={typeOptions}
-									{disabled}
+									disabled={disabled || !!btn.locked}
 									onchange={(v) => onPatchButton(btn.id, { type: v })}
 								/>
 							</label>
@@ -263,7 +327,7 @@
 									class="input w-full"
 									type="text"
 									value={btn.text}
-									{disabled}
+									disabled={fieldDisabled}
 									oninput={(e) =>
 										onPatchButton(btn.id, {
 											text: (e.currentTarget as HTMLInputElement).value
@@ -278,7 +342,7 @@
 										class="input w-full"
 										type="text"
 										value={btn.url ?? ''}
-										{disabled}
+										disabled={fieldDisabled}
 										oninput={(e) =>
 											onPatchButton(btn.id, {
 												url: (e.currentTarget as HTMLInputElement).value
@@ -292,7 +356,7 @@
 										class="input w-full"
 										type="text"
 										value={btn.callback_data ?? ''}
-										{disabled}
+										disabled={fieldDisabled}
 										oninput={(e) =>
 											onPatchButton(btn.id, {
 												callback_data: (e.currentTarget as HTMLInputElement).value
@@ -306,7 +370,7 @@
 										class="input w-full"
 										type="text"
 										value={btn.web_app?.url ?? ''}
-										{disabled}
+										disabled={fieldDisabled}
 										oninput={(e) =>
 											onPatchButton(btn.id, {
 												web_app: { url: (e.currentTarget as HTMLInputElement).value }
@@ -320,7 +384,7 @@
 										class="input w-full"
 										type="text"
 										value={btn.login_url?.url ?? ''}
-										{disabled}
+										disabled={fieldDisabled}
 										oninput={(e) =>
 											onPatchButton(btn.id, {
 												login_url: { url: (e.currentTarget as HTMLInputElement).value }
@@ -334,7 +398,7 @@
 										class="input w-full"
 										type="text"
 										value={btn.copy_text?.text ?? ''}
-										{disabled}
+										disabled={fieldDisabled}
 										oninput={(e) =>
 											onPatchButton(btn.id, {
 												copy_text: { text: (e.currentTarget as HTMLInputElement).value }
@@ -348,7 +412,7 @@
 										class="input w-full"
 										type="text"
 										value={btn.payload ?? ''}
-										{disabled}
+										disabled={fieldDisabled}
 										oninput={(e) =>
 											onPatchButton(btn.id, {
 												payload: (e.currentTarget as HTMLInputElement).value
@@ -362,7 +426,7 @@
 										class="input w-full"
 										type="text"
 										value={btn.switch_inline_query ?? ''}
-										{disabled}
+										disabled={fieldDisabled}
 										oninput={(e) =>
 											onPatchButton(btn.id, {
 												switch_inline_query: (e.currentTarget as HTMLInputElement).value
@@ -376,7 +440,7 @@
 										class="input w-full"
 										type="text"
 										value={btn.switch_inline_query_current_chat ?? ''}
-										{disabled}
+										disabled={fieldDisabled}
 										oninput={(e) =>
 											onPatchButton(btn.id, {
 												switch_inline_query_current_chat: (e.currentTarget as HTMLInputElement)

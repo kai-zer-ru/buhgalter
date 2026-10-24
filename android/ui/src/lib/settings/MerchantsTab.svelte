@@ -5,6 +5,7 @@
 		createMerchant,
 		deleteMerchant,
 		listMerchants,
+		mergeMerchants,
 		updateMerchant,
 		type Merchant
 	} from '$lib/api/client';
@@ -12,6 +13,7 @@
 	import CategoryIconPicker from '$lib/components/CategoryIconPicker.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
 	import IconButton from '$lib/components/IconButton.svelte';
+	import ModalShell from '$lib/components/ModalShell.svelte';
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
 	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
 	import { defaultIconForKind } from '$lib/category-icons';
@@ -26,22 +28,48 @@
 	let loadError = $state<string | null>(null);
 
 	let newName = $state('');
+	let newAliases = $state('');
 	let newIcon = $state(defaultIconForKind('expense'));
 
 	let editingId = $state<string | null>(null);
 	let editName = $state('');
+	let editAliases = $state('');
 	let editIcon = $state('default');
 	let listQuery = $state('');
+
+	let mergeTarget = $state<Merchant | null>(null);
+	let mergeSelected = $state<string[]>([]);
 
 	const filteredMerchants = $derived.by(() => {
 		const q = listQuery.trim().toLowerCase();
 		if (!q) return merchants;
-		return merchants.filter((m) => m.name.toLowerCase().includes(q));
+		return merchants.filter(
+			(m) =>
+				m.name.toLowerCase().includes(q) ||
+				(m.aliases ?? []).some((alias) => alias.toLowerCase().includes(q))
+		);
+	});
+
+	const mergeOthers = $derived.by(() => {
+		const target = mergeTarget;
+		if (!target) return [];
+		return merchants.filter((m) => m.id !== target.id);
 	});
 
 	onMount(() => {
 		void load();
 	});
+
+	function parseAliases(raw: string): string[] {
+		const out: string[] = [];
+		for (const part of raw.split(',')) {
+			const name = part.trim();
+			if (!name) continue;
+			if (out.some((item) => item.toLocaleLowerCase() === name.toLocaleLowerCase())) continue;
+			out.push(name);
+		}
+		return out;
+	}
 
 	async function load() {
 		loading = true;
@@ -60,8 +88,9 @@
 		const name = newName.trim();
 		if (!name) return;
 		try {
-			await createMerchant(name, newIcon);
+			await createMerchant(name, newIcon, parseAliases(newAliases));
 			newName = '';
+			newAliases = '';
 			newIcon = defaultIconForKind('expense');
 			toast($_('common.saved'));
 			await load();
@@ -73,6 +102,7 @@
 	function startEdit(m: Merchant) {
 		editingId = m.id;
 		editName = m.name;
+		editAliases = (m.aliases ?? []).join(', ');
 		editIcon = m.icon || 'default';
 	}
 
@@ -82,7 +112,7 @@
 		const icon = editIcon.trim() || 'default';
 		if (!name) return;
 		try {
-			await updateMerchant(editingId, name, icon);
+			await updateMerchant(editingId, name, icon, parseAliases(editAliases));
 			editingId = null;
 			toast($_('common.saved'));
 			await load();
@@ -107,12 +137,49 @@
 		}
 	}
 
+	function startMerge(m: Merchant) {
+		mergeTarget = m;
+		mergeSelected = [];
+	}
+
+	function toggleMerge(id: string, checked: boolean) {
+		if (checked) {
+			if (!mergeSelected.includes(id)) mergeSelected = [...mergeSelected, id];
+			return;
+		}
+		mergeSelected = mergeSelected.filter((item) => item !== id);
+	}
+
+	async function submitMerge() {
+		const target = mergeTarget;
+		if (!target || mergeSelected.length === 0) return;
+		const ok = await confirm({
+			message: $_('merchants.confirm.merge', { values: { name: target.name } }),
+			confirmLabel: $_('merchants.action.merge')
+		});
+		if (!ok) return;
+		try {
+			await mergeMerchants(target.id, mergeSelected);
+			mergeTarget = null;
+			mergeSelected = [];
+			toast($_('common.saved'));
+			await load();
+		} catch (err) {
+			toast.fromError(err);
+		}
+	}
+
 	function rowActions(m: Merchant): RowAction[] {
 		return [
 			{
 				icon: 'edit',
 				label: $_('common.edit'),
 				onclick: () => startEdit(m)
+			},
+			{
+				icon: 'transfer',
+				label: $_('merchants.action.merge'),
+				onclick: () => startMerge(m)
 			},
 			{
 				icon: 'delete',
@@ -145,6 +212,13 @@
 				{$_('common.create')}
 			</button>
 		</div>
+		<input
+			id="merchant-new-aliases"
+			class="input w-full"
+			placeholder={$_('merchants.field.aliasesPlaceholder')}
+			aria-label={$_('merchants.field.aliases')}
+			bind:value={newAliases}
+		/>
 	</div>
 
 	{#if merchants.length > 0}
@@ -164,13 +238,20 @@
 		{:else}
 			<div class="space-y-2">
 				{#each filteredMerchants as m (m.id)}
-					<div class="card">
+					<div class="card space-y-2">
 						<div class="flex flex-wrap items-center gap-1 sm:flex-nowrap">
 							{#if editingId !== m.id}
 								<span class="inline-flex shrink-0 items-center justify-center min-h-11 min-w-11">
 									<CategoryIcon icon={m.icon || 'default'} size={iconSize} />
 								</span>
-								<span class="min-w-0 flex-1 truncate font-medium">{m.name}</span>
+								<div class="min-w-0 flex-1">
+									<div class="truncate font-medium">{m.name}</div>
+									{#if m.aliases?.length}
+										<div class="truncate text-sm" style:color="var(--text-muted)">
+											{m.aliases.join(', ')}
+										</div>
+									{/if}
+								</div>
 								<RowActionsMenu actions={rowActions(m)} />
 							{:else}
 								{#key editingId}
@@ -198,9 +279,60 @@
 								/>
 							{/if}
 						</div>
+						{#if editingId === m.id}
+							<input
+								id="merchant-edit-aliases"
+								class="input w-full"
+								placeholder={$_('merchants.field.aliasesPlaceholder')}
+								aria-label={$_('merchants.field.aliases')}
+								bind:value={editAliases}
+							/>
+						{/if}
 					</div>
 				{/each}
 			</div>
 		{/if}
 	</PageLoadGate>
 </div>
+
+<ModalShell
+	open={mergeTarget !== null}
+	title={$_('merchants.merge.title')}
+	onclose={() => (mergeTarget = null)}
+>
+	<p class="text-sm" style:color="var(--text-muted)">
+		{$_('merchants.merge.hint', { values: { name: mergeTarget?.name ?? '' } })}
+	</p>
+	{#if mergeOthers.length === 0}
+		<p class="mt-3 text-sm">{$_('merchants.merge.empty')}</p>
+	{:else}
+		<ul class="mt-3 space-y-2">
+			{#each mergeOthers as m (m.id)}
+				<li>
+					<label class="flex items-center gap-2">
+						<input
+							type="checkbox"
+							checked={mergeSelected.includes(m.id)}
+							onchange={(event) =>
+								toggleMerge(m.id, (event.currentTarget as HTMLInputElement).checked)}
+						/>
+						<span>{m.name}</span>
+					</label>
+				</li>
+			{/each}
+		</ul>
+	{/if}
+	{#snippet footer()}
+		<button type="button" class="btn-secondary" onclick={() => (mergeTarget = null)}>
+			{$_('common.cancel')}
+		</button>
+		<button
+			type="button"
+			class="btn-primary"
+			disabled={mergeSelected.length === 0}
+			onclick={() => void submitMerge()}
+		>
+			{$_('merchants.action.merge')}
+		</button>
+	{/snippet}
+</ModalShell>

@@ -4,19 +4,25 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 const emptyKeyboardJSON = `{"rows":[]}`
 
 // InlineKeyboard is the stored/API shape for TG and MAX keyboards.
 // Example: {"rows":[[{"type":"url","text":"Открыть","url":"{debt_url}"}]]}
+// Placement is template-only: tokens "g:<id>" and "l:<id>". Absent → global rows, then local rows.
 type InlineKeyboard struct {
-	Rows [][]KeyboardButton `json:"rows"`
+	Rows      [][]KeyboardButton `json:"rows"`
+	Placement [][]string         `json:"placement,omitempty"`
 }
 
 // KeyboardButton is a provider-agnostic button. Exactly one action type is set
 // via Type; provider-specific fields are filled accordingly.
+// ID is stored so a template can refer to a global button. Provider payloads omit it.
 type KeyboardButton struct {
+	ID   string `json:"id,omitempty"`
 	Type string `json:"type"`
 	Text string `json:"text"`
 
@@ -103,6 +109,20 @@ func (kb *InlineKeyboard) IsEmpty() bool {
 		}
 	}
 	return true
+}
+
+// EnsureButtonIDs assigns a stable id to every button that does not have one.
+func EnsureButtonIDs(kb *InlineKeyboard) {
+	if kb == nil {
+		return
+	}
+	for i := range kb.Rows {
+		for j := range kb.Rows[i] {
+			if strings.TrimSpace(kb.Rows[i][j].ID) == "" {
+				kb.Rows[i][j].ID = uuid.NewString()
+			}
+		}
+	}
 }
 
 func (kb *InlineKeyboard) ButtonCount() int {

@@ -11,6 +11,9 @@ test.describe('notification keyboards', () => {
 	});
 
 	test('global default buttons: add preset, save, reload', async ({ page }) => {
+		await apiJSON(page, 'PUT', '/api/v1/user/notifications', {
+			telegram_enabled: true
+		});
 		await page.goto('/settings/notifications');
 		await waitAppReady(page);
 
@@ -54,6 +57,35 @@ test.describe('notification keyboards', () => {
 			.click();
 		await page.getByTestId('notifications-global-keyboards-save').click();
 		await expectToast(page, 'success', 'Изменения сохранены.');
+	});
+
+	test('global default buttons: both channels use tabs', async ({ page }) => {
+		await apiJSON(page, 'PUT', '/api/v1/user/notifications', {
+			telegram_enabled: true,
+			max_enabled: true
+		});
+		await page.goto('/settings/notifications');
+		await waitAppReady(page);
+
+		await expandCollapsibleSection(page, 'Кнопки по умолчанию');
+		const globalCard = page.getByTestId('notifications-global-keyboards');
+		await expect(globalCard.getByRole('tab', { name: 'Telegram' })).toBeVisible();
+		await expect(globalCard.getByRole('tab', { name: 'MAX' })).toBeVisible();
+		await expect(globalCard.getByTestId('keyboard-builder-global-tg')).toBeVisible();
+	});
+
+	test('global default buttons: disabled MAX has no tabs and shows Telegram', async ({ page }) => {
+		await apiJSON(page, 'PUT', '/api/v1/user/notifications', {
+			telegram_enabled: true,
+			max_enabled: false
+		});
+		await page.goto('/settings/notifications');
+		await waitAppReady(page);
+
+		await expandCollapsibleSection(page, 'Кнопки по умолчанию');
+		const globalCard = page.getByTestId('notifications-global-keyboards');
+		await expect(globalCard.getByRole('tab')).toHaveCount(0);
+		await expect(globalCard.getByTestId('keyboard-builder-global-tg')).toBeVisible();
 	});
 
 	test('template preview returns keyboard schemas', async ({ page }) => {
@@ -107,5 +139,90 @@ test.describe('notification keyboards', () => {
 		await expect(card.getByRole('button', { name: 'MAX' })).toHaveCount(0);
 		await expect(card.getByRole('button', { name: 'Telegram' })).toHaveCount(0);
 		await expect(page.getByTestId('keyboard-builder-tpl-test-tg')).toBeVisible();
+	});
+
+	test('template includes global buttons, add keeps them, delete is hidden', async ({ page }) => {
+		const settings = await apiJSON<{
+			templates: { trigger_type: string; template: string }[];
+		}>(page, 'GET', '/api/v1/user/notifications');
+		const testTpl = settings.templates.find((tpl) => tpl.trigger_type === 'test');
+		const templateText = testTpl?.template?.trim() || 'Тест';
+
+		await apiJSON(page, 'PUT', '/api/v1/user/notifications', {
+			telegram_enabled: true,
+			keyboard_telegram: {
+				rows: [
+					[
+						{ id: 'g-debts', type: 'url', text: 'Глобальные долги', url: '{debt_url}' },
+						{ id: 'g-budget', type: 'url', text: 'Глобальный бюджет', url: '{budget_url}' }
+					]
+				]
+			},
+			templates: [
+				{
+					trigger_type: 'test',
+					template: templateText,
+					keyboard_telegram: { rows: [] },
+					keyboard_max: { rows: [] }
+				}
+			]
+		});
+
+		try {
+			await page.goto('/settings/notifications');
+			await waitAppReady(page);
+			await expandCollapsibleSection(page, 'Тестовое сообщение');
+			const card = page.getByTestId('notifications-template-test');
+			const builder = page.getByTestId('keyboard-builder-tpl-test-tg');
+			await expect(builder).toContainText('Глобальные долги');
+			await expect(builder).toContainText('Глобальный бюджет');
+
+			const locked = builder.locator('[data-locked="true"]');
+			await expect(locked).toHaveCount(2);
+			await expect(locked.getByRole('button', { name: 'Удалить' })).toHaveCount(0);
+			await expect(locked.locator('input').first()).toBeDisabled();
+
+			await builder.getByRole('button', { name: 'Добавить кнопку' }).click();
+			const local = builder.locator('[data-locked="false"]');
+			await expect(local).toHaveCount(1);
+			await local.locator('input').nth(0).fill('Своя кнопка');
+			await local.locator('input').nth(1).fill('https://example.com/own');
+
+			const putPromise = page.waitForResponse(
+				(res) =>
+					res.url().includes('/api/v1/user/notifications') &&
+					res.request().method() === 'PUT' &&
+					res.ok()
+			);
+			await card.getByRole('button', { name: 'Сохранить' }).click();
+			const putRes = await putPromise;
+			const body = putRes.request().postDataJSON() as {
+				templates?: {
+					keyboard_telegram?: {
+						rows: { text?: string }[][];
+						placement?: string[][];
+					};
+				}[];
+			};
+			const kb = body.templates?.[0]?.keyboard_telegram;
+			const flat = (kb?.placement ?? []).flat();
+			expect(flat).toContain('g:g-debts');
+			expect(flat).toContain('g:g-budget');
+			expect(flat.some((token) => token.startsWith('l:'))).toBe(true);
+			expect(kb?.rows?.some((row) => row.some((btn) => btn.text === 'Своя кнопка'))).toBe(true);
+			await expectToast(page, 'success', 'Шаблон «Тестовое сообщение» сохранён.');
+		} finally {
+			await apiJSON(page, 'PUT', '/api/v1/user/notifications', {
+				keyboard_telegram: { rows: [] },
+				templates: [
+					{
+						trigger_type: 'test',
+						template: templateText,
+						keyboard_telegram: { rows: [] },
+						keyboard_max: { rows: [] }
+					}
+				]
+			});
+		}
 	});
 });

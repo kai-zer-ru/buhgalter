@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { ADMIN, apiJSON, formatUTCDateTime, waitAppReady } from './helpers/auth';
+import { expectApiDocsRendered } from './helpers/docs';
 
 const AUTHENTICATED_ROUTES = [
 	'/',
@@ -42,7 +43,9 @@ test.describe('public', () => {
 	test('API docs open without auth', async ({ page }) => {
 		const response = await page.goto('/docs');
 		expect(response?.ok()).toBeTruthy();
-		await expect(page.locator('redoc')).toBeVisible({ timeout: 20_000 });
+		const spec = await page.request.get('/docs/openapi.yaml');
+		expect(spec.ok()).toBeTruthy();
+		await expectApiDocsRendered(page);
 	});
 
 	test('cold start at / redirects to login', async ({ page }) => {

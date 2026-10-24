@@ -1,6 +1,6 @@
 -- +goose Up
 -- Repair / backfill: version 43 may already be applied on some DBs as legacy
--- legacy 043_receipt_scan_jobs (now 057), so 043_subscriptions.sql was skipped on some DBs.
+-- legacy 043_receipt_scan_jobs (now 058), so 043_subscriptions.sql was skipped on some DBs.
 CREATE TABLE IF NOT EXISTS subscriptions (
     id              TEXT PRIMARY KEY,
     user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

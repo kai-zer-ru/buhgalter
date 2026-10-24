@@ -142,6 +142,7 @@
 		merchants.map((m) => ({
 			value: m.id,
 			label: m.name,
+			keywords: m.aliases ?? [],
 			icon: { type: 'category' as const, icon: m.icon || 'default' }
 		}))
 	);
