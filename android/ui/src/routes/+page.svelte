@@ -32,7 +32,12 @@
 		scheduleSyncOutbox,
 		shouldSuppressHomeDataRefresh
 	} from '$lib/offline/sync';
-	import { refCacheReady, refCacheUpdate, readRefCache } from '$lib/offline/ref-cache';
+	import {
+		dashboardSnapshotSeq,
+		readRefCache,
+		refCacheReady,
+		refCacheUpdate
+	} from '$lib/offline/ref-cache';
 	import { refCachePathMatches } from '$lib/offline/ref-cache-watch';
 	import { assignIfChanged } from '$lib/state-utils';
 	import { getOutboxEntries } from '$lib/offline/store';
@@ -66,7 +71,14 @@
 	import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
 	import PullToRefresh from '$lib/components/PullToRefresh.svelte';
-	import { reportPageLoadFailure } from '$lib/page-load';
+	import {
+		HOME_DASHBOARD_PATH,
+		applyCachedDashboardSnapshot,
+		hasHomeDashboardSnapshot,
+		homeDashboardGateMessage,
+		homeNeedsForegroundLoad,
+		reportHomeListLoadFailure
+	} from '$lib/home-snapshot';
 	import {
 		countInterceptDrafts,
 		getCurrentInterceptSettings,
@@ -75,7 +87,7 @@
 	} from '$lib/android/notification-intercept';
 	import { requireOnline } from '$lib/offline/require-online';
 
-	const DASHBOARD_PATH = '/api/v1/dashboard';
+	const DASHBOARD_PATH = HOME_DASHBOARD_PATH;
 	const PAST_TX_PATH = HOME_PAST_TRANSACTIONS_PATH;
 	const PLANNED_TX_PATH = HOME_PLANNED_TRANSACTIONS_PATH;
 	const BUDGET_PATH = '/api/v1/budgets/summary';
@@ -110,7 +122,6 @@
 		if (!getCurrentInterceptSettings().enabled) return 0;
 		return countInterceptDrafts($user?.id);
 	});
-	const HOME_CORE_PATHS = [DASHBOARD_PATH, PAST_TX_PATH, PLANNED_TX_PATH];
 
 	const dash = $derived.by(() => {
 		void $outboxTick;
@@ -175,15 +186,13 @@
 	}
 
 	onMount(() => {
-		const cacheWarm = HOME_CORE_PATHS.every(refCacheReady);
-		if (cacheWarm) {
-			loading = false;
-			pastLoading = false;
-			plannedLoading = false;
-			// Show cache immediately, then soft-refresh so in-memory list matches warm/SWR.
-			scheduleBackgroundLoadAll();
-		} else {
+		if (homeNeedsForegroundLoad(dashBase)) {
 			void loadAll();
+		} else {
+			// Snapshot is enough for the summary. Lists may still be cold — refresh in the
+			// background, same as when every home key is already warm.
+			loading = false;
+			scheduleBackgroundLoadAll();
 		}
 		setTimeout(() => void processPendingBankNotifications(), 3000);
 	});
@@ -195,8 +204,24 @@
 	});
 
 	$effect(() => {
+		const seq = $dashboardSnapshotSeq;
+		if (seq === 0) return;
+		const next = applyCachedDashboardSnapshot({ dashBase, loadError, loading });
+		if (next.dashBase !== dashBase) dashBase = next.dashBase;
+		if (next.loadError !== loadError) loadError = next.loadError;
+		if (next.loading !== loading) loading = next.loading;
+	});
+
+	$effect(() => {
 		const update = $refCacheUpdate;
-		if (!update || !dashBase) return;
+		if (!update) return;
+		if (refCachePathMatches(update.path, DASHBOARD_PATH)) {
+			const next = applyCachedDashboardSnapshot({ dashBase, loadError, loading });
+			if (next.dashBase !== dashBase) dashBase = next.dashBase;
+			if (next.loadError !== loadError) loadError = next.loadError;
+			if (next.loading !== loading) loading = next.loading;
+		}
+		if (!dashBase) return;
 		const paths = [DASHBOARD_PATH, PAST_TX_PATH, PLANNED_TX_PATH, BUDGET_PATH, TEMPLATES_PATH];
 		if (paths.some((p) => refCachePathMatches(update.path, p))) {
 			scheduleBackgroundLoadAll();
@@ -204,15 +229,14 @@
 	});
 
 	async function loadDashboard(opts: { background?: boolean } = {}) {
-		if (!opts.background && !refCacheReady(DASHBOARD_PATH)) loading = true;
+		if (!opts.background && !hasHomeDashboardSnapshot(dashBase)) loading = true;
 		try {
 			const next = await getDashboard();
 			dashBase = opts.background ? assignIfChanged(dashBase, next) : next;
 			if (dashBase) mergeAccountsFallback(dashBase.accounts);
 			loadError = null;
 		} catch (err) {
-			const msg = reportPageLoadFailure(err, { background: opts.background, hasData: !!dashBase });
-			if (msg) loadError = msg;
+			loadError = homeDashboardGateMessage(err, dashBase);
 		} finally {
 			loading = false;
 		}
@@ -231,7 +255,7 @@
 			serverPastTx = opts.background ? assignIfChanged(serverPastTx, nextData) : nextData;
 			pastTotal = opts.background ? assignIfChanged(pastTotal, res.meta.total) : res.meta.total;
 		} catch (err) {
-			toast.fromError(err);
+			reportHomeListLoadFailure(err);
 		} finally {
 			pastLoading = false;
 		}
@@ -252,7 +276,7 @@
 				? assignIfChanged(plannedTotal, res.meta.total)
 				: res.meta.total;
 		} catch (err) {
-			toast.fromError(err);
+			reportHomeListLoadFailure(err);
 		} finally {
 			plannedLoading = false;
 		}
@@ -286,15 +310,12 @@
 	}
 
 	async function loadAll(opts: { background?: boolean } = {}) {
+		const background = opts.background === true || hasHomeDashboardSnapshot(dashBase);
+		const run = { background };
 		await refreshMergeMeta().catch(() => undefined);
-		await loadDashboard(opts);
-		await Promise.all([
-			loadPastTx(opts),
-			loadPlannedTx(opts),
-			loadBudget(opts),
-			loadTemplates(opts)
-		]);
-		if (!opts.background) scheduleSyncOutbox();
+		await loadDashboard(run);
+		await Promise.all([loadPastTx(run), loadPlannedTx(run), loadBudget(run), loadTemplates(run)]);
+		if (!background) scheduleSyncOutbox();
 	}
 
 	function applyTemplate(tpl: TransactionTemplate) {
@@ -542,7 +563,12 @@
 			{/if}
 		{/snippet}
 
-		<PageLoadGate {loading} error={loadError} onretry={() => void loadAll()} inline>
+		<PageLoadGate
+			loading={!dash && loading}
+			error={dash ? null : loadError}
+			onretry={() => void loadAll()}
+			inline
+		>
 			{#if dash}
 				{#if hasCreditCards}
 					<div class="space-y-4">

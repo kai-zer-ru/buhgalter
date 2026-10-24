@@ -91,6 +91,12 @@ export const refCacheTick = writable(0);
 /** Path-aware notification after SWR revalidate (preferred over refCacheTick). */
 export const refCacheUpdate = writable<{ path: string; seq: number } | null>(null);
 
+/**
+ * Successful writes of `/api/v1/dashboard`.
+ * Increments even while `refCacheUpdate` is silent (warm suppress and the 8s grace).
+ */
+export const dashboardSnapshotSeq = writable(0);
+
 function storageKeyForServer(server: string, path: string): string {
 	return `${REF_CACHE_VERSION}::${server || '_no_server'}::${path}`;
 }
@@ -382,6 +388,10 @@ export function writeRefCache<T>(path: string, value: T): boolean {
 			}
 		}
 		storageSet(key, nextRaw);
+		// Home applies this snapshot even when warm suppresses refCacheUpdate.
+		if (isDashboardRefPath(path)) {
+			dashboardSnapshotSeq.update((n) => n + 1);
+		}
 		if (isDashboardRefPath(path) && isDashboardShape(value)) {
 			patchAccountListCachesFromDashboard(value as Dashboard);
 		}
@@ -679,6 +689,7 @@ export function resetRefCacheForTests(): void {
 	stableCatalogMemory = null;
 	refCacheTick.set(0);
 	refCacheUpdate.set(null);
+	dashboardSnapshotSeq.set(0);
 }
 
 /** Flush deferred ref-cache writes to localStorage (warm sync, tests). */

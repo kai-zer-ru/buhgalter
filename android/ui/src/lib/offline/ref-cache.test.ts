@@ -1,6 +1,8 @@
+import { get } from 'svelte/store';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
 	clearRefCache,
+	dashboardSnapshotSeq,
 	fetchWithRefCache,
 	readRefCache,
 	refCacheReady,
@@ -8,6 +10,8 @@ import {
 	refCacheUpdate,
 	resetRefCacheForTests,
 	runWithForcedRefCacheNetwork,
+	runWithSuppressedRefCacheNotifications,
+	setWarmRefCacheActive,
 	shouldInvalidateRefCacheOnWrite,
 	shouldPersistRefCache,
 	writeRefCache
@@ -599,5 +603,42 @@ describe('isPreservedOfflineRefPath', () => {
 		expect(isPreservedOfflineRefPath('/api/v1/debtors/abc')).toBe(true);
 		expect(isPreservedOfflineRefPath('/api/v1/setup/status')).toBe(false);
 		expect(isPreservedOfflineRefPath('/api/v1/sync/transaction-changes')).toBe(false);
+	});
+});
+
+describe('dashboard snapshot seq', () => {
+	beforeEach(() => {
+		resetRefCacheForTests();
+		currentServerUrl = 'http://test.local:8765';
+	});
+
+	afterEach(() => {
+		resetRefCacheForTests();
+	});
+
+	it('moves the counter when dashboard is written inside suppressed notifications without refCacheUpdate', async () => {
+		const dash = { total_balance: 10, accounts: [], debts_summary: { i_owe: 0 } };
+		await runWithSuppressedRefCacheNotifications(async () => {
+			expect(writeRefCache('/api/v1/dashboard', dash)).toBe(true);
+			expect(writeRefCache('/api/v1/dashboard', dash)).toBe(false);
+			expect(writeRefCache('/api/v1/accounts', [{ id: 'a1' }])).toBe(true);
+		});
+		expect(get(dashboardSnapshotSeq)).toBe(1);
+		expect(get(refCacheUpdate)).toBeNull();
+
+		setWarmRefCacheActive(true);
+		setWarmRefCacheActive(false);
+		expect(
+			writeRefCache('/api/v1/dashboard', {
+				total_balance: 11,
+				accounts: [],
+				debts_summary: { i_owe: 0 }
+			})
+		).toBe(true);
+		expect(get(dashboardSnapshotSeq)).toBe(2);
+		expect(get(refCacheUpdate)).toBeNull();
+
+		resetRefCacheForTests();
+		expect(get(dashboardSnapshotSeq)).toBe(0);
 	});
 });
