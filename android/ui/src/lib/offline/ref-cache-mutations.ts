@@ -17,8 +17,11 @@ import {
 	categoriesRefPath,
 	invalidateRefCache,
 	invalidateRefCachePrefix,
+	persistStableOfflineCatalog,
 	publishRefCachePath,
 	readRefCache,
+	readRefCacheActive,
+	readStableOfflineCatalog,
 	subcategoriesRefPath
 } from '$lib/offline/ref-cache';
 import { makeLocalKey } from '$lib/offline/types';
@@ -282,6 +285,43 @@ function ensureTagInCache(tag: Tag): void {
 			});
 		}
 	}
+}
+
+function rowId(row: unknown): string | null {
+	if (!row || typeof row !== 'object') return null;
+	const id = (row as { id?: unknown }).id;
+	return typeof id === 'string' ? id : null;
+}
+
+/** Replace `/api/v1/merchants` with the list still on screen and drop `id` from ui/meta
+ * and the stable offline catalog. The preserved snapshot is not filtered: the screen
+ * list is written as-is. Unlock re-seeds from meta and the stable catalog, so the id
+ * has to leave both or the next offline list brings the merchant back.
+ */
+export function onMerchantDeleted(id: string, remaining: Merchant[]): void {
+	publishRefCachePath(MERCHANTS_PATH, remaining);
+	const meta = readRefCacheActive<{ merchants?: Merchant[] } & Record<string, unknown>>(
+		UI_META_PATH
+	);
+	if (meta && Array.isArray(meta.merchants) && meta.merchants.some((row) => row.id === id)) {
+		publishRefCachePath(UI_META_PATH, {
+			...meta,
+			merchants: meta.merchants.filter((row) => row.id !== id)
+		});
+	}
+	const stable = readStableOfflineCatalog();
+	if (!stable || !Array.isArray(stable.merchants)) return;
+	if (!stable.merchants.some((row) => rowId(row) === id)) return;
+	persistStableOfflineCatalog({
+		accounts: stable.accounts,
+		expense_categories: stable.expense_categories,
+		income_categories: stable.income_categories,
+		merchants: stable.merchants.filter((row) => rowId(row) !== id),
+		tags: stable.tags,
+		debtors: stable.debtors,
+		banks: stable.banks,
+		transaction_templates: stable.transaction_templates
+	});
 }
 
 /** Patch merchants/tags ref-cache when a transaction creates or links them. */

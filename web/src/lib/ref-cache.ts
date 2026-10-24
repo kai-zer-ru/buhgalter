@@ -216,6 +216,14 @@ export function writeRefCache<T>(path: string, value: T): boolean {
 	}
 }
 
+/** Store the merchants list still on screen.
+ * DELETE already ran clearRefCache, so `/api/v1/merchants` is empty: filtering that
+ * snapshot would persist nothing, and a dropped connection would list zero merchants.
+ */
+export function writeMerchantsRefSnapshot<T>(merchants: T[]): void {
+	writeRefCache('/api/v1/merchants', merchants);
+}
+
 export function invalidateRefCache(path: string): void {
 	storageRemove(storageKey(path));
 }

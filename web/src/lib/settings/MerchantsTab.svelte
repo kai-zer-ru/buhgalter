@@ -19,6 +19,7 @@
 	import { defaultIconForKind } from '$lib/category-icons';
 	import { confirm } from '$lib/confirm';
 	import { reportPageLoadFailure } from '$lib/page-load';
+	import { writeMerchantsRefSnapshot } from '$lib/ref-cache';
 	import { toast } from '$lib/toast';
 
 	const iconSize = 40;
@@ -130,8 +131,17 @@
 		if (!ok) return;
 		try {
 			await deleteMerchant(m.id);
+			if (editingId === m.id) editingId = null;
+			if (mergeTarget?.id === m.id) {
+				mergeTarget = null;
+				mergeSelected = [];
+			} else {
+				mergeSelected = mergeSelected.filter((id) => id !== m.id);
+			}
+			const remaining = merchants.filter((row) => row.id !== m.id);
+			merchants = remaining;
+			writeMerchantsRefSnapshot(remaining);
 			toast($_('common.deleted'));
-			await load();
 		} catch (err) {
 			toast.fromError(err);
 		}

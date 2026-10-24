@@ -14,6 +14,7 @@ import {
 	setRefCacheUserId,
 	shouldPersistRefCache,
 	shouldInvalidateRefCacheOnWrite,
+	writeMerchantsRefSnapshot,
 	writeRefCache
 } from './ref-cache';
 
@@ -463,5 +464,39 @@ describe('web fetchWithRefCache SWR', () => {
 		expect(readRefCache('/api/v1/accounts?status=active')).toMatchObject([
 			{ id: 'a1', balance: 44100, balance_display: '441.00' }
 		]);
+	});
+});
+
+describe('writeMerchantsRefSnapshot', () => {
+	beforeEach(() => {
+		resetRefCacheForTests();
+		setRefCacheUserId('user-1');
+	});
+
+	it('writes the on-screen list after DELETE cleared the merchants key', () => {
+		writeRefCache('/api/v1/merchants', [
+			{ id: 'keep', name: 'Keep' },
+			{ id: 'drop', name: 'Drop' }
+		]);
+		writeRefCache('/api/v1/ui/meta', {
+			merchants: [
+				{ id: 'keep', name: 'Keep' },
+				{ id: 'drop', name: 'Drop' }
+			]
+		});
+		notifyRealtimeInvalidate();
+		expect(readRefCache('/api/v1/merchants')).toBeNull();
+		expect(readRefCache('/api/v1/ui/meta')).toBeNull();
+
+		const screen = [{ id: 'keep', name: 'Keep' }];
+		writeMerchantsRefSnapshot(screen);
+		expect(readRefCache('/api/v1/merchants')).toEqual(screen);
+	});
+
+	it('stores an empty list so a stale read is not a cache miss', () => {
+		writeRefCache('/api/v1/merchants', [{ id: 'only', name: 'Only' }]);
+		clearRefCache();
+		writeMerchantsRefSnapshot([]);
+		expect(readRefCache<unknown[]>('/api/v1/merchants')).toEqual([]);
 	});
 });

@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { clearServerUrl, setServerUrl } from '$lib/platform/server-url';
 import type { Category, Debt } from '$lib/api/client';
 import {
 	onCategoryCreated,
 	onCategoryDeleted,
 	onCategoryUpdated,
 	ensureMerchantsTagsFromTransaction,
+	onMerchantDeleted,
 	ensureSubcategoryInCacheFromTransaction,
 	onSubcategoryCreated,
 	onSubcategoryDeleted,
@@ -15,8 +17,12 @@ import {
 } from '$lib/offline/ref-cache-mutations';
 import {
 	categoriesRefPath,
+	persistStableOfflineCatalog,
 	publishRefCachePath,
 	readRefCache,
+	readRefCacheActive,
+	readStableOfflineCatalog,
+	reconcileOfflineCatalogsOnUnlock,
 	refCacheTick,
 	resetRefCacheForTests,
 	subcategoriesRefPath,
@@ -399,5 +405,155 @@ describe('patchRefCacheList', () => {
 		expect(tick).toBe(1);
 		expect(readRefCache('/api/v1/test')).toEqual({ ok: true });
 		unsub();
+	});
+});
+
+type CachedMerchant = { id: string; name: string; icon: string; created_at: string };
+
+function cachedMerchant(id: string, name = id): CachedMerchant {
+	return { id, name, icon: 'default', created_at: '2026-01-01T00:00:00Z' };
+}
+
+describe('onMerchantDeleted', () => {
+	beforeEach(() => {
+		resetRefCacheForTests();
+	});
+
+	it('overwrites the merchants snapshot with the screen list and drops the id from meta and the stable catalog', () => {
+		const keep = cachedMerchant('keep', 'Keep');
+		const drop = cachedMerchant('drop', 'Drop');
+		const extra = cachedMerchant('extra', 'Extra');
+		writeRefCache('/api/v1/merchants', [keep, drop, extra]);
+		writeRefCache('/api/v1/ui/meta', {
+			expense_categories: [],
+			income_categories: [],
+			merchants: [keep, drop, extra],
+			tags: [{ id: 't1' }]
+		});
+		const accounts = [
+			{ id: 'a1', name: 'Наличные', type: 'cash' as const, status: 'active' as const }
+		];
+		const debtors = [{ id: 'd1', name: 'Иван' }];
+		const transactionTemplates = [{ id: 'tpl1', name: 'Кофе' }];
+		persistStableOfflineCatalog({
+			accounts,
+			expense_categories: [{ id: 'c1' }],
+			income_categories: [{ id: 'c2' }],
+			merchants: [keep, drop, extra],
+			tags: [{ id: 't1' }],
+			banks: [{ id: 'b1' }],
+			debtors,
+			transaction_templates: transactionTemplates
+		});
+
+		onMerchantDeleted('drop', [keep]);
+
+		expect(readRefCache<CachedMerchant[]>('/api/v1/merchants')).toEqual([keep]);
+		expect(
+			readRefCache<{ merchants: CachedMerchant[]; tags: { id: string }[] }>(
+				'/api/v1/ui/meta'
+			)?.merchants.map((row) => row.id)
+		).toEqual(['keep', 'extra']);
+		expect(readRefCache<{ tags: { id: string }[] }>('/api/v1/ui/meta')?.tags).toEqual([
+			{ id: 't1' }
+		]);
+		const stable = readStableOfflineCatalog();
+		expect(stable?.merchants).toEqual([keep, extra]);
+		expect(stable?.expense_categories).toEqual([{ id: 'c1' }]);
+		expect(stable?.income_categories).toEqual([{ id: 'c2' }]);
+		expect(stable?.tags).toEqual([{ id: 't1' }]);
+		expect(stable?.banks).toEqual([{ id: 'b1' }]);
+		expect(stable?.accounts).toEqual(accounts);
+		expect(stable?.debtors).toEqual(debtors);
+		expect(stable?.transaction_templates).toEqual(transactionTemplates);
+	});
+
+	it('stores an empty screen list and removes the last id from meta and the stable catalog', () => {
+		const only = cachedMerchant('only', 'Only');
+		writeRefCache('/api/v1/merchants', [only]);
+		writeRefCache('/api/v1/ui/meta', {
+			expense_categories: [],
+			income_categories: [],
+			merchants: [only]
+		});
+		persistStableOfflineCatalog({
+			expense_categories: [],
+			income_categories: [],
+			merchants: [only]
+		});
+
+		onMerchantDeleted('only', []);
+
+		expect(readRefCache<CachedMerchant[]>('/api/v1/merchants')).toEqual([]);
+		expect(readRefCache<{ merchants: CachedMerchant[] }>('/api/v1/ui/meta')?.merchants).toEqual([]);
+		expect(readStableOfflineCatalog()?.merchants).toEqual([]);
+	});
+
+	it('does not resurrect the deleted merchant when catalogs are reconciled on unlock', () => {
+		const keep = cachedMerchant('keep', 'Keep');
+		const drop = cachedMerchant('drop', 'Drop');
+		const meta = {
+			expense_categories: [{ id: 'c1' }],
+			income_categories: [] as unknown[],
+			merchants: [keep, drop],
+			tags: [] as unknown[],
+			banks: [] as unknown[]
+		};
+		writeRefCache('/api/v1/ui/meta', meta);
+		writeRefCache('/api/v1/merchants', [keep, drop]);
+		persistStableOfflineCatalog(meta);
+
+		onMerchantDeleted('drop', [keep]);
+		reconcileOfflineCatalogsOnUnlock();
+
+		expect(readRefCache<CachedMerchant[]>('/api/v1/merchants')).toEqual([keep]);
+		expect(readRefCache<{ merchants: CachedMerchant[] }>('/api/v1/ui/meta')?.merchants).toEqual([
+			keep
+		]);
+		expect(readStableOfflineCatalog()?.merchants).toEqual([keep]);
+	});
+
+	it('does not copy ui/meta from another server origin onto the active one', () => {
+		const drop = cachedMerchant('drop', 'Drop');
+		const foreign = cachedMerchant('foreign', 'Foreign');
+		const keep = cachedMerchant('keep', 'Keep');
+		try {
+			setServerUrl('http://192.168.8.2:8765');
+			writeRefCache('/api/v1/ui/meta', {
+				expense_categories: [],
+				income_categories: [],
+				merchants: [foreign, drop]
+			});
+			setServerUrl('http://192.168.8.3:8765');
+			expect(readRefCacheActive('/api/v1/ui/meta')).toBeNull();
+
+			onMerchantDeleted('drop', [keep]);
+
+			expect(readRefCacheActive('/api/v1/ui/meta')).toBeNull();
+			expect(readRefCacheActive<CachedMerchant[]>('/api/v1/merchants')).toEqual([keep]);
+			setServerUrl('http://192.168.8.2:8765');
+			expect(
+				readRefCacheActive<{ merchants: { id: string }[] }>('/api/v1/ui/meta')?.merchants.map(
+					(row) => row.id
+				)
+			).toEqual(['foreign', 'drop']);
+		} finally {
+			clearServerUrl();
+		}
+	});
+
+	it('leaves a stable catalog alone when it does not contain the deleted id', () => {
+		const keep = cachedMerchant('keep', 'Keep');
+		persistStableOfflineCatalog({
+			expense_categories: [{ id: 'c1' }],
+			income_categories: [],
+			merchants: [keep]
+		});
+		const before = readStableOfflineCatalog();
+
+		onMerchantDeleted('drop', [keep]);
+
+		expect(readRefCache<CachedMerchant[]>('/api/v1/merchants')).toEqual([keep]);
+		expect(readStableOfflineCatalog()).toBe(before);
 	});
 });

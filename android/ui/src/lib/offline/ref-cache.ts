@@ -215,6 +215,11 @@ export function readRefCache<T>(path: string): T | null {
 	return direct;
 }
 
+/** Active server only. `readRefCache` also returns another origin's snapshot. */
+export function readRefCacheActive<T>(path: string): T | null {
+	return readRefCacheForServer<T>(getServerUrl() || '_no_server', path);
+}
+
 function isEmptyListValue(value: unknown): boolean {
 	return Array.isArray(value) && value.length === 0;
 }

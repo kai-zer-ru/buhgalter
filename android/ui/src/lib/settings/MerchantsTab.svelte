@@ -18,6 +18,7 @@
 	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
 	import { defaultIconForKind } from '$lib/category-icons';
 	import { confirm } from '$lib/confirm';
+	import { onMerchantDeleted } from '$lib/offline/ref-cache-mutations';
 	import { reportPageLoadFailure } from '$lib/page-load';
 	import { toast } from '$lib/toast';
 
@@ -130,8 +131,17 @@
 		if (!ok) return;
 		try {
 			await deleteMerchant(m.id);
+			if (editingId === m.id) editingId = null;
+			if (mergeTarget?.id === m.id) {
+				mergeTarget = null;
+				mergeSelected = [];
+			} else {
+				mergeSelected = mergeSelected.filter((id) => id !== m.id);
+			}
+			const remaining = merchants.filter((row) => row.id !== m.id);
+			merchants = remaining;
+			onMerchantDeleted(m.id, remaining);
 			toast($_('common.deleted'));
-			await load();
 		} catch (err) {
 			toast.fromError(err);
 		}
