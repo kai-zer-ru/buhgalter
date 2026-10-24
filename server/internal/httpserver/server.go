@@ -175,6 +175,7 @@ func (s *Server) Handler() http.Handler {
 			ar.Post("/transactions", transactionHandler.Create)
 			ar.Get("/transactions/{id}", transactionHandler.Get)
 			ar.Put("/transactions/{id}", transactionHandler.Update)
+			ar.Put("/transactions/{id}/time", transactionHandler.UpdateClock)
 			ar.Delete("/transactions/{id}", transactionHandler.Delete)
 			ar.Post("/transactions/{id}/activate", transactionHandler.Activate)
 			ar.Get("/sync/transaction-changes", transactionHandler.Changes)

@@ -1438,6 +1438,14 @@ export function updateTransaction(id: string, payload: TransactionWritePayload) 
 	});
 }
 
+/** Hour and minute of a credit-linked payment. Calendar day stays on the server. */
+export function updateCreditPaymentTime(id: string, time: string) {
+	return request<Transaction>(`/api/v1/transactions/${id}/time`, {
+		method: 'PUT',
+		body: JSON.stringify({ time })
+	});
+}
+
 export function deleteTransaction(id: string) {
 	return request<void>(`/api/v1/transactions/${id}`, { method: 'DELETE' });
 }

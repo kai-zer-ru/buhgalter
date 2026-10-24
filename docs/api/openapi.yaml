@@ -3561,7 +3561,8 @@ paths:
       summary: Обновить доход или расход
       description: |
         Переводы обновляются через `PUT /transfers/{group_id}`.
-        Операции с `credit_payment_linked=true` редактируются через кредит, не через этот endpoint.
+        Операции с `credit_payment_linked=true` этим endpoint не меняются (`ERR_CREDIT_CANNOT_EDIT_PAYMENT`).
+        Час и минута такой операции — `PUT /transactions/{id}/time`: календарный день и `debit_time_local` кредита остаются.
         Поле `type` должно совпадать с существующей операцией — иначе `ERR_TX_TYPE_CHANGE`.
         Если `transaction_date` в будущем (в TZ пользователя), `kind` становится `future`.
       security:
@@ -3638,6 +3639,42 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Transaction'
+        '404':
+          description: Не найдена
+  /transactions/{id}/time:
+    put:
+      summary: Изменить время платежа по кредиту
+      description: |
+        Только для операции с `credit_payment_linked=true`.
+        Пишет час и минуту в `transaction_date` в часовом поясе пользователя; календарный день тот же.
+        Сумма, счёт, категория, описание, связь с платежом и `credits.debit_time_local` не меняются.
+        Полный `PUT /transactions/{id}` для такой операции по-прежнему запрещён.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionClockUpdate'
+      responses:
+        '200':
+          description: Операция с новым временем суток
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+        '400':
+          description: |
+            Некорректное время (`ERR_TX_CLOCK_INVALID`) или операция не является платежом по кредиту
+            (`ERR_TX_CLOCK_NOT_CREDIT`).
         '404':
           description: Не найдена
   /stores:
@@ -5677,6 +5714,14 @@ components:
         Дата в будущем переводит операцию в `kind=future`.
         Если `tag_ids` и `tag_names` **оба отсутствуют** в JSON — теги операции не меняются.
         Пустые массивы — снять все теги.
+    TransactionClockUpdate:
+      type: object
+      required: [time]
+      properties:
+        time:
+          type: string
+          description: Час и минута в часовом поясе пользователя, `HH:MM` (секунды, если переданы, игнорируются)
+          example: "21:45"
     Store:
       type: object
       properties:

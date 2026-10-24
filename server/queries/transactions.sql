@@ -142,6 +142,11 @@ SET account_id = ?, type = ?, kind = ?, amount = ?, description = ?,
     category_id = ?, subcategory_id = ?, merchant_id = ?, store_id = ?, transaction_date = ?, updated_at = ?
 WHERE id = ? AND user_id = ?;
 
+-- name: UpdateTransactionDate :exec
+UPDATE transactions
+SET transaction_date = ?, updated_at = ?
+WHERE id = ? AND user_id = ?;
+
 -- name: UpdateTransactionAffectsBalance :execrows
 UPDATE transactions
 SET affects_balance = ?, updated_at = ?
@@ -646,6 +651,20 @@ FROM transactions
 WHERE user_id = ? AND type = 'expense' AND kind = 'manual'
   AND affects_balance = 1 AND transaction_date <= ?
 GROUP BY account_id;
+
+-- name: SumAppliedCreditExpenseAfterCutoff :many
+-- Applied credit payments stay in the current balance when only the clock
+-- moves later the same local day. A later calendar day stays outside.
+SELECT t.account_id, COALESCE(SUM(t.amount), 0) AS total
+FROM transactions t
+INNER JOIN credit_payments cp ON cp.transaction_id = t.id AND cp.is_applied = 1
+WHERE t.user_id = sqlc.arg(user_id)
+  AND t.type = 'expense'
+  AND t.kind = 'manual'
+  AND t.affects_balance = 1
+  AND t.transaction_date > sqlc.arg(cutoff)
+  AND t.transaction_date <= sqlc.arg(day_end)
+GROUP BY t.account_id;
 
 -- name: SumTransferOutManualByUser :many
 SELECT account_id, COALESCE(SUM(amount), 0) AS total

@@ -188,6 +188,39 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, tx)
 }
 
+type clockRequest struct {
+	Time string `json:"time"`
+}
+
+func (h *Handler) UpdateClock(w http.ResponseWriter, r *http.Request) {
+	info, ok := auth.FromContext(r.Context())
+	if !ok {
+		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
+		return
+	}
+	id := chi.URLParam(r, "id")
+	var req clockRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_INVALID_JSON")
+		return
+	}
+	hour, minute, err := parseClock(req.Time)
+	if err != nil {
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_TX_CLOCK_INVALID")
+		return
+	}
+	tx, err := UpdateCreditPaymentClock(r.Context(), h.Store.DB(), info.User.ID, id, hour, minute)
+	if errors.Is(err, ErrNotFound) {
+		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
+		return
+	}
+	if writeTxError(w, r, err) {
+		return
+	}
+	_ = h.Audit.Log("transaction.update_clock", info.User.ID, info.User.Login, clientIP(r), map[string]any{"transaction_id": id})
+	writeJSON(w, http.StatusOK, tx)
+}
+
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	info, ok := auth.FromContext(r.Context())
 	if !ok {
@@ -438,6 +471,10 @@ func writeTxError(w http.ResponseWriter, r *http.Request, err error) bool {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_SYSTEM_CATEGORY_PLANNED")
 	case errors.Is(err, credit.ErrCannotEditPayment):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_CANNOT_EDIT_PAYMENT")
+	case errors.Is(err, ErrInvalidClock):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_TX_CLOCK_INVALID")
+	case errors.Is(err, ErrClockNotCreditPayment):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_TX_CLOCK_NOT_CREDIT")
 	case errors.Is(err, ErrInvalidSubcategory):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_SUBCATEGORY_NOT_FOUND")
 	case errors.Is(err, ErrInvalidMerchant):

@@ -91,6 +91,8 @@
   "ERR_TX_TYPE": "Тип операции: income или expense",
   "ERR_TX_TYPE_CHANGE": "Тип операции нельзя изменить",
   "ERR_TX_AMOUNT_POSITIVE": "Сумма должна быть положительной",
+  "ERR_TX_CLOCK_INVALID": "Некорректное время (ожидается ЧЧ:ММ)",
+  "ERR_TX_CLOCK_NOT_CREDIT": "Время можно изменить только у платежа по кредиту",
   "ERR_CATEGORY_NOT_FOUND": "Категория не найдена",
   "ERR_CATEGORY_TYPE_MISMATCH": "Тип категории не совпадает с типом операции",
   "ERR_SUBCATEGORY_NOT_FOUND": "Подкатегория не найдена",

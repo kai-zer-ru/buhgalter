@@ -468,6 +468,7 @@
 	"transactions.new": "Операция",
 	"transactions.edit": "Редактировать операцию",
 	"transactions.repeat": "Повторить",
+	"transactions.changeTime": "Изменить время",
 	"transactions.transfer": "Перевод",
 	"transactions.all": "Все операции",
 	"transactions.empty": "Операций пока нет",

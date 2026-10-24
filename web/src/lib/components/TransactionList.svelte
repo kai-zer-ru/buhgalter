@@ -5,7 +5,7 @@
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
 	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
 	import TransactionAccountCell from '$lib/components/TransactionAccountCell.svelte';
-	import { formatAPIOperationDateTimeForDisplay } from '$lib/dates';
+	import { formatAPIOperationDateTimeForDisplay, fromAPIDateTime } from '$lib/dates';
 	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
 	import {
 		transactionAmountSign,
@@ -19,7 +19,8 @@
 	import IconButton from '$lib/components/IconButton.svelte';
 	import ReceiptDetailDialog from '$lib/components/ReceiptDetailDialog.svelte';
 	import ReceiptAttachForm from '$lib/components/ReceiptAttachForm.svelte';
-	import { detachReceipt } from '$lib/api/client';
+	import { detachReceipt, updateCreditPaymentTime } from '$lib/api/client';
+	import TransactionTimeDialog from '$lib/components/TransactionTimeDialog.svelte';
 	import { confirm } from '$lib/confirm';
 	import { toast } from '$lib/toast';
 	import { formatApiError } from '$lib/api/errors';
@@ -27,6 +28,11 @@
 	let receiptOpen = $state(false);
 	let attachOpen = $state(false);
 	let attachTx = $state<Transaction | null>(null);
+	let clockTx = $state<Transaction | null>(null);
+	let clockValue = $state('');
+	let clockSaving = $state(false);
+	let clockSaveGen = 0;
+	let clockOverrides = $state<Record<string, string>>({});
 	let receiptImportId = $state('');
 	let receiptTransactionId = $state('');
 
@@ -99,7 +105,8 @@
 			(onmakeSubscription && subscriptionsEnabled) ||
 			(onattachSubscription && subscriptionsEnabled) ||
 			onattachCredit ||
-			(receiptAttachEnabled && onreceiptAttached)
+			(receiptAttachEnabled && onreceiptAttached) ||
+			transactions.some((tx) => tx.credit_payment_linked)
 		)
 	);
 
@@ -169,6 +176,46 @@
 		attachOpen = true;
 	}
 
+	function rowDateLabel(tx: Transaction): string {
+		return formatAPIOperationDateTimeForDisplay(clockOverrides[tx.id] ?? tx.transaction_date, tz);
+	}
+
+	function clockInputValue(apiDate: string): string {
+		try {
+			const local = fromAPIDateTime(apiDate, tz);
+			const hour = String(local.getHours()).padStart(2, '0');
+			const minute = String(local.getMinutes()).padStart(2, '0');
+			return `${hour}:${minute}`;
+		} catch {
+			return '00:00';
+		}
+	}
+
+	function openClock(tx: Transaction) {
+		clockSaveGen += 1;
+		clockTx = tx;
+		clockValue = clockInputValue(clockOverrides[tx.id] ?? tx.transaction_date);
+		clockSaving = false;
+	}
+
+	async function saveClock() {
+		if (!clockTx || clockSaving || !clockValue) return;
+		const id = clockTx.id;
+		const time = clockValue;
+		const gen = clockSaveGen;
+		clockSaving = true;
+		try {
+			const updated = await updateCreditPaymentTime(id, time);
+			clockOverrides = { ...clockOverrides, [id]: updated.transaction_date };
+			if (clockSaveGen === gen && clockTx?.id === id) clockTx = null;
+		} catch (e) {
+			if (clockSaveGen === gen && clockTx?.id === id)
+				toast.error(formatApiError(e, 'common.error'));
+		} finally {
+			if (clockSaveGen === gen) clockSaving = false;
+		}
+	}
+
 	function rowActions(tx: Transaction): RowAction[] {
 		const actions: RowAction[] = [];
 		if (onrepeat && canRepeatTransaction(tx)) {
@@ -235,6 +282,13 @@
 				onclick: () => onedit(tx)
 			});
 		}
+		if (tx.credit_payment_linked) {
+			actions.push({
+				icon: 'edit',
+				label: $_('transactions.changeTime'),
+				onclick: () => openClock(tx)
+			});
+		}
 		if (showDelete && ondelete && canDeleteTransaction(tx)) {
 			actions.push({
 				icon: 'delete',
@@ -273,7 +327,7 @@
 					{@const commissionDisplay = transferCommissionDisplay(tx, siblings)}
 					<tr class="border-t" style:border-color="var(--border)">
 						<td class="p-3 align-middle whitespace-nowrap">
-							{formatAPIOperationDateTimeForDisplay(tx.transaction_date, tz)}
+							{rowDateLabel(tx)}
 							{#if tx.kind === 'future'}
 								<span title={$_('transactions.planned')}> 📅</span>
 							{/if}
@@ -351,7 +405,7 @@
 				<div class="flex items-start justify-between gap-3">
 					<div class="min-w-0">
 						<p class="text-sm" style:color="var(--text-muted)">
-							{formatAPIOperationDateTimeForDisplay(tx.transaction_date, tz)}
+							{rowDateLabel(tx)}
 							{#if tx.kind === 'future'}
 								<span title={$_('transactions.planned')}> 📅</span>
 							{/if}
@@ -442,4 +496,11 @@
 		attachTx = null;
 	}}
 	onsaved={() => onreceiptAttached?.()}
+/>
+<TransactionTimeDialog
+	open={clockTx !== null}
+	bind:time={clockValue}
+	saving={clockSaving}
+	onclose={() => (clockTx = null)}
+	onsave={() => void saveClock()}
 />

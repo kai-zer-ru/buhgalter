@@ -414,6 +414,7 @@
 	"transactions.new": "Операция",
 	"transactions.edit": "Редактировать операцию",
 	"transactions.repeat": "Повторить",
+	"transactions.changeTime": "Изменить время",
 	"transactions.transfer": "Перевод",
 	"receipt.title": "Чек",
 	"receipt.intro": "Отсканируйте QR камерой или загрузите фото. Код читается на устройстве, затем данные чека запрашиваются на сервере.",

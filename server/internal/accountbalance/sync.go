@@ -106,7 +106,49 @@ func computeDeltas(ctx context.Context, db sqlcdb.DBTX, userID, cutoff string) (
 
 // ComputeAll returns current balances for every account of the user.
 func ComputeAll(ctx context.Context, db sqlcdb.DBTX, userID string) (map[string]int64, error) {
-	return ComputeAllAsOf(ctx, db, userID, timeutil.FormatUTC(timeutil.NowUTC()))
+	now := timeutil.NowUTC()
+	out, err := ComputeAllAsOf(ctx, db, userID, timeutil.FormatUTC(now))
+	if err != nil {
+		return nil, err
+	}
+	dayEnd, err := endOfUserLocalDayUTC(ctx, db, userID, now)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := queries(db).SumAppliedCreditExpenseAfterCutoff(ctx, sqlcdb.SumAppliedCreditExpenseAfterCutoffParams{
+		UserID: userID,
+		Cutoff: timeutil.FormatUTC(now),
+		DayEnd: dayEnd,
+	})
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		total, err := sumInt64(row.Total, nil)
+		if err != nil {
+			return nil, err
+		}
+		out[row.AccountID] -= total
+	}
+	return out, nil
+}
+
+func endOfUserLocalDayUTC(ctx context.Context, db sqlcdb.DBTX, userID string, now time.Time) (string, error) {
+	tz, err := queries(db).GetUserTimezone(ctx, userID)
+	if err != nil {
+		return "", err
+	}
+	if tz == "" {
+		tz = "Europe/Moscow"
+	}
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		return "", fmt.Errorf("invalid timezone %q: %w", tz, err)
+	}
+	inTZ := now.In(loc)
+	year, month, day := inTZ.Date()
+	end := time.Date(year, month, day, 23, 59, 59, 0, loc)
+	return timeutil.FormatUTC(end), nil
 }
 
 // ComputeAllAsOf returns account balances including only manual operations with transaction_date <= cutoff (UTC).

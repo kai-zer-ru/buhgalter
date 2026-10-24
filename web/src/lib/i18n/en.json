@@ -414,6 +414,7 @@
 	"transactions.new": "Transaction",
 	"transactions.edit": "Edit transaction",
 	"transactions.repeat": "Repeat",
+	"transactions.changeTime": "Change time",
 	"transactions.transfer": "Transfer",
 	"receipt.title": "Receipt",
 	"receipt.intro": "Scan the QR with the camera or upload a photo. The code is read on the device, then the receipt data is requested from the server.",

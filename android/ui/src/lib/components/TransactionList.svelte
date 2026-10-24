@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { _ } from 'svelte-i18n';
-	import { detachReceipt, type Transaction } from '$lib/api/client';
+	import { detachReceipt, updateCreditPaymentTime, type Transaction } from '$lib/api/client';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { receiptViewPath } from '$lib/android/form-routes';
@@ -12,7 +12,7 @@
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
 	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
 	import TransactionAccountCell from '$lib/components/TransactionAccountCell.svelte';
-	import { formatAPIOperationDateTimeForDisplay } from '$lib/dates';
+	import { formatAPIOperationDateTimeForDisplay, fromAPIDateTime } from '$lib/dates';
 	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
 	import {
 		transactionAmountSign,
@@ -26,7 +26,10 @@
 		canAttachReceipt
 	} from '$lib/transaction-display';
 	import { isReceiptScannerEnabled } from '$lib/receipt/receipt-module';
+	import { afterOnlineWrite } from '$lib/offline/after-online-write';
 	import { isPendingTransaction, pendingSyncFailed } from '$lib/offline/pending-display';
+	import { touchLedgerAfterTransactionMutation } from '$lib/offline/ref-cache-mutations';
+	import TransactionTimeDialog from '$lib/components/TransactionTimeDialog.svelte';
 	import TransactionCategoryCell from '$lib/components/TransactionCategoryCell.svelte';
 	import TransactionMerchantTags from '$lib/components/TransactionMerchantTags.svelte';
 	import { featureFlags, isFeatureEnabled } from '$lib/features';
@@ -78,6 +81,12 @@
 		descriptionExtra?: Snippet<[Transaction]>;
 	} = $props();
 
+	let clockTx = $state<Transaction | null>(null);
+	let clockValue = $state('');
+	let clockSaving = $state(false);
+	let clockSaveGen = 0;
+	let clockOverrides = $state<Record<string, string>>({});
+
 	const templatesEnabled = $derived(isFeatureEnabled('transaction_templates', $featureFlags));
 	const recurringEnabled = $derived(isFeatureEnabled('recurring', $featureFlags));
 	const subscriptionsEnabled = $derived(isFeatureEnabled('subscriptions', $featureFlags));
@@ -95,7 +104,8 @@
 			(onattachSubscription && subscriptionsEnabled) ||
 			onattachCredit ||
 			(onattachReceipt && receiptScannerActive) ||
-			(onreceiptChanged && receiptScannerActive)
+			(onreceiptChanged && receiptScannerActive) ||
+			transactions.some((tx) => tx.credit_payment_linked && !isPendingTransaction(tx))
 		)
 	);
 
@@ -136,6 +146,52 @@
 		} catch (e) {
 			toast.error(formatApiError(e, 'receipt.detach.error'));
 		}
+	}
+
+	function rowDateLabel(tx: Transaction): string {
+		return formatAPIOperationDateTimeForDisplay(clockOverrides[tx.id] ?? tx.transaction_date, tz);
+	}
+
+	function clockInputValue(apiDate: string): string {
+		try {
+			const local = fromAPIDateTime(apiDate, tz);
+			const hour = String(local.getHours()).padStart(2, '0');
+			const minute = String(local.getMinutes()).padStart(2, '0');
+			return `${hour}:${minute}`;
+		} catch {
+			return '00:00';
+		}
+	}
+
+	function openClock(tx: Transaction) {
+		clockSaveGen += 1;
+		clockTx = tx;
+		clockValue = clockInputValue(clockOverrides[tx.id] ?? tx.transaction_date);
+		clockSaving = false;
+	}
+
+	async function saveClock() {
+		if (!clockTx || clockSaving || !clockValue) return;
+		const id = clockTx.id;
+		const time = clockValue;
+		const gen = clockSaveGen;
+		clockSaving = true;
+		try {
+			const updated = await updateCreditPaymentTime(id, time);
+			clockOverrides = { ...clockOverrides, [id]: updated.transaction_date };
+			touchLedgerAfterTransactionMutation();
+			afterOnlineWrite();
+			if (clockSaveGen === gen && clockTx?.id === id) clockTx = null;
+		} catch (e) {
+			if (clockSaveGen === gen && clockTx?.id === id)
+				toast.error(formatApiError(e, 'common.error'));
+		} finally {
+			if (clockSaveGen === gen) clockSaving = false;
+		}
+	}
+
+	function canChangeClock(tx: Transaction): boolean {
+		return Boolean(tx.credit_payment_linked) && !isPendingTransaction(tx);
 	}
 
 	function canMakeRecurring(tx: Transaction): boolean {
@@ -222,6 +278,13 @@
 				onclick: () => onedit(tx)
 			});
 		}
+		if (canChangeClock(tx)) {
+			actions.push({
+				icon: 'edit',
+				label: $_('transactions.changeTime'),
+				onclick: () => openClock(tx)
+			});
+		}
 		if (showDelete && ondelete && canDeleteTransaction(tx)) {
 			actions.push({
 				icon: 'delete',
@@ -244,7 +307,7 @@
 				<div class="flex items-start justify-between gap-3">
 					<div class="min-w-0">
 						<p class="text-sm" style:color="var(--text-muted)">
-							{formatAPIOperationDateTimeForDisplay(tx.transaction_date, tz)}
+							{rowDateLabel(tx)}
 							{#if tx.kind === 'future'}
 								<span title={$_('transactions.planned')}> 📅</span>
 							{/if}
@@ -345,7 +408,7 @@
 					{@const commissionDisplay = transferCommissionDisplay(tx, siblings)}
 					<tr class="border-t" style:border-color="var(--border)">
 						<td class="p-3 align-middle whitespace-nowrap">
-							{formatAPIOperationDateTimeForDisplay(tx.transaction_date, tz)}
+							{rowDateLabel(tx)}
 							{#if tx.kind === 'future'}
 								<span title={$_('transactions.planned')}> 📅</span>
 							{/if}
@@ -427,7 +490,7 @@
 				<div class="flex items-start justify-between gap-3">
 					<div class="min-w-0">
 						<p class="text-sm" style:color="var(--text-muted)">
-							{formatAPIOperationDateTimeForDisplay(tx.transaction_date, tz)}
+							{rowDateLabel(tx)}
 							{#if tx.kind === 'future'}
 								<span title={$_('transactions.planned')}> 📅</span>
 							{/if}
@@ -505,3 +568,11 @@
 		{/each}
 	</div>
 {/if}
+
+<TransactionTimeDialog
+	open={clockTx !== null}
+	bind:time={clockValue}
+	saving={clockSaving}
+	onclose={() => (clockTx = null)}
+	onsave={() => void saveClock()}
+/>

@@ -1960,6 +1960,55 @@ func (q *Queries) SetTransactionSubscriptionID(ctx context.Context, arg SetTrans
 	return err
 }
 
+const sumAppliedCreditExpenseAfterCutoff = `-- name: SumAppliedCreditExpenseAfterCutoff :many
+SELECT t.account_id, COALESCE(SUM(t.amount), 0) AS total
+FROM transactions t
+INNER JOIN credit_payments cp ON cp.transaction_id = t.id AND cp.is_applied = 1
+WHERE t.user_id = ?1
+  AND t.type = 'expense'
+  AND t.kind = 'manual'
+  AND t.affects_balance = 1
+  AND t.transaction_date > ?2
+  AND t.transaction_date <= ?3
+GROUP BY t.account_id
+`
+
+type SumAppliedCreditExpenseAfterCutoffParams struct {
+	UserID string `json:"user_id"`
+	Cutoff string `json:"cutoff"`
+	DayEnd string `json:"day_end"`
+}
+
+type SumAppliedCreditExpenseAfterCutoffRow struct {
+	AccountID string      `json:"account_id"`
+	Total     interface{} `json:"total"`
+}
+
+// Applied credit payments stay in the current balance when only the clock
+// moves later the same local day. A later calendar day stays outside.
+func (q *Queries) SumAppliedCreditExpenseAfterCutoff(ctx context.Context, arg SumAppliedCreditExpenseAfterCutoffParams) ([]SumAppliedCreditExpenseAfterCutoffRow, error) {
+	rows, err := q.db.QueryContext(ctx, sumAppliedCreditExpenseAfterCutoff, arg.UserID, arg.Cutoff, arg.DayEnd)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SumAppliedCreditExpenseAfterCutoffRow{}
+	for rows.Next() {
+		var i SumAppliedCreditExpenseAfterCutoffRow
+		if err := rows.Scan(&i.AccountID, &i.Total); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const sumExpenseManual = `-- name: SumExpenseManual :one
 SELECT COALESCE(SUM(amount), 0) AS total
 FROM transactions
@@ -2618,6 +2667,29 @@ func (q *Queries) UpdateTransactionAffectsBalance(ctx context.Context, arg Updat
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const updateTransactionDate = `-- name: UpdateTransactionDate :exec
+UPDATE transactions
+SET transaction_date = ?, updated_at = ?
+WHERE id = ? AND user_id = ?
+`
+
+type UpdateTransactionDateParams struct {
+	TransactionDate string `json:"transaction_date"`
+	UpdatedAt       string `json:"updated_at"`
+	ID              string `json:"id"`
+	UserID          string `json:"user_id"`
+}
+
+func (q *Queries) UpdateTransactionDate(ctx context.Context, arg UpdateTransactionDateParams) error {
+	_, err := q.db.ExecContext(ctx, updateTransactionDate,
+		arg.TransactionDate,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
+	return err
 }
 
 const updateTransferAccountID = `-- name: UpdateTransferAccountID :exec

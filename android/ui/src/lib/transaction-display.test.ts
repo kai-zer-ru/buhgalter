@@ -96,10 +96,11 @@ describe('canLinkToSubscription', () => {
 		expect(canLinkToSubscription(tx({ type: 'expense' }))).toBe(true);
 	});
 
-	it('blocks income, transfer, and already linked expense', () => {
+	it('blocks income, transfer, subscription, and credit payment', () => {
 		expect(canLinkToSubscription(tx({ type: 'income' }))).toBe(false);
 		expect(canLinkToSubscription(tx({ type: 'transfer', transfer_group_id: 'grp-1' }))).toBe(false);
 		expect(canLinkToSubscription(tx({ type: 'expense', subscription_id: 'sub-1' }))).toBe(false);
+		expect(canLinkToSubscription(tx({ type: 'expense', credit_payment_linked: true }))).toBe(false);
 	});
 });
 

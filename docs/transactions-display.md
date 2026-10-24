@@ -21,7 +21,7 @@ OpenAPI-схемы: [`Transaction`](api/openapi.yaml#/components/schemas/Transac
 | `amount_display` | string | `"1234.56"` для UI |
 | `commission` | integer | Только для `type=transfer`: комиссия в копейках (сумма ноги `expense` в группе) |
 | `commission_display` | string | Отформатированная комиссия (если `commission > 0`) |
-| `credit_payment_linked` | bool | `true` — операция привязана к платежу по кредиту; редактирование через `PUT /transactions/{id}` запрещено |
+| `credit_payment_linked` | bool | `true` — операция привязана к платежу по кредиту. Полный `PUT /transactions/{id}` запрещён. Час и минута этой операции — `PUT /transactions/{id}/time` (календарный день тот же, `debit_time_local` кредита не меняется) |
 | `store_id` | string | nullable; только `expense` — магазин из чека или выбранный вручную |
 | `store_name` | string | nullable; имя из `stores` (обогащение в SELECT) |
 | `receipt_import_id` | string | nullable; если операция создана из чека — для иконки и попапа деталей |
@@ -71,7 +71,7 @@ UI показывает строку прогноза, если `forecast_balanc
 | `canRepeatTransaction(tx)` | `false` при `credit_payment_linked` или системной категории (доход/расход); переводы — без ограничения по категории |
 | «Сделать платежом по кредиту» | Расход без `credit_payment_linked` / `subscription_id` / перевода → `/credits?attach_tx=` (web и Android) |
 | `canDeleteTransaction(tx)` | `false` при ноге комиссии или `deletable === false` |
-| `canLinkToSubscription(tx)` | Расход без `subscription_id` — пункты «Сделать подпиской» / «Прикрепить к подписке» в меню строки |
+| `canLinkToSubscription(tx)` | Расход без `subscription_id` и без `credit_payment_linked` — пункты «Сделать подпиской» / «Прикрепить к подписке» |
 | `formatTransactionAccount(tx, siblings, mode)` | Текст колонки «Счёт» |
 | `transactionAmountSign(tx, opts?)` | Префикс суммы: `+`, `−` или пусто |
 
@@ -176,7 +176,10 @@ OpenAPI: `CreateTransferRequest.commission`, схемы `Transfer` и `Transacti
 - Можно менять: счёт, категорию, подкатегорию, магазин, теги, сумму, описание, дату
 - **Тип** (`income` / `expense`) не меняется — в форме показывается текстом; при смене типа в теле запроса — `ERR_TX_TYPE_CHANGE`
 - Дата в будущем (в TZ пользователя) → `kind=future` (плановая операция)
-- Операции с `credit_payment_linked` **не** редактируются из списка (`canEditTransaction`)
+- Операции с `credit_payment_linked` **не** открывают форму «Изменить» (`canEditTransaction`). В меню строки — **«Изменить время»**
+- Меняются только час и минута `transaction_date` в часовом поясе пользователя; календарный день тот же. Сумма, счёт, категория, описание и связь с платежом не меняются
+- Полный `PUT /transactions/{id}` по-прежнему отвечает `ERR_CREDIT_CANNOT_EDIT_PAYMENT`. Узкая запись — `PUT /transactions/{id}/time`
+- Время автосписания кредита (`debit_time_local`) не меняется. Если запись не удалась, в строке остаётся прежнее время и показывается toast
 
 ## Редактирование перевода (v1.1)
 
@@ -245,6 +248,7 @@ OpenAPI: `CreateTransferRequest.commission`, схемы `Transfer` и `Transacti
 - `e2e/money-input.spec.ts` — пустые поля суммы и placeholder в формах счёта, операций, перевода, периодических операций.
 - `e2e/transaction-filters.spec.ts` — фильтры и пагинация на `/transactions` (20 на страницу).
 - `e2e/transaction-actions.spec.ts` — спойлеры плановых/прошлых на `/transactions` и главной.
+- `e2e/credit-payment-time.spec.ts` — меню платежа кредита без пунктов подписки; после «Изменить время» в строке новое время и та же дата.
 - `transaction-display.test.ts` — `canRepeatTransaction` (ограничения как у редактирования).
 
 ## Требование для новых экранов

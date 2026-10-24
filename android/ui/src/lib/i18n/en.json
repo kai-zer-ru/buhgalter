@@ -468,6 +468,7 @@
 	"transactions.new": "Transaction",
 	"transactions.edit": "Edit transaction",
 	"transactions.repeat": "Repeat",
+	"transactions.changeTime": "Change time",
 	"transactions.transfer": "Transfer",
 	"transactions.all": "All transactions",
 	"transactions.empty": "No transactions yet",

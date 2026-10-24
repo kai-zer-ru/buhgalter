@@ -161,9 +161,9 @@ export function canDeleteTransaction(tx: Transaction): boolean {
 	return tx.deletable !== false;
 }
 
-/** Expense not already linked to a subscription — show «Сделать подпиской» / «Прикрепить к подписке». */
+/** Expense not linked to a subscription or a credit payment — show subscription menu items. */
 export function canLinkToSubscription(tx: Transaction): boolean {
-	return tx.type === 'expense' && !tx.subscription_id;
+	return tx.type === 'expense' && !tx.subscription_id && !tx.credit_payment_linked;
 }
 
 /** Expense eligible for receipt attach (scanner module gated in UI). */
