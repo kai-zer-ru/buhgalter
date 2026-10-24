@@ -40,6 +40,7 @@ UPDATE transactions
 SET receipt_import_id = ?,
     receipt_item_index = NULL,
     store_id = COALESCE(store_id, ?),
+    merchant_id = COALESCE(merchant_id, ?),
     updated_at = ?
 WHERE id = ? AND user_id = ? AND type = 'expense' AND receipt_import_id IS NULL;
 

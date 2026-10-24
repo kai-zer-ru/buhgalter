@@ -19,6 +19,7 @@ type ReceiptCreateInput struct {
 	SubcategoryID    *string
 	TransactionDate  time.Time
 	StoreID          *string
+	MerchantID       *string
 	ReceiptImportID  *string
 	ReceiptItemIndex *int64
 }
@@ -54,7 +55,7 @@ func CreateWithReceipt(ctx context.Context, db sqlcdb.DBTX, userID string, in Re
 		TransactionDate:   txDate,
 		AffectsBalance:    1,
 		SubscriptionID:    nil,
-		MerchantID:        nil,
+		MerchantID:        in.MerchantID,
 		CreatedAt:         now,
 		UpdatedAt:         now,
 	}); err != nil {

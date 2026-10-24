@@ -29,6 +29,7 @@ WHERE t.user_id = ?
   AND (? = '' OR t.transaction_date <= ?)
   AND (? = '' OR t.description LIKE '%' || ? || '%')
   AND (? = '' OR t.store_id = ?)
+  AND (? = '' OR t.merchant_id = ?)
   AND NOT EXISTS (
     SELECT 1
     FROM credit_payments cp
@@ -57,6 +58,8 @@ type StatsByCategoryParams struct {
 	Column15          *string     `json:"column_15"`
 	Column16          interface{} `json:"column_16"`
 	StoreID           *string     `json:"store_id"`
+	Column18          interface{} `json:"column_18"`
+	MerchantID        *string     `json:"merchant_id"`
 }
 
 type StatsByCategoryRow struct {
@@ -87,6 +90,8 @@ func (q *Queries) StatsByCategory(ctx context.Context, arg StatsByCategoryParams
 		arg.Column15,
 		arg.Column16,
 		arg.StoreID,
+		arg.Column18,
+		arg.MerchantID,
 	)
 	if err != nil {
 		return nil, err
@@ -118,12 +123,12 @@ func (q *Queries) StatsByCategory(ctx context.Context, arg StatsByCategoryParams
 
 const statsByStore = `-- name: StatsByStore :many
 SELECT
-    s.id AS store_id,
-    s.name AS store_name,
+    m.id AS store_id,
+    m.name AS store_name,
     CAST(COALESCE(SUM(t.amount), 0) AS INTEGER) AS total,
     COUNT(*) AS tx_count
 FROM transactions t
-JOIN stores s ON s.id = t.store_id
+JOIN merchants m ON m.id = t.merchant_id AND m.user_id = t.user_id
 WHERE t.user_id = ?
   AND t.type = 'expense'
   AND (? = '' OR t.account_id = ?)
@@ -133,13 +138,14 @@ WHERE t.user_id = ?
   AND (? = '' OR t.transaction_date <= ?)
   AND (? = '' OR t.description LIKE '%' || ? || '%')
   AND (? = '' OR t.store_id = ?)
+  AND (? = '' OR t.merchant_id = ?)
   AND NOT EXISTS (
     SELECT 1
     FROM credit_payments cp
     WHERE cp.transaction_id = t.id
       AND cp.exclude_from_stats = 1
   )
-GROUP BY s.id, s.name
+GROUP BY m.id, m.name
 ORDER BY total DESC
 `
 
@@ -159,6 +165,8 @@ type StatsByStoreParams struct {
 	Column13          *string     `json:"column_13"`
 	Column14          interface{} `json:"column_14"`
 	StoreID           *string     `json:"store_id"`
+	Column16          interface{} `json:"column_16"`
+	MerchantID        *string     `json:"merchant_id"`
 }
 
 type StatsByStoreRow struct {
@@ -185,6 +193,8 @@ func (q *Queries) StatsByStore(ctx context.Context, arg StatsByStoreParams) ([]S
 		arg.Column13,
 		arg.Column14,
 		arg.StoreID,
+		arg.Column16,
+		arg.MerchantID,
 	)
 	if err != nil {
 		return nil, err
@@ -234,6 +244,7 @@ WHERE t.user_id = ?
   AND (? = '' OR t.transaction_date <= ?)
   AND (? = '' OR t.description LIKE '%' || ? || '%')
   AND (? = '' OR t.store_id = ?)
+  AND (? = '' OR t.merchant_id = ?)
   AND NOT (
     t.receipt_import_id IS NOT NULL
     AND t.receipt_item_index IS NULL
@@ -266,6 +277,8 @@ type StatsBySubcategoryParams struct {
 	Column15          *string     `json:"column_15"`
 	Column16          interface{} `json:"column_16"`
 	StoreID           *string     `json:"store_id"`
+	Column18          interface{} `json:"column_18"`
+	MerchantID        *string     `json:"merchant_id"`
 }
 
 type StatsBySubcategoryRow struct {
@@ -297,6 +310,8 @@ func (q *Queries) StatsBySubcategory(ctx context.Context, arg StatsBySubcategory
 		arg.Column15,
 		arg.Column16,
 		arg.StoreID,
+		arg.Column18,
+		arg.MerchantID,
 	)
 	if err != nil {
 		return nil, err
@@ -361,6 +376,7 @@ WHERE t.user_id = ?
   AND (? = '' OR t.transaction_date <= ?)
   AND (? = '' OR t.description LIKE '%' || ? || '%')
   AND (? = '' OR t.store_id = ?)
+  AND (? = '' OR t.merchant_id = ?)
   AND NOT EXISTS (
     SELECT 1
     FROM credit_payments cp
@@ -389,6 +405,8 @@ type StatsBySubcategoryReceiptLinesParams struct {
 	Column15          *string     `json:"column_15"`
 	Column16          interface{} `json:"column_16"`
 	StoreID           *string     `json:"store_id"`
+	Column18          interface{} `json:"column_18"`
+	MerchantID        *string     `json:"merchant_id"`
 }
 
 type StatsBySubcategoryReceiptLinesRow struct {
@@ -421,6 +439,8 @@ func (q *Queries) StatsBySubcategoryReceiptLines(ctx context.Context, arg StatsB
 		arg.Column15,
 		arg.Column16,
 		arg.StoreID,
+		arg.Column18,
+		arg.MerchantID,
 	)
 	if err != nil {
 		return nil, err
@@ -698,6 +718,7 @@ WHERE t.user_id = ?
   AND (? = '' OR t.transaction_date <= ?)
   AND (? = '' OR t.description LIKE '%' || ? || '%')
   AND (? = '' OR t.store_id = ?)
+  AND (? = '' OR t.merchant_id = ?)
   AND NOT EXISTS (
     SELECT 1
     FROM credit_payments cp
@@ -725,6 +746,8 @@ type StatsPeriodRowsParams struct {
 	Column15          *string     `json:"column_15"`
 	Column16          interface{} `json:"column_16"`
 	StoreID           *string     `json:"store_id"`
+	Column18          interface{} `json:"column_18"`
+	MerchantID        *string     `json:"merchant_id"`
 }
 
 type StatsPeriodRowsRow struct {
@@ -752,6 +775,8 @@ func (q *Queries) StatsPeriodRows(ctx context.Context, arg StatsPeriodRowsParams
 		arg.Column15,
 		arg.Column16,
 		arg.StoreID,
+		arg.Column18,
+		arg.MerchantID,
 	)
 	if err != nil {
 		return nil, err
@@ -790,6 +815,7 @@ WHERE t.user_id = ?
   AND (? = '' OR t.transaction_date <= ?)
   AND (? = '' OR t.description LIKE '%' || ? || '%')
   AND (? = '' OR t.store_id = ?)
+  AND (? = '' OR t.merchant_id = ?)
   AND NOT EXISTS (
     SELECT 1
     FROM credit_payments cp
@@ -816,6 +842,8 @@ type StatsSummaryParams struct {
 	Column15          *string     `json:"column_15"`
 	Column16          interface{} `json:"column_16"`
 	StoreID           *string     `json:"store_id"`
+	Column18          interface{} `json:"column_18"`
+	MerchantID        *string     `json:"merchant_id"`
 }
 
 type StatsSummaryRow struct {
@@ -843,6 +871,8 @@ func (q *Queries) StatsSummary(ctx context.Context, arg StatsSummaryParams) (Sta
 		arg.Column15,
 		arg.Column16,
 		arg.StoreID,
+		arg.Column18,
+		arg.MerchantID,
 	)
 	var i StatsSummaryRow
 	err := row.Scan(&i.IncomeTotal, &i.ExpenseTotal, &i.TransactionCount)
@@ -887,6 +917,7 @@ WHERE t.user_id = ?
   AND (? = '' OR t.transaction_date <= ?)
   AND (? = '' OR t.description LIKE '%' || ? || '%')
   AND (? = '' OR t.store_id = ?)
+  AND (? = '' OR t.merchant_id = ?)
   AND NOT EXISTS (
     SELECT 1
     FROM credit_payments cp
@@ -912,6 +943,8 @@ type StatsSummaryAccountParams struct {
 	Column14          *string     `json:"column_14"`
 	Column15          interface{} `json:"column_15"`
 	StoreID           *string     `json:"store_id"`
+	Column17          interface{} `json:"column_17"`
+	MerchantID        *string     `json:"merchant_id"`
 }
 
 type StatsSummaryAccountRow struct {
@@ -939,6 +972,8 @@ func (q *Queries) StatsSummaryAccount(ctx context.Context, arg StatsSummaryAccou
 		arg.Column14,
 		arg.Column15,
 		arg.StoreID,
+		arg.Column17,
+		arg.MerchantID,
 	)
 	var i StatsSummaryAccountRow
 	err := row.Scan(&i.IncomeTotal, &i.ExpenseTotal, &i.TransactionCount)

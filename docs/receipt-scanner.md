@@ -26,7 +26,7 @@
    - Кнопка **«Проставить без категории»** — для всех **включённых** строк, у которых категория ещё не выбрана, подставляет общую категорию/подкатегорию; уже заданные вручную **не перезаписывает** (удобно для смешанных чеков: продукты + лекарства + бытовое).
    - Подсказка: сначала массово однотипное, затем вручную отдельные позиции.
    - Сохранение недоступно, пока у каждой **включённой** строки нет категории.
-4. `POST /api/v1/receipts/import` — в одной транзакции БД: `stores` (getOrCreate), `receipt_imports`, N операций `expense`.
+4. `POST /api/v1/receipts/import` — в одной транзакции БД: `stores` (getOrCreate), `merchant_id` по имени точки в каталоге `merchants` (то же разрешение, что у ручной операции: имя или алиас), `receipt_imports`, N операций `expense`. Пустое имя точки магазин не создаёт. Одинаковое имя или алиас не создаёт второй магазин. Ошибка разрешения магазина откатывает import.
 5. В журнале — иконка чека; попап `GET /api/v1/receipts/{id}?transaction_id=…` с подсветкой позиции и **категорией/подкатегорией** по каждой строке (из связанных операций).
 
 ### Категория в журнале (import и attach)
@@ -57,9 +57,9 @@
 3. Таблица позиций: **категория / подкатегория** на каждую строку; блок **«Общая категория»** и **«Проставить без категории»** (как import). По умолчанию подставляется категория/подкатегория **текущей операции**, если есть.
 4. **Сумма:** `transactions.amount` (коп.) vs `receipt.total_sum` (коп.) — **строгое** равенство.
 5. Совпало — подтверждение; не совпало — [ui-dialogs.md](ui-dialogs.md): **«Добавить всё равно»** / **«Отмена»**. Сохранение недоступно, пока у **каждой** позиции чека не выбрана категория.
-6. Успех: `receipt_import_id` на операции; категории строк — в `receipt_import_item_categories`; `receipt_item_index` на операции **не** задаётся (одна операция на весь чек).
+6. Успех: `receipt_import_id` на операции; `merchant_id` заполняется по имени точки, только если у расхода магазина ещё не было; категории строк — в `receipt_import_item_categories`; `receipt_item_index` на операции **не** задаётся (одна операция на весь чек).
 7. **Статистика расходов:** подкатегории attach-строк попадают в `GET /stats/by-subcategory` (сумма по позиции из payload чека). Import — через `subcategory_id` на каждой созданной операции. См. [ui-stats.md](ui-stats.md).
-8. **Открепить чек:** меню строки или кнопка в просмотре чека → `POST /api/v1/receipts/detach` с `{ "transaction_id" }`; сбрасывает `receipt_import_id` / `receipt_item_index` на **этой** операции; при отсутствии других связей категории строк attach удаляются.
+8. **Открепить чек:** меню строки или кнопка в просмотре чека → `POST /api/v1/receipts/detach` с `{ "transaction_id" }`; сбрасывает `receipt_import_id` / `receipt_item_index` на **этой** операции; `merchant_id` и `store_id` не меняет; при отсутствии других связей категории строк attach удаляются.
 
 ### API attach
 
@@ -104,7 +104,7 @@
 | `POST` | `/api/v1/receipts/attach` | Attach к одной операции |
 | `POST` | `/api/v1/receipts/detach` | Открепить чек от операции |
 | `GET` | `/api/v1/receipts/{id}` | Детали чека |
-| `GET` | `/api/v1/stores` | Справочник магазинов |
+| `GET` | `/api/v1/stores` | Точки чека (`stores`); в UI не показывается |
 | `PUT` | `/api/v1/admin/settings/receipt-api-token` | Задать токен (admin) |
 
 Ошибки модуля: `ERR_RECEIPT_API_NOT_CONFIGURED`, `ERR_RECEIPT_QR`, `ERR_RECEIPT_NOT_FOUND`, `ERR_RECEIPT_DUPLICATE`, `ERR_RECEIPT_SUM_MISMATCH`, `ERR_RECEIPT_ITEMS`, `ERR_FNS_UNAVAILABLE` (legacy / провайдер недоступен).
@@ -113,14 +113,15 @@
 
 - **«Чек»** в `NewTransactionButtons` (главная, `/transactions`, `/accounts/[id]`) — при включённом модуле.
 - **«Прикрепить чек»** в меню строки расхода.
-- Магазин в `TransactionForm`, фильтр «Магазин», блок **«По магазинам»** на `/stats` — при наличии данных.
+- Магазин чека — тот же каталог, что у ручной операции. В форме одно поле в спойлере «Время, комментарий, магазин, теги»; отдельного селекта точки нет. Фильтра «Точка из чека» нет. Блок **«По магазинам»** на `/stats` считает `merchant_id` (ручные расходы и чеки) и остаётся на `GET /stats/by-store`: в ответе по-прежнему `store_id` и `store_name`, это id и имя магазина. Блок виден, когда в ответе есть строки.
 
 Android — те же сценарии в `android/ui/` ([android-client-receipts.md](android-client-receipts.md)): full-screen `/receipts/import`, `/receipts/attach`, `/receipts/[id]`; кнопка «Чек» на главной / операциях / счёте; **online-only**.
 
 ## Модель данных
 
 - `stores`, `receipt_imports`, `receipt_fiscal_previews`, `receipt_scan_jobs` — см. [data-model.md](data-model.md).
-- `transactions.store_id`, `receipt_import_id`, `receipt_item_index`.
+- `transactions.store_id` — точка чека; `merchant_id` — каталог магазинов. Import пишет оба на каждую включённую строку. Attach пишет `store_id` как раньше и заполняет `merchant_id`, только если он ещё пуст. Detach не очищает ни магазин, ни точку.
+- `receipt_import_id`, `receipt_item_index`.
 - Токен API: `system_settings` (шифрование как `notification_secret_key`); в GET админки только `receipt_api_token_set`.
 
 ## Формат description (import по позициям)
@@ -144,7 +145,7 @@ Android — те же сценарии в `android/ui/` ([android-client-receipt
 - Сколько чеков можно запросить у proverkacheka, задаёт тариф провайдера, не buhgalter.
 - Без токена proverkacheka — **нет** состава позиций (не обещать silent fallback «Покупка по чеку» в v1.10).
 - Фото чека на сервере не хранится; в БД — JSON снимок в `receipt_imports.payload_json`.
-- Нет ручного CRUD магазинов.
+- Нет ручного CRUD точек `stores`. Магазин чека — каталог `merchants`.
 
 ## Legacy (до v1.10, не развивать)
 

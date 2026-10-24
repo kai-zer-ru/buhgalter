@@ -1699,19 +1699,29 @@ export function getDashboard() {
 	return request<Dashboard>('/api/v1/dashboard');
 }
 
-export function getStatsSummary(params?: Record<string, string>) {
-	const q = params ? '?' + new URLSearchParams(params).toString() : '';
-	return request<StatsSummary>(`/api/v1/stats/summary${q}`);
+/** Query for stats endpoints. `merchant_id` narrows the same aggregates as `store_id`. */
+export type StatsParams = Record<string, string> & {
+	merchant_id?: string;
+};
+
+function statsQuery(params?: StatsParams): string {
+	if (!params) return '';
+	const q = new URLSearchParams(params).toString();
+	return q ? `?${q}` : '';
 }
 
-export function getStatsByCategory(params?: Record<string, string>) {
-	const q = params ? '?' + new URLSearchParams(params).toString() : '';
-	return request<{ items: StatsCategoryItem[] }>(`/api/v1/stats/by-category${q}`);
+export function getStatsSummary(params?: StatsParams) {
+	return request<StatsSummary>(`/api/v1/stats/summary${statsQuery(params)}`);
 }
 
-export function getStatsBySubcategory(params?: Record<string, string>) {
-	const q = params ? '?' + new URLSearchParams(params).toString() : '';
-	return request<{ items: StatsSubcategoryItem[] }>(`/api/v1/stats/by-subcategory${q}`);
+export function getStatsByCategory(params?: StatsParams) {
+	return request<{ items: StatsCategoryItem[] }>(`/api/v1/stats/by-category${statsQuery(params)}`);
+}
+
+export function getStatsBySubcategory(params?: StatsParams) {
+	return request<{ items: StatsSubcategoryItem[] }>(
+		`/api/v1/stats/by-subcategory${statsQuery(params)}`
+	);
 }
 
 export type Store = {
@@ -1899,19 +1909,16 @@ export function getReceipt(id: string, transactionId?: string) {
 	return request<ReceiptDetail>(`/api/v1/receipts/${id}${q}`);
 }
 
-export function getStatsByStore(params?: Record<string, string>) {
-	const q = params ? '?' + new URLSearchParams(params).toString() : '';
-	return request<{ items: StatsStoreItem[] }>(`/api/v1/stats/by-store${q}`);
+export function getStatsByStore(params?: StatsParams) {
+	return request<{ items: StatsStoreItem[] }>(`/api/v1/stats/by-store${statsQuery(params)}`);
 }
 
-export function getStatsByPeriod(params?: Record<string, string>) {
-	const q = params ? '?' + new URLSearchParams(params).toString() : '';
-	return request<{ items: StatsPeriodItem[] }>(`/api/v1/stats/by-period${q}`);
+export function getStatsByPeriod(params?: StatsParams) {
+	return request<{ items: StatsPeriodItem[] }>(`/api/v1/stats/by-period${statsQuery(params)}`);
 }
 
-export function searchStats(params?: Record<string, string>) {
-	const q = params ? '?' + new URLSearchParams(params).toString() : '';
-	return request<TransactionList>(`/api/v1/stats/search${q}`);
+export function searchStats(params?: StatsParams) {
+	return request<TransactionList>(`/api/v1/stats/search${statsQuery(params)}`);
 }
 
 export function getStatsContext(params?: Record<string, string>) {

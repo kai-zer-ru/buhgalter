@@ -326,11 +326,11 @@ erDiagram
 - **Комиссия (v1.1 / v1.4.1):** опциональное поле `commission` при создании/изменении перевода; отдельная нога `expense` на счёте-источнике в системной категории «Комиссия». В списках нога скрыта; сумма агрегируется в `commission` / `commission_display` на ногах перевода. Самостоятельные UPDATE/DELETE ноги комиссии — `ERR_COMMISSION_LINKED`.
 - В API-ответах: `transfer_account_name`, `transfer_is_out`, `commission`, `commission_display` (вычисляемые/агрегированные поля).
 - UI: [transactions-display.md](transactions-display.md).
-- **Чеки (54-ФЗ):** `store_id`, `receipt_import_id`, `receipt_item_index` — для расходов из чека и привязки к магазину; см. [receipt-scanner.md](receipt-scanner.md).
+- **Чеки (54-ФЗ):** `store_id` (точка чека), `merchant_id` (каталог магазинов), `receipt_import_id`, `receipt_item_index`; см. [receipt-scanner.md](receipt-scanner.md).
 
 ## Магазины и чеки
 
-- `stores` — точки продаж для фильтров и статистики (`name`, `name_normalized`); уникальность `(user_id, name_normalized)`; без отдельного CRUD в UI. Строки создаются из **чеков** и **синхронизируются с каталогом `merchants`** (то же имя → одна запись); у расходов с `merchant_id` при сохранении и при `GET /stores` проставляется `store_id`.
+- `stores` — точки из чека (`name`, `name_normalized`); уникальность `(user_id, name_normalized)`; без отдельного CRUD в UI. Import и attach по-прежнему делают getOrCreate и пишут `store_id` (в том числе `receipt_imports.store_id`). Каталог для журнала, фильтра и блока «По магазинам» — `merchants`: чек ставит `merchant_id` по имени точки. Пустое имя магазин не создаёт; совпадение основного имени или алиаса берёт существующий магазин. `GET /stores` не копирует `merchants`. Сохранение расхода с магазином не создаёт строку `stores`. Уже импортированные расходы не переносятся.
 - `receipt_imports` — один чек на запись; fiscal-ключ, `payload_json` (нормализованный снимок preview, v1.10 — proverkacheka), `fns_check_url`; dedup при **import**; при **attach** — reuse по fiscal key.
 - `receipt_import_item_categories` — категория/подкатегория по индексу позиции чека (attach: одна операция на весь чек).
 - `receipt_fiscal_previews` — кэш ответа proverkacheka по `(user_id, fn, i, fp)`; `result_json` (`ParsedReceipt`), `fetched_at`; заполняется при успешном preview, чтобы не дергать API повторно.

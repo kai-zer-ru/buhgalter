@@ -10,7 +10,6 @@
 		listAccounts,
 		listBanks,
 		listCategories,
-		listStores,
 		listMerchants,
 		listTags,
 		listTransactions,
@@ -21,7 +20,6 @@
 		type AccountBalanceSummary,
 		type Bank,
 		type Category,
-		type Store,
 		type Merchant,
 		type Tag,
 		type Transaction
@@ -47,7 +45,6 @@
 	import { isCreditCard } from '$lib/credit-card';
 	import { forecastWithLabelKey } from '$lib/forecast-label';
 	import { saveTransactionAsTemplate } from '$lib/save-transaction-template';
-	import { get } from 'svelte/store';
 	import { featureFlags, isFeatureEnabled } from '$lib/features';
 	import { isReceiptScannerAvailable } from '$lib/receipt/receipt-scanner-enabled';
 
@@ -77,7 +74,6 @@
 	let accBalance = $state<AccountBalanceSummary | null>(null);
 	let banks = $state<Bank[]>([]);
 	let categories = $state<Category[]>([]);
-	let stores = $state<Store[]>([]);
 	let merchants = $state<Merchant[]>([]);
 	let tags = $state<Tag[]>([]);
 	let transactions = $state<Transaction[]>([]);
@@ -109,7 +105,6 @@
 	let toLocal = $state('');
 	let typeFilter = $state('');
 	let categoryFilter = $state('');
-	let storeFilter = $state('');
 	let kindFilter = $state('');
 	let searchFilter = $state('');
 	let merchantFilter = $state('');
@@ -166,7 +161,6 @@
 			toLocal,
 			type: typeFilter,
 			categoryId: categoryFilter,
-			storeId: storeFilter,
 			kind: kindFilter,
 			search: searchFilter.trim(),
 			merchantId: merchantFilter,
@@ -181,7 +175,6 @@
 			to: toLocal ? fromDateLocalEnd(toLocal, tz) : '',
 			type: typeFilter,
 			category_id: categoryFilter,
-			store_id: storeFilter,
 			search: searchFilter,
 			merchant_id: merchantFilter,
 			tag_id: tagFilter
@@ -201,7 +194,6 @@
 		toLocal = q.get('to_local') ?? '';
 		typeFilter = q.get('type') ?? '';
 		categoryFilter = q.get('category_id') ?? '';
-		storeFilter = q.get('store_id') ?? '';
 		kindFilter = q.get('kind') ?? '';
 		searchFilter = q.get('search') ?? '';
 		merchantFilter = q.get('merchant_id') ?? '';
@@ -224,7 +216,6 @@
 				expenseCats,
 				incomeCats,
 				accountList,
-				storeList,
 				merchantList,
 				tagList
 			] = await Promise.all([
@@ -234,7 +225,6 @@
 				listCategories('expense'),
 				listCategories('income'),
 				listAccounts(),
-				listStores(),
 				listMerchants(),
 				listTags()
 			]);
@@ -248,8 +238,6 @@
 				a.name.localeCompare(b.name, 'ru')
 			);
 			categories = opts.silent ? assignIfChanged(categories, nextCategories) : nextCategories;
-			const nextStores = isReceiptScannerAvailable(get(featureFlags)) ? storeList : [];
-			stores = opts.silent ? assignIfChanged(stores, nextStores) : nextStores;
 			merchants = opts.silent ? assignIfChanged(merchants, merchantList) : merchantList;
 			tags = opts.silent ? assignIfChanged(tags, tagList) : tagList;
 			name = account.name;
@@ -280,7 +268,6 @@
 			if (toLocal) params.to = fromDateLocalEnd(toLocal, tz);
 			if (typeFilter) params.type = typeFilter;
 			if (categoryFilter) params.category_id = categoryFilter;
-			if (storeFilter) params.store_id = storeFilter;
 			if (kindFilter) params.kind = kindFilter;
 			if (searchFilter.trim()) params.search = searchFilter.trim();
 			if (merchantFilter) params.merchant_id = merchantFilter;
@@ -303,7 +290,6 @@
 		if (toLocal) queryParts.push(`to_local=${encodeURIComponent(toLocal)}`);
 		if (typeFilter) queryParts.push(`type=${encodeURIComponent(typeFilter)}`);
 		if (categoryFilter) queryParts.push(`category_id=${encodeURIComponent(categoryFilter)}`);
-		if (storeFilter) queryParts.push(`store_id=${encodeURIComponent(storeFilter)}`);
 		if (kindFilter) queryParts.push(`kind=${encodeURIComponent(kindFilter)}`);
 		if (searchFilter.trim()) queryParts.push(`search=${encodeURIComponent(searchFilter.trim())}`);
 		if (merchantFilter) queryParts.push(`merchant_id=${encodeURIComponent(merchantFilter)}`);
@@ -548,7 +534,6 @@
 		toLocal = '';
 		typeFilter = '';
 		categoryFilter = '';
-		storeFilter = '';
 		kindFilter = '';
 		searchFilter = '';
 		merchantFilter = '';
@@ -766,14 +751,11 @@
 						{categories}
 						{merchants}
 						{tags}
-						{stores}
-						showStoreFilter={receiptScannerActive}
 						showAccount={false}
 						expandSearchToEnd={true}
 						onreset={resetFilters}
 						bind:type={typeFilter}
 						bind:categoryId={categoryFilter}
-						bind:storeId={storeFilter}
 						bind:kind={kindFilter}
 						bind:search={searchFilter}
 						bind:merchantId={merchantFilter}

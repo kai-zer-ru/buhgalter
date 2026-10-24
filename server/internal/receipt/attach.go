@@ -90,10 +90,19 @@ func Attach(ctx context.Context, db *sql.DB, userID string, in AttachInput) (Att
 		return AttachResult{}, err
 	}
 
+	var merchantID *string
+	if txRow.MerchantID == nil || strings.TrimSpace(*txRow.MerchantID) == "" {
+		merchantID, err = resolveReceiptMerchant(ctx, dbTx, userID, in.Receipt.StoreName)
+		if err != nil {
+			return AttachResult{}, err
+		}
+	}
+
 	now := time.Now().UTC().Format(time.RFC3339)
 	rows, err := q.AttachReceiptToTransaction(ctx, sqlcdb.AttachReceiptToTransactionParams{
 		ReceiptImportID: &receiptID,
 		StoreID:         storeID,
+		MerchantID:      merchantID,
 		UpdatedAt:       now,
 		ID:              txID,
 		UserID:          userID,

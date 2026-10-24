@@ -22,6 +22,7 @@ type Filters struct {
 	AccountID     string
 	CategoryID    string
 	StoreID       string
+	MerchantID    string
 	Kind          string
 	Search        string
 	IncludeFuture bool
@@ -539,6 +540,8 @@ func toSummaryParams(userID string, f Filters) sqlcdb.StatsSummaryParams {
 		Column15:          search,
 		Column16:          f.StoreID,
 		StoreID:           strPtr(f.StoreID),
+		Column18:          f.MerchantID,
+		MerchantID:        strPtr(f.MerchantID),
 	}
 }
 
@@ -562,6 +565,8 @@ func toAccountSummaryParams(userID string, f Filters) sqlcdb.StatsSummaryAccount
 		Column14:          search,
 		Column15:          f.StoreID,
 		StoreID:           strPtr(f.StoreID),
+		Column17:          f.MerchantID,
+		MerchantID:        strPtr(f.MerchantID),
 	}
 }
 
@@ -584,6 +589,8 @@ func toStoreParams(userID string, f Filters) sqlcdb.StatsByStoreParams {
 		Column13:          search,
 		Column14:          f.StoreID,
 		StoreID:           strPtr(f.StoreID),
+		Column16:          f.MerchantID,
+		MerchantID:        strPtr(f.MerchantID),
 	}
 }
 
@@ -621,6 +628,8 @@ func toSubcategoryReceiptLinesParams(userID string, f Filters) sqlcdb.StatsBySub
 		Column15:          p.Column15,
 		Column16:          p.Column16,
 		StoreID:           p.StoreID,
+		Column18:          p.Column18,
+		MerchantID:        p.MerchantID,
 	}
 }
 

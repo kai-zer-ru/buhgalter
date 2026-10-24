@@ -8,14 +8,12 @@
 		listAccounts,
 		listCategories,
 		listSubcategories,
-		listStores,
 		listMerchants,
 		listTags,
 		listCredits,
 		addCreditPayment,
 		type Account,
 		type Category,
-		type Store,
 		type Credit,
 		type Subcategory,
 		type Merchant,
@@ -45,8 +43,6 @@
 	} from '$lib/select-options';
 	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
-	import { featureFlags } from '$lib/features';
-	import { isReceiptScannerAvailable } from '$lib/receipt/receipt-scanner-enabled';
 
 	function isCreditsExpenseCategory(cat: Category | undefined): boolean {
 		return Boolean(cat?.is_system && cat.name === 'Кредиты');
@@ -91,8 +87,6 @@
 	let accounts = $state<Account[]>([]);
 	let categories = $state<Category[]>([]);
 	let subcategories = $state<Subcategory[]>([]);
-	let stores = $state<Store[]>([]);
-	let storeId = $state('');
 	let merchants = $state<Merchant[]>([]);
 	let allTags = $state<Tag[]>([]);
 	let saving = $state(false);
@@ -121,12 +115,6 @@
 		return list;
 	});
 	const categoryOptions = $derived(categorySelectOptions(pickableCategories));
-	const storeOptions = $derived([
-		{ value: '', label: '—' },
-		...stores.map((store) => ({ value: store.id, label: store.name }))
-	]);
-	const receiptScannerActive = $derived(isReceiptScannerAvailable($featureFlags));
-	const showStore = $derived(txType === 'expense' && stores.length > 0 && receiptScannerActive);
 	const selectedCategory = $derived(categories.find((c) => c.id === categoryId));
 	const isCreditPaymentMode = $derived(
 		!editing && txType === 'expense' && isCreditsExpenseCategory(selectedCategory)
@@ -213,8 +201,6 @@
 			selectedTags = [...(editSource.tags ?? [])];
 			tagInput = '';
 			description = editSource.description ?? '';
-			storeId = editSource.store_id ?? '';
-			dateTimeValue = toDatetimeLocalValue(editSource.transaction_date, tz);
 			dateTimeValue = toDatetimeLocalValue(
 				editSource.transaction_date,
 				untrack(() => tz)
@@ -250,12 +236,8 @@
 			selectedTags = [];
 			tagInput = '';
 			description = '';
-			storeId = '';
-			dateTimeValue = nowDatetimeLocal(tz);
 			dateTimeValue = nowDatetimeLocal(untrack(() => tz));
 		}
-		accounts = await listAccounts('active');
-		stores = await listStores();
 		accounts = (await listAccounts('active').catch(() => [] as Account[])) ?? [];
 		if (!editSource && !repeatSource) {
 			selectedAccount = defaultAccountId(accounts, accountId);
@@ -424,7 +406,6 @@
 				category_id: categoryId || undefined,
 				subcategory_id: newSubcategoryName ? undefined : subcategoryId || undefined,
 				subcategory_name: newSubcategoryName || undefined,
-				store_id: storeId || undefined,
 				merchant_id: newMerchantName ? undefined : merchantId || undefined,
 				merchant_name: newMerchantName || undefined,
 				tag_ids: tagIds,
@@ -514,16 +495,6 @@
 		/>
 		{#if ruleHint}
 			<p class="text-sm" style:color="var(--primary)">{ruleHint}</p>
-		{/if}
-
-		{#if showStore}
-			<Select
-				id="tx-store"
-				label={$_('stores.field')}
-				bind:value={storeId}
-				options={storeOptions}
-				usePortal
-			/>
 		{/if}
 
 		<div>

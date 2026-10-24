@@ -7,9 +7,12 @@ import (
 	"testing"
 	"time"
 
+	"database/sql"
+
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	"github.com/kai-zer-ru/buhgalter/internal/category"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
+	"github.com/kai-zer-ru/buhgalter/internal/merchant"
 	"github.com/kai-zer-ru/buhgalter/internal/receipt/fns"
 	"github.com/kai-zer-ru/buhgalter/internal/store"
 	"github.com/kai-zer-ru/buhgalter/internal/transaction"
@@ -107,6 +110,9 @@ func TestImport_createsStoreAndTransactions(t *testing.T) {
 		if tx.StoreID == nil || tx.StoreName == nil || *tx.StoreName != "Магнит" {
 			t.Fatalf("expected store on tx %+v", tx)
 		}
+		if tx.MerchantID == nil || tx.MerchantName == nil || *tx.MerchantName != "Магнит" {
+			t.Fatalf("expected merchant on tx %+v", tx)
+		}
 		if tx.Description == nil || !strings.Contains(*tx.Description, "Чек №12345") {
 			t.Fatalf("unexpected description: %v", tx.Description)
 		}
@@ -118,6 +124,17 @@ func TestImport_createsStoreAndTransactions(t *testing.T) {
 	}
 	if len(stores) != 1 || stores[0].Name != "Магнит" {
 		t.Fatalf("unexpected stores: %+v", stores)
+	}
+	if result.Transactions[0].MerchantID == nil || result.Transactions[1].MerchantID == nil ||
+		*result.Transactions[0].MerchantID != *result.Transactions[1].MerchantID {
+		t.Fatalf("expected one merchant id on included rows: %+v", result.Transactions)
+	}
+	merchants, err := merchant.List(ctx, env.mgr.DB(), env.userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(merchants) != 1 || merchants[0].Name != "Магнит" || merchants[0].Icon != "default" {
+		t.Fatalf("expected one default merchant Магнит, got %+v", merchants)
 	}
 
 	detail, err := GetByID(ctx, env.mgr.DB(), env.userID, result.ReceiptImportID, result.Transactions[0].ID)
@@ -217,4 +234,118 @@ func TestAttach_linksReceiptToExpense(t *testing.T) {
 	if result.Transaction.ReceiptImportID == nil || *result.Transaction.ReceiptImportID != result.ReceiptImportID {
 		t.Fatalf("expected receipt_import_id on transaction, got %+v", result.Transaction)
 	}
+	if result.Transaction.MerchantID == nil || result.Transaction.MerchantName == nil || *result.Transaction.MerchantName != "Магнит" {
+		t.Fatalf("expected merchant from receipt point, got %+v", result.Transaction)
+	}
+}
+
+func TestImport_reusesMerchantByNameOrAlias(t *testing.T) {
+	for _, storeName := range []string{"пятёрочка", "Магнит"} {
+		t.Run(storeName, func(t *testing.T) {
+			env := seedReceiptEnv(t)
+			ctx := context.Background()
+			if _, err := merchant.CreateWithAliases(ctx, env.mgr.DB(), env.userID, "Пятёрочка", "shopping", []string{"Магнит"}); err != nil {
+				t.Fatal(err)
+			}
+			receipt := sampleParsedReceipt()
+			receipt.StoreName = storeName
+			cat := env.expenseID
+			result, err := Import(ctx, env.mgr.DB(), env.userID, ImportInput{
+				AccountID:            env.accountID,
+				FiscalDriveNumber:    receipt.FiscalDriveNumber,
+				FiscalDocumentNumber: receipt.FiscalDocumentNumber,
+				FiscalSign:           receipt.FiscalSign,
+				Receipt:              receipt,
+				Items: []ImportItemInput{
+					{Index: 0, CategoryID: &cat, Include: true},
+					{Index: 1, CategoryID: &cat, Include: false},
+				},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(result.Transactions) != 1 {
+				t.Fatalf("expected 1 included row, got %d", len(result.Transactions))
+			}
+			tx := result.Transactions[0]
+			if tx.MerchantName == nil || *tx.MerchantName != "Пятёрочка" {
+				t.Fatalf("expected existing merchant, got %+v", tx)
+			}
+			merchants, err := merchant.List(ctx, env.mgr.DB(), env.userID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(merchants) != 1 || merchants[0].Icon != "shopping" {
+				t.Fatalf("expected the original merchant only, got %+v", merchants)
+			}
+		})
+	}
+}
+
+func TestImport_blankStoreNameSkipsMerchant(t *testing.T) {
+	env := seedReceiptEnv(t)
+	ctx := context.Background()
+	receipt := sampleParsedReceipt()
+	receipt.StoreName = "   "
+	cat := env.expenseID
+	result, err := Import(ctx, env.mgr.DB(), env.userID, ImportInput{
+		AccountID:            env.accountID,
+		FiscalDriveNumber:    receipt.FiscalDriveNumber,
+		FiscalDocumentNumber: receipt.FiscalDocumentNumber,
+		FiscalSign:           receipt.FiscalSign,
+		Receipt:              receipt,
+		Items:                []ImportItemInput{{Index: 0, CategoryID: &cat, Include: true}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx := result.Transactions[0]
+	if tx.MerchantID != nil || tx.StoreID != nil {
+		t.Fatalf("expected empty merchant and store, got %+v", tx)
+	}
+	if n := countRows(t, env.mgr.DB(), `SELECT COUNT(*) FROM merchants WHERE user_id = ?`, env.userID); n != 0 {
+		t.Fatalf("expected no merchant, got %d", n)
+	}
+	if n := countRows(t, env.mgr.DB(), `SELECT COUNT(*) FROM stores WHERE user_id = ?`, env.userID); n != 0 {
+		t.Fatalf("expected no store, got %d", n)
+	}
+}
+
+func TestImport_merchantResolveErrorRollsBack(t *testing.T) {
+	env := seedReceiptEnv(t)
+	ctx := context.Background()
+	if _, err := env.mgr.DB().ExecContext(ctx, `
+		CREATE TRIGGER block_merchant_insert BEFORE INSERT ON merchants
+		BEGIN
+			SELECT RAISE(ABORT, 'block merchant');
+		END`); err != nil {
+		t.Fatal(err)
+	}
+	receipt := sampleParsedReceipt()
+	cat := env.expenseID
+	_, err := Import(ctx, env.mgr.DB(), env.userID, ImportInput{
+		AccountID:            env.accountID,
+		FiscalDriveNumber:    receipt.FiscalDriveNumber,
+		FiscalDocumentNumber: receipt.FiscalDocumentNumber,
+		FiscalSign:           receipt.FiscalSign,
+		Receipt:              receipt,
+		Items:                []ImportItemInput{{Index: 0, CategoryID: &cat, Include: true}},
+	})
+	if err == nil {
+		t.Fatal("expected resolve error")
+	}
+	for _, table := range []string{"merchants", "stores", "receipt_imports", "transactions"} {
+		if n := countRows(t, env.mgr.DB(), `SELECT COUNT(*) FROM `+table+` WHERE user_id = ?`, env.userID); n != 0 {
+			t.Fatalf("expected rollback of %s, got %d rows", table, n)
+		}
+	}
+}
+
+func countRows(t *testing.T, db *sql.DB, query string, args ...any) int {
+	t.Helper()
+	var n int
+	if err := db.QueryRow(query, args...).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
 }

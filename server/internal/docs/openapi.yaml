@@ -1576,6 +1576,8 @@ paths:
         - $ref: '#/components/parameters/StatsCategoryId'
         - $ref: '#/components/parameters/StatsKind'
         - $ref: '#/components/parameters/StatsSearch'
+        - $ref: '#/components/parameters/StatsStoreId'
+        - $ref: '#/components/parameters/StatsMerchantId'
         - $ref: '#/components/parameters/StatsIncludeFuture'
       responses:
         '200':
@@ -1603,6 +1605,8 @@ paths:
         - $ref: '#/components/parameters/StatsCategoryId'
         - $ref: '#/components/parameters/StatsKind'
         - $ref: '#/components/parameters/StatsSearch'
+        - $ref: '#/components/parameters/StatsStoreId'
+        - $ref: '#/components/parameters/StatsMerchantId'
       responses:
         '200':
           description: Список категорий
@@ -1637,6 +1641,8 @@ paths:
         - $ref: '#/components/parameters/StatsCategoryId'
         - $ref: '#/components/parameters/StatsKind'
         - $ref: '#/components/parameters/StatsSearch'
+        - $ref: '#/components/parameters/StatsStoreId'
+        - $ref: '#/components/parameters/StatsMerchantId'
       responses:
         '200':
           description: Список подкатегорий
@@ -1656,8 +1662,9 @@ paths:
     get:
       summary: Статистика по магазинам
       description: |
-        Агрегация расходов по магазинам (`stores`). Только операции `type=expense`.
-        Блок «По магазинам» на `/stats` — при наличии магазинов и данных.
+        Агрегация расходов по каталогу магазинов (`merchants`). Только операции `type=expense` с заполненным `merchant_id`.
+        Ключи ответа те же: `store_id` — id магазина, `store_name` — его основное имя.
+        Блок «По магазинам» на `/stats` показывается, когда в ответе есть строки.
       security:
         - sessionCookie: []
         - bearerAuth: []
@@ -1667,6 +1674,7 @@ paths:
         - $ref: '#/components/parameters/StatsAccountId'
         - $ref: '#/components/parameters/StatsCategoryId'
         - $ref: '#/components/parameters/StatsStoreId'
+        - $ref: '#/components/parameters/StatsMerchantId'
         - $ref: '#/components/parameters/StatsKind'
         - $ref: '#/components/parameters/StatsSearch'
       responses:
@@ -1710,6 +1718,8 @@ paths:
         - $ref: '#/components/parameters/StatsCategoryId'
         - $ref: '#/components/parameters/StatsKind'
         - $ref: '#/components/parameters/StatsSearch'
+        - $ref: '#/components/parameters/StatsStoreId'
+        - $ref: '#/components/parameters/StatsMerchantId'
       responses:
         '200':
           description: Доход и расход по периодам
@@ -1747,6 +1757,8 @@ paths:
         - $ref: '#/components/parameters/StatsAccountId'
         - $ref: '#/components/parameters/StatsCategoryId'
         - $ref: '#/components/parameters/StatsKind'
+        - $ref: '#/components/parameters/StatsStoreId'
+        - $ref: '#/components/parameters/StatsMerchantId'
         - name: page
           in: query
           schema:
@@ -1913,7 +1925,7 @@ paths:
           in: query
           schema:
             type: string
-          description: Фильтр по магазину (только расходы)
+          description: Фильтр по точке чека (`stores`). Журнал его не показывает; параметр остаётся.
         - name: kind
           in: query
           schema:
@@ -4241,7 +4253,13 @@ components:
       in: query
       schema:
         type: string
-      description: Фильтр по магазину (только расходы)
+      description: Фильтр по точке чека (`stores`). UI статистики его не показывает; параметр остаётся.
+    StatsMerchantId:
+      name: merchant_id
+      in: query
+      schema:
+        type: string
+      description: Фильтр по каталогу магазинов (`merchants`). Сужает те же выборки, что и `store_id`.
     StatsKind:
       name: kind
       in: query
@@ -6256,8 +6274,10 @@ components:
       properties:
         store_id:
           type: string
+          description: Id магазина из каталога (`merchants.id`)
         store_name:
           type: string
+          description: Основное имя магазина (`merchants.name`)
         total:
           type: integer
         percentage:

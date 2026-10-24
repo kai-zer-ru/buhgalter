@@ -7,11 +7,9 @@
 	import {
 		deleteTransaction,
 		getUIMeta,
-		listStores,
 		listTransactions,
 		type Account,
 		type Category,
-		type Store,
 		type Merchant,
 		type Tag,
 		type Transaction
@@ -38,7 +36,6 @@
 	import { assignIfChanged } from '$lib/state-utils';
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
 	import PullToRefresh from '$lib/components/PullToRefresh.svelte';
-	import { get } from 'svelte/store';
 	import { featureFlags } from '$lib/features';
 	import { isReceiptScannerAvailable } from '$lib/receipt/receipt-scanner-enabled';
 
@@ -69,7 +66,6 @@
 	let newTxType = $state<'expense' | 'income'>('expense');
 	let accounts = $state<Account[]>([]);
 	let categories = $state<Category[]>([]);
-	let stores = $state<Store[]>([]);
 	let merchants = $state<Merchant[]>([]);
 	let tags = $state<Tag[]>([]);
 
@@ -77,7 +73,6 @@
 	let toLocal = $state('');
 	let type = $state('');
 	let categoryId = $state('');
-	let storeId = $state('');
 	let accountId = $state('');
 	let kind = $state('');
 	let search = $state('');
@@ -120,7 +115,6 @@
 		toLocal = q.get('to_local') ?? '';
 		type = q.get('type') ?? '';
 		categoryId = q.get('category_id') ?? '';
-		storeId = q.get('store_id') ?? '';
 		accountId = q.get('account_id') ?? '';
 		kind = q.get('kind') ?? '';
 		search = q.get('search') ?? '';
@@ -134,7 +128,6 @@
 		if (toLocal) params.to = fromDateLocalEnd(toLocal, tz);
 		if (type) params.type = type;
 		if (categoryId) params.category_id = categoryId;
-		if (storeId) params.store_id = storeId;
 		if (accountId) params.account_id = accountId;
 		if (search.trim()) params.search = search.trim();
 		if (merchantId) params.merchant_id = merchantId;
@@ -162,7 +155,6 @@
 			toLocal,
 			type,
 			categoryId,
-			storeId,
 			accountId,
 			kind,
 			search: search.trim(),
@@ -211,11 +203,6 @@
 				hasData: categories.length > 0
 			});
 			if (msg) loadError = msg;
-		}
-		if (isReceiptScannerAvailable(get(featureFlags))) {
-			stores = await listStores();
-		} else {
-			stores = [];
 		}
 	}
 
@@ -301,7 +288,6 @@
 		if (toLocal) queryParts.push(`to_local=${encodeURIComponent(toLocal)}`);
 		if (type) queryParts.push(`type=${encodeURIComponent(type)}`);
 		if (categoryId) queryParts.push(`category_id=${encodeURIComponent(categoryId)}`);
-		if (storeId) queryParts.push(`store_id=${encodeURIComponent(storeId)}`);
 		if (accountId) queryParts.push(`account_id=${encodeURIComponent(accountId)}`);
 		if (kind) queryParts.push(`kind=${encodeURIComponent(kind)}`);
 		if (search.trim()) queryParts.push(`search=${encodeURIComponent(search.trim())}`);
@@ -321,7 +307,6 @@
 		toLocal = '';
 		type = '';
 		categoryId = '';
-		storeId = '';
 		accountId = '';
 		kind = '';
 		search = '';
@@ -434,7 +419,6 @@
 			bind:toLocal
 			bind:type
 			bind:categoryId
-			bind:storeId
 			bind:accountId
 			bind:kind
 			bind:search
@@ -444,8 +428,6 @@
 			{categories}
 			{merchants}
 			{tags}
-			{stores}
-			showStoreFilter={receiptScannerActive}
 			onreset={resetFilters}
 		/>
 

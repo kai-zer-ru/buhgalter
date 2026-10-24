@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kai-zer-ru/buhgalter/internal/category"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/merchant"
 	"github.com/kai-zer-ru/buhgalter/internal/money"
 	"github.com/kai-zer-ru/buhgalter/internal/receipt/fns"
 	"github.com/kai-zer-ru/buhgalter/internal/store"
@@ -168,6 +169,10 @@ func Import(ctx context.Context, db *sql.DB, userID string, in ImportInput) (Imp
 	if err != nil {
 		return ImportResult{}, err
 	}
+	merchantID, err := resolveReceiptMerchant(ctx, tx, userID, in.Receipt.StoreName)
+	if err != nil {
+		return ImportResult{}, err
+	}
 
 	payload := fns.ToPayload(in.Receipt)
 	payloadJSON, err := json.Marshal(payload)
@@ -223,6 +228,7 @@ func Import(ctx context.Context, db *sql.DB, userID string, in ImportInput) (Imp
 			SubcategoryID:    itemIn.SubcategoryID,
 			TransactionDate:  in.Receipt.DateTime,
 			StoreID:          storeID,
+			MerchantID:       merchantID,
 			ReceiptImportID:  &receiptID,
 			ReceiptItemIndex: &idx,
 		})
@@ -250,6 +256,16 @@ func Import(ctx context.Context, db *sql.DB, userID string, in ImportInput) (Imp
 		created = append(created, txRow)
 	}
 	return ImportResult{ReceiptImportID: receiptID, Transactions: created}, nil
+}
+
+// resolveReceiptMerchant maps the receipt point name onto the merchant catalog.
+// A blank name does not create a merchant. The name is the request text, so an alias matches.
+func resolveReceiptMerchant(ctx context.Context, db sqlcdb.DBTX, userID, storeName string) (*string, error) {
+	name := strings.TrimSpace(storeName)
+	if name == "" {
+		return nil, nil
+	}
+	return merchant.Resolve(ctx, db, userID, nil, &name)
 }
 
 func validateExpenseCategory(ctx context.Context, db *sql.DB, userID string, categoryID *string) error {

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { _ } from 'svelte-i18n';
-	import type { Account, Category, Merchant, Store, Tag } from '$lib/api/client';
+	import type { Account, Category, Merchant, Tag } from '$lib/api/client';
 	import { categorySelectLabel } from '$lib/category-label';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
 	import { dateOnlyPicker } from '$lib/datetime-picker-standards';
@@ -14,21 +14,18 @@
 		type: string;
 		categoryId: string;
 		accountId: string;
-		storeId: string;
 		kind: string;
 		search: string;
 		merchantId: string;
 		tagId: string;
 		accounts?: Account[];
 		categories?: Category[];
-		stores?: Store[];
 		merchants?: Merchant[];
 		tags?: Tag[];
 		showAccount?: boolean;
 		showCategory?: boolean;
 		showType?: boolean;
 		showKind?: boolean;
-		showStoreFilter?: boolean;
 		expandSearchToEnd?: boolean;
 		onreset: () => void;
 	};
@@ -39,21 +36,18 @@
 		type = $bindable(),
 		categoryId = $bindable(),
 		accountId = $bindable(),
-		storeId = $bindable(),
 		kind = $bindable(),
 		search = $bindable(),
 		merchantId = $bindable(''),
 		tagId = $bindable(''),
 		accounts = [],
 		categories = [],
-		stores = [],
 		merchants = [],
 		tags = [],
 		showAccount = true,
 		showCategory = true,
 		showType = true,
 		showKind = true,
-		showStoreFilter = true,
 		expandSearchToEnd = false,
 		onreset
 	}: Props = $props();
@@ -78,11 +72,6 @@
 	const categoryOptions = $derived([
 		{ value: '', label: $_('import.export.all_categories') },
 		...categorySelectOptions(filteredCategories, (cat) => categorySelectLabel(cat, categories))
-	]);
-
-	const storeOptions = $derived([
-		{ value: '', label: $_('import.export.all_stores') },
-		...stores.map((store) => ({ value: store.id, label: store.name }))
 	]);
 
 	$effect(() => {
@@ -158,16 +147,6 @@
 				label={$_('transactions.filters.category')}
 				bind:value={categoryId}
 				options={categoryOptions}
-				usePortal
-			/>
-		{/if}
-
-		{#if showStoreFilter && stores.length > 0}
-			<Select
-				id="tx-filter-store"
-				label={$_('transactions.filters.store')}
-				bind:value={storeId}
-				options={storeOptions}
 				usePortal
 			/>
 		{/if}

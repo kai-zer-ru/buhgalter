@@ -45,7 +45,7 @@ curl -sS -X POST 'https://proverkacheka.com/api/v1/check/get' \
 |---|--------|--------|
 | Создаёт операции | Да, N расходов | Нет |
 | Пишет `receipt_imports` | Да | Да (или reuse по fn+i+fp) |
-| Обновляет `transactions` | insert | `receipt_import_id`, опционально `store_id` |
+| Обновляет `transactions` | insert с `store_id` и `merchant_id` | `receipt_import_id`, опционально `store_id`; `merchant_id` только если у расхода его ещё не было |
 | Duplicate fiscal key | 409 import | reuse import id |
 | Сумма ≠ операции | N/A (суммы из позиций) | 409 без `acknowledge_sum_mismatch`; UI — «Добавить всё равно» |
 

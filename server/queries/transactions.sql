@@ -867,18 +867,3 @@ WHERE t.user_id = ?
   AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL)
 ORDER BY t.transaction_date ASC, t.created_at ASC
 LIMIT ? OFFSET ?;
-
--- name: ListExpenseTransactionsMissingStoreWithMerchant :many
-SELECT t.id, m.name AS merchant_name
-FROM transactions t
-JOIN merchants m ON m.id = t.merchant_id AND m.user_id = t.user_id
-WHERE t.user_id = ?
-  AND t.type = 'expense'
-  AND t.merchant_id IS NOT NULL
-  AND trim(t.merchant_id) != ''
-  AND t.store_id IS NULL;
-
--- name: SetTransactionStoreID :exec
-UPDATE transactions
-SET store_id = ?, updated_at = ?
-WHERE id = ? AND user_id = ? AND store_id IS NULL;

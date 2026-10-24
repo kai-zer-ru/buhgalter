@@ -13,10 +13,10 @@
 		getStatsNetWorth,
 		getBudgetSummary,
 		getUIMeta,
-		listStores,
 		searchStats,
 		type Account,
 		type Category,
+		type Merchant,
 		type Credit,
 		type Debtor,
 		type StatsCategoryItem,
@@ -62,11 +62,6 @@
 	import StatsCharts from '$lib/components/StatsCharts.svelte';
 	import { user } from '$lib/stores/auth';
 	import { toast } from '$lib/toast';
-	import { get } from 'svelte/store';
-	import { featureFlags } from '$lib/features';
-	import { isReceiptScannerAvailable } from '$lib/receipt/receipt-scanner-enabled';
-
-	const receiptScannerActive = $derived(isReceiptScannerAvailable($featureFlags));
 
 	let loading = $state(true);
 	let loadError = $state<string | null>(null);
@@ -80,7 +75,7 @@
 	let searchRows = $state<Transaction[]>([]);
 	let accounts = $state<Account[]>([]);
 	let categories = $state<Category[]>([]);
-	let stores = $state<import('$lib/api/client').Store[]>([]);
+	let merchants = $state<Merchant[]>([]);
 	let byStore = $state<StatsStoreItem[]>([]);
 	let debtorByName = $state<Record<string, string>>({});
 	let creditByName = $state<Record<string, string>>({});
@@ -90,7 +85,7 @@
 	let type = $state('');
 	let accountId = $state('');
 	let categoryId = $state('');
-	let storeId = $state('');
+	let merchantId = $state('');
 	let groupBy = $state<'day' | 'week' | 'month'>('month');
 	let search = $state('');
 	let filtersAutoApplyReady = $state(false);
@@ -125,11 +120,15 @@
 			...categorySelectOptions(filtered, (cat) => categorySelectLabel(cat, categories))
 		];
 	});
-	const storeOptions = $derived.by(() => {
+	const merchantOptions = $derived.by(() => {
 		void $locale;
 		return [
-			{ value: '', label: tr('import.export.all_stores') },
-			...stores.map((store) => ({ value: store.id, label: store.name }))
+			{ value: '', label: tr('transactions.filters.allMerchants') },
+			...merchants.map((merchant) => ({
+				value: merchant.id,
+				label: merchant.name,
+				icon: { type: 'category' as const, icon: merchant.icon || 'default' }
+			}))
 		];
 	});
 	const duplicateCategoryNameSet = $derived(
@@ -201,7 +200,7 @@
 			type,
 			accountId,
 			categoryId,
-			storeId,
+			merchantId,
 			groupBy,
 			search: search.trim()
 		});
@@ -220,7 +219,7 @@
 			categories = Object.values(uniqueByID).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
 			debtorByName = toDebtorMap(meta.debtors);
 			creditByName = toCreditMap([...meta.active_credits, ...meta.closed_credits]);
-			stores = isReceiptScannerAvailable(get(featureFlags)) ? await listStores() : [];
+			merchants = [...(meta.merchants ?? [])].sort((a, b) => a.name.localeCompare(b.name, 'ru'));
 			metaLoaded = true;
 		} catch (err) {
 			toast.fromError(err);
@@ -234,7 +233,7 @@
 		if (type) params.type = type;
 		if (accountId) params.account_id = accountId;
 		if (categoryId) params.category_id = categoryId;
-		if (storeId) params.store_id = storeId;
+		if (merchantId) params.merchant_id = merchantId;
 		return params;
 	}
 
@@ -274,9 +273,7 @@
 						month,
 						can_copy_from_previous: false
 					})),
-					stores.length > 0
-						? getStatsByStore(params)
-						: Promise.resolve({ items: [] as StatsStoreItem[] }),
+					getStatsByStore(params),
 					netWorthPromise
 				]);
 			summary = summaryRes;
@@ -322,7 +319,7 @@
 		type = '';
 		accountId = '';
 		categoryId = '';
-		storeId = '';
+		merchantId = '';
 		groupBy = 'month';
 		search = '';
 		lastFiltersKey = currentFiltersKey();
@@ -450,15 +447,16 @@
 				options={categoryOptions}
 				usePortal
 			/>
-			{#if receiptScannerActive && stores.length > 0}
-				<Select
-					id="stats-store"
-					label={$_('stats.filters.store')}
-					bind:value={storeId}
-					options={storeOptions}
-					usePortal
-				/>
-			{/if}
+			<Select
+				id="stats-merchant"
+				label={$_('transactions.filters.merchant')}
+				bind:value={merchantId}
+				options={merchantOptions}
+				usePortal
+				searchable
+				searchPlaceholder={$_('common.searchPlaceholder')}
+				emptyLabel={$_('common.notFound')}
+			/>
 			<Select
 				id="stats-group-by"
 				label={$_('stats.filters.groupBy')}
@@ -576,7 +574,7 @@
 				{/if}
 			</div>
 
-			{#if receiptScannerActive && stores.length > 0 && byStore.length > 0 && showCategoryExpense}
+			{#if byStore.length > 0 && showCategoryExpense}
 				<div class="card md:overflow-x-auto">
 					<h2 class="mb-2 text-lg font-medium">{$_('stats.byStore')}</h2>
 					<table class="w-full text-left text-sm">

@@ -14,6 +14,7 @@ UPDATE transactions
 SET receipt_import_id = ?,
     receipt_item_index = NULL,
     store_id = COALESCE(store_id, ?),
+    merchant_id = COALESCE(merchant_id, ?),
     updated_at = ?
 WHERE id = ? AND user_id = ? AND type = 'expense' AND receipt_import_id IS NULL
 `
@@ -21,6 +22,7 @@ WHERE id = ? AND user_id = ? AND type = 'expense' AND receipt_import_id IS NULL
 type AttachReceiptToTransactionParams struct {
 	ReceiptImportID *string `json:"receipt_import_id"`
 	StoreID         *string `json:"store_id"`
+	MerchantID      *string `json:"merchant_id"`
 	UpdatedAt       string  `json:"updated_at"`
 	ID              string  `json:"id"`
 	UserID          string  `json:"user_id"`
@@ -30,6 +32,7 @@ func (q *Queries) AttachReceiptToTransaction(ctx context.Context, arg AttachRece
 	result, err := q.db.ExecContext(ctx, attachReceiptToTransaction,
 		arg.ReceiptImportID,
 		arg.StoreID,
+		arg.MerchantID,
 		arg.UpdatedAt,
 		arg.ID,
 		arg.UserID,

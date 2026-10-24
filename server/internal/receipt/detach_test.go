@@ -40,6 +40,14 @@ func TestDetach_clearsReceiptLink(t *testing.T) {
 	if result.Transaction.ReceiptImportID != nil && *result.Transaction.ReceiptImportID != "" {
 		t.Fatalf("expected cleared receipt_import_id, got %v", result.Transaction.ReceiptImportID)
 	}
+	if result.Transaction.MerchantID == nil || attached.Transaction.MerchantID == nil ||
+		*result.Transaction.MerchantID != *attached.Transaction.MerchantID {
+		t.Fatalf("detach cleared merchant: attached %v detached %v", attached.Transaction.MerchantID, result.Transaction.MerchantID)
+	}
+	if result.Transaction.StoreID == nil || attached.Transaction.StoreID == nil ||
+		*result.Transaction.StoreID != *attached.Transaction.StoreID {
+		t.Fatalf("detach cleared store: attached %v detached %v", attached.Transaction.StoreID, result.Transaction.StoreID)
+	}
 
 	_, err = Detach(ctx, env.mgr.DB(), env.userID, txRow.ID)
 	if !errors.Is(err, ErrNotAttached) {
