@@ -48,7 +48,7 @@
 		clearVersionBlock,
 		versionBlockInfo
 	} from '$lib/version-check';
-	import { initDeepLinkListener } from '$lib/android/deep-link';
+	import { followDeepLinkHistory, initDeepLinkListener } from '$lib/android/deep-link';
 	import { initShareTargetListener } from '$lib/android/share-target';
 	import { initNotificationIntercept, cancelQuietWake } from '$lib/android/notification-intercept';
 	import { initDebugLogListeners, debugLogInfo } from '$lib/platform/debug-log';
@@ -81,7 +81,9 @@
 		if (!pendingDeepLink || !canNavigateDeepLink()) return;
 		const route = pendingDeepLink;
 		pendingDeepLink = null;
-		await goto(resolveAppPath(route), { replaceState: true });
+		await followDeepLinkHistory($page.url.pathname + $page.url.search, route, (href, opts) =>
+			goto(resolveAppPath(href), opts)
+		);
 	}
 
 	$effect(() => {
