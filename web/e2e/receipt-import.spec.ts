@@ -33,6 +33,21 @@ async function getExpenseCategoryId(page: import('@playwright/test').Page) {
 	return cats[0].id;
 }
 
+/** Категория первой позиции живёт в окне кнопки строки. */
+async function selectFirstItemCategory(
+	page: import('@playwright/test').Page,
+	option: { label?: string; index?: number }
+) {
+	await page.locator('#receipt-item-cat-0').click();
+	await selectCombobox(page, 'receipt-cat-0', option);
+	const itemDialog = page.getByRole('dialog').filter({ has: page.locator('#receipt-cat-0') });
+	await itemDialog.getByRole('button', { name: 'Закрыть' }).click();
+	await expect(itemDialog).toHaveCount(0);
+	if (option.label) {
+		await expect(page.locator('#receipt-item-cat-0')).toContainText(option.label);
+	}
+}
+
 test('receipt import form creates expense from photo scan job', async ({ page }) => {
 	await enableReceiptScannerFeatures(page);
 	const tag = Date.now();
@@ -54,9 +69,9 @@ test('receipt import form creates expense from photo scan job', async ({ page })
 	await expect(dialog.getByText('E2E Магазин')).toBeVisible({ timeout: 20_000 });
 
 	await selectCombobox(page, 'receipt-account', { label: account.name });
-	await selectCombobox(page, 'receipt-cat-0', { index: 1 });
+	await selectFirstItemCategory(page, { index: 1 });
 
-	await dialog.getByRole('button', { name: /Создать 1 операций/ }).click();
+	await dialog.getByRole('button', { name: 'Сохранить' }).click();
 	await expect(dialog).toHaveCount(0, { timeout: 15_000 });
 
 	await selectCombobox(page, 'tx-filter-account', { label: account.name });
@@ -103,11 +118,11 @@ test('receipt bulk category applies only to unassigned included rows', async ({ 
 	await expect(dialog.getByText('E2E Магазин')).toBeVisible({ timeout: 20_000 });
 
 	await selectCombobox(page, 'receipt-account', { label: account.name });
-	await selectCombobox(page, 'receipt-cat-0', { label: catManual.name });
+	await selectFirstItemCategory(page, { label: catManual.name });
 	await selectCombobox(page, 'receipt-bulk-category', { label: catBulk.name });
 	await dialog.getByRole('button', { name: 'Проставить без категории' }).click();
 
-	await dialog.getByRole('button', { name: /Создать 2 операций/ }).click();
+	await dialog.getByRole('button', { name: 'Сохранить' }).click();
 	await expect(dialog).toHaveCount(0, { timeout: 15_000 });
 
 	expect(importBody).not.toBeNull();

@@ -16,6 +16,7 @@
 	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import ReceiptInlineSubcategoryField from '$lib/components/ReceiptInlineSubcategoryField.svelte';
+	import ReceiptItemCategoryButton from '$lib/components/ReceiptItemCategoryButton.svelte';
 	import { confirm } from '$lib/confirm';
 	import { formatMoneyForDisplay } from '$lib/money-display';
 	import {
@@ -155,7 +156,25 @@
 				categoryId: txCat,
 				subcategoryId: txSub
 			}));
-			subcategoriesByRow = {};
+			const stubName = transaction?.subcategory_name?.trim() ?? '';
+			subcategoriesByRow =
+				txSub && stubName
+					? Object.fromEntries(
+							rows.map((row) => [
+								row.index,
+								[
+									{
+										id: txSub,
+										category_id: txCat,
+										name: stubName,
+										icon: transaction?.subcategory_icon || 'default',
+										sort_order: 0,
+										created_at: ''
+									}
+								]
+							])
+						)
+					: {};
 			for (const row of rows) {
 				void loadSubcategories(row.index, txCat);
 			}
@@ -165,13 +184,26 @@
 		bulkSubcategories = [];
 	}
 
+	let subcategoryLoadGen: Record<number, number> = {};
+
 	async function loadSubcategories(rowIndex: number, categoryId: string) {
+		const gen = (subcategoryLoadGen[rowIndex] ?? 0) + 1;
+		subcategoryLoadGen[rowIndex] = gen;
 		if (!categoryId) {
 			subcategoriesByRow = { ...subcategoriesByRow, [rowIndex]: [] };
 			return;
 		}
-		const subs = await listSubcategories(categoryId);
-		subcategoriesByRow = { ...subcategoriesByRow, [rowIndex]: subs };
+		try {
+			const subs = await listSubcategories(categoryId);
+			if (subcategoryLoadGen[rowIndex] !== gen) return;
+			const selectedId = rows.find((item) => item.index === rowIndex)?.subcategoryId ?? '';
+			const kept = (subcategoriesByRow[rowIndex] ?? []).find((sub) => sub.id === selectedId);
+			const next =
+				!selectedId || !kept || subs.some((sub) => sub.id === selectedId) ? subs : [...subs, kept];
+			subcategoriesByRow = { ...subcategoriesByRow, [rowIndex]: next };
+		} catch {
+			// Сеть не стирает уже показанное имя подкатегории на кнопке.
+		}
 	}
 
 	async function loadBulkSubcategories(categoryId: string) {
@@ -187,6 +219,9 @@
 		if (!bulkCategoryId) return;
 		for (const row of rows) {
 			if (row.include && row.categoryId === bulkCategoryId) {
+				if (bulkSubcategories.length) {
+					subcategoriesByRow = { ...subcategoriesByRow, [row.index]: bulkSubcategories };
+				}
 				void loadSubcategories(row.index, bulkCategoryId);
 			}
 		}
@@ -500,54 +535,46 @@
 					</div>
 				</div>
 
-				<div class="overflow-x-auto">
-					<table class="w-full text-sm">
-						<thead>
-							<tr style:color="var(--text-muted)">
-								<th class="p-2 text-left">{$_('receipt.col.item')}</th>
-								<th class="p-2 text-right">{$_('receipt.col.sum')}</th>
-								<th class="p-2 text-left">{$_('transactions.col.category')}</th>
-								<th class="p-2 text-left">{$_('transactions.field.subcategory')}</th>
+				<table class="w-full table-fixed text-sm">
+					<thead>
+						<tr style:color="var(--text-muted)">
+							<th class="p-2 text-left">{$_('receipt.col.item')}</th>
+							<th class="w-[22%] p-2 text-right">{$_('receipt.col.sum')}</th>
+							<th class="w-[38%] p-2 text-left"
+								><span class="sr-only">{$_('transactions.field.category')}</span></th
+							>
+						</tr>
+					</thead>
+					<tbody>
+						{#each rows as row (row.index)}
+							<tr class="border-t" style:border-color="var(--border)">
+								<td class="min-w-0 p-2 break-words">{receipt.items[row.index]?.name ?? ''}</td>
+								<td class="p-2 text-right tabular-nums">
+									<MoneyDisplay value={formatReceiptItemSum(receipt.items[row.index]?.sum ?? 0)} />
+								</td>
+								<td class="min-w-0 p-2">
+									<ReceiptItemCategoryButton
+										buttonId={`receipt-attach-item-cat-${row.index}`}
+										categorySelectId={`receipt-attach-cat-${row.index}`}
+										subcategoryFieldId={`receipt-attach-subcat-${row.index}`}
+										itemName={receipt.items[row.index]?.name ?? ''}
+										bind:categoryId={row.categoryId}
+										bind:subcategoryId={row.subcategoryId}
+										{categoryOptions}
+										subcategories={subcategoriesByRow[row.index] ?? []}
+										onCategoryChange={(categoryId) => {
+											row.subcategoryId = '';
+											void loadSubcategories(row.index, categoryId);
+										}}
+										onSubcategoriesChange={(subs) => {
+											subcategoriesByRow = { ...subcategoriesByRow, [row.index]: subs };
+										}}
+									/>
+								</td>
 							</tr>
-						</thead>
-						<tbody>
-							{#each rows as row (row.index)}
-								<tr class="border-t" style:border-color="var(--border)">
-									<td class="p-2">{receipt.items[row.index]?.name ?? ''}</td>
-									<td class="p-2 text-right tabular-nums">
-										<MoneyDisplay
-											value={formatReceiptItemSum(receipt.items[row.index]?.sum ?? 0)}
-										/>
-									</td>
-									<td class="p-2">
-										<Select
-											id={`receipt-attach-cat-${row.index}`}
-											placeholder={$_('receipt.selectCategory')}
-											bind:value={row.categoryId}
-											options={categoryOptions}
-											usePortal
-											onchange={() => {
-												row.subcategoryId = '';
-												void loadSubcategories(row.index, row.categoryId);
-											}}
-										/>
-									</td>
-									<td class="p-2">
-										<ReceiptInlineSubcategoryField
-											id={`receipt-attach-subcat-${row.index}`}
-											categoryId={row.categoryId}
-											bind:value={row.subcategoryId}
-											subcategories={subcategoriesByRow[row.index] ?? []}
-											onSubcategoriesChange={(subs) => {
-												subcategoriesByRow = { ...subcategoriesByRow, [row.index]: subs };
-											}}
-										/>
-									</td>
-								</tr>
-							{/each}
-						</tbody>
-					</table>
-				</div>
+						{/each}
+					</tbody>
+				</table>
 
 				{#if missingCategory}
 					<p class="text-sm text-amber-600">{$_('receipt.categoryRequired')}</p>

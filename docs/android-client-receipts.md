@@ -31,7 +31,7 @@ Gate: `featureRequiredForPath` — префикс `/receipts` → `receipt_scann
 
 1. Две кнопки: камера (`html5-qrcode`, [parse-qr.ts](../android/ui/src/lib/receipt/parse-qr.ts)) и загрузка файла (`BarcodeDetector`, иначе `scanFile`). Раскладка — [ниже](#кнопки). QR читается на телефоне, дальше `POST /receipts/parse` со строкой. Картинка на сервер не уходит. Камера: `CAMERA` в `AndroidManifest` (`required=false`). Если код на файле не прочитался — `receipt.parseError`. Если запрос чека не дошёл до сервера — `receipt.requestNotSent`, не «Сессия сохранена».
 2. Альтернатива: строка QR → `POST /receipts/parse`.
-3. Подтверждение: счёт (import), таблица позиций, категория/подкатегория, общая категория, «+» подкатегория ([ReceiptInlineSubcategoryField.svelte](../android/ui/src/lib/components/ReceiptInlineSubcategoryField.svelte)). Нижние кнопки — [ниже](#кнопки).
+3. Подтверждение: счёт (import), список позиций без горизонтального скролла — название, сумма и одна кнопка ([ReceiptItemCategoryButton.svelte](../android/ui/src/lib/components/ReceiptItemCategoryButton.svelte)). Кнопка открывает окно с категорией, подкатегорией и «+» ([ReceiptInlineSubcategoryField.svelte](../android/ui/src/lib/components/ReceiptInlineSubcategoryField.svelte)). «Общая категория» свёрнута в спойлер (подсказка, выбор и «Проставить без категории» внутри). Нижние кнопки — [ниже](#кнопки).
 4. Дубликат: только сообщение `already_imported` / `already_in_ledger` + «Назад» (без таблицы).
 5. Save → API import/attach с `items[]`; `dataRefreshTick` + `leaveForm(from)`.
 
@@ -48,8 +48,8 @@ Attach: сумма операции vs чек — диалог «Добавит�
 
 Подтверждение, когда чек не дубликат:
 
-- «Назад» и «Создать N операций» (import) или «Прикрепить» (attach) — прямые кнопки футера `FormPageShell`, как «Отмена» и «Сохранить» на создании операции: две равные колонки на всю ширину, одна высота, подпись в одну строку.
-- Подписи и условия, когда сохранение недоступно, те же. «Проставить без категории» остаётся кнопкой в блоке общей категории.
+- «Назад» и «Сохранить» (import) или «Прикрепить» (attach) — прямые кнопки футера `FormPageShell`, как «Отмена» и «Сохранить» на создании операции: две равные колонки на всю ширину, одна высота, подпись в одну строку. Числа операций в подписи нет.
+- «Назад», «Прикрепить» и условия, когда сохранение недоступно, те же. «Проставить без категории» остаётся в спойлере общей категории.
 
 ## API-клиент
 

@@ -42,7 +42,7 @@
 			onkeydown={(event) => event.stopPropagation()}
 		>
 			<div class="shrink-0 border-b px-4 py-3 sm:px-6 sm:py-4" style:border-color="var(--border)">
-				<h2 class="text-lg font-semibold">{title}</h2>
+				<h2 class="line-clamp-4 break-words text-lg font-semibold">{title}</h2>
 			</div>
 			<div class="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
 				{@render children()}

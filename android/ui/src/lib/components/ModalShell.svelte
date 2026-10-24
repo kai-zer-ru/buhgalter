@@ -6,6 +6,7 @@
 		open = $bindable(false),
 		title,
 		maxWidth = 'max-w-lg',
+		clip = true,
 		onclose,
 		children,
 		footer
@@ -13,6 +14,8 @@
 		open?: boolean;
 		title: string;
 		maxWidth?: string;
+		/** false — не обрезать абсолютный список Select (окно категории позиции чека, без портала). */
+		clip?: boolean;
 		onclose: () => void;
 		children: Snippet;
 		footer?: Snippet;
@@ -31,7 +34,9 @@
 		onclick={onclose}
 	>
 		<div
-			class="modal-panel card flex max-h-[min(92dvh,44rem)] w-full flex-col overflow-hidden sm:max-h-[min(92vh,44rem)] {maxWidth}"
+			class="modal-panel card flex max-h-[min(92dvh,44rem)] w-full flex-col sm:max-h-[min(92vh,44rem)] {clip
+				? 'overflow-hidden'
+				: 'overflow-visible'} {maxWidth}"
 			role="dialog"
 			aria-modal="true"
 			aria-label={title}
@@ -40,9 +45,13 @@
 			onkeydown={(event) => event.stopPropagation()}
 		>
 			<div class="shrink-0 border-b px-4 py-3 sm:px-6 sm:py-4" style:border-color="var(--border)">
-				<h2 class="text-lg font-semibold">{title}</h2>
+				<h2 class="line-clamp-4 break-words text-lg font-semibold">{title}</h2>
 			</div>
-			<div class="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
+			<div
+				class="min-h-0 flex-1 px-4 py-4 sm:px-6 {clip
+					? 'overflow-y-auto'
+					: 'relative z-10 overflow-visible'}"
+			>
 				{@render children()}
 			</div>
 			{#if footer}

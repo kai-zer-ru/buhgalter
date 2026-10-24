@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { portal } from '$lib/actions/portal';
+	import { pushModalEscape } from '$lib/modal-escape';
 	import {
 		dropdownListStyle,
 		dropdownPlacementFor,
@@ -113,6 +114,22 @@
 		if (open) positionList();
 	}
 
+	function onFocusOut(event: FocusEvent) {
+		if (!open) return;
+		const next = event.relatedTarget;
+		if (!(next instanceof Node)) return;
+		if (triggerEl?.contains(next) || panelEl?.contains(next)) return;
+		close();
+	}
+
+	$effect(() => {
+		if (!open) return;
+		return pushModalEscape(() => {
+			close();
+			triggerEl?.focus();
+		});
+	});
+
 	$effect(() => {
 		if (!open) return;
 		document.addEventListener('pointerdown', onDocumentPointerDown, true);
@@ -169,7 +186,7 @@
 	}
 </script>
 
-<div>
+<div onfocusout={onFocusOut}>
 	{#if label}
 		<label class="field-label" for={id}>{label}</label>
 	{/if}
