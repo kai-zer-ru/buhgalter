@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { _ } from 'svelte-i18n';
+	import DemoModeButton from '$lib/components/DemoModeButton.svelte';
 	import ServerDiscoveryPanel from '$lib/components/ServerDiscoveryPanel.svelte';
 	import ServerProfileFields from '$lib/components/ServerProfileFields.svelte';
 	import ServerTrustDialog from '$lib/components/ServerTrustDialog.svelte';
@@ -23,7 +24,12 @@
 	let lanUrl = $state(initial.lanUrl);
 	let trustedOrigins = $state([...initial.trustedOrigins]);
 	let loading = $state(false);
+	let demoBusy = $state(false);
 	let formError = $state<string | null>(null);
+
+	$effect(() => {
+		if (demoBusy) formError = null;
+	});
 	let trustDialogOpen = $state(false);
 	let trustOrigin = $state('');
 	let trustEnabled = $state(false);
@@ -130,10 +136,17 @@
 			{#if formError}
 				<p class="text-sm" style:color="var(--danger)" role="alert">{formError}</p>
 			{/if}
-			<button type="submit" class="btn-primary w-full" disabled={loading}>
+			<button type="submit" class="btn-primary w-full" disabled={loading || demoBusy}>
 				{loading ? $_('serverSetup.checking') : $_('serverSetup.continue')}
 			</button>
 		</form>
+		<DemoModeButton
+			bind:busy={demoBusy}
+			blocked={loading}
+			onError={(message) => {
+				formError = message;
+			}}
+		/>
 	</div>
 </div>
 

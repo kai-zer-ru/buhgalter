@@ -19,6 +19,7 @@
 | [android-client-ui.md](android-client-ui.md) | Android: интерфейс и навигация |
 | [android-client-platform.md](android-client-platform.md) | Android: вход, офлайн, виджеты, перехват уведомлений, i18n, discovery, логи, сборка |
 | [android-client-receipts.md](android-client-receipts.md) | Android: сканер чеков |
+| [../roadmap/android-demo-login.md](../roadmap/android-demo-login.md) | (план v1.10) Демо-вход Android: кнопка на экране адреса и выбора входа |
 
 Краткий обзор и переменные окружения — в [README.md](../README.md) в корне репозитория.
 

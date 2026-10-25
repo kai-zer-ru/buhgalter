@@ -33,6 +33,8 @@ android/
 
 Можно вернуться на `/login` (другой способ) или на `/server-setup` (смена сервера).
 
+Демо-вход: кнопка на `/server-setup` и `/login` подставляет origin `https://buhgalter-demo.kai-zer.ru` и входит тем же session Bearer, что логин и пароль (логин `demo`, пароль `demo_1_demo`). Успех сохраняет профиль только с этим `lanUrl`, без прежних SSID и внешнего URL. Ошибка сети или логина возвращает профиль, который был до нажатия, и сессию не создаёт. Публичный сертификат стенда не открывает диалог доверия к самоподписанному сертификату. Подробно: [android-demo-login.md](../roadmap/android-demo-login.md).
+
 1. Токен (session или API) хранится в **native secure storage** (`@aparajita/capacitor-secure-storage`) в APK; в **browser** (`vite dev` / обычный Chromium) — memory + `localStorage` (`buhgalter.secure.*`), без вызова Capacitor-плагина (нереализованный bridge зависает на «Загрузка…»). При первом запуске после обновления токен мигрируется из legacy `localStorage` ключа `buhgalter.auth_token`. Вид токена — `localStorage` ключ `buhgalter.auth_kind`.
 2. Все запросы: `Authorization: Bearer <token>`, `credentials: omit`.
 3. **Выход:** для `session` — `POST /api/v1/auth/logout` (если сеть есть), затем локальная очистка; для `api_token` — только локально. **Блокировка приложения** (PIN и биометрия) сбрасывается.

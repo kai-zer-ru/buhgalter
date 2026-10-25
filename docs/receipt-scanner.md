@@ -143,6 +143,7 @@ Android — те же сценарии в `android/ui/` ([android-client-receipt
 
 - QR 54-ФЗ; зарубежные чеки — вне scope.
 - Сколько чеков можно запросить у proverkacheka, задаёт тариф провайдера, не buhgalter.
+- На публичном [демо-стенде](https://buhgalter-demo.kai-zer.ru/) сканер чеков не работает: лимита proverkacheka.com не хватает на общий стенд. На своём инстансе нужен свой токен.
 - Без токена proverkacheka — **нет** состава позиций (не обещать silent fallback «Покупка по чеку» в v1.10).
 - Фото чека на сервере не хранится; в БД — JSON снимок в `receipt_imports.payload_json`.
 - Нет ручного CRUD точек `stores`. Магазин чека — каталог `merchants`.

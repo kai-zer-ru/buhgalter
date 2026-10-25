@@ -3,7 +3,9 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { _ } from 'svelte-i18n';
+	import DemoModeButton from '$lib/components/DemoModeButton.svelte';
 	import { hasServerUrl } from '$lib/platform/server-url';
+	import { toast } from '$lib/toast';
 
 	onMount(async () => {
 		if (!hasServerUrl()) {
@@ -31,6 +33,7 @@
 				{$_('androidAuth.method.token')}
 			</a>
 		</div>
+		<DemoModeButton onError={(message) => toast.error(message)} />
 		<p class="mt-4 text-center text-sm" style:color="var(--text-muted)">
 			<a href={resolve('/server-setup')} class="hover:underline" style:color="var(--primary)">
 				{$_('serverSetup.changeServer')}
