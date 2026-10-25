@@ -4,7 +4,7 @@
 
 **Спецификация API:** [api/openapi.yaml](api/openapi.yaml) (интерактивно — `/docs` на запущенном сервере).
 
-История изменений по версиям — [CHANGELOG.md](../CHANGELOG.md). Последний релиз: [release-notes-v1.9.2.md](release-notes-v1.9.2.md).
+История изменений по версиям — [CHANGELOG.md](../CHANGELOG.md). Последний релиз: [release-notes-v1.10.0.md](release-notes-v1.10.0.md).
 
 ---
 
@@ -19,7 +19,7 @@
 | [android-client-ui.md](android-client-ui.md) | Android: интерфейс и навигация |
 | [android-client-platform.md](android-client-platform.md) | Android: вход, офлайн, виджеты, перехват уведомлений, i18n, discovery, логи, сборка |
 | [android-client-receipts.md](android-client-receipts.md) | Android: сканер чеков |
-| [../roadmap/android-demo-login.md](../roadmap/android-demo-login.md) | (план v1.10) Демо-вход Android: кнопка на экране адреса и выбора входа |
+| [../roadmap/android-demo-login.md](../roadmap/android-demo-login.md) | Демо-вход Android: кнопка на экране адреса и выбора входа (v1.10) |
 
 Краткий обзор и переменные окружения — в [README.md](../README.md) в корне репозитория.
 
@@ -35,7 +35,7 @@
 | [../roadmap/credit-payment-link.md](../roadmap/credit-payment-link.md) | Привязка операции к оплате кредита |
 | [categories-and-icons.md](categories-and-icons.md) | Категории, подкатегории, иконки |
 | [budget.md](budget.md) | Бюджет: помесячные лимиты, копирование, план vs факт, API |
-| [../roadmap/budget-post-mvp.md](../roadmap/budget-post-mvp.md) | (план v1.10) Бюджет: rollover, прогноз ожидаемых расходов, конверты |
+| [../roadmap/budget-post-mvp.md](../roadmap/budget-post-mvp.md) | (план v1.11) Бюджет: rollover, прогноз ожидаемых расходов, конверты |
 | [transactions-display.md](transactions-display.md) | Отображение операций в UI и API |
 | [receipt-scanner.md](receipt-scanner.md) | Чеки 54-ФЗ: импорт, прикрепление, proverkacheka (v1.10) |
 | [receipt-scanner-proverkacheka.md](receipt-scanner-proverkacheka.md) | Интеграция API (dev) |
@@ -91,6 +91,7 @@
 | [../roadmap/category-rules-inbox.md](../roadmap/category-rules-inbox.md) | Спека правил и inbox (реализовано в v1.8.0) |
 | [feature-toggles.md](feature-toggles.md) | Флаги модулей в админке; чеклист для новых фич |
 | [subscriptions.md](subscriptions.md) | Подписки: API, UI, уведомления, плановый остаток, привязка и очередь |
+| [release-notes-v1.10.0.md](release-notes-v1.10.0.md) | Release notes v1.10.0: сканер чеков, демо-вход Android, время платежа кредита |
 | [release-notes-v1.9.2.md](release-notes-v1.9.2.md) | Release notes v1.9.2: алиасы магазинов, кнопки в шаблоне, экспорт без format |
 | [release-notes-v1.9.1.md](release-notes-v1.9.1.md) | Release notes v1.9.1: Android harden перехвата (шторка, СБП WB, по/от/пара) |
 | [release-notes-v1.9.0.md](release-notes-v1.9.0.md) | Release notes v1.9.0: кнопки TG/MAX, UX polish, Android шторка/парсер |
