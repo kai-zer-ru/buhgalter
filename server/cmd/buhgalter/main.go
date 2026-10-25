@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -55,6 +56,8 @@ func main() {
 		log.Fatalf("logger: %v", err)
 	}
 	defer logCloser.Close()
+	// Package-level slog.* calls in handlers must reach app.log too.
+	slog.SetDefault(logger)
 	if len(cfg.AllowedHosts) > 0 {
 		logger.Info("direct access hosts", "hosts", cfg.AllowedHosts, "env_file", cfg.EnvFilePath)
 	}
