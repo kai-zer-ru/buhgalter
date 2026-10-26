@@ -32,6 +32,7 @@
 - [v1.9.1](#v191)
 - [v1.9.2](#v192)
 - [v1.10.0](#v1100)
+- [v1.10.1](#v1101)
 - [v1.11.0](#v1110)
 - [v1.12.0](#v1120)
 - [v1.13.0](#v1130)
@@ -419,6 +420,11 @@
 - [x] Платёж по кредиту: в меню строки «Изменить время» вместо пунктов подписки; день операции и `debit_time_local` кредита не меняются ([transactions-display.md](docs/transactions-display.md#редактирование-дохода-и-расхода))
 - [x] [Демо-вход Android](roadmap/android-demo-login.md) — кнопка «Войти в демо-режим» на экране адреса и на выборе входа; стенд `buhgalter-demo.kai-zer.ru`, учётка из README
 - [x] Предупреждения сервера, которые handler пишет через пакетный `slog`, теперь попадают в `logs/app.log`, а не только в stdout
+
+## v1.10.1
+
+- [x] БАГ. Android: «Изменить время» у платежа по кредиту открывается в самом низу страницы, а не у края экрана (`ModalShell` без портала внутри `PullToRefresh`); в поле времени выбор открывается только по иконке часов, не по тапу на поле ([android-client-ui.md](docs/android-client-ui.md#модальные-окна-modalshell))
+- [x] **Docs:** [Release notes](docs/release-notes-v1.10.1.md) · [CHANGELOG.md](CHANGELOG.md) · [android-client-ui.md](docs/android-client-ui.md) · [README.md](README.md)
 
 ## v1.11.0
 

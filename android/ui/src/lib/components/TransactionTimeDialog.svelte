@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { nativeTimePicker } from '$lib/actions/native-time-picker';
 	import { _ } from 'svelte-i18n';
 	import ModalShell from '$lib/components/ModalShell.svelte';
 
@@ -20,7 +21,7 @@
 <ModalShell {open} title={$_('transactions.changeTime')} maxWidth="max-w-sm" {onclose}>
 	<label class="block text-sm">
 		<span class="font-medium">{$_('transactions.changeTime')}</span>
-		<input class="input mt-1 w-full" type="time" step="60" bind:value={time} />
+		<input class="input mt-1 w-full" type="time" use:nativeTimePicker step="60" bind:value={time} />
 	</label>
 	{#snippet footer()}
 		<button type="button" class="btn-ghost" disabled={saving} onclick={onclose}>

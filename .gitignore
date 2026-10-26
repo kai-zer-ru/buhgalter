@@ -1,6 +1,7 @@
 /.idea
 /.cursor
 /AGENTS.md
+/.claude/
 server/buhgalter
 /buhgalter
 bin/

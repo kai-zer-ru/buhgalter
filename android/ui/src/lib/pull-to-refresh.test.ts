@@ -14,6 +14,7 @@ import {
 	isPtrBlockedByModal,
 	normalizePtrPathname,
 	PTR_VIEWPORT_MAX_PX,
+	ptrContentTransform,
 	revalidateCurrentPath
 } from './pull-to-refresh';
 
@@ -149,5 +150,16 @@ describe('attachNonPassiveTouchMove', () => {
 
 		dispose();
 		expect(remove).toHaveBeenCalledWith('touchmove', handler);
+	});
+});
+
+describe('ptrContentTransform', () => {
+	it('leaves transform unset at rest so fixed descendants stay viewport-relative', () => {
+		expect(ptrContentTransform(0)).toBeUndefined();
+	});
+
+	it('translates content while pulling or refreshing', () => {
+		expect(ptrContentTransform(42)).toBe('translateY(42px)');
+		expect(ptrContentTransform(35.2)).toBe('translateY(35.2px)');
 	});
 });

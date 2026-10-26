@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { nativeTimePicker } from '$lib/actions/native-time-picker';
 	import { _, locale } from 'svelte-i18n';
 	import { tr } from '$lib/i18n';
 	import {
@@ -422,6 +423,7 @@
 					<input
 						class="input w-full"
 						type="time"
+						use:nativeTimePicker
 						bind:value={timeLocal}
 						step="60"
 						onchange={() => void refreshUpcoming()}

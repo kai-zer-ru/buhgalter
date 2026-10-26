@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { nativeTimePicker } from '$lib/actions/native-time-picker';
 	import { onMount, tick } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { _ } from 'svelte-i18n';
@@ -934,7 +935,12 @@
 							<span class="block leading-snug"
 								>{$_('settings.notifications.triggers.send_time')}</span
 							>
-							<input class="input w-full" type="time" bind:value={notificationTimeLocal} />
+							<input
+								class="input w-full"
+								type="time"
+								use:nativeTimePicker
+								bind:value={notificationTimeLocal}
+							/>
 						</label>
 						<p class="max-w-xl text-xs leading-relaxed" style:color="var(--text-muted)">
 							{$_('settings.notifications.triggers.send_time_hint', { values: { timezone } })}

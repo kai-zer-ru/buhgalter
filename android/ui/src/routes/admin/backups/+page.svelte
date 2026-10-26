@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { nativeTimePicker } from '$lib/actions/native-time-picker';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -162,7 +163,7 @@
 			<div class="grid gap-4 sm:grid-cols-2">
 				<div>
 					<label class="mb-1.5 block text-sm" for="time">{$_('admin.backups.time')}</label>
-					<input id="time" type="time" class="input" bind:value={backupTime} />
+					<input id="time" type="time" use:nativeTimePicker class="input" bind:value={backupTime} />
 				</div>
 				<div>
 					<label class="mb-1.5 block text-sm" for="retention">{$_('admin.backups.retention')}</label

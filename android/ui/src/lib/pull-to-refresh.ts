@@ -95,6 +95,15 @@ export function revalidateCurrentPath(pathname: string): void {
 	}
 }
 
+/**
+ * Inline `transform` for `.pull-to-refresh-content`. At rest it must be unset:
+ * any transform makes the wrapper a containing block for `position: fixed`
+ * descendants (ModalShell overlay would stretch to the whole page).
+ */
+export function ptrContentTransform(offsetPx: number): string | undefined {
+	return offsetPx > 0 ? `translateY(${offsetPx}px)` : undefined;
+}
+
 /** True when a modal / drawer overlay should suppress PTR. */
 export function isPtrBlockedByModal(root: ParentNode | null | undefined = undefined): boolean {
 	const doc = root ?? (typeof document !== 'undefined' ? document : null);

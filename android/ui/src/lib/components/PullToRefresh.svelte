@@ -6,6 +6,7 @@
 		isPullToRefreshActive,
 		isPullToRefreshRoute,
 		isPtrBlockedByModal,
+		ptrContentTransform,
 		revalidateCurrentPath
 	} from '$lib/pull-to-refresh';
 	import { isNativeApp } from '$lib/platform/native';
@@ -192,6 +193,7 @@
 	const indicatorOffset = $derived(
 		refreshing ? PULL_THRESHOLD_PX * 0.55 : pulling ? pullDistance : 0
 	);
+	const contentTransform = $derived(ptrContentTransform(indicatorOffset));
 	const indicatorVisible = $derived(refreshing || pullDistance > 8);
 </script>
 
@@ -215,7 +217,11 @@
 	>
 		<span class="pull-to-refresh-spinner"></span>
 	</div>
-	<div class="pull-to-refresh-content" style:transform="translateY({indicatorOffset}px)">
+	<div
+		class="pull-to-refresh-content"
+		style:transform={contentTransform}
+		style:will-change={contentTransform ? 'transform' : undefined}
+	>
 		{@render children()}
 	</div>
 </div>
@@ -255,10 +261,6 @@
 
 	.pull-to-refresh-indicator.refreshing .pull-to-refresh-spinner {
 		animation: pull-to-refresh-spin 0.7s linear infinite;
-	}
-
-	.pull-to-refresh-content {
-		will-change: transform;
 	}
 
 	@keyframes pull-to-refresh-spin {

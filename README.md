@@ -450,7 +450,7 @@ curl -v https://platform-api2.max.ru/
 
 ## Обновление
 
-Сделайте бэкап, замените бинарник или образ, перезапустите. Миграции применятся при старте. Release notes текущего релиза — [v1.10.0](docs/release-notes-v1.10.0.md) (сканер чеков 54-ФЗ, демо-вход в Android, «Изменить время» у платежа кредита; миграции `057`–`062`). Предыдущий — [v1.9.2](docs/release-notes-v1.9.2.md).
+Сделайте бэкап, замените бинарник или образ, перезапустите. Миграции применятся при старте. Release notes текущего релиза — [v1.10.1](docs/release-notes-v1.10.1.md) (Android: окно «Изменить время» и выбор времени по тапу; без миграций). Предыдущий — [v1.10.0](docs/release-notes-v1.10.0.md) (сканер чеков 54-ФЗ, демо-вход в Android; миграции `057`–`062`).
 
 Если стоите за nginx — для живых обновлений веба добавьте `location /api/v1/realtime` с `Upgrade` (см. [Nginx](#nginx-reverse-proxy--https)); без этого веб останется на SWR.
 
@@ -495,7 +495,7 @@ docker compose up -d
 
 ## Документация
 
-Справочники по установке, данным, UI и API — [docs/README.md](docs/README.md). История изменений — [CHANGELOG.md](CHANGELOG.md). Последний релиз — [v1.10.0](docs/release-notes-v1.10.0.md).
+Справочники по установке, данным, UI и API — [docs/README.md](docs/README.md). История изменений — [CHANGELOG.md](CHANGELOG.md). Последний релиз — [v1.10.1](docs/release-notes-v1.10.1.md).
 
 ## API-документация
 

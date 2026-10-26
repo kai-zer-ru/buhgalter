@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { nativeTimePicker } from '$lib/actions/native-time-picker';
 	import { page } from '$app/stores';
 	import { _ } from 'svelte-i18n';
 	import { getCredit, type Credit } from '$lib/api/client';
@@ -92,7 +93,12 @@
 						<span class="text-sm" style:color="var(--text-muted)"
 							>{$_('credits.field.debitTime')}</span
 						>
-						<input type="time" class="input w-full" bind:value={debitTimeLocal} />
+						<input
+							type="time"
+							use:nativeTimePicker
+							class="input w-full"
+							bind:value={debitTimeLocal}
+						/>
 					</label>
 					<FieldHint text={$_('credits.field.debitTimeHint')} />
 				{/if}

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { nativeTimePicker } from '$lib/actions/native-time-picker';
 	import { untrack } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import {
@@ -651,6 +652,7 @@
 				<input
 					id="tx-time"
 					type="time"
+					use:nativeTimePicker
 					class="input w-full"
 					bind:value={timeInput}
 					onchange={applyOperationTime}

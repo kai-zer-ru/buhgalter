@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { nativeTimePicker } from '$lib/actions/native-time-picker';
 	/**
 	 * Date/time picker. Project standards: docs/date-time-display.md,
 	 * props helpers in $lib/datetime-picker-standards.ts
@@ -445,6 +446,7 @@
 						<input
 							id="{id}-time"
 							type="time"
+							use:nativeTimePicker
 							class="input w-full"
 							bind:value={timeValue}
 							onchange={applyTime}
@@ -475,7 +477,13 @@
 				{$_('transactions.field.timeOptional')}
 			</summary>
 			<div class="mt-2">
-				<input type="time" class="input w-full" bind:value={timeValue} onchange={applyTime} />
+				<input
+					type="time"
+					use:nativeTimePicker
+					class="input w-full"
+					bind:value={timeValue}
+					onchange={applyTime}
+				/>
 				<FieldHint text={$_('transactions.field.timeHint')} />
 			</div>
 		</details>

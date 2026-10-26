@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { nativeTimePicker } from '$lib/actions/native-time-picker';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -527,7 +528,13 @@
 				{$_('recurring.timeAdvanced')}
 			</summary>
 			<div class="mt-2">
-				<input class="input w-full" type="time" bind:value={timeLocal} step="60" />
+				<input
+					class="input w-full"
+					type="time"
+					use:nativeTimePicker
+					bind:value={timeLocal}
+					step="60"
+				/>
 			</div>
 		</details>
 		<label class="inline-flex items-center gap-2 text-sm">
