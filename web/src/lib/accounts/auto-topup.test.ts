@@ -76,6 +76,14 @@ describe('autoTopupSourceOptions', () => {
 		const opts = autoTopupSourceOptions(accounts, 'b1');
 		expect(opts.map((o) => o.value)).toEqual(['b2']);
 	});
+
+	it('keeps only sources in the same currency when given', () => {
+		const accounts = [
+			base({ id: 'b1', name: 'RUB src', type: 'bank', currency: 'RUB' }),
+			base({ id: 'b2', name: 'USD src', type: 'bank', currency: 'USD' })
+		];
+		expect(autoTopupSourceOptions(accounts, 'x', 'USD').map((o) => o.value)).toEqual(['b2']);
+	});
 });
 
 describe('defaultAutoTopupSourceId', () => {

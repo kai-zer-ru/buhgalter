@@ -17,6 +17,7 @@
 	import { defaultAccountId } from '$lib/accounts';
 	import { maxCreditCardPaymentKopecks, resolvePaymentAccountId } from '$lib/credit-card';
 	import { fromDatetimeLocalValue, nowDatetimeLocal, toDatetimeLocalValue } from '$lib/dates';
+	import { formatTransferRate } from '$lib/finance';
 	import { formatMoneyForInput, fromCents, toAPIAmount, toCents } from '$lib/money';
 	import { formatMoneyForDisplay } from '$lib/money-display';
 	import { transferAccountIds, transferGroupLegs, transferOutLeg } from '$lib/transaction-display';
@@ -64,6 +65,7 @@
 	let fromAccount = $state('');
 	let toAccount = $state('');
 	let amount = $state('');
+	let toAmount = $state('');
 	let commission = $state('');
 	let description = $state('');
 	let dateTimeValue = $state('');
@@ -81,6 +83,12 @@
 		accounts = applyOutboxToAccounts(accountsBase, tz);
 	});
 	const fromAcc = $derived(accounts.find((a) => a.id === fromAccount));
+	const toAcc = $derived(accounts.find((a) => a.id === toAccount));
+	const isFx = $derived(
+		Boolean(fromAcc?.currency && toAcc?.currency && fromAcc.currency !== toAcc.currency)
+	);
+	const transferRate = $derived(formatTransferRate(toCents(amount), toCents(toAmount)));
+	const fxIncomplete = $derived(isFx && !toAmount.trim());
 	const canFullBalance = $derived(Boolean(fromAcc && fromAcc.balance > 0 && !editing));
 	const fromAccountOptions = $derived(
 		creditCardPay
@@ -168,6 +176,7 @@
 			commission = formatMoneyForInput(commissionValue);
 			description = metaLeg.description ?? '';
 			dateTimeValue = toDatetimeLocalValue(metaLeg.transaction_date, tz);
+			toAmount = '';
 		} else if (repeatSource?.type === 'transfer') {
 			const legs = transferGroupLegs(repeatSource, related);
 			const metaLeg = legs.length >= 2 ? transferOutLeg(repeatSource, legs) : repeatSource;
@@ -184,11 +193,13 @@
 			commission = formatMoneyForInput(commissionValue);
 			description = metaLeg.description ?? '';
 			dateTimeValue = nowDatetimeLocal(tz);
+			toAmount = '';
 		} else if (!preserveSelection) {
 			groupId = '';
 			fromAccount = '';
 			toAccount = '';
 			amount = prefill?.amount ? formatMoneyForInput(prefill.amount) : '';
+			toAmount = '';
 			commission = '';
 			description = prefill?.description ?? '';
 			if (prefill?.occurredAt) {
@@ -222,16 +233,30 @@
 				}
 			}
 		}
+		const src = editSource ?? (repeatSource?.type === 'transfer' ? repeatSource : null);
+		if (src) {
+			const fromCur = accounts.find((a) => a.id === fromAccount)?.currency;
+			const toCur = accounts.find((a) => a.id === toAccount)?.currency;
+			if (fromCur && toCur && fromCur !== toCur) {
+				const inLeg = transferGroupLegs(src, related).find((leg) => leg.account_id === toAccount);
+				if (inLeg) toAmount = formatMoneyForInput(inLeg.amount_display);
+			}
+		}
 		formInitialized = true;
 	}
 
 	async function save(e: Event) {
 		e.preventDefault();
 		saving = true;
+		if (fxIncomplete) {
+			saving = false;
+			return;
+		}
 		const payload = {
 			from_account_id: fromAccount,
 			to_account_id: toAccount,
 			amount: toAPIAmount(amount),
+			to_amount: isFx ? toAPIAmount(toAmount) : undefined,
 			commission: commission.trim() ? toAPIAmount(commission) : undefined,
 			description: description || undefined,
 			transaction_date: fromDatetimeLocalValue(dateTimeValue, tz)
@@ -364,6 +389,19 @@
 				{/if}
 			</div>
 		</div>
+		{#if isFx}
+			<div>
+				<label class="mb-1 block text-sm font-medium" for="tr-to-amount"
+					>{$_('transfers.field.toAmount')}</label
+				>
+				<MoneyInput id="tr-to-amount" bind:value={toAmount} required />
+				{#if transferRate}
+					<p class="mt-1 text-sm" style:color="var(--text-muted)">
+						{$_('transfers.rate', { values: { rate: transferRate } })}
+					</p>
+				{/if}
+			</div>
+		{/if}
 		<div>
 			<label class="mb-1 block text-sm font-medium" for="tr-commission"
 				>{$_('transfers.field.commission')}</label
@@ -389,7 +427,12 @@
 
 {#snippet formFooter()}
 	<button type="button" class="btn-ghost" onclick={close}>{$_('common.cancel')}</button>
-	<button type="submit" form="transfer-form" class="btn-primary" disabled={saving}>
+	<button
+		type="submit"
+		form="transfer-form"
+		class="btn-primary"
+		disabled={saving || payExceedsMax || fxIncomplete}
+	>
 		{saving ? $_('common.loading') : $_('common.save')}
 	</button>
 {/snippet}

@@ -35,13 +35,13 @@
 | [../roadmap/credit-payment-link.md](../roadmap/credit-payment-link.md) | Привязка операции к оплате кредита |
 | [categories-and-icons.md](categories-and-icons.md) | Категории, подкатегории, иконки |
 | [budget.md](budget.md) | Бюджет: помесячные лимиты, копирование, план vs факт, API |
-| [../roadmap/budget-post-mvp.md](../roadmap/budget-post-mvp.md) | (план v1.11) Бюджет: rollover, прогноз ожидаемых расходов, конверты |
+| [../roadmap/budget-post-mvp.md](../roadmap/budget-post-mvp.md) | (план v1.12) Бюджет: rollover, прогноз ожидаемых расходов, конверты |
 | [transactions-display.md](transactions-display.md) | Отображение операций в UI и API |
 | [receipt-scanner.md](receipt-scanner.md) | Чеки 54-ФЗ: импорт, прикрепление, proverkacheka (v1.10) |
 | [receipt-scanner-proverkacheka.md](receipt-scanner-proverkacheka.md) | Интеграция API (dev) |
 | [../roadmap/transaction-templates.md](../roadmap/transaction-templates.md) | Шаблоны операций для быстрого добавления |
-| [../roadmap/multicurrency.md](../roadmap/multicurrency.md) | (план) Настоящая мультивалютность |
-| [../roadmap/team-collaboration.md](../roadmap/team-collaboration.md) | (план) Семья / команда: личные и общие счета, инвайты; спецификация зафиксирована |
+| [../roadmap/multicurrency.md](../roadmap/multicurrency.md) | (v1.11.0) Валюта счёта, обмен, итоги по валютам без смешения |
+| [../roadmap/team-collaboration.md](../roadmap/team-collaboration.md) | (спека v1.11 готова, код после валюты счёта) Семья / команда: household-принципал, инвайты, общие счета |
 | [../roadmap/transaction-enrichment.md](../roadmap/transaction-enrichment.md) | (план) Теги, контрагент, split, вложения |
 | [../roadmap/savings-reports-import.md](../roadmap/savings-reports-import.md) | (план) Цели накопления, PDF-отчёты, расширенный импорт |
 | [accounts-archive-delete.md](accounts-archive-delete.md) | Архивация, мягкое удаление счётов, автоперевод остатка |

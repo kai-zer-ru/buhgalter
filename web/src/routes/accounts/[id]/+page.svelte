@@ -9,6 +9,7 @@
 		getAccountBalance,
 		listAccounts,
 		listBanks,
+		listCurrencies,
 		listCategories,
 		listMerchants,
 		listTags,
@@ -16,9 +17,11 @@
 		setPrimaryAccount,
 		unarchiveAccount,
 		updateAccount,
+		ApiError,
 		type Account,
 		type AccountBalanceSummary,
 		type Bank,
+		type Currency,
 		type Category,
 		type Merchant,
 		type Tag,
@@ -60,6 +63,8 @@
 	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
 	import { canSetAsPrimary, formatAccountInitialBalanceForEdit } from '$lib/accounts';
 	import { toAPIAmount } from '$lib/money';
+	import { currencySelectOptions } from '$lib/currency';
+	import { currencySymbol } from '$lib/finance';
 	import { fromDateLocalEnd, fromDateLocalStart } from '$lib/dates';
 	import { dedupeTransferLegs } from '$lib/transaction-display';
 	import { user } from '$lib/stores/auth';
@@ -83,6 +88,9 @@
 	let editing = $state(false);
 	let name = $state('');
 	let bankId = $state('');
+	let currencyCode = $state('');
+	let currencyLocked = $state(false);
+	let currencies = $state<Currency[]>([]);
 	let paymentAccountId = $state('');
 	let initialBalance = $state('');
 	let loading = $state(true);
@@ -119,9 +127,16 @@
 	let allAccounts = $state<Account[]>([]);
 	const debitPaymentOptions = $derived(
 		accountSelectOptions(
-			allAccounts.filter((a) => a.status === 'active' && a.type !== 'credit_card' && a.id !== id)
+			allAccounts.filter(
+				(a) =>
+					a.status === 'active' &&
+					a.type !== 'credit_card' &&
+					a.id !== id &&
+					a.currency === (currencyCode || acc?.currency)
+			)
 		)
 	);
+	const currencyOptions = $derived(currencySelectOptions(currencies));
 
 	$effect(() => {
 		const update = $refCacheUpdate;
@@ -184,6 +199,7 @@
 		} else {
 			params.include_future = 'true';
 		}
+		if (acc?.currency) params.currency = acc.currency;
 		return params;
 	}
 
@@ -217,7 +233,8 @@
 				incomeCats,
 				accountList,
 				merchantList,
-				tagList
+				tagList,
+				currencyList
 			] = await Promise.all([
 				getAccount(id),
 				getAccountBalance(id),
@@ -226,12 +243,14 @@
 				listCategories('income'),
 				listAccounts(),
 				listMerchants(),
-				listTags()
+				listTags(),
+				listCurrencies()
 			]);
 			acc = opts.silent ? assignIfChanged(acc, account) : account;
 			accBalance = opts.silent ? assignIfChanged(accBalance, accountBalance) : accountBalance;
 			banks = opts.silent ? assignIfChanged(banks, bankList) : bankList;
 			allAccounts = opts.silent ? assignIfChanged(allAccounts, accountList) : accountList;
+			currencies = opts.silent ? assignIfChanged(currencies, currencyList) : currencyList;
 			const uniqueCatsByID: Record<string, Category> = {};
 			for (const cat of [...expenseCats, ...incomeCats]) uniqueCatsByID[cat.id] = cat;
 			const nextCategories = Object.values(uniqueCatsByID).sort((a, b) =>
@@ -242,6 +261,8 @@
 			tags = opts.silent ? assignIfChanged(tags, tagList) : tagList;
 			name = account.name;
 			bankId = account.bank_id ?? '';
+			currencyCode = account.currency ?? $user?.currency ?? '';
+			if (!opts.silent) currencyLocked = false;
 			paymentAccountId = account.payment_account_id ?? '';
 			initialBalance = formatAccountInitialBalanceForEdit(account.initial_balance);
 			editing = $page.url.searchParams.get('edit') === '1' && account.status !== 'deleted';
@@ -314,6 +335,7 @@
 		try {
 			acc = await updateAccount(acc.id, {
 				name,
+				currency: currencyCode || undefined,
 				bank_id: acc.type === 'bank' || acc.type === 'credit_card' ? bankId : undefined,
 				initial_balance: toAPIAmount(initialBalance),
 				payment_account_id: acc.type === 'credit_card' ? paymentAccountId || null : undefined
@@ -322,6 +344,9 @@
 			editing = false;
 			toast($_('common.saved'));
 		} catch (err) {
+			if (err instanceof ApiError && err.code === 'ERR_ACCOUNT_CURRENCY_LOCKED') {
+				currencyLocked = true;
+			}
 			toast.fromError(err);
 		} finally {
 			saving = false;
@@ -583,6 +608,17 @@
 											maxlength="64"
 										/>
 									</div>
+									<Select
+										id="account-currency"
+										label={$_('accounts.field.currency')}
+										hint={currencyLocked
+											? $_('accounts.currency.locked')
+											: $_('accounts.currency.hint')}
+										bind:value={currencyCode}
+										options={currencyOptions}
+										disabled={currencyLocked}
+										usePortal
+									/>
 									{#if acc.type === 'bank' || acc.type === 'credit_card'}
 										<Select
 											label={$_('accounts.field.bank')}
@@ -600,7 +636,7 @@
 												<p class="tabular-nums">
 													<MoneyDisplay
 														value={acc.credit_limit_display}
-														currency={$user?.currency ?? 'RUB'}
+														currency={acc.currency}
 														class=""
 													/>
 												</p>
@@ -656,6 +692,11 @@
 										{/if}
 										<div class="flex items-center gap-2">
 											<h1 class="text-2xl font-semibold">{acc.name}</h1>
+											{#if acc.currency}
+												<span class="text-base font-normal" style:color="var(--text-muted)">
+													{currencySymbol(acc.currency)}
+												</span>
+											{/if}
 											{#if acc.is_primary}
 												<span
 													class="shrink-0"
@@ -679,7 +720,7 @@
 										<p class="mt-1 text-3xl font-semibold tabular-nums">
 											<MoneyDisplay
 												value={accBalance?.balance_display ?? acc.balance_display}
-												currency={$user?.currency ?? 'RUB'}
+												currency={acc.currency}
 												class=""
 											/>
 										</p>
@@ -688,7 +729,7 @@
 												{$_('accounts.field.creditLimit')}:
 												<MoneyDisplay
 													value={acc.credit_limit_display}
-													currency={$user?.currency ?? 'RUB'}
+													currency={acc.currency}
 													class=""
 												/>
 											</p>
@@ -708,7 +749,7 @@
 												{$_(forecastWithLabelKey(accBalance ?? {}))}:
 												<MoneyDisplay
 													value={accBalance?.forecast_display ?? acc.balance_display}
-													currency={$user?.currency ?? 'RUB'}
+													currency={acc.currency}
 													class=""
 												/>
 											</p>

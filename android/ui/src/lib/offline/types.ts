@@ -30,6 +30,7 @@ export type TransferPayload = {
 	from_account_id: string;
 	to_account_id: string;
 	amount: string;
+	to_amount?: string;
 	commission?: string;
 	description?: string;
 	transaction_date: string;
@@ -75,6 +76,7 @@ export type AccountCreatePayload = {
 	initial_balance: string;
 	credit_limit?: string;
 	payment_account_id?: string;
+	currency?: string;
 };
 
 export type AccountUpdatePayload = {
@@ -104,6 +106,7 @@ export type BudgetPayload = {
 	alert_at_percent?: number;
 	is_active?: boolean;
 	copy_forward?: boolean;
+	currency?: string;
 	/** Month query for create/update (`YYYY-MM`). */
 	month?: string;
 };

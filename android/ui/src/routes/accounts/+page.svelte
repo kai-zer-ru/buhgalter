@@ -14,10 +14,13 @@
 	import {
 		listAccounts,
 		listBanks,
+		listCurrencies,
 		setPrimaryAccount,
 		type Account,
-		type Bank
+		type Bank,
+		type Currency
 	} from '$lib/api/client';
+	import { currencySelectOptions } from '$lib/currency';
 	import { unarchiveAccount, updateAccount } from '$lib/offline/accounts-api';
 	import {
 		promptArchiveAccount,
@@ -80,6 +83,8 @@
 	let editBankId = $state('');
 	let editPaymentAccountId = $state('');
 	let editInitialBalance = $state('');
+	let editCurrency = $state('');
+	let currencies = $state<Currency[]>([]);
 	let savingEditId = $state('');
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
@@ -94,6 +99,7 @@
 		return applyOutboxToAccounts(activeAccountsBase, tz);
 	});
 	const bankOptions = $derived(banks.map((bank) => ({ value: bank.id, label: bank.name })));
+	const currencyOptions = $derived(currencySelectOptions(currencies));
 	const accountGroups = $derived(groupAccountsByType(accounts));
 
 	onMount(() => {
@@ -130,13 +136,15 @@
 			loading = true;
 		}
 		try {
-			const [accountList, bankList, activeList] = await Promise.all([
+			const [accountList, bankList, activeList, currencyList] = await Promise.all([
 				listAccounts(filter),
 				listBanks(),
-				listAccounts('active')
+				listAccounts('active'),
+				listCurrencies()
 			]);
 			accountsBase = opts.background ? assignIfChanged(accountsBase, accountList) : accountList;
 			banks = opts.background ? assignIfChanged(banks, bankList) : bankList;
+			currencies = opts.background ? assignIfChanged(currencies, currencyList) : currencyList;
 			activeAccountsBase = opts.background
 				? assignIfChanged(activeAccountsBase, activeList)
 				: activeList;
@@ -167,6 +175,7 @@
 		editBankId = acc.bank_id ?? '';
 		editPaymentAccountId = acc.payment_account_id ?? '';
 		editInitialBalance = formatAccountInitialBalanceForEdit(acc.initial_balance);
+		editCurrency = acc.currency ?? $user?.currency ?? 'RUB';
 	}
 
 	function cancelEdit() {
@@ -451,6 +460,15 @@
 								autofocus
 							/>
 						</div>
+						<Select
+							id="edit-currency-{acc.id}"
+							label={$_('accounts.field.currency')}
+							hint={$_('accounts.currency.locked')}
+							bind:value={editCurrency}
+							options={currencyOptions}
+							disabled
+							usePortal
+						/>
 						{#if acc.type === 'bank' || acc.type === 'credit_card'}
 							<Select
 								label={$_('accounts.field.bank')}
@@ -468,7 +486,7 @@
 									<p class="tabular-nums">
 										<MoneyDisplay
 											value={acc.credit_limit_display}
-											currency={$user?.currency ?? 'RUB'}
+											currency={acc.currency}
 											class=""
 										/>
 									</p>
@@ -550,20 +568,12 @@
 							{/if}
 						</div>
 						<p class="mt-1 text-xl font-semibold tabular-nums">
-							<MoneyDisplay
-								value={acc.balance_display}
-								currency={$user?.currency ?? 'RUB'}
-								class=""
-							/>
+							<MoneyDisplay value={acc.balance_display} currency={acc.currency} class="" />
 						</p>
 						{#if acc.credit_limit_display}
 							<p class="mt-0.5 text-sm tabular-nums" style:color="var(--text-muted)">
 								{$_('accounts.field.creditLimit')}:
-								<MoneyDisplay
-									value={acc.credit_limit_display}
-									currency={$user?.currency ?? 'RUB'}
-									class=""
-								/>
+								<MoneyDisplay value={acc.credit_limit_display} currency={acc.currency} class="" />
 							</p>
 						{/if}
 					</div>

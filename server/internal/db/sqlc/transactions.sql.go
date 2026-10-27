@@ -150,6 +150,7 @@ func (q *Queries) CountInboxTransactions(ctx context.Context, userID string) (in
 const countTransactionsFiltered = `-- name: CountTransactionsFiltered :one
 SELECT COUNT(*) AS count
 FROM transactions t
+LEFT JOIN accounts a ON a.id = t.account_id
 WHERE t.user_id = ?
   AND (? = '' OR t.account_id = ?)
   AND (? = '' OR t.type = ?)
@@ -179,6 +180,7 @@ WHERE t.user_id = ?
       LIMIT 1
     )
   )
+  AND (? = '' OR a.currency = ?)
 `
 
 type CountTransactionsFilteredParams struct {
@@ -204,6 +206,8 @@ type CountTransactionsFilteredParams struct {
 	Column20          interface{} `json:"column_20"`
 	TagID             string      `json:"tag_id"`
 	Column22          interface{} `json:"column_22"`
+	Column23          interface{} `json:"column_23"`
+	Currency          string      `json:"currency"`
 }
 
 func (q *Queries) CountTransactionsFiltered(ctx context.Context, arg CountTransactionsFilteredParams) (int64, error) {
@@ -230,6 +234,8 @@ func (q *Queries) CountTransactionsFiltered(ctx context.Context, arg CountTransa
 		arg.Column20,
 		arg.TagID,
 		arg.Column22,
+		arg.Column23,
+		arg.Currency,
 	)
 	var count int64
 	err := row.Scan(&count)
@@ -362,6 +368,7 @@ SELECT
     s.icon AS subcategory_icon,
     a.name AS account_name,
     a.status AS account_status,
+    a.currency AS account_currency,
     ta.name AS transfer_account_name,
     ta.status AS transfer_account_status,
     st.name AS store_name,
@@ -431,6 +438,7 @@ type GetTransactionByIDRow struct {
 	SubcategoryIcon       *string `json:"subcategory_icon"`
 	AccountName           *string `json:"account_name"`
 	AccountStatus         *string `json:"account_status"`
+	AccountCurrency       *string `json:"account_currency"`
 	TransferAccountName   *string `json:"transfer_account_name"`
 	TransferAccountStatus *string `json:"transfer_account_status"`
 	StoreName             *string `json:"store_name"`
@@ -471,6 +479,7 @@ func (q *Queries) GetTransactionByID(ctx context.Context, arg GetTransactionByID
 		&i.SubcategoryIcon,
 		&i.AccountName,
 		&i.AccountStatus,
+		&i.AccountCurrency,
 		&i.TransferAccountName,
 		&i.TransferAccountStatus,
 		&i.StoreName,
@@ -597,8 +606,10 @@ SELECT
     t.transaction_date,
     t.affects_balance,
     t.created_at,
-    t.updated_at
+    t.updated_at,
+    a.currency AS account_currency
 FROM transactions t
+JOIN accounts a ON a.id = t.account_id
 WHERE t.user_id = ?
   AND t.kind = 'future'
   AND t.transaction_date <= ?
@@ -631,6 +642,7 @@ type ListDueFutureTransactionsRow struct {
 	AffectsBalance    int64   `json:"affects_balance"`
 	CreatedAt         string  `json:"created_at"`
 	UpdatedAt         string  `json:"updated_at"`
+	AccountCurrency   string  `json:"account_currency"`
 }
 
 func (q *Queries) ListDueFutureTransactions(ctx context.Context, arg ListDueFutureTransactionsParams) ([]ListDueFutureTransactionsRow, error) {
@@ -663,6 +675,7 @@ func (q *Queries) ListDueFutureTransactions(ctx context.Context, arg ListDueFutu
 			&i.AffectsBalance,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.AccountCurrency,
 		); err != nil {
 			return nil, err
 		}
@@ -707,6 +720,7 @@ SELECT
     s.icon AS subcategory_icon,
     a.name AS account_name,
     a.status AS account_status,
+    a.currency AS account_currency,
     ta.name AS transfer_account_name,
     ta.status AS transfer_account_status,
     st.name AS store_name,
@@ -764,6 +778,7 @@ type ListInboxTransactionsDateAscRow struct {
 	SubcategoryIcon       *string `json:"subcategory_icon"`
 	AccountName           *string `json:"account_name"`
 	AccountStatus         *string `json:"account_status"`
+	AccountCurrency       *string `json:"account_currency"`
 	TransferAccountName   *string `json:"transfer_account_name"`
 	TransferAccountStatus *string `json:"transfer_account_status"`
 	StoreName             *string `json:"store_name"`
@@ -810,6 +825,7 @@ func (q *Queries) ListInboxTransactionsDateAsc(ctx context.Context, arg ListInbo
 			&i.SubcategoryIcon,
 			&i.AccountName,
 			&i.AccountStatus,
+			&i.AccountCurrency,
 			&i.TransferAccountName,
 			&i.TransferAccountStatus,
 			&i.StoreName,
@@ -860,6 +876,7 @@ SELECT
     s.icon AS subcategory_icon,
     a.name AS account_name,
     a.status AS account_status,
+    a.currency AS account_currency,
     ta.name AS transfer_account_name,
     ta.status AS transfer_account_status,
     st.name AS store_name,
@@ -917,6 +934,7 @@ type ListInboxTransactionsDateDescRow struct {
 	SubcategoryIcon       *string `json:"subcategory_icon"`
 	AccountName           *string `json:"account_name"`
 	AccountStatus         *string `json:"account_status"`
+	AccountCurrency       *string `json:"account_currency"`
 	TransferAccountName   *string `json:"transfer_account_name"`
 	TransferAccountStatus *string `json:"transfer_account_status"`
 	StoreName             *string `json:"store_name"`
@@ -963,6 +981,7 @@ func (q *Queries) ListInboxTransactionsDateDesc(ctx context.Context, arg ListInb
 			&i.SubcategoryIcon,
 			&i.AccountName,
 			&i.AccountStatus,
+			&i.AccountCurrency,
 			&i.TransferAccountName,
 			&i.TransferAccountStatus,
 			&i.StoreName,
@@ -1013,6 +1032,7 @@ SELECT
     s.icon AS subcategory_icon,
     a.name AS account_name,
     a.status AS account_status,
+    a.currency AS account_currency,
     ta.name AS transfer_account_name,
     ta.status AS transfer_account_status,
     st.name AS store_name,
@@ -1096,6 +1116,7 @@ type ListRecentTransactionsRow struct {
 	SubcategoryIcon       *string `json:"subcategory_icon"`
 	AccountName           *string `json:"account_name"`
 	AccountStatus         *string `json:"account_status"`
+	AccountCurrency       *string `json:"account_currency"`
 	TransferAccountName   *string `json:"transfer_account_name"`
 	TransferAccountStatus *string `json:"transfer_account_status"`
 	StoreName             *string `json:"store_name"`
@@ -1142,6 +1163,7 @@ func (q *Queries) ListRecentTransactions(ctx context.Context, arg ListRecentTran
 			&i.SubcategoryIcon,
 			&i.AccountName,
 			&i.AccountStatus,
+			&i.AccountCurrency,
 			&i.TransferAccountName,
 			&i.TransferAccountStatus,
 			&i.StoreName,
@@ -1192,6 +1214,7 @@ SELECT
     s.icon AS subcategory_icon,
     a.name AS account_name,
     a.status AS account_status,
+    a.currency AS account_currency,
     ta.name AS transfer_account_name,
     ta.status AS transfer_account_status,
     st.name AS store_name,
@@ -1251,6 +1274,7 @@ type ListTransactionsByTransferGroupRow struct {
 	SubcategoryIcon       *string `json:"subcategory_icon"`
 	AccountName           *string `json:"account_name"`
 	AccountStatus         *string `json:"account_status"`
+	AccountCurrency       *string `json:"account_currency"`
 	TransferAccountName   *string `json:"transfer_account_name"`
 	TransferAccountStatus *string `json:"transfer_account_status"`
 	StoreName             *string `json:"store_name"`
@@ -1295,6 +1319,7 @@ func (q *Queries) ListTransactionsByTransferGroup(ctx context.Context, arg ListT
 			&i.SubcategoryIcon,
 			&i.AccountName,
 			&i.AccountStatus,
+			&i.AccountCurrency,
 			&i.TransferAccountName,
 			&i.TransferAccountStatus,
 			&i.StoreName,
@@ -1343,6 +1368,7 @@ SELECT
     s.icon AS subcategory_icon,
     a.name AS account_name,
     a.status AS account_status,
+    a.currency AS account_currency,
     ta.name AS transfer_account_name,
     ta.status AS transfer_account_status,
     st.name AS store_name,
@@ -1404,6 +1430,7 @@ WHERE t.user_id = ?
       LIMIT 1
     )
   )
+  AND (? = '' OR a.currency = ?)
 ORDER BY t.transaction_date ASC, t.created_at ASC
 LIMIT ? OFFSET ?
 `
@@ -1431,6 +1458,8 @@ type ListTransactionsFilteredDateAscParams struct {
 	Column20          interface{} `json:"column_20"`
 	TagID             string      `json:"tag_id"`
 	Column22          interface{} `json:"column_22"`
+	Column23          interface{} `json:"column_23"`
+	Currency          string      `json:"currency"`
 	Limit             int64       `json:"limit"`
 	Offset            int64       `json:"offset"`
 }
@@ -1464,6 +1493,7 @@ type ListTransactionsFilteredDateAscRow struct {
 	SubcategoryIcon       *string `json:"subcategory_icon"`
 	AccountName           *string `json:"account_name"`
 	AccountStatus         *string `json:"account_status"`
+	AccountCurrency       *string `json:"account_currency"`
 	TransferAccountName   *string `json:"transfer_account_name"`
 	TransferAccountStatus *string `json:"transfer_account_status"`
 	StoreName             *string `json:"store_name"`
@@ -1496,6 +1526,8 @@ func (q *Queries) ListTransactionsFilteredDateAsc(ctx context.Context, arg ListT
 		arg.Column20,
 		arg.TagID,
 		arg.Column22,
+		arg.Column23,
+		arg.Currency,
 		arg.Limit,
 		arg.Offset,
 	)
@@ -1535,6 +1567,7 @@ func (q *Queries) ListTransactionsFilteredDateAsc(ctx context.Context, arg ListT
 			&i.SubcategoryIcon,
 			&i.AccountName,
 			&i.AccountStatus,
+			&i.AccountCurrency,
 			&i.TransferAccountName,
 			&i.TransferAccountStatus,
 			&i.StoreName,
@@ -1585,6 +1618,7 @@ SELECT
     s.icon AS subcategory_icon,
     a.name AS account_name,
     a.status AS account_status,
+    a.currency AS account_currency,
     ta.name AS transfer_account_name,
     ta.status AS transfer_account_status,
     st.name AS store_name,
@@ -1646,6 +1680,7 @@ WHERE t.user_id = ?
       LIMIT 1
     )
   )
+  AND (? = '' OR a.currency = ?)
 ORDER BY t.transaction_date DESC, t.created_at DESC
 LIMIT ? OFFSET ?
 `
@@ -1673,6 +1708,8 @@ type ListTransactionsFilteredDateDescParams struct {
 	Column20          interface{} `json:"column_20"`
 	TagID             string      `json:"tag_id"`
 	Column22          interface{} `json:"column_22"`
+	Column23          interface{} `json:"column_23"`
+	Currency          string      `json:"currency"`
 	Limit             int64       `json:"limit"`
 	Offset            int64       `json:"offset"`
 }
@@ -1706,6 +1743,7 @@ type ListTransactionsFilteredDateDescRow struct {
 	SubcategoryIcon       *string `json:"subcategory_icon"`
 	AccountName           *string `json:"account_name"`
 	AccountStatus         *string `json:"account_status"`
+	AccountCurrency       *string `json:"account_currency"`
 	TransferAccountName   *string `json:"transfer_account_name"`
 	TransferAccountStatus *string `json:"transfer_account_status"`
 	StoreName             *string `json:"store_name"`
@@ -1738,6 +1776,8 @@ func (q *Queries) ListTransactionsFilteredDateDesc(ctx context.Context, arg List
 		arg.Column20,
 		arg.TagID,
 		arg.Column22,
+		arg.Column23,
+		arg.Currency,
 		arg.Limit,
 		arg.Offset,
 	)
@@ -1777,6 +1817,7 @@ func (q *Queries) ListTransactionsFilteredDateDesc(ctx context.Context, arg List
 			&i.SubcategoryIcon,
 			&i.AccountName,
 			&i.AccountStatus,
+			&i.AccountCurrency,
 			&i.TransferAccountName,
 			&i.TransferAccountStatus,
 			&i.StoreName,

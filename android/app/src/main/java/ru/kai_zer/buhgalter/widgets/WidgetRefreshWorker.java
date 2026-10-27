@@ -125,12 +125,12 @@ public class WidgetRefreshWorker extends Worker {
         snap.put("total_forecast_display", formatMoney(forecast, currency));
         snap.put("show_forecast", total != forecast);
         JSONObject cards = dashboard.optJSONObject("credit_cards_summary");
-        long cashCents = sumBalanceByType(accounts, "cash");
-        long bankCents = sumBalanceByType(accounts, "bank");
+        long cashCents = sumBalanceByType(accounts, "cash", currency);
+        long bankCents = sumBalanceByType(accounts, "bank", currency);
         long creditCents =
                 cards != null
                         ? cards.optLong("total_balance", 0)
-                        : sumBalanceByType(accounts, "credit_card");
+                        : sumBalanceByType(accounts, "credit_card", currency);
         String cashDisplay = formatMoney(cashCents, currency);
         String bankDisplay = formatMoney(bankCents, currency);
         String creditDisplay = formatMoney(creditCents, currency);
@@ -158,10 +158,34 @@ public class WidgetRefreshWorker extends Worker {
             }
         }
         snap.put("accounts", accountsOut);
+        if (hasOtherCurrencies(accounts, currency)) {
+            snap.put(
+                    "other_currencies_display",
+                    "en".equalsIgnoreCase(language) ? "+ other currencies" : "+ другие валюты");
+        } else {
+            snap.put("other_currencies_display", JSONObject.NULL);
+        }
         return snap;
     }
 
-    private static long sumBalanceByType(JSONArray accounts, String type) {
+    private static boolean matchesProfileCurrency(JSONObject account, String profileCurrency) {
+        String code = account.optString("currency", "");
+        if (code == null || code.isEmpty()) return true;
+        return code.equals(profileCurrency);
+    }
+
+    private static boolean hasOtherCurrencies(JSONArray accounts, String profileCurrency) {
+        if (accounts == null) return false;
+        for (int i = 0; i < accounts.length(); i++) {
+            JSONObject a = accounts.optJSONObject(i);
+            if (a == null) continue;
+            String code = a.optString("currency", "");
+            if (code != null && !code.isEmpty() && !code.equals(profileCurrency)) return true;
+        }
+        return false;
+    }
+
+    private static long sumBalanceByType(JSONArray accounts, String type, String profileCurrency) {
         if (accounts == null) return 0;
         long sum = 0;
         for (int i = 0; i < accounts.length(); i++) {
@@ -169,6 +193,7 @@ public class WidgetRefreshWorker extends Worker {
             if (a == null) continue;
             if (!"active".equals(a.optString("status", "active"))) continue;
             if (!type.equals(a.optString("type"))) continue;
+            if (!matchesProfileCurrency(a, profileCurrency)) continue;
             sum += a.optLong("balance", 0);
         }
         return sum;

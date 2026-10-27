@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { currencyCatalogVersion } from '$lib/finance';
 	import { formatMoneyForDisplay } from '$lib/money-display';
 
 	type Props = {
@@ -10,7 +11,10 @@
 
 	let { value, cents, currency, class: className = 'tabular-nums' }: Props = $props();
 
-	const display = $derived(formatMoneyForDisplay({ value, cents, currency }));
+	const display = $derived.by(() => {
+		void $currencyCatalogVersion;
+		return formatMoneyForDisplay({ value, cents, currency });
+	});
 </script>
 
 <span class={className}>{display}</span>

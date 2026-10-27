@@ -18,6 +18,7 @@ SELECT
     b.rollover,
     b.alert_at_percent,
     b.is_active,
+    b.currency,
     b.created_at,
     b.updated_at
 FROM budgets b
@@ -55,6 +56,7 @@ SELECT
     b.rollover,
     b.alert_at_percent,
     b.is_active,
+    b.currency,
     b.created_at,
     b.updated_at
 FROM budgets b
@@ -68,9 +70,9 @@ INSERT INTO budgets (
     id, user_id, name, scope,
     category_id, subcategory_id, amount, period, account_id,
     month, copy_forward,
-    rollover, alert_at_percent, is_active,
+    rollover, alert_at_percent, is_active, currency,
     created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: UpdateBudget :execrows
 UPDATE budgets
@@ -102,6 +104,7 @@ WHERE user_id = ?
   AND IFNULL(category_id, '') = IFNULL(?, '')
   AND IFNULL(subcategory_id, '') = IFNULL(?, '')
   AND month = ?
+  AND currency = ?
   AND is_active = 1
   AND (sqlc.arg(exclude_id) = '' OR id != sqlc.arg(exclude_id));
 
@@ -131,6 +134,7 @@ WHERE budget_id = ? AND period_start = ?;
 -- name: BudgetSpent :one
 SELECT CAST(COALESCE(SUM(t.amount), 0) AS INTEGER) AS spent
 FROM transactions t
+JOIN accounts a ON a.id = t.account_id AND a.currency = ?
 WHERE t.user_id = ?
   AND t.type = 'expense'
   AND (? = '' OR t.account_id = ?)
@@ -167,7 +171,8 @@ SELECT
     b.amount,
     b.account_id,
     b.month,
-    b.alert_at_percent
+    b.alert_at_percent,
+    b.currency
 FROM budgets b
 WHERE b.user_id = ? AND b.is_active = 1
   AND (? = '' OR b.month = ?);

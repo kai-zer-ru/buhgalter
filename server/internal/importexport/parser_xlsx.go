@@ -192,6 +192,12 @@ func MapCubuxRow(headers []string, row RawRow) (MappedRow, error) {
 		if err != nil {
 			return m, err
 		}
+		if creditAmt != "" {
+			m.CreditAmount, err = ParseCubuxAmount(creditAmt)
+			if err != nil {
+				return m, err
+			}
+		}
 		if m.DebitAccount == "" || m.CreditAccount == "" {
 			return m, fmt.Errorf("для перевода нужны оба счёта")
 		}

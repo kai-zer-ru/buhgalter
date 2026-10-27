@@ -31,6 +31,7 @@ SELECT
     s.icon AS subcategory_icon,
     a.name AS account_name,
     a.status AS account_status,
+    a.currency AS account_currency,
     ta.name AS transfer_account_name,
     ta.status AS transfer_account_status,
     st.name AS store_name,
@@ -95,6 +96,7 @@ SELECT
     s.icon AS subcategory_icon,
     a.name AS account_name,
     a.status AS account_status,
+    a.currency AS account_currency,
     ta.name AS transfer_account_name,
     ta.status AS transfer_account_status,
     st.name AS store_name,
@@ -193,8 +195,10 @@ SELECT
     t.transaction_date,
     t.affects_balance,
     t.created_at,
-    t.updated_at
+    t.updated_at,
+    a.currency AS account_currency
 FROM transactions t
+JOIN accounts a ON a.id = t.account_id
 WHERE t.user_id = ?
   AND t.kind = 'future'
   AND t.transaction_date <= ?
@@ -230,6 +234,7 @@ WHERE kind = 'future'
 -- name: CountTransactionsFiltered :one
 SELECT COUNT(*) AS count
 FROM transactions t
+LEFT JOIN accounts a ON a.id = t.account_id
 WHERE t.user_id = ?
   AND (? = '' OR t.account_id = ?)
   AND (? = '' OR t.type = ?)
@@ -258,7 +263,8 @@ WHERE t.user_id = ?
       ORDER BY x.created_at ASC, x.id ASC
       LIMIT 1
     )
-  );
+  )
+  AND (? = '' OR a.currency = ?);
 
 -- name: ListTransactionsFilteredDateDesc :many
 SELECT
@@ -290,6 +296,7 @@ SELECT
     s.icon AS subcategory_icon,
     a.name AS account_name,
     a.status AS account_status,
+    a.currency AS account_currency,
     ta.name AS transfer_account_name,
     ta.status AS transfer_account_status,
     st.name AS store_name,
@@ -351,6 +358,7 @@ WHERE t.user_id = ?
       LIMIT 1
     )
   )
+  AND (? = '' OR a.currency = ?)
 ORDER BY t.transaction_date DESC, t.created_at DESC
 LIMIT ? OFFSET ?;
 
@@ -384,6 +392,7 @@ SELECT
     s.icon AS subcategory_icon,
     a.name AS account_name,
     a.status AS account_status,
+    a.currency AS account_currency,
     ta.name AS transfer_account_name,
     ta.status AS transfer_account_status,
     st.name AS store_name,
@@ -445,6 +454,7 @@ WHERE t.user_id = ?
       LIMIT 1
     )
   )
+  AND (? = '' OR a.currency = ?)
 ORDER BY t.transaction_date ASC, t.created_at ASC
 LIMIT ? OFFSET ?;
 
@@ -478,6 +488,7 @@ SELECT
     s.icon AS subcategory_icon,
     a.name AS account_name,
     a.status AS account_status,
+    a.currency AS account_currency,
     ta.name AS transfer_account_name,
     ta.status AS transfer_account_status,
     st.name AS store_name,
@@ -796,6 +807,7 @@ SELECT
     s.icon AS subcategory_icon,
     a.name AS account_name,
     a.status AS account_status,
+    a.currency AS account_currency,
     ta.name AS transfer_account_name,
     ta.status AS transfer_account_status,
     st.name AS store_name,
@@ -847,6 +859,7 @@ SELECT
     s.icon AS subcategory_icon,
     a.name AS account_name,
     a.status AS account_status,
+    a.currency AS account_currency,
     ta.name AS transfer_account_name,
     ta.status AS transfer_account_status,
     st.name AS store_name,

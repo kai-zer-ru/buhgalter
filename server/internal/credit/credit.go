@@ -147,6 +147,7 @@ var (
 	ErrInvalidPrincipalIncome     = errors.New("principal income not allowed for this credit type")
 	ErrAttachForbidden            = errors.New("transaction cannot be attached")
 	ErrTransactionNotFound        = errors.New("transaction not found")
+	ErrCurrencyMismatch           = money.ErrCurrencyMismatch
 )
 
 const (
@@ -315,6 +316,15 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Cre
 	}
 	if err := validateActiveAccount(ctx, db, userID, in.DebitAccountID); err != nil {
 		return Credit{}, err
+	}
+	if creditKind == CreditKindMortgage && downPayment > 0 && in.DownPaymentAffectsBalance &&
+		in.DownPaymentAccountID != nil && strings.TrimSpace(*in.DownPaymentAccountID) != "" {
+		if err := validateActiveAccount(ctx, db, userID, *in.DownPaymentAccountID); err != nil {
+			return Credit{}, err
+		}
+		if err := validateSameCurrency(ctx, db, userID, in.DebitAccountID, *in.DownPaymentAccountID); err != nil {
+			return Credit{}, err
+		}
 	}
 	debitTimeLocal, err := normalizeDebitTimeLocal(in.DebitTimeLocal)
 	if err != nil {
@@ -599,6 +609,11 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in UpdateInput) 
 		if err := validateActiveAccount(ctx, db, userID, *in.DebitAccountID); err != nil {
 			return Credit{}, err
 		}
+		if *in.DebitAccountID != existing.DebitAccountID {
+			if err := validateSameCurrency(ctx, db, userID, existing.DebitAccountID, *in.DebitAccountID); err != nil {
+				return Credit{}, err
+			}
+		}
 		debitAccount = *in.DebitAccountID
 	}
 	debitTimeLocal := existing.DebitTimeLocal
@@ -659,6 +674,7 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in UpdateInput) 
 func PayNextScheduled(ctx context.Context, db *sql.DB, userID, creditID string, in PayPaymentInput) (Credit, error) {
 	attachID := strings.TrimSpace(in.TransactionID)
 	var attachDesc *string
+	attachAccountID := ""
 	if attachID != "" {
 		row, err := loadAttachableExpense(ctx, db, userID, attachID)
 		if err != nil {
@@ -678,6 +694,7 @@ func PayNextScheduled(ctx context.Context, db *sql.DB, userID, creditID string, 
 			in.AccountID = row.AccountID
 		}
 		attachDesc = row.Description
+		attachAccountID = row.AccountID
 	}
 	if in.Amount <= 0 {
 		return Credit{}, ErrInvalidAmount
@@ -699,6 +716,15 @@ func PayNextScheduled(ctx context.Context, db *sql.DB, userID, creditID string, 
 	}
 	if err := validateActiveAccount(ctx, db, userID, debitAccountID); err != nil {
 		return Credit{}, err
+	}
+	// The payment account and an attached operation's account must share the credit's currency.
+	for _, accID := range []string{debitAccountID, attachAccountID} {
+		if accID == "" || accID == c.DebitAccountID {
+			continue
+		}
+		if err := validateSameCurrency(ctx, db, userID, c.DebitAccountID, accID); err != nil {
+			return Credit{}, err
+		}
 	}
 
 	var targetID string
@@ -1526,6 +1552,28 @@ func validateActiveAccount(ctx context.Context, db *sql.DB, userID, accountID st
 	}
 	if row.Status != "active" {
 		return ErrAccountArchived
+	}
+	return nil
+}
+
+// validateSameCurrency rejects linking an account whose currency differs from the reference account's.
+func validateSameCurrency(ctx context.Context, db *sql.DB, userID, refAccountID, accountID string) error {
+	ref, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: refAccountID, UserID: userID})
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrInvalidAccount
+	}
+	if err != nil {
+		return err
+	}
+	acc, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: accountID, UserID: userID})
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrInvalidAccount
+	}
+	if err != nil {
+		return err
+	}
+	if ref.Currency != acc.Currency {
+		return ErrCurrencyMismatch
 	}
 	return nil
 }

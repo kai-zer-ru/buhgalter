@@ -84,6 +84,7 @@ func CopyToNextMonth(ctx context.Context, db *sql.DB, userID, id string) (Budget
 		AccountID:      src.AccountID,
 		AlertAtPercent: src.AlertAtPercent,
 		IsActive:       src.IsActive,
+		Currency:       src.Currency,
 		Month:          targetMonth,
 		CopyForward:    false,
 	}
@@ -151,6 +152,7 @@ func inputFromRow(row sqlcdb.ListBudgetsByUserRow) Input {
 		IsActive:       row.IsActive == 1,
 		Month:          row.Month,
 		CopyForward:    row.CopyForward == 1,
+		Currency:       row.Currency,
 	}
 }
 
@@ -167,6 +169,10 @@ func prepareBudgetInput(ctx context.Context, db sqlcdb.DBTX, userID string, in I
 	}
 	if _, _, err := parseMonth(in.Month); err != nil {
 		return Input{}, ErrInvalidMonth
+	}
+	in, err = resolveCurrency(ctx, db, userID, in)
+	if err != nil {
+		return Input{}, err
 	}
 	if err := validateInput(ctx, db, userID, in); err != nil {
 		return Input{}, err
@@ -233,6 +239,7 @@ func insertBudgetTx(ctx context.Context, tx sqlcdb.DBTX, userID string, in Input
 		Rollover:       0,
 		AlertAtPercent: in.AlertAtPercent,
 		IsActive:       boolToInt(in.IsActive),
+		Currency:       in.Currency,
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	}); err != nil {
@@ -335,13 +342,14 @@ func updateCopiedBudget(ctx context.Context, tx sqlcdb.DBTX, userID, id string, 
 }
 
 // pickCopyTarget chooses the active row of the same scope, otherwise the inactive
-// row with the latest updated_at. account_id is not part of the identity.
+// row with the latest updated_at. account_id is not part of the identity; currency is.
 func pickCopyTarget(rows []sqlcdb.ListBudgetsByUserRow, in Input) *sqlcdb.ListBudgetsByUserRow {
 	var active *sqlcdb.ListBudgetsByUserRow
 	var latest *sqlcdb.ListBudgetsByUserRow
 	for i := range rows {
 		row := &rows[i]
-		if row.Scope != in.Scope || !sameID(row.CategoryID, in.CategoryID) || !sameID(row.SubcategoryID, in.SubcategoryID) {
+		if row.Scope != in.Scope || !sameID(row.CategoryID, in.CategoryID) || !sameID(row.SubcategoryID, in.SubcategoryID) ||
+			row.Currency != in.Currency {
 			continue
 		}
 		if row.IsActive == 1 {
@@ -358,13 +366,13 @@ func pickCopyTarget(rows []sqlcdb.ListBudgetsByUserRow, in Input) *sqlcdb.ListBu
 	return latest
 }
 
-// pickCopySources keeps one budget per scope: the active row, otherwise the
+// pickCopySources keeps one budget per scope and currency: the active row, otherwise the
 // inactive row with the latest updated_at. Only that row may be copied forward.
 func pickCopySources(rows []sqlcdb.ListBudgetsByUserRow) []sqlcdb.ListBudgetsByUserRow {
 	chosen := make(map[string]int, len(rows))
 	order := make([]string, 0, len(rows))
 	for i := range rows {
-		key := rows[i].Scope + "\x00" + idOrEmpty(rows[i].CategoryID) + "\x00" + idOrEmpty(rows[i].SubcategoryID)
+		key := rows[i].Scope + "\x00" + idOrEmpty(rows[i].CategoryID) + "\x00" + idOrEmpty(rows[i].SubcategoryID) + "\x00" + rows[i].Currency
 		prev, ok := chosen[key]
 		if !ok {
 			chosen[key] = i

@@ -22,6 +22,7 @@ type Account struct {
 	IsPrimary                int64   `json:"is_primary"`
 	CreatedAt                string  `json:"created_at"`
 	UpdatedAt                string  `json:"updated_at"`
+	Currency                 string  `json:"currency"`
 }
 
 type AccountsNew struct {
@@ -76,6 +77,7 @@ type Budget struct {
 	IsActive       int64   `json:"is_active"`
 	CreatedAt      string  `json:"created_at"`
 	UpdatedAt      string  `json:"updated_at"`
+	Currency       string  `json:"currency"`
 }
 
 type BudgetAlertSent struct {
@@ -176,6 +178,7 @@ type Debt struct {
 	IsSettled      int64   `json:"is_settled"`
 	SettledAt      *string `json:"settled_at"`
 	CreatedAt      string  `json:"created_at"`
+	Currency       string  `json:"currency"`
 }
 
 type DebtTransaction struct {

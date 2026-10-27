@@ -4,7 +4,14 @@
 	import { resolve } from '$app/paths';
 	import { get } from 'svelte/store';
 	import { _ } from 'svelte-i18n';
-	import { deleteUserData, getUserSettings, putUserSettings } from '$lib/api/client';
+	import {
+		deleteUserData,
+		getUserSettings,
+		listCurrencies,
+		putUserSettings,
+		type Currency
+	} from '$lib/api/client';
+	import { currencySelectOptions } from '$lib/currency';
 	import { user } from '$lib/stores/auth';
 	import { applyThemePreference, isThemePreference, type ThemePreference } from '$lib/theme';
 	import { isUiStyle, readUiStyle, setUiStyle, type UiStyle } from '$lib/ui-style';
@@ -34,6 +41,7 @@
 	let displayName = $state('');
 	let language = $state('ru');
 	let currency = $state('RUB');
+	let currencies = $state<Currency[]>([]);
 	let timezone = $state('Europe/Moscow');
 	let theme = $state<ThemePreference>('system');
 	let uiStyle = $state<UiStyle>('classic');
@@ -52,7 +60,8 @@
 	async function loadProfile() {
 		pageLoading = true;
 		try {
-			const s = await getUserSettings();
+			const [s, currencyList] = await Promise.all([getUserSettings(), listCurrencies()]);
+			currencies = currencyList;
 			displayName = s.display_name;
 			language = s.language;
 			currency = s.currency;
@@ -171,11 +180,7 @@
 			id="currency"
 			label={$_('settings.currency')}
 			bind:value={currency}
-			options={[
-				{ value: 'RUB', label: 'RUB' },
-				{ value: 'USD', label: 'USD' },
-				{ value: 'EUR', label: 'EUR' }
-			]}
+			options={currencySelectOptions(currencies)}
 		/>
 		<TimezonePicker
 			id="tz"

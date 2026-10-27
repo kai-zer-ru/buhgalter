@@ -1,5 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { setCurrencyCatalog } from './finance';
 import { formatMoneyForDisplay } from './money-display';
+
+beforeEach(() => {
+	setCurrencyCatalog([{ code: 'RUB', symbol: '₽' }]);
+});
 
 describe('formatMoneyForDisplay', () => {
 	it('formats API display string with thousands separator', () => {
@@ -12,6 +17,15 @@ describe('formatMoneyForDisplay', () => {
 
 	it('formats with currency symbol', () => {
 		expect(formatMoneyForDisplay({ value: '1234.56', currency: 'RUB' })).toBe('1 234.56 ₽');
+	});
+
+	it('uses the catalog symbol for USD', () => {
+		setCurrencyCatalog([
+			{ code: 'RUB', symbol: '₽' },
+			{ code: 'USD', symbol: '$' }
+		]);
+		expect(formatMoneyForDisplay({ value: '10.00', currency: 'USD' })).toBe('10.00 $');
+		expect(formatMoneyForDisplay({ cents: 500, currency: 'XYZ' })).toBe('5.00 XYZ');
 	});
 
 	it('formats cents with currency', () => {

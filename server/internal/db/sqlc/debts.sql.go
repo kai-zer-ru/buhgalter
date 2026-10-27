@@ -163,6 +163,7 @@ SELECT
     d.is_settled,
     d.settled_at,
     d.created_at,
+    d.currency,
     tx.account_id AS open_account_id,
     acc.name AS open_account_name
 FROM debts d
@@ -193,6 +194,7 @@ type GetDebtByIDRow struct {
 	IsSettled       int64   `json:"is_settled"`
 	SettledAt       *string `json:"settled_at"`
 	CreatedAt       string  `json:"created_at"`
+	Currency        string  `json:"currency"`
 	OpenAccountID   *string `json:"open_account_id"`
 	OpenAccountName *string `json:"open_account_name"`
 }
@@ -215,6 +217,7 @@ func (q *Queries) GetDebtByID(ctx context.Context, arg GetDebtByIDParams) (GetDe
 		&i.IsSettled,
 		&i.SettledAt,
 		&i.CreatedAt,
+		&i.Currency,
 		&i.OpenAccountID,
 		&i.OpenAccountName,
 	)
@@ -288,8 +291,8 @@ func (q *Queries) GetDebtorByName(ctx context.Context, arg GetDebtorByNameParams
 const insertDebt = `-- name: InsertDebt :exec
 INSERT INTO debts (
     id, user_id, debtor_id, direction, amount, affects_balance,
-    debt_date, due_date, description, transaction_id, is_settled, settled_at, created_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    debt_date, due_date, description, transaction_id, is_settled, settled_at, created_at, currency
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type InsertDebtParams struct {
@@ -306,6 +309,7 @@ type InsertDebtParams struct {
 	IsSettled      int64   `json:"is_settled"`
 	SettledAt      *string `json:"settled_at"`
 	CreatedAt      string  `json:"created_at"`
+	Currency       string  `json:"currency"`
 }
 
 func (q *Queries) InsertDebt(ctx context.Context, arg InsertDebtParams) error {
@@ -323,6 +327,7 @@ func (q *Queries) InsertDebt(ctx context.Context, arg InsertDebtParams) error {
 		arg.IsSettled,
 		arg.SettledAt,
 		arg.CreatedAt,
+		arg.Currency,
 	)
 	return err
 }
@@ -381,6 +386,7 @@ SELECT
     d.is_settled,
     d.settled_at,
     d.created_at,
+    d.currency,
     tx.account_id AS open_account_id,
     acc.name AS open_account_name
 FROM debts d
@@ -407,6 +413,7 @@ type ListActiveDebtsByUserRow struct {
 	IsSettled       int64   `json:"is_settled"`
 	SettledAt       *string `json:"settled_at"`
 	CreatedAt       string  `json:"created_at"`
+	Currency        string  `json:"currency"`
 	OpenAccountID   *string `json:"open_account_id"`
 	OpenAccountName *string `json:"open_account_name"`
 }
@@ -435,6 +442,7 @@ func (q *Queries) ListActiveDebtsByUser(ctx context.Context, userID string) ([]L
 			&i.IsSettled,
 			&i.SettledAt,
 			&i.CreatedAt,
+			&i.Currency,
 			&i.OpenAccountID,
 			&i.OpenAccountName,
 		); err != nil {
@@ -452,7 +460,7 @@ func (q *Queries) ListActiveDebtsByUser(ctx context.Context, userID string) ([]L
 }
 
 const listActiveDebtsForSummary = `-- name: ListActiveDebtsForSummary :many
-SELECT direction, amount, due_date
+SELECT direction, amount, due_date, currency
 FROM debts
 WHERE user_id = ? AND is_settled = 0
 `
@@ -461,6 +469,7 @@ type ListActiveDebtsForSummaryRow struct {
 	Direction string `json:"direction"`
 	Amount    int64  `json:"amount"`
 	DueDate   string `json:"due_date"`
+	Currency  string `json:"currency"`
 }
 
 func (q *Queries) ListActiveDebtsForSummary(ctx context.Context, userID string) ([]ListActiveDebtsForSummaryRow, error) {
@@ -472,7 +481,12 @@ func (q *Queries) ListActiveDebtsForSummary(ctx context.Context, userID string) 
 	items := []ListActiveDebtsForSummaryRow{}
 	for rows.Next() {
 		var i ListActiveDebtsForSummaryRow
-		if err := rows.Scan(&i.Direction, &i.Amount, &i.DueDate); err != nil {
+		if err := rows.Scan(
+			&i.Direction,
+			&i.Amount,
+			&i.DueDate,
+			&i.Currency,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -502,6 +516,7 @@ SELECT
     d.is_settled,
     d.settled_at,
     d.created_at,
+    d.currency,
     tx.account_id AS open_account_id,
     acc.name AS open_account_name
 FROM debts d
@@ -528,6 +543,7 @@ type ListAllDebtsByUserRow struct {
 	IsSettled       int64   `json:"is_settled"`
 	SettledAt       *string `json:"settled_at"`
 	CreatedAt       string  `json:"created_at"`
+	Currency        string  `json:"currency"`
 	OpenAccountID   *string `json:"open_account_id"`
 	OpenAccountName *string `json:"open_account_name"`
 }
@@ -556,6 +572,7 @@ func (q *Queries) ListAllDebtsByUser(ctx context.Context, userID string) ([]List
 			&i.IsSettled,
 			&i.SettledAt,
 			&i.CreatedAt,
+			&i.Currency,
 			&i.OpenAccountID,
 			&i.OpenAccountName,
 		); err != nil {
@@ -654,6 +671,7 @@ SELECT
     d.is_settled,
     d.settled_at,
     d.created_at,
+    d.currency,
     tx.account_id AS open_account_id,
     acc.name AS open_account_name
 FROM debts d
@@ -685,6 +703,7 @@ type ListDebtsByDebtorRow struct {
 	IsSettled       int64   `json:"is_settled"`
 	SettledAt       *string `json:"settled_at"`
 	CreatedAt       string  `json:"created_at"`
+	Currency        string  `json:"currency"`
 	OpenAccountID   *string `json:"open_account_id"`
 	OpenAccountName *string `json:"open_account_name"`
 }
@@ -713,6 +732,7 @@ func (q *Queries) ListDebtsByDebtor(ctx context.Context, arg ListDebtsByDebtorPa
 			&i.IsSettled,
 			&i.SettledAt,
 			&i.CreatedAt,
+			&i.Currency,
 			&i.OpenAccountID,
 			&i.OpenAccountName,
 		); err != nil {
@@ -745,6 +765,7 @@ SELECT
     d.is_settled,
     d.settled_at,
     d.created_at,
+    d.currency,
     tx.account_id AS open_account_id,
     acc.name AS open_account_name
 FROM debts d
@@ -771,6 +792,7 @@ type ListSettledDebtsByUserRow struct {
 	IsSettled       int64   `json:"is_settled"`
 	SettledAt       *string `json:"settled_at"`
 	CreatedAt       string  `json:"created_at"`
+	Currency        string  `json:"currency"`
 	OpenAccountID   *string `json:"open_account_id"`
 	OpenAccountName *string `json:"open_account_name"`
 }
@@ -799,6 +821,7 @@ func (q *Queries) ListSettledDebtsByUser(ctx context.Context, userID string) ([]
 			&i.IsSettled,
 			&i.SettledAt,
 			&i.CreatedAt,
+			&i.Currency,
 			&i.OpenAccountID,
 			&i.OpenAccountName,
 		); err != nil {

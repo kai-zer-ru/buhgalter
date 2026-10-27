@@ -10,7 +10,7 @@
 	import SectionHeader from '$lib/components/SectionHeader.svelte';
 	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
 	import { toast } from '$lib/toast';
-	import { user } from '$lib/stores/auth';
+	import { currencySymbol } from '$lib/finance';
 
 	let accounts = $state<Account[]>([]);
 	let filter = $state<'active' | 'archived' | 'deleted'>('active');
@@ -94,7 +94,12 @@
 					<a href={resolve(`/accounts/${acc.id}`)} class="flex min-w-0 flex-1 items-center gap-4">
 						<AccountIcon type={acc.type} bankIcon={acc.bank_icon} size={48} />
 						<div class="min-w-0 flex-1">
-							<div class="truncate font-medium">{acc.name}</div>
+							<div class="truncate font-medium">
+								{acc.name}
+								{#if acc.currency}
+									<span class="font-normal"> {currencySymbol(acc.currency)}</span>
+								{/if}
+							</div>
 							<div class="text-sm" style:color="var(--text-muted)">
 								{#if acc.type === 'bank' && acc.bank_name}
 									{acc.bank_name}
@@ -121,11 +126,7 @@
 						</button>
 					{/if}
 					<div class="shrink-0 text-right font-semibold tabular-nums">
-						<MoneyDisplay
-							value={acc.balance_display}
-							currency={$user?.currency ?? 'RUB'}
-							class=""
-						/>
+						<MoneyDisplay value={acc.balance_display} currency={acc.currency} class="" />
 					</div>
 				</div>
 			{/each}

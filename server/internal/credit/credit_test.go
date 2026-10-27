@@ -91,6 +91,40 @@ func TestPayNextScheduledAlternateAccount(t *testing.T) {
 	}
 }
 
+func TestPayNextScheduledRejectsForeignCurrency(t *testing.T) {
+	ctx, handle, userID, accountID := seedCreditEnv(t)
+	sqlDB := handle.DB()
+	usdID := "acc-usd-pay"
+	if _, err := sqlDB.ExecContext(ctx, `
+		INSERT INTO accounts (id, user_id, name, type, initial_balance, status, currency, created_at, updated_at)
+		VALUES (?, ?, 'USD', 'cash', 0, 'active', 'USD', datetime('now'), datetime('now'))`,
+		usdID, userID); err != nil {
+		t.Fatal(err)
+	}
+
+	issue := timeutil.NowUTC().AddDate(0, 1, 0)
+	c, err := Create(ctx, sqlDB, userID, CreateInput{
+		PrincipalAmount: 60_000,
+		IssueDate:       issue,
+		TermMonths:      6,
+		PaymentInterval: IntervalMonth,
+		DebitAccountID:  accountID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = PayNextScheduled(ctx, sqlDB, userID, c.ID, PayPaymentInput{
+		Amount: c.MonthlyPayment, PaymentDate: timeutil.NowUTC(), AccountID: usdID,
+	})
+	if !errors.Is(err, ErrCurrencyMismatch) {
+		t.Fatalf("err %v, want ErrCurrencyMismatch", err)
+	}
+	var n int
+	if err := sqlDB.QueryRowContext(ctx, `SELECT COUNT(*) FROM credit_payments WHERE credit_id = ? AND is_applied = 1`, c.ID).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("applied payments %d err %v", n, err)
+	}
+}
+
 func TestCreateListGetCredit(t *testing.T) {
 	ctx, handle, userID, accountID := seedCreditEnv(t)
 	sqlDB := handle.DB()

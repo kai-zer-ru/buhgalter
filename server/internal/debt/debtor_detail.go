@@ -28,8 +28,15 @@ type DebtorDetail struct {
 	Debtor
 	IOwe         int64             `json:"i_owe"`
 	OwedToMe     int64             `json:"owed_to_me"`
+	ByCurrency   []DebtorCurrency  `json:"by_currency"`
 	Debts        []Debt            `json:"debts"`
 	Transactions []DebtTransaction `json:"transactions"`
+}
+
+type DebtorCurrency struct {
+	IOwe     int64  `json:"i_owe"`
+	OwedToMe int64  `json:"owed_to_me"`
+	Currency string `json:"currency"`
 }
 
 func GetDebtorDetail(ctx context.Context, db *sql.DB, userID, debtorID string) (DebtorDetail, error) {
@@ -51,7 +58,8 @@ func GetDebtorDetail(ctx context.Context, db *sql.DB, userID, debtorID string) (
 	}
 
 	debts := make([]Debt, 0, len(rows))
-	var iOwe, owedToMe int64
+	type pair struct{ iOwe, owed int64 }
+	by := map[string]pair{}
 	for _, row := range rows {
 		d, err := debtFromFields(debtRowFromDebtorList(row), tz, now)
 		if err != nil {
@@ -59,12 +67,34 @@ func GetDebtorDetail(ctx context.Context, db *sql.DB, userID, debtorID string) (
 		}
 		debts = append(debts, d)
 		if !d.IsSettled {
+			cur := money.ProfileOrDefault(d.Currency)
+			p := by[cur]
 			switch d.Direction {
 			case "borrowed":
-				iOwe += d.Amount
+				p.iOwe += d.Amount
 			case "lent":
-				owedToMe += d.Amount
+				p.owed += d.Amount
 			}
+			by[cur] = p
+		}
+	}
+	profile, err := queries(db).GetUserFormatting(ctx, userID)
+	if err != nil {
+		return DebtorDetail{}, err
+	}
+	profileCur := money.ProfileOrDefault(profile.Currency)
+	codes := make([]string, 0, len(by))
+	for c := range by {
+		codes = append(codes, c)
+	}
+	order := money.OrderPresentWithProfileFirst(profileCur, codes)
+	byCurrency := make([]DebtorCurrency, 0, len(order))
+	var iOwe, owedToMe int64
+	for _, c := range order {
+		p := by[c]
+		byCurrency = append(byCurrency, DebtorCurrency{IOwe: p.iOwe, OwedToMe: p.owed, Currency: c})
+		if c == profileCur {
+			iOwe, owedToMe = p.iOwe, p.owed
 		}
 	}
 
@@ -89,6 +119,7 @@ func GetDebtorDetail(ctx context.Context, db *sql.DB, userID, debtorID string) (
 		Debtor:       debtor,
 		IOwe:         iOwe,
 		OwedToMe:     owedToMe,
+		ByCurrency:   byCurrency,
 		Debts:        debts,
 		Transactions: txs,
 	}, nil
@@ -145,5 +176,6 @@ func debtRowFromDebtorList(r sqlcdb.ListDebtsByDebtorRow) debtRowFields {
 		description: r.Description, transactionID: r.TransactionID, isSettled: r.IsSettled,
 		settledAt: r.SettledAt, createdAt: r.CreatedAt,
 		accountID: r.OpenAccountID, accountName: r.OpenAccountName,
+		currency: r.Currency,
 	}
 }

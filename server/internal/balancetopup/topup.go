@@ -16,12 +16,13 @@ import (
 const Description = "Автопополнение"
 
 type accountSnap struct {
-	id      string
-	name    string
-	accType string
-	status  string
-	balance int64
-	enabled bool
+	id       string
+	name     string
+	accType  string
+	status   string
+	balance  int64
+	currency string
+	enabled  bool
 	threshold,
 	target *int64
 	sourceID *string
@@ -167,6 +168,7 @@ func loadAccount(ctx context.Context, db *sql.DB, userID, accountID string) (acc
 		accType:   row.Type,
 		status:    row.Status,
 		balance:   row.CurrentBalance,
+		currency:  row.Currency,
 		enabled:   row.AutoTopupEnabled != 0,
 		threshold: row.AutoTopupThreshold,
 		target:    row.AutoTopupTarget,
@@ -197,9 +199,13 @@ func notifyAutoTopupDisabled(ctx context.Context, db *sql.DB, userID string, ben
 	if err != nil || settings.TriggerAutoTopupDisabled != 1 {
 		return
 	}
-	localeCode, _, currencyCode, err := notify.UserFormatting(ctx, db, userID)
+	localeCode, _, _, err := notify.UserFormatting(ctx, db, userID)
 	if err != nil {
 		return
+	}
+	currencyCode := beneficiary.currency
+	if currencyCode == "" {
+		currencyCode = source.currency
 	}
 	externalURL := notify.ResolveExternalURL(ctx, db)
 	customTemplates, err := q.ListNotificationTemplates(ctx, userID)

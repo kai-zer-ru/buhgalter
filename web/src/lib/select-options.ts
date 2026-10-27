@@ -15,20 +15,21 @@ export type SelectOption = {
 export function accountFromUIMetaRef(
 	acc: UIMetaAccountRef,
 	banks: readonly Bank[]
-): Pick<Account, 'id' | 'name' | 'type' | 'bank_id' | 'bank_icon'> {
+): Pick<Account, 'id' | 'name' | 'type' | 'bank_id' | 'bank_icon' | 'currency'> {
 	return {
 		id: acc.id,
 		name: acc.name,
 		type: acc.type,
 		bank_id: acc.bank_id ?? null,
-		bank_icon: acc.bank_id ? (banks.find((b) => b.id === acc.bank_id)?.icon_path ?? null) : null
+		bank_icon: acc.bank_id ? (banks.find((b) => b.id === acc.bank_id)?.icon_path ?? null) : null,
+		currency: acc.currency
 	};
 }
 
 export function accountsFromUIMeta(
 	refs: readonly UIMetaAccountRef[],
 	banks: readonly Bank[]
-): Pick<Account, 'id' | 'name' | 'type' | 'bank_id' | 'bank_icon'>[] {
+): Pick<Account, 'id' | 'name' | 'type' | 'bank_id' | 'bank_icon' | 'currency'>[] {
 	return refs.map((acc) => accountFromUIMetaRef(acc, banks));
 }
 

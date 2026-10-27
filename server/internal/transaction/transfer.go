@@ -20,6 +20,7 @@ type TransferInput struct {
 	FromAccountID   string
 	ToAccountID     string
 	Amount          int64
+	ToAmount        int64 // credited amount in the target currency; 0 = not passed
 	Commission      int64
 	Description     *string
 	TransactionDate time.Time
@@ -32,6 +33,11 @@ type Transfer struct {
 	ToAccountID       string        `json:"to_account_id"`
 	Amount            int64         `json:"amount"`
 	AmountDisplay     string        `json:"amount_display"`
+	ToAmount          int64         `json:"to_amount"`
+	ToAmountDisplay   string        `json:"to_amount_display"`
+	FromCurrency      string        `json:"from_currency"`
+	ToCurrency        string        `json:"to_currency"`
+	Rate              string        `json:"rate"`
 	Commission        int64         `json:"commission"`
 	CommissionDisplay string        `json:"commission_display"`
 	Description       *string       `json:"description"`
@@ -47,7 +53,7 @@ func CreateTransfer(ctx context.Context, db *sql.DB, userID string, in TransferI
 	if in.Amount <= 0 {
 		return Transfer{}, ErrInvalidAmount
 	}
-	if in.Commission < 0 {
+	if in.Commission < 0 || in.ToAmount < 0 {
 		return Transfer{}, ErrInvalidAmount
 	}
 
@@ -92,7 +98,11 @@ func CreateTransfer(ctx context.Context, db *sql.DB, userID string, in TransferI
 	if err := validateAccountForTransfer(ctx, tx, userID, in.ToAccountID, true); err != nil {
 		return Transfer{}, err
 	}
-	if err := validateCreditCardTransferAmount(ctx, tx, userID, in.ToAccountID, in.Amount); err != nil {
+	toAmount, err := resolveTransferToAmount(ctx, tx, userID, in)
+	if err != nil {
+		return Transfer{}, err
+	}
+	if err := validateCreditCardTransferAmount(ctx, tx, userID, in.ToAccountID, toAmount); err != nil {
 		return Transfer{}, err
 	}
 	fromType, toType, err := accountTypes(ctx, tx, userID, in.FromAccountID, in.ToAccountID)
@@ -114,7 +124,7 @@ func CreateTransfer(ctx context.Context, db *sql.DB, userID string, in TransferI
 	}
 	if err := q.InsertTransaction(ctx, sqlcdb.InsertTransactionParams{
 		ID: inID, UserID: userID, AccountID: in.ToAccountID,
-		Type: "transfer", Kind: kind, Amount: in.Amount, Description: in.Description,
+		Type: "transfer", Kind: kind, Amount: toAmount, Description: in.Description,
 		CategoryID: &catID, SubcategoryID: nil,
 		TransferGroupID: &groupID, TransferAccountID: &in.FromAccountID,
 		StoreID: nil, ReceiptImportID: nil, ReceiptItemIndex: nil,
@@ -177,7 +187,15 @@ func CreateTransferForAccountDeleteTx(ctx context.Context, db sqlcdb.DBTX, userI
 	if err := validateAccountForTransfer(ctx, db, userID, in.ToAccountID, true); err != nil {
 		return Transfer{}, err
 	}
-	if err := validateCreditCardTransferAmount(ctx, db, userID, in.ToAccountID, in.Amount); err != nil {
+	fromCur, toCur, err := transferCurrencies(ctx, db, userID, in.FromAccountID, in.ToAccountID)
+	if err != nil {
+		return Transfer{}, err
+	}
+	if fromCur != toCur {
+		return Transfer{}, ErrCurrencyMismatch
+	}
+	toAmount := in.Amount
+	if err := validateCreditCardTransferAmount(ctx, db, userID, in.ToAccountID, toAmount); err != nil {
 		return Transfer{}, err
 	}
 
@@ -225,7 +243,7 @@ func CreateTransferForAccountDeleteTx(ctx context.Context, db sqlcdb.DBTX, userI
 	}
 	if err := q.InsertTransaction(ctx, sqlcdb.InsertTransactionParams{
 		ID: inID, UserID: userID, AccountID: in.ToAccountID,
-		Type: "transfer", Kind: kind, Amount: in.Amount, Description: in.Description,
+		Type: "transfer", Kind: kind, Amount: toAmount, Description: in.Description,
 		CategoryID: &catID, SubcategoryID: nil,
 		TransferGroupID: &groupID, TransferAccountID: &in.FromAccountID,
 		StoreID: nil, ReceiptImportID: nil, ReceiptItemIndex: nil,
@@ -246,7 +264,7 @@ func UpdateTransfer(ctx context.Context, db *sql.DB, userID, groupID string, in 
 	if in.Amount <= 0 {
 		return Transfer{}, ErrInvalidAmount
 	}
-	if in.Commission < 0 {
+	if in.Commission < 0 || in.ToAmount < 0 {
 		return Transfer{}, ErrInvalidAmount
 	}
 
@@ -289,7 +307,11 @@ func UpdateTransfer(ctx context.Context, db *sql.DB, userID, groupID string, in 
 	if err := validateAccountForTransfer(ctx, dbTx, userID, in.ToAccountID, true); err != nil {
 		return Transfer{}, err
 	}
-	if err := validateCreditCardTransferAmount(ctx, dbTx, userID, in.ToAccountID, in.Amount); err != nil {
+	toAmount, err := resolveTransferToAmount(ctx, dbTx, userID, in)
+	if err != nil {
+		return Transfer{}, err
+	}
+	if err := validateCreditCardTransferAmount(ctx, dbTx, userID, in.ToAccountID, toAmount); err != nil {
 		return Transfer{}, err
 	}
 
@@ -300,6 +322,7 @@ func UpdateTransfer(ctx context.Context, db *sql.DB, userID, groupID string, in 
 		var accountID string
 		var transferAccountID string
 		var legCreated string
+		legAmount := in.Amount
 		if i == 0 {
 			accountID = in.FromAccountID
 			transferAccountID = in.ToAccountID
@@ -308,9 +331,10 @@ func UpdateTransfer(ctx context.Context, db *sql.DB, userID, groupID string, in 
 			accountID = in.ToAccountID
 			transferAccountID = in.FromAccountID
 			legCreated = inCreated
+			legAmount = toAmount
 		}
 		if err := q.UpdateTransferLeg(ctx, sqlcdb.UpdateTransferLegParams{
-			AccountID: accountID, Amount: in.Amount, Description: in.Description,
+			AccountID: accountID, Amount: legAmount, Description: in.Description,
 			TransactionDate: txDate, Kind: kind, UpdatedAt: now,
 			ID: leg.ID, UserID: userID,
 		}); err != nil {
@@ -413,6 +437,13 @@ func GetTransfer(ctx context.Context, db *sql.DB, userID, groupID string) (Trans
 	}
 
 	first := transferLegs[0]
+	fromCurrency := legCurrency(first)
+	toAmount := first.Amount
+	toCurrency := fromCurrency
+	if len(transferLegs) > 1 {
+		toAmount = transferLegs[1].Amount
+		toCurrency = legCurrency(transferLegs[1])
+	}
 	var commission int64
 	if commissionLeg != nil {
 		commission = commissionLeg.Amount
@@ -423,6 +454,11 @@ func GetTransfer(ctx context.Context, db *sql.DB, userID, groupID string) (Trans
 		ToAccountID:       toID,
 		Amount:            first.Amount,
 		AmountDisplay:     money.FormatRubles(first.Amount),
+		ToAmount:          toAmount,
+		ToAmountDisplay:   money.FormatRubles(toAmount),
+		FromCurrency:      fromCurrency,
+		ToCurrency:        toCurrency,
+		Rate:              money.Rate(first.Amount, toAmount),
 		Commission:        commission,
 		CommissionDisplay: money.FormatRubles(commission),
 		Description:       first.Description,
@@ -554,6 +590,55 @@ func accountTypes(ctx context.Context, db sqlcdb.DBTX, userID, fromID, toID stri
 		return "", "", err
 	}
 	return fromRow.Type, toRow.Type, nil
+}
+
+func legCurrency(row sqlcdb.ListTransactionsByTransferGroupRow) string {
+	if row.AccountCurrency != nil {
+		return *row.AccountCurrency
+	}
+	return ""
+}
+
+// transferCurrencies returns the currencies of the source and target accounts.
+func transferCurrencies(ctx context.Context, db sqlcdb.DBTX, userID, fromID, toID string) (string, string, error) {
+	fromRow, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: fromID, UserID: userID})
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", "", ErrInvalidAccount
+	}
+	if err != nil {
+		return "", "", err
+	}
+	toRow, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: toID, UserID: userID})
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", "", ErrInvalidAccount
+	}
+	if err != nil {
+		return "", "", err
+	}
+	return fromRow.Currency, toRow.Currency, nil
+}
+
+// resolveTransferToAmount applies the currency rule: same currency credits amount
+// (to_amount absent or equal), different currencies require an explicit to_amount.
+func resolveTransferToAmount(ctx context.Context, db sqlcdb.DBTX, userID string, in TransferInput) (int64, error) {
+	fromCur, toCur, err := transferCurrencies(ctx, db, userID, in.FromAccountID, in.ToAccountID)
+	if err != nil {
+		return 0, err
+	}
+	return transferToAmount(fromCur, toCur, in.Amount, in.ToAmount)
+}
+
+func transferToAmount(fromCur, toCur string, amount, toAmount int64) (int64, error) {
+	if fromCur == toCur {
+		if toAmount != 0 && toAmount != amount {
+			return 0, ErrTransferToAmountMismatch
+		}
+		return amount, nil
+	}
+	if toAmount <= 0 {
+		return 0, ErrTransferToAmountRequired
+	}
+	return toAmount, nil
 }
 
 func transferCommissionDescription(fromType, toType string) *string {

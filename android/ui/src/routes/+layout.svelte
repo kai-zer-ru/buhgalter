@@ -18,6 +18,7 @@
 	} from '$lib/stores/auth';
 	import { isPublicAppRoute, sessionExpiredTick } from '$lib/auth/session-expired';
 	import { invalidateApiCache } from '$lib/api/cache';
+	import { listCurrencies } from '$lib/api/client';
 	import { initTheme, syncThemeFromUser } from '$lib/stores/theme';
 	import { initUiStyle } from '$lib/ui-style';
 	import { setLocale } from '$lib/i18n';
@@ -165,6 +166,7 @@
 		await refreshAppLockConfig();
 		lockSession();
 		scheduleBackgroundSessionRefresh(profile);
+		void listCurrencies().catch(() => {});
 		return true;
 	}
 
@@ -236,6 +238,7 @@
 				return;
 			}
 			lockSession();
+			void listCurrencies().catch(() => {});
 		}
 
 		ready = true;

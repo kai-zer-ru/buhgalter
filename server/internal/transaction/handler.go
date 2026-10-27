@@ -45,6 +45,7 @@ type transferRequest struct {
 	FromAccountID   string  `json:"from_account_id"`
 	ToAccountID     string  `json:"to_account_id"`
 	Amount          string  `json:"amount"`
+	ToAmount        *string `json:"to_amount,omitempty"`
 	Commission      *string `json:"commission,omitempty"`
 	Description     *string `json:"description"`
 	TransactionDate string  `json:"transaction_date"`
@@ -434,6 +435,13 @@ func parseTransferInput(req transferRequest) (TransferInput, error) {
 			return TransferInput{}, errors.New("некорректная комиссия")
 		}
 	}
+	var toAmount int64
+	if req.ToAmount != nil && strings.TrimSpace(*req.ToAmount) != "" {
+		toAmount, err = money.ParseRubles(*req.ToAmount)
+		if err != nil || toAmount <= 0 {
+			return TransferInput{}, errors.New("некорректная сумма зачисления")
+		}
+	}
 	txDate, err := timeutil.ParseUTC(req.TransactionDate)
 	if err != nil {
 		return TransferInput{}, errors.New("некорректная дата операции")
@@ -442,6 +450,7 @@ func parseTransferInput(req transferRequest) (TransferInput, error) {
 		FromAccountID:   req.FromAccountID,
 		ToAccountID:     req.ToAccountID,
 		Amount:          amount,
+		ToAmount:        toAmount,
 		Commission:      commission,
 		Description:     req.Description,
 		TransactionDate: txDate,
@@ -489,6 +498,12 @@ func writeTxError(w http.ResponseWriter, r *http.Request, err error) bool {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_CARD_PAYMENT_EXCEEDS_LIMIT")
 	case errors.Is(err, ErrUseTransfersEndpoint):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_USE_TRANSFERS_ENDPOINT")
+	case errors.Is(err, ErrTransferToAmountRequired):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_TRANSFER_TO_AMOUNT_REQUIRED")
+	case errors.Is(err, ErrTransferToAmountMismatch):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_TRANSFER_TO_AMOUNT_MISMATCH")
+	case errors.Is(err, ErrCurrencyMismatch):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CURRENCY_MISMATCH")
 	case errors.Is(err, ErrCommissionLinked):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_COMMISSION_LINKED")
 	default:

@@ -4,6 +4,7 @@ SELECT
     CAST(COALESCE(SUM(CASE WHEN t.type = 'expense' THEN t.amount ELSE 0 END), 0) AS INTEGER) AS expense_total,
     COUNT(*) AS transaction_count
 FROM transactions t
+JOIN accounts a ON a.id = t.account_id AND a.currency = ?
 WHERE t.user_id = ?
   AND t.type IN ('income', 'expense')
   AND (? = '' OR t.account_id = ?)
@@ -51,6 +52,7 @@ SELECT
     ), 0) AS INTEGER) AS expense_total,
     COUNT(*) AS transaction_count
 FROM transactions t
+JOIN accounts a ON a.id = t.account_id AND a.currency = ?
 WHERE t.user_id = ?
   AND t.account_id = ?
   AND t.type IN ('income', 'expense', 'transfer')
@@ -78,6 +80,7 @@ SELECT
     CAST(COALESCE(SUM(t.amount), 0) AS INTEGER) AS total,
     COUNT(*) AS tx_count
 FROM transactions t
+JOIN accounts a ON a.id = t.account_id AND a.currency = ?
 JOIN categories c ON c.id = t.category_id
 WHERE t.user_id = ?
   AND t.type IN ('income', 'expense')
@@ -106,6 +109,7 @@ SELECT
     CAST(COALESCE(SUM(t.amount), 0) AS INTEGER) AS total,
     COUNT(*) AS tx_count
 FROM transactions t
+JOIN accounts a ON a.id = t.account_id AND a.currency = ?
 JOIN merchants m ON m.id = t.merchant_id AND m.user_id = t.user_id
 WHERE t.user_id = ?
   AND t.type = 'expense'
@@ -136,6 +140,7 @@ SELECT
     CAST(COALESCE(SUM(t.amount), 0) AS INTEGER) AS total,
     COUNT(*) AS tx_count
 FROM transactions t
+JOIN accounts a ON a.id = t.account_id AND a.currency = ?
 JOIN categories c ON c.id = t.category_id
 JOIN subcategories s ON s.id = t.subcategory_id
 WHERE t.user_id = ?
@@ -179,6 +184,7 @@ SELECT
     ), 0) AS INTEGER) AS total,
     COUNT(*) AS tx_count
 FROM transactions t
+JOIN accounts a ON a.id = t.account_id AND a.currency = ?
 JOIN receipt_imports ri ON ri.id = t.receipt_import_id AND ri.user_id = t.user_id
 JOIN receipt_import_item_categories ric ON ric.receipt_import_id = t.receipt_import_id AND ric.user_id = t.user_id
 JOIN categories c ON c.id = ric.category_id
@@ -213,6 +219,7 @@ SELECT
     t.type,
     t.amount
 FROM transactions t
+JOIN accounts a ON a.id = t.account_id AND a.currency = ?
 WHERE t.user_id = ?
   AND t.type IN ('income', 'expense')
   AND (? = '' OR t.account_id = ?)
@@ -241,7 +248,7 @@ SELECT
     COUNT(DISTINCT t.id) AS transaction_count
 FROM transactions t
 JOIN debt_transactions dtx ON dtx.transaction_id = t.id
-JOIN debts d ON d.id = dtx.debt_id
+JOIN debts d ON d.id = dtx.debt_id AND d.currency = ?
 WHERE t.user_id = ?
   AND d.user_id = ?
   AND d.debtor_id = ?
@@ -258,6 +265,7 @@ SELECT
 FROM transactions t
 JOIN credit_payments cp ON cp.transaction_id = t.id
 JOIN credits c ON c.id = cp.credit_id
+JOIN accounts a ON a.id = c.debit_account_id AND a.currency = ?
 WHERE t.user_id = ?
   AND c.user_id = ?
   AND c.id = ?
@@ -273,6 +281,7 @@ SELECT
     COUNT(*) AS payment_count
 FROM credit_payments cp
 JOIN credits c ON c.id = cp.credit_id
+JOIN accounts a ON a.id = c.debit_account_id AND a.currency = ?
 WHERE c.user_id = ?
   AND c.id = ?
   AND cp.transaction_id IS NOT NULL
@@ -284,8 +293,9 @@ WHERE c.user_id = ?
 SELECT
     principal_amount,
     paid_amount
-FROM credits
-WHERE id = ? AND user_id = ?;
+FROM credits c
+JOIN accounts a ON a.id = c.debit_account_id AND a.currency = ?
+WHERE c.id = ? AND c.user_id = ?;
 
 -- name: StatsContextDebts :one
 SELECT
@@ -294,7 +304,7 @@ SELECT
     COUNT(DISTINCT t.id) AS transaction_count
 FROM transactions t
 JOIN debt_transactions dtx ON dtx.transaction_id = t.id
-JOIN debts d ON d.id = dtx.debt_id
+JOIN debts d ON d.id = dtx.debt_id AND d.currency = ?
 WHERE t.user_id = ?
   AND d.user_id = ?
   AND t.type IN ('income', 'expense')

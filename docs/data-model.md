@@ -30,6 +30,7 @@ erDiagram
         TEXT login UK
         TEXT language
         TEXT timezone
+        TEXT currency
         TEXT theme "light|dark|system"
         INTEGER is_admin
         TEXT status
@@ -56,6 +57,7 @@ erDiagram
 
     accounts {
         TEXT type "cash|bank|credit_card"
+        TEXT currency
         TEXT status "active|archived|deleted"
         INTEGER is_primary
         INTEGER initial_balance
@@ -323,8 +325,9 @@ erDiagram
 
 - Пара перевода: `transfer_group_id`, исходящая нога — первая по `created_at`.
 - Создание перевода — в одной транзакции БД (`BeginTx` + откат при ошибке второй ноги).
-- **Комиссия (v1.1 / v1.4.1):** опциональное поле `commission` при создании/изменении перевода; отдельная нога `expense` на счёте-источнике в системной категории «Комиссия». В списках нога скрыта; сумма агрегируется в `commission` / `commission_display` на ногах перевода. Самостоятельные UPDATE/DELETE ноги комиссии — `ERR_COMMISSION_LINKED`.
-- В API-ответах: `transfer_account_name`, `transfer_is_out`, `commission`, `commission_display` (вычисляемые/агрегированные поля).
+- **Комиссия (v1.1 / v1.4.1):** опциональное поле `commission` при создании/изменении перевода; отдельная нога `expense` на счёте-источнике в системной категории «Комиссия» и в валюте этого счёта. В списках нога скрыта; сумма агрегируется в `commission` / `commission_display` на ногах перевода. Самостоятельные UPDATE/DELETE ноги комиссии — `ERR_COMMISSION_LINKED`.
+- **Обмен (v1.11):** разные валюты счетов — обязателен `to_amount` (нога зачисления); одинаковые — `to_amount` отсутствует или равен `amount`. Курс в ответе не хранится, считается из двух сумм. См. [multicurrency.md](../roadmap/multicurrency.md).
+- В API-ответах: `transfer_account_name`, `transfer_is_out`, `commission`, `commission_display`, `to_amount`, `from_currency`, `to_currency`, `rate` (вычисляемые/агрегированные поля).
 - UI: [transactions-display.md](transactions-display.md).
 - **Чеки (54-ФЗ):** `store_id` (точка чека), `merchant_id` (каталог магазинов), `receipt_import_id`, `receipt_item_index`; см. [receipt-scanner.md](receipt-scanner.md).
 
@@ -341,6 +344,7 @@ erDiagram
 
 - **Один должник — одно направление:** у человека не может быть одновременно активных (`is_settled=0`) долгов `lent` и `borrowed` → **409 Conflict**.
 - `debts.transaction_id` — ссылка на начальную (`open`) операцию; полный список — в `debt_transactions`.
+- `debts.currency` — валюта долга (со счёта открытия, иначе профиль). Погашение только на счёт той же валюты (`ERR_CURRENCY_MISMATCH`).
 - `POST /debts/{id}/settle`: `affects_balance` и `account_id` в теле запроса **не зависят** от флага долга при создании. При `affects_balance=true` — обратная операция на указанном счёте; при `false` — долг закрывается (или уменьшается) без операции по счёту.
 - `DELETE /debts/{id}` — каскадно снимает связи и удаляет привязанные `transactions`.
 - `DELETE /transactions/{id}` для начальной (`open`) операции — удаляет долг, если это единственная связанная операция; иначе **409 Conflict**.
@@ -382,10 +386,11 @@ erDiagram
 | Поле | Описание |
 |------|----------|
 | `accounts.type` | `cash`, `bank`, `credit_card` |
-| `accounts.initial_balance` | начальный остаток, копейки; фиксируется при создании и при явном изменении в форме редактирования |
+| `accounts.currency` | код из allowlist (`GET /currencies`); при создании без поля — валюта профиля; смена при операциях/связях — `ERR_ACCOUNT_CURRENCY_LOCKED` |
+| `accounts.initial_balance` | начальный остаток, копейки в валюте счёта; фиксируется при создании и при явном изменении в форме редактирования |
 | `accounts.current_balance` | текущий баланс, копейки; денормализация, пересчитывается пакетом `accountbalance` |
 | `accounts.credit_limit` | лимит кредитной карты, копейки; только для `credit_card`; смена после создания — только `PUT /accounts/{id}/credit-limit` (с корректировкой `initial_balance`, см. [ui-credit-cards.md](ui-credit-cards.md)) |
-| `accounts.payment_account_id` | счёт по умолчанию для переводов на карту (опционально) |
+| `accounts.payment_account_id` | счёт по умолчанию для переводов на карту (опционально); та же валюта, иначе `ERR_CURRENCY_MISMATCH` |
 | `accounts.auto_topup_*` | автопополнение bank-счёта — см. [balance-maintenance.md](balance-maintenance.md) |
 | `accounts.status` | `active`, `archived`, `deleted` |
 | `accounts.is_primary` | `1` — основной счёт среди активных `cash`/`bank`; не более одного на пользователя; **кредитная карта основным быть не может** |
@@ -412,12 +417,13 @@ erDiagram
 
 | Таблица | Назначение |
 |---------|------------|
-| `budgets` | Лимит на месяц (`month`): scope, сумма, `copy_forward`, порог уведомления, `is_active` |
+| `budgets` | Лимит на месяц (`month`): scope, сумма, `currency`, `copy_forward`, порог уведомления, `is_active` |
 | `budget_periods` | Снимок на месяц: `planned_amount`, `rollover_amount` (rollover — post-MVP) |
 | `budget_alert_sent` | Дедупликация уведомлений `budget_threshold` |
 
 - Факт (`spent`) не денормализуется — запрос к `transactions` с теми же предикатами, что `StatsByCategory`.
-- Уникальность: один активный бюджет на `(user_id, scope, category_id, subcategory_id, month)` — без `account_id` (см. `039_budget_scope_unique.sql`).
+- Уникальность: один активный бюджет на `(user_id, scope, category_id, subcategory_id, month, currency)` — без `account_id` (`064_budget_unique_currency.sql`).
+- `spent` считает операции счетов с `accounts.currency = budgets.currency`. Смена `currency` через update запрещена.
 - Период создаётся при сохранении бюджета и когда проход 1-го числа создаёт следующий месяц. Если записи ещё нет, `GET summary` создаёт её при чтении.
 
 Подробнее: [budget.md](budget.md).
@@ -430,7 +436,7 @@ erDiagram
 
 | Поле | Тип в БД | Примечание |
 |------|----------|------------|
-| Суммы | `INTEGER` | копейки (минорные единицы) |
+| Суммы | `INTEGER` | минорные единицы (копейки) в валюте сущности; разные валюты не складывать |
 | Даты/время | `TEXT` | UTC, `YYYY-MM-DD HH:MM:SS` в API |
 
 ## Пакеты и sqlc-запросы
@@ -495,5 +501,7 @@ erDiagram
   - `042_primary_not_credit_card.sql` — кредитная карта не может быть основным счётом
   - `052_user_change_events.sql` — лента изменений операций для Android-sync
   - `056_merchant_aliases.sql` — алиасы магазина (v1.9.2). Номер занят этим релизом; чеки — `057`…`061`. Если версия 56 уже записана старой цепочкой чеков, таблицу создаёт `062_merchant_aliases_ensure.sql`
+  - `063_account_currency.sql` — `accounts.currency` / `budgets.currency` / `debts.currency`, backfill из профиля (или счёта долга)
+  - `064_budget_unique_currency.sql` — уникальность активного бюджета включает `currency`
 
 Уже применённые миграции **не переписывать** — только новые файлы в конец цепочки. После каждой миграции обновлять `server/schema.sql` и при необходимости запускать `make sqlc`.

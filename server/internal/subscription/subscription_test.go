@@ -192,6 +192,48 @@ func TestApplyDueRollsBackChargeIfMarkFails(t *testing.T) {
 	}
 }
 
+func TestSummaryByCurrencyKeepsProfileTotals(t *testing.T) {
+	mgr, userID, rubAcc := setup(t)
+	ctx := context.Background()
+	now := timeutil.FormatUTC(timeutil.NowUTC())
+	usdAcc := "acc-usd"
+	if _, err := mgr.DB().ExecContext(ctx, `
+		INSERT INTO accounts (id, user_id, name, type, initial_balance, current_balance, status, currency, created_at, updated_at)
+		VALUES (?, ?, 'USD', 'cash', 0, 0, 'active', 'USD', ?, ?)`, usdAcc, userID, now, now); err != nil {
+		t.Fatal(err)
+	}
+	day := int64(1)
+	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	if _, err := subscription.Create(ctx, mgr.DB(), userID, subscription.Input{
+		Name: "RUB sub", Amount: 10000, AccountID: rubAcc, Period: "month",
+		DayOfMonth: &day, StartDate: start, TimeLocal: "08:00", Active: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := subscription.Create(ctx, mgr.DB(), userID, subscription.Input{
+		Name: "USD sub", Amount: 2000, AccountID: usdAcc, Period: "month",
+		DayOfMonth: &day, StartDate: start, TimeLocal: "08:00", Active: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	sum, err := subscription.SummaryForUser(ctx, mgr.DB(), userID, 14)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum.MonthlyTotal != 10000 {
+		t.Fatalf("profile monthly %d want 10000", sum.MonthlyTotal)
+	}
+	if len(sum.ByCurrency) != 2 {
+		t.Fatalf("by_currency %+v", sum.ByCurrency)
+	}
+	if sum.ByCurrency[0].Currency != "RUB" || sum.ByCurrency[0].MonthlyTotal != 10000 {
+		t.Fatalf("first %+v", sum.ByCurrency[0])
+	}
+	if sum.ByCurrency[1].Currency != "USD" || sum.ByCurrency[1].MonthlyTotal != 2000 {
+		t.Fatalf("usd %+v", sum.ByCurrency[1])
+	}
+}
+
 func mustEncodeUpcoming(t *testing.T, dates []string) string {
 	t.Helper()
 	if err := subscription.ValidateUpcoming(dates); err != nil {

@@ -6,6 +6,7 @@ import { getOutboxEntries, outboxTick } from '$lib/offline/store';
 import type { OutboxEntry, TransactionPayload, TransferPayload } from '$lib/offline/types';
 import {
 	findTransferCommissionKopecks,
+	listIndexedTransferLegs,
 	lookupServerTransaction
 } from '$lib/offline/transaction-index';
 
@@ -83,16 +84,17 @@ export function effectFromTransactionPayload(
 export function effectFromTransferPayload(payload: TransferPayload, tz: string): AccountDeltas {
 	const amount = toCents(payload.amount);
 	const commission = toCents(payload.commission ?? '0');
+	const toAmount = toCents(payload.to_amount?.trim() ? payload.to_amount : payload.amount);
 	const fromTotal = amount + commission;
 	const future = isFutureApiDatetime(payload.transaction_date, tz);
 	const inMonth = isCurrentMonthApiDatetime(payload.transaction_date, tz);
 	const out = emptyDeltas();
 	if (!future) {
 		addDelta(out, payload.from_account_id, -fromTotal, -fromTotal);
-		addDelta(out, payload.to_account_id, amount, amount);
+		addDelta(out, payload.to_account_id, toAmount, toAmount);
 	} else if (inMonth) {
 		addDelta(out, payload.from_account_id, 0, -fromTotal);
-		addDelta(out, payload.to_account_id, 0, amount);
+		addDelta(out, payload.to_account_id, 0, toAmount);
 	}
 	return out;
 }
@@ -103,15 +105,21 @@ export function effectFromServerTransaction(tx: Transaction, tz: string): Accoun
 		const commission = tx.transfer_group_id
 			? findTransferCommissionKopecks(tx.transfer_group_id)
 			: 0;
+		const inLeg = tx.transfer_group_id
+			? listIndexedTransferLegs(tx.transfer_group_id).find(
+					(leg) => leg.account_id === tx.transfer_account_id && leg.type === 'transfer'
+				)
+			: undefined;
+		const toAmount = inLeg?.amount ?? tx.amount;
 		const isManual = tx.kind !== 'future';
 		const inMonth = isCurrentMonthApiDatetime(tx.transaction_date, tz);
 		const out = emptyDeltas();
 		if (isManual) {
 			addDelta(out, tx.account_id, -(tx.amount + commission), -(tx.amount + commission));
-			addDelta(out, tx.transfer_account_id, tx.amount, tx.amount);
+			addDelta(out, tx.transfer_account_id, toAmount, toAmount);
 		} else if (inMonth) {
 			addDelta(out, tx.account_id, 0, -(tx.amount + commission));
-			addDelta(out, tx.transfer_account_id, 0, tx.amount);
+			addDelta(out, tx.transfer_account_id, 0, toAmount);
 		}
 		return out;
 	}

@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { setCurrencyCatalog } from '$lib/finance';
 import type {
 	Credit,
 	Dashboard,
@@ -8,6 +9,10 @@ import type {
 	Transaction
 } from '$lib/api/client';
 import { buildUpcomingItems, buildWidgetSnapshot } from './snapshot';
+
+beforeEach(() => {
+	setCurrencyCatalog([{ code: 'RUB', symbol: '₽' }]);
+});
 
 const dash = (partial: Partial<Dashboard> = {}): Dashboard => ({
 	total_balance: 10050,
@@ -175,5 +180,51 @@ describe('buildWidgetSnapshot', () => {
 		expect(snap.bank_display).toBe('40 992.53 ₽');
 		expect(snap.credit_funds_display).toBe('10 014.00 ₽');
 		expect(snap.budget?.spent_display).toBe('40.00 ₽');
+		expect(snap.other_currencies_display).toBeNull();
+	});
+
+	it('sums only the profile currency and flags other currencies', () => {
+		const snap = buildWidgetSnapshot({
+			dashboard: dash({
+				total_balance: 200,
+				total_forecast: 200,
+				accounts: [
+					{
+						id: 'c1',
+						name: 'Cash RUB',
+						type: 'cash',
+						currency: 'RUB',
+						balance: 100,
+						balance_display: '1.00',
+						forecast_balance: 100,
+						forecast_display: '1.00',
+						has_future_this_month: false,
+						is_primary: true
+					},
+					{
+						id: 'c2',
+						name: 'Cash GBP',
+						type: 'cash',
+						currency: 'GBP',
+						balance: 11100000,
+						balance_display: '111000.00',
+						forecast_balance: 11100000,
+						forecast_display: '111000.00',
+						has_future_this_month: false,
+						is_primary: false
+					}
+				]
+			}),
+			budgetItems: [],
+			credits: [],
+			debts: [],
+			futureTx: [],
+			currency: 'RUB',
+			language: 'ru',
+			otherCurrenciesLabel: '+ другие валюты',
+			now: new Date('2026-07-15T12:00:00Z')
+		});
+		expect(snap.cash_display).toBe('1.00 ₽');
+		expect(snap.other_currencies_display).toBe('+ другие валюты');
 	});
 });

@@ -298,9 +298,10 @@ WHERE id = (
 );
 
 -- name: CreditPaymentsUnappliedByUser :many
-SELECT cp.id, cp.credit_id, c.name AS credit_name, c.debit_account_id, cp.amount, cp.payment_date
+SELECT cp.id, cp.credit_id, c.name AS credit_name, c.debit_account_id, cp.amount, cp.payment_date, a.currency AS account_currency
 FROM credit_payments cp
 JOIN credits c ON c.id = cp.credit_id
+JOIN accounts a ON a.id = c.debit_account_id
 WHERE cp.is_applied = 0 AND cp.kind = 'scheduled'
   AND c.status = 'active' AND c.user_id = ?;
 

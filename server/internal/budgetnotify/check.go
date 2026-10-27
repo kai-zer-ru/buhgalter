@@ -53,7 +53,7 @@ func CheckThresholdsForUser(ctx context.Context, db *sql.DB, userID string) erro
 	if err != nil {
 		return err
 	}
-	localeCode, _, currencyCode, err := notify.UserFormatting(ctx, db, userID)
+	localeCode, _, _, err := notify.UserFormatting(ctx, db, userID)
 	if err != nil {
 		return err
 	}
@@ -76,8 +76,8 @@ func CheckThresholdsForUser(ctx context.Context, db *sql.DB, userID string) erro
 			}
 			data := notify.FormatData{
 				"name":       item.Name,
-				"spent":      notify.FormatAmountDisplay(item.Spent, currencyCode),
-				"planned":    notify.FormatAmountDisplay(item.Planned, currencyCode),
+				"spent":      notify.FormatAmountDisplay(item.Spent, item.Currency),
+				"planned":    notify.FormatAmountDisplay(item.Planned, item.Currency),
 				"percent":    strconv.Itoa(item.Percent),
 				"budget_url": notify.BudgetURLPlaceholderValue(externalURL, localeCode),
 			}

@@ -1,4 +1,5 @@
 import { get } from 'svelte/store';
+import { _ } from 'svelte-i18n';
 import {
 	getBudgetSummary,
 	getDashboard,
@@ -102,7 +103,8 @@ export async function publishWidgetSnapshot(): Promise<void> {
 				subscriptions: Array.isArray(subscriptions) ? subscriptions : [],
 				recurring: Array.isArray(recurring) ? recurring : [],
 				currency: u?.currency ?? 'RUB',
-				language: u?.language ?? 'ru'
+				language: u?.language ?? 'ru',
+				otherCurrenciesLabel: get(_)('dashboard.otherCurrencies')
 			});
 			const lockEnabled = shouldHideWidgetAmounts();
 			await publishWidgetBridge({

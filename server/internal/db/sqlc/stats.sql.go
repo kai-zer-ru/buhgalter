@@ -18,6 +18,7 @@ SELECT
     CAST(COALESCE(SUM(t.amount), 0) AS INTEGER) AS total,
     COUNT(*) AS tx_count
 FROM transactions t
+JOIN accounts a ON a.id = t.account_id AND a.currency = ?
 JOIN categories c ON c.id = t.category_id
 WHERE t.user_id = ?
   AND t.type IN ('income', 'expense')
@@ -41,24 +42,25 @@ ORDER BY total DESC
 `
 
 type StatsByCategoryParams struct {
+	Currency          string      `json:"currency"`
 	UserID            string      `json:"user_id"`
-	Column2           interface{} `json:"column_2"`
+	Column3           interface{} `json:"column_3"`
 	AccountID         string      `json:"account_id"`
-	Column4           interface{} `json:"column_4"`
+	Column5           interface{} `json:"column_5"`
 	CategoryID        *string     `json:"category_id"`
-	Column6           interface{} `json:"column_6"`
+	Column7           interface{} `json:"column_7"`
 	Type              string      `json:"type"`
-	Column8           interface{} `json:"column_8"`
+	Column9           interface{} `json:"column_9"`
 	Kind              string      `json:"kind"`
-	Column10          interface{} `json:"column_10"`
+	Column11          interface{} `json:"column_11"`
 	TransactionDate   string      `json:"transaction_date"`
-	Column12          interface{} `json:"column_12"`
+	Column13          interface{} `json:"column_13"`
 	TransactionDate_2 string      `json:"transaction_date_2"`
-	Column14          interface{} `json:"column_14"`
-	Column15          *string     `json:"column_15"`
-	Column16          interface{} `json:"column_16"`
+	Column15          interface{} `json:"column_15"`
+	Column16          *string     `json:"column_16"`
+	Column17          interface{} `json:"column_17"`
 	StoreID           *string     `json:"store_id"`
-	Column18          interface{} `json:"column_18"`
+	Column19          interface{} `json:"column_19"`
 	MerchantID        *string     `json:"merchant_id"`
 }
 
@@ -73,24 +75,25 @@ type StatsByCategoryRow struct {
 
 func (q *Queries) StatsByCategory(ctx context.Context, arg StatsByCategoryParams) ([]StatsByCategoryRow, error) {
 	rows, err := q.db.QueryContext(ctx, statsByCategory,
+		arg.Currency,
 		arg.UserID,
-		arg.Column2,
+		arg.Column3,
 		arg.AccountID,
-		arg.Column4,
+		arg.Column5,
 		arg.CategoryID,
-		arg.Column6,
+		arg.Column7,
 		arg.Type,
-		arg.Column8,
+		arg.Column9,
 		arg.Kind,
-		arg.Column10,
+		arg.Column11,
 		arg.TransactionDate,
-		arg.Column12,
+		arg.Column13,
 		arg.TransactionDate_2,
-		arg.Column14,
 		arg.Column15,
 		arg.Column16,
+		arg.Column17,
 		arg.StoreID,
-		arg.Column18,
+		arg.Column19,
 		arg.MerchantID,
 	)
 	if err != nil {
@@ -128,6 +131,7 @@ SELECT
     CAST(COALESCE(SUM(t.amount), 0) AS INTEGER) AS total,
     COUNT(*) AS tx_count
 FROM transactions t
+JOIN accounts a ON a.id = t.account_id AND a.currency = ?
 JOIN merchants m ON m.id = t.merchant_id AND m.user_id = t.user_id
 WHERE t.user_id = ?
   AND t.type = 'expense'
@@ -150,22 +154,23 @@ ORDER BY total DESC
 `
 
 type StatsByStoreParams struct {
+	Currency          string      `json:"currency"`
 	UserID            string      `json:"user_id"`
-	Column2           interface{} `json:"column_2"`
+	Column3           interface{} `json:"column_3"`
 	AccountID         string      `json:"account_id"`
-	Column4           interface{} `json:"column_4"`
+	Column5           interface{} `json:"column_5"`
 	CategoryID        *string     `json:"category_id"`
-	Column6           interface{} `json:"column_6"`
+	Column7           interface{} `json:"column_7"`
 	Kind              string      `json:"kind"`
-	Column8           interface{} `json:"column_8"`
+	Column9           interface{} `json:"column_9"`
 	TransactionDate   string      `json:"transaction_date"`
-	Column10          interface{} `json:"column_10"`
+	Column11          interface{} `json:"column_11"`
 	TransactionDate_2 string      `json:"transaction_date_2"`
-	Column12          interface{} `json:"column_12"`
-	Column13          *string     `json:"column_13"`
-	Column14          interface{} `json:"column_14"`
+	Column13          interface{} `json:"column_13"`
+	Column14          *string     `json:"column_14"`
+	Column15          interface{} `json:"column_15"`
 	StoreID           *string     `json:"store_id"`
-	Column16          interface{} `json:"column_16"`
+	Column17          interface{} `json:"column_17"`
 	MerchantID        *string     `json:"merchant_id"`
 }
 
@@ -178,22 +183,23 @@ type StatsByStoreRow struct {
 
 func (q *Queries) StatsByStore(ctx context.Context, arg StatsByStoreParams) ([]StatsByStoreRow, error) {
 	rows, err := q.db.QueryContext(ctx, statsByStore,
+		arg.Currency,
 		arg.UserID,
-		arg.Column2,
+		arg.Column3,
 		arg.AccountID,
-		arg.Column4,
+		arg.Column5,
 		arg.CategoryID,
-		arg.Column6,
+		arg.Column7,
 		arg.Kind,
-		arg.Column8,
+		arg.Column9,
 		arg.TransactionDate,
-		arg.Column10,
+		arg.Column11,
 		arg.TransactionDate_2,
-		arg.Column12,
 		arg.Column13,
 		arg.Column14,
+		arg.Column15,
 		arg.StoreID,
-		arg.Column16,
+		arg.Column17,
 		arg.MerchantID,
 	)
 	if err != nil {
@@ -232,6 +238,7 @@ SELECT
     CAST(COALESCE(SUM(t.amount), 0) AS INTEGER) AS total,
     COUNT(*) AS tx_count
 FROM transactions t
+JOIN accounts a ON a.id = t.account_id AND a.currency = ?
 JOIN categories c ON c.id = t.category_id
 JOIN subcategories s ON s.id = t.subcategory_id
 WHERE t.user_id = ?
@@ -260,24 +267,25 @@ ORDER BY total DESC
 `
 
 type StatsBySubcategoryParams struct {
+	Currency          string      `json:"currency"`
 	UserID            string      `json:"user_id"`
-	Column2           interface{} `json:"column_2"`
+	Column3           interface{} `json:"column_3"`
 	AccountID         string      `json:"account_id"`
-	Column4           interface{} `json:"column_4"`
+	Column5           interface{} `json:"column_5"`
 	CategoryID        *string     `json:"category_id"`
-	Column6           interface{} `json:"column_6"`
+	Column7           interface{} `json:"column_7"`
 	Type              string      `json:"type"`
-	Column8           interface{} `json:"column_8"`
+	Column9           interface{} `json:"column_9"`
 	Kind              string      `json:"kind"`
-	Column10          interface{} `json:"column_10"`
+	Column11          interface{} `json:"column_11"`
 	TransactionDate   string      `json:"transaction_date"`
-	Column12          interface{} `json:"column_12"`
+	Column13          interface{} `json:"column_13"`
 	TransactionDate_2 string      `json:"transaction_date_2"`
-	Column14          interface{} `json:"column_14"`
-	Column15          *string     `json:"column_15"`
-	Column16          interface{} `json:"column_16"`
+	Column15          interface{} `json:"column_15"`
+	Column16          *string     `json:"column_16"`
+	Column17          interface{} `json:"column_17"`
 	StoreID           *string     `json:"store_id"`
-	Column18          interface{} `json:"column_18"`
+	Column19          interface{} `json:"column_19"`
 	MerchantID        *string     `json:"merchant_id"`
 }
 
@@ -293,24 +301,25 @@ type StatsBySubcategoryRow struct {
 
 func (q *Queries) StatsBySubcategory(ctx context.Context, arg StatsBySubcategoryParams) ([]StatsBySubcategoryRow, error) {
 	rows, err := q.db.QueryContext(ctx, statsBySubcategory,
+		arg.Currency,
 		arg.UserID,
-		arg.Column2,
+		arg.Column3,
 		arg.AccountID,
-		arg.Column4,
+		arg.Column5,
 		arg.CategoryID,
-		arg.Column6,
+		arg.Column7,
 		arg.Type,
-		arg.Column8,
+		arg.Column9,
 		arg.Kind,
-		arg.Column10,
+		arg.Column11,
 		arg.TransactionDate,
-		arg.Column12,
+		arg.Column13,
 		arg.TransactionDate_2,
-		arg.Column14,
 		arg.Column15,
 		arg.Column16,
+		arg.Column17,
 		arg.StoreID,
-		arg.Column18,
+		arg.Column19,
 		arg.MerchantID,
 	)
 	if err != nil {
@@ -358,6 +367,7 @@ SELECT
     ), 0) AS INTEGER) AS total,
     COUNT(*) AS tx_count
 FROM transactions t
+JOIN accounts a ON a.id = t.account_id AND a.currency = ?
 JOIN receipt_imports ri ON ri.id = t.receipt_import_id AND ri.user_id = t.user_id
 JOIN receipt_import_item_categories ric ON ric.receipt_import_id = t.receipt_import_id AND ric.user_id = t.user_id
 JOIN categories c ON c.id = ric.category_id
@@ -388,24 +398,25 @@ ORDER BY total DESC
 `
 
 type StatsBySubcategoryReceiptLinesParams struct {
+	Currency          string      `json:"currency"`
 	UserID            string      `json:"user_id"`
-	Column2           interface{} `json:"column_2"`
+	Column3           interface{} `json:"column_3"`
 	AccountID         string      `json:"account_id"`
-	Column4           interface{} `json:"column_4"`
+	Column5           interface{} `json:"column_5"`
 	CategoryID        string      `json:"category_id"`
-	Column6           interface{} `json:"column_6"`
+	Column7           interface{} `json:"column_7"`
 	Type              string      `json:"type"`
-	Column8           interface{} `json:"column_8"`
+	Column9           interface{} `json:"column_9"`
 	Kind              string      `json:"kind"`
-	Column10          interface{} `json:"column_10"`
+	Column11          interface{} `json:"column_11"`
 	TransactionDate   string      `json:"transaction_date"`
-	Column12          interface{} `json:"column_12"`
+	Column13          interface{} `json:"column_13"`
 	TransactionDate_2 string      `json:"transaction_date_2"`
-	Column14          interface{} `json:"column_14"`
-	Column15          *string     `json:"column_15"`
-	Column16          interface{} `json:"column_16"`
+	Column15          interface{} `json:"column_15"`
+	Column16          *string     `json:"column_16"`
+	Column17          interface{} `json:"column_17"`
 	StoreID           *string     `json:"store_id"`
-	Column18          interface{} `json:"column_18"`
+	Column19          interface{} `json:"column_19"`
 	MerchantID        *string     `json:"merchant_id"`
 }
 
@@ -422,24 +433,25 @@ type StatsBySubcategoryReceiptLinesRow struct {
 // Attach: one transaction per receipt; subcategories per line in receipt_import_item_categories.
 func (q *Queries) StatsBySubcategoryReceiptLines(ctx context.Context, arg StatsBySubcategoryReceiptLinesParams) ([]StatsBySubcategoryReceiptLinesRow, error) {
 	rows, err := q.db.QueryContext(ctx, statsBySubcategoryReceiptLines,
+		arg.Currency,
 		arg.UserID,
-		arg.Column2,
+		arg.Column3,
 		arg.AccountID,
-		arg.Column4,
+		arg.Column5,
 		arg.CategoryID,
-		arg.Column6,
+		arg.Column7,
 		arg.Type,
-		arg.Column8,
+		arg.Column9,
 		arg.Kind,
-		arg.Column10,
+		arg.Column11,
 		arg.TransactionDate,
-		arg.Column12,
+		arg.Column13,
 		arg.TransactionDate_2,
-		arg.Column14,
 		arg.Column15,
 		arg.Column16,
+		arg.Column17,
 		arg.StoreID,
-		arg.Column18,
+		arg.Column19,
 		arg.MerchantID,
 	)
 	if err != nil {
@@ -479,6 +491,7 @@ SELECT
 FROM transactions t
 JOIN credit_payments cp ON cp.transaction_id = t.id
 JOIN credits c ON c.id = cp.credit_id
+JOIN accounts a ON a.id = c.debit_account_id AND a.currency = ?
 WHERE t.user_id = ?
   AND c.user_id = ?
   AND c.id = ?
@@ -490,14 +503,15 @@ WHERE t.user_id = ?
 `
 
 type StatsContextCreditParams struct {
+	Currency          string      `json:"currency"`
 	UserID            string      `json:"user_id"`
 	UserID_2          string      `json:"user_id_2"`
 	ID                string      `json:"id"`
-	Column4           interface{} `json:"column_4"`
+	Column5           interface{} `json:"column_5"`
 	Kind              string      `json:"kind"`
-	Column6           interface{} `json:"column_6"`
+	Column7           interface{} `json:"column_7"`
 	TransactionDate   string      `json:"transaction_date"`
-	Column8           interface{} `json:"column_8"`
+	Column9           interface{} `json:"column_9"`
 	TransactionDate_2 string      `json:"transaction_date_2"`
 }
 
@@ -509,14 +523,15 @@ type StatsContextCreditRow struct {
 
 func (q *Queries) StatsContextCredit(ctx context.Context, arg StatsContextCreditParams) (StatsContextCreditRow, error) {
 	row := q.db.QueryRowContext(ctx, statsContextCredit,
+		arg.Currency,
 		arg.UserID,
 		arg.UserID_2,
 		arg.ID,
-		arg.Column4,
+		arg.Column5,
 		arg.Kind,
-		arg.Column6,
+		arg.Column7,
 		arg.TransactionDate,
-		arg.Column8,
+		arg.Column9,
 		arg.TransactionDate_2,
 	)
 	var i StatsContextCreditRow
@@ -530,6 +545,7 @@ SELECT
     COUNT(*) AS payment_count
 FROM credit_payments cp
 JOIN credits c ON c.id = cp.credit_id
+JOIN accounts a ON a.id = c.debit_account_id AND a.currency = ?
 WHERE c.user_id = ?
   AND c.id = ?
   AND cp.transaction_id IS NOT NULL
@@ -539,11 +555,12 @@ WHERE c.user_id = ?
 `
 
 type StatsContextCreditPaidParams struct {
+	Currency      string      `json:"currency"`
 	UserID        string      `json:"user_id"`
 	ID            string      `json:"id"`
-	Column3       interface{} `json:"column_3"`
+	Column4       interface{} `json:"column_4"`
 	PaymentDate   string      `json:"payment_date"`
-	Column5       interface{} `json:"column_5"`
+	Column6       interface{} `json:"column_6"`
 	PaymentDate_2 string      `json:"payment_date_2"`
 }
 
@@ -554,11 +571,12 @@ type StatsContextCreditPaidRow struct {
 
 func (q *Queries) StatsContextCreditPaid(ctx context.Context, arg StatsContextCreditPaidParams) (StatsContextCreditPaidRow, error) {
 	row := q.db.QueryRowContext(ctx, statsContextCreditPaid,
+		arg.Currency,
 		arg.UserID,
 		arg.ID,
-		arg.Column3,
+		arg.Column4,
 		arg.PaymentDate,
-		arg.Column5,
+		arg.Column6,
 		arg.PaymentDate_2,
 	)
 	var i StatsContextCreditPaidRow
@@ -570,13 +588,15 @@ const statsContextCreditRemaining = `-- name: StatsContextCreditRemaining :one
 SELECT
     principal_amount,
     paid_amount
-FROM credits
-WHERE id = ? AND user_id = ?
+FROM credits c
+JOIN accounts a ON a.id = c.debit_account_id AND a.currency = ?
+WHERE c.id = ? AND c.user_id = ?
 `
 
 type StatsContextCreditRemainingParams struct {
-	ID     string `json:"id"`
-	UserID string `json:"user_id"`
+	Currency string `json:"currency"`
+	ID       string `json:"id"`
+	UserID   string `json:"user_id"`
 }
 
 type StatsContextCreditRemainingRow struct {
@@ -585,7 +605,7 @@ type StatsContextCreditRemainingRow struct {
 }
 
 func (q *Queries) StatsContextCreditRemaining(ctx context.Context, arg StatsContextCreditRemainingParams) (StatsContextCreditRemainingRow, error) {
-	row := q.db.QueryRowContext(ctx, statsContextCreditRemaining, arg.ID, arg.UserID)
+	row := q.db.QueryRowContext(ctx, statsContextCreditRemaining, arg.Currency, arg.ID, arg.UserID)
 	var i StatsContextCreditRemainingRow
 	err := row.Scan(&i.PrincipalAmount, &i.PaidAmount)
 	return i, err
@@ -600,7 +620,7 @@ SELECT
     COUNT(DISTINCT t.id) AS transaction_count
 FROM transactions t
 JOIN debt_transactions dtx ON dtx.transaction_id = t.id
-JOIN debts d ON d.id = dtx.debt_id
+JOIN debts d ON d.id = dtx.debt_id AND d.currency = ?
 WHERE t.user_id = ?
   AND d.user_id = ?
   AND d.debtor_id = ?
@@ -611,14 +631,15 @@ WHERE t.user_id = ?
 `
 
 type StatsContextDebtorParams struct {
+	Currency          string      `json:"currency"`
 	UserID            string      `json:"user_id"`
 	UserID_2          string      `json:"user_id_2"`
 	DebtorID          string      `json:"debtor_id"`
-	Column4           interface{} `json:"column_4"`
+	Column5           interface{} `json:"column_5"`
 	Kind              string      `json:"kind"`
-	Column6           interface{} `json:"column_6"`
+	Column7           interface{} `json:"column_7"`
 	TransactionDate   string      `json:"transaction_date"`
-	Column8           interface{} `json:"column_8"`
+	Column9           interface{} `json:"column_9"`
 	TransactionDate_2 string      `json:"transaction_date_2"`
 }
 
@@ -632,14 +653,15 @@ type StatsContextDebtorRow struct {
 
 func (q *Queries) StatsContextDebtor(ctx context.Context, arg StatsContextDebtorParams) (StatsContextDebtorRow, error) {
 	row := q.db.QueryRowContext(ctx, statsContextDebtor,
+		arg.Currency,
 		arg.UserID,
 		arg.UserID_2,
 		arg.DebtorID,
-		arg.Column4,
+		arg.Column5,
 		arg.Kind,
-		arg.Column6,
+		arg.Column7,
 		arg.TransactionDate,
-		arg.Column8,
+		arg.Column9,
 		arg.TransactionDate_2,
 	)
 	var i StatsContextDebtorRow
@@ -660,7 +682,7 @@ SELECT
     COUNT(DISTINCT t.id) AS transaction_count
 FROM transactions t
 JOIN debt_transactions dtx ON dtx.transaction_id = t.id
-JOIN debts d ON d.id = dtx.debt_id
+JOIN debts d ON d.id = dtx.debt_id AND d.currency = ?
 WHERE t.user_id = ?
   AND d.user_id = ?
   AND t.type IN ('income', 'expense')
@@ -670,13 +692,14 @@ WHERE t.user_id = ?
 `
 
 type StatsContextDebtsParams struct {
+	Currency          string      `json:"currency"`
 	UserID            string      `json:"user_id"`
 	UserID_2          string      `json:"user_id_2"`
-	Column3           interface{} `json:"column_3"`
+	Column4           interface{} `json:"column_4"`
 	Kind              string      `json:"kind"`
-	Column5           interface{} `json:"column_5"`
+	Column6           interface{} `json:"column_6"`
 	TransactionDate   string      `json:"transaction_date"`
-	Column7           interface{} `json:"column_7"`
+	Column8           interface{} `json:"column_8"`
 	TransactionDate_2 string      `json:"transaction_date_2"`
 }
 
@@ -688,13 +711,14 @@ type StatsContextDebtsRow struct {
 
 func (q *Queries) StatsContextDebts(ctx context.Context, arg StatsContextDebtsParams) (StatsContextDebtsRow, error) {
 	row := q.db.QueryRowContext(ctx, statsContextDebts,
+		arg.Currency,
 		arg.UserID,
 		arg.UserID_2,
-		arg.Column3,
+		arg.Column4,
 		arg.Kind,
-		arg.Column5,
+		arg.Column6,
 		arg.TransactionDate,
-		arg.Column7,
+		arg.Column8,
 		arg.TransactionDate_2,
 	)
 	var i StatsContextDebtsRow
@@ -708,6 +732,7 @@ SELECT
     t.type,
     t.amount
 FROM transactions t
+JOIN accounts a ON a.id = t.account_id AND a.currency = ?
 WHERE t.user_id = ?
   AND t.type IN ('income', 'expense')
   AND (? = '' OR t.account_id = ?)
@@ -729,24 +754,25 @@ ORDER BY t.transaction_date ASC
 `
 
 type StatsPeriodRowsParams struct {
+	Currency          string      `json:"currency"`
 	UserID            string      `json:"user_id"`
-	Column2           interface{} `json:"column_2"`
+	Column3           interface{} `json:"column_3"`
 	AccountID         string      `json:"account_id"`
-	Column4           interface{} `json:"column_4"`
+	Column5           interface{} `json:"column_5"`
 	CategoryID        *string     `json:"category_id"`
-	Column6           interface{} `json:"column_6"`
+	Column7           interface{} `json:"column_7"`
 	Type              string      `json:"type"`
-	Column8           interface{} `json:"column_8"`
+	Column9           interface{} `json:"column_9"`
 	Kind              string      `json:"kind"`
-	Column10          interface{} `json:"column_10"`
+	Column11          interface{} `json:"column_11"`
 	TransactionDate   string      `json:"transaction_date"`
-	Column12          interface{} `json:"column_12"`
+	Column13          interface{} `json:"column_13"`
 	TransactionDate_2 string      `json:"transaction_date_2"`
-	Column14          interface{} `json:"column_14"`
-	Column15          *string     `json:"column_15"`
-	Column16          interface{} `json:"column_16"`
+	Column15          interface{} `json:"column_15"`
+	Column16          *string     `json:"column_16"`
+	Column17          interface{} `json:"column_17"`
 	StoreID           *string     `json:"store_id"`
-	Column18          interface{} `json:"column_18"`
+	Column19          interface{} `json:"column_19"`
 	MerchantID        *string     `json:"merchant_id"`
 }
 
@@ -758,24 +784,25 @@ type StatsPeriodRowsRow struct {
 
 func (q *Queries) StatsPeriodRows(ctx context.Context, arg StatsPeriodRowsParams) ([]StatsPeriodRowsRow, error) {
 	rows, err := q.db.QueryContext(ctx, statsPeriodRows,
+		arg.Currency,
 		arg.UserID,
-		arg.Column2,
+		arg.Column3,
 		arg.AccountID,
-		arg.Column4,
+		arg.Column5,
 		arg.CategoryID,
-		arg.Column6,
+		arg.Column7,
 		arg.Type,
-		arg.Column8,
+		arg.Column9,
 		arg.Kind,
-		arg.Column10,
+		arg.Column11,
 		arg.TransactionDate,
-		arg.Column12,
+		arg.Column13,
 		arg.TransactionDate_2,
-		arg.Column14,
 		arg.Column15,
 		arg.Column16,
+		arg.Column17,
 		arg.StoreID,
-		arg.Column18,
+		arg.Column19,
 		arg.MerchantID,
 	)
 	if err != nil {
@@ -805,6 +832,7 @@ SELECT
     CAST(COALESCE(SUM(CASE WHEN t.type = 'expense' THEN t.amount ELSE 0 END), 0) AS INTEGER) AS expense_total,
     COUNT(*) AS transaction_count
 FROM transactions t
+JOIN accounts a ON a.id = t.account_id AND a.currency = ?
 WHERE t.user_id = ?
   AND t.type IN ('income', 'expense')
   AND (? = '' OR t.account_id = ?)
@@ -825,24 +853,25 @@ WHERE t.user_id = ?
 `
 
 type StatsSummaryParams struct {
+	Currency          string      `json:"currency"`
 	UserID            string      `json:"user_id"`
-	Column2           interface{} `json:"column_2"`
+	Column3           interface{} `json:"column_3"`
 	AccountID         string      `json:"account_id"`
-	Column4           interface{} `json:"column_4"`
+	Column5           interface{} `json:"column_5"`
 	CategoryID        *string     `json:"category_id"`
-	Column6           interface{} `json:"column_6"`
+	Column7           interface{} `json:"column_7"`
 	Type              string      `json:"type"`
-	Column8           interface{} `json:"column_8"`
+	Column9           interface{} `json:"column_9"`
 	Kind              string      `json:"kind"`
-	Column10          interface{} `json:"column_10"`
+	Column11          interface{} `json:"column_11"`
 	TransactionDate   string      `json:"transaction_date"`
-	Column12          interface{} `json:"column_12"`
+	Column13          interface{} `json:"column_13"`
 	TransactionDate_2 string      `json:"transaction_date_2"`
-	Column14          interface{} `json:"column_14"`
-	Column15          *string     `json:"column_15"`
-	Column16          interface{} `json:"column_16"`
+	Column15          interface{} `json:"column_15"`
+	Column16          *string     `json:"column_16"`
+	Column17          interface{} `json:"column_17"`
 	StoreID           *string     `json:"store_id"`
-	Column18          interface{} `json:"column_18"`
+	Column19          interface{} `json:"column_19"`
 	MerchantID        *string     `json:"merchant_id"`
 }
 
@@ -854,24 +883,25 @@ type StatsSummaryRow struct {
 
 func (q *Queries) StatsSummary(ctx context.Context, arg StatsSummaryParams) (StatsSummaryRow, error) {
 	row := q.db.QueryRowContext(ctx, statsSummary,
+		arg.Currency,
 		arg.UserID,
-		arg.Column2,
+		arg.Column3,
 		arg.AccountID,
-		arg.Column4,
+		arg.Column5,
 		arg.CategoryID,
-		arg.Column6,
+		arg.Column7,
 		arg.Type,
-		arg.Column8,
+		arg.Column9,
 		arg.Kind,
-		arg.Column10,
+		arg.Column11,
 		arg.TransactionDate,
-		arg.Column12,
+		arg.Column13,
 		arg.TransactionDate_2,
-		arg.Column14,
 		arg.Column15,
 		arg.Column16,
+		arg.Column17,
 		arg.StoreID,
-		arg.Column18,
+		arg.Column19,
 		arg.MerchantID,
 	)
 	var i StatsSummaryRow
@@ -907,6 +937,7 @@ SELECT
     ), 0) AS INTEGER) AS expense_total,
     COUNT(*) AS transaction_count
 FROM transactions t
+JOIN accounts a ON a.id = t.account_id AND a.currency = ?
 WHERE t.user_id = ?
   AND t.account_id = ?
   AND t.type IN ('income', 'expense', 'transfer')
@@ -927,23 +958,24 @@ WHERE t.user_id = ?
 `
 
 type StatsSummaryAccountParams struct {
+	Currency          string      `json:"currency"`
 	UserID            string      `json:"user_id"`
 	AccountID         string      `json:"account_id"`
-	Column3           interface{} `json:"column_3"`
+	Column4           interface{} `json:"column_4"`
 	CategoryID        *string     `json:"category_id"`
-	Column5           interface{} `json:"column_5"`
+	Column6           interface{} `json:"column_6"`
 	Type              string      `json:"type"`
-	Column7           interface{} `json:"column_7"`
+	Column8           interface{} `json:"column_8"`
 	Kind              string      `json:"kind"`
-	Column9           interface{} `json:"column_9"`
+	Column10          interface{} `json:"column_10"`
 	TransactionDate   string      `json:"transaction_date"`
-	Column11          interface{} `json:"column_11"`
+	Column12          interface{} `json:"column_12"`
 	TransactionDate_2 string      `json:"transaction_date_2"`
-	Column13          interface{} `json:"column_13"`
-	Column14          *string     `json:"column_14"`
-	Column15          interface{} `json:"column_15"`
+	Column14          interface{} `json:"column_14"`
+	Column15          *string     `json:"column_15"`
+	Column16          interface{} `json:"column_16"`
 	StoreID           *string     `json:"store_id"`
-	Column17          interface{} `json:"column_17"`
+	Column18          interface{} `json:"column_18"`
 	MerchantID        *string     `json:"merchant_id"`
 }
 
@@ -956,23 +988,24 @@ type StatsSummaryAccountRow struct {
 // Account-scoped totals: incoming transfers count as income, outgoing as expense (matches balance).
 func (q *Queries) StatsSummaryAccount(ctx context.Context, arg StatsSummaryAccountParams) (StatsSummaryAccountRow, error) {
 	row := q.db.QueryRowContext(ctx, statsSummaryAccount,
+		arg.Currency,
 		arg.UserID,
 		arg.AccountID,
-		arg.Column3,
+		arg.Column4,
 		arg.CategoryID,
-		arg.Column5,
+		arg.Column6,
 		arg.Type,
-		arg.Column7,
+		arg.Column8,
 		arg.Kind,
-		arg.Column9,
+		arg.Column10,
 		arg.TransactionDate,
-		arg.Column11,
+		arg.Column12,
 		arg.TransactionDate_2,
-		arg.Column13,
 		arg.Column14,
 		arg.Column15,
+		arg.Column16,
 		arg.StoreID,
-		arg.Column17,
+		arg.Column18,
 		arg.MerchantID,
 	)
 	var i StatsSummaryAccountRow

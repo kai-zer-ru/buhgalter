@@ -173,6 +173,8 @@ function stubTransfer(groupId: string, payload: TransferPayload): Transfer {
 		to_account_id: payload.to_account_id,
 		amount: 0,
 		amount_display: payload.amount,
+		to_amount: payload.to_amount ? 0 : undefined,
+		to_amount_display: payload.to_amount,
 		commission: 0,
 		commission_display: payload.commission ?? '0.00',
 		description: payload.description ?? null,

@@ -14,6 +14,7 @@ SELECT
     a.auto_topup_source_account_id,
     a.status,
     a.is_primary,
+    a.currency,
     a.created_at,
     a.updated_at,
     b.name AS bank_name,
@@ -38,6 +39,7 @@ SELECT
     a.auto_topup_source_account_id,
     a.status,
     a.is_primary,
+    a.currency,
     a.created_at,
     a.updated_at,
     b.name AS bank_name,
@@ -64,6 +66,7 @@ SELECT
     src.name AS auto_topup_source_name,
     a.status,
     a.is_primary,
+    a.currency,
     b.name AS bank_name
 FROM accounts a
 LEFT JOIN banks b ON b.id = a.bank_id
@@ -88,6 +91,7 @@ SELECT
     a.auto_topup_source_account_id,
     a.status,
     a.is_primary,
+    a.currency,
     a.created_at,
     a.updated_at,
     b.name AS bank_name,
@@ -100,13 +104,36 @@ ORDER BY a.name;
 -- name: InsertAccount :exec
 INSERT INTO accounts (
     id, user_id, name, type, bank_id, initial_balance, current_balance,
-    credit_limit, payment_account_id, status, is_primary, created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?);
+    credit_limit, payment_account_id, status, is_primary, currency, created_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?);
 
 -- name: UpdateAccount :exec
 UPDATE accounts
 SET name = ?, bank_id = ?, initial_balance = ?, credit_limit = ?, payment_account_id = ?, updated_at = ?
 WHERE id = ? AND user_id = ?;
+
+-- name: UpdateAccountCurrency :exec
+UPDATE accounts
+SET currency = ?, updated_at = ?
+WHERE id = ? AND user_id = ?;
+
+-- name: AccountCurrencyInUse :one
+SELECT CAST(
+    EXISTS (
+        SELECT 1 FROM transactions t
+        WHERE t.user_id = sqlc.arg(user_id)
+          AND (t.account_id = sqlc.arg(account_id) OR t.transfer_account_id = sqlc.arg(account_id))
+    )
+    OR EXISTS (SELECT 1 FROM credits c WHERE c.debit_account_id = sqlc.arg(account_id))
+    OR EXISTS (SELECT 1 FROM subscriptions s WHERE s.account_id = sqlc.arg(account_id))
+    OR EXISTS (SELECT 1 FROM recurring_operations r WHERE r.account_id = sqlc.arg(account_id))
+    OR EXISTS (SELECT 1 FROM budgets b WHERE b.account_id = sqlc.arg(account_id))
+    OR EXISTS (
+        SELECT 1 FROM accounts x
+        WHERE x.id != sqlc.arg(account_id)
+          AND (x.payment_account_id = sqlc.arg(account_id) OR x.auto_topup_source_account_id = sqlc.arg(account_id))
+    )
+AS INTEGER) AS in_use;
 
 -- name: UpdateAccountStatus :execrows
 UPDATE accounts
@@ -176,6 +203,7 @@ SELECT
     a.auto_topup_source_account_id,
     a.status,
     a.is_primary,
+    a.currency,
     a.created_at,
     a.updated_at,
     b.name AS bank_name,

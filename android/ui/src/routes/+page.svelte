@@ -66,6 +66,7 @@
 	import { user } from '$lib/stores/auth';
 	import { resolveAutoTopupSourceName } from '$lib/accounts/auto-topup';
 	import { groupAccountsByType, accountGroupKind } from '$lib/accounts/group-by-type';
+	import { ownFundsTotalsByCurrency, sortRowsByProfileCurrency } from '$lib/currency';
 	import { aggregateForecastLabelFlags, forecastWithLabelKey } from '$lib/forecast-label';
 	import AccountGroupPanel from '$lib/components/AccountGroupPanel.svelte';
 	import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
@@ -145,11 +146,24 @@
 	const pastVisible = $derived(dedupeTransferLegs(pastTx));
 	const plannedVisible = $derived(dedupeTransferLegs(plannedTx));
 	const txSiblings = $derived([...pastTx, ...plannedTx]);
-	const hasCreditCards = $derived(dash != null && dash.credit_cards_summary != null);
+	const hasCreditCards = $derived(
+		dash != null &&
+			(dash.credit_cards_summary != null || (dash.credit_cards_by_currency?.length ?? 0) > 0)
+	);
 	const hasDebts = $derived(
-		dash != null && (dash.debts_summary.i_owe > 0 || dash.debts_summary.owed_to_me > 0)
+		dash != null &&
+			(dash.debts_summary.i_owe > 0 ||
+				dash.debts_summary.owed_to_me > 0 ||
+				(dash.debts_summary.by_currency ?? []).some((row) => row.i_owe > 0 || row.owed_to_me > 0))
 	);
 	const currency = $derived($user?.currency ?? 'RUB');
+	const totalsByCurrency = $derived(ownFundsTotalsByCurrency(dash?.accounts, currency));
+	const creditCardsByCurrency = $derived(
+		sortRowsByProfileCurrency(dash?.credit_cards_by_currency ?? [], currency)
+	);
+	const debtsByCurrency = $derived(
+		sortRowsByProfileCurrency(dash?.debts_summary.by_currency ?? [], currency)
+	);
 	const accountGroups = $derived(dash ? groupAccountsByType(dash.accounts) : []);
 	const recentTotal = $derived(pastTotal + plannedTotal);
 	const ownForecastFlags = $derived(
@@ -504,6 +518,32 @@
 			</ul>
 		{/snippet}
 
+		{#snippet totalsBlock()}
+			{#each totalsByCurrency as row (row.currency)}
+				<div class="card flex h-full flex-col">
+					<p class="text-sm" style:color="var(--text-muted)">
+						{$_('dashboard.totalsByCurrency')} · {row.currency}
+					</p>
+					<p class="text-3xl font-semibold tabular-nums">
+						<MoneyDisplay cents={row.total_balance} currency={row.currency} class="" />
+					</p>
+					{#if row.total_forecast !== row.total_balance}
+						<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
+							{$_(forecastWithLabelKey(ownForecastFlags))}:
+							<MoneyDisplay cents={row.total_forecast} currency={row.currency} class="" />
+						</p>
+					{/if}
+				</div>
+			{:else}
+				<div class="card flex h-full flex-col">
+					<p class="text-sm" style:color="var(--text-muted)">{$_('dashboard.totalsByCurrency')}</p>
+					<p class="text-3xl font-semibold tabular-nums">
+						<MoneyDisplay cents={0} {currency} class="" />
+					</p>
+				</div>
+			{/each}
+		{/snippet}
+
 		{#snippet budgetWidget()}
 			{#if budgetItems.length > 0}
 				<CollapsibleSection label={$_('budget.widget.title')}>
@@ -573,44 +613,57 @@
 				{#if hasCreditCards}
 					<div class="space-y-4">
 						<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-							<div class="card">
-								<p class="text-sm" style:color="var(--text-muted)">{$_('dashboard.total')}</p>
-								<p class="text-3xl font-semibold tabular-nums">
-									<MoneyDisplay cents={dash.total_balance} {currency} class="" />
-								</p>
-								{#if dash.total_forecast !== dash.total_balance}
-									<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
-										{$_(forecastWithLabelKey(ownForecastFlags))}:
-										<MoneyDisplay cents={dash.total_forecast} {currency} class="" />
-									</p>
-								{/if}
-							</div>
+							{@render totalsBlock()}
 							<div class="card">
 								<p class="text-sm" style:color="var(--text-muted)">{$_('dashboard.creditCards')}</p>
-								<p class="text-3xl font-semibold tabular-nums">
-									<MoneyDisplay
-										value={dash.credit_cards_summary!.total_balance_display}
-										{currency}
-										class=""
-									/>
-								</p>
-								<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
-									{$_('accounts.field.creditLimit')}:
-									<MoneyDisplay
-										value={dash.credit_cards_summary!.total_limit_display}
-										{currency}
-										class=""
-									/>
-								</p>
-								{#if dash.credit_cards_summary!.total_forecast !== dash.credit_cards_summary!.total_balance}
-									<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
-										{$_(forecastWithLabelKey(creditForecastFlags))}:
+								{#if creditCardsByCurrency.length > 0}
+									<div class="mt-1 space-y-3">
+										{#each creditCardsByCurrency as row (row.currency)}
+											<div>
+												<p class="text-3xl font-semibold tabular-nums">
+													<MoneyDisplay
+														value={row.total_balance_display}
+														currency={row.currency}
+														class=""
+													/>
+												</p>
+												<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
+													{$_('accounts.field.creditLimit')}:
+													<MoneyDisplay
+														value={row.total_limit_display}
+														currency={row.currency}
+														class=""
+													/>
+												</p>
+											</div>
+										{/each}
+									</div>
+								{:else if dash.credit_cards_summary}
+									<p class="text-3xl font-semibold tabular-nums">
 										<MoneyDisplay
-											value={dash.credit_cards_summary!.total_forecast_display}
+											value={dash.credit_cards_summary.total_balance_display}
 											{currency}
 											class=""
 										/>
 									</p>
+									<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
+										{$_('accounts.field.creditLimit')}:
+										<MoneyDisplay
+											value={dash.credit_cards_summary.total_limit_display}
+											{currency}
+											class=""
+										/>
+									</p>
+									{#if dash.credit_cards_summary.total_forecast !== dash.credit_cards_summary.total_balance}
+										<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
+											{$_(forecastWithLabelKey(creditForecastFlags))}:
+											<MoneyDisplay
+												value={dash.credit_cards_summary.total_forecast_display}
+												{currency}
+												class=""
+											/>
+										</p>
+									{/if}
 								{/if}
 							</div>
 						</div>
@@ -618,7 +671,22 @@
 							<a href={resolve('/debts')} class="card block self-start transition hover:opacity-90">
 								<p class="text-sm" style:color="var(--text-muted)">{$_('debts.title')}</p>
 								<div class="mt-1 space-y-1">
-									{#if hasDebts}
+									{#if hasDebts && debtsByCurrency.length > 1}
+										{#each debtsByCurrency as row (row.currency)}
+											{#if row.i_owe > 0}
+												<p class="tabular-nums" style:color="var(--danger)">
+													{$_('debts.summary.iOwe')}:
+													<MoneyDisplay cents={row.i_owe} currency={row.currency} class="" />
+												</p>
+											{/if}
+											{#if row.owed_to_me > 0}
+												<p class="tabular-nums" style:color="var(--primary)">
+													{$_('debts.summary.owedToMe')}:
+													<MoneyDisplay cents={row.owed_to_me} currency={row.currency} class="" />
+												</p>
+											{/if}
+										{/each}
+									{:else if hasDebts}
 										{#if dash.debts_summary.i_owe > 0}
 											<p class="tabular-nums" style:color="var(--danger)">
 												{$_('debts.summary.iOwe')}:
@@ -642,25 +710,29 @@
 					</div>
 				{:else}
 					<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:items-stretch">
-						<div class="card flex h-full flex-col">
-							<p class="text-sm" style:color="var(--text-muted)">{$_('dashboard.total')}</p>
-							<p class="text-3xl font-semibold tabular-nums">
-								<MoneyDisplay cents={dash.total_balance} {currency} class="" />
-							</p>
-							{#if dash.total_forecast !== dash.total_balance}
-								<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
-									{$_(forecastWithLabelKey(ownForecastFlags))}:
-									<MoneyDisplay cents={dash.total_forecast} {currency} class="" />
-								</p>
-							{/if}
-						</div>
+						{@render totalsBlock()}
 						<a
 							href={resolve('/debts')}
 							class="card flex h-full flex-col transition hover:opacity-90"
 						>
 							<p class="text-sm" style:color="var(--text-muted)">{$_('debts.title')}</p>
 							<div class="mt-1 space-y-1">
-								{#if hasDebts}
+								{#if hasDebts && debtsByCurrency.length > 1}
+									{#each debtsByCurrency as row (row.currency)}
+										{#if row.i_owe > 0}
+											<p class="tabular-nums" style:color="var(--danger)">
+												{$_('debts.summary.iOwe')}:
+												<MoneyDisplay cents={row.i_owe} currency={row.currency} class="" />
+											</p>
+										{/if}
+										{#if row.owed_to_me > 0}
+											<p class="tabular-nums" style:color="var(--primary)">
+												{$_('debts.summary.owedToMe')}:
+												<MoneyDisplay cents={row.owed_to_me} currency={row.currency} class="" />
+											</p>
+										{/if}
+									{/each}
+								{:else if hasDebts}
 									{#if dash.debts_summary.i_owe > 0}
 										<p class="tabular-nums" style:color="var(--danger)">
 											{$_('debts.summary.iOwe')}:
@@ -727,12 +799,20 @@
 											<div class="min-w-0 flex-1">
 												<p class="truncate font-medium">{acc.name}</p>
 												<p class="mt-1 text-xl font-semibold tabular-nums">
-													<MoneyDisplay value={acc.balance_display} {currency} class="" />
+													<MoneyDisplay
+														value={acc.balance_display}
+														currency={acc.currency}
+														class=""
+													/>
 												</p>
 												{#if acc.credit_limit_display}
 													<p class="mt-0.5 text-sm tabular-nums" style:color="var(--text-muted)">
 														{$_('accounts.field.creditLimit')}:
-														<MoneyDisplay value={acc.credit_limit_display} {currency} class="" />
+														<MoneyDisplay
+															value={acc.credit_limit_display}
+															currency={acc.currency}
+															class=""
+														/>
 													</p>
 												{/if}
 												{#if acc.type === 'bank' && isFeatureEnabled('balance_maintenance', $featureFlags)}
@@ -748,7 +828,11 @@
 												{#if acc.forecast_balance !== acc.balance}
 													<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
 														{$_(forecastWithLabelKey(acc))}:
-														<MoneyDisplay value={acc.forecast_display} {currency} class="" />
+														<MoneyDisplay
+															value={acc.forecast_display}
+															currency={acc.currency}
+															class=""
+														/>
 													</p>
 												{/if}
 											</div>

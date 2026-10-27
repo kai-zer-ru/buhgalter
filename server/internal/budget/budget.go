@@ -36,6 +36,10 @@ var (
 	ErrInvalidSub      = errors.New("invalid subcategory")
 	ErrInvalidAccount  = errors.New("invalid account")
 	ErrAccountArchived = errors.New("account archived")
+	ErrInvalidCurrency = errors.New("invalid currency")
+	// ErrCurrencyImmutable is returned when an update tries to change the budget currency.
+	ErrCurrencyImmutable = errors.New("budget currency cannot be changed")
+	ErrCurrencyMismatch  = money.ErrCurrencyMismatch
 )
 
 type Budget struct {
@@ -51,6 +55,7 @@ type Budget struct {
 	AmountDisplay   string  `json:"amount_display"`
 	AccountID       *string `json:"account_id"`
 	AccountName     *string `json:"account_name,omitempty"`
+	Currency        string  `json:"currency"`
 	Month           string  `json:"month"`
 	CopyForward     bool    `json:"copy_forward"`
 	AlertAtPercent  int64   `json:"alert_at_percent"`
@@ -70,6 +75,7 @@ type Period struct {
 type SummaryItem struct {
 	ID                     string  `json:"id"`
 	Name                   string  `json:"name"`
+	Currency               string  `json:"currency"`
 	Scope                  string  `json:"scope"`
 	CategoryID             *string `json:"category_id"`
 	CategoryName           *string `json:"category_name,omitempty"`
@@ -99,6 +105,7 @@ type SummaryResult struct {
 	Items               []SummaryItem `json:"items"`
 	Month               string        `json:"month"`
 	CanCopyFromPrevious bool          `json:"can_copy_from_previous"`
+	AvailableCurrencies []string      `json:"available_currencies"`
 }
 
 type Input struct {
@@ -112,6 +119,9 @@ type Input struct {
 	CopyForward    bool
 	AlertAtPercent int64
 	IsActive       bool
+	// Currency is optional on create ("" = account currency, else profile currency).
+	// On update a different value is rejected; "" keeps the stored currency.
+	Currency string
 	// SkipCopyForward keeps a direct insert from also writing month+1.
 	// Native import already has every month in the file.
 	SkipCopyForward bool
@@ -174,6 +184,15 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in Input, month 
 		return Budget{}, err
 	}
 	in.Month = existing.Month
+	if c := money.Normalize(in.Currency); c != "" {
+		if !money.Valid(c) {
+			return Budget{}, ErrInvalidCurrency
+		}
+		if c != existing.Currency {
+			return Budget{}, ErrCurrencyImmutable
+		}
+	}
+	in.Currency = existing.Currency
 	in, err = resolveScopeRefs(ctx, db, userID, in)
 	if err != nil {
 		return Budget{}, err
@@ -274,7 +293,7 @@ func Summary(ctx context.Context, db *sql.DB, userID, month string) (SummaryResu
 		if err != nil {
 			return SummaryResult{}, err
 		}
-		spent, err := spentForBudget(ctx, db, userID, row.Scope, row.CategoryID, row.SubcategoryID, row.AccountID, periodStart, periodEnd)
+		spent, err := spentForBudget(ctx, db, userID, row.Scope, row.CategoryID, row.SubcategoryID, row.AccountID, periodStart, periodEnd, row.Currency)
 		if err != nil {
 			return SummaryResult{}, err
 		}
@@ -284,6 +303,7 @@ func Summary(ctx context.Context, db *sql.DB, userID, month string) (SummaryResu
 		out = append(out, SummaryItem{
 			ID:               row.ID,
 			Name:             row.Name,
+			Currency:         money.ProfileOrDefault(row.Currency),
 			Scope:            row.Scope,
 			CategoryID:       row.CategoryID,
 			CategoryName:     row.CategoryName,
@@ -457,8 +477,45 @@ func validateInput(ctx context.Context, db sqlcdb.DBTX, userID string, in Input)
 		if acc.Status != "active" {
 			return ErrAccountArchived
 		}
+		if in.Currency != "" && acc.Currency != in.Currency {
+			return ErrCurrencyMismatch
+		}
 	}
 	return nil
+}
+
+// resolveCurrency fills in.Currency on create: explicit code from the allowlist,
+// else the linked account's currency, else the profile currency.
+func resolveCurrency(ctx context.Context, db sqlcdb.DBTX, userID string, in Input) (Input, error) {
+	if c := money.Normalize(in.Currency); c != "" {
+		if !money.Valid(c) {
+			return Input{}, ErrInvalidCurrency
+		}
+		in.Currency = c
+		return in, nil
+	}
+	if in.AccountID != nil && *in.AccountID != "" {
+		acc, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{
+			ID: *in.AccountID, UserID: userID,
+		})
+		if errors.Is(err, sql.ErrNoRows) {
+			return Input{}, ErrInvalidAccount
+		}
+		if err != nil {
+			return Input{}, err
+		}
+		in.Currency = acc.Currency
+		return in, nil
+	}
+	row, err := queries(db).GetUserFormatting(ctx, userID)
+	if err != nil {
+		return Input{}, err
+	}
+	in.Currency = money.Normalize(row.Currency)
+	if !money.Valid(in.Currency) {
+		in.Currency = money.DefaultCurrency
+	}
+	return in, nil
 }
 
 func resolveScopeRefs(ctx context.Context, db sqlcdb.DBTX, userID string, in Input) (Input, error) {
@@ -512,6 +569,7 @@ func checkActiveUniqueness(ctx context.Context, db sqlcdb.DBTX, userID string, i
 		IFNULL:    in.CategoryID,
 		IFNULL_2:  in.SubcategoryID,
 		Month:     in.Month,
+		Currency:  in.Currency,
 		ExcludeID: exclude,
 	})
 	if err != nil {
@@ -552,6 +610,7 @@ func budgetFromListRow(row sqlcdb.ListBudgetsByUserRow) Budget {
 		AmountDisplay:   money.FormatRubles(row.Amount),
 		AccountID:       row.AccountID,
 		AccountName:     row.AccountName,
+		Currency:        row.Currency,
 		Month:           row.Month,
 		CopyForward:     row.CopyForward == 1,
 		AlertAtPercent:  row.AlertAtPercent,
@@ -575,6 +634,7 @@ func budgetFromGetRow(row sqlcdb.GetBudgetByIDRow) Budget {
 		AmountDisplay:   money.FormatRubles(row.Amount),
 		AccountID:       row.AccountID,
 		AccountName:     row.AccountName,
+		Currency:        row.Currency,
 		Month:           row.Month,
 		CopyForward:     row.CopyForward == 1,
 		AlertAtPercent:  row.AlertAtPercent,

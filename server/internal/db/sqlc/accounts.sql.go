@@ -9,6 +9,37 @@ import (
 	"context"
 )
 
+const accountCurrencyInUse = `-- name: AccountCurrencyInUse :one
+SELECT CAST(
+    EXISTS (
+        SELECT 1 FROM transactions t
+        WHERE t.user_id = ?1
+          AND (t.account_id = ?2 OR t.transfer_account_id = ?2)
+    )
+    OR EXISTS (SELECT 1 FROM credits c WHERE c.debit_account_id = ?2)
+    OR EXISTS (SELECT 1 FROM subscriptions s WHERE s.account_id = ?2)
+    OR EXISTS (SELECT 1 FROM recurring_operations r WHERE r.account_id = ?2)
+    OR EXISTS (SELECT 1 FROM budgets b WHERE b.account_id = ?2)
+    OR EXISTS (
+        SELECT 1 FROM accounts x
+        WHERE x.id != ?2
+          AND (x.payment_account_id = ?2 OR x.auto_topup_source_account_id = ?2)
+    )
+AS INTEGER) AS in_use
+`
+
+type AccountCurrencyInUseParams struct {
+	UserID    string `json:"user_id"`
+	AccountID string `json:"account_id"`
+}
+
+func (q *Queries) AccountCurrencyInUse(ctx context.Context, arg AccountCurrencyInUseParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, accountCurrencyInUse, arg.UserID, arg.AccountID)
+	var in_use int64
+	err := row.Scan(&in_use)
+	return in_use, err
+}
+
 const clearAccountPrimaryFlag = `-- name: ClearAccountPrimaryFlag :exec
 UPDATE accounts
 SET is_primary = 0
@@ -183,6 +214,7 @@ SELECT
     a.auto_topup_source_account_id,
     a.status,
     a.is_primary,
+    a.currency,
     a.created_at,
     a.updated_at,
     b.name AS bank_name,
@@ -212,6 +244,7 @@ type GetAccountByIDRow struct {
 	AutoTopupSourceAccountID *string `json:"auto_topup_source_account_id"`
 	Status                   string  `json:"status"`
 	IsPrimary                int64   `json:"is_primary"`
+	Currency                 string  `json:"currency"`
 	CreatedAt                string  `json:"created_at"`
 	UpdatedAt                string  `json:"updated_at"`
 	BankName                 *string `json:"bank_name"`
@@ -236,6 +269,7 @@ func (q *Queries) GetAccountByID(ctx context.Context, arg GetAccountByIDParams) 
 		&i.AutoTopupSourceAccountID,
 		&i.Status,
 		&i.IsPrimary,
+		&i.Currency,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.BankName,
@@ -260,6 +294,7 @@ SELECT
     a.auto_topup_source_account_id,
     a.status,
     a.is_primary,
+    a.currency,
     a.created_at,
     a.updated_at,
     b.name AS bank_name,
@@ -290,6 +325,7 @@ type GetActiveAccountByNameRow struct {
 	AutoTopupSourceAccountID *string `json:"auto_topup_source_account_id"`
 	Status                   string  `json:"status"`
 	IsPrimary                int64   `json:"is_primary"`
+	Currency                 string  `json:"currency"`
 	CreatedAt                string  `json:"created_at"`
 	UpdatedAt                string  `json:"updated_at"`
 	BankName                 *string `json:"bank_name"`
@@ -314,6 +350,7 @@ func (q *Queries) GetActiveAccountByName(ctx context.Context, arg GetActiveAccou
 		&i.AutoTopupSourceAccountID,
 		&i.Status,
 		&i.IsPrimary,
+		&i.Currency,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.BankName,
@@ -325,8 +362,8 @@ func (q *Queries) GetActiveAccountByName(ctx context.Context, arg GetActiveAccou
 const insertAccount = `-- name: InsertAccount :exec
 INSERT INTO accounts (
     id, user_id, name, type, bank_id, initial_balance, current_balance,
-    credit_limit, payment_account_id, status, is_primary, created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)
+    credit_limit, payment_account_id, status, is_primary, currency, created_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)
 `
 
 type InsertAccountParams struct {
@@ -340,6 +377,7 @@ type InsertAccountParams struct {
 	CreditLimit      *int64  `json:"credit_limit"`
 	PaymentAccountID *string `json:"payment_account_id"`
 	IsPrimary        int64   `json:"is_primary"`
+	Currency         string  `json:"currency"`
 	CreatedAt        string  `json:"created_at"`
 	UpdatedAt        string  `json:"updated_at"`
 }
@@ -356,6 +394,7 @@ func (q *Queries) InsertAccount(ctx context.Context, arg InsertAccountParams) er
 		arg.CreditLimit,
 		arg.PaymentAccountID,
 		arg.IsPrimary,
+		arg.Currency,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
@@ -422,6 +461,7 @@ SELECT
     a.auto_topup_source_account_id,
     a.status,
     a.is_primary,
+    a.currency,
     a.created_at,
     a.updated_at,
     b.name AS bank_name,
@@ -447,6 +487,7 @@ type ListAccountsByUserActiveRow struct {
 	AutoTopupSourceAccountID *string `json:"auto_topup_source_account_id"`
 	Status                   string  `json:"status"`
 	IsPrimary                int64   `json:"is_primary"`
+	Currency                 string  `json:"currency"`
 	CreatedAt                string  `json:"created_at"`
 	UpdatedAt                string  `json:"updated_at"`
 	BankName                 *string `json:"bank_name"`
@@ -477,6 +518,7 @@ func (q *Queries) ListAccountsByUserActive(ctx context.Context, userID string) (
 			&i.AutoTopupSourceAccountID,
 			&i.Status,
 			&i.IsPrimary,
+			&i.Currency,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.BankName,
@@ -511,6 +553,7 @@ SELECT
     a.auto_topup_source_account_id,
     a.status,
     a.is_primary,
+    a.currency,
     a.created_at,
     a.updated_at,
     b.name AS bank_name,
@@ -541,6 +584,7 @@ type ListAccountsByUserAndStatusRow struct {
 	AutoTopupSourceAccountID *string `json:"auto_topup_source_account_id"`
 	Status                   string  `json:"status"`
 	IsPrimary                int64   `json:"is_primary"`
+	Currency                 string  `json:"currency"`
 	CreatedAt                string  `json:"created_at"`
 	UpdatedAt                string  `json:"updated_at"`
 	BankName                 *string `json:"bank_name"`
@@ -571,6 +615,7 @@ func (q *Queries) ListAccountsByUserAndStatus(ctx context.Context, arg ListAccou
 			&i.AutoTopupSourceAccountID,
 			&i.Status,
 			&i.IsPrimary,
+			&i.Currency,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.BankName,
@@ -606,6 +651,7 @@ SELECT
     src.name AS auto_topup_source_name,
     a.status,
     a.is_primary,
+    a.currency,
     b.name AS bank_name
 FROM accounts a
 LEFT JOIN banks b ON b.id = a.bank_id
@@ -631,6 +677,7 @@ type ListAccountsForExportRow struct {
 	AutoTopupSourceName      *string `json:"auto_topup_source_name"`
 	Status                   string  `json:"status"`
 	IsPrimary                int64   `json:"is_primary"`
+	Currency                 string  `json:"currency"`
 	BankName                 *string `json:"bank_name"`
 }
 
@@ -659,6 +706,7 @@ func (q *Queries) ListAccountsForExport(ctx context.Context, userID string) ([]L
 			&i.AutoTopupSourceName,
 			&i.Status,
 			&i.IsPrimary,
+			&i.Currency,
 			&i.BankName,
 		); err != nil {
 			return nil, err
@@ -889,6 +937,29 @@ func (q *Queries) UpdateAccountAutoTopup(ctx context.Context, arg UpdateAccountA
 		arg.AutoTopupThreshold,
 		arg.AutoTopupTarget,
 		arg.AutoTopupSourceAccountID,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.UserID,
+	)
+	return err
+}
+
+const updateAccountCurrency = `-- name: UpdateAccountCurrency :exec
+UPDATE accounts
+SET currency = ?, updated_at = ?
+WHERE id = ? AND user_id = ?
+`
+
+type UpdateAccountCurrencyParams struct {
+	Currency  string `json:"currency"`
+	UpdatedAt string `json:"updated_at"`
+	ID        string `json:"id"`
+	UserID    string `json:"user_id"`
+}
+
+func (q *Queries) UpdateAccountCurrency(ctx context.Context, arg UpdateAccountCurrencyParams) error {
+	_, err := q.db.ExecContext(ctx, updateAccountCurrency,
+		arg.Currency,
 		arg.UpdatedAt,
 		arg.ID,
 		arg.UserID,

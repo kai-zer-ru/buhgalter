@@ -16,6 +16,7 @@ import {
 	markServerOnline
 } from '$lib/offline/server-connectivity';
 import { debugLogInfo, debugLogWarn } from '$lib/platform/debug-log';
+import { setCurrencyCatalog, type CurrencyInfo } from '$lib/finance';
 import { isDashboardRefPath, isDashboardShape, stableEqual } from '$lib/state-utils';
 
 const REF_CACHE_VERSION = 'buhgalter.ref_cache.v1';
@@ -51,6 +52,7 @@ export type StableOfflineCatalog = {
 	debtors?: unknown[];
 	banks?: unknown[];
 	transaction_templates?: unknown[];
+	currencies?: unknown[];
 };
 
 /** In-memory mirror when localStorage is unavailable (vitest) or as read-through cache. */
@@ -315,7 +317,9 @@ export function persistStableOfflineCatalog(meta: {
 	debtors?: unknown[];
 	banks?: unknown[];
 	transaction_templates?: unknown[];
+	currencies?: unknown[];
 }): void {
+	const prev = stableCatalogMemory ?? readStableOfflineCatalog();
 	const snapshot: StableOfflineCatalog = {
 		savedAt: Date.now(),
 		accounts: meta.accounts,
@@ -325,7 +329,8 @@ export function persistStableOfflineCatalog(meta: {
 		tags: meta.tags,
 		debtors: meta.debtors,
 		banks: meta.banks,
-		transaction_templates: meta.transaction_templates
+		transaction_templates: meta.transaction_templates,
+		currencies: meta.currencies ?? prev?.currencies
 	};
 	stableCatalogMemory = snapshot;
 	if (typeof localStorage === 'undefined') return;
@@ -334,6 +339,24 @@ export function persistStableOfflineCatalog(meta: {
 	} catch {
 		// quota
 	}
+}
+
+export function persistCurrenciesCatalog(rows: CurrencyInfo[]): void {
+	writeRefCache('/api/v1/currencies', rows);
+	setCurrencyCatalog(rows);
+	const prev = readStableOfflineCatalog();
+	if (!prev) return;
+	persistStableOfflineCatalog({
+		accounts: prev.accounts,
+		expense_categories: prev.expense_categories,
+		income_categories: prev.income_categories,
+		merchants: prev.merchants,
+		tags: prev.tags,
+		debtors: prev.debtors,
+		banks: prev.banks,
+		transaction_templates: prev.transaction_templates,
+		currencies: rows
+	});
 }
 
 export function clearStableOfflineCatalog(): void {
@@ -357,6 +380,10 @@ export function reconcileOfflineCatalogsOnUnlock(): void {
 	const stable = readStableOfflineCatalog();
 	if (stable) {
 		seedDictionariesFromUIMeta(stable);
+		if (Array.isArray(stable.currencies) && stable.currencies.length) {
+			writeRefCache('/api/v1/currencies', stable.currencies);
+			setCurrencyCatalog(stable.currencies as CurrencyInfo[]);
+		}
 	}
 
 	const legacyMeta = readRefCacheFromAnyStoredOrigin<UIMeta>(UI_META_PATH);
@@ -557,6 +584,13 @@ function scheduleRevalidate<T>(path: string, fetcher: () => Promise<T>): void {
 	revalidateTimers.set(path, timer);
 }
 
+function dashboardCacheMissingAccountCurrency(value: unknown): boolean {
+	if (!isDashboardShape(value)) return false;
+	const accounts = (value as Dashboard).accounts;
+	if (!accounts?.length) return false;
+	return accounts.some((acc) => !acc.currency);
+}
+
 export async function fetchWithRefCache<T>(path: string, fetcher: () => Promise<T>): Promise<T> {
 	if (isServerOfflineMode()) {
 		const cached = readRefCache<T>(path);
@@ -593,7 +627,7 @@ export async function fetchWithRefCache<T>(path: string, fetcher: () => Promise<
 	}
 
 	const cached = readRefCache<T>(path);
-	if (cached !== null) {
+	if (cached !== null && !dashboardCacheMissingAccountCurrency(cached)) {
 		debugLogInfo('cache', `SWR cache hit ${path}`);
 		scheduleRevalidate(path, fetcher);
 		return cached;
@@ -740,6 +774,7 @@ export function seedDictionariesFromUIMeta(meta: {
 	tags?: unknown[];
 	transaction_templates?: unknown[];
 	debtors?: unknown[];
+	currencies?: unknown[];
 }): void {
 	seedCategoriesFromUIMeta(meta);
 	if (meta.banks !== undefined) writeRefCache('/api/v1/banks', meta.banks);
@@ -749,6 +784,10 @@ export function seedDictionariesFromUIMeta(meta: {
 		writeRefCache('/api/v1/transaction-templates', meta.transaction_templates);
 	}
 	if (meta.debtors !== undefined) writeRefCache('/api/v1/debtors', meta.debtors);
+	if (meta.currencies !== undefined) {
+		writeRefCache('/api/v1/currencies', meta.currencies);
+		setCurrencyCatalog(meta.currencies as CurrencyInfo[]);
+	}
 	seedAccountsFromUIMetaIfEmpty(meta);
 	persistStableOfflineCatalog(meta);
 }
@@ -818,6 +857,7 @@ function accountFromBalanceSummary(summary: AccountBalanceSummary): Account {
 		auto_topup_source_account_id: summary.auto_topup_source_account_id ?? null,
 		status: 'active',
 		is_primary: summary.is_primary,
+		currency: summary.currency,
 		created_at: '',
 		updated_at: ''
 	};
@@ -934,7 +974,8 @@ function applyBalanceSummary(account: Account, summary?: AccountBalanceSummary):
 		auto_topup_target_display:
 			summary.auto_topup_target_display ?? account.auto_topup_target_display,
 		auto_topup_source_account_id:
-			summary.auto_topup_source_account_id ?? account.auto_topup_source_account_id
+			summary.auto_topup_source_account_id ?? account.auto_topup_source_account_id,
+		currency: summary.currency ?? account.currency
 	};
 }
 

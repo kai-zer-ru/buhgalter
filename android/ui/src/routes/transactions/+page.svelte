@@ -176,6 +176,8 @@
 		} else {
 			params.include_future = 'true';
 		}
+		const acc = accounts.find((a) => a.id === accountId);
+		if (acc?.currency) params.currency = acc.currency;
 		return params;
 	}
 

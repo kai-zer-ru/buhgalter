@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/kai-zer-ru/buhgalter/internal/account"
 	"github.com/kai-zer-ru/buhgalter/internal/accountbalance"
 	"github.com/kai-zer-ru/buhgalter/internal/balancehooks"
 	"github.com/kai-zer-ru/buhgalter/internal/categoryseed"
@@ -64,11 +65,20 @@ type Input struct {
 }
 
 type Summary struct {
-	MonthlyTotal        int64          `json:"monthly_total"`
-	MonthlyTotalDisplay string         `json:"monthly_total_display"`
-	YearlyTotal         int64          `json:"yearly_total"`
-	YearlyTotalDisplay  string         `json:"yearly_total_display"`
-	Upcoming            []Subscription `json:"upcoming"`
+	MonthlyTotal        int64               `json:"monthly_total"`
+	MonthlyTotalDisplay string              `json:"monthly_total_display"`
+	YearlyTotal         int64               `json:"yearly_total"`
+	YearlyTotalDisplay  string              `json:"yearly_total_display"`
+	ByCurrency          []SummaryByCurrency `json:"by_currency"`
+	Upcoming            []Subscription      `json:"upcoming"`
+}
+
+type SummaryByCurrency struct {
+	Currency            string `json:"currency"`
+	MonthlyTotal        int64  `json:"monthly_total"`
+	MonthlyTotalDisplay string `json:"monthly_total_display"`
+	YearlyTotal         int64  `json:"yearly_total"`
+	YearlyTotalDisplay  string `json:"yearly_total_display"`
 }
 
 type CandidateTransaction struct {
@@ -266,30 +276,51 @@ func SummaryForUser(ctx context.Context, db *sql.DB, userID string, upcomingDays
 	if upcomingDays <= 0 {
 		upcomingDays = 14
 	}
-	items, err := List(ctx, db, userID)
+	rows, err := queries(db).ListSubscriptionsByUser(ctx, userID)
 	if err != nil {
 		return Summary{}, err
 	}
-	var monthly int64
+	profile, err := account.ProfileCurrency(ctx, db, userID)
+	if err != nil {
+		return Summary{}, err
+	}
+	monthlyBy := map[string]int64{}
 	upcoming := make([]Subscription, 0)
 	now := timeutil.NowUTC()
 	until := now.AddDate(0, 0, upcomingDays)
-	for _, s := range items {
+	for _, row := range rows {
+		s := fromRow(row)
 		if !s.Active {
 			continue
 		}
-		monthly += monthlyEquivalent(s.Amount, s.Period)
+		cur := money.ProfileOrDefault(row.AccountCurrency)
+		monthlyBy[cur] += monthlyEquivalent(s.Amount, s.Period)
 		if next, err := timeutil.ParseUTC(s.NextRunAt); err == nil {
 			if !next.After(until) {
 				upcoming = append(upcoming, s)
 			}
 		}
 	}
+	codes := make([]string, 0, len(monthlyBy))
+	for c := range monthlyBy {
+		codes = append(codes, c)
+	}
+	order := money.OrderPresentWithProfileFirst(profile, codes)
+	byCur := make([]SummaryByCurrency, 0, len(order))
+	for _, c := range order {
+		m := monthlyBy[c]
+		y := m * 12
+		byCur = append(byCur, SummaryByCurrency{
+			Currency: c, MonthlyTotal: m, MonthlyTotalDisplay: money.FormatRubles(m),
+			YearlyTotal: y, YearlyTotalDisplay: money.FormatRubles(y),
+		})
+	}
+	monthly := monthlyBy[profile]
 	yearly := monthly * 12
 	return Summary{
 		MonthlyTotal: monthly, MonthlyTotalDisplay: money.FormatRubles(monthly),
 		YearlyTotal: yearly, YearlyTotalDisplay: money.FormatRubles(yearly),
-		Upcoming: upcoming,
+		ByCurrency: byCur, Upcoming: upcoming,
 	}, nil
 }
 

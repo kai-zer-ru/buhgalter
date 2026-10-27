@@ -40,7 +40,7 @@ func exportNative(ctx context.Context, db *sql.DB, userID, displayName string, f
 			a.ID, a.Name, a.Type, csvStringPtr(a.BankName), FormatCubuxAmount(a.InitialBalance),
 			csvAmountPtr(a.CreditLimit), csvBool(a.IsPrimary != 0), a.Status, csvStringPtr(a.PaymentAccountName),
 			csvBool(a.AutoTopupEnabled != 0), csvAmountPtr(a.AutoTopupThreshold), csvAmountPtr(a.AutoTopupTarget),
-			csvStringPtr(a.AutoTopupSourceName),
+			csvStringPtr(a.AutoTopupSourceName), a.Currency,
 		})
 	}
 
@@ -147,7 +147,7 @@ func exportNative(ctx context.Context, db *sql.DB, userID, displayName string, f
 		debtRows = append(debtRows, []string{
 			d.ID, d.DebtorID, d.DebtorName, d.Direction, FormatCubuxAmount(d.Amount), csvBool(d.AffectsBalance),
 			d.DebtDate, d.DueDate, csvStringPtr(d.Description), csvStringPtr(d.TransactionID),
-			csvBool(d.IsSettled), csvStringPtr(d.SettledAt),
+			csvBool(d.IsSettled), csvStringPtr(d.SettledAt), d.Currency,
 		})
 	}
 	links, err := q.ListDebtLinksByUser(ctx, userID)
@@ -192,7 +192,7 @@ func exportNative(ctx context.Context, db *sql.DB, userID, displayName string, f
 		budgetRows = append(budgetRows, []string{
 			b.ID, b.Name, b.Scope, csvStringPtr(b.CategoryName), csvStringPtr(b.SubcategoryName),
 			FormatCubuxAmount(b.Amount), csvStringPtr(b.AccountName), b.Month,
-			csvBool(b.CopyForward != 0), csvBool(b.Rollover != 0), csvInt(b.AlertAtPercent), csvBool(b.IsActive != 0),
+			csvBool(b.CopyForward != 0), csvBool(b.Rollover != 0), csvInt(b.AlertAtPercent), csvBool(b.IsActive != 0), b.Currency,
 		})
 	}
 

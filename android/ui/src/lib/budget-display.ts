@@ -1,11 +1,16 @@
 import type { BudgetScope, BudgetSummaryItem } from '$lib/api/client';
 import { tr } from '$lib/i18n';
+import { formatBalance } from './finance';
 import { formatMoneyDisplay, fromCents } from './money';
 
 type BudgetStatusFields = Pick<
 	BudgetSummaryItem,
 	'remaining' | 'remaining_display' | 'percent' | 'spent' | 'planned'
->;
+> & { currency?: string };
+
+function moneyWithCurrency(display: string, currency?: string): string {
+	return currency ? formatBalance(display, currency) : formatMoneyDisplay(display);
+}
 
 export function isBudgetExceeded(item: BudgetStatusFields): boolean {
 	return item.remaining < 0 || item.spent > item.planned;
@@ -19,11 +24,17 @@ function overshootAmount(item: BudgetStatusFields): string {
 export function budgetStatusLine(item: BudgetStatusFields): string {
 	if (isBudgetExceeded(item)) {
 		return tr('budget.exceeded', {
-			values: { amount: overshootAmount(item), percent: String(item.percent) }
+			values: {
+				amount: moneyWithCurrency(overshootAmount(item), item.currency),
+				percent: String(item.percent)
+			}
 		});
 	}
 	return tr('budget.remaining_line', {
-		values: { amount: formatMoneyDisplay(item.remaining_display), percent: String(item.percent) }
+		values: {
+			amount: moneyWithCurrency(item.remaining_display, item.currency),
+			percent: String(item.percent)
+		}
 	});
 }
 
@@ -31,10 +42,13 @@ export function budgetStatusLine(item: BudgetStatusFields): string {
 export function budgetRemainingCell(item: BudgetStatusFields): string {
 	if (isBudgetExceeded(item)) {
 		return tr('budget.exceeded', {
-			values: { amount: overshootAmount(item), percent: String(item.percent) }
+			values: {
+				amount: moneyWithCurrency(overshootAmount(item), item.currency),
+				percent: String(item.percent)
+			}
 		});
 	}
-	return formatMoneyDisplay(item.remaining_display);
+	return moneyWithCurrency(item.remaining_display, item.currency);
 }
 
 /** True when create/edit form can load spent preview for the selected scope. */

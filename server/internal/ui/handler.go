@@ -23,11 +23,12 @@ type Handler struct {
 }
 
 type AccountRef struct {
-	ID     string  `json:"id"`
-	Name   string  `json:"name"`
-	Type   string  `json:"type"`
-	Status string  `json:"status"`
-	BankID *string `json:"bank_id,omitempty"`
+	ID       string  `json:"id"`
+	Name     string  `json:"name"`
+	Type     string  `json:"type"`
+	Status   string  `json:"status"`
+	BankID   *string `json:"bank_id,omitempty"`
+	Currency string  `json:"currency"`
 }
 
 type MetaResponse struct {
@@ -62,6 +63,7 @@ func (h *Handler) Meta(w http.ResponseWriter, r *http.Request) {
 	for _, row := range accountRows {
 		accounts = append(accounts, AccountRef{
 			ID: row.ID, Name: row.Name, Type: row.Type, Status: row.Status, BankID: row.BankID,
+			Currency: row.Currency,
 		})
 	}
 

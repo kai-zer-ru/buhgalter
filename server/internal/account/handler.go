@@ -26,6 +26,7 @@ type createRequest struct {
 	InitialBalance   string  `json:"initial_balance"`
 	CreditLimit      *string `json:"credit_limit"`
 	PaymentAccountID *string `json:"payment_account_id"`
+	Currency         string  `json:"currency"`
 }
 
 type updateRequest struct {
@@ -38,6 +39,7 @@ type updateRequest struct {
 	AutoTopupThreshold       *string `json:"auto_topup_threshold,omitempty"`
 	AutoTopupTarget          *string `json:"auto_topup_target,omitempty"`
 	AutoTopupSourceAccountID *string `json:"auto_topup_source_account_id,omitempty"`
+	Currency                 *string `json:"currency,omitempty"`
 }
 
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
@@ -105,6 +107,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		InitialBalance:   balance,
 		CreditLimit:      creditLimit,
 		PaymentAccountID: req.PaymentAccountID,
+		Currency:         req.Currency,
 	})
 	if err := writeAccountError(w, r, err); err != nil {
 		return
@@ -151,6 +154,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		CreditLimit:      creditLimit,
 		PaymentAccountID: req.PaymentAccountID,
 		AutoTopup:        autoTopup,
+		Currency:         req.Currency,
 	})
 	if errors.Is(err, ErrNotFound) {
 		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
@@ -304,6 +308,12 @@ func writeAccountError(w http.ResponseWriter, r *http.Request, err error) error 
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_ACCOUNT_AUTO_TOPUP_SOURCE")
 	case errors.Is(err, ErrArchived):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_ACCOUNT_ARCHIVED_EDIT")
+	case errors.Is(err, ErrInvalidCurrency):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CURRENCY")
+	case errors.Is(err, ErrCurrencyLocked):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_ACCOUNT_CURRENCY_LOCKED")
+	case errors.Is(err, ErrCurrencyMismatch):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CURRENCY_MISMATCH")
 	default:
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 	}

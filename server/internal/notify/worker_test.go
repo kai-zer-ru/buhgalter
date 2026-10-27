@@ -2,6 +2,7 @@ package notify
 
 import (
 	"context"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -361,6 +362,95 @@ func TestWorkerPlannedOperations(t *testing.T) {
 	}
 	if kind != "manual" {
 		t.Fatalf("kind=%q, want manual", kind)
+	}
+}
+
+func TestWorkerPlannedUSDAccountUsesDollarSymbol(t *testing.T) {
+	manager, err := db.NewManager(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+
+	ctx := context.Background()
+	now := time.Now().UTC()
+	userID := "u-plan-usd"
+	_, err = manager.DB().ExecContext(ctx, `
+		INSERT INTO users (id, login, password_hash, display_name, is_admin, language, currency, timezone, theme, created_at, updated_at)
+		VALUES (?, 'planusd', 'hash', 'PlanUSD', 0, 'ru', 'RUB', 'Europe/Moscow', 'light', ?, ?)`,
+		userID, now.Format(time.RFC3339), now.Format(time.RFC3339))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = manager.DB().ExecContext(ctx, `
+		INSERT INTO accounts (id, user_id, name, type, initial_balance, status, currency, created_at, updated_at)
+		VALUES ('acc-usd', ?, 'Dollars', 'cash', 0, 'active', 'USD', ?, ?)`, userID, now.Format(time.RFC3339), now.Format(time.RFC3339))
+	if err != nil {
+		t.Fatal(err)
+	}
+	catID := "cat-expense-usd"
+	_, err = manager.DB().ExecContext(ctx, `
+		INSERT INTO categories (id, user_id, name, type, icon, sort_order, is_primary, is_system, created_at)
+		VALUES (?, ?, 'Еда', 'expense', 'default', 0, 1, 0, ?)`,
+		catID, userID, now.Format(time.RFC3339))
+	if err != nil {
+		t.Fatal(err)
+	}
+	txDate := now.Format("2006-01-02 15:04:05")
+	_, err = manager.DB().ExecContext(ctx, `
+		INSERT INTO transactions (
+			id, user_id, account_id, type, kind, amount, description, category_id,
+			transaction_date, affects_balance, created_at, updated_at
+		) VALUES ('tx-future-usd', ?, 'acc-usd', 'expense', 'future', 1000, 'Coffee', ?, ?, 1, ?, ?)`,
+		userID, catID, txDate, now.Format(time.RFC3339), now.Format(time.RFC3339))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var gotBody string
+	mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		gotBody = string(raw)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer mock.Close()
+	t.Setenv("BUHGALTER_TELEGRAM_BASE_URL", mock.URL)
+
+	secret := "12345678901234567890123456789012"
+	_, err = manager.DB().ExecContext(ctx, `UPDATE system_settings SET notification_secret_key = ? WHERE id = 1`, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	box, err := NewSecretBox(secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, err := box.Encrypt("telegram-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = manager.DB().ExecContext(ctx, `
+		INSERT INTO notification_settings (
+			user_id, telegram_enabled, telegram_bot_token, telegram_chat_id,
+			max_enabled, trigger_debt, trigger_credit, trigger_planned, debt_days_before, credit_days_before,
+			notification_time_local, updated_at
+		) VALUES (?, 1, ?, '12345', 0, 0, 0, 1, 1, 0, '00:00', ?)`,
+		userID, token, now.Format(time.RFC3339))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	worker := NewWorker(manager.DB(), slog.Default())
+	settings := sqlNotificationSettings(t, manager, ctx, userID)
+	msk := time.FixedZone("MSK", 3*3600)
+	if err := worker.runForUser(ctx, userID, now, now.In(msk), settings); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(gotBody, "$") {
+		t.Fatalf("planned USD notify should use dollar symbol, body=%s", gotBody)
+	}
+	if strings.Contains(gotBody, "₽") {
+		t.Fatalf("planned USD notify should not use profile ruble symbol, body=%s", gotBody)
 	}
 }
 

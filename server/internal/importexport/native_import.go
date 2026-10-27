@@ -17,14 +17,15 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/category"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/merchant"
+	"github.com/kai-zer-ru/buhgalter/internal/money"
 	"github.com/kai-zer-ru/buhgalter/internal/tag"
 	"github.com/kai-zer-ru/buhgalter/internal/transactiontemplate"
 )
 
 type nativeAccountMeta struct {
-	Name, Type, Bank, PaymentAccount, AutoTopupSource, Status        string
-	InitialBalance, CreditLimit, AutoTopupThreshold, AutoTopupTarget int64
-	IsPrimary, AutoTopupEnabled, hasLimit                            bool
+	Name, Type, Bank, PaymentAccount, AutoTopupSource, Status, Currency string
+	InitialBalance, CreditLimit, AutoTopupThreshold, AutoTopupTarget    int64
+	IsPrimary, AutoTopupEnabled, hasLimit                               bool
 }
 
 func (r *resolver) loadNativeMeta(nf *NativeFile) {
@@ -53,6 +54,7 @@ func (r *resolver) loadNativeMeta(nf *NativeFile) {
 			IsPrimary:        parseCSVBool(nativeCell(table, row, "is_primary")),
 			AutoTopupEnabled: parseCSVBool(nativeCell(table, row, "auto_topup_enabled")),
 			hasLimit:         err == nil && strings.TrimSpace(nativeCell(table, row, "credit_limit")) != "",
+			Currency:         nativeCell(table, row, "currency"),
 		}
 		r.nativeAccounts[strings.ToLower(name)] = meta
 	}
@@ -126,6 +128,7 @@ func (r *resolver) ensureNativeAccounts(ctx context.Context) error {
 			if typ != want {
 				continue
 			}
+			r.rowCurrency = meta.Currency
 			if _, err := r.resolveAccount(ctx, meta.Name); err != nil {
 				return err
 			}
@@ -540,6 +543,10 @@ func importNativeDebts(ctx context.Context, db *sql.DB, r *resolver, nf *NativeF
 	}
 	debtMap := map[string]string{}
 	if table, ok := nf.Sections[sectionDebts]; ok {
+		profileCurrency := money.DefaultCurrency
+		if f, err := q.GetUserFormatting(ctx, r.userID); err == nil && money.Valid(money.Normalize(f.Currency)) {
+			profileCurrency = money.Normalize(f.Currency)
+		}
 		for _, row := range table.Rows {
 			oldID := nativeCell(table, row, "id")
 			debtorID := debtorMap[nativeCell(table, row, "debtor_id")]
@@ -554,13 +561,24 @@ func importNativeDebts(ctx context.Context, db *sql.DB, r *resolver, nf *NativeF
 				return err
 			}
 			newID := uuid.NewString()
+			debtCurrency := money.Normalize(nativeCell(table, row, "currency"))
+			if !money.Valid(debtCurrency) {
+				if txID := remapTx(r, nativeCell(table, row, "transaction_id")); txID != nil && *txID != "" {
+					if tx, err := q.GetTransactionByID(ctx, sqlcdb.GetTransactionByIDParams{ID: *txID, UserID: r.userID}); err == nil && tx.AccountCurrency != nil {
+						debtCurrency = money.ProfileOrDefault(*tx.AccountCurrency)
+					}
+				}
+			}
+			if !money.Valid(debtCurrency) {
+				debtCurrency = profileCurrency
+			}
 			if err := q.InsertDebt(ctx, sqlcdb.InsertDebtParams{
 				ID: newID, UserID: r.userID, DebtorID: debtorID, Direction: nativeCell(table, row, "direction"),
 				Amount: amt, AffectsBalance: boolToInt(parseCSVBool(nativeCell(table, row, "affects_balance"))),
 				DebtDate: nativeCell(table, row, "debt_date"), DueDate: nativeCell(table, row, "due_date"),
 				Description: strPtr(nativeCell(table, row, "description")), TransactionID: remapTx(r, nativeCell(table, row, "transaction_id")),
 				IsSettled: boolToInt(parseCSVBool(nativeCell(table, row, "is_settled"))),
-				SettledAt: strPtr(nativeCell(table, row, "settled_at")), CreatedAt: now,
+				SettledAt: strPtr(nativeCell(table, row, "settled_at")), CreatedAt: now, Currency: debtCurrency,
 			}); err != nil {
 				return err
 			}
@@ -697,6 +715,7 @@ func importNativeBudgets(ctx context.Context, db *sql.DB, r *resolver, nf *Nativ
 			AlertAtPercent:  90,
 			IsActive:        parseCSVBool(nativeCell(table, row, "is_active")),
 			SkipCopyForward: true,
+			Currency:        nativeCell(table, row, "currency"),
 		}
 		if v := parseOptionalInt(nativeCell(table, row, "alert_at_percent")); v != nil {
 			in.AlertAtPercent = *v

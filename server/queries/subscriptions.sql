@@ -9,6 +9,7 @@ SELECT
     s.amount,
     s.account_id,
     a.name AS account_name,
+    a.currency AS account_currency,
     s.subcategory_id,
     sub.name AS subcategory_name,
     sub.icon AS subcategory_icon,
@@ -40,6 +41,7 @@ SELECT
     s.amount,
     s.account_id,
     a.name AS account_name,
+    a.currency AS account_currency,
     s.subcategory_id,
     sub.name AS subcategory_name,
     sub.icon AS subcategory_icon,
@@ -164,6 +166,7 @@ SELECT
     s.amount,
     s.account_id,
     a.name AS account_name,
+    a.currency AS account_currency,
     s.next_run_at
 FROM subscriptions s
 JOIN accounts a ON a.id = s.account_id

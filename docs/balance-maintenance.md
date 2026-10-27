@@ -33,7 +33,7 @@
 3. `current_balance < auto_topup_threshold` (копейки).
 4. `transfer_amount = auto_topup_target - current_balance`, `transfer_amount > 0`.
 5. На счёте списания: `current_balance >= transfer_amount`.
-6. Оба счёта принадлежат пользователю, активны, разные.
+6. Оба счёта принадлежат пользователю, активны, разные, **одной валюты** (`ERR_CURRENCY_MISMATCH` при настройке).
 
 Прогноз (`forecast_balance`) **не** учитывается.
 

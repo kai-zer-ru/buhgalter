@@ -230,7 +230,7 @@ OpenAPI: `CreateTransferRequest.commission`, схемы `Transfer` и `Transacti
 
 **Отображение сумм в UI:** компонент `MoneyDisplay.svelte` (`web/src/lib/components/MoneyDisplay.svelte`) — единая точка для read-only сумм. Принимает `value` (строка `_display` из API), `cents` (копейки) и опционально `currency` (добавляет символ валюты, например `₽`). Логика форматирования — в `$lib/money-display.ts` (`formatMoneyForDisplay`); для интерполяции в i18n (`tr(..., { values: { amount } })`) используйте ту же функцию.
 
-Валюта сейчас берётся из `users.currency` (**только отображение**). Учёт нескольких валют на счетах — план: [multicurrency.md](../roadmap/multicurrency.md).
+В журнале, карточках и формах `MoneyDisplay` получает **валюту строки** (`tx.currency` / `account.currency`), не профиль. Символ — из каталога `GET /currencies` (`formatBalance`). Сводки не смешивают валюты: главная — `totals_by_currency[]`; `/stats` и `/budget` — переключатель при нескольких валютах. Подробно: [multicurrency.md](../roadmap/multicurrency.md).
 
 **Ввод:** компонент `MoneyInput.svelte` — при вводе курсор сохраняется при форматировании (`mapMoneyInputCursor`).
 

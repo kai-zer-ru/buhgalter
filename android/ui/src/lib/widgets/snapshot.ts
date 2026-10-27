@@ -8,6 +8,7 @@ import type {
 	Subscription,
 	Transaction
 } from '$lib/api/client';
+import { hasOtherAccountCurrencies } from '$lib/currency';
 import { formatBalance } from '$lib/finance';
 import { fromCents } from '$lib/money';
 
@@ -51,6 +52,7 @@ export type WidgetSnapshot = {
 	cash_display: string;
 	bank_display: string;
 	credit_funds_display: string;
+	other_currencies_display: string | null;
 	budget: WidgetBudgetItem | null;
 	upcoming: WidgetUpcomingItem[];
 	accounts: WidgetAccountItem[];
@@ -66,6 +68,7 @@ export type BuildWidgetSnapshotInput = {
 	recurring?: RecurringOperation[];
 	currency: string;
 	language: string;
+	otherCurrenciesLabel?: string;
 	now?: Date;
 };
 
@@ -189,11 +192,14 @@ export function buildUpcomingItems(
 
 function sumBalanceByType(
 	accounts: readonly AccountBalanceSummary[],
-	type: AccountBalanceSummary['type']
+	type: AccountBalanceSummary['type'],
+	profileCurrency: string
 ): number {
 	let sum = 0;
 	for (const a of accounts) {
 		if (a.type !== type) continue;
+		const code = a.currency || profileCurrency;
+		if (code !== profileCurrency) continue;
 		sum += a.balance;
 	}
 	return sum;
@@ -203,9 +209,9 @@ export function buildWidgetSnapshot(input: BuildWidgetSnapshotInput): WidgetSnap
 	const { dashboard, currency } = input;
 	const accounts = dashboard.accounts;
 	const cards = dashboard.credit_cards_summary;
-	const cashCents = sumBalanceByType(accounts, 'cash');
-	const bankCents = sumBalanceByType(accounts, 'bank');
-	const creditCents = cards?.total_balance ?? sumBalanceByType(accounts, 'credit_card');
+	const cashCents = sumBalanceByType(accounts, 'cash', currency);
+	const bankCents = sumBalanceByType(accounts, 'bank', currency);
+	const creditCents = cards?.total_balance ?? sumBalanceByType(accounts, 'credit_card', currency);
 	const cashDisplay = formatWidgetCents(cashCents, currency);
 	const bankDisplay = formatWidgetCents(bankCents, currency);
 	const creditDisplay = formatWidgetCents(creditCents, currency);
@@ -220,6 +226,9 @@ export function buildWidgetSnapshot(input: BuildWidgetSnapshotInput): WidgetSnap
 		cash_display: cashDisplay,
 		bank_display: bankDisplay,
 		credit_funds_display: creditDisplay,
+		other_currencies_display: hasOtherAccountCurrencies(accounts, currency)
+			? (input.otherCurrenciesLabel ?? '')
+			: null,
 		budget: pickBudget(input.budgetItems, currency),
 		upcoming: buildUpcomingItems(
 			input.credits,

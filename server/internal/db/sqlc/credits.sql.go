@@ -146,20 +146,22 @@ func (q *Queries) CountCreditPayments(ctx context.Context, creditID string) (int
 }
 
 const creditPaymentsUnappliedByUser = `-- name: CreditPaymentsUnappliedByUser :many
-SELECT cp.id, cp.credit_id, c.name AS credit_name, c.debit_account_id, cp.amount, cp.payment_date
+SELECT cp.id, cp.credit_id, c.name AS credit_name, c.debit_account_id, cp.amount, cp.payment_date, a.currency AS account_currency
 FROM credit_payments cp
 JOIN credits c ON c.id = cp.credit_id
+JOIN accounts a ON a.id = c.debit_account_id
 WHERE cp.is_applied = 0 AND cp.kind = 'scheduled'
   AND c.status = 'active' AND c.user_id = ?
 `
 
 type CreditPaymentsUnappliedByUserRow struct {
-	ID             string  `json:"id"`
-	CreditID       string  `json:"credit_id"`
-	CreditName     *string `json:"credit_name"`
-	DebitAccountID string  `json:"debit_account_id"`
-	Amount         int64   `json:"amount"`
-	PaymentDate    string  `json:"payment_date"`
+	ID              string  `json:"id"`
+	CreditID        string  `json:"credit_id"`
+	CreditName      *string `json:"credit_name"`
+	DebitAccountID  string  `json:"debit_account_id"`
+	Amount          int64   `json:"amount"`
+	PaymentDate     string  `json:"payment_date"`
+	AccountCurrency string  `json:"account_currency"`
 }
 
 func (q *Queries) CreditPaymentsUnappliedByUser(ctx context.Context, userID string) ([]CreditPaymentsUnappliedByUserRow, error) {
@@ -178,6 +180,7 @@ func (q *Queries) CreditPaymentsUnappliedByUser(ctx context.Context, userID stri
 			&i.DebitAccountID,
 			&i.Amount,
 			&i.PaymentDate,
+			&i.AccountCurrency,
 		); err != nil {
 			return nil, err
 		}

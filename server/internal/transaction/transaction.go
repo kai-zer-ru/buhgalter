@@ -27,6 +27,7 @@ type Transaction struct {
 	AccountID             string    `json:"account_id"`
 	AccountName           string    `json:"account_name,omitempty"`
 	AccountStatus         string    `json:"account_status,omitempty"`
+	Currency              string    `json:"currency"`
 	TransferAccountName   string    `json:"transfer_account_name,omitempty"`
 	TransferAccountStatus string    `json:"transfer_account_status,omitempty"`
 	Type                  string    `json:"type"`
@@ -71,6 +72,7 @@ type ListFilters struct {
 	Search     string
 	MerchantID string
 	TagID      string
+	Currency   string
 	Sort       string
 	Page       int
 	Limit      int
@@ -83,8 +85,10 @@ type ListMeta struct {
 }
 
 type ListResult struct {
-	Data []Transaction `json:"data"`
-	Meta ListMeta      `json:"meta"`
+	Data                []Transaction `json:"data"`
+	Meta                ListMeta      `json:"meta"`
+	Currency            string        `json:"currency,omitempty"`
+	AvailableCurrencies []string      `json:"available_currencies,omitempty"`
 }
 
 var (
@@ -106,6 +110,9 @@ var (
 	ErrCommissionLinked              = errors.New("commission is linked to transfer")
 	ErrInvalidMerchant               = errors.New("invalid merchant")
 	ErrInvalidTag                    = errors.New("invalid tag")
+	ErrTransferToAmountRequired      = errors.New("to_amount is required for a cross-currency transfer")
+	ErrTransferToAmountMismatch      = errors.New("to_amount must equal amount for a same-currency transfer")
+	ErrCurrencyMismatch              = money.ErrCurrencyMismatch
 )
 
 func isTransferCommission(tx Transaction) bool {
@@ -122,7 +129,7 @@ func txFromGetRow(row sqlcdb.GetTransactionByIDRow) Transaction {
 		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID, row.SubscriptionID, row.MerchantID,
 		row.StoreID, row.ReceiptImportID, row.StoreName,
 		row.TransactionDate, row.CreatedAt, row.UpdatedAt,
-		row.MerchantName, row.MerchantIcon, row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.TransferAccountName, row.TransferAccountStatus,
+		row.MerchantName, row.MerchantIcon, row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.AccountCurrency, row.TransferAccountName, row.TransferAccountStatus,
 		row.TransferIsOut, row.CreditPaymentLinked,
 	)
 }
@@ -133,7 +140,7 @@ func txFromListDesc(row sqlcdb.ListTransactionsFilteredDateDescRow) Transaction 
 		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID, row.SubscriptionID, row.MerchantID,
 		row.StoreID, row.ReceiptImportID, row.StoreName,
 		row.TransactionDate, row.CreatedAt, row.UpdatedAt,
-		row.MerchantName, row.MerchantIcon, row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.TransferAccountName, row.TransferAccountStatus,
+		row.MerchantName, row.MerchantIcon, row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.AccountCurrency, row.TransferAccountName, row.TransferAccountStatus,
 		row.TransferIsOut, row.CreditPaymentLinked,
 	)
 }
@@ -144,7 +151,7 @@ func txFromListAsc(row sqlcdb.ListTransactionsFilteredDateAscRow) Transaction {
 		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID, row.SubscriptionID, row.MerchantID,
 		row.StoreID, row.ReceiptImportID, row.StoreName,
 		row.TransactionDate, row.CreatedAt, row.UpdatedAt,
-		row.MerchantName, row.MerchantIcon, row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.TransferAccountName, row.TransferAccountStatus,
+		row.MerchantName, row.MerchantIcon, row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.AccountCurrency, row.TransferAccountName, row.TransferAccountStatus,
 		row.TransferIsOut, row.CreditPaymentLinked,
 	)
 }
@@ -155,7 +162,7 @@ func txFromInboxDesc(row sqlcdb.ListInboxTransactionsDateDescRow) Transaction {
 		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID, row.SubscriptionID, row.MerchantID,
 		row.StoreID, row.ReceiptImportID, row.StoreName,
 		row.TransactionDate, row.CreatedAt, row.UpdatedAt,
-		row.MerchantName, row.MerchantIcon, row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.TransferAccountName, row.TransferAccountStatus,
+		row.MerchantName, row.MerchantIcon, row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.AccountCurrency, row.TransferAccountName, row.TransferAccountStatus,
 		row.TransferIsOut, row.CreditPaymentLinked,
 	)
 }
@@ -166,7 +173,7 @@ func txFromInboxAsc(row sqlcdb.ListInboxTransactionsDateAscRow) Transaction {
 		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID, row.SubscriptionID, row.MerchantID,
 		row.StoreID, row.ReceiptImportID, row.StoreName,
 		row.TransactionDate, row.CreatedAt, row.UpdatedAt,
-		row.MerchantName, row.MerchantIcon, row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.TransferAccountName, row.TransferAccountStatus,
+		row.MerchantName, row.MerchantIcon, row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.AccountCurrency, row.TransferAccountName, row.TransferAccountStatus,
 		row.TransferIsOut, row.CreditPaymentLinked,
 	)
 }
@@ -177,7 +184,7 @@ func txFromRecent(row sqlcdb.ListRecentTransactionsRow) Transaction {
 		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID, row.SubscriptionID, row.MerchantID,
 		row.StoreID, row.ReceiptImportID, row.StoreName,
 		row.TransactionDate, row.CreatedAt, row.UpdatedAt,
-		row.MerchantName, row.MerchantIcon, row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.TransferAccountName, row.TransferAccountStatus,
+		row.MerchantName, row.MerchantIcon, row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.AccountCurrency, row.TransferAccountName, row.TransferAccountStatus,
 		row.TransferIsOut, row.CreditPaymentLinked,
 	)
 }
@@ -188,7 +195,7 @@ func txFromGroupRow(row sqlcdb.ListTransactionsByTransferGroupRow) Transaction {
 		row.CategoryID, row.SubcategoryID, row.TransferGroupID, row.TransferAccountID, row.SubscriptionID, row.MerchantID,
 		row.StoreID, row.ReceiptImportID, row.StoreName,
 		row.TransactionDate, row.CreatedAt, row.UpdatedAt,
-		row.MerchantName, row.MerchantIcon, row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.TransferAccountName, row.TransferAccountStatus,
+		row.MerchantName, row.MerchantIcon, row.CategoryName, row.CategoryIcon, row.CategoryIsSystem, row.SubcategoryName, row.SubcategoryIcon, row.AccountName, row.AccountStatus, row.AccountCurrency, row.TransferAccountName, row.TransferAccountStatus,
 		row.TransferIsOut, 0,
 	)
 }
@@ -198,7 +205,7 @@ func txFromFields(
 	categoryID, subcategoryID, transferGroupID, transferAccountID, subscriptionID, merchantID *string,
 	storeID, receiptImportID, storeName *string,
 	transactionDate, createdAt, updatedAt string,
-	merchantName, merchantIcon, categoryName, categoryIcon *string, categoryIsSystem *int64, subcategoryName, subcategoryIcon, accountName, accountStatus, transferAccountName, transferAccountStatus *string,
+	merchantName, merchantIcon, categoryName, categoryIcon *string, categoryIsSystem *int64, subcategoryName, subcategoryIcon, accountName, accountStatus, accountCurrency, transferAccountName, transferAccountStatus *string,
 	transferIsOut, creditPaymentLinked int64,
 ) Transaction {
 	t := Transaction{
@@ -237,6 +244,9 @@ func txFromFields(
 	}
 	if accountStatus != nil {
 		t.AccountStatus = *accountStatus
+	}
+	if accountCurrency != nil {
+		t.Currency = *accountCurrency
 	}
 	if transferAccountName != nil {
 		t.TransferAccountName = *transferAccountName
@@ -772,6 +782,7 @@ type filterParams struct {
 	merchantID string
 	storeID    string
 	tagID      string
+	currency   string
 }
 
 func buildFilterParams(userID string, f ListFilters) filterParams {
@@ -787,6 +798,7 @@ func buildFilterParams(userID string, f ListFilters) filterParams {
 		merchantID: f.MerchantID,
 		storeID:    f.StoreID,
 		tagID:      f.TagID,
+		currency:   f.Currency,
 	}
 }
 
@@ -818,6 +830,8 @@ func (fp filterParams) count() sqlcdb.CountTransactionsFilteredParams {
 		Column20:          fp.tagID,
 		TagID:             fp.tagID,
 		Column22:          fp.accountID,
+		Column23:          fp.currency,
+		Currency:          fp.currency,
 	}
 }
 
@@ -846,6 +860,8 @@ func (fp filterParams) listDesc(limit, offset int64) sqlcdb.ListTransactionsFilt
 		Column20:          p.Column20,
 		TagID:             p.TagID,
 		Column22:          p.Column22,
+		Column23:          p.Column23,
+		Currency:          p.Currency,
 		Limit:             limit,
 		Offset:            offset,
 	}
@@ -876,6 +892,8 @@ func (fp filterParams) listAsc(limit, offset int64) sqlcdb.ListTransactionsFilte
 		Column20:          p.Column20,
 		TagID:             p.TagID,
 		Column22:          p.Column22,
+		Column23:          p.Column23,
+		Currency:          p.Currency,
 		Limit:             limit,
 		Offset:            offset,
 	}

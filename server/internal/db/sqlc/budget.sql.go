@@ -12,6 +12,7 @@ import (
 const budgetSpent = `-- name: BudgetSpent :one
 SELECT CAST(COALESCE(SUM(t.amount), 0) AS INTEGER) AS spent
 FROM transactions t
+JOIN accounts a ON a.id = t.account_id AND a.currency = ?
 WHERE t.user_id = ?
   AND t.type = 'expense'
   AND (? = '' OR t.account_id = ?)
@@ -30,12 +31,13 @@ WHERE t.user_id = ?
 `
 
 type BudgetSpentParams struct {
+	Currency          string      `json:"currency"`
 	UserID            string      `json:"user_id"`
-	Column2           interface{} `json:"column_2"`
+	Column3           interface{} `json:"column_3"`
 	AccountID         string      `json:"account_id"`
-	Column4           interface{} `json:"column_4"`
+	Column5           interface{} `json:"column_5"`
 	CategoryID        *string     `json:"category_id"`
-	Column6           interface{} `json:"column_6"`
+	Column7           interface{} `json:"column_7"`
 	SubcategoryID     *string     `json:"subcategory_id"`
 	TransactionDate   string      `json:"transaction_date"`
 	TransactionDate_2 string      `json:"transaction_date_2"`
@@ -43,12 +45,13 @@ type BudgetSpentParams struct {
 
 func (q *Queries) BudgetSpent(ctx context.Context, arg BudgetSpentParams) (int64, error) {
 	row := q.db.QueryRowContext(ctx, budgetSpent,
+		arg.Currency,
 		arg.UserID,
-		arg.Column2,
+		arg.Column3,
 		arg.AccountID,
-		arg.Column4,
+		arg.Column5,
 		arg.CategoryID,
-		arg.Column6,
+		arg.Column7,
 		arg.SubcategoryID,
 		arg.TransactionDate,
 		arg.TransactionDate_2,
@@ -66,8 +69,9 @@ WHERE user_id = ?
   AND IFNULL(category_id, '') = IFNULL(?, '')
   AND IFNULL(subcategory_id, '') = IFNULL(?, '')
   AND month = ?
+  AND currency = ?
   AND is_active = 1
-  AND (?6 = '' OR id != ?6)
+  AND (?7 = '' OR id != ?7)
 `
 
 type CountActiveBudgetConflictParams struct {
@@ -76,6 +80,7 @@ type CountActiveBudgetConflictParams struct {
 	IFNULL    interface{} `json:"IFNULL"`
 	IFNULL_2  interface{} `json:"IFNULL_2"`
 	Month     string      `json:"month"`
+	Currency  string      `json:"currency"`
 	ExcludeID interface{} `json:"exclude_id"`
 }
 
@@ -86,6 +91,7 @@ func (q *Queries) CountActiveBudgetConflict(ctx context.Context, arg CountActive
 		arg.IFNULL,
 		arg.IFNULL_2,
 		arg.Month,
+		arg.Currency,
 		arg.ExcludeID,
 	)
 	var cnt int64
@@ -151,6 +157,7 @@ SELECT
     b.rollover,
     b.alert_at_percent,
     b.is_active,
+    b.currency,
     b.created_at,
     b.updated_at
 FROM budgets b
@@ -184,6 +191,7 @@ type GetBudgetByIDRow struct {
 	Rollover        int64   `json:"rollover"`
 	AlertAtPercent  int64   `json:"alert_at_percent"`
 	IsActive        int64   `json:"is_active"`
+	Currency        string  `json:"currency"`
 	CreatedAt       string  `json:"created_at"`
 	UpdatedAt       string  `json:"updated_at"`
 }
@@ -210,6 +218,7 @@ func (q *Queries) GetBudgetByID(ctx context.Context, arg GetBudgetByIDParams) (G
 		&i.Rollover,
 		&i.AlertAtPercent,
 		&i.IsActive,
+		&i.Currency,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -273,9 +282,9 @@ INSERT INTO budgets (
     id, user_id, name, scope,
     category_id, subcategory_id, amount, period, account_id,
     month, copy_forward,
-    rollover, alert_at_percent, is_active,
+    rollover, alert_at_percent, is_active, currency,
     created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type InsertBudgetParams struct {
@@ -293,6 +302,7 @@ type InsertBudgetParams struct {
 	Rollover       int64   `json:"rollover"`
 	AlertAtPercent int64   `json:"alert_at_percent"`
 	IsActive       int64   `json:"is_active"`
+	Currency       string  `json:"currency"`
 	CreatedAt      string  `json:"created_at"`
 	UpdatedAt      string  `json:"updated_at"`
 }
@@ -313,6 +323,7 @@ func (q *Queries) InsertBudget(ctx context.Context, arg InsertBudgetParams) erro
 		arg.Rollover,
 		arg.AlertAtPercent,
 		arg.IsActive,
+		arg.Currency,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
@@ -382,7 +393,8 @@ SELECT
     b.amount,
     b.account_id,
     b.month,
-    b.alert_at_percent
+    b.alert_at_percent,
+    b.currency
 FROM budgets b
 WHERE b.user_id = ? AND b.is_active = 1
   AND (? = '' OR b.month = ?)
@@ -405,6 +417,7 @@ type ListActiveBudgetsByUserRow struct {
 	AccountID      *string `json:"account_id"`
 	Month          string  `json:"month"`
 	AlertAtPercent int64   `json:"alert_at_percent"`
+	Currency       string  `json:"currency"`
 }
 
 func (q *Queries) ListActiveBudgetsByUser(ctx context.Context, arg ListActiveBudgetsByUserParams) ([]ListActiveBudgetsByUserRow, error) {
@@ -427,6 +440,7 @@ func (q *Queries) ListActiveBudgetsByUser(ctx context.Context, arg ListActiveBud
 			&i.AccountID,
 			&i.Month,
 			&i.AlertAtPercent,
+			&i.Currency,
 		); err != nil {
 			return nil, err
 		}
@@ -461,6 +475,7 @@ SELECT
     b.rollover,
     b.alert_at_percent,
     b.is_active,
+    b.currency,
     b.created_at,
     b.updated_at
 FROM budgets b
@@ -497,6 +512,7 @@ type ListBudgetsByUserRow struct {
 	Rollover        int64   `json:"rollover"`
 	AlertAtPercent  int64   `json:"alert_at_percent"`
 	IsActive        int64   `json:"is_active"`
+	Currency        string  `json:"currency"`
 	CreatedAt       string  `json:"created_at"`
 	UpdatedAt       string  `json:"updated_at"`
 }
@@ -529,6 +545,7 @@ func (q *Queries) ListBudgetsByUser(ctx context.Context, arg ListBudgetsByUserPa
 			&i.Rollover,
 			&i.AlertAtPercent,
 			&i.IsActive,
+			&i.Currency,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {

@@ -115,6 +115,7 @@ SELECT
     s.amount,
     s.account_id,
     a.name AS account_name,
+    a.currency AS account_currency,
     s.subcategory_id,
     sub.name AS subcategory_name,
     sub.icon AS subcategory_icon,
@@ -150,6 +151,7 @@ type GetSubscriptionByIDRow struct {
 	Amount          int64   `json:"amount"`
 	AccountID       string  `json:"account_id"`
 	AccountName     string  `json:"account_name"`
+	AccountCurrency string  `json:"account_currency"`
 	SubcategoryID   *string `json:"subcategory_id"`
 	SubcategoryName *string `json:"subcategory_name"`
 	SubcategoryIcon *string `json:"subcategory_icon"`
@@ -179,6 +181,7 @@ func (q *Queries) GetSubscriptionByID(ctx context.Context, arg GetSubscriptionBy
 		&i.Amount,
 		&i.AccountID,
 		&i.AccountName,
+		&i.AccountCurrency,
 		&i.SubcategoryID,
 		&i.SubcategoryName,
 		&i.SubcategoryIcon,
@@ -331,6 +334,7 @@ SELECT
     s.amount,
     s.account_id,
     a.name AS account_name,
+    a.currency AS account_currency,
     s.next_run_at
 FROM subscriptions s
 JOIN accounts a ON a.id = s.account_id
@@ -338,14 +342,15 @@ WHERE s.user_id = ? AND s.active = 1
 `
 
 type ListActiveSubscriptionsForNotifyRow struct {
-	ID          string  `json:"id"`
-	Name        string  `json:"name"`
-	Description *string `json:"description"`
-	WebsiteUrl  *string `json:"website_url"`
-	Amount      int64   `json:"amount"`
-	AccountID   string  `json:"account_id"`
-	AccountName string  `json:"account_name"`
-	NextRunAt   string  `json:"next_run_at"`
+	ID              string  `json:"id"`
+	Name            string  `json:"name"`
+	Description     *string `json:"description"`
+	WebsiteUrl      *string `json:"website_url"`
+	Amount          int64   `json:"amount"`
+	AccountID       string  `json:"account_id"`
+	AccountName     string  `json:"account_name"`
+	AccountCurrency string  `json:"account_currency"`
+	NextRunAt       string  `json:"next_run_at"`
 }
 
 func (q *Queries) ListActiveSubscriptionsForNotify(ctx context.Context, userID string) ([]ListActiveSubscriptionsForNotifyRow, error) {
@@ -365,6 +370,7 @@ func (q *Queries) ListActiveSubscriptionsForNotify(ctx context.Context, userID s
 			&i.Amount,
 			&i.AccountID,
 			&i.AccountName,
+			&i.AccountCurrency,
 			&i.NextRunAt,
 		); err != nil {
 			return nil, err
@@ -575,6 +581,7 @@ SELECT
     s.amount,
     s.account_id,
     a.name AS account_name,
+    a.currency AS account_currency,
     s.subcategory_id,
     sub.name AS subcategory_name,
     sub.icon AS subcategory_icon,
@@ -606,6 +613,7 @@ type ListSubscriptionsByUserRow struct {
 	Amount          int64   `json:"amount"`
 	AccountID       string  `json:"account_id"`
 	AccountName     string  `json:"account_name"`
+	AccountCurrency string  `json:"account_currency"`
 	SubcategoryID   *string `json:"subcategory_id"`
 	SubcategoryName *string `json:"subcategory_name"`
 	SubcategoryIcon *string `json:"subcategory_icon"`
@@ -641,6 +649,7 @@ func (q *Queries) ListSubscriptionsByUser(ctx context.Context, userID string) ([
 			&i.Amount,
 			&i.AccountID,
 			&i.AccountName,
+			&i.AccountCurrency,
 			&i.SubcategoryID,
 			&i.SubcategoryName,
 			&i.SubcategoryIcon,

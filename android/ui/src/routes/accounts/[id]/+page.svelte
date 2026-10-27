@@ -8,6 +8,7 @@
 		getAccountBalance,
 		listAccounts,
 		listBanks,
+		listCurrencies,
 		listCategories,
 		listMerchants,
 		listTags,
@@ -19,8 +20,10 @@
 		type Category,
 		type Merchant,
 		type Tag,
-		type Transaction
+		type Transaction,
+		type Currency
 	} from '$lib/api/client';
+	import { currencySelectOptions } from '$lib/currency';
 	import { unarchiveAccount, updateAccount } from '$lib/offline/accounts-api';
 	import { deleteTransaction, deleteTransfer } from '$lib/offline/transactions-api';
 	import { mergeOutboxTransactions, refreshMergeMeta } from '$lib/offline/merge';
@@ -93,6 +96,8 @@
 	let bankId = $state('');
 	let paymentAccountId = $state('');
 	let initialBalance = $state('');
+	let currencyCode = $state('');
+	let currencies = $state<Currency[]>([]);
 	let loading = $state(true);
 	let loadError = $state<string | null>(null);
 	let filterLoading = $state(false);
@@ -119,6 +124,8 @@
 	});
 	const visibleTx = $derived(dedupeTransferLegs(transactions));
 	const bankOptions = $derived(banks.map((bank) => ({ value: bank.id, label: bank.name })));
+	const currencyOptions = $derived(currencySelectOptions(currencies));
+	const currencyLocked = $derived(true);
 	let allAccountsBase = $state<Account[]>([]);
 	const allAccounts = $derived.by(() => {
 		void $outboxTick;
@@ -207,6 +214,7 @@
 		} else {
 			params.include_future = 'true';
 		}
+		if (acc?.currency) params.currency = acc.currency;
 		return params;
 	}
 
@@ -241,7 +249,8 @@
 				incomeCats,
 				accountList,
 				merchantList,
-				tagList
+				tagList,
+				currencyList
 			] = await Promise.all([
 				getAccount(id),
 				getAccountBalance(id),
@@ -250,7 +259,8 @@
 				listCategories('income'),
 				listAccounts(),
 				listMerchants(),
-				listTags()
+				listTags(),
+				listCurrencies()
 			]);
 			acc = opts.background ? assignIfChanged(acc, account) : account;
 			accBalanceBase = opts.background
@@ -268,7 +278,9 @@
 			categories = opts.background ? assignIfChanged(categories, nextCategories) : nextCategories;
 			merchants = opts.background ? assignIfChanged(merchants, merchantList) : merchantList;
 			tags = opts.background ? assignIfChanged(tags, tagList) : tagList;
+			currencies = opts.background ? assignIfChanged(currencies, currencyList) : currencyList;
 			name = account.name;
+			currencyCode = account.currency ?? $user?.currency ?? 'RUB';
 			bankId = account.bank_id ?? '';
 			paymentAccountId = account.payment_account_id ?? '';
 			initialBalance = formatAccountInitialBalanceForEdit(account.initial_balance);
@@ -653,6 +665,17 @@
 											maxlength="64"
 										/>
 									</div>
+									<Select
+										id="account-currency"
+										label={$_('accounts.field.currency')}
+										hint={currencyLocked
+											? $_('accounts.currency.locked')
+											: $_('accounts.currency.hint')}
+										bind:value={currencyCode}
+										options={currencyOptions}
+										disabled={currencyLocked}
+										usePortal
+									/>
 									{#if acc.type === 'bank' || acc.type === 'credit_card'}
 										<Select
 											label={$_('accounts.field.bank')}
@@ -670,7 +693,7 @@
 												<p class="tabular-nums">
 													<MoneyDisplay
 														value={acc.credit_limit_display}
-														currency={$user?.currency ?? 'RUB'}
+														currency={acc.currency}
 														class=""
 													/>
 												</p>
@@ -749,7 +772,7 @@
 										<p class="mt-1 text-3xl font-semibold tabular-nums">
 											<MoneyDisplay
 												value={accBalance?.balance_display ?? acc.balance_display}
-												currency={$user?.currency ?? 'RUB'}
+												currency={acc.currency}
 												class=""
 											/>
 										</p>
@@ -758,7 +781,7 @@
 												{$_('accounts.field.creditLimit')}:
 												<MoneyDisplay
 													value={acc.credit_limit_display}
-													currency={$user?.currency ?? 'RUB'}
+													currency={acc.currency}
 													class=""
 												/>
 											</p>
@@ -778,7 +801,7 @@
 												{$_(forecastWithLabelKey(accBalance ?? {}))}:
 												<MoneyDisplay
 													value={accBalance?.forecast_display ?? acc.balance_display}
-													currency={$user?.currency ?? 'RUB'}
+													currency={acc.currency}
 													class=""
 												/>
 											</p>

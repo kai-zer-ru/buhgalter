@@ -623,6 +623,8 @@ func writeCreditError(w http.ResponseWriter, r *http.Request, err error) bool {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_INVALID_TERM")
 	case errors.Is(err, ErrInvalidAccount):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_ACCOUNT_NOT_FOUND")
+	case errors.Is(err, ErrCurrencyMismatch):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CURRENCY_MISMATCH")
 	case errors.Is(err, ErrAccountArchived):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_ACCOUNT_ARCHIVED")
 	case errors.Is(err, ErrAlreadyClosed):

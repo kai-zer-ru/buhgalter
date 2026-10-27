@@ -3,12 +3,14 @@ import type { Transaction } from '$lib/api/client';
 import {
 	computeOutboxAccountDeltas,
 	effectFromTransactionPayload,
+	effectFromTransferPayload,
 	resetOutboxDeltasCacheForTests
 } from '$lib/offline/balance-overlay';
 import {
 	enqueueTransactionCreate,
 	enqueueTransactionDelete,
 	enqueueTransactionUpdate,
+	enqueueTransferCreate,
 	resetOutboxForTests
 } from '$lib/offline/store';
 import {
@@ -103,5 +105,35 @@ describe('computeOutboxAccountDeltas', () => {
 		enqueueTransactionDelete('tx-2');
 		const deltas = computeOutboxAccountDeltas(tz);
 		expect(deltas.balance['acc-2']).toBe(-20_000);
+	});
+});
+
+describe('effectFromTransferPayload FX', () => {
+	it('credits the destination with to_amount, not the source amount', () => {
+		const effect = effectFromTransferPayload(
+			{
+				from_account_id: 'rub',
+				to_account_id: 'gbp',
+				amount: '9000.00',
+				to_amount: '100.00',
+				transaction_date: pastDate
+			},
+			tz
+		);
+		expect(effect.balance['rub']).toBe(-900_000);
+		expect(effect.balance['gbp']).toBe(10_000);
+	});
+
+	it('queues FX overlay via outbox', () => {
+		enqueueTransferCreate(makeLocalKey(), {
+			from_account_id: 'rub',
+			to_account_id: 'gbp',
+			amount: '9000.00',
+			to_amount: '100.00',
+			transaction_date: pastDate
+		});
+		const deltas = computeOutboxAccountDeltas(tz);
+		expect(deltas.balance['rub']).toBe(-900_000);
+		expect(deltas.balance['gbp']).toBe(10_000);
 	});
 });

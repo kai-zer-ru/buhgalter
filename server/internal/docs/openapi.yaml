@@ -352,11 +352,16 @@ paths:
           description: Настройки
     put:
       summary: Обновить настройки
+      description: |
+        `currency` — код из allowlist (`GET /currencies`); иначе 400 `ERR_CURRENCY`.
+        Смена валюты профиля не меняет валюту счетов.
       security:
         - sessionCookie: []
       responses:
         '200':
           description: Настройки обновлены
+        '400':
+          description: Ошибка валидации (`ERR_CURRENCY`, `ERR_LANGUAGE`, …)
   /user/data:
     delete:
       summary: Удалить учётные данные пользователя
@@ -1126,6 +1131,31 @@ paths:
       responses:
         '200':
           description: Список банков
+  /currencies:
+    get:
+      summary: Справочник валют (allowlist)
+      description: |
+        Единый allowlist кодов валют для профиля и счетов. Без авторизации и feature flag.
+        Порядок фиксирован сервером. Сервер кеширует ответ in-memory (TTL 5 мин).
+        Клиенты не держат свой список и берут коды и символы отсюда.
+      responses:
+        '200':
+          description: Список валют
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Currency'
+              example:
+                - {code: RUB, symbol: "₽"}
+                - {code: USD, symbol: "$"}
+                - {code: EUR, symbol: "€"}
+                - {code: CNY, symbol: "¥"}
+                - {code: KZT, symbol: "₸"}
+                - {code: BYN, symbol: "Br"}
+                - {code: TRY, symbol: "₺"}
+                - {code: GBP, symbol: "£"}
   /accounts:
     get:
       summary: Список счетов пользователя
@@ -1162,6 +1192,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Account'
+        '400':
+          description: |
+            Ошибка валидации; неизвестная валюта — `ERR_CURRENCY`; `payment_account_id` в другой
+            валюте — `ERR_CURRENCY_MISMATCH`
   /accounts/{id}:
     get:
       summary: Получить счёт
@@ -1188,6 +1222,12 @@ paths:
         Смена `credit_limit` через этот метод запрещена (`ERR_ACCOUNT_CREDIT_LIMIT_IMMUTABLE`);
         используйте `PUT /accounts/{id}/credit-limit`.
         После сохранения `current_balance` пересчитывается от нового `initial_balance` и операций.
+        `currency` необязателен: без поля валюта не меняется. Смена валюты разрешена, только если
+        по счёту нет ни одной операции (`account_id` или `transfer_account_id`, любой `kind`) и на счёт
+        не ссылаются кредиты (`debit_account_id`), подписки, плановые операции, бюджеты, кредитки
+        (`payment_account_id`) и автопополнение (`auto_topup_source_account_id`); иначе 400
+        `ERR_ACCOUNT_CURRENCY_LOCKED`. `initial_balance` блокировку не вызывает. Та же валюта — не смена.
+        Неизвестный код — 400 `ERR_CURRENCY`.
         В UI — inline-форма на `/accounts` или форма на `/accounts/{id}`; поле «Начальный баланс» заполняется из `initial_balance` ответа GET, не из `balance_display`.
       security:
         - sessionCookie: []
@@ -1212,7 +1252,10 @@ paths:
                 $ref: '#/components/schemas/Account'
         '400':
           description: |
-            В том числе попытка сменить `credit_limit` (`ERR_ACCOUNT_CREDIT_LIMIT_IMMUTABLE`).
+            В том числе попытка сменить `credit_limit` (`ERR_ACCOUNT_CREDIT_LIMIT_IMMUTABLE`),
+            неизвестная валюта (`ERR_CURRENCY`), смена валюты занятого счёта (`ERR_ACCOUNT_CURRENCY_LOCKED`),
+            `payment_account_id` или источник автопополнения в другой валюте, включая смену валюты
+            самого счёта (`ERR_CURRENCY_MISMATCH`).
     delete:
       summary: Удалить счёт
       description: |
@@ -1220,7 +1263,8 @@ paths:
         доступен для просмотра на вкладке «Удалённые» и по прямой ссылке `/accounts/{id}`.
 
         Для счетов `cash` / `bank` с `balance > 0` обязателен `transfer_to_account_id` (query или JSON body):
-        перед удалением создаётся перевод всей суммы на указанный активный счёт (категория «Перевод»,
+        перед удалением создаётся перевод всей суммы на указанный активный счёт той же валюты
+        (иначе 400 `ERR_CURRENCY_MISMATCH`, счёт не меняется) (категория «Перевод»,
         комментарий `Удаление счёта "{name}"`).
 
         Для `credit_card` перевод не выполняется. Удаление возможно только при полном погашении
@@ -1267,7 +1311,8 @@ paths:
         следующий активный. В UI — пункт «Архивировать» в меню «⋯» на `/accounts` и на странице счёта.
 
         Для счетов `cash` / `bank` с `balance > 0` обязателен `transfer_to_account_id` (query или JSON body):
-        перед архивацией создаётся перевод всей суммы на указанный активный счёт (категория «Перевод»,
+        перед архивацией создаётся перевод всей суммы на указанный активный счёт той же валюты
+        (иначе 400 `ERR_CURRENCY_MISMATCH`, счёт не меняется) (категория «Перевод»,
         комментарий `Архивация счёта "{name}"`).
 
         Для `credit_card` перевод не выполняется. Архивация возможна только при полном погашении
@@ -1579,6 +1624,7 @@ paths:
         - $ref: '#/components/parameters/StatsStoreId'
         - $ref: '#/components/parameters/StatsMerchantId'
         - $ref: '#/components/parameters/StatsIncludeFuture'
+        - $ref: '#/components/parameters/StatsCurrency'
       responses:
         '200':
           description: Сводка
@@ -1587,7 +1633,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/StatsSummary'
         '400':
-          description: Некорректный период (`ERR_PERIOD_DATE`)
+          description: Некорректный период (`ERR_PERIOD_DATE`) или валюта (`ERR_CURRENCY`)
   /stats/by-category:
     get:
       summary: Статистика по категориям
@@ -1607,6 +1653,7 @@ paths:
         - $ref: '#/components/parameters/StatsSearch'
         - $ref: '#/components/parameters/StatsStoreId'
         - $ref: '#/components/parameters/StatsMerchantId'
+        - $ref: '#/components/parameters/StatsCurrency'
       responses:
         '200':
           description: Список категорий
@@ -1614,14 +1661,20 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [items]
+                required: [items, currency, available_currencies]
                 properties:
                   items:
                     type: array
                     items:
                       $ref: '#/components/schemas/StatsCategoryItem'
+                  currency:
+                    type: string
+                  available_currencies:
+                    type: array
+                    items:
+                      type: string
         '400':
-          description: Некорректный период
+          description: Некорректный период (`ERR_PERIOD_DATE`) или валюта (`ERR_CURRENCY`)
   /stats/by-subcategory:
     get:
       summary: Статистика по подкатегориям
@@ -1643,6 +1696,7 @@ paths:
         - $ref: '#/components/parameters/StatsSearch'
         - $ref: '#/components/parameters/StatsStoreId'
         - $ref: '#/components/parameters/StatsMerchantId'
+        - $ref: '#/components/parameters/StatsCurrency'
       responses:
         '200':
           description: Список подкатегорий
@@ -1650,14 +1704,20 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [items]
+                required: [items, currency, available_currencies]
                 properties:
                   items:
                     type: array
                     items:
                       $ref: '#/components/schemas/StatsSubcategoryItem'
+                  currency:
+                    type: string
+                  available_currencies:
+                    type: array
+                    items:
+                      type: string
         '400':
-          description: Некорректный период
+          description: Некорректный период (`ERR_PERIOD_DATE`) или валюта (`ERR_CURRENCY`)
   /stats/by-store:
     get:
       summary: Статистика по магазинам
@@ -1677,6 +1737,7 @@ paths:
         - $ref: '#/components/parameters/StatsMerchantId'
         - $ref: '#/components/parameters/StatsKind'
         - $ref: '#/components/parameters/StatsSearch'
+        - $ref: '#/components/parameters/StatsCurrency'
       responses:
         '200':
           description: Список магазинов
@@ -1684,14 +1745,20 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [items]
+                required: [items, currency, available_currencies]
                 properties:
                   items:
                     type: array
                     items:
                       $ref: '#/components/schemas/StatsStoreItem'
+                  currency:
+                    type: string
+                  available_currencies:
+                    type: array
+                    items:
+                      type: string
         '400':
-          description: Некорректный период
+          description: Некорректный период (`ERR_PERIOD_DATE`) или валюта (`ERR_CURRENCY`)
   /stats/by-period:
     get:
       summary: Статистика по периодам
@@ -1720,6 +1787,7 @@ paths:
         - $ref: '#/components/parameters/StatsSearch'
         - $ref: '#/components/parameters/StatsStoreId'
         - $ref: '#/components/parameters/StatsMerchantId'
+        - $ref: '#/components/parameters/StatsCurrency'
       responses:
         '200':
           description: Доход и расход по периодам
@@ -1727,14 +1795,20 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [items]
+                required: [items, currency, available_currencies]
                 properties:
                   items:
                     type: array
                     items:
                       $ref: '#/components/schemas/StatsPeriodItem'
+                  currency:
+                    type: string
+                  available_currencies:
+                    type: array
+                    items:
+                      type: string
         '400':
-          description: Некорректный период или `group_by` (`ERR_GROUP_BY`, `ERR_PERIOD_DATE`)
+          description: Некорректный период, `group_by` или валюта (`ERR_GROUP_BY`, `ERR_PERIOD_DATE`, `ERR_CURRENCY`)
   /stats/search:
     get:
       summary: Поиск операций в статистике
@@ -1769,6 +1843,7 @@ paths:
           schema:
             type: integer
             default: 20
+        - $ref: '#/components/parameters/StatsCurrency'
       responses:
         '200':
           description: Страница операций
@@ -1777,7 +1852,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/TransactionList'
         '400':
-          description: Некорректный период
+          description: Некорректный период (`ERR_PERIOD_DATE`) или валюта (`ERR_CURRENCY`)
   /stats/context:
     get:
       summary: Контекстная сводка
@@ -1812,6 +1887,7 @@ paths:
         - $ref: '#/components/parameters/StatsCategoryId'
         - $ref: '#/components/parameters/StatsKind'
         - $ref: '#/components/parameters/StatsSearch'
+        - $ref: '#/components/parameters/StatsCurrency'
       responses:
         '200':
           description: Контекстная сводка
@@ -1820,7 +1896,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/StatsContextSummary'
         '400':
-          description: Некорректный период
+          description: Некорректный период (`ERR_PERIOD_DATE`) или валюта (`ERR_CURRENCY`)
   /stats/net-worth:
     get:
       summary: Нетто-капитал во времени
@@ -1843,6 +1919,7 @@ paths:
             enum: [month]
             default: month
           description: Пока поддерживается только `month`
+        - $ref: '#/components/parameters/StatsCurrency'
       responses:
         '200':
           description: Текущий нетто и ряд по месяцам
@@ -1851,7 +1928,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/StatsNetWorthResponse'
         '400':
-          description: Некорректный период или `group_by` (`ERR_PERIOD_DATE`, `ERR_GROUP_BY`)
+          description: Некорректный период, `group_by` или валюта (`ERR_PERIOD_DATE`, `ERR_GROUP_BY`, `ERR_CURRENCY`)
   /transactions/inbox:
     get:
       summary: Очередь «разобрать»
@@ -2704,6 +2781,10 @@ paths:
       responses:
         '200':
           description: Должник с долгами и операциями
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DebtorDetail'
         '404':
           description: Не найден
   /debts/{id}:
@@ -2740,6 +2821,8 @@ paths:
 
         Опциональное поле `amount` — частичное погашение (строка с рублями, как при создании долга);
         если не указано — погашается остаток целиком.
+
+        Счёт погашения должен быть в валюте долга (`currency`), иначе 400 `ERR_CURRENCY_MISMATCH`.
 
         В веб-клиенте: переключатель «Не учитывать в балансе» (по умолчанию выключен), затем счёт;
         счёт по умолчанию — `account_id` долга или основной счёт пользователя.
@@ -2811,6 +2894,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Credit'
+        '400':
+          description: Ошибка валидации; `down_payment_account_id` не в валюте `debit_account_id` — `ERR_CURRENCY_MISMATCH`
   /credits/schedule/preview:
     post:
       summary: Предпросмотр графика платежей
@@ -2909,6 +2994,8 @@ paths:
       responses:
         '200':
           description: Обновлённый кредит
+        '400':
+          description: Ошибка валидации; новый `debit_account_id` в другой валюте — `ERR_CURRENCY_MISMATCH`
     delete:
       summary: Удалить кредит
       description: |
@@ -2945,6 +3032,8 @@ paths:
         до наступления даты операции и учитывается в прогнозе баланса.
         Опциональный `account_id` задаёт счёт только для операции этой оплаты;
         основной счёт кредита (`debit_account_id`) не меняется.
+        `account_id` и счёт привязываемой операции (`transaction_id`) должны быть в валюте
+        `debit_account_id`, иначе 400 `ERR_CURRENCY_MISMATCH`.
       security:
         - sessionCookie: []
         - bearerAuth: []
@@ -2963,6 +3052,8 @@ paths:
       responses:
         '200':
           description: Кредит после платежа
+        '400':
+          description: Ошибка валидации; счёт оплаты или привязываемой операции в другой валюте — `ERR_CURRENCY_MISMATCH`
   /credits/{id}/payments/{paymentId}:
     delete:
       summary: Удалить строку графика
@@ -3356,6 +3447,7 @@ paths:
             type: string
             pattern: '^\d{4}-\d{2}$'
           description: Календарный месяц (YYYY-MM) в timezone пользователя
+        - $ref: '#/components/parameters/BudgetSummaryCurrency'
       responses:
         '200':
           description: Сводка бюджетов за месяц
@@ -3401,6 +3493,7 @@ paths:
           schema:
             type: string
           description: Опционально сужает факт до операций по счёту
+        - $ref: '#/components/parameters/StatsCurrency'
       responses:
         '200':
           description: Потраченная сумма за месяц
@@ -3409,7 +3502,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/BudgetSpentPreview'
         '400':
-          description: Некорректный scope / категория / подкатегория / счёт / месяц
+          description: Некорректный scope / категория / подкатегория / счёт / месяц или валюта (`ERR_CURRENCY`)
   /budgets/copy-from-previous:
     post:
       summary: Скопировать все бюджеты с прошлого месяца
@@ -3480,6 +3573,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/BudgetItem'
+        '400':
+          description: |
+            Ошибка валидации; неизвестная валюта — `ERR_CURRENCY`; `currency` не совпадает с валютой
+            `account_id` — `ERR_CURRENCY_MISMATCH`
+        '409':
+          description: Дубликат активного бюджета (тот же scope, категория, месяц и валюта)
   /budgets/{id}:
     patch:
       summary: Обновить бюджет
@@ -3505,10 +3604,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/BudgetItem'
+        '400':
+          description: |
+            Ошибка валидации; неизвестная валюта — `ERR_CURRENCY`; другая валюта —
+            `ERR_BUDGET_CURRENCY_IMMUTABLE`; `account_id` в другой валюте — `ERR_CURRENCY_MISMATCH`
         '404':
           description: Не найден
         '409':
-          description: Дубликат активного бюджета
+          description: Дубликат активного бюджета (тот же scope, категория, месяц и валюта)
     delete:
       summary: Удалить бюджет
       security:
@@ -3914,7 +4017,12 @@ paths:
   /transfers:
     post:
       summary: Создать перевод
-      description: Атомарно две записи с одним `transfer_group_id`; исходящая нога создаётся первой (`created_at` +1 ms у входящей).
+      description: |
+        Атомарно две записи с одним `transfer_group_id`; исходящая нога создаётся первой (`created_at` +1 ms у входящей).
+        Счета в одной валюте: `to_amount` не передаётся или равен `amount`, иначе 400 `ERR_TRANSFER_TO_AMOUNT_MISMATCH`.
+        Счета в разных валютах (обмен): `to_amount > 0` обязателен, иначе 400 `ERR_TRANSFER_TO_AMOUNT_REQUIRED`.
+        Нога списания — `amount` в валюте источника, нога зачисления — `to_amount` в валюте получателя.
+        Комиссия — расход на счёте-источнике в его валюте. Лимит кредитки-получателя проверяется по сумме зачисления.
       security:
         - sessionCookie: []
         - bearerAuth: []
@@ -3932,10 +4040,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Transfer'
         '400':
-          description: Ошибка валидации (тот же счёт, сумма и т.д.)
+          description: |
+            Ошибка валидации (тот же счёт, сумма и т.д.), `ERR_TRANSFER_TO_AMOUNT_REQUIRED`,
+            `ERR_TRANSFER_TO_AMOUNT_MISMATCH`
   /transfers/{group_id}:
     put:
       summary: Обновить перевод
+      description: |
+        Правило валют то же, что в `POST /transfers`, и пересчитывается по новым счетам:
+        смена получателя на счёт другой валюты без `to_amount` — 400 `ERR_TRANSFER_TO_AMOUNT_REQUIRED`.
       security:
         - sessionCookie: []
         - bearerAuth: []
@@ -3958,6 +4071,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Transfer'
+        '400':
+          description: Ошибка валидации, `ERR_TRANSFER_TO_AMOUNT_REQUIRED`, `ERR_TRANSFER_TO_AMOUNT_MISMATCH`
         '404':
           description: Не найден
     delete:
@@ -4279,6 +4394,22 @@ components:
         type: boolean
         default: false
       description: Учитывать операции `kind=future` в сводке (`true` / `1`)
+    StatsCurrency:
+      name: currency
+      in: query
+      schema:
+        type: string
+      description: |
+        Код валюты из allowlist. По умолчанию — валюта профиля.
+        Неизвестный код — `400` `ERR_CURRENCY`. Выборка только по счетам этой валюты.
+    BudgetSummaryCurrency:
+      name: currency
+      in: query
+      schema:
+        type: string
+      description: |
+        Фильтр строк сводки по валюте бюджета. Без параметра — бюджеты всех валют.
+        Неизвестный код — `400` `ERR_CURRENCY`. В ответе всегда `available_currencies`.
     SubscriptionID:
       name: id
       in: path
@@ -4455,6 +4586,19 @@ components:
         bank_id:
           type: string
           nullable: true
+        currency:
+          type: string
+          description: ISO 4217 код валюты счёта
+    Currency:
+      type: object
+      required: [code, symbol]
+      properties:
+        code:
+          type: string
+          description: Код ISO 4217 (`RUB`, `USD`, …)
+        symbol:
+          type: string
+          description: Символ для отображения (`₽`, `$`, `Br`, …)
     Bank:
       type: object
       required: [id, name, icon_path, sort_order]
@@ -4589,6 +4733,7 @@ components:
           type: string
         currency:
           type: string
+          description: Валюта профиля (код из `GET /currencies`)
         timezone:
           type: string
         theme:
@@ -5515,6 +5660,9 @@ components:
           type: string
           enum: [active, archived, deleted]
           description: Статус счёта ноги (`accounts.status` по `account_id`)
+        currency:
+          type: string
+          description: Валюта счёта ноги (`accounts.currency` по `account_id`); суммы операции — в этой валюте
         type:
           type: string
           enum: [income, expense, transfer]
@@ -5636,6 +5784,14 @@ components:
                 Число операций в журнале с учётом фильтров. Перевод — одна операция
                 (без фильтра `account_id` в списке исходящая нога; на странице счёта — нога этого счёта).
                 Комиссия перевода в счётчик не входит.
+        currency:
+          type: string
+          description: Только в `GET /stats/search`
+        available_currencies:
+          type: array
+          items:
+            type: string
+          description: Только в `GET /stats/search`
     TransactionChanges:
       type: object
       required: [server_time, since_id, has_more, changes]
@@ -5944,8 +6100,23 @@ components:
           type: string
         amount:
           type: integer
+          description: Сумма списания в валюте `from_currency`, копейки
         amount_display:
           type: string
+        to_amount:
+          type: integer
+          description: Сумма зачисления в валюте `to_currency`, копейки (восстанавливается из ноги зачисления). При одной валюте равна `amount`
+        to_amount_display:
+          type: string
+        from_currency:
+          type: string
+          description: Валюта счёта-источника
+        to_currency:
+          type: string
+          description: Валюта счёта-получателя
+        rate:
+          type: string
+          description: Информационный курс `to_amount / amount`, 6 знаков после точки (`"0.011111"`); не хранится
         commission:
           type: integer
           description: Комиссия за перевод, копейки
@@ -5973,7 +6144,14 @@ components:
           type: string
         amount:
           type: string
-          description: Рубли (`"500.00"`)
+          description: Сумма списания в валюте источника (`"500.00"`)
+        to_amount:
+          type: string
+          nullable: true
+          description: |
+            Сумма зачисления в валюте получателя (`"100.00"`). Обязательна (> 0), если валюты счетов
+            различаются (`ERR_TRANSFER_TO_AMOUNT_REQUIRED`). При одной валюте — не передаётся или равна
+            `amount` (`ERR_TRANSFER_TO_AMOUNT_MISMATCH`).
         commission:
           type: string
           nullable: true
@@ -6005,6 +6183,9 @@ components:
         bank_icon:
           type: string
           nullable: true
+        currency:
+          type: string
+          description: Валюта счёта (код из `GET /currencies`); все суммы счёта — в ней
         initial_balance:
           type: integer
           description: Начальный остаток, копейки; фиксированная сумма при создании/редактировании счёта (не текущий баланс)
@@ -6074,10 +6255,13 @@ components:
         payment_account_id:
           type: string
           nullable: true
-          description: Счёт `cash`/`bank` для переводов на карту
+          description: Счёт `cash`/`bank` для переводов на карту; той же валюты, что карта, иначе `ERR_CURRENCY_MISMATCH`
         initial_balance:
           type: string
           description: Рубли (`"0.00"`)
+        currency:
+          type: string
+          description: Код из `GET /currencies`; по умолчанию — валюта профиля. Неизвестный код — `ERR_CURRENCY`
     AccountUpdate:
       type: object
       properties:
@@ -6095,6 +6279,7 @@ components:
         payment_account_id:
           type: string
           nullable: true
+          description: Той же валюты, что карта (с учётом новой `currency`), иначе `ERR_CURRENCY_MISMATCH`
         auto_topup_enabled:
           type: boolean
         auto_topup_threshold:
@@ -6104,9 +6289,15 @@ components:
           type: string
         auto_topup_source_account_id:
           type: string
+          description: Источник автопополнения той же валюты, что счёт-получатель, иначе `ERR_CURRENCY_MISMATCH`
         initial_balance:
           type: string
           description: Начальный остаток, рубли (`"1000.00"`); не путать с текущим `balance_display`
+        currency:
+          type: string
+          description: |
+            Код из `GET /currencies`. Без поля валюта не меняется. Смена — только у неиспользуемого
+            счёта, иначе `ERR_ACCOUNT_CURRENCY_LOCKED`
     AccountCreditLimitChange:
       type: object
       required: [credit_limit]
@@ -6188,6 +6379,9 @@ components:
         auto_topup_source_account_id:
           type: string
           nullable: true
+        currency:
+          type: string
+          description: Валюта счёта (ISO-код из allowlist)
     CreditCardsSummary:
       type: object
       properties:
@@ -6205,6 +6399,28 @@ components:
           type: string
         total_limit_display:
           type: string
+    TotalsByCurrency:
+      type: object
+      required: [currency, total_balance, total_forecast, total_balance_display, total_forecast_display]
+      properties:
+        currency:
+          type: string
+        total_balance:
+          type: integer
+        total_forecast:
+          type: integer
+        total_balance_display:
+          type: string
+        total_forecast_display:
+          type: string
+    CreditCardsByCurrency:
+      allOf:
+        - $ref: '#/components/schemas/CreditCardsSummary'
+        - type: object
+          required: [currency]
+          properties:
+            currency:
+              type: string
     AccountsSummary:
       type: object
       properties:
@@ -6214,21 +6430,43 @@ components:
             $ref: '#/components/schemas/AccountBalanceSummary'
         total_balance:
           type: integer
+          description: Итог только по активным не-кредитным счетам валюты профиля
         total_forecast:
           type: integer
+        totals_by_currency:
+          type: array
+          items:
+            $ref: '#/components/schemas/TotalsByCurrency'
+        credit_cards_summary:
+          $ref: '#/components/schemas/CreditCardsSummary'
+          nullable: true
+          description: Кредитные карты валюты профиля
+        credit_cards_by_currency:
+          type: array
+          items:
+            $ref: '#/components/schemas/CreditCardsByCurrency'
     Dashboard:
       type: object
       properties:
         total_balance:
           type: integer
+          description: Итог только по активным не-кредитным счетам валюты профиля
         total_forecast:
           type: integer
+        totals_by_currency:
+          type: array
+          items:
+            $ref: '#/components/schemas/TotalsByCurrency'
         inbox_count:
           type: integer
           description: Операции income/expense без category_id (очередь «разобрать»)
         credit_cards_summary:
           $ref: '#/components/schemas/CreditCardsSummary'
           nullable: true
+        credit_cards_by_currency:
+          type: array
+          items:
+            $ref: '#/components/schemas/CreditCardsByCurrency'
         accounts:
           type: array
           items:
@@ -6237,9 +6475,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Transaction'
+        debts_summary:
+          $ref: '#/components/schemas/DebtsSummary'
     StatsSummary:
       type: object
-      required: [income_total, expense_total, transaction_count]
+      required: [income_total, expense_total, transaction_count, currency, available_currencies]
       properties:
         income_total:
           type: integer
@@ -6249,6 +6489,13 @@ components:
           description: Сумма расходов (копейки)
         transaction_count:
           type: integer
+        currency:
+          type: string
+        available_currencies:
+          type: array
+          items:
+            type: string
+          description: Валюты активных счетов; код профиля всегда первый
     StatsCategoryItem:
       type: object
       properties:
@@ -6380,7 +6627,7 @@ components:
           type: string
     StatsNetWorthResponse:
       type: object
-      required: [current, items]
+      required: [current, items, currency, available_currencies]
       properties:
         current:
           $ref: '#/components/schemas/StatsNetWorthSnapshot'
@@ -6388,6 +6635,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/StatsNetWorthSnapshot'
+        currency:
+          type: string
+        available_currencies:
+          type: array
+          items:
+            type: string
     StatsContextSummary:
       allOf:
         - $ref: '#/components/schemas/StatsSummary'
@@ -6419,7 +6672,27 @@ components:
       properties:
         i_owe:
           type: integer
-          description: Сумма активных долгов «я взял» (копейки)
+          description: Сумма активных долгов «я взял» в валюте профиля (копейки)
+        owed_to_me:
+          type: integer
+        overdue_i_owe:
+          type: integer
+        overdue_owed_to_me:
+          type: integer
+        active_count:
+          type: integer
+        by_currency:
+          type: array
+          items:
+            $ref: '#/components/schemas/DebtsSummaryByCurrency'
+    DebtsSummaryByCurrency:
+      type: object
+      required: [currency, i_owe, owed_to_me, overdue_i_owe, overdue_owed_to_me, active_count]
+      properties:
+        currency:
+          type: string
+        i_owe:
+          type: integer
         owed_to_me:
           type: integer
         overdue_i_owe:
@@ -6437,6 +6710,24 @@ components:
           type: string
         created_at:
           type: string
+    DebtorDetail:
+      allOf:
+        - $ref: '#/components/schemas/Debtor'
+        - type: object
+          properties:
+            i_owe:
+              type: integer
+              description: Валюта профиля
+            owed_to_me:
+              type: integer
+            by_currency:
+              type: array
+              items:
+                type: object
+                properties:
+                  currency: { type: string }
+                  i_owe: { type: integer }
+                  owed_to_me: { type: integer }
     Debt:
       type: object
       properties:
@@ -6478,6 +6769,9 @@ components:
           type: string
           nullable: true
           description: Счёт начальной (`open`) операции; null при «без баланса»
+        currency:
+          type: string
+          description: Валюта долга — валюта счёта открытия, без счёта — валюта профиля
         account_name:
           type: string
           nullable: true
@@ -6694,7 +6988,7 @@ components:
         down_payment_account_id:
           type: string
           nullable: true
-          description: Счёт для списания первоначального взноса; используется только если down_payment_affects_balance=true. Если не указан, используется debit_account_id
+          description: Счёт для списания первоначального взноса; используется только если down_payment_affects_balance=true. Если не указан, используется debit_account_id. Должен быть в валюте debit_account_id, иначе `ERR_CURRENCY_MISMATCH`
         issue_date:
           type: string
         term_months:
@@ -6780,6 +7074,7 @@ components:
         debit_account_id:
           type: string
           nullable: true
+          description: Новый счёт списания должен быть в валюте текущего, иначе `ERR_CURRENCY_MISMATCH`
         debit_time_local:
           type: string
           nullable: true
@@ -6840,6 +7135,9 @@ components:
           description: Порог уведомления; по умолчанию 90
         is_active:
           type: boolean
+        currency:
+          type: string
+          description: Валюта бюджета; задаётся при создании и не меняется
         created_at:
           type: string
         updated_at:
@@ -6893,6 +7191,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/BudgetSummaryItem'
+        available_currencies:
+          type: array
+          items:
+            type: string
     BudgetSpentPreview:
       type: object
       required: [spent, spent_display]
@@ -6932,6 +7234,13 @@ components:
           type: boolean
           default: false
           description: Нет поля — false. У уже наступившего месяца true сразу записывает только следующий месяц и выключает там копирование. Будущий месяц только включает флаг
+        currency:
+          type: string
+          description: |
+            Create: необязательно; код из `GET /currencies` (иначе `ERR_CURRENCY`). Без поля — валюта
+            `account_id`, без счёта — валюта профиля. Валюта, отличная от валюты `account_id`, —
+            `ERR_CURRENCY_MISMATCH`. Update: без поля — без изменений; другая валюта —
+            `ERR_BUDGET_CURRENCY_IMMUTABLE`. Копии в следующий месяц сохраняют валюту источника
 
     Subscription:
       type: object
@@ -7021,14 +7330,27 @@ components:
     SubscriptionSummary:
       type: object
       properties:
-        monthly_total: { type: integer }
+        monthly_total: { type: integer, description: Сумма в валюте профиля }
         monthly_total_display: { type: string }
         yearly_total: { type: integer }
         yearly_total_display: { type: string }
+        by_currency:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubscriptionSummaryByCurrency'
         upcoming:
           type: array
           items:
             $ref: '#/components/schemas/Subscription'
+    SubscriptionSummaryByCurrency:
+      type: object
+      required: [currency, monthly_total, yearly_total]
+      properties:
+        currency: { type: string }
+        monthly_total: { type: integer }
+        monthly_total_display: { type: string }
+        yearly_total: { type: integer }
+        yearly_total_display: { type: string }
     SubscriptionCandidateResult:
       type: object
       properties:

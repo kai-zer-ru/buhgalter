@@ -167,7 +167,7 @@ func (w *Worker) processPlanned(
 		dateKey := nowLocal.Format("2006-01-02")
 		data := FormatData{
 			"type":            localizedOperationType(localeCode, tx.Type),
-			"amount":          FormatAmountDisplay(tx.Amount, currencyCode),
+			"amount":          FormatAmountDisplay(tx.Amount, tx.AccountCurrency),
 			"description":     normalizeDescription(tx.Description),
 			"date":            timeutil.FormatDisplayDateTimeShortInTimezone(tx.TransactionDate, timezone),
 			"transaction_url": transactionURLPlaceholderValue(externalURL, localeCode, tx.ID),
@@ -178,7 +178,7 @@ func (w *Worker) processPlanned(
 		}
 		var shortfallData FormatData
 		if tx.AffectsBalance == 1 && (tx.Type == "expense" || tx.Type == "transfer") {
-			text, shortfallData, err = formatWithBalanceShortfall(ctx, lookup, balanceEnabled, localeCode, currencyCode, customMap, text, tx.AccountID, tx.Amount, externalURL)
+			text, shortfallData, err = formatWithBalanceShortfall(ctx, lookup, balanceEnabled, localeCode, tx.AccountCurrency, customMap, text, tx.AccountID, tx.Amount, externalURL)
 			if err != nil {
 				continue
 			}
@@ -221,7 +221,7 @@ func (w *Worker) processDebts(
 		}
 		data := FormatData{
 			"debtor":   row.DebtorName,
-			"amount":   FormatAmountDisplay(row.Amount, currencyCode),
+			"amount":   FormatAmountDisplay(row.Amount, row.Currency),
 			"due_date": timeutil.FormatDisplayDateInTimezone(row.DueDate, timezone),
 			"days":     int64ToString(int64(max(diff, 0))),
 			"when":     RelativeDays(localeCode, max(diff, 0)),
@@ -234,7 +234,7 @@ func (w *Worker) processDebts(
 		}
 		var shortfallData FormatData
 		if row.Direction == "borrowed" && row.AffectsBalance == 1 && row.OpenAccountID != nil && strings.TrimSpace(*row.OpenAccountID) != "" {
-			text, shortfallData, err = formatWithBalanceShortfall(ctx, lookup, balanceEnabled, localeCode, currencyCode, customMap, text, *row.OpenAccountID, row.Amount, externalURL)
+			text, shortfallData, err = formatWithBalanceShortfall(ctx, lookup, balanceEnabled, localeCode, row.Currency, customMap, text, *row.OpenAccountID, row.Amount, externalURL)
 			if err != nil {
 				continue
 			}
@@ -335,7 +335,7 @@ func (w *Worker) processCreditPayments(
 		}
 		data := FormatData{
 			"credit":       creditName,
-			"amount":       FormatAmountDisplay(row.Amount, currencyCode),
+			"amount":       FormatAmountDisplay(row.Amount, row.AccountCurrency),
 			"payment_date": timeutil.FormatDisplayDateInTimezone(row.PaymentDate, timezone),
 			"when":         RelativeWhen(localeCode, row.PaymentDate, nowUTC, timezone),
 			"credit_url":   creditURLPlaceholderValue(externalURL, localeCode, row.CreditID),
@@ -344,7 +344,7 @@ func (w *Worker) processCreditPayments(
 		if err != nil {
 			continue
 		}
-		text, shortfallData, err := formatWithBalanceShortfall(ctx, lookup, balanceEnabled, localeCode, currencyCode, customMap, text, row.DebitAccountID, row.Amount, externalURL)
+		text, shortfallData, err := formatWithBalanceShortfall(ctx, lookup, balanceEnabled, localeCode, row.AccountCurrency, customMap, text, row.DebitAccountID, row.Amount, externalURL)
 		if err != nil {
 			continue
 		}
@@ -392,7 +392,7 @@ func (w *Worker) processSubscriptionCharges(
 		}
 		data := FormatData{
 			"name":             row.Name,
-			"amount":           FormatAmountDisplay(row.Amount, currencyCode),
+			"amount":           FormatAmountDisplay(row.Amount, row.AccountCurrency),
 			"date":             timeutil.FormatDisplayDateInTimezone(row.NextRunAt, timezone),
 			"account":          row.AccountName,
 			"description":      desc,

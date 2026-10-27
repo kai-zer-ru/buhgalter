@@ -29,7 +29,7 @@
 
 `all_income` зарезервирован в схеме; не используется.
 
-Опциональный `account_id` **сужает расчёт факта** (только операции по счёту), но **не создаёт отдельный бюджет**: два лимита на одну категорию в одном месяце невозможны, даже если счета разные.
+Опциональный `account_id` **сужает расчёт факта** (только операции по счёту той же валюты, что бюджет), но **не создаёт отдельный бюджет**: два лимита на одну категорию в одном месяце **одной валюты** невозможны. Лимит той же категории в другой валюте — отдельная строка.
 
 Системные категории расходов в форме бюджета не выбираются. Платежи кредита с `exclude_from_stats = 1` **не входят** в факт (как в статистике).
 
@@ -72,9 +72,9 @@
 
 ## Уникальность
 
-Один **активный** бюджет на комбинацию `(user_id, scope, category_id, subcategory_id, month)` — частичный уникальный индекс в БД (`039_budget_scope_unique.sql`).
+Один **активный** бюджет на комбинацию `(user_id, scope, category_id, subcategory_id, month, currency)` — частичный уникальный индекс (`064_budget_unique_currency.sql`).
 
-Запрещено в одном месяце:
+Запрещено в одном месяце **и одной валюте**:
 
 - два `all_expense`;
 - два бюджета на одну категорию (например, «Магазины»);
@@ -94,6 +94,7 @@ API: `409 ERR_BUDGET_DUPLICATE` при создании/активации ду�
 - **Переводы между своими счетами не учитываются:** `transfer_group_id IS NOT NULL` (в т.ч. комиссия в «Комиссия»).
 - Исключение платежей кредита: `credit_payments.exclude_from_stats = 1`.
 - Опционально: фильтр `account_id` из бюджета.
+- Только счета с `accounts.currency = budgets.currency` (без `account_id` — все такие счета).
 
 `planned` = `budget_periods.planned_amount` (период создаётся лениво из `budgets.amount` при первом обращении к месяцу).
 
@@ -122,6 +123,7 @@ API: `409 ERR_BUDGET_DUPLICATE` при создании/активации ду�
 | `category_id` | обязателен при `category` |
 | `subcategory_id` | обязателен при `subcategory` |
 | `account_id` | опционально сужает факт |
+| `currency` | валюта факта; без счёта — выбранная на экране / профиль |
 
 Ответ: `{ "spent", "spent_display" }`. Эндпоинт в пути содержит `/preview` — вне серверного GET-кеша и client ref-cache.
 
@@ -154,9 +156,12 @@ API: `409 ERR_BUDGET_DUPLICATE` при создании/активации ду�
 {
   "month": "2026-07",
   "can_copy_from_previous": false,
+  "available_currencies": ["RUB", "USD"],
   "items": [ /* BudgetSummaryItem[] */ ]
 }
 ```
+
+Без `?currency=` — все бюджеты всех валют (виджет главной); каждая строка со своим `currency`. С `?currency=X` — только эта валюта. `children_*` у `all_expense` — дочерние той же валюты.
 
 ---
 
@@ -171,7 +176,8 @@ API: `409 ERR_BUDGET_DUPLICATE` при создании/активации ду�
 | `is_active` | `true` | Неактивный не попадает в `summary` |
 | `copy_forward` | `false` | Сохранение уже наступившего месяца записывает только следующий и выключает там копирование |
 | `month` | текущий месяц пользователя | При `POST` — query `month` или текущий |
-| `account_id` | `null` | Все счета |
+| `account_id` | `null` | Все счета этой валюты |
+| `currency` | валюта профиля | Задаётся при создании; `PATCH` не меняет |
 
 Редактирование `amount` обновляет `budget_periods.planned_amount` текущего месяца (query `month` в `PATCH`).
 
@@ -185,15 +191,16 @@ POST   /api/v1/budgets?month=2026-06
 PATCH  /api/v1/budgets/{id}?month=2026-06
 DELETE /api/v1/budgets/{id}
 GET    /api/v1/budgets/summary?month=2026-06
+GET    /api/v1/budgets/summary?month=2026-06&currency=USD
 POST   /api/v1/budgets/{id}/copy-next
 POST   /api/v1/budgets/copy-from-previous?month=2026-06
 ```
 
 `month` — `YYYY-MM` в timezone пользователя.
 
-`BudgetUpsertRequest`: `name`, `scope`, `amount`, опционально `category_id`, `subcategory_id`, `account_id`, `alert_at_percent`, `is_active`, `copy_forward`.
+`BudgetUpsertRequest`: `name`, `scope`, `amount`, опционально `category_id`, `subcategory_id`, `account_id`, `currency` (create), `alert_at_percent`, `is_active`, `copy_forward`.
 
-Коды ошибок: `ERR_BUDGET_DUPLICATE`, `ERR_BUDGET_COPY_EXISTS`, `ERR_BUDGET_NOTHING_TO_COPY`, `ERR_BUDGET_MONTH`, `ERR_BUDGET_SCOPE`.
+Коды ошибок: `ERR_BUDGET_DUPLICATE`, `ERR_BUDGET_COPY_EXISTS`, `ERR_BUDGET_NOTHING_TO_COPY`, `ERR_BUDGET_MONTH`, `ERR_BUDGET_SCOPE`, `ERR_CURRENCY_MISMATCH`.
 
 ---
 

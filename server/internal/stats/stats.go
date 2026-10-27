@@ -8,7 +8,9 @@ import (
 	"sort"
 	"time"
 
+	"github.com/kai-zer-ru/buhgalter/internal/account"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/money"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
 )
 
@@ -26,12 +28,15 @@ type Filters struct {
 	Kind          string
 	Search        string
 	IncludeFuture bool
+	Currency      string
 }
 
 type Summary struct {
-	IncomeTotal      int64 `json:"income_total"`
-	ExpenseTotal     int64 `json:"expense_total"`
-	TransactionCount int64 `json:"transaction_count"`
+	IncomeTotal         int64    `json:"income_total"`
+	ExpenseTotal        int64    `json:"expense_total"`
+	TransactionCount    int64    `json:"transaction_count"`
+	Currency            string   `json:"currency"`
+	AvailableCurrencies []string `json:"available_currencies"`
 }
 
 type CategoryItem struct {
@@ -93,7 +98,7 @@ func queries(db sqlcdb.DBTX) *sqlcdb.Queries {
 }
 
 func (s *Service) Summary(ctx context.Context, userID string, f Filters, factualOnly bool) (Summary, error) {
-	f, err := normalizeFilters(f, factualOnly)
+	f, err := s.prepareFilters(ctx, userID, f, factualOnly)
 	if err != nil {
 		return Summary{}, err
 	}
@@ -119,7 +124,7 @@ func (s *Service) Summary(ctx context.Context, userID string, f Filters, factual
 }
 
 func (s *Service) ByCategory(ctx context.Context, userID string, f Filters) ([]CategoryItem, error) {
-	f, err := normalizeFilters(f, true)
+	f, err := s.prepareFilters(ctx, userID, f, true)
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +152,7 @@ func (s *Service) ByCategory(ctx context.Context, userID string, f Filters) ([]C
 }
 
 func (s *Service) BySubcategory(ctx context.Context, userID string, f Filters) ([]SubcategoryItem, error) {
-	f, err := normalizeFilters(f, true)
+	f, err := s.prepareFilters(ctx, userID, f, true)
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +260,7 @@ func mergeSubcategoryStatsRows(
 }
 
 func (s *Service) ByStore(ctx context.Context, userID string, f Filters) ([]StoreItem, error) {
-	f, err := normalizeFilters(f, true)
+	f, err := s.prepareFilters(ctx, userID, f, true)
 	if err != nil {
 		return nil, err
 	}
@@ -282,7 +287,7 @@ func (s *Service) ByStore(ctx context.Context, userID string, f Filters) ([]Stor
 }
 
 func (s *Service) ByPeriod(ctx context.Context, userID string, groupBy string, f Filters) ([]PeriodItem, error) {
-	f, err := normalizeFilters(f, true)
+	f, err := s.prepareFilters(ctx, userID, f, true)
 	if err != nil {
 		return nil, err
 	}
@@ -348,19 +353,20 @@ func (s *Service) ContextAccount(ctx context.Context, userID, accountID string, 
 }
 
 func (s *Service) ContextDebtor(ctx context.Context, userID, debtorID string, f Filters) (ContextSummary, error) {
-	f, err := normalizeFilters(f, false)
+	f, err := s.prepareFilters(ctx, userID, f, false)
 	if err != nil {
 		return ContextSummary{}, err
 	}
 	row, err := queries(s.db).StatsContextDebtor(ctx, sqlcdb.StatsContextDebtorParams{
+		Currency:          f.Currency,
 		UserID:            userID,
 		UserID_2:          userID,
 		DebtorID:          debtorID,
-		Column4:           f.Kind,
+		Column5:           f.Kind,
 		Kind:              f.Kind,
-		Column6:           f.From,
+		Column7:           f.From,
 		TransactionDate:   f.From,
-		Column8:           f.To,
+		Column9:           f.To,
 		TransactionDate_2: f.To,
 	})
 	if err != nil {
@@ -382,40 +388,45 @@ func (s *Service) ContextDebtor(ctx context.Context, userID, debtorID string, f 
 }
 
 func (s *Service) ContextCredit(ctx context.Context, userID, creditID string, f Filters) (ContextSummary, error) {
-	f, err := normalizeFilters(f, false)
+	f, err := s.prepareFilters(ctx, userID, f, false)
 	if err != nil {
 		return ContextSummary{}, err
 	}
 	row, err := queries(s.db).StatsContextCredit(ctx, sqlcdb.StatsContextCreditParams{
+		Currency:          f.Currency,
 		UserID:            userID,
 		UserID_2:          userID,
 		ID:                creditID,
-		Column4:           f.Kind,
+		Column5:           f.Kind,
 		Kind:              f.Kind,
-		Column6:           f.From,
+		Column7:           f.From,
 		TransactionDate:   f.From,
-		Column8:           f.To,
+		Column9:           f.To,
 		TransactionDate_2: f.To,
 	})
 	if err != nil {
 		return ContextSummary{}, err
 	}
 	paidRow, err := queries(s.db).StatsContextCreditPaid(ctx, sqlcdb.StatsContextCreditPaidParams{
+		Currency:      f.Currency,
 		UserID:        userID,
 		ID:            creditID,
-		Column3:       f.From,
+		Column4:       f.From,
 		PaymentDate:   f.From,
-		Column5:       f.To,
+		Column6:       f.To,
 		PaymentDate_2: f.To,
 	})
 	if err != nil {
 		return ContextSummary{}, err
 	}
 	remainingRow, err := queries(s.db).StatsContextCreditRemaining(ctx, sqlcdb.StatsContextCreditRemainingParams{
-		ID:     creditID,
-		UserID: userID,
+		Currency: f.Currency,
+		ID:       creditID,
+		UserID:   userID,
 	})
-	if err != nil {
+	if errors.Is(err, sql.ErrNoRows) {
+		remainingRow = sqlcdb.StatsContextCreditRemainingRow{}
+	} else if err != nil {
 		return ContextSummary{}, err
 	}
 	remaining := remainingRow.PrincipalAmount - remainingRow.PaidAmount
@@ -436,18 +447,19 @@ func (s *Service) ContextCredit(ctx context.Context, userID, creditID string, f 
 }
 
 func (s *Service) ContextDebts(ctx context.Context, userID string, f Filters) (ContextSummary, error) {
-	f, err := normalizeFilters(f, false)
+	f, err := s.prepareFilters(ctx, userID, f, false)
 	if err != nil {
 		return ContextSummary{}, err
 	}
 	row, err := queries(s.db).StatsContextDebts(ctx, sqlcdb.StatsContextDebtsParams{
+		Currency:          f.Currency,
 		UserID:            userID,
 		UserID_2:          userID,
-		Column3:           f.Kind,
+		Column4:           f.Kind,
 		Kind:              f.Kind,
-		Column5:           f.From,
+		Column6:           f.From,
 		TransactionDate:   f.From,
-		Column7:           f.To,
+		Column8:           f.To,
 		TransactionDate_2: f.To,
 	})
 	if err != nil {
@@ -477,6 +489,23 @@ func contextFactualOnly(f Filters) bool {
 		return false
 	}
 	return true
+}
+
+func (s *Service) prepareFilters(ctx context.Context, userID string, f Filters, factualOnly bool) (Filters, error) {
+	f, err := normalizeFilters(f, factualOnly)
+	if err != nil {
+		return Filters{}, err
+	}
+	if f.Currency == "" {
+		cur, err := account.ProfileCurrency(ctx, s.db, userID)
+		if err != nil {
+			return Filters{}, err
+		}
+		f.Currency = cur
+	} else {
+		f.Currency = money.ProfileOrDefault(f.Currency)
+	}
+	return f, nil
 }
 
 func normalizeFilters(f Filters, factualOnly bool) (Filters, error) {
@@ -523,8 +552,35 @@ func toSummaryParams(userID string, f Filters) sqlcdb.StatsSummaryParams {
 	search := strPtr(f.Search)
 	categoryID := strPtr(f.CategoryID)
 	return sqlcdb.StatsSummaryParams{
+		Currency:          f.Currency,
 		UserID:            userID,
-		Column2:           f.AccountID,
+		Column3:           f.AccountID,
+		AccountID:         f.AccountID,
+		Column5:           f.CategoryID,
+		CategoryID:        categoryID,
+		Column7:           f.Type,
+		Type:              f.Type,
+		Column9:           f.Kind,
+		Kind:              f.Kind,
+		Column11:          f.From,
+		TransactionDate:   f.From,
+		Column13:          f.To,
+		TransactionDate_2: f.To,
+		Column15:          f.Search,
+		Column16:          search,
+		Column17:          f.StoreID,
+		StoreID:           strPtr(f.StoreID),
+		Column19:          f.MerchantID,
+		MerchantID:        strPtr(f.MerchantID),
+	}
+}
+
+func toAccountSummaryParams(userID string, f Filters) sqlcdb.StatsSummaryAccountParams {
+	search := strPtr(f.Search)
+	categoryID := strPtr(f.CategoryID)
+	return sqlcdb.StatsSummaryAccountParams{
+		Currency:          f.Currency,
+		UserID:            userID,
 		AccountID:         f.AccountID,
 		Column4:           f.CategoryID,
 		CategoryID:        categoryID,
@@ -545,16 +601,16 @@ func toSummaryParams(userID string, f Filters) sqlcdb.StatsSummaryParams {
 	}
 }
 
-func toAccountSummaryParams(userID string, f Filters) sqlcdb.StatsSummaryAccountParams {
+func toStoreParams(userID string, f Filters) sqlcdb.StatsByStoreParams {
 	search := strPtr(f.Search)
 	categoryID := strPtr(f.CategoryID)
-	return sqlcdb.StatsSummaryAccountParams{
+	return sqlcdb.StatsByStoreParams{
+		Currency:          f.Currency,
 		UserID:            userID,
+		Column3:           f.AccountID,
 		AccountID:         f.AccountID,
-		Column3:           f.CategoryID,
+		Column5:           f.CategoryID,
 		CategoryID:        categoryID,
-		Column5:           f.Type,
-		Type:              f.Type,
 		Column7:           f.Kind,
 		Kind:              f.Kind,
 		Column9:           f.From,
@@ -566,30 +622,6 @@ func toAccountSummaryParams(userID string, f Filters) sqlcdb.StatsSummaryAccount
 		Column15:          f.StoreID,
 		StoreID:           strPtr(f.StoreID),
 		Column17:          f.MerchantID,
-		MerchantID:        strPtr(f.MerchantID),
-	}
-}
-
-func toStoreParams(userID string, f Filters) sqlcdb.StatsByStoreParams {
-	search := strPtr(f.Search)
-	categoryID := strPtr(f.CategoryID)
-	return sqlcdb.StatsByStoreParams{
-		UserID:            userID,
-		Column2:           f.AccountID,
-		AccountID:         f.AccountID,
-		Column4:           f.CategoryID,
-		CategoryID:        categoryID,
-		Column6:           f.Kind,
-		Kind:              f.Kind,
-		Column8:           f.From,
-		TransactionDate:   f.From,
-		Column10:          f.To,
-		TransactionDate_2: f.To,
-		Column12:          f.Search,
-		Column13:          search,
-		Column14:          f.StoreID,
-		StoreID:           strPtr(f.StoreID),
-		Column16:          f.MerchantID,
 		MerchantID:        strPtr(f.MerchantID),
 	}
 }
@@ -611,24 +643,25 @@ func toSubcategoryReceiptLinesParams(userID string, f Filters) sqlcdb.StatsBySub
 		categoryID = *p.CategoryID
 	}
 	return sqlcdb.StatsBySubcategoryReceiptLinesParams{
+		Currency:          p.Currency,
 		UserID:            p.UserID,
-		Column2:           p.Column2,
+		Column3:           p.Column3,
 		AccountID:         p.AccountID,
-		Column4:           p.Column4,
+		Column5:           p.Column5,
 		CategoryID:        categoryID,
-		Column6:           p.Column6,
+		Column7:           p.Column7,
 		Type:              p.Type,
-		Column8:           p.Column8,
+		Column9:           p.Column9,
 		Kind:              p.Kind,
-		Column10:          p.Column10,
+		Column11:          p.Column11,
 		TransactionDate:   p.TransactionDate,
-		Column12:          p.Column12,
+		Column13:          p.Column13,
 		TransactionDate_2: p.TransactionDate_2,
-		Column14:          p.Column14,
 		Column15:          p.Column15,
 		Column16:          p.Column16,
+		Column17:          p.Column17,
 		StoreID:           p.StoreID,
-		Column18:          p.Column18,
+		Column19:          p.Column19,
 		MerchantID:        p.MerchantID,
 	}
 }

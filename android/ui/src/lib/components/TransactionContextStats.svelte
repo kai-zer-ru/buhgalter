@@ -17,7 +17,7 @@
 	let loading = $state(false);
 	let loadError = $state<string | null>(null);
 
-	const currency = $derived($user?.currency ?? 'RUB');
+	const currency = $derived(params.currency || summary?.currency || $user?.currency || 'RUB');
 	const paramsKey = $derived(JSON.stringify(params));
 
 	$effect(() => {

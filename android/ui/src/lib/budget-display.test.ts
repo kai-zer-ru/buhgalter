@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { setCurrencyCatalog } from './finance';
 import {
 	budgetRemainingCell,
 	budgetSpentPreviewReady,
@@ -15,6 +16,10 @@ vi.mock('$lib/i18n', () => ({
 		return key;
 	}
 }));
+
+beforeEach(() => {
+	setCurrencyCatalog([{ code: 'RUB', symbol: '₽' }]);
+});
 
 const base = {
 	remaining: 12_000,
@@ -45,6 +50,10 @@ describe('budget-display', () => {
 
 	it('formats remaining line when under budget', () => {
 		expect(budgetStatusLine(base)).toBe('remaining:120.00:60');
+	});
+
+	it('appends the catalog symbol when currency is set', () => {
+		expect(budgetStatusLine({ ...base, currency: 'RUB' })).toBe('remaining:120.00 ₽:60');
 	});
 
 	it('formats stats cell for exceeded', () => {

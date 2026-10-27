@@ -251,6 +251,39 @@ func TestTransferCRUD(t *testing.T) {
 	}
 }
 
+func TestGetTransferRestoresExchangeAmounts(t *testing.T) {
+	handle, env := seedEnvFull(t)
+	database := handle.DB()
+	ctx := context.Background()
+	if _, err := database.ExecContext(ctx, `UPDATE accounts SET currency = 'USD' WHERE id = ?`, env.account2); err != nil {
+		t.Fatal(err)
+	}
+	past := timeutil.NowUTC().Add(-time.Hour)
+	created, err := CreateTransfer(ctx, database, env.userID, TransferInput{
+		FromAccountID: env.accountID, ToAccountID: env.account2,
+		Amount: 900000, ToAmount: 10000, TransactionDate: past,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.ToAmount != 10000 || created.ToCurrency != "USD" || created.FromCurrency != "RUB" || created.Rate != "0.011111" {
+		t.Fatalf("create %+v", created)
+	}
+	got, err := GetTransfer(ctx, database, env.userID, created.GroupID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Amount != 900000 || got.ToAmount != 10000 || got.ToAmountDisplay != "100.00" {
+		t.Fatalf("get amounts %+v", got)
+	}
+	if got.FromCurrency != "RUB" || got.ToCurrency != "USD" || got.Rate != "0.011111" {
+		t.Fatalf("get currencies %+v", got)
+	}
+	if len(got.Legs) != 2 || got.Legs[0].Currency != "RUB" || got.Legs[1].Currency != "USD" {
+		t.Fatalf("legs %+v", got.Legs)
+	}
+}
+
 func TestTransferWithCommission(t *testing.T) {
 	handle, env := seedEnvFull(t)
 	database := handle.DB()

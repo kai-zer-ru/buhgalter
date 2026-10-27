@@ -4,13 +4,16 @@
 	import { resolve } from '$app/paths';
 	import { _ } from 'svelte-i18n';
 	import {
+		ApiError,
 		listAccounts,
 		listBanks,
+		listCurrencies,
 		setPrimaryAccount,
 		unarchiveAccount,
 		updateAccount,
 		type Account,
-		type Bank
+		type Bank,
+		type Currency
 	} from '$lib/api/client';
 	import {
 		promptArchiveAccount,
@@ -41,6 +44,8 @@
 	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
 	import { canSetAsPrimary, formatAccountInitialBalanceForEdit } from '$lib/accounts';
 	import { toAPIAmount } from '$lib/money';
+	import { currencySelectOptions } from '$lib/currency';
+	import { currencySymbol } from '$lib/finance';
 	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
 	import { refCacheReady, refCacheReadyAny, refCacheUpdate } from '$lib/ref-cache';
@@ -73,6 +78,9 @@
 	let editBankId = $state('');
 	let editPaymentAccountId = $state('');
 	let editInitialBalance = $state('');
+	let editCurrency = $state('');
+	let currencyLocked = $state(false);
+	let currencies = $state<Currency[]>([]);
 	let payOpen = $state(false);
 	let feeOpen = $state(false);
 	let changeLimitOpen = $state(false);
@@ -111,14 +119,16 @@
 			loading = true;
 		}
 		try {
-			const [accountList, bankList, activeList] = await Promise.all([
+			const [accountList, bankList, activeList, currencyList] = await Promise.all([
 				listAccounts(filter),
 				listBanks(),
-				listAccounts('active')
+				listAccounts('active'),
+				listCurrencies()
 			]);
 			accounts = opts.silent ? assignIfChanged(accounts, accountList) : accountList;
 			banks = opts.silent ? assignIfChanged(banks, bankList) : bankList;
 			activeAccounts = opts.silent ? assignIfChanged(activeAccounts, activeList) : activeList;
+			currencies = opts.silent ? assignIfChanged(currencies, currencyList) : currencyList;
 			ready = true;
 			loadError = null;
 		} catch (err) {
@@ -136,9 +146,7 @@
 		void load({ filterChange: true });
 	}
 
-	const paymentOptions = $derived(
-		accountSelectOptions(activeAccounts.filter((a) => a.type !== 'credit_card'))
-	);
+	const currencyOptions = $derived(currencySelectOptions(currencies));
 
 	function startEdit(acc: Account) {
 		editingId = acc.id;
@@ -146,6 +154,8 @@
 		editBankId = acc.bank_id ?? '';
 		editPaymentAccountId = acc.payment_account_id ?? '';
 		editInitialBalance = formatAccountInitialBalanceForEdit(acc.initial_balance);
+		editCurrency = acc.currency ?? $user?.currency ?? '';
+		currencyLocked = false;
 	}
 
 	function cancelEdit() {
@@ -163,6 +173,7 @@
 		try {
 			const updated = await updateAccount(acc.id, {
 				name: editName,
+				currency: editCurrency || undefined,
 				bank_id: acc.type === 'bank' || acc.type === 'credit_card' ? editBankId : undefined,
 				initial_balance: toAPIAmount(editInitialBalance),
 				payment_account_id: acc.type === 'credit_card' ? editPaymentAccountId || null : undefined
@@ -171,6 +182,9 @@
 			editingId = null;
 			toast($_('common.saved'));
 		} catch (err) {
+			if (err instanceof ApiError && err.code === 'ERR_ACCOUNT_CURRENCY_LOCKED') {
+				currencyLocked = true;
+			}
 			toast.fromError(err);
 		} finally {
 			savingEditId = '';
@@ -434,6 +448,15 @@
 								autofocus
 							/>
 						</div>
+						<Select
+							id="account-currency"
+							label={$_('accounts.field.currency')}
+							hint={currencyLocked ? $_('accounts.currency.locked') : $_('accounts.currency.hint')}
+							bind:value={editCurrency}
+							options={currencyOptions}
+							disabled={currencyLocked}
+							usePortal
+						/>
 						{#if acc.type === 'bank' || acc.type === 'credit_card'}
 							<Select
 								label={$_('accounts.field.bank')}
@@ -451,7 +474,7 @@
 									<p class="tabular-nums">
 										<MoneyDisplay
 											value={acc.credit_limit_display}
-											currency={$user?.currency ?? 'RUB'}
+											currency={acc.currency}
 											class=""
 										/>
 									</p>
@@ -462,7 +485,14 @@
 								bind:value={editPaymentAccountId}
 								options={[
 									{ value: '', label: $_('accounts.creditCard.paymentAccountDefault') },
-									...paymentOptions.filter((o) => o.value !== acc.id)
+									...accountSelectOptions(
+										activeAccounts.filter(
+											(a) =>
+												a.type !== 'credit_card' &&
+												a.id !== acc.id &&
+												a.currency === (editCurrency || acc.currency)
+										)
+									)
 								]}
 								usePortal
 							/>
@@ -512,6 +542,11 @@
 					<div class="min-w-0 flex-1">
 						<div class="flex items-center gap-1">
 							<p class="truncate font-medium">{acc.name}</p>
+							{#if acc.currency}
+								<span class="shrink-0 text-sm font-normal" style:color="var(--text-muted)">
+									{currencySymbol(acc.currency)}
+								</span>
+							{/if}
 							{#if acc.is_primary}
 								<span
 									class="shrink-0"
@@ -533,20 +568,12 @@
 							{/if}
 						</div>
 						<p class="mt-1 text-xl font-semibold tabular-nums">
-							<MoneyDisplay
-								value={acc.balance_display}
-								currency={$user?.currency ?? 'RUB'}
-								class=""
-							/>
+							<MoneyDisplay value={acc.balance_display} currency={acc.currency} class="" />
 						</p>
 						{#if acc.credit_limit_display}
 							<p class="mt-0.5 text-sm tabular-nums" style:color="var(--text-muted)">
 								{$_('accounts.field.creditLimit')}:
-								<MoneyDisplay
-									value={acc.credit_limit_display}
-									currency={$user?.currency ?? 'RUB'}
-									class=""
-								/>
+								<MoneyDisplay value={acc.credit_limit_display} currency={acc.currency} class="" />
 							</p>
 						{/if}
 					</div>

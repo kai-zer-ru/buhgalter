@@ -41,7 +41,9 @@
 	let saving = $state(false);
 	let formError = $state('');
 
-	const sourceOptions = $derived(account ? autoTopupSourceOptions(accounts, account.id) : []);
+	const sourceOptions = $derived(
+		account ? autoTopupSourceOptions(accounts, account.id, account.currency) : []
+	);
 	const active = $derived(variant === 'page' || open);
 
 	$effect(() => {
@@ -58,7 +60,7 @@
 		void listAccounts().then((rows) => {
 			accounts = rows;
 			if (!account.auto_topup_source_account_id) {
-				sourceId = defaultAutoTopupSourceId(rows, account.id);
+				sourceId = defaultAutoTopupSourceId(rows, account.id, account.currency);
 			}
 		});
 	});

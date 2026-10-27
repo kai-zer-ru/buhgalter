@@ -6,9 +6,12 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/kai-zer-ru/buhgalter/internal/account"
 	"github.com/kai-zer-ru/buhgalter/internal/apperror"
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
+	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/money"
 	"github.com/kai-zer-ru/buhgalter/internal/transaction"
 )
 
@@ -22,17 +25,17 @@ func (h *Handler) Summary(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
 		return
 	}
-	f := filtersFromQuery(r)
+	f, currency, available, ok := h.filtersWithCurrency(w, r, info.User.ID)
+	if !ok {
+		return
+	}
 	svc := New(h.Store.DB())
 	out, err := svc.Summary(r.Context(), info.User.ID, f, true)
-	if errors.Is(err, ErrInvalidDate) {
-		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_PERIOD_DATE")
+	if writeStatsError(w, r, err) {
 		return
 	}
-	if err != nil {
-		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
-		return
-	}
+	out.Currency = currency
+	out.AvailableCurrencies = available
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -42,18 +45,16 @@ func (h *Handler) ByCategory(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
 		return
 	}
-	f := filtersFromQuery(r)
+	f, currency, available, ok := h.filtersWithCurrency(w, r, info.User.ID)
+	if !ok {
+		return
+	}
 	svc := New(h.Store.DB())
 	out, err := svc.ByCategory(r.Context(), info.User.ID, f)
-	if errors.Is(err, ErrInvalidDate) {
-		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_PERIOD_DATE")
+	if writeStatsError(w, r, err) {
 		return
 	}
-	if err != nil {
-		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": out})
+	writeJSON(w, http.StatusOK, map[string]any{"items": out, "currency": currency, "available_currencies": available})
 }
 
 func (h *Handler) BySubcategory(w http.ResponseWriter, r *http.Request) {
@@ -62,18 +63,16 @@ func (h *Handler) BySubcategory(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
 		return
 	}
-	f := filtersFromQuery(r)
+	f, currency, available, ok := h.filtersWithCurrency(w, r, info.User.ID)
+	if !ok {
+		return
+	}
 	svc := New(h.Store.DB())
 	out, err := svc.BySubcategory(r.Context(), info.User.ID, f)
-	if errors.Is(err, ErrInvalidDate) {
-		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_PERIOD_DATE")
+	if writeStatsError(w, r, err) {
 		return
 	}
-	if err != nil {
-		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": out})
+	writeJSON(w, http.StatusOK, map[string]any{"items": out, "currency": currency, "available_currencies": available})
 }
 
 func (h *Handler) ByStore(w http.ResponseWriter, r *http.Request) {
@@ -82,18 +81,16 @@ func (h *Handler) ByStore(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
 		return
 	}
-	f := filtersFromQuery(r)
+	f, currency, available, ok := h.filtersWithCurrency(w, r, info.User.ID)
+	if !ok {
+		return
+	}
 	svc := New(h.Store.DB())
 	out, err := svc.ByStore(r.Context(), info.User.ID, f)
-	if errors.Is(err, ErrInvalidDate) {
-		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_PERIOD_DATE")
+	if writeStatsError(w, r, err) {
 		return
 	}
-	if err != nil {
-		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": out})
+	writeJSON(w, http.StatusOK, map[string]any{"items": out, "currency": currency, "available_currencies": available})
 }
 
 func (h *Handler) ByPeriod(w http.ResponseWriter, r *http.Request) {
@@ -110,18 +107,16 @@ func (h *Handler) ByPeriod(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_GROUP_BY")
 		return
 	}
-	f := filtersFromQuery(r)
+	f, currency, available, ok := h.filtersWithCurrency(w, r, info.User.ID)
+	if !ok {
+		return
+	}
 	svc := New(h.Store.DB())
 	out, err := svc.ByPeriod(r.Context(), info.User.ID, groupBy, f)
-	if errors.Is(err, ErrInvalidDate) {
-		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_PERIOD_DATE")
+	if writeStatsError(w, r, err) {
 		return
 	}
-	if err != nil {
-		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": out})
+	writeJSON(w, http.StatusOK, map[string]any{"items": out, "currency": currency, "available_currencies": available})
 }
 
 func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
@@ -134,6 +129,10 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 	search := q.Get("q")
 	page, _ := strconv.Atoi(q.Get("page"))
 	limit, _ := strconv.Atoi(q.Get("limit"))
+	currency, available, ok := h.resolveCurrency(w, r, info.User.ID)
+	if !ok {
+		return
+	}
 	result, err := transaction.List(r.Context(), h.Store.DB(), info.User.ID, transaction.ListFilters{
 		AccountID:  q.Get("account_id"),
 		Type:       q.Get("type"),
@@ -147,6 +146,7 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 		Sort:       q.Get("sort"),
 		Page:       page,
 		Limit:      limit,
+		Currency:   currency,
 	})
 	if errors.Is(err, transaction.ErrInvalidDate) {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_PERIOD_DATE")
@@ -156,6 +156,8 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
+	result.Currency = currency
+	result.AvailableCurrencies = available
 	writeJSON(w, http.StatusOK, result)
 }
 
@@ -170,20 +172,17 @@ func (h *Handler) NetWorth(w http.ResponseWriter, r *http.Request) {
 	if groupBy == "" {
 		groupBy = "month"
 	}
+	currency, available, ok := h.resolveCurrency(w, r, info.User.ID)
+	if !ok {
+		return
+	}
 	svc := New(h.Store.DB())
-	out, err := svc.NetWorth(r.Context(), info.User.ID, q.Get("from"), q.Get("to"), groupBy)
-	if errors.Is(err, ErrInvalidDate) {
-		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_PERIOD_DATE")
+	out, err := svc.NetWorth(r.Context(), info.User.ID, q.Get("from"), q.Get("to"), groupBy, currency)
+	if writeStatsError(w, r, err) {
 		return
 	}
-	if errors.Is(err, ErrInvalidGroupBy) {
-		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_GROUP_BY")
-		return
-	}
-	if err != nil {
-		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
-		return
-	}
+	out.Currency = currency
+	out.AvailableCurrencies = available
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -194,7 +193,10 @@ func (h *Handler) Context(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
-	f := filtersFromQuery(r)
+	f, currency, available, ok := h.filtersWithCurrency(w, r, info.User.ID)
+	if !ok {
+		return
+	}
 	svc := New(h.Store.DB())
 
 	var (
@@ -203,24 +205,37 @@ func (h *Handler) Context(w http.ResponseWriter, r *http.Request) {
 	)
 	switch {
 	case q.Get("account_id") != "":
+		if acc, aerr := sqlcdb.New(h.Store.DB()).GetAccountByID(r.Context(), sqlcdb.GetAccountByIDParams{
+			ID: q.Get("account_id"), UserID: info.User.ID,
+		}); aerr == nil {
+			currency = money.ProfileOrDefault(acc.Currency)
+			f.Currency = currency
+		}
 		out, err = svc.ContextAccount(r.Context(), info.User.ID, q.Get("account_id"), f)
 	case q.Get("debtor_id") != "":
 		out, err = svc.ContextDebtor(r.Context(), info.User.ID, q.Get("debtor_id"), f)
 	case q.Get("credit_id") != "":
+		if cr, cerr := sqlcdb.New(h.Store.DB()).GetCreditByID(r.Context(), sqlcdb.GetCreditByIDParams{
+			ID: q.Get("credit_id"), UserID: info.User.ID,
+		}); cerr == nil {
+			if acc, aerr := sqlcdb.New(h.Store.DB()).GetAccountByID(r.Context(), sqlcdb.GetAccountByIDParams{
+				ID: cr.DebitAccountID, UserID: info.User.ID,
+			}); aerr == nil {
+				currency = money.ProfileOrDefault(acc.Currency)
+				f.Currency = currency
+			}
+		}
 		out, err = svc.ContextCredit(r.Context(), info.User.ID, q.Get("credit_id"), f)
 	case q.Get("debts") == "1":
 		out, err = svc.ContextDebts(r.Context(), info.User.ID, f)
 	default:
 		out, err = svc.ContextDefault(r.Context(), info.User.ID, f)
 	}
-	if errors.Is(err, ErrInvalidDate) {
-		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_PERIOD_DATE")
+	if writeStatsError(w, r, err) {
 		return
 	}
-	if err != nil {
-		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
-		return
-	}
+	out.Currency = currency
+	out.AvailableCurrencies = available
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -239,6 +254,55 @@ func filtersFromQuery(r *http.Request) Filters {
 		Search:        q.Get("search"),
 		IncludeFuture: includeFuture,
 	}
+}
+
+func (h *Handler) resolveCurrency(w http.ResponseWriter, r *http.Request, userID string) (currency string, available []string, ok bool) {
+	available, err := account.ActiveCurrencies(r.Context(), h.Store.DB(), userID)
+	if err != nil {
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return "", nil, false
+	}
+	profile, err := account.ProfileCurrency(r.Context(), h.Store.DB(), userID)
+	if err != nil {
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return "", nil, false
+	}
+	currency, err = money.ParseQueryCurrency(r.URL.Query().Get("currency"), profile)
+	if errors.Is(err, money.ErrInvalidCurrency) {
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CURRENCY")
+		return "", nil, false
+	}
+	if err != nil {
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return "", nil, false
+	}
+	return currency, available, true
+}
+
+func (h *Handler) filtersWithCurrency(w http.ResponseWriter, r *http.Request, userID string) (Filters, string, []string, bool) {
+	f := filtersFromQuery(r)
+	currency, available, ok := h.resolveCurrency(w, r, userID)
+	if !ok {
+		return Filters{}, "", nil, false
+	}
+	f.Currency = currency
+	return f, currency, available, true
+}
+
+func writeStatsError(w http.ResponseWriter, r *http.Request, err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, ErrInvalidDate) {
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_PERIOD_DATE")
+		return true
+	}
+	if errors.Is(err, ErrInvalidGroupBy) {
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_GROUP_BY")
+		return true
+	}
+	apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+	return true
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

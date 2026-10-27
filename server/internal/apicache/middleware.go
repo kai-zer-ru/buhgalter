@@ -154,6 +154,8 @@ func cacheKey(r *http.Request) (string, time.Duration, bool) {
 	switch path {
 	case "/api/v1/banks":
 		return "g:banks", RefDataTTL, true
+	case "/api/v1/currencies":
+		return "g:currencies", RefDataTTL, true
 	case "/api/v1/setup/status":
 		return "g:setup:status", DataTTL, true
 	}

@@ -22,6 +22,7 @@ type SpentPreviewInput struct {
 	CategoryID    *string
 	SubcategoryID *string
 	AccountID     *string
+	Currency      string
 }
 
 // PreviewSpent returns expense total for the given scope in a calendar month
@@ -50,10 +51,29 @@ func PreviewSpent(ctx context.Context, db *sql.DB, userID string, in SpentPrevie
 	if err != nil {
 		return SpentPreview{}, err
 	}
+	currency := in.Currency
+	if scopeIn.AccountID != nil && *scopeIn.AccountID != "" {
+		acc, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{
+			ID: *scopeIn.AccountID, UserID: userID,
+		})
+		if err != nil {
+			return SpentPreview{}, err
+		}
+		currency = acc.Currency
+	} else {
+		profile, err := queries(db).GetUserFormatting(ctx, userID)
+		if err != nil {
+			return SpentPreview{}, err
+		}
+		currency, err = money.ParseQueryCurrency(currency, profile.Currency)
+		if err != nil {
+			return SpentPreview{}, ErrInvalidCurrency
+		}
+	}
 	spent, err := spentForBudget(
 		ctx, db, userID, scopeIn.Scope,
 		scopeIn.CategoryID, scopeIn.SubcategoryID, scopeIn.AccountID,
-		periodStart, periodEnd,
+		periodStart, periodEnd, currency,
 	)
 	if err != nil {
 		return SpentPreview{}, err
@@ -119,6 +139,7 @@ func spentForBudget(
 	scope string,
 	categoryID, subcategoryID, accountID *string,
 	periodStart, periodEndExclusive string,
+	currency string,
 ) (int64, error) {
 	accCol := ""
 	accVal := ""
@@ -146,12 +167,13 @@ func spentForBudget(
 		return 0, ErrInvalidScope
 	}
 	return queries(db).BudgetSpent(ctx, sqlcdb.BudgetSpentParams{
+		Currency:          money.ProfileOrDefault(currency),
 		UserID:            userID,
-		Column2:           accCol,
+		Column3:           accCol,
 		AccountID:         accVal,
-		Column4:           catCol,
+		Column5:           catCol,
 		CategoryID:        catPtr,
-		Column6:           subCol,
+		Column7:           subCol,
 		SubcategoryID:     subPtr,
 		TransactionDate:   periodStart,
 		TransactionDate_2: periodEndExclusive,

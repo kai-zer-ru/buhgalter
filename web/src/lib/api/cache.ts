@@ -24,6 +24,12 @@ export function seedStaticRef<T>(key: string, value: T, ttlMs = STATIC_REF_TTL_M
 	cache.set(key, { value, expiresAt: Date.now() + ttlMs });
 }
 
+export function peekCached<T>(key: string): T | undefined {
+	const hit = cache.get(key);
+	if (!hit) return undefined;
+	return hit.value as T;
+}
+
 export async function cachedGet<T>(
 	key: string,
 	fetcher: () => Promise<T>,

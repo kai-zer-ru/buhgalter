@@ -51,6 +51,7 @@ SELECT
     d.is_settled,
     d.settled_at,
     d.created_at,
+    d.currency,
     tx.account_id AS open_account_id,
     acc.name AS open_account_name
 FROM debts d
@@ -77,6 +78,7 @@ SELECT
     d.is_settled,
     d.settled_at,
     d.created_at,
+    d.currency,
     tx.account_id AS open_account_id,
     acc.name AS open_account_name
 FROM debts d
@@ -103,6 +105,7 @@ SELECT
     d.is_settled,
     d.settled_at,
     d.created_at,
+    d.currency,
     tx.account_id AS open_account_id,
     acc.name AS open_account_name
 FROM debts d
@@ -129,6 +132,7 @@ SELECT
     d.is_settled,
     d.settled_at,
     d.created_at,
+    d.currency,
     tx.account_id AS open_account_id,
     acc.name AS open_account_name
 FROM debts d
@@ -141,8 +145,8 @@ WHERE d.id = ? AND d.user_id = ?;
 -- name: InsertDebt :exec
 INSERT INTO debts (
     id, user_id, debtor_id, direction, amount, affects_balance,
-    debt_date, due_date, description, transaction_id, is_settled, settled_at, created_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    debt_date, due_date, description, transaction_id, is_settled, settled_at, created_at, currency
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: SettleDebt :execrows
 UPDATE debts
@@ -246,6 +250,7 @@ SELECT
     d.is_settled,
     d.settled_at,
     d.created_at,
+    d.currency,
     tx.account_id AS open_account_id,
     acc.name AS open_account_name
 FROM debts d
@@ -257,6 +262,6 @@ WHERE d.user_id = ? AND d.debtor_id = ?
 ORDER BY d.is_settled ASC, d.debt_date DESC, d.created_at DESC;
 
 -- name: ListActiveDebtsForSummary :many
-SELECT direction, amount, due_date
+SELECT direction, amount, due_date, currency
 FROM debts
 WHERE user_id = ? AND is_settled = 0;

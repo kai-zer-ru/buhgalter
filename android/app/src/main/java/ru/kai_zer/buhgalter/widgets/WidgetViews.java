@@ -45,6 +45,7 @@ final class WidgetViews {
             views.setTextViewText(R.id.widget_cash_amount, hidden);
             views.setTextViewText(R.id.widget_bank_amount, hidden);
             views.setTextViewText(R.id.widget_credit_amount, hidden);
+            views.setViewVisibility(R.id.widget_other_currencies, View.GONE);
             return;
         }
         JSONObject snap = WidgetSnapshotStore.getSnapshot(context);
@@ -57,6 +58,13 @@ final class WidgetViews {
         views.setTextViewText(R.id.widget_cash_amount, snap.optString("cash_display", "—"));
         views.setTextViewText(R.id.widget_bank_amount, snap.optString("bank_display", "—"));
         views.setTextViewText(R.id.widget_credit_amount, snap.optString("credit_funds_display", "—"));
+        String other = snap.optString("other_currencies_display", "");
+        if (other.isEmpty() || "null".equals(other)) {
+            views.setViewVisibility(R.id.widget_other_currencies, View.GONE);
+        } else {
+            views.setViewVisibility(R.id.widget_other_currencies, View.VISIBLE);
+            views.setTextViewText(R.id.widget_other_currencies, other);
+        }
     }
 
     static void bindBudget(Context context, RemoteViews views) {

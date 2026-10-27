@@ -170,4 +170,47 @@ public class WidgetRefreshWorkerTest {
         assertEquals("40 992.53 ₽", snap.getString("bank_display"));
         assertEquals("10 014.00 ₽", snap.getString("credit_funds_display"));
     }
+
+    @Test
+    public void buildSnapshot_skipsForeignCurrencyCashAndFlagsOthers() throws Exception {
+        JSONObject dashboard = new JSONObject();
+        dashboard.put("total_balance", 100);
+        dashboard.put("total_forecast", 100);
+
+        JSONArray accounts = new JSONArray();
+        JSONObject rub = new JSONObject();
+        rub.put("id", "c1");
+        rub.put("name", "Cash RUB");
+        rub.put("type", "cash");
+        rub.put("currency", "RUB");
+        rub.put("status", "active");
+        rub.put("balance", 100);
+        accounts.put(rub);
+        JSONObject gbp = new JSONObject();
+        gbp.put("id", "c2");
+        gbp.put("name", "Cash GBP");
+        gbp.put("type", "cash");
+        gbp.put("currency", "GBP");
+        gbp.put("status", "active");
+        gbp.put("balance", 11100000);
+        accounts.put(gbp);
+
+        JSONObject budget = new JSONObject();
+        budget.put("items", new JSONArray());
+
+        JSONObject snap =
+                WidgetRefreshWorker.buildSnapshot(
+                        dashboard,
+                        accounts,
+                        budget,
+                        new JSONArray(),
+                        new JSONArray(),
+                        new JSONArray(),
+                        new JSONArray(),
+                        new JSONArray(),
+                        "RUB",
+                        "ru");
+        assertEquals("1.00 ₽", snap.getString("cash_display"));
+        assertEquals("+ другие валюты", snap.getString("other_currencies_display"));
+    }
 }

@@ -35,9 +35,9 @@
 - комментарий `Архивация счёта "{name}"` или `Удаление счёта "{name}"`;
 - параметр API `transfer_to_account_id` (query или JSON body).
 
-Сумма перевода — `max(current_balance, пересчёт по операциям)`; в UI отображается через `MoneyDisplay`.
+Сумма перевода — `max(current_balance, пересчёт по операциям)`; в UI отображается через `MoneyDisplay` в валюте счёта.
 
-Без `transfer_to_account_id` при положительном остатке API вернёт `400` (`ERR_ACCOUNT_TRANSFER_REQUIRED`).
+Счёт-приёмник должен быть той же валюты, иначе `400` (`ERR_CURRENCY_MISMATCH`). Без `transfer_to_account_id` при положительном остатке API вернёт `400` (`ERR_ACCOUNT_TRANSFER_REQUIRED`).
 
 ### `credit_card`
 

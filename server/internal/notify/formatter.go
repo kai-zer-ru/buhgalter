@@ -87,14 +87,11 @@ func FormatAmountDisplay(amount int64, currencyCode string) string {
 }
 
 func currencySymbol(currencyCode string) string {
-	switch strings.ToUpper(strings.TrimSpace(currencyCode)) {
-	case "USD":
-		return "$"
-	case "EUR":
-		return "€"
-	default:
-		return "₽"
+	code := money.Normalize(currencyCode)
+	if code == "" {
+		code = money.DefaultCurrency
 	}
+	return money.Symbol(code)
 }
 
 func addThousandsSeparator(value string) string {

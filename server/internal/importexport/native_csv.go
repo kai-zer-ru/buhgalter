@@ -32,6 +32,7 @@ const (
 var nativeAccountHeaders = []string{
 	"id", "name", "type", "bank", "initial_balance", "credit_limit", "is_primary", "status",
 	"payment_account", "auto_topup_enabled", "auto_topup_threshold", "auto_topup_target", "auto_topup_source",
+	"currency",
 }
 
 var nativeCategoryHeaders = []string{"name", "type", "icon", "sort_order", "is_primary", "is_system"}
@@ -48,7 +49,7 @@ var nativeCreditPayHeaders = []string{"id", "credit_id", "transaction_id", "amou
 var nativeDebtorHeaders = []string{"id", "name"}
 var nativeDebtHeaders = []string{
 	"id", "debtor_id", "debtor", "direction", "amount", "affects_balance", "debt_date", "due_date",
-	"description", "transaction_id", "is_settled", "settled_at",
+	"description", "transaction_id", "is_settled", "settled_at", "currency",
 }
 var nativeDebtLinkHeaders = []string{"debt_id", "transaction_id", "role"}
 var nativeSubHeaders = []string{
@@ -61,7 +62,7 @@ var nativeRecurringHeaders = []string{
 }
 var nativeBudgetHeaders = []string{
 	"id", "name", "scope", "category", "subcategory", "amount", "account", "month",
-	"copy_forward", "rollover", "alert_at_percent", "is_active",
+	"copy_forward", "rollover", "alert_at_percent", "is_active", "currency",
 }
 var nativeTemplateHeaders = []string{
 	"name", "type", "account", "to_account", "category", "subcategory", "amount", "description", "merchant", "icon", "tags",

@@ -333,9 +333,16 @@ function scheduleRevalidate<T>(path: string, fetcher: () => Promise<T>): void {
 	revalidateTimers.set(path, timer);
 }
 
+function dashboardCacheMissingAccountCurrency(value: unknown): boolean {
+	if (!isDashboardShape(value)) return false;
+	const accounts = (value as Dashboard).accounts;
+	if (!accounts?.length) return false;
+	return accounts.some((acc) => !acc.currency);
+}
+
 export async function fetchWithRefCache<T>(path: string, fetcher: () => Promise<T>): Promise<T> {
 	const cached = readRefCache<T>(path);
-	if (cached !== null) {
+	if (cached !== null && !dashboardCacheMissingAccountCurrency(cached)) {
 		scheduleRevalidate(path, fetcher);
 		return cached;
 	}
@@ -422,6 +429,7 @@ export function isPreservedOfflineRefPath(path: string): boolean {
 	if (pathOnly === '/api/v1/merchants') return true;
 	if (pathOnly === '/api/v1/tags') return true;
 	if (pathOnly === '/api/v1/banks') return true;
+	if (pathOnly === '/api/v1/currencies') return true;
 	if (pathOnly === '/api/v1/debtors') return true;
 	if (pathOnly === '/api/v1/transaction-templates') return true;
 	if (pathOnly === '/api/v1/accounts') return true;
@@ -610,7 +618,8 @@ function applyBalanceSummary(account: Account, summary?: AccountBalanceSummary):
 		auto_topup_target_display:
 			summary.auto_topup_target_display ?? account.auto_topup_target_display,
 		auto_topup_source_account_id:
-			summary.auto_topup_source_account_id ?? account.auto_topup_source_account_id
+			summary.auto_topup_source_account_id ?? account.auto_topup_source_account_id,
+		currency: summary.currency ?? account.currency
 	};
 }
 

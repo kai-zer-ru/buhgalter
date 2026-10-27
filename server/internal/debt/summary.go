@@ -5,21 +5,34 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/kai-zer-ru/buhgalter/internal/account"
+	"github.com/kai-zer-ru/buhgalter/internal/money"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
 )
 
 type Summary struct {
-	IOwe            int64 `json:"i_owe"`
-	OwedToMe        int64 `json:"owed_to_me"`
-	OverdueIOwe     int64 `json:"overdue_i_owe"`
-	OverdueOwedToMe int64 `json:"overdue_owed_to_me"`
-	ActiveCount     int64 `json:"active_count"`
+	IOwe            int64             `json:"i_owe"`
+	OwedToMe        int64             `json:"owed_to_me"`
+	OverdueIOwe     int64             `json:"overdue_i_owe"`
+	OverdueOwedToMe int64             `json:"overdue_owed_to_me"`
+	ActiveCount     int64             `json:"active_count"`
+	ByCurrency      []CurrencySummary `json:"by_currency"`
+}
+
+type CurrencySummary struct {
+	IOwe            int64  `json:"i_owe"`
+	OwedToMe        int64  `json:"owed_to_me"`
+	OverdueIOwe     int64  `json:"overdue_i_owe"`
+	OverdueOwedToMe int64  `json:"overdue_owed_to_me"`
+	ActiveCount     int64  `json:"active_count"`
+	Currency        string `json:"currency"`
 }
 
 type summaryRow struct {
 	Direction string
 	Amount    int64
 	DueDate   string
+	Currency  string
 }
 
 func ComputeSummary(rows []summaryRow, tz string, now time.Time) (Summary, error) {
@@ -65,7 +78,45 @@ func SummaryForUser(ctx context.Context, db *sql.DB, userID string) (Summary, er
 			Direction: row.Direction,
 			Amount:    row.Amount,
 			DueDate:   row.DueDate,
+			Currency:  money.ProfileOrDefault(row.Currency),
 		})
 	}
-	return ComputeSummary(input, tz, timeutil.NowUTC())
+	now := timeutil.NowUTC()
+	profile, err := account.ProfileCurrency(ctx, db, userID)
+	if err != nil {
+		return Summary{}, err
+	}
+	return summarizeByCurrency(input, tz, now, profile)
+}
+
+func summarizeByCurrency(rows []summaryRow, tz string, now time.Time, profile string) (Summary, error) {
+	by := map[string][]summaryRow{}
+	for _, row := range rows {
+		by[row.Currency] = append(by[row.Currency], row)
+	}
+	codes := make([]string, 0, len(by))
+	for c := range by {
+		codes = append(codes, c)
+	}
+	order := money.OrderPresentWithProfileFirst(profile, codes)
+	out := Summary{ByCurrency: []CurrencySummary{}}
+	for _, c := range order {
+		part, err := ComputeSummary(by[c], tz, now)
+		if err != nil {
+			return Summary{}, err
+		}
+		out.ByCurrency = append(out.ByCurrency, CurrencySummary{
+			IOwe: part.IOwe, OwedToMe: part.OwedToMe,
+			OverdueIOwe: part.OverdueIOwe, OverdueOwedToMe: part.OverdueOwedToMe,
+			ActiveCount: part.ActiveCount, Currency: c,
+		})
+		if c == profile {
+			out.IOwe = part.IOwe
+			out.OwedToMe = part.OwedToMe
+			out.OverdueIOwe = part.OverdueIOwe
+			out.OverdueOwedToMe = part.OverdueOwedToMe
+			out.ActiveCount = part.ActiveCount
+		}
+	}
+	return out, nil
 }

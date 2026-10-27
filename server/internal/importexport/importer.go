@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 	"time"
 
@@ -32,6 +31,8 @@ type resolver struct {
 	subcategories     map[string]string
 	subByCategoryID   map[string]map[string]category.Subcategory
 	catIsSystem       map[string]bool
+	acctCurrency      map[string]string
+	rowCurrency       string
 	createdAccounts   map[string]struct{}
 	createdCategories map[string]struct{}
 	accountMap        map[string]AccountMapEntry
@@ -66,6 +67,7 @@ func newResolver(
 		subcategories:     make(map[string]string),
 		subByCategoryID:   make(map[string]map[string]category.Subcategory),
 		catIsSystem:       make(map[string]bool),
+		acctCurrency:      make(map[string]string),
 		createdAccounts:   make(map[string]struct{}),
 		createdCategories: make(map[string]struct{}),
 		accountMap:        accountMap,
@@ -247,7 +249,7 @@ func (r *resolver) createAccountByFileName(ctx context.Context, name, key string
 	}
 	created, err := account.Create(ctx, r.db, r.userID, account.CreateInput{
 		Name: name, Type: accType, BankID: bankID, InitialBalance: initial,
-		CreditLimit: creditLimit,
+		CreditLimit: creditLimit, Currency: importAccountCurrency(r.rowCurrency),
 	})
 	if err != nil {
 		return "", err
@@ -255,6 +257,7 @@ func (r *resolver) createAccountByFileName(ctx context.Context, name, key string
 	r.fileAccounts[key] = created.ID
 	r.accounts[key] = created.ID
 	r.acctNames[key] = created.Name
+	r.acctCurrency[created.ID] = created.Currency
 	r.createdAccounts[name] = struct{}{}
 	return created.ID, nil
 }
@@ -521,13 +524,14 @@ func Preview(ctx context.Context, db *sql.DB, userID string, filename string, da
 			report.CategoriesToCreate = appendUnique(report.CategoriesToCreate, n)
 		}
 	}
-	warnNonRUB(mapped)
+	appendCurrencySkipLogs(ctx, res, mapped, &report)
 	return report, nil
 }
 
 func (r *resolver) touchRow(ctx context.Context, m MappedRow) error {
 	switch m.CubuxType {
 	case "Расходы":
+		r.rowCurrency = m.DebitCurrency
 		if _, err := r.resolveAccount(ctx, m.DebitAccount); err != nil {
 			return err
 		}
@@ -539,6 +543,7 @@ func (r *resolver) touchRow(ctx context.Context, m MappedRow) error {
 			_, _, _ = r.resolveSubcategoryInput(ctx, catID, m.Category, "expense", m.Subcategory)
 		}
 	case "Доходы":
+		r.rowCurrency = m.CreditCurrency
 		if _, err := r.resolveAccount(ctx, m.CreditAccount); err != nil {
 			return err
 		}
@@ -550,9 +555,11 @@ func (r *resolver) touchRow(ctx context.Context, m MappedRow) error {
 			_, _, _ = r.resolveSubcategoryInput(ctx, catID, m.Category, "income", m.Subcategory)
 		}
 	case "Перевод":
+		r.rowCurrency = m.DebitCurrency
 		if _, err := r.resolveAccount(ctx, m.DebitAccount); err != nil {
 			return err
 		}
+		r.rowCurrency = m.CreditCurrency
 		if _, err := r.resolveAccount(ctx, m.CreditAccount); err != nil {
 			return err
 		}
@@ -699,6 +706,12 @@ func importWithProgress(
 			emitProgress(false)
 			continue
 		}
+		if log := res.currencySkipLog(ctx, m); log != "" {
+			report.Logs = append(report.Logs, log)
+			report.ProcessedRows++
+			emitProgress(false)
+			continue
+		}
 
 		createdID, err := importRowWithRetry(ctx, db, userID, res, m)
 		if err != nil {
@@ -769,7 +782,6 @@ func importWithProgress(
 		balancehooks.NotifyAllRefresh(ctx, db, userID, time.Time{})
 	}
 	emitProgress(true)
-	warnNonRUB(mapped)
 	return report, nil
 }
 
@@ -859,6 +871,7 @@ func importRow(ctx context.Context, db *sql.DB, userID string, res *resolver, m 
 
 	switch m.CubuxType {
 	case "Расходы":
+		res.rowCurrency = m.DebitCurrency
 		accID, err := res.resolveAccount(ctx, m.DebitAccount)
 		if err != nil {
 			return "", err
@@ -883,6 +896,7 @@ func importRow(ctx context.Context, db *sql.DB, userID string, res *resolver, m 
 		res.rememberCreatedSubcategory(catID, m.Category, subName, created.SubcategoryID)
 		return created.ID, nil
 	case "Доходы":
+		res.rowCurrency = m.CreditCurrency
 		accID, err := res.resolveAccount(ctx, m.CreditAccount)
 		if err != nil {
 			return "", err
@@ -907,18 +921,24 @@ func importRow(ctx context.Context, db *sql.DB, userID string, res *resolver, m 
 		res.rememberCreatedSubcategory(catID, m.Category, subName, created.SubcategoryID)
 		return created.ID, nil
 	case "Перевод":
+		res.rowCurrency = m.DebitCurrency
 		fromID, err := res.resolveAccount(ctx, m.DebitAccount)
 		if err != nil {
 			return "", err
 		}
+		res.rowCurrency = m.CreditCurrency
 		toID, err := res.resolveAccount(ctx, m.CreditAccount)
 		if err != nil {
 			return "", err
 		}
-		tr, err := transaction.CreateTransfer(ctx, db, userID, transaction.TransferInput{
+		trIn := transaction.TransferInput{
 			FromAccountID: fromID, ToAccountID: toID, Amount: m.DebitAmount,
 			Commission: m.Commission, Description: desc, TransactionDate: txDate,
-		})
+		}
+		if money.Normalize(m.DebitCurrency) != money.Normalize(m.CreditCurrency) && m.CreditAmount > 0 {
+			trIn.ToAmount = m.CreditAmount
+		}
+		tr, err := transaction.CreateTransfer(ctx, db, userID, trIn)
 		if err != nil {
 			return "", err
 		}
@@ -1073,12 +1093,82 @@ func strPtr(s string) *string {
 	return &s
 }
 
-func warnNonRUB(rows []MappedRow) {
+func importAccountCurrency(code string) string {
+	c := money.Normalize(code)
+	if money.Valid(c) {
+		return c
+	}
+	return ""
+}
+
+func (r *resolver) peekAccountID(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ""
+	}
+	key := strings.ToLower(name)
+	if id, ok := r.fileAccounts[key]; ok && id != "" {
+		return id
+	}
+	if entry, ok := r.accountMap[name]; ok && entry.Mode == "existing" && entry.AccountID != "" {
+		return entry.AccountID
+	}
+	if id, ok := r.accounts[key]; ok && id != "" {
+		return id
+	}
+	return ""
+}
+
+func (r *resolver) currencyOf(ctx context.Context, id string) string {
+	if c, ok := r.acctCurrency[id]; ok {
+		return c
+	}
+	acc, err := account.GetByID(ctx, r.db, r.userID, id)
+	if err != nil {
+		return ""
+	}
+	r.acctCurrency[id] = acc.Currency
+	return acc.Currency
+}
+
+func (r *resolver) mismatchLog(ctx context.Context, name, rowCurrency string, rowNum int) string {
+	cur := money.Normalize(rowCurrency)
+	if cur == "" {
+		return ""
+	}
+	id := r.peekAccountID(name)
+	if id == "" {
+		return ""
+	}
+	accCur := money.Normalize(r.currencyOf(ctx, id))
+	if accCur == "" || accCur == cur {
+		return ""
+	}
+	return fmt.Sprintf("row %d: skipped currency mismatch (%s vs account %s)", rowNum, cur, accCur)
+}
+
+func (r *resolver) currencySkipLog(ctx context.Context, m MappedRow) string {
+	switch m.CubuxType {
+	case "Расходы":
+		return r.mismatchLog(ctx, m.DebitAccount, m.DebitCurrency, m.RowNum)
+	case "Доходы":
+		return r.mismatchLog(ctx, m.CreditAccount, m.CreditCurrency, m.RowNum)
+	case "Перевод":
+		if log := r.mismatchLog(ctx, m.DebitAccount, m.DebitCurrency, m.RowNum); log != "" {
+			return log
+		}
+		return r.mismatchLog(ctx, m.CreditAccount, m.CreditCurrency, m.RowNum)
+	default:
+		return ""
+	}
+}
+
+func appendCurrencySkipLogs(ctx context.Context, r *resolver, rows []MappedRow, report *Report) {
 	for _, m := range rows {
-		for _, cur := range []string{m.DebitCurrency, m.CreditCurrency} {
-			c := strings.TrimSpace(strings.ToUpper(cur))
-			if c != "" && c != "RUB" {
-				slog.Warn("import: non-RUB currency ignored", "currency", cur, "row", m.RowNum)
+		if log := r.currencySkipLog(ctx, m); log != "" {
+			report.Logs = append(report.Logs, log)
+			if report.ValidRows > 0 {
+				report.ValidRows--
 			}
 		}
 	}

@@ -54,6 +54,7 @@ type BudgetBody = {
 	alert_at_percent?: number;
 	is_active?: boolean;
 	copy_forward?: boolean;
+	currency?: string;
 };
 
 function toPayload(body: BudgetBody, month?: string): BudgetPayload {
@@ -77,6 +78,7 @@ function localBudget(id: string, payload: BudgetPayload): BudgetItem {
 		period: 'month',
 		alert_at_percent: payload.alert_at_percent ?? 80,
 		is_active: payload.is_active ?? true,
+		currency: payload.currency,
 		created_at: ts,
 		updated_at: ts
 	};

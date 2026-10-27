@@ -11,6 +11,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	"github.com/kai-zer-ru/buhgalter/internal/bank"
 	"github.com/kai-zer-ru/buhgalter/internal/budget"
+	"github.com/kai-zer-ru/buhgalter/internal/debt"
 	"github.com/kai-zer-ru/buhgalter/internal/merchant"
 	"github.com/kai-zer-ru/buhgalter/internal/tag"
 	"github.com/kai-zer-ru/buhgalter/internal/transaction"
@@ -475,6 +476,81 @@ func TestNativeMerchantImportWithoutAliasColumn(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].Name != "Магнит" || len(got[0].Aliases) != 0 {
 		t.Fatalf("imported=%+v", got)
+	}
+}
+
+func TestNativeCurrencyRoundTrip(t *testing.T) {
+	ctx, sqlDB, srcUser := seedImportUser(t)
+	usdAcc, err := account.Create(ctx, sqlDB, srcUser, account.CreateInput{
+		Name: "USD кошелёк", Type: "cash", Currency: "USD", InitialBalance: 5000,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	name := "Иван"
+	d, err := debt.Create(ctx, sqlDB, srcUser, debt.CreateInput{
+		DebtorName: &name, Direction: "lent", Amount: 2000,
+		DebtDate:       time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC),
+		DueDate:        time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC),
+		AffectsBalance: true, AccountID: usdAcc.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Currency != "USD" {
+		t.Fatalf("src debt currency %s", d.Currency)
+	}
+	b, err := budget.Create(ctx, sqlDB, srcUser, budget.Input{
+		Name: "USD бюджет", Scope: budget.ScopeAllExpense, Amount: 10000,
+		Month: "2026-01", Currency: "USD", IsActive: true, SkipCopyForward: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.Currency != "USD" {
+		t.Fatalf("src budget currency %s", b.Currency)
+	}
+
+	out, _, err := ExportCSV(ctx, sqlDB, srcUser, "Import", ExportFilters{Format: "buhgalter"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(out), "USD") {
+		t.Fatalf("export missing USD: %s", string(out)[:min(500, len(out))])
+	}
+
+	hash, err := auth.HashPassword("secret123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dstUser, err := auth.CreateUser(ctx, sqlDB, "importusd", hash, "ImportUSD", false, auth.UserStatusActive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rep, err := Import(ctx, sqlDB, dstUser, "native.csv", out, ImportOptions{Preset: "buhgalter", Confirm: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.Errors) != 0 {
+		t.Fatalf("import errors: %+v", rep.Errors)
+	}
+	dstAcc := mustAccountByName(t, ctx, sqlDB, dstUser, "USD кошелёк")
+	if dstAcc.Currency != "USD" {
+		t.Fatalf("dst account currency %s", dstAcc.Currency)
+	}
+	debts, err := debt.List(ctx, sqlDB, dstUser, "false")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(debts) != 1 || debts[0].Currency != "USD" {
+		t.Fatalf("dst debts %+v", debts)
+	}
+	budgets, err := budget.List(ctx, sqlDB, dstUser, "2026-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(budgets) != 1 || budgets[0].Currency != "USD" {
+		t.Fatalf("dst budgets %+v", budgets)
 	}
 }
 

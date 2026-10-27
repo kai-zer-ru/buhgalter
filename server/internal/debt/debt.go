@@ -24,6 +24,7 @@ type Debt struct {
 	Direction      string  `json:"direction"`
 	Amount         int64   `json:"amount"`
 	AmountDisplay  string  `json:"amount_display"`
+	Currency       string  `json:"currency"`
 	AffectsBalance bool    `json:"affects_balance"`
 	DebtDate       string  `json:"debt_date"`
 	DueDate        string  `json:"due_date"`
@@ -70,6 +71,7 @@ var (
 	ErrCannotBorrowFromDebtor = errors.New("cannot borrow from debtor who owes you")
 	ErrCannotLendToCreditor   = errors.New("cannot lend to creditor you owe")
 	ErrPlannedNotAllowed      = errors.New("planned operation is not allowed for debt transactions")
+	ErrCurrencyMismatch       = money.ErrCurrencyMismatch
 )
 
 func queries(db sqlcdb.DBTX) *sqlcdb.Queries {
@@ -118,6 +120,7 @@ type debtRowFields struct {
 	affectsBalance, isSettled                                         int64
 	description, transactionID, settledAt                             *string
 	accountID, accountName                                            *string
+	currency                                                          string
 }
 
 func mapDebtRows[T any](list []T, tz string, now time.Time, at func(int) debtRowFields) ([]Debt, error) {
@@ -139,6 +142,7 @@ func debtRowFromActive(r sqlcdb.ListActiveDebtsByUserRow) debtRowFields {
 		description: r.Description, transactionID: r.TransactionID, isSettled: r.IsSettled,
 		settledAt: r.SettledAt, createdAt: r.CreatedAt,
 		accountID: r.OpenAccountID, accountName: r.OpenAccountName,
+		currency: r.Currency,
 	}
 }
 
@@ -149,6 +153,7 @@ func debtRowFromSettled(r sqlcdb.ListSettledDebtsByUserRow) debtRowFields {
 		description: r.Description, transactionID: r.TransactionID, isSettled: r.IsSettled,
 		settledAt: r.SettledAt, createdAt: r.CreatedAt,
 		accountID: r.OpenAccountID, accountName: r.OpenAccountName,
+		currency: r.Currency,
 	}
 }
 
@@ -159,6 +164,7 @@ func debtRowFromAll(r sqlcdb.ListAllDebtsByUserRow) debtRowFields {
 		description: r.Description, transactionID: r.TransactionID, isSettled: r.IsSettled,
 		settledAt: r.SettledAt, createdAt: r.CreatedAt,
 		accountID: r.OpenAccountID, accountName: r.OpenAccountName,
+		currency: r.Currency,
 	}
 }
 
@@ -169,6 +175,7 @@ func debtFromGetRow(row sqlcdb.GetDebtByIDRow, tz string, now time.Time) (Debt, 
 		description: row.Description, transactionID: row.TransactionID, isSettled: row.IsSettled,
 		settledAt: row.SettledAt, createdAt: row.CreatedAt,
 		accountID: row.OpenAccountID, accountName: row.OpenAccountName,
+		currency: row.Currency,
 	}, tz, now)
 }
 
@@ -191,6 +198,7 @@ func debtFromFields(f debtRowFields, tz string, now time.Time) (Debt, error) {
 		Direction:      f.direction,
 		Amount:         f.amount,
 		AmountDisplay:  money.FormatRubles(f.amount),
+		Currency:       f.currency,
 		AffectsBalance: f.affectsBalance == 1,
 		DebtDate:       f.debtDate,
 		DueDate:        f.dueDate,
@@ -242,6 +250,10 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Deb
 			return Debt{}, err
 		}
 	}
+	currency, err := openDebtCurrency(ctx, db, userID, in)
+	if err != nil {
+		return Debt{}, err
+	}
 
 	id := uuid.NewString()
 	now := time.Now().UTC().Format(time.RFC3339)
@@ -272,7 +284,7 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Deb
 		ID: id, UserID: userID, DebtorID: debtorID, Direction: in.Direction,
 		Amount: in.Amount, AffectsBalance: affects, DebtDate: debtDate, DueDate: dueDate,
 		Description: in.Description, TransactionID: txID,
-		IsSettled: 0, SettledAt: nil, CreatedAt: now,
+		IsSettled: 0, SettledAt: nil, CreatedAt: now, Currency: currency,
 	}); err != nil {
 		return Debt{}, err
 	}
@@ -318,6 +330,13 @@ func Settle(ctx context.Context, db *sql.DB, userID, id string, in SettleInput) 
 		}
 		if err := validateActiveAccount(ctx, db, userID, in.AccountID); err != nil {
 			return Debt{}, err
+		}
+		acc, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: in.AccountID, UserID: userID})
+		if err != nil {
+			return Debt{}, err
+		}
+		if existing.Currency != "" && acc.Currency != existing.Currency {
+			return Debt{}, ErrCurrencyMismatch
 		}
 	}
 
@@ -551,6 +570,28 @@ func validateActiveAccount(ctx context.Context, db sqlcdb.DBTX, userID, accountI
 		return ErrAccountArchived
 	}
 	return nil
+}
+
+// openDebtCurrency is the opening account's currency, or the profile currency without an account.
+func openDebtCurrency(ctx context.Context, db *sql.DB, userID string, in CreateInput) (string, error) {
+	if in.AffectsBalance && in.AccountID != "" {
+		acc, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: in.AccountID, UserID: userID})
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", ErrInvalidAccount
+		}
+		if err != nil {
+			return "", err
+		}
+		return acc.Currency, nil
+	}
+	row, err := queries(db).GetUserFormatting(ctx, userID)
+	if err != nil {
+		return "", err
+	}
+	if c := money.Normalize(row.Currency); money.Valid(c) {
+		return c, nil
+	}
+	return money.DefaultCurrency, nil
 }
 
 func userTimezone(ctx context.Context, db *sql.DB, userID string) (string, error) {

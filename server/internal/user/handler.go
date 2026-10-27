@@ -16,6 +16,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/money"
 	"github.com/kai-zer-ru/buhgalter/internal/notificationintercept"
 	"github.com/kai-zer-ru/buhgalter/internal/notify"
 )
@@ -112,7 +113,8 @@ func (h *Handler) PutSettings(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_LANGUAGE")
 		return
 	}
-	if req.Currency != "" && req.Currency != "RUB" && req.Currency != "USD" && req.Currency != "EUR" {
+	req.Currency = money.Normalize(req.Currency)
+	if req.Currency != "" && !money.Valid(req.Currency) {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CURRENCY")
 		return
 	}

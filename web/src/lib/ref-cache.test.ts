@@ -23,6 +23,7 @@ describe('shouldPersistRefCache', () => {
 		expect(shouldPersistRefCache('/api/v1/credits/abc-123')).toBe(true);
 		expect(shouldPersistRefCache('/api/v1/credits?status=active')).toBe(true);
 		expect(shouldPersistRefCache('/api/v1/banks')).toBe(true);
+		expect(shouldPersistRefCache('/api/v1/currencies')).toBe(true);
 	});
 
 	it('skips setup status (registration flag for public pages)', () => {
@@ -93,6 +94,61 @@ describe('web fetchWithRefCache SWR', () => {
 		await vi.waitFor(() =>
 			expect(readRefCache('/api/v1/dashboard')).toEqual({ total_balance: 200 })
 		);
+	});
+
+	it('does not SWR-serve a dashboard whose accounts lack currency', async () => {
+		writeRefCache('/api/v1/dashboard', {
+			total_balance: 100,
+			accounts: [
+				{
+					id: 'a1',
+					name: 'Dahua',
+					type: 'cash',
+					balance: 11100000,
+					balance_display: '111000.00',
+					forecast_balance: 11100000,
+					forecast_display: '111000.00',
+					has_future_this_month: false,
+					is_primary: false
+				}
+			],
+			debts_summary: {
+				i_owe: 0,
+				owed_to_me: 0,
+				overdue_i_owe: 0,
+				overdue_owed_to_me: 0,
+				active_count: 0
+			},
+			recent_transactions: []
+		});
+		const fetcher = vi.fn(async () => ({
+			total_balance: 100,
+			accounts: [
+				{
+					id: 'a1',
+					name: 'Dahua',
+					type: 'cash',
+					currency: 'GBP',
+					balance: 11100000,
+					balance_display: '111000.00',
+					forecast_balance: 11100000,
+					forecast_display: '111000.00',
+					has_future_this_month: false,
+					is_primary: false
+				}
+			],
+			debts_summary: {
+				i_owe: 0,
+				owed_to_me: 0,
+				overdue_i_owe: 0,
+				overdue_owed_to_me: 0,
+				active_count: 0
+			},
+			recent_transactions: []
+		}));
+		const first = await fetchWithRefCache('/api/v1/dashboard', fetcher);
+		expect(fetcher).toHaveBeenCalledOnce();
+		expect(first.accounts[0]?.currency).toBe('GBP');
 	});
 
 	it('skips background revalidate while realtime socket is live', async () => {

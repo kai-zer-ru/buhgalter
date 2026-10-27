@@ -1,7 +1,7 @@
 -- name: ListAccountsNetWorthByUser :many
-SELECT id, type, initial_balance, credit_limit, created_at
+SELECT id, type, initial_balance, credit_limit, created_at, currency
 FROM accounts
-WHERE user_id = ? AND status != 'deleted';
+WHERE user_id = ? AND status != 'deleted' AND currency = ?;
 
 -- name: NetWorthDebtsByUser :many
 SELECT
@@ -16,6 +16,7 @@ SELECT
     ), 0) AS INTEGER) AS amount_at_as_of
 FROM debts d
 WHERE d.user_id = sqlc.arg(user_id)
+  AND d.currency = sqlc.arg(currency)
   AND d.debt_date <= sqlc.arg(as_of)
   AND NOT (
     d.is_settled = 1
@@ -35,6 +36,7 @@ SELECT
           AND cp.payment_date <= sqlc.arg(as_of)
     ), 0) AS INTEGER) AS paid_at_as_of
 FROM credits c
+JOIN accounts a ON a.id = c.debit_account_id AND a.currency = sqlc.arg(currency)
 WHERE c.user_id = sqlc.arg(user_id)
   AND c.issue_date <= sqlc.arg(as_of)
   AND (

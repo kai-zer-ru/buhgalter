@@ -6,10 +6,13 @@
 	import {
 		listAccounts,
 		listBanks,
+		listCurrencies,
 		type Account,
 		type AccountType,
-		type Bank
+		type Bank,
+		type Currency
 	} from '$lib/api/client';
+	import { currencySelectOptions } from '$lib/currency';
 	import { createAccount } from '$lib/offline/accounts-api';
 	import BackLink from '$lib/components/BackLink.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
@@ -20,6 +23,7 @@
 	import { debitAccounts } from '$lib/credit-card';
 	import { accountSelectOptions } from '$lib/select-options';
 	import { toast } from '$lib/toast';
+	import { user } from '$lib/stores/auth';
 	import { reportPageLoadFailure } from '$lib/page-load';
 	import { dataRefreshTick } from '$lib/offline/sync';
 	import { bankIconUrl } from '$lib/finance';
@@ -34,6 +38,8 @@
 	let creditLimit = $state('');
 	let initialBalance = $state('');
 	let paymentAccountId = $state('');
+	let currency = $state('RUB');
+	let currencies = $state<Currency[]>([]);
 	let banks = $state<Bank[]>([]);
 	let debitAccountList = $state<Account[]>([]);
 	let loading = $state(false);
@@ -44,12 +50,19 @@
 	);
 	const needsBank = $derived(type === 'bank' || type === 'credit_card');
 	const paymentOptions = $derived(accountSelectOptions(debitAccounts(debitAccountList)));
+	const currencyOptions = $derived(currencySelectOptions(currencies));
 
 	onMount(async () => {
 		try {
-			const [bankList, accountList] = await Promise.all([listBanks(), listAccounts()]);
+			const [bankList, accountList, currencyList] = await Promise.all([
+				listBanks(),
+				listAccounts(),
+				listCurrencies()
+			]);
 			banks = bankList;
 			debitAccountList = accountList;
+			currencies = currencyList;
+			currency = $user?.currency ?? currencyList[0]?.code ?? 'RUB';
 			loadError = null;
 		} catch (err) {
 			const msg = reportPageLoadFailure(err);
@@ -72,7 +85,8 @@
 				initial_balance: toAPIAmount(initialBalance || '0'),
 				credit_limit: type === 'credit_card' ? toAPIAmount(creditLimit) : undefined,
 				payment_account_id:
-					type === 'credit_card' && paymentAccountId ? paymentAccountId : undefined
+					type === 'credit_card' && paymentAccountId ? paymentAccountId : undefined,
+				currency
 			});
 			dataRefreshTick.update((n) => n + 1);
 			await leaveForm(returnTo);
@@ -138,6 +152,15 @@
 					</button>
 				</div>
 			</div>
+
+			<Select
+				id="account-currency"
+				label={$_('accounts.field.currency')}
+				hint={$_('accounts.currency.hint')}
+				bind:value={currency}
+				options={currencyOptions}
+				usePortal
+			/>
 
 			{#if needsBank}
 				<div>

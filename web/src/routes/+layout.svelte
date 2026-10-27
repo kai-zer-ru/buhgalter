@@ -5,7 +5,7 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
 	import { _ } from 'svelte-i18n';
-	import { ApiError, getDashboard, getSetupStatus } from '$lib/api/client';
+	import { ApiError, getDashboard, getSetupStatus, listCurrencies } from '$lib/api/client';
 	import { readInboxCount } from '$lib/stores/inbox-count';
 	import { refCacheTick } from '$lib/ref-cache';
 	import { loadUser, logout, user, hasRecentSession, clearSessionHint } from '$lib/stores/auth';
@@ -396,6 +396,7 @@
 				if (currentUser) {
 					setLocale(currentUser.language);
 					syncThemeFromUser(currentUser.theme);
+					void listCurrencies().catch(() => {});
 					if (currentUser.is_admin) {
 						void checkForVersionUpdate().then((update) => {
 							if (update) pendingUpdate = update;

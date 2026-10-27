@@ -32,7 +32,15 @@
 	import Select from '$lib/components/Select.svelte';
 	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
 	import { confirm } from '$lib/confirm';
-	import { formatMoneyDisplay, formatMoneyForInput, toAPIAmount } from '$lib/money';
+	import { formatBalance } from '$lib/finance';
+	import { formatMoneyForInput, toAPIAmount } from '$lib/money';
+	import {
+		mergeAvailableCurrencies,
+		readStoredStatsCurrency,
+		resolveStoredStatsCurrency,
+		writeStoredStatsCurrency
+	} from '$lib/currency';
+	import { user } from '$lib/stores/auth';
 	import { toast } from '$lib/toast';
 	import { tr } from '$lib/i18n';
 	import {
@@ -50,7 +58,6 @@
 		subcategorySelectOptions
 	} from '$lib/select-options';
 
-	let items = $state<BudgetSummaryItem[]>([]);
 	let canCopyFromPrevious = $state(false);
 	let categories = $state<Category[]>([]);
 	let accounts = $state<UIMetaAccountRef[]>([]);
@@ -76,8 +83,17 @@
 	let copying = $state(false);
 	let spentPreviewDisplay = $state<string | null>(null);
 	let spentPreviewSeq = 0;
+	let allItems = $state<BudgetSummaryItem[]>([]);
+	let availableCurrencies = $state<string[]>([]);
+	let budgetCurrency = $state('');
 
 	const month = $derived($page.url.searchParams.get('month') ?? currentMonthKey());
+	const profileCurrency = $derived($user?.currency ?? 'RUB');
+	const currency = $derived(budgetCurrency || profileCurrency);
+	const showCurrencyChips = $derived(availableCurrencies.length > 1);
+	const items = $derived(
+		allItems.filter((item) => (item.currency || profileCurrency) === currency)
+	);
 	const formVisible = $derived(formOpen || editId !== null);
 	const canShowSpentPreview = $derived(
 		formVisible &&
@@ -114,7 +130,9 @@
 	);
 	const accountOptions = $derived([
 		{ value: '', label: $_('budget.field.account_all') },
-		...accounts.map((a) => accountRefSelectOption(a, banks))
+		...accounts
+			.filter((a) => (a.currency || profileCurrency) === currency)
+			.map((a) => accountRefSelectOption(a, banks))
 	]);
 	const scopeOptions = $derived(
 		[
@@ -199,10 +217,22 @@
 		error = '';
 		try {
 			const [summary, meta] = await Promise.all([getBudgetSummary(month), getUIMeta()]);
-			items = opts.background ? assignIfChanged(items, summary.items) : summary.items;
-			canCopyFromPrevious = summary.can_copy_from_previous;
 			const nextAccounts = meta.accounts.filter((a) => a.status === 'active');
 			accounts = opts.background ? assignIfChanged(accounts, nextAccounts) : nextAccounts;
+			availableCurrencies = mergeAvailableCurrencies(
+				summary.available_currencies,
+				nextAccounts,
+				profileCurrency
+			);
+			const nextCurrency = resolveStoredStatsCurrency(
+				availableCurrencies,
+				budgetCurrency || readStoredStatsCurrency(),
+				profileCurrency
+			);
+			if (nextCurrency !== budgetCurrency) budgetCurrency = nextCurrency;
+			writeStoredStatsCurrency(nextCurrency);
+			allItems = opts.background ? assignIfChanged(allItems, summary.items) : summary.items;
+			canCopyFromPrevious = summary.can_copy_from_previous;
 			banks = opts.background ? assignIfChanged(banks, meta.banks) : meta.banks;
 			categories = opts.background
 				? assignIfChanged(categories, meta.expense_categories)
@@ -215,7 +245,7 @@
 		} catch (err) {
 			const msg = reportPageLoadFailure(err, {
 				silent: opts.background,
-				hasData: items.length > 0
+				hasData: allItems.length > 0
 			});
 			if (msg) loadError = msg;
 		} finally {
@@ -234,6 +264,7 @@
 			subcategory_id: scope === 'subcategory' ? subcategoryId : undefined,
 			account_id: accountId || undefined,
 			amount: toAPIAmount(amount),
+			currency: editId ? undefined : currency,
 			alert_at_percent: Number(alertAtPercent) || 0,
 			is_active: isActive,
 			copy_forward: copyForward
@@ -371,7 +402,8 @@
 					: undefined,
 			subcategory_id:
 				previewScope === 'subcategory' ? previewSubcategoryId || undefined : undefined,
-			account_id: previewAccountId || undefined
+			account_id: previewAccountId || undefined,
+			currency: previewAccountId ? undefined : currency
 		})
 			.then((res) => {
 				if (seq !== spentPreviewSeq) return;
@@ -483,7 +515,7 @@
 		{#if spentPreviewDisplay !== null}
 			<p class="text-sm" style:color="var(--text-muted)" data-testid="budget-already-spent">
 				{$_('budget.field.already_spent', {
-					values: { spent: formatMoneyDisplay(spentPreviewDisplay) }
+					values: { spent: formatBalance(spentPreviewDisplay, currency) }
 				})}
 			</p>
 		{/if}
@@ -567,6 +599,28 @@
 			]}
 		/>
 
+		{#if showCurrencyChips}
+			<div class="flex flex-wrap items-center gap-2">
+				<span class="text-sm" style:color="var(--text-muted)">{$_('stats.currencyFilter')}</span>
+				{#each availableCurrencies as code (code)}
+					<button
+						type="button"
+						class={code === currency ? 'tab tab-active' : 'tab'}
+						onclick={() => {
+							budgetCurrency = code;
+							writeStoredStatsCurrency(code);
+							if (accountId) {
+								const acc = accounts.find((a) => a.id === accountId);
+								if (acc?.currency && acc.currency !== code) accountId = '';
+							}
+						}}
+					>
+						{code}
+					</button>
+				{/each}
+			</div>
+		{/if}
+
 		<div class="flex flex-wrap items-center justify-between gap-3">
 			<h1 class="text-2xl font-semibold">{$_('budget.title')}</h1>
 
@@ -637,8 +691,8 @@
 									<p class="text-sm" style:color="var(--text-muted)">
 										{tr('budget.progress', {
 											values: {
-												spent: formatMoneyDisplay(item.spent_display),
-												planned: formatMoneyDisplay(item.planned_display)
+												spent: formatBalance(item.spent_display, item.currency ?? currency),
+												planned: formatBalance(item.planned_display, item.currency ?? currency)
 											}
 										})}
 									</p>
@@ -670,8 +724,14 @@
 								<p class="text-sm tabular-nums" style:color="var(--text-muted)">
 									{tr('budget.children', {
 										values: {
-											spent: formatMoneyDisplay(item.children_spent_display ?? '0.00'),
-											planned: formatMoneyDisplay(item.children_planned_display)
+											spent: formatBalance(
+												item.children_spent_display ?? '0.00',
+												item.currency ?? currency
+											),
+											planned: formatBalance(
+												item.children_planned_display,
+												item.currency ?? currency
+											)
 										}
 									})}
 								</p>

@@ -18,15 +18,28 @@ export function isAutoTopupEligible(acc: Pick<Account, 'type' | 'status'>): bool
 	return acc.type === 'bank' && acc.status === 'active';
 }
 
-export function autoTopupSourceOptions(accounts: Account[], beneficiaryId: string) {
+export function autoTopupSourceOptions(
+	accounts: Account[],
+	beneficiaryId: string,
+	currency?: string
+) {
 	return accounts
 		.filter((a) => a.status === 'active' && a.type === 'bank' && a.id !== beneficiaryId)
+		.filter((a) => !currency || a.currency === currency)
 		.map((a) => accountSelectOption(a));
 }
 
-export function defaultAutoTopupSourceId(accounts: Account[], beneficiaryId: string): string {
+export function defaultAutoTopupSourceId(
+	accounts: Account[],
+	beneficiaryId: string,
+	currency?: string
+): string {
 	const banks = accounts.filter(
-		(a) => a.status === 'active' && a.type === 'bank' && a.id !== beneficiaryId
+		(a) =>
+			a.status === 'active' &&
+			a.type === 'bank' &&
+			a.id !== beneficiaryId &&
+			(!currency || a.currency === currency)
 	);
 	const primary = banks.find((a) => a.is_primary);
 	return primary?.id ?? banks[0]?.id ?? '';

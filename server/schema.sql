@@ -97,7 +97,8 @@ CREATE TABLE accounts (
     status              TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'archived', 'deleted')),
     is_primary          INTEGER NOT NULL DEFAULT 0,
     created_at          TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at          TEXT NOT NULL DEFAULT (datetime('now'))
+    updated_at          TEXT NOT NULL DEFAULT (datetime('now')),
+    currency            TEXT NOT NULL DEFAULT 'RUB'
 );
 CREATE INDEX idx_accounts_user ON accounts(user_id);
 
@@ -389,7 +390,8 @@ CREATE TABLE debts (
     transaction_id  TEXT REFERENCES transactions(id),
     is_settled      INTEGER NOT NULL DEFAULT 0,
     settled_at      TEXT,
-    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    currency        TEXT NOT NULL DEFAULT 'RUB'
 );
 CREATE INDEX idx_debts_user ON debts(user_id);
 CREATE INDEX idx_debts_debtor ON debts(debtor_id);
@@ -579,7 +581,8 @@ CREATE TABLE budgets (
     alert_at_percent INTEGER NOT NULL DEFAULT 90,
     is_active       INTEGER NOT NULL DEFAULT 1,
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    currency        TEXT NOT NULL DEFAULT 'RUB'
 );
 CREATE INDEX idx_budgets_user ON budgets(user_id);
 CREATE UNIQUE INDEX idx_budgets_active_unique ON budgets(
@@ -587,7 +590,8 @@ CREATE UNIQUE INDEX idx_budgets_active_unique ON budgets(
     scope,
     IFNULL(category_id, ''),
     IFNULL(subcategory_id, ''),
-    month
+    month,
+    currency
 ) WHERE is_active = 1;
 
 CREATE TABLE budget_periods (

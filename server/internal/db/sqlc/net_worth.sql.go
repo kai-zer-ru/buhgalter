@@ -10,10 +10,15 @@ import (
 )
 
 const listAccountsNetWorthByUser = `-- name: ListAccountsNetWorthByUser :many
-SELECT id, type, initial_balance, credit_limit, created_at
+SELECT id, type, initial_balance, credit_limit, created_at, currency
 FROM accounts
-WHERE user_id = ? AND status != 'deleted'
+WHERE user_id = ? AND status != 'deleted' AND currency = ?
 `
+
+type ListAccountsNetWorthByUserParams struct {
+	UserID   string `json:"user_id"`
+	Currency string `json:"currency"`
+}
 
 type ListAccountsNetWorthByUserRow struct {
 	ID             string `json:"id"`
@@ -21,10 +26,11 @@ type ListAccountsNetWorthByUserRow struct {
 	InitialBalance int64  `json:"initial_balance"`
 	CreditLimit    *int64 `json:"credit_limit"`
 	CreatedAt      string `json:"created_at"`
+	Currency       string `json:"currency"`
 }
 
-func (q *Queries) ListAccountsNetWorthByUser(ctx context.Context, userID string) ([]ListAccountsNetWorthByUserRow, error) {
-	rows, err := q.db.QueryContext(ctx, listAccountsNetWorthByUser, userID)
+func (q *Queries) ListAccountsNetWorthByUser(ctx context.Context, arg ListAccountsNetWorthByUserParams) ([]ListAccountsNetWorthByUserRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAccountsNetWorthByUser, arg.UserID, arg.Currency)
 	if err != nil {
 		return nil, err
 	}
@@ -38,6 +44,7 @@ func (q *Queries) ListAccountsNetWorthByUser(ctx context.Context, userID string)
 			&i.InitialBalance,
 			&i.CreditLimit,
 			&i.CreatedAt,
+			&i.Currency,
 		); err != nil {
 			return nil, err
 		}
@@ -64,7 +71,8 @@ SELECT
           AND cp.payment_date <= ?1
     ), 0) AS INTEGER) AS paid_at_as_of
 FROM credits c
-WHERE c.user_id = ?2
+JOIN accounts a ON a.id = c.debit_account_id AND a.currency = ?2
+WHERE c.user_id = ?3
   AND c.issue_date <= ?1
   AND (
     c.status = 'active'
@@ -73,8 +81,9 @@ WHERE c.user_id = ?2
 `
 
 type NetWorthCreditsByUserParams struct {
-	AsOf   string `json:"as_of"`
-	UserID string `json:"user_id"`
+	AsOf     string `json:"as_of"`
+	Currency string `json:"currency"`
+	UserID   string `json:"user_id"`
 }
 
 type NetWorthCreditsByUserRow struct {
@@ -84,7 +93,7 @@ type NetWorthCreditsByUserRow struct {
 }
 
 func (q *Queries) NetWorthCreditsByUser(ctx context.Context, arg NetWorthCreditsByUserParams) ([]NetWorthCreditsByUserRow, error) {
-	rows, err := q.db.QueryContext(ctx, netWorthCreditsByUser, arg.AsOf, arg.UserID)
+	rows, err := q.db.QueryContext(ctx, netWorthCreditsByUser, arg.AsOf, arg.Currency, arg.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -119,6 +128,7 @@ SELECT
     ), 0) AS INTEGER) AS amount_at_as_of
 FROM debts d
 WHERE d.user_id = ?2
+  AND d.currency = ?3
   AND d.debt_date <= ?1
   AND NOT (
     d.is_settled = 1
@@ -128,8 +138,9 @@ WHERE d.user_id = ?2
 `
 
 type NetWorthDebtsByUserParams struct {
-	AsOf   string `json:"as_of"`
-	UserID string `json:"user_id"`
+	AsOf     string `json:"as_of"`
+	UserID   string `json:"user_id"`
+	Currency string `json:"currency"`
 }
 
 type NetWorthDebtsByUserRow struct {
@@ -138,7 +149,7 @@ type NetWorthDebtsByUserRow struct {
 }
 
 func (q *Queries) NetWorthDebtsByUser(ctx context.Context, arg NetWorthDebtsByUserParams) ([]NetWorthDebtsByUserRow, error) {
-	rows, err := q.db.QueryContext(ctx, netWorthDebtsByUser, arg.AsOf, arg.UserID)
+	rows, err := q.db.QueryContext(ctx, netWorthDebtsByUser, arg.AsOf, arg.UserID, arg.Currency)
 	if err != nil {
 		return nil, err
 	}

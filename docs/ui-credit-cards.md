@@ -23,7 +23,7 @@
 
 **Баланс карты** хранится в `accounts.current_balance` (копейки), как у `cash` и `bank`. В UI отображается без знака «−». При создании **начальный баланс по умолчанию 0**.
 
-**Валюта** — валюта пользователя (`users.currency`); отдельного поля у карты нет. Настоящая мультивалютность (валюта на счёте) — [multicurrency.md](../roadmap/multicurrency.md).
+**Валюта** — `accounts.currency` кредитки, как у `cash`/`bank`. Счёт оплаты (`payment_account_id`) только той же валюты (`ERR_CURRENCY_MISMATCH`). Allowlist и обмен — [multicurrency.md](../roadmap/multicurrency.md).
 
 **Название** — обычное поле `name` (1–64 символа), задаётся пользователем («Тинькофф Black», «Кредитка жены»).
 

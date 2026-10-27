@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/kai-zer-ru/buhgalter/internal/account"
 	"github.com/kai-zer-ru/buhgalter/internal/apperror"
 	"github.com/kai-zer-ru/buhgalter/internal/audit"
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
@@ -29,6 +30,7 @@ type upsertRequest struct {
 	AlertAtPercent *int64  `json:"alert_at_percent"`
 	IsActive       *bool   `json:"is_active"`
 	CopyForward    *bool   `json:"copy_forward"`
+	Currency       *string `json:"currency,omitempty"`
 }
 
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
@@ -56,6 +58,26 @@ func (h *Handler) Summary(w http.ResponseWriter, r *http.Request) {
 	if writeBudgetError(w, r, err) {
 		return
 	}
+	available, err := account.ActiveCurrencies(r.Context(), h.Store.DB(), info.User.ID)
+	if err != nil {
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	}
+	result.AvailableCurrencies = available
+	if raw := strings.TrimSpace(r.URL.Query().Get("currency")); raw != "" {
+		code, err := money.ParseQueryCurrency(raw, "")
+		if err != nil {
+			apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CURRENCY")
+			return
+		}
+		filtered := make([]SummaryItem, 0, len(result.Items))
+		for _, item := range result.Items {
+			if item.Currency == code {
+				filtered = append(filtered, item)
+			}
+		}
+		result.Items = filtered
+	}
 	writeJSON(w, http.StatusOK, result)
 }
 
@@ -72,6 +94,7 @@ func (h *Handler) SpentPreview(w http.ResponseWriter, r *http.Request) {
 		CategoryID:    optionalQuery(q.Get("category_id")),
 		SubcategoryID: optionalQuery(q.Get("subcategory_id")),
 		AccountID:     optionalQuery(q.Get("account_id")),
+		Currency:      q.Get("currency"),
 	})
 	if writeBudgetError(w, r, err) {
 		return
@@ -205,6 +228,10 @@ func parseInput(req upsertRequest) (Input, error) {
 		copyForward = *req.CopyForward
 	}
 	name := strings.TrimSpace(req.Name)
+	currency := ""
+	if req.Currency != nil {
+		currency = money.Normalize(*req.Currency)
+	}
 	return Input{
 		Name:           name,
 		Scope:          req.Scope,
@@ -215,6 +242,7 @@ func parseInput(req upsertRequest) (Input, error) {
 		CopyForward:    copyForward,
 		AlertAtPercent: alertAt,
 		IsActive:       active,
+		Currency:       currency,
 	}, nil
 }
 
@@ -245,6 +273,12 @@ func writeBudgetError(w http.ResponseWriter, r *http.Request, err error) bool {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_ACCOUNT_NOT_FOUND")
 	case errors.Is(err, ErrAccountArchived):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_ACCOUNT_ARCHIVED")
+	case errors.Is(err, ErrInvalidCurrency):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CURRENCY")
+	case errors.Is(err, ErrCurrencyImmutable):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_BUDGET_CURRENCY_IMMUTABLE")
+	case errors.Is(err, ErrCurrencyMismatch):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CURRENCY_MISMATCH")
 	default:
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 	}

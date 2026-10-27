@@ -78,6 +78,10 @@ func inferField(msgKey string) string {
 		return "body"
 	case "ERR_INVALID_AMOUNT", "ERR_TX_AMOUNT_POSITIVE", "ERR_SETTLE_AMOUNT":
 		return "amount"
+	case "ERR_TRANSFER_TO_AMOUNT_REQUIRED", "ERR_TRANSFER_TO_AMOUNT_MISMATCH":
+		return "to_amount"
+	case "ERR_BUDGET_CURRENCY_IMMUTABLE":
+		return "currency"
 	case "ERR_INVALID_DUE_DATE":
 		return "due_date"
 	case "ERR_INVALID_DEBT_DATE":

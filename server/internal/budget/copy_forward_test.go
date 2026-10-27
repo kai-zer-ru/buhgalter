@@ -935,3 +935,39 @@ func insertRawBudget(t *testing.T, ctx context.Context, db *sql.DB, id, userID, 
 		t.Fatal(err)
 	}
 }
+
+func TestBudgetCopyKeepsCurrency(t *testing.T) {
+	ctx, sqlDB, userID, _, categoryID := seedBudgetEnv(t)
+	cat := categoryID
+	insertRawBudget(t, ctx, sqlDB, "nov-rub", userID, "Рубли", budget.ScopeCategory, &cat, nil, 15_000, "2026-11", 1, 1, "2026-11-01 00:00:00")
+	insertRawBudget(t, ctx, sqlDB, "nov-usd", userID, "Доллары", budget.ScopeCategory, &cat, nil, 2_000, "2026-11", 1, 0, "2026-11-01 00:00:00")
+	if _, err := sqlDB.ExecContext(ctx, `UPDATE budgets SET currency = 'USD', is_active = 1 WHERE id = 'nov-usd'`); err != nil {
+		t.Fatal(err)
+	}
+
+	n, err := budget.CopyMissingNextMonthOnDate(ctx, sqlDB, userID, time.Date(2026, 11, 1, 8, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Fatalf("created %d, want 2", n)
+	}
+	dec := mustList(t, ctx, sqlDB, userID, "2026-12")
+	if got := mustOne(t, dec, "Доллары").Currency; got != "USD" {
+		t.Fatalf("december USD copy currency %q", got)
+	}
+	if got := mustOne(t, dec, "Рубли").Currency; got != "RUB" {
+		t.Fatalf("december RUB copy currency %q", got)
+	}
+
+	copied, err := budget.CopyFromPreviousMonth(ctx, sqlDB, userID, "2027-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(copied) != 2 {
+		t.Fatalf("copied %d, want 2", len(copied))
+	}
+	if got := mustOne(t, copied, "Доллары").Currency; got != "USD" {
+		t.Fatalf("january USD copy currency %q", got)
+	}
+}

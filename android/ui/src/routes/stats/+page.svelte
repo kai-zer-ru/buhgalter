@@ -57,6 +57,13 @@
 	import { user } from '$lib/stores/auth';
 	import { reportPageLoadFailure } from '$lib/page-load';
 	import StatsNetWorthCard from '$lib/components/StatsNetWorthCard.svelte';
+	import {
+		hydrateStoredStatsCurrency,
+		mergeAvailableCurrencies,
+		readStoredStatsCurrency,
+		resolveStoredStatsCurrency,
+		writeStoredStatsCurrency
+	} from '$lib/currency';
 
 	let loading = $state(true);
 	let filterLoading = $state(false);
@@ -85,7 +92,11 @@
 	let metaLoaded = $state(false);
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
-	const currency = $derived($user?.currency ?? 'RUB');
+	const profileCurrency = $derived($user?.currency ?? 'RUB');
+	let statsCurrency = $state('');
+	let availableCurrencies = $state<string[]>([]);
+	const currency = $derived(statsCurrency || profileCurrency);
+	const showCurrencyChips = $derived(availableCurrencies.length > 1);
 	const typeOptions = $derived.by(() => {
 		void $locale;
 		return [
@@ -96,9 +107,10 @@
 	});
 	const accountOptions = $derived.by(() => {
 		void $locale;
+		const matching = accounts.filter((acc) => (acc.currency || profileCurrency) === currency);
 		return [
 			{ value: '', label: tr('import.export.all_accounts') },
-			...accountSelectOptions(accounts)
+			...accountSelectOptions(matching)
 		];
 	});
 	const categoryOptions = $derived.by(() => {
@@ -151,6 +163,7 @@
 	}
 
 	onMount(async () => {
+		statsCurrency = await hydrateStoredStatsCurrency();
 		await loadMeta();
 		await loadStats(true);
 		lastFiltersKey = currentFiltersKey();
@@ -182,8 +195,36 @@
 			accountId,
 			categoryId,
 			groupBy,
-			search: search.trim()
+			search: search.trim(),
+			currency
 		});
+	}
+
+	function applyAvailableCurrencies(codes: string[] | undefined) {
+		availableCurrencies = mergeAvailableCurrencies(codes, accounts, profileCurrency);
+		const next = resolveStoredStatsCurrency(
+			availableCurrencies,
+			statsCurrency || readStoredStatsCurrency(),
+			profileCurrency
+		);
+		if (next !== statsCurrency) statsCurrency = next;
+		writeStoredStatsCurrency(next);
+		if (accountId && !matchingAccountForCurrency(accountId, next)) {
+			accountId = '';
+		}
+	}
+
+	function matchingAccountForCurrency(id: string, code: string): boolean {
+		const acc = accounts.find((a) => a.id === id);
+		return (acc?.currency || profileCurrency) === code;
+	}
+
+	function selectStatsCurrency(code: string) {
+		statsCurrency = code;
+		writeStoredStatsCurrency(code);
+		if (accountId && !matchingAccountForCurrency(accountId, code)) {
+			accountId = '';
+		}
 	}
 
 	async function loadMeta() {
@@ -214,6 +255,7 @@
 		if (type) params.type = type;
 		if (accountId) params.account_id = accountId;
 		if (categoryId) params.category_id = categoryId;
+		if (currency) params.currency = currency;
 		return params;
 	}
 
@@ -221,6 +263,7 @@
 		const params: Record<string, string> = { group_by: 'month' };
 		if (fromLocal) params.from = fromDateLocalStart(fromLocal, tz);
 		if (toLocal) params.to = fromDateLocalEnd(toLocal, tz);
+		if (currency) params.currency = currency;
 		return params;
 	}
 
@@ -256,6 +299,7 @@
 					netWorthPromise
 				]);
 			summary = summaryRes;
+			applyAvailableCurrencies(summaryRes.available_currencies);
 			byCategory = categoryRes.items;
 			bySubcategory = subcategoryRes.items;
 			byPeriod = periodRes.items;
@@ -388,6 +432,21 @@
 		]}
 	/>
 	<h1 class="text-2xl font-semibold">{$_('stats.title')}</h1>
+
+	{#if showCurrencyChips}
+		<div class="flex flex-wrap items-center gap-2">
+			<span class="text-sm" style:color="var(--text-muted)">{$_('stats.currencyFilter')}</span>
+			{#each availableCurrencies as code (code)}
+				<button
+					type="button"
+					class={code === currency ? 'tab tab-active' : 'tab'}
+					onclick={() => selectStatsCurrency(code)}
+				>
+					{code}
+				</button>
+			{/each}
+		</div>
+	{/if}
 
 	<FilterPanel>
 		<div class="filter-panel-body grid items-end gap-3 sm:grid-cols-2 md:mt-0 mt-3 lg:grid-cols-4">

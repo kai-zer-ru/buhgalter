@@ -60,6 +60,7 @@ function localAccount(id: string, payload: AccountCreatePayload): Account {
 		balance_display: payload.initial_balance,
 		credit_limit: payload.credit_limit ? Number.parseFloat(payload.credit_limit) : null,
 		payment_account_id: payload.payment_account_id ?? null,
+		currency: payload.currency,
 		status: 'active',
 		is_primary: false,
 		created_at: ts,

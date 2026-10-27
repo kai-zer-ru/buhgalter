@@ -168,7 +168,7 @@ func TestHandlerPutSettingsValidation(t *testing.T) {
 		body string
 	}{
 		{"language", `{"language":"de"}`},
-		{"currency", `{"currency":"GBP"}`},
+		{"currency", `{"currency":"XYZ"}`},
 		{"theme", `{"theme":"auto"}`},
 		{"timezone", `{"timezone":"Not/AZone"}`},
 		{"invalid json", `{`},
@@ -181,6 +181,23 @@ func TestHandlerPutSettingsValidation(t *testing.T) {
 				t.Fatalf("status %d body=%s", rec.Code, rec.Body.String())
 			}
 		})
+	}
+}
+
+func TestHandlerPutSettingsNormalizesCurrency(t *testing.T) {
+	h, _, user := testEnv(t)
+
+	rec := httptest.NewRecorder()
+	h.PutSettings(rec, withUser(t, user, http.MethodPut, "/user/settings", []byte(`{"currency":" usd "}`)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d body=%s", rec.Code, rec.Body.String())
+	}
+	var updated map[string]string
+	if err := json.NewDecoder(rec.Body).Decode(&updated); err != nil {
+		t.Fatal(err)
+	}
+	if updated["currency"] != "USD" {
+		t.Fatalf("currency %q, want USD", updated["currency"])
 	}
 }
 

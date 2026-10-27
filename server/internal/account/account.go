@@ -23,6 +23,7 @@ type Account struct {
 	BankID                    *string `json:"bank_id"`
 	BankName                  *string `json:"bank_name,omitempty"`
 	BankIcon                  *string `json:"bank_icon,omitempty"`
+	Currency                  string  `json:"currency"`
 	InitialBalance            int64   `json:"initial_balance"`
 	Balance                   int64   `json:"balance"`
 	BalanceDisplay            string  `json:"balance_display"`
@@ -71,6 +72,7 @@ func accountFromRow(
 	autoTopupThreshold, autoTopupTarget *int64,
 	autoTopupSourceAccountID *string,
 	isPrimary int64,
+	currency string,
 	bankName, bankIcon *string,
 ) Account {
 	a := Account{
@@ -80,6 +82,7 @@ func accountFromRow(
 		BankID:                   bankID,
 		BankName:                 bankName,
 		BankIcon:                 bankIcon,
+		Currency:                 currency,
 		InitialBalance:           initialBalance,
 		Status:                   status,
 		IsPrimary:                isPrimary != 0,
@@ -106,7 +109,7 @@ func accountFromGetRow(row sqlcdb.GetAccountByIDRow) Account {
 		row.BankID, row.InitialBalance, row.CurrentBalance,
 		row.CreditLimit, row.PaymentAccountID,
 		row.AutoTopupEnabled, row.AutoTopupThreshold, row.AutoTopupTarget, row.AutoTopupSourceAccountID,
-		row.IsPrimary, row.BankName, row.BankIcon,
+		row.IsPrimary, row.Currency, row.BankName, row.BankIcon,
 	)
 }
 
@@ -116,7 +119,7 @@ func accountFromListActive(row sqlcdb.ListAccountsByUserActiveRow) Account {
 		row.BankID, row.InitialBalance, row.CurrentBalance,
 		row.CreditLimit, row.PaymentAccountID,
 		row.AutoTopupEnabled, row.AutoTopupThreshold, row.AutoTopupTarget, row.AutoTopupSourceAccountID,
-		row.IsPrimary, row.BankName, row.BankIcon,
+		row.IsPrimary, row.Currency, row.BankName, row.BankIcon,
 	)
 }
 
@@ -126,7 +129,7 @@ func accountFromListStatus(row sqlcdb.ListAccountsByUserAndStatusRow) Account {
 		row.BankID, row.InitialBalance, row.CurrentBalance,
 		row.CreditLimit, row.PaymentAccountID,
 		row.AutoTopupEnabled, row.AutoTopupThreshold, row.AutoTopupTarget, row.AutoTopupSourceAccountID,
-		row.IsPrimary, row.BankName, row.BankIcon,
+		row.IsPrimary, row.Currency, row.BankName, row.BankIcon,
 	)
 }
 
@@ -187,6 +190,9 @@ var ErrCreditCardPrimary = errors.New("credit card cannot be primary")
 var ErrCreditCardArchiveNotFullyPaid = errors.New("credit card must be fully paid before archive")
 var ErrCreditLimitImmutable = errors.New("credit limit cannot be changed via account update")
 var ErrCreditCardLimitDecreaseNotFullyPaid = errors.New("credit card must be fully paid before decreasing limit")
+var ErrInvalidCurrency = errors.New("invalid currency")
+var ErrCurrencyLocked = errors.New("account currency cannot be changed: account is in use")
+var ErrCurrencyMismatch = money.ErrCurrencyMismatch
 
 type CreateInput struct {
 	Name             string
@@ -195,13 +201,19 @@ type CreateInput struct {
 	InitialBalance   int64
 	CreditLimit      *int64
 	PaymentAccountID *string
+	// Currency is optional; empty means the owner's profile currency.
+	Currency string
 }
 
 func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Account, error) {
 	if err := validateNameUnique(ctx, db, userID, in.Name, ""); err != nil {
 		return Account{}, err
 	}
-	creditLimit, paymentAccountID, err := validateAccountFields(ctx, db, userID, "", in.Type, in.BankID, in.CreditLimit, in.PaymentAccountID)
+	currency, err := resolveCreateCurrency(ctx, db, userID, in.Currency)
+	if err != nil {
+		return Account{}, err
+	}
+	creditLimit, paymentAccountID, err := validateAccountFields(ctx, db, userID, "", in.Type, currency, in.BankID, in.CreditLimit, in.PaymentAccountID)
 	if err != nil {
 		return Account{}, err
 	}
@@ -230,6 +242,7 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Acc
 		CreditLimit:      creditLimit,
 		PaymentAccountID: paymentAccountID,
 		IsPrimary:        isPrimary,
+		Currency:         currency,
 		CreatedAt:        now,
 		UpdatedAt:        now,
 	}); err != nil {
@@ -245,6 +258,8 @@ type UpdateInput struct {
 	CreditLimit      *int64
 	PaymentAccountID *string
 	AutoTopup        *AutoTopupInput
+	// Currency nil (old clients) keeps the current currency.
+	Currency *string
 }
 
 type AutoTopupInput struct {
@@ -263,6 +278,17 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in UpdateInput) 
 		return Account{}, ErrArchived
 	}
 	if err := validateNameUnique(ctx, db, userID, in.Name, id); err != nil {
+		return Account{}, err
+	}
+	newCurrency, err := resolveUpdateCurrency(ctx, db, userID, existing, in.Currency)
+	if err != nil {
+		return Account{}, err
+	}
+	currency := existing.Currency
+	if newCurrency != "" {
+		currency = newCurrency
+	}
+	if err := validateAutoTopupCurrency(ctx, db, userID, existing, currency, in.AutoTopup); err != nil {
 		return Account{}, err
 	}
 
@@ -293,7 +319,7 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in UpdateInput) 
 		}
 		var validatedCL *int64
 		var validatedPA *string
-		validatedCL, validatedPA, err = validateAccountFields(ctx, db, userID, id, existing.Type, bankID, creditLimit, pa)
+		validatedCL, validatedPA, err = validateAccountFields(ctx, db, userID, id, existing.Type, currency, bankID, creditLimit, pa)
 		if err != nil {
 			return Account{}, err
 		}
@@ -319,6 +345,16 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in UpdateInput) 
 	}); err != nil {
 		return Account{}, err
 	}
+	if newCurrency != "" {
+		if err := queries(db).UpdateAccountCurrency(ctx, sqlcdb.UpdateAccountCurrencyParams{
+			Currency:  newCurrency,
+			UpdatedAt: now,
+			ID:        id,
+			UserID:    userID,
+		}); err != nil {
+			return Account{}, err
+		}
+	}
 	if err := accountbalance.Refresh(ctx, db, userID, id); err != nil {
 		return Account{}, err
 	}
@@ -328,6 +364,77 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in UpdateInput) 
 		}
 	}
 	return GetByID(ctx, db, userID, id)
+}
+
+// resolveCreateCurrency validates an explicit code or falls back to the profile currency.
+func resolveCreateCurrency(ctx context.Context, db sqlcdb.DBTX, userID, code string) (string, error) {
+	code = money.Normalize(code)
+	if code != "" {
+		if !money.Valid(code) {
+			return "", ErrInvalidCurrency
+		}
+		return code, nil
+	}
+	row, err := queries(db).GetUserFormatting(ctx, userID)
+	if err != nil {
+		return "", err
+	}
+	if c := money.Normalize(row.Currency); money.Valid(c) {
+		return c, nil
+	}
+	return money.DefaultCurrency, nil
+}
+
+// ProfileCurrency returns the user's profile currency, or DefaultCurrency.
+func ProfileCurrency(ctx context.Context, db sqlcdb.DBTX, userID string) (string, error) {
+	row, err := queries(db).GetUserFormatting(ctx, userID)
+	if err != nil {
+		return "", err
+	}
+	return money.ProfileOrDefault(row.Currency), nil
+}
+
+// ActiveCurrencies is DISTINCT currencies of active accounts, profile first even if none.
+func ActiveCurrencies(ctx context.Context, db sqlcdb.DBTX, userID string) ([]string, error) {
+	profile, err := ProfileCurrency(ctx, db, userID)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := queries(db).ListAccountsByUserActive(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	codes := make([]string, 0, len(rows))
+	for _, row := range rows {
+		codes = append(codes, row.Currency)
+	}
+	return money.OrderWithProfileFirst(profile, codes), nil
+}
+
+// resolveUpdateCurrency returns the new currency to store, or "" when it does not change.
+// A change is allowed only while the account has no transactions and no references.
+func resolveUpdateCurrency(ctx context.Context, db sqlcdb.DBTX, userID string, existing Account, code *string) (string, error) {
+	if code == nil {
+		return "", nil
+	}
+	c := money.Normalize(*code)
+	if c == "" || c == existing.Currency {
+		return "", nil
+	}
+	if !money.Valid(c) {
+		return "", ErrInvalidCurrency
+	}
+	inUse, err := queries(db).AccountCurrencyInUse(ctx, sqlcdb.AccountCurrencyInUseParams{
+		UserID:    userID,
+		AccountID: existing.ID,
+	})
+	if err != nil {
+		return "", err
+	}
+	if inUse != 0 {
+		return "", ErrCurrencyLocked
+	}
+	return c, nil
 }
 
 // ChangeCreditLimit sets a new credit_limit and adjusts initial_balance by the same delta
@@ -569,7 +676,7 @@ func validateBankID(ctx context.Context, db *sql.DB, bankID *string) error {
 	return nil
 }
 
-func validatePaymentAccount(ctx context.Context, db *sql.DB, userID, selfID string, paymentAccountID *string) (*string, error) {
+func validatePaymentAccount(ctx context.Context, db *sql.DB, userID, selfID, cardCurrency string, paymentAccountID *string) (*string, error) {
 	if paymentAccountID == nil || *paymentAccountID == "" {
 		return nil, nil
 	}
@@ -586,6 +693,9 @@ func validatePaymentAccount(ctx context.Context, db *sql.DB, userID, selfID stri
 	if acc.Status != "active" || acc.Type == "credit_card" {
 		return nil, ErrInvalidPaymentAccount
 	}
+	if acc.Currency != cardCurrency {
+		return nil, ErrCurrencyMismatch
+	}
 	id := *paymentAccountID
 	return &id, nil
 }
@@ -593,7 +703,7 @@ func validatePaymentAccount(ctx context.Context, db *sql.DB, userID, selfID stri
 func validateAccountFields(
 	ctx context.Context,
 	db *sql.DB,
-	userID, selfID, accType string,
+	userID, selfID, accType, currency string,
 	bankID *string,
 	creditLimit *int64,
 	paymentAccountID *string,
@@ -628,7 +738,7 @@ func validateAccountFields(
 		if creditLimit == nil || *creditLimit <= 0 {
 			return nil, nil, ErrCreditLimitRequired
 		}
-		pa, err := validatePaymentAccount(ctx, db, userID, selfID, paymentAccountID)
+		pa, err := validatePaymentAccount(ctx, db, userID, selfID, currency, paymentAccountID)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -704,7 +814,40 @@ func validateAutoTopupSource(ctx context.Context, db *sql.DB, userID, beneficiar
 	if acc.Status != "active" || acc.Type != "bank" {
 		return nil, ErrInvalidAutoTopupSource
 	}
+	beneficiary, err := GetByID(ctx, db, userID, beneficiaryID)
+	if err != nil {
+		return nil, err
+	}
+	if acc.Currency != beneficiary.Currency {
+		return nil, ErrCurrencyMismatch
+	}
 	return &sourceID, nil
+}
+
+// validateAutoTopupCurrency rejects, before any write, an auto top-up source whose currency
+// differs from the beneficiary's (new or kept) currency.
+func validateAutoTopupCurrency(ctx context.Context, db *sql.DB, userID string, existing Account, currency string, in *AutoTopupInput) error {
+	var sourceID string
+	switch {
+	case in != nil && in.Enabled:
+		sourceID = strings.TrimSpace(in.SourceAccountID)
+	case in == nil && existing.AutoTopupEnabled && existing.AutoTopupSourceAccountID != nil:
+		sourceID = *existing.AutoTopupSourceAccountID
+	}
+	if sourceID == "" || sourceID == existing.ID {
+		return nil
+	}
+	src, err := GetByID(ctx, db, userID, sourceID)
+	if errors.Is(err, ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if src.Currency != currency {
+		return ErrCurrencyMismatch
+	}
+	return nil
 }
 
 func disableAutoTopupForInactive(ctx context.Context, db sqlcdb.DBTX, userID, accountID string) error {

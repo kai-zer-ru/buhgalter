@@ -327,6 +327,7 @@
 								<p class="text-sm font-semibold tabular-nums">
 									{showAmountSign ? transactionAmountSign(tx, { singleAccount }) : ''}<MoneyDisplay
 										value={tx.amount_display}
+										currency={tx.currency}
 										class=""
 									/>
 								</p>
@@ -342,7 +343,7 @@
 							{#if commissionDisplay}
 								<p class="text-xs tabular-nums" style:color="var(--text-muted)">
 									{$_('transactions.commission')}:
-									<MoneyDisplay value={commissionDisplay} class="" />
+									<MoneyDisplay value={commissionDisplay} currency={tx.currency} class="" />
 								</p>
 							{/if}
 						</div>
@@ -435,6 +436,7 @@
 							<div class="inline-flex items-center gap-1">
 								{showAmountSign ? transactionAmountSign(tx, { singleAccount }) : ''}<MoneyDisplay
 									value={tx.amount_display}
+									currency={tx.currency}
 									class=""
 								/>
 								{#if tx.receipt_import_id}
@@ -449,7 +451,7 @@
 							{#if commissionDisplay}
 								<div class="text-xs font-normal" style:color="var(--text-muted)">
 									{$_('transactions.commission')}:
-									<MoneyDisplay value={commissionDisplay} class="" />
+									<MoneyDisplay value={commissionDisplay} currency={tx.currency} class="" />
 								</div>
 							{/if}
 						</td>
@@ -510,6 +512,7 @@
 								<p class="text-sm font-semibold tabular-nums">
 									{showAmountSign ? transactionAmountSign(tx, { singleAccount }) : ''}<MoneyDisplay
 										value={tx.amount_display}
+										currency={tx.currency}
 										class=""
 									/>
 								</p>
@@ -525,7 +528,7 @@
 							{#if commissionDisplay}
 								<p class="text-xs tabular-nums" style:color="var(--text-muted)">
 									{$_('transactions.commission')}:
-									<MoneyDisplay value={commissionDisplay} class="" />
+									<MoneyDisplay value={commissionDisplay} currency={tx.currency} class="" />
 								</p>
 							{/if}
 						</div>

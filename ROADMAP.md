@@ -36,7 +36,6 @@
 - [v1.11.0](#v1110)
 - [v1.12.0](#v1120)
 - [v1.13.0](#v1130)
-- [v1.14.0](#v1140)
 - [Общие планы](#общие-планы)
 - [На подумать](#на-подумать)
 
@@ -428,6 +427,11 @@
 
 ## v1.11.0
 
+- [ ] [Семья / команда](roadmap/team-collaboration.md) — household, личные + семейные счета; owner invite (ссылка/QR/код); [спека](roadmap/team-collaboration.md) зафиксирована
+- [x] [Валюта счёта](roadmap/multicurrency.md) — `accounts.currency`, отдельно от `users.currency`; сводки и переводы без тихого смешения валют
+
+## v1.12.0
+
 - [ ] [Цели накопления](roadmap/savings-goals.md) — копилки, прогресс, напоминания (`savings_goals`)
 - [ ] [Улучшение импорта](roadmap/import-improve.md) — универсальный CSV / выгрузки РФ; dedup; связка с правилами и inbox
 - [ ] [Бюджет: rollover, прогноз, конверты](roadmap/budget-post-mvp.md) — перенос остатка; прогноз всех ожидаемых расходов в scope; доступно = лимит + перенос − spent; «к распределению» из доходов; статус от лимит+перенос
@@ -436,15 +440,7 @@
 - [ ] [PDF-отчёты](roadmap/savings-reports-import.md) — месячная сводка (server-side)
 - [ ] [Синхронизация с выпиской банка](roadmap/bank-sync.md) — РФ: файл выписки → normalize → dedup (не скрейпинг ЛК)
 
-## v1.12.0
-
-- [ ] [Валюта счёта](roadmap/multicurrency.md) — `accounts.currency`, отдельно от `users.currency`; сводки и переводы без тихого смешения валют
-
 ## v1.13.0
-
-- [ ] [Семья / команда](roadmap/team-collaboration.md) — household, личные + семейные счета; owner invite (ссылка/QR/код); [спека](roadmap/team-collaboration.md) зафиксирована
-
-## v1.14.0
 
 - [ ] [PostgreSQL](roadmap/postgresql.md) — опциональный драйвер вместо SQLite (K8s / managed DB / нагрузка после team)
 

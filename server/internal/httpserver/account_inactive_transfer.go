@@ -184,6 +184,8 @@ func writeAccountTransferError(w http.ResponseWriter, r *http.Request, err error
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_TX_AMOUNT_POSITIVE")
 	case errors.Is(err, transaction.ErrCreditCardPaymentExceedsLimit):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_CARD_PAYMENT_EXCEEDS_LIMIT")
+	case errors.Is(err, transaction.ErrCurrencyMismatch):
+		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CURRENCY_MISMATCH")
 	case errors.Is(err, transaction.ErrTransferNotFound):
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 	default:

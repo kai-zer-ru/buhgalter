@@ -8,9 +8,11 @@
 		createAccount,
 		listAccounts,
 		listBanks,
+		listCurrencies,
 		type Account,
 		type AccountType,
-		type Bank
+		type Bank,
+		type Currency
 	} from '$lib/api/client';
 	import BackLink from '$lib/components/BackLink.svelte';
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
@@ -21,7 +23,9 @@
 	import { reportPageLoadFailure } from '$lib/page-load';
 	import { toast } from '$lib/toast';
 	import { bankIconUrl } from '$lib/finance';
+	import { currencySelectOptions } from '$lib/currency';
 	import { toAPIAmount } from '$lib/money';
+	import { user } from '$lib/stores/auth';
 
 	function parseFormReturnPath(raw: string | null, fallback: string): string {
 		if (!raw || !raw.startsWith('/') || raw.startsWith('//')) return fallback;
@@ -32,6 +36,8 @@
 
 	let name = $state('');
 	let type = $state<AccountType>('cash');
+	let currency = $state('');
+	let currencies = $state<Currency[]>([]);
 	let bankId = $state('');
 	let bankSearch = $state('');
 	let creditLimit = $state('');
@@ -47,7 +53,12 @@
 		banks.filter((b) => b.name.toLowerCase().includes(bankSearch.toLowerCase()))
 	);
 	const needsBank = $derived(type === 'bank' || type === 'credit_card');
-	const paymentOptions = $derived(accountSelectOptions(debitAccounts(debitAccountList)));
+	const paymentOptions = $derived(
+		accountSelectOptions(
+			debitAccounts(debitAccountList).filter((acc) => !currency || acc.currency === currency)
+		)
+	);
+	const currencyOptions = $derived(currencySelectOptions(currencies));
 
 	onMount(() => {
 		void loadRefs();
@@ -56,9 +67,15 @@
 	async function loadRefs() {
 		pageLoading = true;
 		try {
-			const [bankList, accountList] = await Promise.all([listBanks(), listAccounts()]);
+			const [bankList, accountList, currencyList] = await Promise.all([
+				listBanks(),
+				listAccounts(),
+				listCurrencies()
+			]);
 			banks = bankList;
 			debitAccountList = accountList;
+			currencies = currencyList;
+			if (!currency) currency = $user?.currency ?? currencyList[0]?.code ?? '';
 			loadError = null;
 		} catch (err) {
 			const msg = reportPageLoadFailure(err);
@@ -79,6 +96,7 @@
 			await createAccount({
 				name,
 				type,
+				currency: currency || undefined,
 				bank_id: needsBank ? bankId : undefined,
 				initial_balance: toAPIAmount(initialBalance || '0'),
 				credit_limit: type === 'credit_card' ? toAPIAmount(creditLimit) : undefined,
@@ -142,6 +160,15 @@
 					</button>
 				</div>
 			</div>
+
+			<Select
+				id="account-currency"
+				label={$_('accounts.field.currency')}
+				hint={$_('accounts.currency.hint')}
+				bind:value={currency}
+				options={currencyOptions}
+				usePortal
+			/>
 
 			{#if needsBank}
 				<div>

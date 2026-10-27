@@ -164,3 +164,21 @@ func mustTime(s string) (resultTime time.Time) {
 	}
 	return tm
 }
+
+func TestFormatAmountDisplayCurrencySymbol(t *testing.T) {
+	cases := map[string]string{
+		"":    "1 500.00 ₽",
+		"RUB": "1 500.00 ₽",
+		"usd": "1 500.00 $",
+		"EUR": "1 500.00 €",
+		"KZT": "1 500.00 ₸",
+		"BYN": "1 500.00 Br",
+		"GBP": "1 500.00 £",
+		"XYZ": "1 500.00 XYZ",
+	}
+	for code, want := range cases {
+		if got := FormatAmountDisplay(150000, code); got != want {
+			t.Fatalf("FormatAmountDisplay(%q) = %q, want %q", code, got, want)
+		}
+	}
+}

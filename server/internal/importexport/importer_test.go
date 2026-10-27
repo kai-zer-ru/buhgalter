@@ -7,6 +7,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/kai-zer-ru/buhgalter/internal/account"
 	"github.com/kai-zer-ru/buhgalter/internal/bank"
 )
 
@@ -539,5 +540,142 @@ func TestCubuxIdenticalRowsNotCollapsedInFile(t *testing.T) {
 	}
 	if again.SkippedDuplicates != 2 || again.CreatedTransactions != 0 {
 		t.Fatalf("second import skipped=%d created=%d", again.SkippedDuplicates, again.CreatedTransactions)
+	}
+}
+
+func TestCubuxSkipCurrencyMismatch(t *testing.T) {
+	ctx, sqlDB, userID := seedImportUser(t)
+	acc, err := account.Create(ctx, sqlDB, userID, account.CreateInput{Name: "Наличные", Type: "cash", Currency: "RUB"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := []byte("Тип,Дата,Сумма списания,Валюта списания,Счет списания,Сумма пополнения,Валюта назначения,Счет пополнения,Категория,Subcategory,Описание,Проект,Пользователь\n" +
+		"Расходы,01.01.2025,10.00,USD,Наличные,,,,Транспорт,Автобус,,,User\n")
+	rep, err := Import(ctx, sqlDB, userID, "usd.csv", data, ImportOptions{
+		Preset: "cubux", Confirm: true,
+		AccountMap: map[string]AccountMapEntry{"Наличные": {Mode: "existing", AccountID: acc.ID}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.ValidRows != 0 {
+		t.Fatalf("valid %d, want skipped", rep.ValidRows)
+	}
+	found := false
+	for _, log := range rep.Logs {
+		if strings.Contains(log, "currency mismatch") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("logs: %v", rep.Logs)
+	}
+}
+
+func TestCubuxCreateAccountUsesRowCurrency(t *testing.T) {
+	ctx, sqlDB, userID := seedImportUser(t)
+	data := []byte("Тип,Дата,Сумма списания,Валюта списания,Счет списания,Сумма пополнения,Валюта назначения,Счет пополнения,Категория,Subcategory,Описание,Проект,Пользователь\n" +
+		"Расходы,01.01.2025,10.00,EUR,EuroCash,,,,Транспорт,Автобус,,,User\n")
+	rep, err := Import(ctx, sqlDB, userID, "eur.csv", data, ImportOptions{Preset: "cubux", Confirm: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.ValidRows != 1 {
+		t.Fatalf("valid %d logs %v errors %+v", rep.ValidRows, rep.Logs, rep.Errors)
+	}
+	list, err := account.ListByUser(ctx, sqlDB, userID, "active")
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, a := range list {
+		if a.Name == "EuroCash" {
+			found = true
+			if a.Currency != "EUR" {
+				t.Fatalf("currency %s", a.Currency)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("EuroCash not created")
+	}
+}
+
+func TestCubuxPreviewSkipCurrencyMismatch(t *testing.T) {
+	ctx, sqlDB, userID := seedImportUser(t)
+	acc, err := account.Create(ctx, sqlDB, userID, account.CreateInput{Name: "Наличные", Type: "cash", Currency: "RUB"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := []byte("Тип,Дата,Сумма списания,Валюта списания,Счет списания,Сумма пополнения,Валюта назначения,Счет пополнения,Категория,Subcategory,Описание,Проект,Пользователь\n" +
+		"Расходы,01.01.2025,10.00,USD,Наличные,,,,Транспорт,Автобус,,,User\n")
+	rep, err := Preview(ctx, sqlDB, userID, "usd.csv", data, ImportOptions{
+		Preset:     "cubux",
+		AccountMap: map[string]AccountMapEntry{"Наличные": {Mode: "existing", AccountID: acc.ID}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.ValidRows != 0 {
+		t.Fatalf("preview valid %d, want skipped", rep.ValidRows)
+	}
+	found := false
+	for _, log := range rep.Logs {
+		if strings.Contains(log, "currency mismatch") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("preview logs: %v", rep.Logs)
+	}
+}
+
+func TestCubuxTransferDifferentCurrenciesToAmount(t *testing.T) {
+	ctx, sqlDB, userID := seedImportUser(t)
+	rub, err := account.Create(ctx, sqlDB, userID, account.CreateInput{Name: "Рубли", Type: "cash", Currency: "RUB", InitialBalance: 100000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	usd, err := account.Create(ctx, sqlDB, userID, account.CreateInput{Name: "Доллары", Type: "cash", Currency: "USD"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := []byte("Тип,Дата,Сумма списания,Валюта списания,Счет списания,Сумма пополнения,Валюта назначения,Счет пополнения,Категория,Subcategory,Описание,Проект,Пользователь\n" +
+		"Перевод,01.01.2025,90.00,RUB,Рубли,10.00,USD,Доллары,Перевод,,,,User\n")
+	rep, err := Import(ctx, sqlDB, userID, "fx.csv", data, ImportOptions{
+		Preset: "cubux", Confirm: true,
+		AccountMap: map[string]AccountMapEntry{
+			"Рубли":   {Mode: "existing", AccountID: rub.ID},
+			"Доллары": {Mode: "existing", AccountID: usd.ID},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.ValidRows != 1 || len(rep.Errors) != 0 {
+		t.Fatalf("valid %d errors %+v logs %v", rep.ValidRows, rep.Errors, rep.Logs)
+	}
+	rows, err := sqlDB.QueryContext(ctx, `SELECT account_id, amount FROM transactions WHERE user_id = ? AND type = 'transfer' AND transfer_group_id IS NOT NULL`, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	byAcc := map[string]int64{}
+	for rows.Next() {
+		var accID string
+		var amt int64
+		if err := rows.Scan(&accID, &amt); err != nil {
+			t.Fatal(err)
+		}
+		byAcc[accID] = amt
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if byAcc[usd.ID] != 1000 {
+		t.Fatalf("credit leg %+v, want account %s = 1000", byAcc, usd.ID)
+	}
+	if byAcc[rub.ID] != 9000 {
+		t.Fatalf("debit leg %+v, want account %s = 9000", byAcc, rub.ID)
 	}
 }

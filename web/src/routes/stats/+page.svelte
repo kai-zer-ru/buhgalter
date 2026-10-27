@@ -62,6 +62,12 @@
 	import StatsCharts from '$lib/components/StatsCharts.svelte';
 	import { user } from '$lib/stores/auth';
 	import { toast } from '$lib/toast';
+	import {
+		mergeAvailableCurrencies,
+		readStoredStatsCurrency,
+		resolveStoredStatsCurrency,
+		writeStoredStatsCurrency
+	} from '$lib/currency';
 
 	let loading = $state(true);
 	let loadError = $state<string | null>(null);
@@ -93,7 +99,11 @@
 	let metaLoaded = $state(false);
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
-	const currency = $derived($user?.currency ?? 'RUB');
+	const profileCurrency = $derived($user?.currency ?? 'RUB');
+	let statsCurrency = $state('');
+	let availableCurrencies = $state<string[]>([]);
+	const currency = $derived(statsCurrency || profileCurrency);
+	const showCurrencyChips = $derived(availableCurrencies.length > 1);
 	const typeOptions = $derived.by(() => {
 		void $locale;
 		return [
@@ -104,9 +114,10 @@
 	});
 	const accountOptions = $derived.by(() => {
 		void $locale;
+		const matching = accounts.filter((acc) => (acc.currency || profileCurrency) === currency);
 		return [
 			{ value: '', label: tr('import.export.all_accounts') },
-			...accountSelectOptions(accounts)
+			...accountSelectOptions(matching)
 		];
 	});
 	const categoryOptions = $derived.by(() => {
@@ -170,6 +181,7 @@
 	}
 
 	onMount(async () => {
+		statsCurrency = readStoredStatsCurrency();
 		await loadMeta();
 		await loadStats(true);
 		lastFiltersKey = currentFiltersKey();
@@ -202,7 +214,8 @@
 			categoryId,
 			merchantId,
 			groupBy,
-			search: search.trim()
+			search: search.trim(),
+			currency
 		});
 	}
 
@@ -234,6 +247,7 @@
 		if (accountId) params.account_id = accountId;
 		if (categoryId) params.category_id = categoryId;
 		if (merchantId) params.merchant_id = merchantId;
+		if (currency) params.currency = currency;
 		return params;
 	}
 
@@ -241,7 +255,35 @@
 		const params: Record<string, string> = { group_by: 'month' };
 		if (fromLocal) params.from = fromDateLocalStart(fromLocal, tz);
 		if (toLocal) params.to = fromDateLocalEnd(toLocal, tz);
+		if (currency) params.currency = currency;
 		return params;
+	}
+
+	function applyAvailableCurrencies(codes: string[] | undefined) {
+		availableCurrencies = mergeAvailableCurrencies(codes, accounts, profileCurrency);
+		const next = resolveStoredStatsCurrency(
+			availableCurrencies,
+			statsCurrency || readStoredStatsCurrency(),
+			profileCurrency
+		);
+		if (next !== statsCurrency) statsCurrency = next;
+		writeStoredStatsCurrency(next);
+		if (accountId && !matchingAccountForCurrency(accountId, next)) {
+			accountId = '';
+		}
+	}
+
+	function matchingAccountForCurrency(id: string, code: string): boolean {
+		const acc = accounts.find((a) => a.id === id);
+		return (acc?.currency || profileCurrency) === code;
+	}
+
+	function selectStatsCurrency(code: string) {
+		statsCurrency = code;
+		writeStoredStatsCurrency(code);
+		if (accountId && !matchingAccountForCurrency(accountId, code)) {
+			accountId = '';
+		}
 	}
 
 	function budgetMonthKey(): string {
@@ -268,7 +310,7 @@
 					getStatsByCategory(params),
 					getStatsBySubcategory(params),
 					getStatsByPeriod({ ...params, group_by: groupBy }),
-					getBudgetSummary(month).catch(() => ({
+					getBudgetSummary(month, currency).catch(() => ({
 						items: [] as BudgetSummaryItem[],
 						month,
 						can_copy_from_previous: false
@@ -277,6 +319,7 @@
 					netWorthPromise
 				]);
 			summary = summaryRes;
+			applyAvailableCurrencies(summaryRes.available_currencies);
 			byCategory = categoryRes.items;
 			bySubcategory = subcategoryRes.items;
 			byPeriod = periodRes.items;
@@ -411,6 +454,21 @@
 		]}
 	/>
 	<h1 class="text-2xl font-semibold">{$_('stats.title')}</h1>
+
+	{#if showCurrencyChips}
+		<div class="flex flex-wrap items-center gap-2">
+			<span class="text-sm" style:color="var(--text-muted)">{$_('stats.currencyFilter')}</span>
+			{#each availableCurrencies as code (code)}
+				<button
+					type="button"
+					class={code === currency ? 'tab tab-active' : 'tab'}
+					onclick={() => selectStatsCurrency(code)}
+				>
+					{code}
+				</button>
+			{/each}
+		</div>
+	{/if}
 
 	<FilterPanel>
 		<div class="filter-panel-body grid items-end gap-3 sm:grid-cols-2 md:mt-0 mt-3 lg:grid-cols-4">
@@ -591,7 +649,7 @@
 								<tr class="border-t" style:border-color="var(--border)">
 									<td class="p-3">{row.store_name}</td>
 									<td class="p-3 text-right tabular-nums">
-										<MoneyDisplay cents={row.total} />
+										<MoneyDisplay cents={row.total} {currency} />
 									</td>
 									<td class="p-3 text-right tabular-nums">{row.percentage}%</td>
 									<td class="p-3 text-right tabular-nums">{row.count}</td>
@@ -617,12 +675,12 @@
 									<div
 										class="h-2 rounded bg-emerald-500"
 										style:width={`${Math.max(2, (Math.abs(row.income) / periodMax) * 100)}%`}
-										title={`${$_('stats.summary.income')}: ${formatMoneyForDisplay({ cents: row.income })}`}
+										title={`${$_('stats.summary.income')}: ${formatMoneyForDisplay({ cents: row.income, currency })}`}
 									></div>
 									<div
 										class="h-2 rounded bg-rose-500"
 										style:width={`${Math.max(2, (Math.abs(row.expense) / periodMax) * 100)}%`}
-										title={`${$_('stats.summary.expense')}: ${formatMoneyForDisplay({ cents: row.expense })}`}
+										title={`${$_('stats.summary.expense')}: ${formatMoneyForDisplay({ cents: row.expense, currency })}`}
 									></div>
 								</div>
 							</div>
@@ -640,8 +698,8 @@
 							{#each byPeriod as row (row.period)}
 								<tr class="border-t" style:border-color="var(--border)">
 									<td class="p-2">{periodLabel(row.period)}</td>
-									<td class="p-2"><MoneyDisplay cents={row.income} class="" /></td>
-									<td class="p-2"><MoneyDisplay cents={row.expense} class="" /></td>
+									<td class="p-2"><MoneyDisplay cents={row.income} {currency} class="" /></td>
+									<td class="p-2"><MoneyDisplay cents={row.expense} {currency} class="" /></td>
 								</tr>
 							{/each}
 						</tbody>
@@ -667,7 +725,7 @@
 				<dl class="mt-2 grid gap-1 text-sm">
 					<div class="flex justify-between gap-2">
 						<dt style:color="var(--text-muted)">{$_('transactions.col.amount')}</dt>
-						<dd><MoneyDisplay cents={row.total} class="" /></dd>
+						<dd><MoneyDisplay cents={row.total} {currency} class="" /></dd>
 					</div>
 					{#if showBudget}
 						<div class="flex justify-between gap-2">
@@ -676,6 +734,7 @@
 								{#if budgetByCategory[row.category_id]}
 									<MoneyDisplay
 										value={budgetByCategory[row.category_id].planned_display}
+										currency={budgetByCategory[row.category_id].currency ?? currency}
 										class=""
 									/>
 								{:else}
@@ -711,7 +770,7 @@
 								<li class="flex items-baseline justify-between gap-2">
 									<span>{sub.subcategory_name}</span>
 									<span class="shrink-0 tabular-nums" style:color="var(--text-muted)">
-										<MoneyDisplay cents={sub.total} class="" />
+										<MoneyDisplay cents={sub.total} {currency} class="" />
 										· {subcategoryShareOfParent(sub.total, row.total).toFixed(0)}% · {sub.count}
 									</span>
 								</li>
@@ -757,7 +816,7 @@
 										<li class="flex items-baseline justify-between gap-3 pl-1">
 											<span>{sub.subcategory_name}</span>
 											<span class="shrink-0 tabular-nums" style:color="var(--text-muted)">
-												<MoneyDisplay cents={sub.total} class="" />
+												<MoneyDisplay cents={sub.total} {currency} class="" />
 												· {subcategoryShareOfParent(sub.total, row.total).toFixed(0)}% · {sub.count}
 											</span>
 										</li>
@@ -766,11 +825,15 @@
 							</details>
 						{/if}
 					</td>
-					<td class="p-2 align-top"><MoneyDisplay cents={row.total} class="" /></td>
+					<td class="p-2 align-top"><MoneyDisplay cents={row.total} {currency} class="" /></td>
 					{#if showBudget}
 						<td class="p-2 align-top">
 							{#if budgetByCategory[row.category_id]}
-								<MoneyDisplay value={budgetByCategory[row.category_id].planned_display} class="" />
+								<MoneyDisplay
+									value={budgetByCategory[row.category_id].planned_display}
+									currency={budgetByCategory[row.category_id].currency ?? currency}
+									class=""
+								/>
 							{:else}
 								—
 							{/if}

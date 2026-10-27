@@ -1,6 +1,7 @@
 import { get } from 'svelte/store';
 import { locale } from 'svelte-i18n';
 import { cachedGet, invalidateApiCache, seedStaticRef } from '$lib/api/cache';
+import { setCurrencyCatalog, type CurrencyInfo } from '$lib/finance';
 import { exportCSVUrl } from '$lib/api/export-url';
 import { notifySessionExpired, shouldLogoutOnApi401 } from '$lib/auth/session-expired';
 import { authHeaders, getAuthServerOrigin, getAuthToken } from '$lib/platform/auth-token';
@@ -9,6 +10,7 @@ import {
 	fetchWithRefCache,
 	isOfflineFetchError,
 	OfflineCacheMissError,
+	persistCurrenciesCatalog,
 	readCategoriesFromOfflineCache,
 	readAccountsFromOfflineCache,
 	enrichAccountsWithCachedBalances,
@@ -749,6 +751,7 @@ export type Account = {
 	auto_topup_source_account_id?: string | null;
 	status: 'active' | 'archived' | 'deleted';
 	is_primary: boolean;
+	currency?: string;
 	created_at: string;
 	updated_at: string;
 };
@@ -778,12 +781,25 @@ export function listBanks() {
 	return cachedGet('/api/v1/banks', () => request<Bank[]>('/api/v1/banks'));
 }
 
+export type Currency = CurrencyInfo;
+
+export function listCurrencies() {
+	return cachedGet('/api/v1/currencies', () => request<Currency[]>('/api/v1/currencies')).then(
+		(rows) => {
+			setCurrencyCatalog(rows);
+			persistCurrenciesCatalog(rows);
+			return rows;
+		}
+	);
+}
+
 export type UIMetaAccountRef = {
 	id: string;
 	name: string;
 	type: AccountType;
 	status: 'active' | 'archived' | 'deleted';
 	bank_id?: string;
+	currency?: string;
 };
 
 export type UIMeta = {
@@ -884,6 +900,7 @@ export function createAccount(payload: {
 	initial_balance: string;
 	credit_limit?: string;
 	payment_account_id?: string;
+	currency?: string;
 }) {
 	return request<Account>('/api/v1/accounts', {
 		method: 'POST',
@@ -1030,6 +1047,7 @@ export type Transaction = {
 	account_status?: 'active' | 'archived' | 'deleted';
 	transfer_account_name?: string;
 	transfer_account_status?: 'active' | 'archived' | 'deleted';
+	currency?: string;
 	type: 'income' | 'expense' | 'transfer';
 	kind: 'manual' | 'future';
 	amount: number;
@@ -1095,6 +1113,8 @@ export type StatsSummary = {
 	income_total: number;
 	expense_total: number;
 	transaction_count: number;
+	currency?: string;
+	available_currencies?: string[];
 };
 
 export type StatsCategoryItem = {
@@ -1148,6 +1168,8 @@ export type StatsNetWorthSnapshot = {
 export type StatsNetWorthResponse = {
 	current: StatsNetWorthSnapshot;
 	items: StatsNetWorthSnapshot[];
+	currency?: string;
+	available_currencies?: string[];
 };
 
 export type StatsContext = StatsSummary & {
@@ -1164,6 +1186,7 @@ export type AccountBalanceSummary = {
 	id: string;
 	name: string;
 	type: AccountType;
+	currency?: string;
 	bank_icon?: string | null;
 	balance: number;
 	balance_display: string;
@@ -1193,17 +1216,32 @@ export type CreditCardsSummary = {
 	total_limit_display: string;
 };
 
+export type TotalsByCurrency = {
+	currency: string;
+	total_balance: number;
+	total_forecast: number;
+	total_balance_display: string;
+	total_forecast_display: string;
+};
+
+export type CreditCardsByCurrency = CreditCardsSummary & { currency: string };
+
 export type AccountsSummary = {
 	accounts: AccountBalanceSummary[];
 	total_balance: number;
 	total_forecast: number;
+	totals_by_currency?: TotalsByCurrency[];
+	credit_cards_summary?: CreditCardsSummary | null;
+	credit_cards_by_currency?: CreditCardsByCurrency[];
 };
 
 export type Dashboard = {
 	total_balance: number;
 	total_forecast: number;
+	totals_by_currency?: TotalsByCurrency[];
 	inbox_count?: number;
 	credit_cards_summary?: CreditCardsSummary | null;
+	credit_cards_by_currency?: CreditCardsByCurrency[];
 	accounts: AccountBalanceSummary[];
 	recent_transactions: Transaction[];
 	debts_summary: DebtsSummary;
@@ -1245,12 +1283,22 @@ export type CategoryRuleEvaluateResult = {
 	ambiguous: boolean;
 };
 
+export type DebtsSummaryByCurrency = {
+	currency: string;
+	i_owe: number;
+	owed_to_me: number;
+	overdue_i_owe: number;
+	overdue_owed_to_me: number;
+	active_count: number;
+};
+
 export type DebtsSummary = {
 	i_owe: number;
 	owed_to_me: number;
 	overdue_i_owe: number;
 	overdue_owed_to_me: number;
 	active_count: number;
+	by_currency?: DebtsSummaryByCurrency[];
 };
 
 export type DebtTransaction = {
@@ -1349,6 +1397,7 @@ export type Debt = {
 	created_at: string;
 	account_id?: string | null;
 	account_name?: string | null;
+	currency?: string;
 };
 
 export type Transfer = {
@@ -1357,6 +1406,11 @@ export type Transfer = {
 	to_account_id: string;
 	amount: number;
 	amount_display: string;
+	to_amount?: number;
+	to_amount_display?: string;
+	from_currency?: string;
+	to_currency?: string;
+	rate?: string;
 	commission: number;
 	commission_display: string;
 	description: string | null;
@@ -1674,6 +1728,7 @@ export type BudgetItem = {
 	period: string;
 	alert_at_percent: number;
 	is_active: boolean;
+	currency?: string;
 	created_at: string;
 	updated_at: string;
 };
@@ -1698,6 +1753,7 @@ export type BudgetSummaryResponse = {
 	items: BudgetSummaryItem[];
 	month: string;
 	can_copy_from_previous: boolean;
+	available_currencies?: string[];
 };
 
 export function listBudgets(month?: string) {
@@ -1705,9 +1761,12 @@ export function listBudgets(month?: string) {
 	return request<BudgetItem[]>(`/api/v1/budgets${q}`);
 }
 
-export function getBudgetSummary(month?: string) {
-	const q = month ? `?month=${encodeURIComponent(month)}` : '';
-	return request<BudgetSummaryResponse>(`/api/v1/budgets/summary${q}`);
+export function getBudgetSummary(month?: string, currency?: string) {
+	const q = new URLSearchParams();
+	if (month) q.set('month', month);
+	if (currency) q.set('currency', currency);
+	const qs = q.toString();
+	return request<BudgetSummaryResponse>(`/api/v1/budgets/summary${qs ? `?${qs}` : ''}`);
 }
 
 export type BudgetSpentPreview = {
@@ -1721,6 +1780,7 @@ export function getBudgetSpentPreview(params: {
 	category_id?: string;
 	subcategory_id?: string;
 	account_id?: string;
+	currency?: string;
 }) {
 	const q = new URLSearchParams();
 	if (params.month) q.set('month', params.month);
@@ -1728,6 +1788,7 @@ export function getBudgetSpentPreview(params: {
 	if (params.category_id) q.set('category_id', params.category_id);
 	if (params.subcategory_id) q.set('subcategory_id', params.subcategory_id);
 	if (params.account_id) q.set('account_id', params.account_id);
+	if (params.currency) q.set('currency', params.currency);
 	return request<BudgetSpentPreview>(`/api/v1/budgets/spent-preview?${q.toString()}`);
 }
 
@@ -1742,6 +1803,7 @@ export function createBudget(
 		alert_at_percent?: number;
 		is_active?: boolean;
 		copy_forward?: boolean;
+		currency?: string;
 	},
 	month?: string
 ) {
@@ -1793,6 +1855,7 @@ export function createTransfer(payload: {
 	from_account_id: string;
 	to_account_id: string;
 	amount: string;
+	to_amount?: string;
 	commission?: string;
 	description?: string;
 	transaction_date: string;
@@ -1809,6 +1872,7 @@ export function updateTransfer(
 		from_account_id: string;
 		to_account_id: string;
 		amount: string;
+		to_amount?: string;
 		commission?: string;
 		description?: string;
 		transaction_date: string;

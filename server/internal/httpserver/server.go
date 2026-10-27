@@ -24,6 +24,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/categoryrule"
 	"github.com/kai-zer-ru/buhgalter/internal/config"
 	"github.com/kai-zer-ru/buhgalter/internal/credit"
+	"github.com/kai-zer-ru/buhgalter/internal/currency"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
 	"github.com/kai-zer-ru/buhgalter/internal/debt"
 	"github.com/kai-zer-ru/buhgalter/internal/docs"
@@ -150,6 +151,7 @@ func (s *Server) Handler() http.Handler {
 		})
 
 		api.With(apiCacheMW).Get("/banks", bankHandler.List)
+		api.With(apiCacheMW).Get("/currencies", currency.List)
 
 		api.Group(func(ar chi.Router) {
 			ar.Use(auth.RequireAuth(dbHandle))
