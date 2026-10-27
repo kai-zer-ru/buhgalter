@@ -7,6 +7,7 @@ package sqlc
 
 import (
 	"context"
+	"strings"
 )
 
 const statsByCategory = `-- name: StatsByCategory :many
@@ -20,7 +21,7 @@ SELECT
 FROM transactions t
 JOIN accounts a ON a.id = t.account_id AND a.currency = ?
 JOIN categories c ON c.id = t.category_id
-WHERE t.user_id = ?
+WHERE t.user_id IN (/*SLICE:owner_ids*/?)
   AND t.type IN ('income', 'expense')
   AND (? = '' OR t.account_id = ?)
   AND (? = '' OR t.category_id = ?)
@@ -43,7 +44,7 @@ ORDER BY total DESC
 
 type StatsByCategoryParams struct {
 	Currency          string      `json:"currency"`
-	UserID            string      `json:"user_id"`
+	OwnerIds          []string    `json:"owner_ids"`
 	Column3           interface{} `json:"column_3"`
 	AccountID         string      `json:"account_id"`
 	Column5           interface{} `json:"column_5"`
@@ -74,28 +75,36 @@ type StatsByCategoryRow struct {
 }
 
 func (q *Queries) StatsByCategory(ctx context.Context, arg StatsByCategoryParams) ([]StatsByCategoryRow, error) {
-	rows, err := q.db.QueryContext(ctx, statsByCategory,
-		arg.Currency,
-		arg.UserID,
-		arg.Column3,
-		arg.AccountID,
-		arg.Column5,
-		arg.CategoryID,
-		arg.Column7,
-		arg.Type,
-		arg.Column9,
-		arg.Kind,
-		arg.Column11,
-		arg.TransactionDate,
-		arg.Column13,
-		arg.TransactionDate_2,
-		arg.Column15,
-		arg.Column16,
-		arg.Column17,
-		arg.StoreID,
-		arg.Column19,
-		arg.MerchantID,
-	)
+	query := statsByCategory
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.Currency)
+	if len(arg.OwnerIds) > 0 {
+		for _, v := range arg.OwnerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(arg.OwnerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	queryParams = append(queryParams, arg.Column3)
+	queryParams = append(queryParams, arg.AccountID)
+	queryParams = append(queryParams, arg.Column5)
+	queryParams = append(queryParams, arg.CategoryID)
+	queryParams = append(queryParams, arg.Column7)
+	queryParams = append(queryParams, arg.Type)
+	queryParams = append(queryParams, arg.Column9)
+	queryParams = append(queryParams, arg.Kind)
+	queryParams = append(queryParams, arg.Column11)
+	queryParams = append(queryParams, arg.TransactionDate)
+	queryParams = append(queryParams, arg.Column13)
+	queryParams = append(queryParams, arg.TransactionDate_2)
+	queryParams = append(queryParams, arg.Column15)
+	queryParams = append(queryParams, arg.Column16)
+	queryParams = append(queryParams, arg.Column17)
+	queryParams = append(queryParams, arg.StoreID)
+	queryParams = append(queryParams, arg.Column19)
+	queryParams = append(queryParams, arg.MerchantID)
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +142,7 @@ SELECT
 FROM transactions t
 JOIN accounts a ON a.id = t.account_id AND a.currency = ?
 JOIN merchants m ON m.id = t.merchant_id AND m.user_id = t.user_id
-WHERE t.user_id = ?
+WHERE t.user_id IN (/*SLICE:owner_ids*/?)
   AND t.type = 'expense'
   AND (? = '' OR t.account_id = ?)
   AND (? = '' OR t.category_id = ?)
@@ -155,7 +164,7 @@ ORDER BY total DESC
 
 type StatsByStoreParams struct {
 	Currency          string      `json:"currency"`
-	UserID            string      `json:"user_id"`
+	OwnerIds          []string    `json:"owner_ids"`
 	Column3           interface{} `json:"column_3"`
 	AccountID         string      `json:"account_id"`
 	Column5           interface{} `json:"column_5"`
@@ -182,26 +191,34 @@ type StatsByStoreRow struct {
 }
 
 func (q *Queries) StatsByStore(ctx context.Context, arg StatsByStoreParams) ([]StatsByStoreRow, error) {
-	rows, err := q.db.QueryContext(ctx, statsByStore,
-		arg.Currency,
-		arg.UserID,
-		arg.Column3,
-		arg.AccountID,
-		arg.Column5,
-		arg.CategoryID,
-		arg.Column7,
-		arg.Kind,
-		arg.Column9,
-		arg.TransactionDate,
-		arg.Column11,
-		arg.TransactionDate_2,
-		arg.Column13,
-		arg.Column14,
-		arg.Column15,
-		arg.StoreID,
-		arg.Column17,
-		arg.MerchantID,
-	)
+	query := statsByStore
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.Currency)
+	if len(arg.OwnerIds) > 0 {
+		for _, v := range arg.OwnerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(arg.OwnerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	queryParams = append(queryParams, arg.Column3)
+	queryParams = append(queryParams, arg.AccountID)
+	queryParams = append(queryParams, arg.Column5)
+	queryParams = append(queryParams, arg.CategoryID)
+	queryParams = append(queryParams, arg.Column7)
+	queryParams = append(queryParams, arg.Kind)
+	queryParams = append(queryParams, arg.Column9)
+	queryParams = append(queryParams, arg.TransactionDate)
+	queryParams = append(queryParams, arg.Column11)
+	queryParams = append(queryParams, arg.TransactionDate_2)
+	queryParams = append(queryParams, arg.Column13)
+	queryParams = append(queryParams, arg.Column14)
+	queryParams = append(queryParams, arg.Column15)
+	queryParams = append(queryParams, arg.StoreID)
+	queryParams = append(queryParams, arg.Column17)
+	queryParams = append(queryParams, arg.MerchantID)
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
 	if err != nil {
 		return nil, err
 	}
@@ -241,7 +258,7 @@ FROM transactions t
 JOIN accounts a ON a.id = t.account_id AND a.currency = ?
 JOIN categories c ON c.id = t.category_id
 JOIN subcategories s ON s.id = t.subcategory_id
-WHERE t.user_id = ?
+WHERE t.user_id IN (/*SLICE:owner_ids*/?)
   AND t.type IN ('income', 'expense')
   AND (? = '' OR t.account_id = ?)
   AND (? = '' OR t.category_id = ?)
@@ -268,7 +285,7 @@ ORDER BY total DESC
 
 type StatsBySubcategoryParams struct {
 	Currency          string      `json:"currency"`
-	UserID            string      `json:"user_id"`
+	OwnerIds          []string    `json:"owner_ids"`
 	Column3           interface{} `json:"column_3"`
 	AccountID         string      `json:"account_id"`
 	Column5           interface{} `json:"column_5"`
@@ -300,28 +317,36 @@ type StatsBySubcategoryRow struct {
 }
 
 func (q *Queries) StatsBySubcategory(ctx context.Context, arg StatsBySubcategoryParams) ([]StatsBySubcategoryRow, error) {
-	rows, err := q.db.QueryContext(ctx, statsBySubcategory,
-		arg.Currency,
-		arg.UserID,
-		arg.Column3,
-		arg.AccountID,
-		arg.Column5,
-		arg.CategoryID,
-		arg.Column7,
-		arg.Type,
-		arg.Column9,
-		arg.Kind,
-		arg.Column11,
-		arg.TransactionDate,
-		arg.Column13,
-		arg.TransactionDate_2,
-		arg.Column15,
-		arg.Column16,
-		arg.Column17,
-		arg.StoreID,
-		arg.Column19,
-		arg.MerchantID,
-	)
+	query := statsBySubcategory
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.Currency)
+	if len(arg.OwnerIds) > 0 {
+		for _, v := range arg.OwnerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(arg.OwnerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	queryParams = append(queryParams, arg.Column3)
+	queryParams = append(queryParams, arg.AccountID)
+	queryParams = append(queryParams, arg.Column5)
+	queryParams = append(queryParams, arg.CategoryID)
+	queryParams = append(queryParams, arg.Column7)
+	queryParams = append(queryParams, arg.Type)
+	queryParams = append(queryParams, arg.Column9)
+	queryParams = append(queryParams, arg.Kind)
+	queryParams = append(queryParams, arg.Column11)
+	queryParams = append(queryParams, arg.TransactionDate)
+	queryParams = append(queryParams, arg.Column13)
+	queryParams = append(queryParams, arg.TransactionDate_2)
+	queryParams = append(queryParams, arg.Column15)
+	queryParams = append(queryParams, arg.Column16)
+	queryParams = append(queryParams, arg.Column17)
+	queryParams = append(queryParams, arg.StoreID)
+	queryParams = append(queryParams, arg.Column19)
+	queryParams = append(queryParams, arg.MerchantID)
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
 	if err != nil {
 		return nil, err
 	}
@@ -372,7 +397,7 @@ JOIN receipt_imports ri ON ri.id = t.receipt_import_id AND ri.user_id = t.user_i
 JOIN receipt_import_item_categories ric ON ric.receipt_import_id = t.receipt_import_id AND ric.user_id = t.user_id
 JOIN categories c ON c.id = ric.category_id
 JOIN subcategories s ON s.id = ric.subcategory_id
-WHERE t.user_id = ?
+WHERE t.user_id IN (/*SLICE:owner_ids*/?)
   AND t.receipt_import_id IS NOT NULL
   AND t.receipt_item_index IS NULL
   AND ric.subcategory_id IS NOT NULL
@@ -399,7 +424,7 @@ ORDER BY total DESC
 
 type StatsBySubcategoryReceiptLinesParams struct {
 	Currency          string      `json:"currency"`
-	UserID            string      `json:"user_id"`
+	OwnerIds          []string    `json:"owner_ids"`
 	Column3           interface{} `json:"column_3"`
 	AccountID         string      `json:"account_id"`
 	Column5           interface{} `json:"column_5"`
@@ -432,28 +457,36 @@ type StatsBySubcategoryReceiptLinesRow struct {
 
 // Attach: one transaction per receipt; subcategories per line in receipt_import_item_categories.
 func (q *Queries) StatsBySubcategoryReceiptLines(ctx context.Context, arg StatsBySubcategoryReceiptLinesParams) ([]StatsBySubcategoryReceiptLinesRow, error) {
-	rows, err := q.db.QueryContext(ctx, statsBySubcategoryReceiptLines,
-		arg.Currency,
-		arg.UserID,
-		arg.Column3,
-		arg.AccountID,
-		arg.Column5,
-		arg.CategoryID,
-		arg.Column7,
-		arg.Type,
-		arg.Column9,
-		arg.Kind,
-		arg.Column11,
-		arg.TransactionDate,
-		arg.Column13,
-		arg.TransactionDate_2,
-		arg.Column15,
-		arg.Column16,
-		arg.Column17,
-		arg.StoreID,
-		arg.Column19,
-		arg.MerchantID,
-	)
+	query := statsBySubcategoryReceiptLines
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.Currency)
+	if len(arg.OwnerIds) > 0 {
+		for _, v := range arg.OwnerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(arg.OwnerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	queryParams = append(queryParams, arg.Column3)
+	queryParams = append(queryParams, arg.AccountID)
+	queryParams = append(queryParams, arg.Column5)
+	queryParams = append(queryParams, arg.CategoryID)
+	queryParams = append(queryParams, arg.Column7)
+	queryParams = append(queryParams, arg.Type)
+	queryParams = append(queryParams, arg.Column9)
+	queryParams = append(queryParams, arg.Kind)
+	queryParams = append(queryParams, arg.Column11)
+	queryParams = append(queryParams, arg.TransactionDate)
+	queryParams = append(queryParams, arg.Column13)
+	queryParams = append(queryParams, arg.TransactionDate_2)
+	queryParams = append(queryParams, arg.Column15)
+	queryParams = append(queryParams, arg.Column16)
+	queryParams = append(queryParams, arg.Column17)
+	queryParams = append(queryParams, arg.StoreID)
+	queryParams = append(queryParams, arg.Column19)
+	queryParams = append(queryParams, arg.MerchantID)
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
 	if err != nil {
 		return nil, err
 	}
@@ -492,8 +525,8 @@ FROM transactions t
 JOIN credit_payments cp ON cp.transaction_id = t.id
 JOIN credits c ON c.id = cp.credit_id
 JOIN accounts a ON a.id = c.debit_account_id AND a.currency = ?
-WHERE t.user_id = ?
-  AND c.user_id = ?
+WHERE t.user_id IN (/*SLICE:owner_ids*/?)
+  AND c.user_id = t.user_id
   AND c.id = ?
   AND t.type IN ('income', 'expense')
   AND cp.exclude_from_stats = 0
@@ -504,14 +537,13 @@ WHERE t.user_id = ?
 
 type StatsContextCreditParams struct {
 	Currency          string      `json:"currency"`
-	UserID            string      `json:"user_id"`
-	UserID_2          string      `json:"user_id_2"`
+	OwnerIds          []string    `json:"owner_ids"`
 	ID                string      `json:"id"`
-	Column5           interface{} `json:"column_5"`
+	Column4           interface{} `json:"column_4"`
 	Kind              string      `json:"kind"`
-	Column7           interface{} `json:"column_7"`
+	Column6           interface{} `json:"column_6"`
 	TransactionDate   string      `json:"transaction_date"`
-	Column9           interface{} `json:"column_9"`
+	Column8           interface{} `json:"column_8"`
 	TransactionDate_2 string      `json:"transaction_date_2"`
 }
 
@@ -522,18 +554,25 @@ type StatsContextCreditRow struct {
 }
 
 func (q *Queries) StatsContextCredit(ctx context.Context, arg StatsContextCreditParams) (StatsContextCreditRow, error) {
-	row := q.db.QueryRowContext(ctx, statsContextCredit,
-		arg.Currency,
-		arg.UserID,
-		arg.UserID_2,
-		arg.ID,
-		arg.Column5,
-		arg.Kind,
-		arg.Column7,
-		arg.TransactionDate,
-		arg.Column9,
-		arg.TransactionDate_2,
-	)
+	query := statsContextCredit
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.Currency)
+	if len(arg.OwnerIds) > 0 {
+		for _, v := range arg.OwnerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(arg.OwnerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	queryParams = append(queryParams, arg.ID)
+	queryParams = append(queryParams, arg.Column4)
+	queryParams = append(queryParams, arg.Kind)
+	queryParams = append(queryParams, arg.Column6)
+	queryParams = append(queryParams, arg.TransactionDate)
+	queryParams = append(queryParams, arg.Column8)
+	queryParams = append(queryParams, arg.TransactionDate_2)
+	row := q.db.QueryRowContext(ctx, query, queryParams...)
 	var i StatsContextCreditRow
 	err := row.Scan(&i.IncomeTotal, &i.ExpenseTotal, &i.TransactionCount)
 	return i, err
@@ -545,23 +584,21 @@ SELECT
     COUNT(*) AS payment_count
 FROM credit_payments cp
 JOIN credits c ON c.id = cp.credit_id
-JOIN accounts a ON a.id = c.debit_account_id AND a.currency = ?
-WHERE c.user_id = ?
-  AND c.id = ?
+JOIN accounts a ON a.id = c.debit_account_id AND a.currency = ?1
+WHERE (?2 = '' OR cp.payment_date >= ?2)
+  AND (?3 = '' OR cp.payment_date <= ?3)
   AND cp.transaction_id IS NOT NULL
   AND cp.exclude_from_stats = 0
-  AND (? = '' OR cp.payment_date >= ?)
-  AND (? = '' OR cp.payment_date <= ?)
+  AND c.id = ?4
+  AND c.user_id IN (/*SLICE:owner_ids*/?)
 `
 
 type StatsContextCreditPaidParams struct {
-	Currency      string      `json:"currency"`
-	UserID        string      `json:"user_id"`
-	ID            string      `json:"id"`
-	Column4       interface{} `json:"column_4"`
-	PaymentDate   string      `json:"payment_date"`
-	Column6       interface{} `json:"column_6"`
-	PaymentDate_2 string      `json:"payment_date_2"`
+	Currency string      `json:"currency"`
+	DateFrom interface{} `json:"date_from"`
+	DateTo   interface{} `json:"date_to"`
+	ID       string      `json:"id"`
+	OwnerIds []string    `json:"owner_ids"`
 }
 
 type StatsContextCreditPaidRow struct {
@@ -570,15 +607,21 @@ type StatsContextCreditPaidRow struct {
 }
 
 func (q *Queries) StatsContextCreditPaid(ctx context.Context, arg StatsContextCreditPaidParams) (StatsContextCreditPaidRow, error) {
-	row := q.db.QueryRowContext(ctx, statsContextCreditPaid,
-		arg.Currency,
-		arg.UserID,
-		arg.ID,
-		arg.Column4,
-		arg.PaymentDate,
-		arg.Column6,
-		arg.PaymentDate_2,
-	)
+	query := statsContextCreditPaid
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.Currency)
+	queryParams = append(queryParams, arg.DateFrom)
+	queryParams = append(queryParams, arg.DateTo)
+	queryParams = append(queryParams, arg.ID)
+	if len(arg.OwnerIds) > 0 {
+		for _, v := range arg.OwnerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(arg.OwnerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	row := q.db.QueryRowContext(ctx, query, queryParams...)
 	var i StatsContextCreditPaidRow
 	err := row.Scan(&i.PaidTotal, &i.PaymentCount)
 	return i, err
@@ -589,14 +632,14 @@ SELECT
     principal_amount,
     paid_amount
 FROM credits c
-JOIN accounts a ON a.id = c.debit_account_id AND a.currency = ?
-WHERE c.id = ? AND c.user_id = ?
+JOIN accounts a ON a.id = c.debit_account_id AND a.currency = ?1
+WHERE c.id = ?2 AND c.user_id IN (/*SLICE:owner_ids*/?)
 `
 
 type StatsContextCreditRemainingParams struct {
-	Currency string `json:"currency"`
-	ID       string `json:"id"`
-	UserID   string `json:"user_id"`
+	Currency string   `json:"currency"`
+	ID       string   `json:"id"`
+	OwnerIds []string `json:"owner_ids"`
 }
 
 type StatsContextCreditRemainingRow struct {
@@ -605,7 +648,19 @@ type StatsContextCreditRemainingRow struct {
 }
 
 func (q *Queries) StatsContextCreditRemaining(ctx context.Context, arg StatsContextCreditRemainingParams) (StatsContextCreditRemainingRow, error) {
-	row := q.db.QueryRowContext(ctx, statsContextCreditRemaining, arg.Currency, arg.ID, arg.UserID)
+	query := statsContextCreditRemaining
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.Currency)
+	queryParams = append(queryParams, arg.ID)
+	if len(arg.OwnerIds) > 0 {
+		for _, v := range arg.OwnerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(arg.OwnerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	row := q.db.QueryRowContext(ctx, query, queryParams...)
 	var i StatsContextCreditRemainingRow
 	err := row.Scan(&i.PrincipalAmount, &i.PaidAmount)
 	return i, err
@@ -621,8 +676,8 @@ SELECT
 FROM transactions t
 JOIN debt_transactions dtx ON dtx.transaction_id = t.id
 JOIN debts d ON d.id = dtx.debt_id AND d.currency = ?
-WHERE t.user_id = ?
-  AND d.user_id = ?
+WHERE t.user_id IN (/*SLICE:owner_ids*/?)
+  AND d.user_id = t.user_id
   AND d.debtor_id = ?
   AND t.type IN ('income', 'expense')
   AND (? = '' OR t.kind = ?)
@@ -632,14 +687,13 @@ WHERE t.user_id = ?
 
 type StatsContextDebtorParams struct {
 	Currency          string      `json:"currency"`
-	UserID            string      `json:"user_id"`
-	UserID_2          string      `json:"user_id_2"`
+	OwnerIds          []string    `json:"owner_ids"`
 	DebtorID          string      `json:"debtor_id"`
-	Column5           interface{} `json:"column_5"`
+	Column4           interface{} `json:"column_4"`
 	Kind              string      `json:"kind"`
-	Column7           interface{} `json:"column_7"`
+	Column6           interface{} `json:"column_6"`
 	TransactionDate   string      `json:"transaction_date"`
-	Column9           interface{} `json:"column_9"`
+	Column8           interface{} `json:"column_8"`
 	TransactionDate_2 string      `json:"transaction_date_2"`
 }
 
@@ -652,18 +706,25 @@ type StatsContextDebtorRow struct {
 }
 
 func (q *Queries) StatsContextDebtor(ctx context.Context, arg StatsContextDebtorParams) (StatsContextDebtorRow, error) {
-	row := q.db.QueryRowContext(ctx, statsContextDebtor,
-		arg.Currency,
-		arg.UserID,
-		arg.UserID_2,
-		arg.DebtorID,
-		arg.Column5,
-		arg.Kind,
-		arg.Column7,
-		arg.TransactionDate,
-		arg.Column9,
-		arg.TransactionDate_2,
-	)
+	query := statsContextDebtor
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.Currency)
+	if len(arg.OwnerIds) > 0 {
+		for _, v := range arg.OwnerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(arg.OwnerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	queryParams = append(queryParams, arg.DebtorID)
+	queryParams = append(queryParams, arg.Column4)
+	queryParams = append(queryParams, arg.Kind)
+	queryParams = append(queryParams, arg.Column6)
+	queryParams = append(queryParams, arg.TransactionDate)
+	queryParams = append(queryParams, arg.Column8)
+	queryParams = append(queryParams, arg.TransactionDate_2)
+	row := q.db.QueryRowContext(ctx, query, queryParams...)
 	var i StatsContextDebtorRow
 	err := row.Scan(
 		&i.IncomeTotal,
@@ -683,8 +744,8 @@ SELECT
 FROM transactions t
 JOIN debt_transactions dtx ON dtx.transaction_id = t.id
 JOIN debts d ON d.id = dtx.debt_id AND d.currency = ?
-WHERE t.user_id = ?
-  AND d.user_id = ?
+WHERE t.user_id IN (/*SLICE:owner_ids*/?)
+  AND d.user_id = t.user_id
   AND t.type IN ('income', 'expense')
   AND (? = '' OR t.kind = ?)
   AND (? = '' OR t.transaction_date >= ?)
@@ -693,13 +754,12 @@ WHERE t.user_id = ?
 
 type StatsContextDebtsParams struct {
 	Currency          string      `json:"currency"`
-	UserID            string      `json:"user_id"`
-	UserID_2          string      `json:"user_id_2"`
-	Column4           interface{} `json:"column_4"`
+	OwnerIds          []string    `json:"owner_ids"`
+	Column3           interface{} `json:"column_3"`
 	Kind              string      `json:"kind"`
-	Column6           interface{} `json:"column_6"`
+	Column5           interface{} `json:"column_5"`
 	TransactionDate   string      `json:"transaction_date"`
-	Column8           interface{} `json:"column_8"`
+	Column7           interface{} `json:"column_7"`
 	TransactionDate_2 string      `json:"transaction_date_2"`
 }
 
@@ -710,17 +770,24 @@ type StatsContextDebtsRow struct {
 }
 
 func (q *Queries) StatsContextDebts(ctx context.Context, arg StatsContextDebtsParams) (StatsContextDebtsRow, error) {
-	row := q.db.QueryRowContext(ctx, statsContextDebts,
-		arg.Currency,
-		arg.UserID,
-		arg.UserID_2,
-		arg.Column4,
-		arg.Kind,
-		arg.Column6,
-		arg.TransactionDate,
-		arg.Column8,
-		arg.TransactionDate_2,
-	)
+	query := statsContextDebts
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.Currency)
+	if len(arg.OwnerIds) > 0 {
+		for _, v := range arg.OwnerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(arg.OwnerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	queryParams = append(queryParams, arg.Column3)
+	queryParams = append(queryParams, arg.Kind)
+	queryParams = append(queryParams, arg.Column5)
+	queryParams = append(queryParams, arg.TransactionDate)
+	queryParams = append(queryParams, arg.Column7)
+	queryParams = append(queryParams, arg.TransactionDate_2)
+	row := q.db.QueryRowContext(ctx, query, queryParams...)
 	var i StatsContextDebtsRow
 	err := row.Scan(&i.IncomeTotal, &i.ExpenseTotal, &i.TransactionCount)
 	return i, err
@@ -733,7 +800,7 @@ SELECT
     t.amount
 FROM transactions t
 JOIN accounts a ON a.id = t.account_id AND a.currency = ?
-WHERE t.user_id = ?
+WHERE t.user_id IN (/*SLICE:owner_ids*/?)
   AND t.type IN ('income', 'expense')
   AND (? = '' OR t.account_id = ?)
   AND (? = '' OR t.category_id = ?)
@@ -755,7 +822,7 @@ ORDER BY t.transaction_date ASC
 
 type StatsPeriodRowsParams struct {
 	Currency          string      `json:"currency"`
-	UserID            string      `json:"user_id"`
+	OwnerIds          []string    `json:"owner_ids"`
 	Column3           interface{} `json:"column_3"`
 	AccountID         string      `json:"account_id"`
 	Column5           interface{} `json:"column_5"`
@@ -783,28 +850,36 @@ type StatsPeriodRowsRow struct {
 }
 
 func (q *Queries) StatsPeriodRows(ctx context.Context, arg StatsPeriodRowsParams) ([]StatsPeriodRowsRow, error) {
-	rows, err := q.db.QueryContext(ctx, statsPeriodRows,
-		arg.Currency,
-		arg.UserID,
-		arg.Column3,
-		arg.AccountID,
-		arg.Column5,
-		arg.CategoryID,
-		arg.Column7,
-		arg.Type,
-		arg.Column9,
-		arg.Kind,
-		arg.Column11,
-		arg.TransactionDate,
-		arg.Column13,
-		arg.TransactionDate_2,
-		arg.Column15,
-		arg.Column16,
-		arg.Column17,
-		arg.StoreID,
-		arg.Column19,
-		arg.MerchantID,
-	)
+	query := statsPeriodRows
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.Currency)
+	if len(arg.OwnerIds) > 0 {
+		for _, v := range arg.OwnerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(arg.OwnerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	queryParams = append(queryParams, arg.Column3)
+	queryParams = append(queryParams, arg.AccountID)
+	queryParams = append(queryParams, arg.Column5)
+	queryParams = append(queryParams, arg.CategoryID)
+	queryParams = append(queryParams, arg.Column7)
+	queryParams = append(queryParams, arg.Type)
+	queryParams = append(queryParams, arg.Column9)
+	queryParams = append(queryParams, arg.Kind)
+	queryParams = append(queryParams, arg.Column11)
+	queryParams = append(queryParams, arg.TransactionDate)
+	queryParams = append(queryParams, arg.Column13)
+	queryParams = append(queryParams, arg.TransactionDate_2)
+	queryParams = append(queryParams, arg.Column15)
+	queryParams = append(queryParams, arg.Column16)
+	queryParams = append(queryParams, arg.Column17)
+	queryParams = append(queryParams, arg.StoreID)
+	queryParams = append(queryParams, arg.Column19)
+	queryParams = append(queryParams, arg.MerchantID)
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
 	if err != nil {
 		return nil, err
 	}
@@ -833,7 +908,7 @@ SELECT
     COUNT(*) AS transaction_count
 FROM transactions t
 JOIN accounts a ON a.id = t.account_id AND a.currency = ?
-WHERE t.user_id = ?
+WHERE t.user_id IN (/*SLICE:owner_ids*/?)
   AND t.type IN ('income', 'expense')
   AND (? = '' OR t.account_id = ?)
   AND (? = '' OR t.category_id = ?)
@@ -854,7 +929,7 @@ WHERE t.user_id = ?
 
 type StatsSummaryParams struct {
 	Currency          string      `json:"currency"`
-	UserID            string      `json:"user_id"`
+	OwnerIds          []string    `json:"owner_ids"`
 	Column3           interface{} `json:"column_3"`
 	AccountID         string      `json:"account_id"`
 	Column5           interface{} `json:"column_5"`
@@ -882,28 +957,36 @@ type StatsSummaryRow struct {
 }
 
 func (q *Queries) StatsSummary(ctx context.Context, arg StatsSummaryParams) (StatsSummaryRow, error) {
-	row := q.db.QueryRowContext(ctx, statsSummary,
-		arg.Currency,
-		arg.UserID,
-		arg.Column3,
-		arg.AccountID,
-		arg.Column5,
-		arg.CategoryID,
-		arg.Column7,
-		arg.Type,
-		arg.Column9,
-		arg.Kind,
-		arg.Column11,
-		arg.TransactionDate,
-		arg.Column13,
-		arg.TransactionDate_2,
-		arg.Column15,
-		arg.Column16,
-		arg.Column17,
-		arg.StoreID,
-		arg.Column19,
-		arg.MerchantID,
-	)
+	query := statsSummary
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.Currency)
+	if len(arg.OwnerIds) > 0 {
+		for _, v := range arg.OwnerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(arg.OwnerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	queryParams = append(queryParams, arg.Column3)
+	queryParams = append(queryParams, arg.AccountID)
+	queryParams = append(queryParams, arg.Column5)
+	queryParams = append(queryParams, arg.CategoryID)
+	queryParams = append(queryParams, arg.Column7)
+	queryParams = append(queryParams, arg.Type)
+	queryParams = append(queryParams, arg.Column9)
+	queryParams = append(queryParams, arg.Kind)
+	queryParams = append(queryParams, arg.Column11)
+	queryParams = append(queryParams, arg.TransactionDate)
+	queryParams = append(queryParams, arg.Column13)
+	queryParams = append(queryParams, arg.TransactionDate_2)
+	queryParams = append(queryParams, arg.Column15)
+	queryParams = append(queryParams, arg.Column16)
+	queryParams = append(queryParams, arg.Column17)
+	queryParams = append(queryParams, arg.StoreID)
+	queryParams = append(queryParams, arg.Column19)
+	queryParams = append(queryParams, arg.MerchantID)
+	row := q.db.QueryRowContext(ctx, query, queryParams...)
 	var i StatsSummaryRow
 	err := row.Scan(&i.IncomeTotal, &i.ExpenseTotal, &i.TransactionCount)
 	return i, err
@@ -938,7 +1021,7 @@ SELECT
     COUNT(*) AS transaction_count
 FROM transactions t
 JOIN accounts a ON a.id = t.account_id AND a.currency = ?
-WHERE t.user_id = ?
+WHERE t.user_id IN (/*SLICE:owner_ids*/?)
   AND t.account_id = ?
   AND t.type IN ('income', 'expense', 'transfer')
   AND (? = '' OR t.category_id = ?)
@@ -959,7 +1042,7 @@ WHERE t.user_id = ?
 
 type StatsSummaryAccountParams struct {
 	Currency          string      `json:"currency"`
-	UserID            string      `json:"user_id"`
+	OwnerIds          []string    `json:"owner_ids"`
 	AccountID         string      `json:"account_id"`
 	Column4           interface{} `json:"column_4"`
 	CategoryID        *string     `json:"category_id"`
@@ -987,27 +1070,35 @@ type StatsSummaryAccountRow struct {
 
 // Account-scoped totals: incoming transfers count as income, outgoing as expense (matches balance).
 func (q *Queries) StatsSummaryAccount(ctx context.Context, arg StatsSummaryAccountParams) (StatsSummaryAccountRow, error) {
-	row := q.db.QueryRowContext(ctx, statsSummaryAccount,
-		arg.Currency,
-		arg.UserID,
-		arg.AccountID,
-		arg.Column4,
-		arg.CategoryID,
-		arg.Column6,
-		arg.Type,
-		arg.Column8,
-		arg.Kind,
-		arg.Column10,
-		arg.TransactionDate,
-		arg.Column12,
-		arg.TransactionDate_2,
-		arg.Column14,
-		arg.Column15,
-		arg.Column16,
-		arg.StoreID,
-		arg.Column18,
-		arg.MerchantID,
-	)
+	query := statsSummaryAccount
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.Currency)
+	if len(arg.OwnerIds) > 0 {
+		for _, v := range arg.OwnerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(arg.OwnerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	queryParams = append(queryParams, arg.AccountID)
+	queryParams = append(queryParams, arg.Column4)
+	queryParams = append(queryParams, arg.CategoryID)
+	queryParams = append(queryParams, arg.Column6)
+	queryParams = append(queryParams, arg.Type)
+	queryParams = append(queryParams, arg.Column8)
+	queryParams = append(queryParams, arg.Kind)
+	queryParams = append(queryParams, arg.Column10)
+	queryParams = append(queryParams, arg.TransactionDate)
+	queryParams = append(queryParams, arg.Column12)
+	queryParams = append(queryParams, arg.TransactionDate_2)
+	queryParams = append(queryParams, arg.Column14)
+	queryParams = append(queryParams, arg.Column15)
+	queryParams = append(queryParams, arg.Column16)
+	queryParams = append(queryParams, arg.StoreID)
+	queryParams = append(queryParams, arg.Column18)
+	queryParams = append(queryParams, arg.MerchantID)
+	row := q.db.QueryRowContext(ctx, query, queryParams...)
 	var i StatsSummaryAccountRow
 	err := row.Scan(&i.IncomeTotal, &i.ExpenseTotal, &i.TransactionCount)
 	return i, err

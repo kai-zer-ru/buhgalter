@@ -21,6 +21,7 @@
 	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
 	import { defaultAccountId } from '$lib/accounts';
 	import { accountSelectOptions } from '$lib/select-options';
+	import { matchRefByName, refsForAccount } from '$lib/household/refs-for-account';
 	import { toast } from '$lib/toast';
 	import {
 		fromDateLocalEnd,
@@ -84,11 +85,15 @@
 			{ value: 'borrowed', label: tr('debts.direction.borrowed') }
 		];
 	});
+	const selectedAcc = $derived(accounts.find((acc) => acc.id === accountId));
+	const scopedDebtors = $derived(
+		refsForAccount(skipBalance ? { scope: 'personal' } : selectedAcc, debtors)
+	);
 	const debtorOptions = $derived.by(() => {
 		void $locale;
 		return [
 			{ value: '', label: tr('debts.field.newDebtor') },
-			...debtors.map((debtor) => ({ value: debtor.id, label: debtor.name }))
+			...scopedDebtors.map((debtor) => ({ value: debtor.id, label: debtor.name }))
 		];
 	});
 	const accountOptions = $derived(accountSelectOptions(accounts));
@@ -174,6 +179,17 @@
 			}
 		}
 		accountId = defaultAccountId(accounts);
+	}
+
+	function onDebtAccountChange() {
+		const current = debtors.find((d) => d.id === debtorId);
+		const matched = matchRefByName(current, scopedDebtors);
+		if (current && !matched) {
+			debtorId = '';
+			toast($_('refs.reset.debtor'));
+		} else if (matched) {
+			debtorId = matched.id;
+		}
 	}
 
 	function close() {
@@ -284,7 +300,10 @@
 				<ToggleSwitch
 					checked={skipBalance}
 					label={$_('debts.field.noBalance')}
-					onchange={() => (skipBalance = !skipBalance)}
+					onchange={() => {
+						skipBalance = !skipBalance;
+						onDebtAccountChange();
+					}}
 				/>
 			</div>
 		</div>
@@ -294,6 +313,7 @@
 				label={$_('transactions.field.account')}
 				bind:value={accountId}
 				options={accountOptions}
+				onchange={() => onDebtAccountChange()}
 				usePortal
 			/>
 		{/if}

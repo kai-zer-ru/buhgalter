@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { _ } from 'svelte-i18n';
@@ -7,6 +7,7 @@
 		deleteTransaction,
 		getBudgetSummary,
 		getDashboard,
+		type CatalogScope,
 		listAccounts,
 		listCategories,
 		listMerchants,
@@ -39,7 +40,21 @@
 	import { tr } from '$lib/i18n';
 	import { budgetStatusLine } from '$lib/budget-display';
 	import { resolveAutoTopupSourceName } from '$lib/accounts/auto-topup';
-	import { groupAccountsByType, accountGroupKind } from '$lib/accounts/group-by-type';
+	import {
+		groupAccountsForDisplay,
+		groupAccountsByOwnership,
+		accountGroupKind,
+		accountOwnershipLabelKey
+	} from '$lib/accounts/group-by-type';
+	import { householdMe, householdMeLoaded, inHousehold } from '$lib/household/membership';
+	import FamilyBadge from '$lib/components/FamilyBadge.svelte';
+	import CatalogScopeTabs from '$lib/components/CatalogScopeTabs.svelte';
+	import {
+		catalogScopeQuery,
+		dashboardRefPath,
+		readStoredCatalogScope,
+		writeStoredCatalogScope
+	} from '$lib/household/catalog-scope';
 	import { ownFundsTotalsByCurrency, sortRowsByProfileCurrency } from '$lib/currency';
 	import { aggregateForecastLabelFlags, forecastWithLabelKey } from '$lib/forecast-label';
 	import AccountGroupPanel from '$lib/components/AccountGroupPanel.svelte';
@@ -55,16 +70,18 @@
 
 	const receiptScannerActive = $derived(isReceiptScannerAvailable($featureFlags));
 
-	const DASHBOARD_PATH = '/api/v1/dashboard';
 	const PAST_TX_PATH = '/api/v1/transactions?kind=manual&limit=10&page=1&sort=date_desc';
 	const PLANNED_TX_PATH = '/api/v1/transactions?kind=future&limit=10&page=1&sort=date_desc';
 	const BUDGET_PATH = '/api/v1/budgets/summary';
 	const TEMPLATES_PATH = '/api/v1/transaction-templates';
 	const HOME_TEMPLATE_LIMIT = 12;
 
-	let dash = $state<Dashboard | null>(readRefCache<Dashboard>(DASHBOARD_PATH));
-	let loading = $state(!refCacheReady(DASHBOARD_PATH));
+	let catalogScope = $state<CatalogScope>(readStoredCatalogScope());
+	const DASHBOARD_PATH = $derived(dashboardRefPath(catalogScope));
+	let dash = $state<Dashboard | null>(readRefCache<Dashboard>(dashboardRefPath(catalogScope)));
+	let loading = $state(!refCacheReady(dashboardRefPath(catalogScope)));
 	let loadError = $state<string | null>(null);
+	let catalogLoadGen = 0;
 	let txOpen = $state(false);
 	let receiptOpen = $state(false);
 	let transferOpen = $state(false);
@@ -117,7 +134,11 @@
 	const debtsByCurrency = $derived(
 		sortRowsByProfileCurrency(dash?.debts_summary.by_currency ?? [], currency)
 	);
-	const accountGroups = $derived(dash ? groupAccountsByType(dash.accounts) : []);
+	const accountGroups = $derived(dash ? groupAccountsForDisplay(dash.accounts) : []);
+	const accountSections = $derived(groupAccountsByOwnership(accountGroups));
+	const showOwnershipHeadings = $derived(
+		accountGroups.some((group) => group.ownership === 'household')
+	);
 	const recentTotal = $derived(pastTotal + plannedTotal);
 	const ownForecastFlags = $derived(
 		dash ? aggregateForecastLabelFlags(dash.accounts.filter((a) => a.type !== 'credit_card')) : {}
@@ -135,7 +156,7 @@
 	$effect(() => {
 		const update = $refCacheUpdate;
 		if (!update || !dash) return;
-		if (refCacheUpdateMatches(update, DASHBOARD_PATH)) {
+		if (update.path === DASHBOARD_PATH) {
 			void loadDashboard({ silent: true });
 		}
 		if (refCacheUpdateMatches(update, PAST_TX_PATH)) {
@@ -152,69 +173,96 @@
 		}
 	});
 
-	async function loadDashboard(opts: { silent?: boolean } = {}) {
-		if (!opts.silent && !refCacheReady(DASHBOARD_PATH)) loading = true;
+	async function loadDashboard(opts: { silent?: boolean; gen?: number } = {}) {
+		const scope = catalogScope;
+		const gen = opts.gen;
+		if (!opts.silent && !refCacheReady(dashboardRefPath(scope))) loading = true;
 		try {
-			const next = await getDashboard();
+			const next = await getDashboard(scope);
+			if (gen !== undefined && gen !== catalogLoadGen) return;
+			if (scope !== catalogScope) return;
 			dash = opts.silent ? assignIfChanged(dash, next) : next;
 			loadError = null;
 		} catch (err) {
+			if (gen !== undefined && gen !== catalogLoadGen) return;
+			if (scope !== catalogScope) return;
 			const msg = reportPageLoadFailure(err, { silent: opts.silent, hasData: !!dash });
 			if (msg) loadError = msg;
 		} finally {
-			loading = false;
+			if (gen === undefined || gen === catalogLoadGen) loading = false;
 		}
 	}
 
-	async function loadPastTx(opts: { silent?: boolean } = {}) {
+	function homeTxParams(kind: 'manual' | 'future'): Record<string, string> {
+		const params: Record<string, string> = {
+			kind,
+			sort: 'date_desc',
+			page: '1',
+			limit: String(txLimit)
+		};
+		const scope = catalogScopeQuery(catalogScope);
+		if (scope) params.scope = scope;
+		return params;
+	}
+
+	function preferredHouseholdAccountId(): string | undefined {
+		if (catalogScope !== 'household') return undefined;
+		return dash?.accounts.find((acc) => acc.scope === 'household')?.id;
+	}
+
+	async function loadPastTx(opts: { silent?: boolean; gen?: number } = {}) {
+		const scope = catalogScope;
+		const gen = opts.gen;
 		if (!opts.silent && !refCacheReady(PAST_TX_PATH)) pastLoading = true;
 		try {
-			const res = await listTransactions({
-				kind: 'manual',
-				sort: 'date_desc',
-				page: '1',
-				limit: String(txLimit)
-			});
+			const res = await listTransactions(homeTxParams('manual'));
+			if (gen !== undefined && gen !== catalogLoadGen) return;
+			if (scope !== catalogScope) return;
 			const next = res.data;
 			pastTx = opts.silent ? assignIfChanged(pastTx, next) : next;
 			pastTotal = opts.silent ? assignIfChanged(pastTotal, res.meta.total) : res.meta.total;
 		} catch (err) {
+			if (gen !== undefined && gen !== catalogLoadGen) return;
 			reportPageLoadFailure(err, { silent: opts.silent, hasData: pastTx.length > 0 });
 		} finally {
-			pastLoading = false;
+			if (gen === undefined || gen === catalogLoadGen) pastLoading = false;
 		}
 	}
 
-	async function loadPlannedTx(opts: { silent?: boolean } = {}) {
+	async function loadPlannedTx(opts: { silent?: boolean; gen?: number } = {}) {
+		const scope = catalogScope;
+		const gen = opts.gen;
 		if (!opts.silent && !refCacheReady(PLANNED_TX_PATH)) plannedLoading = true;
 		try {
-			const res = await listTransactions({
-				kind: 'future',
-				sort: 'date_desc',
-				page: '1',
-				limit: String(txLimit)
-			});
+			const res = await listTransactions(homeTxParams('future'));
+			if (gen !== undefined && gen !== catalogLoadGen) return;
+			if (scope !== catalogScope) return;
 			const next = res.data;
 			plannedTx = opts.silent ? assignIfChanged(plannedTx, next) : next;
 			plannedTotal = opts.silent ? assignIfChanged(plannedTotal, res.meta.total) : res.meta.total;
 		} catch (err) {
+			if (gen !== undefined && gen !== catalogLoadGen) return;
 			reportPageLoadFailure(err, { silent: opts.silent, hasData: plannedTx.length > 0 });
 		} finally {
-			plannedLoading = false;
+			if (gen === undefined || gen === catalogLoadGen) plannedLoading = false;
 		}
 	}
 
-	async function loadBudget(opts: { silent?: boolean } = {}) {
+	async function loadBudget(opts: { silent?: boolean; gen?: number } = {}) {
 		if (!isFeatureEnabled('budget')) {
 			budgetItems = [];
 			return;
 		}
+		const scope = catalogScope;
+		const gen = opts.gen;
 		try {
-			const res = await getBudgetSummary();
+			const res = await getBudgetSummary(undefined, undefined, scope);
+			if (gen !== undefined && gen !== catalogLoadGen) return;
+			if (scope !== catalogScope) return;
 			const next = res.items;
 			budgetItems = opts.silent ? assignIfChanged(budgetItems, next) : next;
 		} catch {
-			if (!opts.silent) budgetItems = [];
+			if (!opts.silent && (gen === undefined || gen === catalogLoadGen)) budgetItems = [];
 		}
 	}
 
@@ -328,6 +376,27 @@
 			toast.fromError(err);
 		}
 	}
+
+	function selectCatalogScope(next: CatalogScope | 'personal' | 'household') {
+		const scope: CatalogScope =
+			next === 'personal' || next === 'household' || next === 'all' ? next : 'all';
+		catalogScope = scope;
+		writeStoredCatalogScope(scope);
+		const cached = readRefCache<Dashboard>(dashboardRefPath(scope));
+		if (cached) dash = cached;
+		const gen = ++catalogLoadGen;
+		void loadDashboard({ gen });
+		void loadBudget({ gen });
+		void loadPastTx({ gen });
+		void loadPlannedTx({ gen });
+	}
+
+	// Left / kicked from the group: tabs are hidden, so fall back to «Все».
+	$effect(() => {
+		if ($householdMeLoaded && !inHousehold($householdMe) && catalogScope !== 'all') {
+			untrack(() => selectCatalogScope('all'));
+		}
+	});
 </script>
 
 <svelte:head>
@@ -544,7 +613,10 @@
 			</div>
 		{/if}
 		<div class="flex flex-wrap items-center justify-between gap-3">
-			<h1 class="text-2xl font-semibold">{$_('dashboard.title')}</h1>
+			<div class="space-y-2">
+				<h1 class="text-2xl font-semibold">{$_('dashboard.title')}</h1>
+				<CatalogScopeTabs value={catalogScope} onchange={selectCatalogScope} />
+			</div>
 			<div class="flex shrink-0 items-center gap-1">
 				{#if dash?.accounts.length === 0}
 					<!-- eslint-disable svelte/no-navigation-without-resolve -- query after resolved path -->
@@ -619,67 +691,88 @@
 					{#if dash.accounts.length === 0}
 						<EmptyStateCard message={$_('dashboard.accountsEmpty')} />
 					{:else}
-						{#each accountGroups as group (accountGroupKind(group))}
-							{@const kind = accountGroupKind(group)}
-							<AccountGroupPanel {kind} count={group.length}>
-								<div class="grid gap-4 sm:grid-cols-2">
-									{#each group as acc (acc.id)}
-										<a
-											href={resolve(`/accounts/${acc.id}`)}
-											class="card flex items-center gap-4 transition hover:opacity-90"
-										>
-											<AccountIcon type={acc.type} bankIcon={acc.bank_icon} size={48} />
-											<div class="min-w-0 flex-1">
-												<p class="truncate font-medium">
-													{acc.name}
-													{#if acc.currency}
-														<span class="font-normal" style:color="var(--text-muted)"
-															>{acc.currency}</span
-														>
-													{/if}
-												</p>
-												<p class="mt-1 text-xl font-semibold tabular-nums">
-													<MoneyDisplay
-														value={acc.balance_display}
-														currency={acc.currency}
-														class=""
-													/>
-												</p>
-												{#if acc.credit_limit_display}
-													<p class="mt-0.5 text-sm tabular-nums" style:color="var(--text-muted)">
-														{$_('accounts.field.creditLimit')}:
-														<MoneyDisplay
-															value={acc.credit_limit_display}
-															currency={acc.currency}
-															class=""
-														/>
-													</p>
-												{/if}
-												{#if acc.type === 'bank' && isFeatureEnabled('balance_maintenance', $featureFlags)}
-													{@const autoTopupSource = resolveAutoTopupSourceName(acc, dash.accounts)}
-													{#if autoTopupSource}
-														<p class="mt-1 text-sm" style:color="var(--text-muted)">
-															{$_('accounts.autoTopup.status', {
-																values: { source: autoTopupSource }
-															})}
+						{#each accountSections as section (section.ownership)}
+							<div class="space-y-4">
+								{#if showOwnershipHeadings}
+									<p
+										class="mb-1 text-xs font-medium uppercase tracking-wide"
+										style:color="var(--text-muted)"
+									>
+										{$_(accountOwnershipLabelKey(section.ownership, $householdMe.household?.kind))}
+									</p>
+								{/if}
+								{#each section.groups as group (`${group.kind}`)}
+									{@const kind = accountGroupKind(group.accounts)}
+									<AccountGroupPanel {kind} count={group.accounts.length}>
+										<div class="grid gap-4 sm:grid-cols-2">
+											{#each group.accounts as acc (acc.id)}
+												<a
+													href={resolve(`/accounts/${acc.id}`)}
+													class="card flex items-center gap-4 transition hover:opacity-90"
+												>
+													<AccountIcon type={acc.type} bankIcon={acc.bank_icon} size={48} />
+													<div class="min-w-0 flex-1">
+														<p class="truncate font-medium">
+															{acc.name}
+															{#if acc.scope === 'household'}
+																<FamilyBadge compact />
+															{/if}
+															{#if acc.currency}
+																<span class="font-normal" style:color="var(--text-muted)"
+																	>{acc.currency}</span
+																>
+															{/if}
 														</p>
-													{/if}
-												{/if}
-												{#if acc.forecast_balance !== acc.balance}
-													<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
-														{$_(forecastWithLabelKey(acc))}:
-														<MoneyDisplay
-															value={acc.forecast_display}
-															currency={acc.currency}
-															class=""
-														/>
-													</p>
-												{/if}
-											</div>
-										</a>
-									{/each}
-								</div>
-							</AccountGroupPanel>
+														<p class="mt-1 text-xl font-semibold tabular-nums">
+															<MoneyDisplay
+																value={acc.balance_display}
+																currency={acc.currency}
+																class=""
+															/>
+														</p>
+														{#if acc.credit_limit_display}
+															<p
+																class="mt-0.5 text-sm tabular-nums"
+																style:color="var(--text-muted)"
+															>
+																{$_('accounts.field.creditLimit')}:
+																<MoneyDisplay
+																	value={acc.credit_limit_display}
+																	currency={acc.currency}
+																	class=""
+																/>
+															</p>
+														{/if}
+														{#if acc.type === 'bank' && isFeatureEnabled('balance_maintenance', $featureFlags)}
+															{@const autoTopupSource = resolveAutoTopupSourceName(
+																acc,
+																dash.accounts
+															)}
+															{#if autoTopupSource}
+																<p class="mt-1 text-sm" style:color="var(--text-muted)">
+																	{$_('accounts.autoTopup.status', {
+																		values: { source: autoTopupSource }
+																	})}
+																</p>
+															{/if}
+														{/if}
+														{#if acc.forecast_balance !== acc.balance}
+															<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
+																{$_(forecastWithLabelKey(acc))}:
+																<MoneyDisplay
+																	value={acc.forecast_display}
+																	currency={acc.currency}
+																	class=""
+																/>
+															</p>
+														{/if}
+													</div>
+												</a>
+											{/each}
+										</div>
+									</AccountGroupPanel>
+								{/each}
+							</div>
 						{/each}
 					{/if}
 				</div>
@@ -818,6 +911,7 @@
 
 <TransactionForm
 	bind:open={txOpen}
+	accountId={preferredHouseholdAccountId() ?? ''}
 	defaultType={newTxType}
 	transaction={editTx}
 	repeatFrom={repeatTx}
@@ -835,6 +929,7 @@
 />
 <TransferForm
 	bind:open={transferOpen}
+	accountId={preferredHouseholdAccountId() ?? ''}
 	editTx={editTransfer}
 	repeatFrom={repeatTransfer}
 	siblings={txSiblings}

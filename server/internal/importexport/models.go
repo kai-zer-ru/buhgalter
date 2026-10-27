@@ -152,6 +152,7 @@ type ImportOptions struct {
 	AutoSubcategory bool
 	Confirm         bool
 	IdempotencyKey  string
+	OwnerIDs        []string
 }
 
 // Report is the API response for preview and commit.

@@ -41,6 +41,7 @@ export type CategoryPayload = {
 	type: 'income' | 'expense';
 	icon: string;
 	sort_order?: number;
+	scope?: 'personal' | 'household';
 };
 
 export type CategoryUpdatePayload = {
@@ -77,6 +78,7 @@ export type AccountCreatePayload = {
 	credit_limit?: string;
 	payment_account_id?: string;
 	currency?: string;
+	shared?: boolean;
 };
 
 export type AccountUpdatePayload = {

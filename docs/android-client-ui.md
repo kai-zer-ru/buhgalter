@@ -128,6 +128,7 @@
 | Безопасность | `/settings/security` |
 | Сервер | `/settings/server` |
 | API-токены | `/settings/tokens` |
+| Семья / команда | `/settings/household` (флаг `household`); `kind` family/team; accept `/settings/household/accept?code=`; scheme `ru.kai_zer.buhgalter://invite/{code}` → `/invite/{code}` → accept. QR: камера и файл, `parseInviteQr`. Чужой host — предупреждение и блок, только если задан внешний URL профиля и host не LAN и не он; без внешнего URL код принимается на текущем сервере. Online-only. После смены membership, share и unshare — `resetCachesAfterMembershipChange` (ref-cache, ledger, виджеты). Счета: бейдж «Семья», share/unshare, тумблер семейного счёта; личные «Мои средства» и «Кредитные» под одним заголовком. Главная/статистика/бюджет — сегмент Всё/Личное/Семья (или Команда); виджеты `scope=all`. См. [household.md](household.md) |
 | Банковские уведомления | `/settings/bank-notifications` (push банков и кошельков + SMS; тумблер «Уведомления в шторке» — Accept/Reject без открытия приложения; черновики — `/settings/bank-notifications/drafts`; уникальная пара расход+пополнение — одна карточка перевода) |
 | Импорт / экспорт | `/settings/import` — Cubux (операции) и [«Бухгалтер»](import/buhgalter.md) (полный перенос учёта) |
 

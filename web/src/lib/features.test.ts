@@ -22,6 +22,8 @@ describe('featureRequiredForPath', () => {
 		expect(featureRequiredForPath('/budget')).toBe('budget');
 		expect(featureRequiredForPath('/debtors/1')).toBe('debts');
 		expect(featureRequiredForPath('/settings/notifications')).toBe('notifications');
+		expect(featureRequiredForPath('/settings/household')).toBe('household');
+		expect(featureRequiredForPath('/invite/ABC-DEF-GHJ')).toBe('household');
 		expect(featureRequiredForPath('/transaction-templates')).toBe('transaction_templates');
 		expect(featureRequiredForPath('/accounts/1/auto-topup')).toBe('balance_maintenance');
 		expect(featureRequiredForPath('/accounts')).toBeNull();

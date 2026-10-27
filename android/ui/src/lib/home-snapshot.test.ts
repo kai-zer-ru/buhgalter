@@ -126,4 +126,20 @@ describe('home snapshot', () => {
 		expect(afterGrace.loadError).toBeNull();
 		expect(afterGrace.loading).toBe(false);
 	});
+
+	it('does not paint the unscoped dashboard onto a household tab', () => {
+		const allDash = { total_balance: 996955, accounts: [{ id: 'p' }], debts_summary: { i_owe: 1 } };
+		const houseDash = { total_balance: 0, accounts: [{ id: 'h' }], debts_summary: { i_owe: 0 } };
+		writeRefCache('/api/v1/dashboard', allDash);
+		writeRefCache('/api/v1/dashboard?scope=household', houseDash);
+
+		const shownHousehold = applyCachedDashboardSnapshot(
+			{ dashBase: houseDash, loadError: null, loading: false },
+			'household'
+		);
+		expect(shownHousehold.dashBase).toEqual(houseDash);
+
+		expect(hasHomeDashboardSnapshot(null, 'household')).toBe(true);
+		expect(hasHomeDashboardSnapshot(null, 'personal')).toBe(false);
+	});
 });

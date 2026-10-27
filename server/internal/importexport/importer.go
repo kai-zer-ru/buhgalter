@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kai-zer-ru/buhgalter/internal/account"
 	"github.com/kai-zer-ru/buhgalter/internal/accountbalance"
+	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	"github.com/kai-zer-ru/buhgalter/internal/balancehooks"
 	"github.com/kai-zer-ru/buhgalter/internal/bank"
 	"github.com/kai-zer-ru/buhgalter/internal/category"
@@ -23,6 +24,8 @@ import (
 type resolver struct {
 	db                *sql.DB
 	userID            string
+	ownerIDs          []string
+	viewer            auth.Scope
 	accounts          map[string]string // lower(db name) -> id
 	acctNames         map[string]string // lower(db name) -> canonical name
 	fileAccounts      map[string]string // lower(file name) -> resolved id (during import)
@@ -50,15 +53,25 @@ func newResolver(
 	ctx context.Context,
 	db *sql.DB,
 	userID string,
+	ownerIDs []string,
 	accountMap map[string]AccountMapEntry,
 	categoryMap map[string]CategoryMapEntry,
 	subcategoryMap map[string]SubcategoryMapEntry,
 	autoSubcategory bool,
 	dryRun bool,
 ) (*resolver, error) {
+	if len(ownerIDs) == 0 {
+		ownerIDs = []string{userID}
+	}
+	sc := auth.Scope{UserID: userID}
+	if len(ownerIDs) > 1 {
+		sc.PrincipalID = ownerIDs[1]
+	}
 	r := &resolver{
 		db:                db,
 		userID:            userID,
+		ownerIDs:          ownerIDs,
+		viewer:            sc,
 		accounts:          make(map[string]string),
 		acctNames:         make(map[string]string),
 		fileAccounts:      make(map[string]string),
@@ -79,7 +92,7 @@ func newResolver(
 		txIDMap:           make(map[string]string),
 		txSubName:         make(map[string]string),
 	}
-	accs, err := account.ListByUser(ctx, db, userID, "active")
+	accs, err := account.ListByScope(ctx, db, sc, "active")
 	if err != nil {
 		return nil, err
 	}
@@ -446,7 +459,15 @@ func dedupHashForMapped(m MappedRow) (string, string, int64, string, string, err
 }
 
 // Preview runs dry-run import analysis.
+func fillImportOwnerIDs(ctx context.Context, db *sql.DB, userID string, opts *ImportOptions) {
+	if len(opts.OwnerIDs) > 0 {
+		return
+	}
+	opts.OwnerIDs = auth.LoadScope(ctx, db, userID).OwnerIDs()
+}
+
 func Preview(ctx context.Context, db *sql.DB, userID string, filename string, data []byte, opts ImportOptions) (Report, error) {
+	fillImportOwnerIDs(ctx, db, userID, &opts)
 	table, native, err := ParseImportFile(filename, data)
 	if err != nil {
 		return Report{}, err
@@ -460,7 +481,7 @@ func Preview(ctx context.Context, db *sql.DB, userID string, filename string, da
 	report.TotalRows = len(table.Rows)
 
 	res, err := newResolver(
-		ctx, db, userID, opts.AccountMap, opts.CategoryMap, opts.SubcategoryMap, opts.AutoSubcategory, true,
+		ctx, db, userID, opts.OwnerIDs, opts.AccountMap, opts.CategoryMap, opts.SubcategoryMap, opts.AutoSubcategory, true,
 	)
 	if err != nil {
 		return Report{}, err
@@ -596,6 +617,7 @@ func importWithProgress(
 	opts ImportOptions,
 	onProgress importProgressFn,
 ) (Report, error) {
+	fillImportOwnerIDs(ctx, db, userID, &opts)
 	if !opts.Confirm {
 		return Report{}, fmt.Errorf("confirm=true required")
 	}
@@ -634,7 +656,7 @@ func importWithProgress(
 	report.Preview = nil
 
 	res, err := newResolver(
-		ctx, db, userID, opts.AccountMap, opts.CategoryMap, opts.SubcategoryMap, opts.AutoSubcategory, false,
+		ctx, db, userID, opts.OwnerIDs, opts.AccountMap, opts.CategoryMap, opts.SubcategoryMap, opts.AutoSubcategory, false,
 	)
 	if err != nil {
 		releaseIdempotencyClaim(ctx, db, userID, opts.IdempotencyKey, claimed)
@@ -1123,7 +1145,7 @@ func (r *resolver) currencyOf(ctx context.Context, id string) string {
 	if c, ok := r.acctCurrency[id]; ok {
 		return c
 	}
-	acc, err := account.GetByID(ctx, r.db, r.userID, id)
+	acc, err := account.GetByScope(ctx, r.db, r.viewer, id)
 	if err != nil {
 		return ""
 	}

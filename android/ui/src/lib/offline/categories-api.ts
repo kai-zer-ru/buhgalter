@@ -54,13 +54,14 @@ function localCategory(id: string, payload: CategoryPayload): Category {
 		sort_order: payload.sort_order ?? 0,
 		is_primary: false,
 		is_system: false,
+		scope: payload.scope ?? 'personal',
 		subcategory_count: 0,
 		created_at: ts
 	};
 }
 
 export async function createCategory(payload: CategoryPayload): Promise<Category> {
-	if (!shouldUseOfflineQueue()) {
+	if (payload.scope === 'household' || !shouldUseOfflineQueue()) {
 		const category = await apiCreateCategory(payload);
 		onCategoryCreated(category);
 		void refreshMergeMeta();

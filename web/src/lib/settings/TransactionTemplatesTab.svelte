@@ -44,6 +44,7 @@
 		templateToRepeatFrom
 	} from '$lib/transaction-template-prefill';
 	import { toast } from '$lib/toast';
+	import { matchRefByName, refsForAccount, remapRefIds } from '$lib/household/refs-for-account';
 
 	let templates = $state<TransactionTemplate[]>([]);
 	let accounts = $state<Account[]>([]);
@@ -79,15 +80,19 @@
 	let draggingId = $state<string | null>(null);
 	let overId = $state<string | null>(null);
 
+	const selectedAcc = $derived(accounts.find((acc) => acc.id === accountId));
 	const accountOptions = $derived(accountSelectOptions(accounts));
-	const categoryOptions = $derived(
-		categorySelectOptions(tplType === 'income' ? incomeCategories : expenseCategories)
+	const scopedCategories = $derived(
+		refsForAccount(selectedAcc, tplType === 'income' ? incomeCategories : expenseCategories)
 	);
+	const categoryOptions = $derived(categorySelectOptions(scopedCategories));
 	const subcategoryOptions = $derived(subcategorySelectOptions(subcategories));
+	const scopedMerchants = $derived(refsForAccount(selectedAcc, merchants));
 	const merchantOptions = $derived([
 		{ value: '', label: '—' },
-		...merchants.map((m) => ({ value: m.id, label: m.name }))
+		...scopedMerchants.map((m) => ({ value: m.id, label: m.name }))
 	]);
+	const scopedTags = $derived(refsForAccount(selectedAcc, allTags));
 	const typeOptions = $derived([
 		{ value: 'expense', label: $_('transactions.type.expense') },
 		{ value: 'income', label: $_('transactions.type.income') },
@@ -173,6 +178,34 @@
 	function closeForm() {
 		formOpen = false;
 		editingId = null;
+	}
+
+	function onTemplateAccountChange() {
+		const currentCat = (tplType === 'income' ? incomeCategories : expenseCategories).find(
+			(c) => c.id === categoryId
+		);
+		const matchedCat = matchRefByName(currentCat, scopedCategories);
+		if (currentCat && !matchedCat) {
+			categoryId = scopedCategories[0]?.id ?? '';
+			subcategoryId = '';
+			void loadSubs(categoryId);
+			toast($_('refs.reset.category'));
+		} else if (matchedCat && matchedCat.id !== categoryId) {
+			categoryId = matchedCat.id;
+			void loadSubs(categoryId);
+		}
+		const currentMerchant = merchants.find((m) => m.id === merchantId);
+		const matchedMerchant = matchRefByName(currentMerchant, scopedMerchants);
+		if (currentMerchant && !matchedMerchant) {
+			merchantId = '';
+			toast($_('refs.reset.merchant'));
+		} else if (matchedMerchant) {
+			merchantId = matchedMerchant.id;
+		}
+		const selected = allTags.filter((t) => selectedTagIds.includes(t.id));
+		const remapped = remapRefIds(selected, scopedTags);
+		if (remapped.dropped) toast($_('refs.reset.tags'));
+		selectedTagIds = remapped.next.map((t) => t.id);
 	}
 
 	function toggleTag(id: string) {
@@ -432,7 +465,11 @@
 					<span class="text-sm" style:color="var(--text-muted)"
 						>{$_('transactions.field.from')}</span
 					>
-					<Select options={accountOptions} bind:value={accountId} />
+					<Select
+						options={accountOptions}
+						bind:value={accountId}
+						onchange={() => onTemplateAccountChange()}
+					/>
 				</label>
 				<label class="block space-y-1">
 					<span class="text-sm" style:color="var(--text-muted)">{$_('transactions.field.to')}</span>
@@ -443,7 +480,11 @@
 					<span class="text-sm" style:color="var(--text-muted)"
 						>{$_('transactions.field.account')}</span
 					>
-					<Select options={accountOptions} bind:value={accountId} />
+					<Select
+						options={accountOptions}
+						bind:value={accountId}
+						onchange={() => onTemplateAccountChange()}
+					/>
 				</label>
 				<label class="block space-y-1">
 					<span class="text-sm" style:color="var(--text-muted)"
@@ -473,13 +514,13 @@
 					>
 					<Select options={merchantOptions} bind:value={merchantId} />
 				</label>
-				{#if allTags.length > 0}
+				{#if scopedTags.length > 0}
 					<div class="space-y-1">
 						<span class="text-sm" style:color="var(--text-muted)"
 							>{$_('transactions.field.tags')}</span
 						>
 						<div class="flex flex-wrap gap-1">
-							{#each allTags as tag (tag.id)}
+							{#each scopedTags as tag (tag.id)}
 								<button
 									type="button"
 									class="rounded-full border px-2 py-0.5 text-xs"

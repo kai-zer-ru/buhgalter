@@ -146,7 +146,7 @@ func (r *resolver) finalizeNativeAccounts(ctx context.Context) error {
 		if !ok || id == "" {
 			continue
 		}
-		acc, err := account.GetByID(ctx, r.db, r.userID, id)
+		acc, err := account.GetByScope(ctx, r.db, r.viewer, id)
 		if err != nil {
 			return err
 		}
@@ -564,7 +564,7 @@ func importNativeDebts(ctx context.Context, db *sql.DB, r *resolver, nf *NativeF
 			debtCurrency := money.Normalize(nativeCell(table, row, "currency"))
 			if !money.Valid(debtCurrency) {
 				if txID := remapTx(r, nativeCell(table, row, "transaction_id")); txID != nil && *txID != "" {
-					if tx, err := q.GetTransactionByID(ctx, sqlcdb.GetTransactionByIDParams{ID: *txID, UserID: r.userID}); err == nil && tx.AccountCurrency != nil {
+					if tx, err := q.GetTransactionByID(ctx, sqlcdb.GetTransactionByIDParams{ID: *txID, OwnerIds: []string{r.userID}}); err == nil && tx.AccountCurrency != nil {
 						debtCurrency = money.ProfileOrDefault(*tx.AccountCurrency)
 					}
 				}

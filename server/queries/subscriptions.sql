@@ -27,7 +27,7 @@ SELECT
 FROM subscriptions s
 JOIN accounts a ON a.id = s.account_id
 LEFT JOIN subcategories sub ON sub.id = s.subcategory_id
-WHERE s.user_id = ?
+WHERE s.user_id IN (sqlc.slice('owner_ids'))
 ORDER BY s.next_run_at ASC, s.created_at DESC;
 
 -- name: GetSubscriptionByID :one
@@ -59,7 +59,7 @@ SELECT
 FROM subscriptions s
 JOIN accounts a ON a.id = s.account_id
 LEFT JOIN subcategories sub ON sub.id = s.subcategory_id
-WHERE s.id = ? AND s.user_id = ?;
+WHERE s.id = sqlc.arg('id') AND s.user_id IN (sqlc.slice('owner_ids'));
 
 -- name: InsertSubscription :exec
 INSERT INTO subscriptions (

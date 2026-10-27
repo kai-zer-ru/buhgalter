@@ -65,8 +65,15 @@ func GetSettings(ctx context.Context, db *sql.DB, userID string) (SettingsView, 
 }
 
 func ReplaceSettings(ctx context.Context, db *sql.DB, userID string, in UpdateInput) (SettingsView, error) {
+	return ReplaceSettingsOwned(ctx, db, userID, []string{userID}, in)
+}
+
+func ReplaceSettingsOwned(ctx context.Context, db *sql.DB, userID string, ownerIDs []string, in UpdateInput) (SettingsView, error) {
 	normalizeInput(&in)
-	if err := validateBindings(ctx, db, userID, in); err != nil {
+	if len(ownerIDs) == 0 {
+		ownerIDs = []string{userID}
+	}
+	if err := validateBindings(ctx, db, ownerIDs, in); err != nil {
 		return SettingsView{}, err
 	}
 	tx, err := db.BeginTx(ctx, nil)
@@ -126,7 +133,7 @@ func normalizeInput(in *UpdateInput) {
 	}
 }
 
-func validateBindings(ctx context.Context, db *sql.DB, userID string, in UpdateInput) error {
+func validateBindings(ctx context.Context, db *sql.DB, ownerIDs []string, in UpdateInput) error {
 	q := sqlcdb.New(db)
 	seenAccounts := map[string]struct{}{}
 	for _, b := range in.BankBindings {
@@ -137,7 +144,7 @@ func validateBindings(ctx context.Context, db *sql.DB, userID string, in UpdateI
 			return fmt.Errorf("ERR_NOTIFICATION_INTERCEPT_BINDING_INVALID")
 		}
 		seenAccounts[b.AccountID] = struct{}{}
-		if err := assertBindableAccount(ctx, q, userID, b.AccountID); err != nil {
+		if err := assertBindableAccount(ctx, q, ownerIDs, b.AccountID); err != nil {
 			return err
 		}
 		ok, err := q.BankExists(ctx, b.BankID)
@@ -158,7 +165,7 @@ func validateBindings(ctx context.Context, db *sql.DB, userID string, in UpdateI
 			return fmt.Errorf("ERR_NOTIFICATION_INTERCEPT_BINDING_INVALID")
 		}
 		seenCards[key] = struct{}{}
-		if err := assertBindableAccount(ctx, q, userID, c.AccountID); err != nil {
+		if err := assertBindableAccount(ctx, q, ownerIDs, c.AccountID); err != nil {
 			return err
 		}
 		ok, err := q.BankExists(ctx, c.BankID)
@@ -172,11 +179,11 @@ func validateBindings(ctx context.Context, db *sql.DB, userID string, in UpdateI
 	return nil
 }
 
-func assertBindableAccount(ctx context.Context, q *sqlcdb.Queries, userID, accountID string) error {
-	acc, err := q.GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{
-		ID:     accountID,
-		UserID: userID,
-	})
+func assertBindableAccount(ctx context.Context, q *sqlcdb.Queries, ownerIDs []string, accountID string) error {
+	if len(ownerIDs) == 0 {
+		return fmt.Errorf("ERR_ACCOUNT_NOT_FOUND")
+	}
+	acc, err := q.GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: accountID, OwnerIds: ownerIDs})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("ERR_ACCOUNT_NOT_FOUND")

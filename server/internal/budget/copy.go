@@ -37,9 +37,16 @@ func resolveMonth(ctx context.Context, db *sql.DB, userID, month string) (string
 }
 
 func listBudgetRows(ctx context.Context, db sqlcdb.DBTX, userID, month string) ([]sqlcdb.ListBudgetsByUserRow, error) {
+	return listBudgetRowsForOwners(ctx, db, []string{userID}, month)
+}
+
+func listBudgetRowsForOwners(ctx context.Context, db sqlcdb.DBTX, ownerIDs []string, month string) ([]sqlcdb.ListBudgetsByUserRow, error) {
+	if len(ownerIDs) == 0 {
+		return nil, nil
+	}
 	filter := month
 	return queries(db).ListBudgetsByUser(ctx, sqlcdb.ListBudgetsByUserParams{
-		UserID: userID, Column2: filter, Month: filter,
+		OwnerIds: ownerIDs, Column2: filter, Month: filter,
 	})
 }
 
@@ -475,7 +482,7 @@ func CopyMissingNextMonthOnDate(ctx context.Context, db *sql.DB, userID string, 
 		created++
 	}
 	if created > 0 {
-		realtime.NotifyUserDataChanged(userID)
+		realtime.NotifyOwnerDataChanged(ctx, db, userID)
 	}
 	return created, passErr
 }

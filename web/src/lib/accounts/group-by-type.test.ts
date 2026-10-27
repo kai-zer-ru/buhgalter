@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { Account } from '$lib/api/client';
-import { accountGroupKind, accountGroupLabelKey, groupAccountsByType } from './group-by-type';
+import {
+	accountGroupKind,
+	accountGroupLabelKey,
+	accountOwnershipLabelKey,
+	groupAccountsByOwnership,
+	groupAccountsByType,
+	groupAccountsForDisplay
+} from './group-by-type';
 
 function account(id: string, type: Account['type'], isPrimary = false): Account {
 	return {
@@ -75,5 +82,65 @@ describe('accountGroupKind', () => {
 	it('maps kinds to i18n keys', () => {
 		expect(accountGroupLabelKey('my_funds')).toBe('accounts.group.myFunds');
 		expect(accountGroupLabelKey('credit_funds')).toBe('accounts.group.creditFunds');
+	});
+});
+
+describe('groupAccountsForDisplay', () => {
+	it('puts household groups after personal, keeping type order', () => {
+		const groups = groupAccountsForDisplay(
+			[
+				account('hh-bank', 'bank'),
+				account('cash-1', 'cash'),
+				account('hh-card', 'credit_card'),
+				account('card-1', 'credit_card')
+			].map((acc) => ({
+				...acc,
+				scope: acc.id.startsWith('hh-') ? 'household' : 'personal'
+			}))
+		);
+
+		expect(groups.map((g) => g.accounts.map((a) => a.id))).toEqual([
+			['cash-1'],
+			['card-1'],
+			['hh-bank'],
+			['hh-card']
+		]);
+		expect(groups.map((g) => g.ownership)).toEqual([
+			'personal',
+			'personal',
+			'household',
+			'household'
+		]);
+
+		const sections = groupAccountsByOwnership(groups);
+		expect(sections.map((s) => [s.ownership, s.groups.length])).toEqual([
+			['personal', 2],
+			['household', 2]
+		]);
+		expect(sections[1]?.groups.map((g) => g.kind)).toEqual(['my_funds', 'credit_funds']);
+	});
+
+	it('keeps one household heading even if fund groups are not consecutive', () => {
+		const sections = groupAccountsByOwnership([
+			{ ownership: 'household', kind: 'my_funds', accounts: [account('hh-cash', 'cash')] },
+			{ ownership: 'personal', kind: 'my_funds', accounts: [account('cash-1', 'cash')] },
+			{
+				ownership: 'household',
+				kind: 'credit_funds',
+				accounts: [account('hh-card', 'credit_card')]
+			}
+		]);
+		expect(sections.map((s) => [s.ownership, s.groups.map((g) => g.kind)])).toEqual([
+			['personal', ['my_funds']],
+			['household', ['my_funds', 'credit_funds']]
+		]);
+	});
+});
+
+describe('accountOwnershipLabelKey', () => {
+	it('uses team label for household sections when the group is a team', () => {
+		expect(accountOwnershipLabelKey('personal')).toBe('household.accounts.personal');
+		expect(accountOwnershipLabelKey('household')).toBe('household.kind.family');
+		expect(accountOwnershipLabelKey('household', 'team')).toBe('household.kind.team');
 	});
 });

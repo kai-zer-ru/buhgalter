@@ -40,6 +40,7 @@
 		getActiveReceiptScanJobId
 	} from '$lib/receipt/scan-job-session';
 	import { accountSelectOptions, categorySelectOptions } from '$lib/select-options';
+	import { matchRefByName, refsForAccount } from '$lib/household/refs-for-account';
 	import { toast } from '$lib/toast';
 	import { formatApiError } from '$lib/api/errors';
 
@@ -74,7 +75,11 @@
 	let wasOpen = false;
 
 	const busy = $derived(loading || scanning);
-	const categoryOptions = $derived(categorySelectOptions(categories.filter((c) => !c.is_system)));
+	const selectedAcc = $derived(accounts.find((acc) => acc.id === selectedAccount));
+	const scopedCategories = $derived(
+		refsForAccount(selectedAcc, categories).filter((c) => !c.is_system)
+	);
+	const categoryOptions = $derived(categorySelectOptions(scopedCategories));
 	const accountOptions = $derived(accountSelectOptions(accounts));
 	const includedCount = $derived(countIncludedRows(rows));
 	const missingCategory = $derived(includedRowsMissingCategory(rows));
@@ -171,6 +176,34 @@
 		bulkCategoryId = '';
 		bulkSubcategoryId = '';
 		bulkSubcategories = [];
+	}
+
+	function remapReceiptCategory(id: string): { id: string; dropped: boolean } {
+		const current = categories.find((c) => c.id === id);
+		const matched = matchRefByName(current, scopedCategories);
+		if (!id) return { id: '', dropped: false };
+		if (current && !matched) return { id: '', dropped: true };
+		return { id: matched?.id ?? '', dropped: false };
+	}
+
+	function onReceiptAccountChange() {
+		const bulk = remapReceiptCategory(bulkCategoryId);
+		if (bulk.dropped) {
+			bulkCategoryId = '';
+			bulkSubcategoryId = '';
+			bulkSubcategories = [];
+			toast($_('refs.reset.category'));
+		} else if (bulk.id !== bulkCategoryId) {
+			bulkCategoryId = bulk.id;
+		}
+		let droppedRow = false;
+		rows = rows.map((row) => {
+			const next = remapReceiptCategory(row.categoryId);
+			if (next.dropped) droppedRow = true;
+			if (next.id === row.categoryId) return row;
+			return { ...row, categoryId: next.id, subcategoryId: '' };
+		});
+		if (droppedRow) toast($_('refs.reset.category'));
 	}
 
 	function setLoadingPhase(status: string) {
@@ -481,6 +514,7 @@
 					label={$_('transactions.field.account')}
 					bind:value={selectedAccount}
 					options={accountOptions}
+					onchange={() => onReceiptAccountChange()}
 					usePortal
 				/>
 

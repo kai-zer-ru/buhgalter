@@ -158,7 +158,7 @@ func createdAtAfterTrigger(ctx context.Context, db *sql.DB, userID, accountID st
 }
 
 func loadAccount(ctx context.Context, db *sql.DB, userID, accountID string) (accountSnap, error) {
-	row, err := sqlcdb.New(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: accountID, UserID: userID})
+	row, err := sqlcdb.New(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: accountID, OwnerIds: []string{userID}})
 	if err != nil {
 		return accountSnap{}, err
 	}

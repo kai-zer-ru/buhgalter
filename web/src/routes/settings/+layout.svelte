@@ -2,6 +2,7 @@
 	import { page } from '$app/stores';
 	import { _, locale } from 'svelte-i18n';
 	import { tr } from '$lib/i18n';
+	import { householdMe, householdNavLabelKey } from '$lib/household/membership';
 	import BackLink, {
 		type BackLinkHref,
 		type BreadcrumbItem
@@ -21,6 +22,16 @@
 		{ path: '/settings', titleKey: 'settings.tab.profile', href: '/settings' },
 		{ path: '/settings/password', titleKey: 'settings.tab.password', href: '/settings/password' },
 		{ path: '/settings/tokens', titleKey: 'settings.tab.tokens', href: '/settings/tokens' },
+		{
+			path: '/settings/household',
+			titleKey: 'settings.tab.household',
+			href: '/settings/household'
+		},
+		{
+			path: '/settings/household/accept',
+			titleKey: 'household.accept.title',
+			href: '/settings/household'
+		},
 		{
 			path: '/settings/notifications',
 			titleKey: 'settings.tab.notifications',
@@ -43,6 +54,9 @@
 			pages[0]
 		);
 	});
+	const currentTitleKey = $derived(
+		current.path === '/settings/household' ? householdNavLabelKey($householdMe) : current.titleKey
+	);
 
 	const breadcrumbItems = $derived.by((): BreadcrumbItem[] => {
 		void $locale;
@@ -52,12 +66,19 @@
 		if (page.path === '/settings') {
 			return [home, settings];
 		}
-		return [home, settings, { href: page.href, label: tr(page.titleKey) }];
+		return [
+			home,
+			settings,
+			{
+				href: page.href,
+				label: tr(page.path === '/settings/household' ? currentTitleKey : page.titleKey)
+			}
+		];
 	});
 </script>
 
 <svelte:head>
-	<title>{$_(current.titleKey)} — {$_('app.title')}</title>
+	<title>{$_(currentTitleKey)} — {$_('app.title')}</title>
 </svelte:head>
 
 {#if isLegacyRedirect}
@@ -66,7 +87,7 @@
 	<div class="space-y-6">
 		<BackLink items={breadcrumbItems} />
 		{#if !current.ownsHeader}
-			<h1 class="text-2xl font-semibold">{$_(current.titleKey)}</h1>
+			<h1 class="text-2xl font-semibold">{$_(currentTitleKey)}</h1>
 		{/if}
 		{@render children()}
 	</div>

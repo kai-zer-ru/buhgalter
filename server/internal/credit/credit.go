@@ -20,6 +20,8 @@ import (
 
 type Credit struct {
 	ID                        string          `json:"id"`
+	OwnerUserID               string          `json:"-"`
+	Scope                     string          `json:"scope,omitempty"`
 	Name                      *string         `json:"name"`
 	CreditKind                string          `json:"credit_kind"`
 	PrincipalAmount           int64           `json:"principal_amount"`
@@ -174,15 +176,22 @@ func queries(db sqlcdb.DBTX) *sqlcdb.Queries {
 }
 
 func List(ctx context.Context, db *sql.DB, userID, statusFilter string) ([]Credit, error) {
+	return ListForOwners(ctx, db, []string{userID}, statusFilter)
+}
+
+func ListForOwners(ctx context.Context, db *sql.DB, ownerIDs []string, statusFilter string) ([]Credit, error) {
+	if len(ownerIDs) == 0 {
+		return []Credit{}, nil
+	}
 	rows, err := queries(db).ListCreditsByUser(ctx, sqlcdb.ListCreditsByUserParams{
-		UserID: userID, Column2: statusFilter, Status: statusFilter,
+		OwnerIds: ownerIDs, Column2: statusFilter, Status: statusFilter,
 	})
 	if err != nil {
 		return nil, err
 	}
 	out := make([]Credit, 0, len(rows))
 	for _, row := range rows {
-		c, err := creditFromListRow(ctx, db, userID, row)
+		c, err := creditFromListRow(ctx, db, row.UserID, row)
 		if err != nil {
 			return nil, err
 		}
@@ -192,14 +201,21 @@ func List(ctx context.Context, db *sql.DB, userID, statusFilter string) ([]Credi
 }
 
 func GetByID(ctx context.Context, db *sql.DB, userID, id string, withSchedule bool) (Credit, error) {
-	row, err := queries(db).GetCreditByID(ctx, sqlcdb.GetCreditByIDParams{ID: id, UserID: userID})
+	return GetByIDForOwners(ctx, db, []string{userID}, id, withSchedule)
+}
+
+func GetByIDForOwners(ctx context.Context, db *sql.DB, ownerIDs []string, id string, withSchedule bool) (Credit, error) {
+	if len(ownerIDs) == 0 {
+		return Credit{}, ErrNotFound
+	}
+	row, err := queries(db).GetCreditByID(ctx, sqlcdb.GetCreditByIDParams{ID: id, OwnerIds: ownerIDs})
 	if errors.Is(err, sql.ErrNoRows) {
 		return Credit{}, ErrNotFound
 	}
 	if err != nil {
 		return Credit{}, err
 	}
-	c, err := creditFromGetRow(ctx, db, userID, row)
+	c, err := creditFromGetRow(ctx, db, row.UserID, row)
 	if err != nil {
 		return Credit{}, err
 	}
@@ -872,7 +888,7 @@ func paymentDescription(creditName *string, existing *string) *string {
 }
 
 func loadAttachableExpense(ctx context.Context, db *sql.DB, userID, txID string) (sqlcdb.GetTransactionByIDRow, error) {
-	row, err := queries(db).GetTransactionByID(ctx, sqlcdb.GetTransactionByIDParams{ID: txID, UserID: userID})
+	row, err := queries(db).GetTransactionByID(ctx, sqlcdb.GetTransactionByIDParams{ID: txID, OwnerIds: []string{userID}})
 	if errors.Is(err, sql.ErrNoRows) {
 		return sqlcdb.GetTransactionByIDRow{}, ErrTransactionNotFound
 	}
@@ -1010,7 +1026,7 @@ func Delete(ctx context.Context, db *sql.DB, userID, id, mode string) error {
 	defer func() { _ = dbTx.Rollback() }()
 
 	q := queries(dbTx)
-	creditRow, err := q.GetCreditByID(ctx, sqlcdb.GetCreditByIDParams{ID: id, UserID: userID})
+	creditRow, err := q.GetCreditByID(ctx, sqlcdb.GetCreditByIDParams{ID: id, OwnerIds: []string{userID}})
 	if err != nil {
 		return err
 	}
@@ -1032,7 +1048,7 @@ func Delete(ctx context.Context, db *sql.DB, userID, id, mode string) error {
 			if txID == nil {
 				continue
 			}
-			row, err := q.GetTransactionByID(ctx, sqlcdb.GetTransactionByIDParams{ID: *txID, UserID: userID})
+			row, err := q.GetTransactionByID(ctx, sqlcdb.GetTransactionByIDParams{ID: *txID, OwnerIds: []string{userID}})
 			if errors.Is(err, sql.ErrNoRows) {
 				continue
 			}
@@ -1173,7 +1189,7 @@ func processAutoPayment(ctx context.Context, db *sql.DB, row sqlcdb.ListDueCredi
 		return false, nil
 	}
 
-	creditRow, err := q.GetCreditByID(ctx, sqlcdb.GetCreditByIDParams{ID: row.CreditID, UserID: row.UserID})
+	creditRow, err := q.GetCreditByID(ctx, sqlcdb.GetCreditByIDParams{ID: row.CreditID, OwnerIds: []string{row.UserID}})
 	if err != nil {
 		return false, err
 	}
@@ -1224,7 +1240,7 @@ func applyPrecreatedPayment(ctx context.Context, db *sql.DB, row sqlcdb.ListDueC
 		}
 	}
 
-	creditRow, err := q.GetCreditByID(ctx, sqlcdb.GetCreditByIDParams{ID: row.CreditID, UserID: row.UserID})
+	creditRow, err := q.GetCreditByID(ctx, sqlcdb.GetCreditByIDParams{ID: row.CreditID, OwnerIds: []string{row.UserID}})
 	if err != nil {
 		return false, err
 	}
@@ -1487,7 +1503,7 @@ func enrichCredit(ctx context.Context, db *sql.DB, userID string, f creditFields
 		remaining = 0
 	}
 	c := Credit{
-		ID: f.id, Name: f.name,
+		ID: f.id, OwnerUserID: userID, Name: f.name,
 		CreditKind:      normalizeCreditKind(f.creditKind),
 		PrincipalAmount: f.principal, PrincipalAmountDisplay: money.FormatRubles(f.principal),
 		PropertyPrice: f.propertyPrice, DownPayment: f.downPayment, DownPaymentDisplay: money.FormatRubles(f.downPayment),
@@ -1543,7 +1559,7 @@ func enrichCredit(ctx context.Context, db *sql.DB, userID string, f creditFields
 }
 
 func validateActiveAccount(ctx context.Context, db *sql.DB, userID, accountID string) error {
-	row, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: accountID, UserID: userID})
+	row, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: accountID, OwnerIds: []string{userID}})
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrInvalidAccount
 	}
@@ -1558,14 +1574,14 @@ func validateActiveAccount(ctx context.Context, db *sql.DB, userID, accountID st
 
 // validateSameCurrency rejects linking an account whose currency differs from the reference account's.
 func validateSameCurrency(ctx context.Context, db *sql.DB, userID, refAccountID, accountID string) error {
-	ref, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: refAccountID, UserID: userID})
+	ref, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: refAccountID, OwnerIds: []string{userID}})
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrInvalidAccount
 	}
 	if err != nil {
 		return err
 	}
-	acc, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: accountID, UserID: userID})
+	acc, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: accountID, OwnerIds: []string{userID}})
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrInvalidAccount
 	}

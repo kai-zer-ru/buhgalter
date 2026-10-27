@@ -33,7 +33,7 @@ func (h *accountArchiveHandler) archiveAccount(w http.ResponseWriter, r *http.Re
 		}
 	}
 
-	updated, err := inactivateAccount(r.Context(), h.store.DB(), info.User.ID, id, "archived", parseTransferToAccountID(r, req))
+	updated, err := inactivateAccount(r.Context(), h.store.DB(), info.Scope, id, "archived", parseTransferToAccountID(r, req))
 	if writeInactivateAccountError(w, r, err) {
 		return
 	}

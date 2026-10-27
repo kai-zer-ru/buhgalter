@@ -10,6 +10,7 @@ import {
 	isTransferCommission,
 	resolveTransactionSubcategoryName,
 	transactionCategoryLabel,
+	transactionContributor,
 	transferCommissionDisplay
 } from './transaction-display';
 import { resetRefCacheForTests, subcategoriesRefPath, writeRefCache } from '$lib/offline/ref-cache';
@@ -132,6 +133,49 @@ describe('dedupeTransferLegs', () => {
 		});
 		expect(dedupeTransferLegs([out, inn, commission]).map((t) => t.id)).toEqual(['out']);
 		expect(transferCommissionDisplay(out)).toBe('5.00');
+	});
+});
+
+describe('masked transfers', () => {
+	it('hides edit and delete when the other account is masked', () => {
+		const masked = tx({
+			type: 'transfer',
+			transfer_group_id: 'g1',
+			transfer_is_out: true,
+			transfer_account_masked: true,
+			transfer_account_label: 'Личный счёт Иван'
+		});
+		expect(canEditTransaction(masked)).toBe(false);
+		expect(canDeleteTransaction(masked)).toBe(false);
+	});
+});
+
+describe('transactionContributor', () => {
+	it('hides the line for own household transactions', () => {
+		expect(
+			transactionContributor(
+				{
+					scope: 'household',
+					created_by: { user_id: 'me', display_name: 'Max' }
+				},
+				'me'
+			)
+		).toBeNull();
+	});
+
+	it('shows another member and a deleted author', () => {
+		expect(
+			transactionContributor(
+				{
+					scope: 'household',
+					created_by: { user_id: 'b', display_name: 'Ivan' }
+				},
+				'me'
+			)
+		).toEqual({ kind: 'other', name: 'Ivan' });
+		expect(transactionContributor({ scope: 'household', created_by: null }, 'me')).toEqual({
+			kind: 'deleted'
+		});
 	});
 });
 

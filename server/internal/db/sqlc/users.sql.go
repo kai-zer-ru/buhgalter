@@ -10,7 +10,7 @@ import (
 )
 
 const countAdminUsers = `-- name: CountAdminUsers :one
-SELECT COUNT(*) FROM users WHERE is_admin = 1
+SELECT COUNT(*) FROM users WHERE is_admin = 1 AND kind = 'person'
 `
 
 func (q *Queries) CountAdminUsers(ctx context.Context) (int64, error) {
@@ -21,7 +21,7 @@ func (q *Queries) CountAdminUsers(ctx context.Context) (int64, error) {
 }
 
 const countUsers = `-- name: CountUsers :one
-SELECT COUNT(*) FROM users
+SELECT COUNT(*) FROM users WHERE kind = 'person'
 `
 
 func (q *Queries) CountUsers(ctx context.Context) (int64, error) {
@@ -42,7 +42,7 @@ func (q *Queries) DeleteUser(ctx context.Context, id string) error {
 
 const getUserAdminItem = `-- name: GetUserAdminItem :one
 SELECT id, login, COALESCE(display_name, '') AS display_name, is_admin, status, created_at
-FROM users WHERE id = ?
+FROM users WHERE id = ? AND kind = 'person'
 `
 
 type GetUserAdminItemRow struct {
@@ -104,7 +104,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id string) (GetUserByIDRow, e
 
 const getUserByLogin = `-- name: GetUserByLogin :one
 SELECT id, login, COALESCE(display_name, '') AS display_name, is_admin, status, language, currency, timezone, theme, password_hash
-FROM users WHERE login = ?
+FROM users WHERE login = ? AND kind = 'person'
 `
 
 type GetUserByLoginRow struct {
@@ -194,7 +194,7 @@ func (q *Queries) GetUserLanguage(ctx context.Context, id string) (string, error
 }
 
 const getUserLogin = `-- name: GetUserLogin :one
-SELECT login FROM users WHERE id = ?
+SELECT login FROM users WHERE id = ? AND kind = 'person'
 `
 
 func (q *Queries) GetUserLogin(ctx context.Context, id string) (string, error) {
@@ -205,7 +205,7 @@ func (q *Queries) GetUserLogin(ctx context.Context, id string) (string, error) {
 }
 
 const getUserLoginAndStatus = `-- name: GetUserLoginAndStatus :one
-SELECT login, status FROM users WHERE id = ?
+SELECT login, status FROM users WHERE id = ? AND kind = 'person'
 `
 
 type GetUserLoginAndStatusRow struct {
@@ -218,6 +218,32 @@ func (q *Queries) GetUserLoginAndStatus(ctx context.Context, id string) (GetUser
 	var i GetUserLoginAndStatusRow
 	err := row.Scan(&i.Login, &i.Status)
 	return i, err
+}
+
+const insertHouseholdPrincipal = `-- name: InsertHouseholdPrincipal :exec
+INSERT INTO users (id, login, password_hash, display_name, is_admin, status, theme, kind, language, currency, timezone)
+VALUES (?, ?, '!', ?, 0, 'active', 'system', 'household', ?, ?, ?)
+`
+
+type InsertHouseholdPrincipalParams struct {
+	ID          string  `json:"id"`
+	Login       string  `json:"login"`
+	DisplayName *string `json:"display_name"`
+	Language    string  `json:"language"`
+	Currency    string  `json:"currency"`
+	Timezone    string  `json:"timezone"`
+}
+
+func (q *Queries) InsertHouseholdPrincipal(ctx context.Context, arg InsertHouseholdPrincipalParams) error {
+	_, err := q.db.ExecContext(ctx, insertHouseholdPrincipal,
+		arg.ID,
+		arg.Login,
+		arg.DisplayName,
+		arg.Language,
+		arg.Currency,
+		arg.Timezone,
+	)
+	return err
 }
 
 const insertUser = `-- name: InsertUser :exec
@@ -247,7 +273,7 @@ func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) error {
 }
 
 const listAdminUserIDs = `-- name: ListAdminUserIDs :many
-SELECT id FROM users WHERE is_admin = 1
+SELECT id FROM users WHERE is_admin = 1 AND kind = 'person'
 `
 
 func (q *Queries) ListAdminUserIDs(ctx context.Context) ([]string, error) {
@@ -302,7 +328,7 @@ func (q *Queries) ListUserIDs(ctx context.Context) ([]string, error) {
 
 const listUsers = `-- name: ListUsers :many
 SELECT id, login, COALESCE(display_name, '') AS display_name, is_admin, status, created_at
-FROM users ORDER BY created_at ASC
+FROM users WHERE kind = 'person' ORDER BY created_at ASC
 `
 
 type ListUsersRow struct {
@@ -345,12 +371,13 @@ func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
 }
 
 const listUsersWithTimezone = `-- name: ListUsersWithTimezone :many
-SELECT id, timezone FROM users
+SELECT id, timezone, kind FROM users
 `
 
 type ListUsersWithTimezoneRow struct {
 	ID       string `json:"id"`
 	Timezone string `json:"timezone"`
+	Kind     string `json:"kind"`
 }
 
 func (q *Queries) ListUsersWithTimezone(ctx context.Context) ([]ListUsersWithTimezoneRow, error) {
@@ -362,7 +389,7 @@ func (q *Queries) ListUsersWithTimezone(ctx context.Context) ([]ListUsersWithTim
 	items := []ListUsersWithTimezoneRow{}
 	for rows.Next() {
 		var i ListUsersWithTimezoneRow
-		if err := rows.Scan(&i.ID, &i.Timezone); err != nil {
+		if err := rows.Scan(&i.ID, &i.Timezone, &i.Kind); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -374,6 +401,29 @@ func (q *Queries) ListUsersWithTimezone(ctx context.Context) ([]ListUsersWithTim
 		return nil, err
 	}
 	return items, nil
+}
+
+const updatePrincipalLocale = `-- name: UpdatePrincipalLocale :exec
+UPDATE users
+SET language = ?, timezone = ?, currency = ?, updated_at = datetime('now')
+WHERE id = ? AND kind = 'household'
+`
+
+type UpdatePrincipalLocaleParams struct {
+	Language string `json:"language"`
+	Timezone string `json:"timezone"`
+	Currency string `json:"currency"`
+	ID       string `json:"id"`
+}
+
+func (q *Queries) UpdatePrincipalLocale(ctx context.Context, arg UpdatePrincipalLocaleParams) error {
+	_, err := q.db.ExecContext(ctx, updatePrincipalLocale,
+		arg.Language,
+		arg.Timezone,
+		arg.Currency,
+		arg.ID,
+	)
+	return err
 }
 
 const updateUserPassword = `-- name: UpdateUserPassword :execrows

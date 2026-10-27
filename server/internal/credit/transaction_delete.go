@@ -13,7 +13,7 @@ import (
 func OnTransactionDelete(ctx context.Context, q *sqlcdb.Queries, userID, txID string) error {
 	link, err := q.GetCreditPaymentLinkByTransactionID(ctx, sqlcdb.GetCreditPaymentLinkByTransactionIDParams{
 		TransactionID: &txID,
-		UserID:        userID,
+		OwnerIds:      []string{userID},
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
@@ -50,7 +50,7 @@ func OnTransactionDelete(ctx context.Context, q *sqlcdb.Queries, userID, txID st
 // RemovePayment deletes a row from the credit schedule (and linked transaction if any).
 func RemovePayment(ctx context.Context, db *sql.DB, userID, creditID, paymentID string) (Credit, error) {
 	row, err := queries(db).GetCreditPaymentForUser(ctx, sqlcdb.GetCreditPaymentForUserParams{
-		ID: paymentID, CreditID: creditID, UserID: userID,
+		ID: paymentID, CreditID: creditID, OwnerIds: []string{userID},
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return Credit{}, ErrNotFound

@@ -62,6 +62,17 @@ func TestHintsForMutation_merchants(t *testing.T) {
 	}
 }
 
+func TestHintsForMutation_household(t *testing.T) {
+	h := HintsForMutation("/api/v1/households/me/invites")
+	if !contains(h.Paths, "/api/v1/households/me") {
+		t.Fatalf("paths=%v", h.Paths)
+	}
+	h2 := HintsForMutation("/api/v1/household-invites/accept")
+	if !contains(h2.Entities, "household") {
+		t.Fatalf("entities=%v", h2.Entities)
+	}
+}
+
 func TestHintsForMutation_unknownIsCoarse(t *testing.T) {
 	h := HintsForMutation("/api/v1/auth/logout")
 	if len(h.Paths) != 0 {

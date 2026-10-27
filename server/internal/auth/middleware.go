@@ -14,11 +14,35 @@ type ctxKey string
 
 const AuthContextKey ctxKey = "auth"
 
+type Scope struct {
+	UserID      string
+	HouseholdID string
+	PrincipalID string
+	Role        string
+	MemberIDs   []string
+}
+
+func (s Scope) InHousehold() bool { return s.HouseholdID != "" }
+
+func (s Scope) IsOwner() bool { return s.Role == "owner" }
+
+// OwnerIDs is the visible set: the person, plus the household principal when in a group.
+func (s Scope) OwnerIDs() []string {
+	if s.UserID == "" {
+		return nil
+	}
+	if s.PrincipalID == "" || s.PrincipalID == s.UserID {
+		return []string{s.UserID}
+	}
+	return []string{s.UserID, s.PrincipalID}
+}
+
 type AuthInfo struct {
 	User      User
 	SessionID string
 	Token     string
 	APIToken  bool
+	Scope     Scope
 }
 
 func extractToken(r *http.Request) string {
@@ -48,7 +72,7 @@ func RequireAuth(store *db.Handle) func(http.Handler) http.Handler {
 					return
 				}
 				info := AuthInfo{User: *sessionUser, SessionID: session.ID, Token: token}
-				ctx := context.WithValue(r.Context(), AuthContextKey, info)
+				ctx := context.WithValue(r.Context(), AuthContextKey, withScope(r.Context(), sqlDB, info))
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
@@ -67,7 +91,7 @@ func RequireAuth(store *db.Handle) func(http.Handler) http.Handler {
 				return
 			}
 			info := AuthInfo{User: *user, Token: token, APIToken: true}
-			ctx := context.WithValue(r.Context(), AuthContextKey, info)
+			ctx := context.WithValue(r.Context(), AuthContextKey, withScope(r.Context(), sqlDB, info))
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -121,7 +145,7 @@ func RequireAPIToken(store *db.Handle) func(http.Handler) http.Handler {
 			}
 
 			info := AuthInfo{User: *user, Token: token, APIToken: true}
-			ctx := context.WithValue(r.Context(), AuthContextKey, info)
+			ctx := context.WithValue(r.Context(), AuthContextKey, withScope(r.Context(), sqlDB, info))
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

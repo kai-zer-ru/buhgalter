@@ -8,15 +8,19 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/scope"
 )
 
 var ErrNotFound = errors.New("store not found")
 
 type Store struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	CreatedAt string `json:"created_at,omitempty"`
+	ID          string `json:"id"`
+	OwnerUserID string `json:"-"`
+	Scope       string `json:"scope,omitempty"`
+	Name        string `json:"name"`
+	CreatedAt   string `json:"created_at,omitempty"`
 }
 
 func queries(db sqlcdb.DBTX) *sqlcdb.Queries {
@@ -28,13 +32,24 @@ func normalizeName(name string) string {
 }
 
 func List(ctx context.Context, db *sql.DB, userID string) ([]Store, error) {
-	rows, err := queries(db).ListStoresByUser(ctx, userID)
+	return ListByScope(ctx, db, auth.Scope{UserID: userID}, "")
+}
+
+func ListByScope(ctx context.Context, db *sql.DB, sc auth.Scope, view string) ([]Store, error) {
+	ids := scope.FilterOwnerIDs(sc, view)
+	if len(ids) == 0 {
+		return []Store{}, nil
+	}
+	rows, err := queries(db).ListStoresByUser(ctx, ids)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]Store, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, Store{ID: row.ID, Name: row.Name, CreatedAt: row.CreatedAt})
+		out = append(out, Store{
+			ID: row.ID, OwnerUserID: row.UserID, Scope: scope.AccountScope(sc, row.UserID),
+			Name: row.Name, CreatedAt: row.CreatedAt,
+		})
 	}
 	return out, nil
 }
@@ -74,7 +89,7 @@ func ValidateForUser(ctx context.Context, db *sql.DB, userID, storeID string) er
 	if storeID == "" {
 		return nil
 	}
-	_, err := queries(db).GetStoreByID(ctx, sqlcdb.GetStoreByIDParams{ID: storeID, UserID: userID})
+	_, err := queries(db).GetStoreByID(ctx, sqlcdb.GetStoreByIDParams{ID: storeID, OwnerIds: []string{userID}})
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
 	}

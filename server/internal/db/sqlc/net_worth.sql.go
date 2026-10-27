@@ -7,17 +7,18 @@ package sqlc
 
 import (
 	"context"
+	"strings"
 )
 
 const listAccountsNetWorthByUser = `-- name: ListAccountsNetWorthByUser :many
 SELECT id, type, initial_balance, credit_limit, created_at, currency
 FROM accounts
-WHERE user_id = ? AND status != 'deleted' AND currency = ?
+WHERE status != 'deleted' AND currency = ?1 AND user_id IN (/*SLICE:owner_ids*/?)
 `
 
 type ListAccountsNetWorthByUserParams struct {
-	UserID   string `json:"user_id"`
-	Currency string `json:"currency"`
+	Currency string   `json:"currency"`
+	OwnerIds []string `json:"owner_ids"`
 }
 
 type ListAccountsNetWorthByUserRow struct {
@@ -30,7 +31,18 @@ type ListAccountsNetWorthByUserRow struct {
 }
 
 func (q *Queries) ListAccountsNetWorthByUser(ctx context.Context, arg ListAccountsNetWorthByUserParams) ([]ListAccountsNetWorthByUserRow, error) {
-	rows, err := q.db.QueryContext(ctx, listAccountsNetWorthByUser, arg.UserID, arg.Currency)
+	query := listAccountsNetWorthByUser
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.Currency)
+	if len(arg.OwnerIds) > 0 {
+		for _, v := range arg.OwnerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(arg.OwnerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
 	if err != nil {
 		return nil, err
 	}
@@ -72,8 +84,8 @@ SELECT
     ), 0) AS INTEGER) AS paid_at_as_of
 FROM credits c
 JOIN accounts a ON a.id = c.debit_account_id AND a.currency = ?2
-WHERE c.user_id = ?3
-  AND c.issue_date <= ?1
+WHERE c.issue_date <= ?1
+  AND c.user_id IN (/*SLICE:owner_ids*/?)
   AND (
     c.status = 'active'
     OR (c.status = 'closed' AND c.closed_at IS NOT NULL AND c.closed_at > ?1)
@@ -81,9 +93,9 @@ WHERE c.user_id = ?3
 `
 
 type NetWorthCreditsByUserParams struct {
-	AsOf     string `json:"as_of"`
-	Currency string `json:"currency"`
-	UserID   string `json:"user_id"`
+	AsOf     string   `json:"as_of"`
+	Currency string   `json:"currency"`
+	OwnerIds []string `json:"owner_ids"`
 }
 
 type NetWorthCreditsByUserRow struct {
@@ -93,7 +105,19 @@ type NetWorthCreditsByUserRow struct {
 }
 
 func (q *Queries) NetWorthCreditsByUser(ctx context.Context, arg NetWorthCreditsByUserParams) ([]NetWorthCreditsByUserRow, error) {
-	rows, err := q.db.QueryContext(ctx, netWorthCreditsByUser, arg.AsOf, arg.Currency, arg.UserID)
+	query := netWorthCreditsByUser
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.AsOf)
+	queryParams = append(queryParams, arg.Currency)
+	if len(arg.OwnerIds) > 0 {
+		for _, v := range arg.OwnerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(arg.OwnerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
 	if err != nil {
 		return nil, err
 	}
@@ -127,9 +151,9 @@ SELECT
           AND t.transaction_date > ?1
     ), 0) AS INTEGER) AS amount_at_as_of
 FROM debts d
-WHERE d.user_id = ?2
-  AND d.currency = ?3
+WHERE d.currency = ?2
   AND d.debt_date <= ?1
+  AND d.user_id IN (/*SLICE:owner_ids*/?)
   AND NOT (
     d.is_settled = 1
     AND d.settled_at IS NOT NULL
@@ -138,9 +162,9 @@ WHERE d.user_id = ?2
 `
 
 type NetWorthDebtsByUserParams struct {
-	AsOf     string `json:"as_of"`
-	UserID   string `json:"user_id"`
-	Currency string `json:"currency"`
+	AsOf     string   `json:"as_of"`
+	Currency string   `json:"currency"`
+	OwnerIds []string `json:"owner_ids"`
 }
 
 type NetWorthDebtsByUserRow struct {
@@ -149,7 +173,19 @@ type NetWorthDebtsByUserRow struct {
 }
 
 func (q *Queries) NetWorthDebtsByUser(ctx context.Context, arg NetWorthDebtsByUserParams) ([]NetWorthDebtsByUserRow, error) {
-	rows, err := q.db.QueryContext(ctx, netWorthDebtsByUser, arg.AsOf, arg.UserID, arg.Currency)
+	query := netWorthDebtsByUser
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.AsOf)
+	queryParams = append(queryParams, arg.Currency)
+	if len(arg.OwnerIds) > 0 {
+		for _, v := range arg.OwnerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(arg.OwnerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
 	if err != nil {
 		return nil, err
 	}

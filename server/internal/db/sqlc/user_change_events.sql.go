@@ -7,32 +7,41 @@ package sqlc
 
 import (
 	"context"
+	"strings"
 )
 
 const listUserChangeEventsAfter = `-- name: ListUserChangeEventsAfter :many
 SELECT id, user_id, entity_type, entity_id, action, occurred_at
 FROM user_change_events
-WHERE user_id = ?1
-  AND id > ?2
-  AND (?3 = '' OR occurred_at >= ?3)
+WHERE id > ?1
+  AND (?2 = '' OR occurred_at >= ?2)
+  AND user_id IN (/*SLICE:owner_ids*/?)
 ORDER BY id ASC
 LIMIT ?4
 `
 
 type ListUserChangeEventsAfterParams struct {
-	UserID  string      `json:"user_id"`
-	AfterID int64       `json:"after_id"`
-	Since   interface{} `json:"since"`
-	Limit   int64       `json:"limit"`
+	AfterID  int64       `json:"after_id"`
+	Since    interface{} `json:"since"`
+	OwnerIds []string    `json:"owner_ids"`
+	Limit    int64       `json:"limit"`
 }
 
 func (q *Queries) ListUserChangeEventsAfter(ctx context.Context, arg ListUserChangeEventsAfterParams) ([]UserChangeEvent, error) {
-	rows, err := q.db.QueryContext(ctx, listUserChangeEventsAfter,
-		arg.UserID,
-		arg.AfterID,
-		arg.Since,
-		arg.Limit,
-	)
+	query := listUserChangeEventsAfter
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.AfterID)
+	queryParams = append(queryParams, arg.Since)
+	if len(arg.OwnerIds) > 0 {
+		for _, v := range arg.OwnerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(arg.OwnerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	queryParams = append(queryParams, arg.Limit)
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
 	if err != nil {
 		return nil, err
 	}
@@ -64,11 +73,21 @@ func (q *Queries) ListUserChangeEventsAfter(ctx context.Context, arg ListUserCha
 const maxUserChangeEventID = `-- name: MaxUserChangeEventID :one
 SELECT IFNULL(MAX(id), 0)
 FROM user_change_events
-WHERE user_id = ?
+WHERE user_id IN (/*SLICE:owner_ids*/?)
 `
 
-func (q *Queries) MaxUserChangeEventID(ctx context.Context, userID string) (interface{}, error) {
-	row := q.db.QueryRowContext(ctx, maxUserChangeEventID, userID)
+func (q *Queries) MaxUserChangeEventID(ctx context.Context, ownerIds []string) (interface{}, error) {
+	query := maxUserChangeEventID
+	var queryParams []interface{}
+	if len(ownerIds) > 0 {
+		for _, v := range ownerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(ownerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	row := q.db.QueryRowContext(ctx, query, queryParams...)
 	var ifnull interface{}
 	err := row.Scan(&ifnull)
 	return ifnull, err

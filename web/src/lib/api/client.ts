@@ -27,12 +27,22 @@ function acceptLanguage(): string {
 	return code === 'en' ? 'en' : 'ru';
 }
 
+export type ShareLink = {
+	kind: string;
+	id: string;
+};
+
+export type ApiErrorDetails = {
+	links?: ShareLink[];
+};
+
 export class ApiError extends Error {
 	constructor(
 		public code: string,
 		message: string,
 		public status: number,
-		public field?: string
+		public field?: string,
+		public details?: ApiErrorDetails
 	) {
 		super(message);
 		this.name = 'ApiError';
@@ -62,18 +72,20 @@ async function requestNetwork<T>(path: string, init?: RequestInit): Promise<T> {
 		let code = 'UNKNOWN';
 		let message = res.statusText;
 		let field: string | undefined;
+		let details: ApiErrorDetails | undefined;
 		try {
 			const body = await res.json();
 			code = body?.error?.code ?? code;
 			message = body?.error?.message ?? message;
 			field = body?.error?.field || undefined;
+			details = body?.details;
 		} catch {
 			// ignore
 		}
 		if (res.status === 401 && shouldRedirectApi401(path)) {
 			notifySessionExpired();
 		}
-		throw new ApiError(code, message, res.status, field);
+		throw new ApiError(code, message, res.status, field, details);
 	}
 
 	if (res.status === 204) {
@@ -555,6 +567,116 @@ export function getFeatures() {
 	return request<FeatureFlagsSnapshot>('/api/v1/features');
 }
 
+export type HouseholdKind = 'family' | 'team';
+
+export type Household = {
+	id: string;
+	name: string;
+	kind: HouseholdKind;
+	created_at: string;
+};
+
+export type HouseholdMember = {
+	user_id: string;
+	display_name: string;
+	login: string;
+	role: 'owner' | 'member';
+	joined_at: string;
+};
+
+export type HouseholdMe = {
+	household: Household | null;
+	role?: 'owner' | 'member';
+	members?: HouseholdMember[];
+};
+
+export type HouseholdInvite = {
+	id: string;
+	code: string;
+	url?: string;
+	created_at?: string;
+	expires_at: string;
+};
+
+export type HouseholdInvitePreview = {
+	household_name: string;
+	owner_display_name: string;
+	expires_at: string;
+};
+
+export function getHouseholdMe() {
+	return request<HouseholdMe>('/api/v1/households/me');
+}
+
+export function createHousehold(opts?: { name?: string; kind?: HouseholdKind }) {
+	const body: { name?: string; kind?: HouseholdKind } = {};
+	if (opts?.name) body.name = opts.name;
+	if (opts?.kind) body.kind = opts.kind;
+	return request<HouseholdMe>('/api/v1/households', {
+		method: 'POST',
+		body: JSON.stringify(body)
+	});
+}
+
+export function renameHousehold(name: string) {
+	return request<HouseholdMe>('/api/v1/households/me', {
+		method: 'PATCH',
+		body: JSON.stringify({ name })
+	});
+}
+
+export function listHouseholdInvites() {
+	return request<HouseholdInvite[]>('/api/v1/households/me/invites');
+}
+
+export function createHouseholdInvite() {
+	return request<HouseholdInvite>('/api/v1/households/me/invites', { method: 'POST' });
+}
+
+export function revokeHouseholdInvite(id: string) {
+	return request<void>(`/api/v1/households/me/invites/${encodeURIComponent(id)}`, {
+		method: 'DELETE'
+	});
+}
+
+export function previewHouseholdInvite(code: string) {
+	return request<HouseholdInvitePreview>('/api/v1/household-invites/preview', {
+		method: 'POST',
+		body: JSON.stringify({ code })
+	});
+}
+
+export function acceptHouseholdInvite(code: string) {
+	return request<HouseholdMe>('/api/v1/household-invites/accept', {
+		method: 'POST',
+		body: JSON.stringify({ code })
+	});
+}
+
+export function leaveHousehold() {
+	return request<void>('/api/v1/households/me/leave', { method: 'POST' });
+}
+
+export function kickHouseholdMember(userId: string) {
+	return request<void>(`/api/v1/households/me/members/${encodeURIComponent(userId)}`, {
+		method: 'DELETE'
+	});
+}
+
+export function transferHousehold(userId: string) {
+	return request<HouseholdMe>('/api/v1/households/me/transfer', {
+		method: 'POST',
+		body: JSON.stringify({ user_id: userId })
+	});
+}
+
+export function dissolveHousehold(confirmMembers = false) {
+	return request<void>('/api/v1/households/me/dissolve', {
+		method: 'POST',
+		body: JSON.stringify({ confirm_members: confirmMembers })
+	});
+}
+
 export function getAdminFeatures() {
 	return request<AdminFeatureFlag[]>('/api/v1/admin/features');
 }
@@ -653,10 +775,19 @@ export type Bank = {
 
 export type AccountType = 'cash' | 'bank' | 'credit_card';
 
+export type CatalogScope = 'all' | 'personal' | 'household';
+
+export type PersonRef = {
+	user_id: string;
+	display_name: string;
+};
+
 export type Account = {
 	id: string;
 	name: string;
 	type: AccountType;
+	scope?: 'personal' | 'household';
+	original_owner?: PersonRef | null;
 	currency?: string;
 	bank_id: string | null;
 	bank_name?: string | null;
@@ -688,6 +819,7 @@ export type Category = {
 	is_primary: boolean;
 	is_system: boolean;
 	subcategory_count: number;
+	scope?: 'personal' | 'household';
 	created_at: string;
 };
 
@@ -697,6 +829,7 @@ export type Subcategory = {
 	name: string;
 	icon: string;
 	sort_order: number;
+	scope?: 'personal' | 'household';
 	created_at: string;
 };
 
@@ -722,6 +855,7 @@ export type UIMetaAccountRef = {
 	status: 'active' | 'archived' | 'deleted';
 	bank_id?: string;
 	currency?: string;
+	scope?: 'personal' | 'household';
 };
 
 export type UIMeta = {
@@ -776,6 +910,7 @@ export function createAccount(payload: {
 	initial_balance: string;
 	credit_limit?: string;
 	payment_account_id?: string;
+	shared?: boolean;
 }) {
 	return request<Account>('/api/v1/accounts', {
 		method: 'POST',
@@ -811,6 +946,32 @@ export function changeAccountCreditLimit(id: string, creditLimit: string) {
 	});
 }
 
+export type MovedCounts = {
+	transactions: number;
+	credits: number;
+	subscriptions: number;
+	recurring: number;
+	budgets: number;
+	debts: number;
+	templates: number;
+};
+
+export type ShareAccountResult = Account & {
+	details?: { moved?: MovedCounts };
+};
+
+export function shareAccount(id: string) {
+	return request<ShareAccountResult>(`/api/v1/accounts/${encodeURIComponent(id)}/share`, {
+		method: 'POST'
+	});
+}
+
+export function unshareAccount(id: string) {
+	return request<ShareAccountResult>(`/api/v1/accounts/${encodeURIComponent(id)}/unshare`, {
+		method: 'POST'
+	});
+}
+
 export function archiveAccount(id: string, transferToAccountId?: string) {
 	const q = transferToAccountId
 		? `?transfer_to_account_id=${encodeURIComponent(transferToAccountId)}`
@@ -833,9 +994,12 @@ export function deleteAccount(id: string, transferToAccountId?: string) {
 	return request<void>(`/api/v1/accounts/${id}${q}`, { method: 'DELETE' });
 }
 
-export function listCategories(type?: 'income' | 'expense') {
-	const q = type ? `?type=${type}` : '';
-	const path = `/api/v1/categories${q}`;
+export function listCategories(type?: 'income' | 'expense', scope?: CatalogScope) {
+	const qs = new URLSearchParams();
+	if (type) qs.set('type', type);
+	if (scope && scope !== 'all') qs.set('scope', scope);
+	const q = qs.toString();
+	const path = `/api/v1/categories${q ? `?${q}` : ''}`;
 	return request<Category[]>(path)
 		.then((rows) => {
 			if (rows.length > 0) return rows;
@@ -852,6 +1016,7 @@ export function createCategory(payload: {
 	type: 'income' | 'expense';
 	icon: string;
 	sort_order?: number;
+	scope?: 'personal' | 'household';
 }) {
 	return request<Category>('/api/v1/categories', {
 		method: 'POST',
@@ -918,11 +1083,15 @@ export function deleteSubcategory(id: string) {
 
 export type Transaction = {
 	id: string;
+	scope?: 'personal' | 'household';
+	created_by?: PersonRef | null;
 	account_id: string;
 	account_name?: string;
 	account_status?: 'active' | 'archived' | 'deleted';
 	transfer_account_name?: string;
 	transfer_account_status?: 'active' | 'archived' | 'deleted';
+	transfer_account_masked?: boolean;
+	transfer_account_label?: string;
 	currency?: string;
 	type: 'income' | 'expense' | 'transfer';
 	kind: 'manual' | 'future';
@@ -1062,6 +1231,7 @@ export type AccountBalanceSummary = {
 	id: string;
 	name: string;
 	type: AccountType;
+	scope?: 'personal' | 'household';
 	currency?: string;
 	bank_icon?: string | null;
 	balance: number;
@@ -1194,6 +1364,7 @@ export type DebtTransaction = {
 export type Debtor = {
 	id: string;
 	name: string;
+	scope?: 'personal' | 'household';
 	created_at: string;
 };
 
@@ -1202,12 +1373,14 @@ export type Merchant = {
 	name: string;
 	icon: string;
 	aliases?: string[];
+	scope?: 'personal' | 'household';
 	created_at: string;
 };
 
 export type Tag = {
 	id: string;
 	name: string;
+	scope?: 'personal' | 'household';
 	created_at: string;
 };
 
@@ -1631,10 +1804,11 @@ export function listBudgets(month?: string) {
 	return request<BudgetItem[]>(`/api/v1/budgets${q}`);
 }
 
-export function getBudgetSummary(month?: string, currency?: string) {
+export function getBudgetSummary(month?: string, currency?: string, scope?: CatalogScope) {
 	const q = new URLSearchParams();
 	if (month) q.set('month', month);
 	if (currency) q.set('currency', currency);
+	if (scope && scope !== 'all') q.set('scope', scope);
 	const qs = q.toString();
 	return request<BudgetSummaryResponse>(`/api/v1/budgets/summary${qs ? `?${qs}` : ''}`);
 }
@@ -1758,8 +1932,9 @@ export function deleteTransfer(groupId: string) {
 	return request<void>(`/api/v1/transfers/${groupId}`, { method: 'DELETE' });
 }
 
-export function getDashboard() {
-	return request<Dashboard>('/api/v1/dashboard');
+export function getDashboard(scope?: CatalogScope) {
+	const q = scope && scope !== 'all' ? `?scope=${encodeURIComponent(scope)}` : '';
+	return request<Dashboard>(`/api/v1/dashboard${q}`);
 }
 
 /** Query for stats endpoints. `merchant_id` narrows the same aggregates as `store_id`. */
@@ -2003,8 +2178,9 @@ export function getAccountBalance(id: string) {
 	return request<AccountBalanceSummary>(`/api/v1/accounts/${id}/balance`);
 }
 
-export function listMerchants() {
-	return request<Merchant[]>('/api/v1/merchants')
+export function listMerchants(scope?: CatalogScope) {
+	const q = scope && scope !== 'all' ? `?scope=${encodeURIComponent(scope)}` : '';
+	return request<Merchant[]>(`/api/v1/merchants${q}`)
 		.then((rows) => {
 			if (rows.length > 0) return rows;
 			return readRefCache<Merchant[]>('/api/v1/merchants') ?? rows;
@@ -2019,11 +2195,18 @@ export function listMerchants() {
 		});
 }
 
-export function createMerchant(name: string, icon?: string, aliases?: string[]) {
-	const body: { name: string; icon: string; aliases?: string[] } = {
-		name,
-		icon: icon?.trim() || 'default'
-	};
+export function createMerchant(
+	name: string,
+	icon?: string,
+	aliases?: string[],
+	scope?: 'personal' | 'household'
+) {
+	const body: { name: string; icon: string; aliases?: string[]; scope?: 'personal' | 'household' } =
+		{
+			name,
+			icon: icon?.trim() || 'default'
+		};
+	if (scope) body.scope = scope;
 	if (aliases !== undefined) body.aliases = aliases;
 	return request<Merchant>('/api/v1/merchants', {
 		method: 'POST',
@@ -2054,8 +2237,11 @@ export function deleteMerchant(id: string) {
 	return request<void>(`/api/v1/merchants/${id}`, { method: 'DELETE' });
 }
 
-export function listTags(q?: string) {
-	const params = q?.trim() ? `?q=${encodeURIComponent(q.trim())}` : '';
+export function listTags(q?: string, scope?: CatalogScope) {
+	const qs = new URLSearchParams();
+	if (q?.trim()) qs.set('q', q.trim());
+	if (scope && scope !== 'all') qs.set('scope', scope);
+	const params = qs.toString() ? `?${qs.toString()}` : '';
 	return request<Tag[]>(`/api/v1/tags${params}`)
 		.then((rows) => {
 			if (rows.length > 0 || params) return rows;
@@ -2070,10 +2256,10 @@ export function listTags(q?: string) {
 		});
 }
 
-export function createTag(name: string) {
+export function createTag(name: string, scope?: 'personal' | 'household') {
 	return request<Tag>('/api/v1/tags', {
 		method: 'POST',
-		body: JSON.stringify({ name })
+		body: JSON.stringify(scope ? { name, scope } : { name })
 	});
 }
 
@@ -2176,18 +2362,19 @@ export function getInboxCount() {
 	return request<{ count: number }>('/api/v1/transactions/inbox/count');
 }
 
-export function listDebtors() {
-	return request<Debtor[]>('/api/v1/debtors');
+export function listDebtors(scope?: CatalogScope) {
+	const q = scope && scope !== 'all' ? `?scope=${encodeURIComponent(scope)}` : '';
+	return request<Debtor[]>(`/api/v1/debtors${q}`);
 }
 
 export function getDebtor(id: string) {
 	return request<DebtorDetail>(`/api/v1/debtors/${id}`);
 }
 
-export function createDebtor(name: string) {
+export function createDebtor(name: string, scope?: 'personal' | 'household') {
 	return request<Debtor>('/api/v1/debtors', {
 		method: 'POST',
-		body: JSON.stringify({ name })
+		body: JSON.stringify(scope ? { name, scope } : { name })
 	});
 }
 

@@ -43,8 +43,40 @@ CREATE TABLE users (
     timezone        TEXT NOT NULL DEFAULT 'Europe/Moscow',
     theme           TEXT NOT NULL DEFAULT 'system',
     status          TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'pending', 'banned')),
+    kind            TEXT NOT NULL DEFAULT 'person' CHECK (kind IN ('person', 'household')),
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE households (
+    id                TEXT PRIMARY KEY,
+    name              TEXT NOT NULL,
+    kind              TEXT NOT NULL DEFAULT 'family' CHECK (kind IN ('family', 'team')),
+    owner_user_id     TEXT NOT NULL REFERENCES users(id),
+    principal_user_id TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE household_members (
+    household_id TEXT NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+    user_id      TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    role         TEXT NOT NULL CHECK (role IN ('owner', 'member')),
+    joined_at    TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (household_id, user_id)
+);
+CREATE UNIQUE INDEX idx_household_one_owner ON household_members(household_id) WHERE role = 'owner';
+
+CREATE TABLE household_invites (
+    id            TEXT PRIMARY KEY,
+    household_id  TEXT NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+    code          TEXT NOT NULL UNIQUE,
+    status        TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'used', 'revoked')),
+    created_by    TEXT NOT NULL REFERENCES users(id),
+    created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+    expires_at    TEXT NOT NULL,
+    used_by       TEXT REFERENCES users(id) ON DELETE SET NULL,
+    used_at       TEXT
 );
 
 CREATE TABLE sessions (
@@ -98,7 +130,8 @@ CREATE TABLE accounts (
     is_primary          INTEGER NOT NULL DEFAULT 0,
     created_at          TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at          TEXT NOT NULL DEFAULT (datetime('now')),
-    currency            TEXT NOT NULL DEFAULT 'RUB'
+    currency            TEXT NOT NULL DEFAULT 'RUB',
+    original_owner_user_id TEXT REFERENCES users(id) ON DELETE SET NULL
 );
 CREATE INDEX idx_accounts_user ON accounts(user_id);
 
@@ -275,6 +308,7 @@ CREATE TABLE transactions (
     affects_balance     INTEGER NOT NULL DEFAULT 1,
     subscription_id     TEXT REFERENCES subscriptions(id) ON DELETE SET NULL,
     merchant_id         TEXT REFERENCES merchants(id) ON DELETE SET NULL,
+    created_by_user_id  TEXT REFERENCES users(id) ON DELETE SET NULL,
     created_at          TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at          TEXT NOT NULL DEFAULT (datetime('now'))
 );

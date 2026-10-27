@@ -44,6 +44,7 @@ var (
 
 type Budget struct {
 	ID              string  `json:"id"`
+	OwnerUserID     string  `json:"-"`
 	Name            string  `json:"name"`
 	Scope           string  `json:"scope"`
 	CategoryID      *string `json:"category_id"`
@@ -130,11 +131,19 @@ type Input struct {
 func queries(db sqlcdb.DBTX) *sqlcdb.Queries { return sqlcdb.New(db) }
 
 func List(ctx context.Context, db *sql.DB, userID, month string) ([]Budget, error) {
+	return ListForOwners(ctx, db, []string{userID}, month)
+}
+
+func ListForOwners(ctx context.Context, db *sql.DB, ownerIDs []string, month string) ([]Budget, error) {
+	if len(ownerIDs) == 0 {
+		return []Budget{}, nil
+	}
+	userID := ownerIDs[0]
 	month, err := resolveMonth(ctx, db, userID, month)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := listBudgetRows(ctx, db, userID, month)
+	rows, err := listBudgetRowsForOwners(ctx, db, ownerIDs, month)
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +173,14 @@ func List(ctx context.Context, db *sql.DB, userID, month string) ([]Budget, erro
 }
 
 func Get(ctx context.Context, db *sql.DB, userID, id string) (Budget, error) {
-	row, err := queries(db).GetBudgetByID(ctx, sqlcdb.GetBudgetByIDParams{ID: id, UserID: userID})
+	return GetForOwners(ctx, db, []string{userID}, id)
+}
+
+func GetForOwners(ctx context.Context, db *sql.DB, ownerIDs []string, id string) (Budget, error) {
+	if len(ownerIDs) == 0 {
+		return Budget{}, ErrNotFound
+	}
+	row, err := queries(db).GetBudgetByID(ctx, sqlcdb.GetBudgetByIDParams{ID: id, OwnerIds: ownerIDs})
 	if errors.Is(err, sql.ErrNoRows) {
 		return Budget{}, ErrNotFound
 	}
@@ -260,15 +276,19 @@ func Delete(ctx context.Context, db *sql.DB, userID, id string) error {
 }
 
 func Summary(ctx context.Context, db *sql.DB, userID, month string) (SummaryResult, error) {
-	month, err := resolveMonth(ctx, db, userID, month)
+	return SummaryForOwners(ctx, db, userID, []string{userID}, month)
+}
+
+func SummaryForOwners(ctx context.Context, db *sql.DB, tzUserID string, ownerIDs []string, month string) (SummaryResult, error) {
+	month, err := resolveMonth(ctx, db, tzUserID, month)
 	if err != nil {
 		return SummaryResult{}, err
 	}
-	canCopy, err := canCopyFromPrevious(ctx, db, userID, month)
+	canCopy, err := canCopyFromPrevious(ctx, db, tzUserID, month)
 	if err != nil {
 		return SummaryResult{}, err
 	}
-	tz, err := userTimezone(ctx, db, userID)
+	tz, err := userTimezone(ctx, db, tzUserID)
 	if err != nil {
 		return SummaryResult{}, err
 	}
@@ -280,7 +300,7 @@ func Summary(ctx context.Context, db *sql.DB, userID, month string) (SummaryResu
 	if err != nil {
 		return SummaryResult{}, err
 	}
-	rows, err := listBudgetRows(ctx, db, userID, month)
+	rows, err := listBudgetRowsForOwners(ctx, db, ownerIDs, month)
 	if err != nil {
 		return SummaryResult{}, err
 	}
@@ -293,7 +313,7 @@ func Summary(ctx context.Context, db *sql.DB, userID, month string) (SummaryResu
 		if err != nil {
 			return SummaryResult{}, err
 		}
-		spent, err := spentForBudget(ctx, db, userID, row.Scope, row.CategoryID, row.SubcategoryID, row.AccountID, periodStart, periodEnd, row.Currency)
+		spent, err := spentForBudget(ctx, db, row.UserID, row.Scope, row.CategoryID, row.SubcategoryID, row.AccountID, periodStart, periodEnd, row.Currency)
 		if err != nil {
 			return SummaryResult{}, err
 		}
@@ -452,7 +472,7 @@ func validateInput(ctx context.Context, db sqlcdb.DBTX, userID string, in Input)
 			return ErrInvalidSub
 		}
 		sub, err := queries(db).GetSubcategoryByID(ctx, sqlcdb.GetSubcategoryByIDParams{
-			ID: *in.SubcategoryID, UserID: userID,
+			ID: *in.SubcategoryID, OwnerIds: []string{userID},
 		})
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrInvalidSub
@@ -465,9 +485,7 @@ func validateInput(ctx context.Context, db sqlcdb.DBTX, userID string, in Input)
 		}
 	}
 	if in.AccountID != nil && *in.AccountID != "" {
-		acc, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{
-			ID: *in.AccountID, UserID: userID,
-		})
+		acc, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: *in.AccountID, OwnerIds: []string{userID}})
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrInvalidAccount
 		}
@@ -495,9 +513,7 @@ func resolveCurrency(ctx context.Context, db sqlcdb.DBTX, userID string, in Inpu
 		return in, nil
 	}
 	if in.AccountID != nil && *in.AccountID != "" {
-		acc, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{
-			ID: *in.AccountID, UserID: userID,
-		})
+		acc, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: *in.AccountID, OwnerIds: []string{userID}})
 		if errors.Is(err, sql.ErrNoRows) {
 			return Input{}, ErrInvalidAccount
 		}
@@ -526,7 +542,7 @@ func resolveScopeRefs(ctx context.Context, db sqlcdb.DBTX, userID string, in Inp
 		return Input{}, ErrInvalidSub
 	}
 	sub, err := queries(db).GetSubcategoryByID(ctx, sqlcdb.GetSubcategoryByIDParams{
-		ID: *in.SubcategoryID, UserID: userID,
+		ID: *in.SubcategoryID, OwnerIds: []string{userID},
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return Input{}, ErrInvalidSub
@@ -541,7 +557,7 @@ func resolveScopeRefs(ctx context.Context, db sqlcdb.DBTX, userID string, in Inp
 
 func validateExpenseCategory(ctx context.Context, db sqlcdb.DBTX, userID, categoryID string) error {
 	cat, err := queries(db).GetCategoryByID(ctx, sqlcdb.GetCategoryByIDParams{
-		ID: categoryID, UserID: userID,
+		ID: categoryID, OwnerIds: []string{userID},
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrInvalidCategory
@@ -599,6 +615,7 @@ func userTimezone(ctx context.Context, db sqlcdb.DBTX, userID string) (string, e
 func budgetFromListRow(row sqlcdb.ListBudgetsByUserRow) Budget {
 	return Budget{
 		ID:              row.ID,
+		OwnerUserID:     row.UserID,
 		Name:            row.Name,
 		Scope:           row.Scope,
 		CategoryID:      row.CategoryID,
@@ -623,6 +640,7 @@ func budgetFromListRow(row sqlcdb.ListBudgetsByUserRow) Budget {
 func budgetFromGetRow(row sqlcdb.GetBudgetByIDRow) Budget {
 	return Budget{
 		ID:              row.ID,
+		OwnerUserID:     row.UserID,
 		Name:            row.Name,
 		Scope:           row.Scope,
 		CategoryID:      row.CategoryID,

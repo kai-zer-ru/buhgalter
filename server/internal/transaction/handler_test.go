@@ -25,7 +25,10 @@ func authRequest(t *testing.T, env seedEnv, method, path string, body []byte) *h
 		req = httptest.NewRequest(method, path, nil)
 	}
 	user := auth.User{ID: env.userID, Login: "txuser", DisplayName: "Tx User"}
-	ctx := context.WithValue(req.Context(), auth.AuthContextKey, auth.AuthInfo{User: user})
+	ctx := context.WithValue(req.Context(), auth.AuthContextKey, auth.AuthInfo{
+		User:  user,
+		Scope: auth.Scope{UserID: env.userID},
+	})
 	return req.WithContext(ctx)
 }
 

@@ -23,8 +23,12 @@
 		type StatsSummary,
 		type StatsNetWorthResponse,
 		type BudgetSummaryItem,
+		type CatalogScope,
 		type Transaction
 	} from '$lib/api/client';
+	import CatalogScopeTabs from '$lib/components/CatalogScopeTabs.svelte';
+	import { readStoredCatalogScope, writeStoredCatalogScope } from '$lib/household/catalog-scope';
+	import { householdMe, inHousehold } from '$lib/household/membership';
 	import BackLink from '$lib/components/BackLink.svelte';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
 	import { dateOnlyPicker } from '$lib/datetime-picker-standards';
@@ -94,6 +98,7 @@
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
 	const profileCurrency = $derived($user?.currency ?? 'RUB');
 	let statsCurrency = $state('');
+	let catalogScope = $state<CatalogScope>('all');
 	let availableCurrencies = $state<string[]>([]);
 	const currency = $derived(statsCurrency || profileCurrency);
 	const showCurrencyChips = $derived(availableCurrencies.length > 1);
@@ -164,6 +169,7 @@
 
 	onMount(async () => {
 		statsCurrency = await hydrateStoredStatsCurrency();
+		catalogScope = readStoredCatalogScope();
 		await loadMeta();
 		await loadStats(true);
 		lastFiltersKey = currentFiltersKey();
@@ -196,7 +202,8 @@
 			categoryId,
 			groupBy,
 			search: search.trim(),
-			currency
+			currency,
+			catalogScope
 		});
 	}
 
@@ -256,6 +263,9 @@
 		if (accountId) params.account_id = accountId;
 		if (categoryId) params.category_id = categoryId;
 		if (currency) params.currency = currency;
+		if (inHousehold($householdMe) && catalogScope && catalogScope !== 'all') {
+			params.scope = catalogScope;
+		}
 		return params;
 	}
 
@@ -264,7 +274,17 @@
 		if (fromLocal) params.from = fromDateLocalStart(fromLocal, tz);
 		if (toLocal) params.to = fromDateLocalEnd(toLocal, tz);
 		if (currency) params.currency = currency;
+		if (inHousehold($householdMe) && catalogScope && catalogScope !== 'all') {
+			params.scope = catalogScope;
+		}
 		return params;
+	}
+
+	function selectCatalogScope(next: CatalogScope | 'personal' | 'household') {
+		const scope: CatalogScope =
+			next === 'personal' || next === 'household' || next === 'all' ? next : 'all';
+		catalogScope = scope;
+		writeStoredCatalogScope(scope);
 	}
 
 	function budgetMonthKey(): string {
@@ -291,7 +311,7 @@
 					getStatsByCategory(params),
 					getStatsBySubcategory(params),
 					getStatsByPeriod({ ...params, group_by: groupBy }),
-					getBudgetSummary(month).catch(() => ({
+					getBudgetSummary(month, currency, catalogScope).catch(() => ({
 						items: [] as BudgetSummaryItem[],
 						month,
 						can_copy_from_previous: false
@@ -432,6 +452,7 @@
 		]}
 	/>
 	<h1 class="text-2xl font-semibold">{$_('stats.title')}</h1>
+	<CatalogScopeTabs value={catalogScope} onchange={selectCatalogScope} />
 
 	{#if showCurrencyChips}
 		<div class="flex flex-wrap items-center gap-2">

@@ -41,4 +41,16 @@ describe('transactionsListPath', () => {
 			})
 		);
 	});
+
+	it('includes catalog scope in the cache key', () => {
+		expect(
+			transactionsListPath({
+				kind: 'manual',
+				limit: '10',
+				page: '1',
+				scope: 'household',
+				sort: 'date_desc'
+			})
+		).toBe('/api/v1/transactions?kind=manual&limit=10&page=1&scope=household&sort=date_desc');
+	});
 });

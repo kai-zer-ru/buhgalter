@@ -26,6 +26,8 @@
 	import { currencySelectOptions } from '$lib/currency';
 	import { toAPIAmount } from '$lib/money';
 	import { user } from '$lib/stores/auth';
+	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
+	import { householdKindKey, householdMe, inHousehold } from '$lib/household/membership';
 
 	function parseFormReturnPath(raw: string | null, fallback: string): string {
 		if (!raw || !raw.startsWith('/') || raw.startsWith('//')) return fallback;
@@ -43,6 +45,7 @@
 	let creditLimit = $state('');
 	let initialBalance = $state('');
 	let paymentAccountId = $state('');
+	let shared = $state(false);
 	let banks = $state<Bank[]>([]);
 	let debitAccountList = $state<Account[]>([]);
 	let loading = $state(false);
@@ -101,7 +104,8 @@
 				initial_balance: toAPIAmount(initialBalance || '0'),
 				credit_limit: type === 'credit_card' ? toAPIAmount(creditLimit) : undefined,
 				payment_account_id:
-					type === 'credit_card' && paymentAccountId ? paymentAccountId : undefined
+					type === 'credit_card' && paymentAccountId ? paymentAccountId : undefined,
+				shared: inHousehold($householdMe) ? shared : undefined
 			});
 			await goto(resolve(returnTo as '/'));
 			toast($_('common.saved'));
@@ -160,6 +164,24 @@
 					</button>
 				</div>
 			</div>
+
+			{#if inHousehold($householdMe)}
+				<div class="flex items-center gap-2">
+					<ToggleSwitch
+						checked={shared}
+						label={$_(householdKindKey('accounts.shared.toggle', $householdMe.household?.kind))}
+						onchange={() => (shared = !shared)}
+					/>
+					<div>
+						<span class="text-sm"
+							>{$_(householdKindKey('accounts.shared.toggle', $householdMe.household?.kind))}</span
+						>
+						<p class="text-xs" style:color="var(--text-muted)">
+							{$_(householdKindKey('accounts.shared.toggleHint', $householdMe.household?.kind))}
+						</p>
+					</div>
+				</div>
+			{/if}
 
 			<Select
 				id="account-currency"

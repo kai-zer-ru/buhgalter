@@ -8,7 +8,11 @@ import (
 )
 
 func CountInbox(ctx context.Context, db *sql.DB, userID string) (int64, error) {
-	n, err := queries(db).CountInboxTransactions(ctx, userID)
+	return CountInboxOwned(ctx, db, []string{userID})
+}
+
+func CountInboxOwned(ctx context.Context, db *sql.DB, ownerIDs []string) (int64, error) {
+	n, err := queries(db).CountInboxTransactions(ctx, ownerIDs)
 	if err != nil {
 		return 0, err
 	}
@@ -16,6 +20,10 @@ func CountInbox(ctx context.Context, db *sql.DB, userID string) (int64, error) {
 }
 
 func ListInbox(ctx context.Context, db *sql.DB, userID string, page, limit int, sort string) (ListResult, error) {
+	return ListInboxOwned(ctx, db, []string{userID}, page, limit, sort)
+}
+
+func ListInboxOwned(ctx context.Context, db *sql.DB, ownerIDs []string, page, limit int, sort string) (ListResult, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -25,16 +33,16 @@ func ListInbox(ctx context.Context, db *sql.DB, userID string, page, limit int, 
 	offset := int64((page - 1) * limit)
 	lim := int64(limit)
 	q := queries(db)
-	total, err := q.CountInboxTransactions(ctx, userID)
+	total, err := q.CountInboxTransactions(ctx, ownerIDs)
 	if err != nil {
 		return ListResult{}, err
 	}
 	var items []Transaction
 	if sort == "date_asc" {
 		rows, err := q.ListInboxTransactionsDateAsc(ctx, sqlcdb.ListInboxTransactionsDateAscParams{
-			UserID: userID,
-			Limit:  lim,
-			Offset: offset,
+			OwnerIds: ownerIDs,
+			Limit:    lim,
+			Offset:   offset,
 		})
 		if err != nil {
 			return ListResult{}, err
@@ -45,9 +53,9 @@ func ListInbox(ctx context.Context, db *sql.DB, userID string, page, limit int, 
 		}
 	} else {
 		rows, err := q.ListInboxTransactionsDateDesc(ctx, sqlcdb.ListInboxTransactionsDateDescParams{
-			UserID: userID,
-			Limit:  lim,
-			Offset: offset,
+			OwnerIds: ownerIDs,
+			Limit:    lim,
+			Offset:   offset,
 		})
 		if err != nil {
 			return ListResult{}, err
@@ -62,6 +70,13 @@ func ListInbox(ctx context.Context, db *sql.DB, userID string, page, limit int, 
 	}
 	if err := attachTags(ctx, db, items); err != nil {
 		return ListResult{}, err
+	}
+	actorID := ""
+	if len(ownerIDs) > 0 {
+		actorID = ownerIDs[0]
+	}
+	for i := range items {
+		decorateVisible(ctx, db, actorID, ownerIDs, &items[i])
 	}
 	return ListResult{
 		Data: items,

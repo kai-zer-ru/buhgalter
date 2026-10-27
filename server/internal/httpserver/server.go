@@ -29,6 +29,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/debt"
 	"github.com/kai-zer-ru/buhgalter/internal/docs"
 	"github.com/kai-zer-ru/buhgalter/internal/features"
+	"github.com/kai-zer-ru/buhgalter/internal/household"
 	"github.com/kai-zer-ru/buhgalter/internal/importexport"
 	"github.com/kai-zer-ru/buhgalter/internal/merchant"
 	appmw "github.com/kai-zer-ru/buhgalter/internal/middleware"
@@ -83,6 +84,11 @@ func (s *Server) Handler() http.Handler {
 	}
 	loginLimiter := appmw.NewIPRateLimiter(loginLimit, time.Minute)
 	passwordResetLimiter := appmw.NewIPRateLimiter(passwordResetLimit, time.Minute)
+	inviteLimit := 10
+	if os.Getenv("BUHGALTER_E2E") == "1" {
+		inviteLimit = 1000
+	}
+	inviteLimiter := appmw.NewIPRateLimiter(inviteLimit, time.Minute)
 	authHandler := &auth.Handler{
 		Store:                dbHandle,
 		Audit:                s.audit,
@@ -119,6 +125,7 @@ func (s *Server) Handler() http.Handler {
 	uiHandler := &ui.Handler{Store: dbHandle, Version: s.cfg.Version}
 	versionHandler := &versioncheck.Handler{Checker: versioncheck.NewChecker(s.cfg.Version)}
 	apiCache := apicache.New()
+	householdHandler := &household.Handler{Store: dbHandle, Audit: s.audit, Cache: apiCache, Limiter: inviteLimiter}
 	realtimeHub := realtime.NewHub()
 	apiCache.OnInvalidate = func(userID string, hints apicache.InvalidateHints) {
 		realtimeHub.PublishInvalidateHints(userID, hints.Paths, hints.Entities)
@@ -169,6 +176,8 @@ func (s *Server) Handler() http.Handler {
 			ar.Post("/accounts/{id}/archive", accountArchiveHandler.archiveAccount)
 			ar.Post("/accounts/{id}/unarchive", accountHandler.Unarchive)
 			ar.Post("/accounts/{id}/primary", accountHandler.SetPrimary)
+			ar.Post("/accounts/{id}/share", accountHandler.Share)
+			ar.Post("/accounts/{id}/unshare", accountHandler.Unshare)
 			ar.Delete("/accounts/{id}", accountDeleteHandler.deleteAccount)
 
 			ar.Get("/transactions/inbox", transactionHandler.Inbox)
@@ -346,6 +355,22 @@ func (s *Server) Handler() http.Handler {
 
 			ar.Get("/ui/meta", uiHandler.Meta)
 			ar.Get("/ui/i18n/{lang}", uiHandler.I18n)
+
+			ar.Group(func(mod chi.Router) {
+				mod.Use(features.RequireFeature(dbHandle, features.Household))
+				mod.Get("/households/me", householdHandler.GetMe)
+				mod.Post("/households", householdHandler.Create)
+				mod.Patch("/households/me", householdHandler.Rename)
+				mod.Get("/households/me/invites", householdHandler.ListInvites)
+				mod.Post("/households/me/invites", householdHandler.CreateInvite)
+				mod.Delete("/households/me/invites/{id}", householdHandler.RevokeInvite)
+				mod.Post("/household-invites/preview", householdHandler.Preview)
+				mod.Post("/household-invites/accept", householdHandler.Accept)
+				mod.Post("/households/me/leave", householdHandler.Leave)
+				mod.Delete("/households/me/members/{user_id}", householdHandler.Kick)
+				mod.Post("/households/me/transfer", householdHandler.Transfer)
+				mod.Post("/households/me/dissolve", householdHandler.Dissolve)
+			})
 		})
 
 		api.Route("/user", func(ur chi.Router) {

@@ -72,7 +72,8 @@ DELETE FROM credit_payments
 WHERE credit_id IN (SELECT id FROM credits WHERE user_id = ?)
 `
 
-// Wipe financial data for one user (keep profile, sessions, API tokens, notification settings).
+// Wipe financial data for one user (keep profile, sessions, API tokens).
+// Household dissolve also deletes notification_settings / templates leftover on the principal.
 func (q *Queries) DeleteUserCreditPayments(ctx context.Context, userID string) error {
 	_, err := q.db.ExecContext(ctx, deleteUserCreditPayments, userID)
 	return err
@@ -133,6 +134,15 @@ func (q *Queries) DeleteUserImportJobs(ctx context.Context, userID string) error
 	return err
 }
 
+const deleteUserMerchantAliases = `-- name: DeleteUserMerchantAliases :exec
+DELETE FROM merchant_aliases WHERE user_id = ?
+`
+
+func (q *Queries) DeleteUserMerchantAliases(ctx context.Context, userID string) error {
+	_, err := q.db.ExecContext(ctx, deleteUserMerchantAliases, userID)
+	return err
+}
+
 const deleteUserMerchants = `-- name: DeleteUserMerchants :exec
 DELETE FROM merchants WHERE user_id = ?
 `
@@ -151,12 +161,75 @@ func (q *Queries) DeleteUserNotificationLog(ctx context.Context, userID string) 
 	return err
 }
 
+const deleteUserNotificationSettings = `-- name: DeleteUserNotificationSettings :exec
+DELETE FROM notification_settings WHERE user_id = ?
+`
+
+func (q *Queries) DeleteUserNotificationSettings(ctx context.Context, userID string) error {
+	_, err := q.db.ExecContext(ctx, deleteUserNotificationSettings, userID)
+	return err
+}
+
+const deleteUserNotificationTemplates = `-- name: DeleteUserNotificationTemplates :exec
+DELETE FROM notification_templates WHERE user_id = ?
+`
+
+func (q *Queries) DeleteUserNotificationTemplates(ctx context.Context, userID string) error {
+	_, err := q.db.ExecContext(ctx, deleteUserNotificationTemplates, userID)
+	return err
+}
+
+const deleteUserReceiptFiscalPreviews = `-- name: DeleteUserReceiptFiscalPreviews :exec
+DELETE FROM receipt_fiscal_previews WHERE user_id = ?
+`
+
+func (q *Queries) DeleteUserReceiptFiscalPreviews(ctx context.Context, userID string) error {
+	_, err := q.db.ExecContext(ctx, deleteUserReceiptFiscalPreviews, userID)
+	return err
+}
+
+const deleteUserReceiptImportItemCategories = `-- name: DeleteUserReceiptImportItemCategories :exec
+DELETE FROM receipt_import_item_categories WHERE user_id = ?
+`
+
+func (q *Queries) DeleteUserReceiptImportItemCategories(ctx context.Context, userID string) error {
+	_, err := q.db.ExecContext(ctx, deleteUserReceiptImportItemCategories, userID)
+	return err
+}
+
+const deleteUserReceiptImports = `-- name: DeleteUserReceiptImports :exec
+DELETE FROM receipt_imports WHERE user_id = ?
+`
+
+func (q *Queries) DeleteUserReceiptImports(ctx context.Context, userID string) error {
+	_, err := q.db.ExecContext(ctx, deleteUserReceiptImports, userID)
+	return err
+}
+
+const deleteUserReceiptScanJobs = `-- name: DeleteUserReceiptScanJobs :exec
+DELETE FROM receipt_scan_jobs WHERE user_id = ?
+`
+
+func (q *Queries) DeleteUserReceiptScanJobs(ctx context.Context, userID string) error {
+	_, err := q.db.ExecContext(ctx, deleteUserReceiptScanJobs, userID)
+	return err
+}
+
 const deleteUserRecurringOperations = `-- name: DeleteUserRecurringOperations :exec
 DELETE FROM recurring_operations WHERE user_id = ?
 `
 
 func (q *Queries) DeleteUserRecurringOperations(ctx context.Context, userID string) error {
 	_, err := q.db.ExecContext(ctx, deleteUserRecurringOperations, userID)
+	return err
+}
+
+const deleteUserStores = `-- name: DeleteUserStores :exec
+DELETE FROM stores WHERE user_id = ?
+`
+
+func (q *Queries) DeleteUserStores(ctx context.Context, userID string) error {
+	_, err := q.db.ExecContext(ctx, deleteUserStores, userID)
 	return err
 }
 

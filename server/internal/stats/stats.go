@@ -29,6 +29,7 @@ type Filters struct {
 	Search        string
 	IncludeFuture bool
 	Currency      string
+	OwnerIDs      []string
 }
 
 type Summary struct {
@@ -101,6 +102,9 @@ func (s *Service) Summary(ctx context.Context, userID string, f Filters, factual
 	f, err := s.prepareFilters(ctx, userID, f, factualOnly)
 	if err != nil {
 		return Summary{}, err
+	}
+	if len(f.OwnerIDs) == 0 {
+		return Summary{}, nil
 	}
 	var income, expense, count int64
 	if f.AccountID != "" {
@@ -359,14 +363,13 @@ func (s *Service) ContextDebtor(ctx context.Context, userID, debtorID string, f 
 	}
 	row, err := queries(s.db).StatsContextDebtor(ctx, sqlcdb.StatsContextDebtorParams{
 		Currency:          f.Currency,
-		UserID:            userID,
-		UserID_2:          userID,
+		OwnerIds:          ownerIDsOrUser(userID, f),
 		DebtorID:          debtorID,
-		Column5:           f.Kind,
+		Column4:           f.Kind,
 		Kind:              f.Kind,
-		Column7:           f.From,
+		Column6:           f.From,
 		TransactionDate:   f.From,
-		Column9:           f.To,
+		Column8:           f.To,
 		TransactionDate_2: f.To,
 	})
 	if err != nil {
@@ -394,27 +397,24 @@ func (s *Service) ContextCredit(ctx context.Context, userID, creditID string, f 
 	}
 	row, err := queries(s.db).StatsContextCredit(ctx, sqlcdb.StatsContextCreditParams{
 		Currency:          f.Currency,
-		UserID:            userID,
-		UserID_2:          userID,
+		OwnerIds:          ownerIDsOrUser(userID, f),
 		ID:                creditID,
-		Column5:           f.Kind,
+		Column4:           f.Kind,
 		Kind:              f.Kind,
-		Column7:           f.From,
+		Column6:           f.From,
 		TransactionDate:   f.From,
-		Column9:           f.To,
+		Column8:           f.To,
 		TransactionDate_2: f.To,
 	})
 	if err != nil {
 		return ContextSummary{}, err
 	}
 	paidRow, err := queries(s.db).StatsContextCreditPaid(ctx, sqlcdb.StatsContextCreditPaidParams{
-		Currency:      f.Currency,
-		UserID:        userID,
-		ID:            creditID,
-		Column4:       f.From,
-		PaymentDate:   f.From,
-		Column6:       f.To,
-		PaymentDate_2: f.To,
+		Currency: f.Currency,
+		DateFrom: f.From,
+		DateTo:   f.To,
+		ID:       creditID,
+		OwnerIds: ownerIDsOrUser(userID, f),
 	})
 	if err != nil {
 		return ContextSummary{}, err
@@ -422,7 +422,7 @@ func (s *Service) ContextCredit(ctx context.Context, userID, creditID string, f 
 	remainingRow, err := queries(s.db).StatsContextCreditRemaining(ctx, sqlcdb.StatsContextCreditRemainingParams{
 		Currency: f.Currency,
 		ID:       creditID,
-		UserID:   userID,
+		OwnerIds: ownerIDsOrUser(userID, f),
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		remainingRow = sqlcdb.StatsContextCreditRemainingRow{}
@@ -453,13 +453,12 @@ func (s *Service) ContextDebts(ctx context.Context, userID string, f Filters) (C
 	}
 	row, err := queries(s.db).StatsContextDebts(ctx, sqlcdb.StatsContextDebtsParams{
 		Currency:          f.Currency,
-		UserID:            userID,
-		UserID_2:          userID,
-		Column4:           f.Kind,
+		OwnerIds:          ownerIDsOrUser(userID, f),
+		Column3:           f.Kind,
 		Kind:              f.Kind,
-		Column6:           f.From,
+		Column5:           f.From,
 		TransactionDate:   f.From,
-		Column8:           f.To,
+		Column7:           f.To,
 		TransactionDate_2: f.To,
 	})
 	if err != nil {
@@ -504,6 +503,9 @@ func (s *Service) prepareFilters(ctx context.Context, userID string, f Filters, 
 		f.Currency = cur
 	} else {
 		f.Currency = money.ProfileOrDefault(f.Currency)
+	}
+	if len(f.OwnerIDs) == 0 && userID != "" {
+		f.OwnerIDs = []string{userID}
 	}
 	return f, nil
 }
@@ -551,9 +553,13 @@ func periodKey(t time.Time, groupBy string) string {
 func toSummaryParams(userID string, f Filters) sqlcdb.StatsSummaryParams {
 	search := strPtr(f.Search)
 	categoryID := strPtr(f.CategoryID)
+	ownerIDs := f.OwnerIDs
+	if len(ownerIDs) == 0 {
+		ownerIDs = []string{userID}
+	}
 	return sqlcdb.StatsSummaryParams{
 		Currency:          f.Currency,
-		UserID:            userID,
+		OwnerIds:          ownerIDs,
 		Column3:           f.AccountID,
 		AccountID:         f.AccountID,
 		Column5:           f.CategoryID,
@@ -580,7 +586,7 @@ func toAccountSummaryParams(userID string, f Filters) sqlcdb.StatsSummaryAccount
 	categoryID := strPtr(f.CategoryID)
 	return sqlcdb.StatsSummaryAccountParams{
 		Currency:          f.Currency,
-		UserID:            userID,
+		OwnerIds:          ownerIDsOrUser(userID, f),
 		AccountID:         f.AccountID,
 		Column4:           f.CategoryID,
 		CategoryID:        categoryID,
@@ -606,7 +612,7 @@ func toStoreParams(userID string, f Filters) sqlcdb.StatsByStoreParams {
 	categoryID := strPtr(f.CategoryID)
 	return sqlcdb.StatsByStoreParams{
 		Currency:          f.Currency,
-		UserID:            userID,
+		OwnerIds:          ownerIDsOrUser(userID, f),
 		Column3:           f.AccountID,
 		AccountID:         f.AccountID,
 		Column5:           f.CategoryID,
@@ -644,7 +650,7 @@ func toSubcategoryReceiptLinesParams(userID string, f Filters) sqlcdb.StatsBySub
 	}
 	return sqlcdb.StatsBySubcategoryReceiptLinesParams{
 		Currency:          p.Currency,
-		UserID:            p.UserID,
+		OwnerIds:          p.OwnerIds,
 		Column3:           p.Column3,
 		AccountID:         p.AccountID,
 		Column5:           p.Column5,
@@ -669,6 +675,16 @@ func toSubcategoryReceiptLinesParams(userID string, f Filters) sqlcdb.StatsBySub
 func toPeriodParams(userID string, f Filters) sqlcdb.StatsPeriodRowsParams {
 	p := toSummaryParams(userID, f)
 	return sqlcdb.StatsPeriodRowsParams(p)
+}
+
+func ownerIDsOrUser(userID string, f Filters) []string {
+	if len(f.OwnerIDs) > 0 {
+		return f.OwnerIDs
+	}
+	if userID == "" {
+		return nil
+	}
+	return []string{userID}
 }
 
 func strPtr(s string) *string {

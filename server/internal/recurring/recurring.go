@@ -18,6 +18,8 @@ import (
 
 type Operation struct {
 	ID              string  `json:"id"`
+	OwnerUserID     string  `json:"-"`
+	Scope           string  `json:"scope,omitempty"`
 	Type            string  `json:"type"`
 	Amount          int64   `json:"amount"`
 	AmountDisplay   string  `json:"amount_display"`
@@ -74,6 +76,7 @@ func queries(db sqlcdb.DBTX) *sqlcdb.Queries { return sqlcdb.New(db) }
 func opFromRow(row sqlcdb.ListRecurringOperationsByUserRow) Operation {
 	return Operation{
 		ID:              row.ID,
+		OwnerUserID:     row.UserID,
 		Type:            row.Type,
 		Amount:          row.Amount,
 		AmountDisplay:   money.FormatRubles(row.Amount),
@@ -100,6 +103,7 @@ func opFromRow(row sqlcdb.ListRecurringOperationsByUserRow) Operation {
 func opFromGetRow(row sqlcdb.GetRecurringOperationByIDRow) Operation {
 	return Operation{
 		ID:              row.ID,
+		OwnerUserID:     row.UserID,
 		Type:            row.Type,
 		Amount:          row.Amount,
 		AmountDisplay:   money.FormatRubles(row.Amount),
@@ -124,8 +128,15 @@ func opFromGetRow(row sqlcdb.GetRecurringOperationByIDRow) Operation {
 }
 
 func getByID(ctx context.Context, db *sql.DB, userID, id string) (Operation, error) {
+	return getByIDForOwners(ctx, db, []string{userID}, id)
+}
+
+func getByIDForOwners(ctx context.Context, db *sql.DB, ownerIDs []string, id string) (Operation, error) {
+	if len(ownerIDs) == 0 {
+		return Operation{}, ErrNotFound
+	}
 	row, err := queries(db).GetRecurringOperationByID(ctx, sqlcdb.GetRecurringOperationByIDParams{
-		ID: id, UserID: userID,
+		ID: id, OwnerIds: ownerIDs,
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return Operation{}, ErrNotFound
@@ -137,7 +148,14 @@ func getByID(ctx context.Context, db *sql.DB, userID, id string) (Operation, err
 }
 
 func List(ctx context.Context, db *sql.DB, userID string) ([]Operation, error) {
-	rows, err := queries(db).ListRecurringOperationsByUser(ctx, userID)
+	return ListForOwners(ctx, db, []string{userID})
+}
+
+func ListForOwners(ctx context.Context, db *sql.DB, ownerIDs []string) ([]Operation, error) {
+	if len(ownerIDs) == 0 {
+		return []Operation{}, nil
+	}
+	rows, err := queries(db).ListRecurringOperationsByUser(ctx, ownerIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -360,9 +378,7 @@ func validateInput(ctx context.Context, db *sql.DB, userID string, in Input) err
 	if err := validatePeriodFields(in); err != nil {
 		return err
 	}
-	acc, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{
-		ID: in.AccountID, UserID: userID,
-	})
+	acc, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: in.AccountID, OwnerIds: []string{userID}})
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrInvalidAccount
 	}
@@ -373,7 +389,7 @@ func validateInput(ctx context.Context, db *sql.DB, userID string, in Input) err
 		return ErrAccountArchived
 	}
 	cat, err := queries(db).GetCategoryByID(ctx, sqlcdb.GetCategoryByIDParams{
-		ID: in.CategoryID, UserID: userID,
+		ID: in.CategoryID, OwnerIds: []string{userID},
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrInvalidCategory
@@ -386,7 +402,7 @@ func validateInput(ctx context.Context, db *sql.DB, userID string, in Input) err
 	}
 	if in.SubcategoryID != nil && *in.SubcategoryID != "" {
 		sub, err := queries(db).GetSubcategoryByID(ctx, sqlcdb.GetSubcategoryByIDParams{
-			ID: *in.SubcategoryID, UserID: userID,
+			ID: *in.SubcategoryID, OwnerIds: []string{userID},
 		})
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrInvalidSub
@@ -402,14 +418,12 @@ func validateInput(ctx context.Context, db *sql.DB, userID string, in Input) err
 }
 
 func validateDueOperation(ctx context.Context, db *sql.DB, userID string, op sqlcdb.RecurringOperation) error {
-	_, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{
-		ID: op.AccountID, UserID: userID,
-	})
+	_, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: op.AccountID, OwnerIds: []string{userID}})
 	if err != nil {
 		return err
 	}
 	_, err = queries(db).GetCategoryByID(ctx, sqlcdb.GetCategoryByIDParams{
-		ID: op.CategoryID, UserID: userID,
+		ID: op.CategoryID, OwnerIds: []string{userID},
 	})
 	return err
 }

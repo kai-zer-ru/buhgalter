@@ -8,6 +8,8 @@
 	import { confirm } from '$lib/confirm';
 	import { reportPageLoadFailure } from '$lib/page-load';
 	import { toast } from '$lib/toast';
+	import CatalogScopeTabs from '$lib/components/CatalogScopeTabs.svelte';
+	import { householdMe, inHousehold } from '$lib/household/membership';
 
 	let tags = $state<Tag[]>([]);
 	let loading = $state(true);
@@ -17,6 +19,7 @@
 	let editingId = $state<string | null>(null);
 	let editName = $state('');
 	let listQuery = $state('');
+	let catalogScope = $state<'personal' | 'household'>('personal');
 
 	const filteredTags = $derived.by(() => {
 		const q = listQuery.trim().toLowerCase();
@@ -31,7 +34,7 @@
 	async function load() {
 		loading = true;
 		try {
-			tags = await listTags();
+			tags = await listTags(undefined, inHousehold($householdMe) ? catalogScope : undefined);
 			loadError = null;
 		} catch (err) {
 			const msg = reportPageLoadFailure(err, { hasData: tags.length > 0 });
@@ -45,7 +48,7 @@
 		const name = newName.trim();
 		if (!name) return;
 		try {
-			await createTag(name);
+			await createTag(name, inHousehold($householdMe) ? catalogScope : undefined);
 			newName = '';
 			toast($_('common.saved'));
 			await load();
@@ -109,6 +112,14 @@
 </script>
 
 <div class="space-y-6">
+	<CatalogScopeTabs
+		mode="catalog"
+		value={catalogScope}
+		onchange={(next) => {
+			catalogScope = next === 'household' ? 'household' : 'personal';
+			void load();
+		}}
+	/>
 	<div class="card space-y-3">
 		<h2 class="font-medium">{$_('tags.add')}</h2>
 		<form

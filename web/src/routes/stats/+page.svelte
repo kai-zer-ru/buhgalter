@@ -26,8 +26,12 @@
 		type StatsSummary,
 		type StatsNetWorthResponse,
 		type BudgetSummaryItem,
-		type Transaction
+		type Transaction,
+		type CatalogScope
 	} from '$lib/api/client';
+	import CatalogScopeTabs from '$lib/components/CatalogScopeTabs.svelte';
+	import { readStoredCatalogScope, writeStoredCatalogScope } from '$lib/household/catalog-scope';
+	import { householdMe, inHousehold } from '$lib/household/membership';
 	import BackLink from '$lib/components/BackLink.svelte';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
 	import { dateOnlyPicker } from '$lib/datetime-picker-standards';
@@ -101,6 +105,7 @@
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
 	const profileCurrency = $derived($user?.currency ?? 'RUB');
 	let statsCurrency = $state('');
+	let catalogScope = $state<CatalogScope>('all');
 	let availableCurrencies = $state<string[]>([]);
 	const currency = $derived(statsCurrency || profileCurrency);
 	const showCurrencyChips = $derived(availableCurrencies.length > 1);
@@ -182,6 +187,7 @@
 
 	onMount(async () => {
 		statsCurrency = readStoredStatsCurrency();
+		catalogScope = readStoredCatalogScope();
 		await loadMeta();
 		await loadStats(true);
 		lastFiltersKey = currentFiltersKey();
@@ -215,7 +221,8 @@
 			merchantId,
 			groupBy,
 			search: search.trim(),
-			currency
+			currency,
+			catalogScope
 		});
 	}
 
@@ -248,6 +255,9 @@
 		if (categoryId) params.category_id = categoryId;
 		if (merchantId) params.merchant_id = merchantId;
 		if (currency) params.currency = currency;
+		if (inHousehold($householdMe) && catalogScope && catalogScope !== 'all') {
+			params.scope = catalogScope;
+		}
 		return params;
 	}
 
@@ -256,6 +266,9 @@
 		if (fromLocal) params.from = fromDateLocalStart(fromLocal, tz);
 		if (toLocal) params.to = fromDateLocalEnd(toLocal, tz);
 		if (currency) params.currency = currency;
+		if (inHousehold($householdMe) && catalogScope && catalogScope !== 'all') {
+			params.scope = catalogScope;
+		}
 		return params;
 	}
 
@@ -276,6 +289,13 @@
 	function matchingAccountForCurrency(id: string, code: string): boolean {
 		const acc = accounts.find((a) => a.id === id);
 		return (acc?.currency || profileCurrency) === code;
+	}
+
+	function selectCatalogScope(next: CatalogScope | 'personal' | 'household') {
+		const scope: CatalogScope =
+			next === 'personal' || next === 'household' || next === 'all' ? next : 'all';
+		catalogScope = scope;
+		writeStoredCatalogScope(scope);
 	}
 
 	function selectStatsCurrency(code: string) {
@@ -310,7 +330,7 @@
 					getStatsByCategory(params),
 					getStatsBySubcategory(params),
 					getStatsByPeriod({ ...params, group_by: groupBy }),
-					getBudgetSummary(month, currency).catch(() => ({
+					getBudgetSummary(month, currency, catalogScope).catch(() => ({
 						items: [] as BudgetSummaryItem[],
 						month,
 						can_copy_from_previous: false
@@ -455,20 +475,23 @@
 	/>
 	<h1 class="text-2xl font-semibold">{$_('stats.title')}</h1>
 
-	{#if showCurrencyChips}
-		<div class="flex flex-wrap items-center gap-2">
-			<span class="text-sm" style:color="var(--text-muted)">{$_('stats.currencyFilter')}</span>
-			{#each availableCurrencies as code (code)}
-				<button
-					type="button"
-					class={code === currency ? 'tab tab-active' : 'tab'}
-					onclick={() => selectStatsCurrency(code)}
-				>
-					{code}
-				</button>
-			{/each}
-		</div>
-	{/if}
+	<div class="flex flex-wrap items-center gap-4">
+		<CatalogScopeTabs value={catalogScope} onchange={selectCatalogScope} />
+		{#if showCurrencyChips}
+			<div class="flex flex-wrap items-center gap-2">
+				<span class="text-sm" style:color="var(--text-muted)">{$_('stats.currencyFilter')}</span>
+				{#each availableCurrencies as code (code)}
+					<button
+						type="button"
+						class={code === currency ? 'tab tab-active' : 'tab'}
+						onclick={() => selectStatsCurrency(code)}
+					>
+						{code}
+					</button>
+				{/each}
+			</div>
+		{/if}
+	</div>
 
 	<FilterPanel>
 		<div class="filter-panel-body grid items-end gap-3 sm:grid-cols-2 md:mt-0 mt-3 lg:grid-cols-4">

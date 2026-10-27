@@ -8,6 +8,7 @@
 		| '/settings/password'
 		| '/settings/server'
 		| '/settings/tokens'
+		| '/settings/household'
 		| '/settings/notifications'
 		| '/settings/import'
 		| '/transaction-templates'

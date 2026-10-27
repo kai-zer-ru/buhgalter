@@ -16,6 +16,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/household"
 	"github.com/kai-zer-ru/buhgalter/internal/money"
 	"github.com/kai-zer-ru/buhgalter/internal/notificationintercept"
 	"github.com/kai-zer-ru/buhgalter/internal/notify"
@@ -153,6 +154,12 @@ func (h *Handler) PutSettings(w http.ResponseWriter, r *http.Request) {
 	if err := auth.UpdateUserProfile(r.Context(), h.Store.DB(), info.User.ID, displayName, language, currency, timezone, theme); err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
+	}
+	if info.Scope.IsOwner() && info.Scope.PrincipalID != "" {
+		if err := household.SyncPrincipalLocale(r.Context(), h.Store.DB(), info.Scope.PrincipalID, language, timezone, currency); err != nil {
+			apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+			return
+		}
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{
@@ -545,7 +552,7 @@ func (h *Handler) PutNotificationInterceptBindings(w http.ResponseWriter, r *htt
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_INVALID_JSON")
 		return
 	}
-	view, err := notificationintercept.ReplaceSettings(r.Context(), h.Store.DB(), info.User.ID, req)
+	view, err := notificationintercept.ReplaceSettingsOwned(r.Context(), h.Store.DB(), info.User.ID, info.Scope.OwnerIDs(), req)
 	if err != nil {
 		msg := err.Error()
 		switch msg {

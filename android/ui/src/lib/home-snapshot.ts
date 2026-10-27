@@ -1,3 +1,5 @@
+import type { CatalogScope } from '$lib/api/client';
+import { dashboardRefPath } from '$lib/household/catalog-scope';
 import { capturePageLoadError } from '$lib/page-load';
 import { readRefCache } from '$lib/offline/ref-cache';
 import { isServerUnavailableForUser } from '$lib/offline/server-connectivity';
@@ -6,15 +8,15 @@ import { toast } from '$lib/toast';
 
 export const HOME_DASHBOARD_PATH = '/api/v1/dashboard';
 
-/** Shown dashboard, or `GET /api/v1/dashboard` already in ref-cache. Enough for the summary. */
-export function hasHomeDashboardSnapshot(shown: unknown): boolean {
+/** Shown dashboard, or the cache entry for this catalog tab. Enough for the summary. */
+export function hasHomeDashboardSnapshot(shown: unknown, scope?: CatalogScope): boolean {
 	if (shown != null) return true;
-	return readRefCache(HOME_DASHBOARD_PATH) !== null;
+	return readRefCache(dashboardRefPath(scope)) !== null;
 }
 
 /** Foreground `loadAll` hides the summary, so it runs only without a snapshot. */
-export function homeNeedsForegroundLoad(shown: unknown): boolean {
-	return !hasHomeDashboardSnapshot(shown);
+export function homeNeedsForegroundLoad(shown: unknown, scope?: CatalogScope): boolean {
+	return !hasHomeDashboardSnapshot(shown, scope);
 }
 
 export type HomeDashboardScreen<T> = {
@@ -29,9 +31,10 @@ export type HomeDashboardScreen<T> = {
  * Returns `screen` unchanged when the cache has no dashboard.
  */
 export function applyCachedDashboardSnapshot<T>(
-	screen: HomeDashboardScreen<T>
+	screen: HomeDashboardScreen<T>,
+	scope?: CatalogScope
 ): HomeDashboardScreen<T> {
-	const cached = readRefCache<T>(HOME_DASHBOARD_PATH);
+	const cached = readRefCache<T>(dashboardRefPath(scope));
 	if (cached == null) return screen;
 	const dashBase = assignIfChanged<T | null>(screen.dashBase, cached);
 	if (dashBase === screen.dashBase && screen.loadError === null && !screen.loading) return screen;

@@ -5,7 +5,7 @@ SELECT
     COUNT(*) AS transaction_count
 FROM transactions t
 JOIN accounts a ON a.id = t.account_id AND a.currency = ?
-WHERE t.user_id = ?
+WHERE t.user_id IN (sqlc.slice('owner_ids'))
   AND t.type IN ('income', 'expense')
   AND (? = '' OR t.account_id = ?)
   AND (? = '' OR t.category_id = ?)
@@ -53,7 +53,7 @@ SELECT
     COUNT(*) AS transaction_count
 FROM transactions t
 JOIN accounts a ON a.id = t.account_id AND a.currency = ?
-WHERE t.user_id = ?
+WHERE t.user_id IN (sqlc.slice('owner_ids'))
   AND t.account_id = ?
   AND t.type IN ('income', 'expense', 'transfer')
   AND (? = '' OR t.category_id = ?)
@@ -82,7 +82,7 @@ SELECT
 FROM transactions t
 JOIN accounts a ON a.id = t.account_id AND a.currency = ?
 JOIN categories c ON c.id = t.category_id
-WHERE t.user_id = ?
+WHERE t.user_id IN (sqlc.slice('owner_ids'))
   AND t.type IN ('income', 'expense')
   AND (? = '' OR t.account_id = ?)
   AND (? = '' OR t.category_id = ?)
@@ -111,7 +111,7 @@ SELECT
 FROM transactions t
 JOIN accounts a ON a.id = t.account_id AND a.currency = ?
 JOIN merchants m ON m.id = t.merchant_id AND m.user_id = t.user_id
-WHERE t.user_id = ?
+WHERE t.user_id IN (sqlc.slice('owner_ids'))
   AND t.type = 'expense'
   AND (? = '' OR t.account_id = ?)
   AND (? = '' OR t.category_id = ?)
@@ -143,7 +143,7 @@ FROM transactions t
 JOIN accounts a ON a.id = t.account_id AND a.currency = ?
 JOIN categories c ON c.id = t.category_id
 JOIN subcategories s ON s.id = t.subcategory_id
-WHERE t.user_id = ?
+WHERE t.user_id IN (sqlc.slice('owner_ids'))
   AND t.type IN ('income', 'expense')
   AND (? = '' OR t.account_id = ?)
   AND (? = '' OR t.category_id = ?)
@@ -189,7 +189,7 @@ JOIN receipt_imports ri ON ri.id = t.receipt_import_id AND ri.user_id = t.user_i
 JOIN receipt_import_item_categories ric ON ric.receipt_import_id = t.receipt_import_id AND ric.user_id = t.user_id
 JOIN categories c ON c.id = ric.category_id
 JOIN subcategories s ON s.id = ric.subcategory_id
-WHERE t.user_id = ?
+WHERE t.user_id IN (sqlc.slice('owner_ids'))
   AND t.receipt_import_id IS NOT NULL
   AND t.receipt_item_index IS NULL
   AND ric.subcategory_id IS NOT NULL
@@ -220,7 +220,7 @@ SELECT
     t.amount
 FROM transactions t
 JOIN accounts a ON a.id = t.account_id AND a.currency = ?
-WHERE t.user_id = ?
+WHERE t.user_id IN (sqlc.slice('owner_ids'))
   AND t.type IN ('income', 'expense')
   AND (? = '' OR t.account_id = ?)
   AND (? = '' OR t.category_id = ?)
@@ -249,8 +249,8 @@ SELECT
 FROM transactions t
 JOIN debt_transactions dtx ON dtx.transaction_id = t.id
 JOIN debts d ON d.id = dtx.debt_id AND d.currency = ?
-WHERE t.user_id = ?
-  AND d.user_id = ?
+WHERE t.user_id IN (sqlc.slice('owner_ids'))
+  AND d.user_id = t.user_id
   AND d.debtor_id = ?
   AND t.type IN ('income', 'expense')
   AND (? = '' OR t.kind = ?)
@@ -266,8 +266,8 @@ FROM transactions t
 JOIN credit_payments cp ON cp.transaction_id = t.id
 JOIN credits c ON c.id = cp.credit_id
 JOIN accounts a ON a.id = c.debit_account_id AND a.currency = ?
-WHERE t.user_id = ?
-  AND c.user_id = ?
+WHERE t.user_id IN (sqlc.slice('owner_ids'))
+  AND c.user_id = t.user_id
   AND c.id = ?
   AND t.type IN ('income', 'expense')
   AND cp.exclude_from_stats = 0
@@ -281,21 +281,21 @@ SELECT
     COUNT(*) AS payment_count
 FROM credit_payments cp
 JOIN credits c ON c.id = cp.credit_id
-JOIN accounts a ON a.id = c.debit_account_id AND a.currency = ?
-WHERE c.user_id = ?
-  AND c.id = ?
+JOIN accounts a ON a.id = c.debit_account_id AND a.currency = sqlc.arg('currency')
+WHERE (sqlc.arg('date_from') = '' OR cp.payment_date >= sqlc.arg('date_from'))
+  AND (sqlc.arg('date_to') = '' OR cp.payment_date <= sqlc.arg('date_to'))
   AND cp.transaction_id IS NOT NULL
   AND cp.exclude_from_stats = 0
-  AND (? = '' OR cp.payment_date >= ?)
-  AND (? = '' OR cp.payment_date <= ?);
+  AND c.id = sqlc.arg('id')
+  AND c.user_id IN (sqlc.slice('owner_ids'));
 
 -- name: StatsContextCreditRemaining :one
 SELECT
     principal_amount,
     paid_amount
 FROM credits c
-JOIN accounts a ON a.id = c.debit_account_id AND a.currency = ?
-WHERE c.id = ? AND c.user_id = ?;
+JOIN accounts a ON a.id = c.debit_account_id AND a.currency = sqlc.arg('currency')
+WHERE c.id = sqlc.arg('id') AND c.user_id IN (sqlc.slice('owner_ids'));
 
 -- name: StatsContextDebts :one
 SELECT
@@ -305,8 +305,8 @@ SELECT
 FROM transactions t
 JOIN debt_transactions dtx ON dtx.transaction_id = t.id
 JOIN debts d ON d.id = dtx.debt_id AND d.currency = ?
-WHERE t.user_id = ?
-  AND d.user_id = ?
+WHERE t.user_id IN (sqlc.slice('owner_ids'))
+  AND d.user_id = t.user_id
   AND t.type IN ('income', 'expense')
   AND (? = '' OR t.kind = ?)
   AND (? = '' OR t.transaction_date >= ?)

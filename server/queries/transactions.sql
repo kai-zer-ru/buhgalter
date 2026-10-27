@@ -5,6 +5,8 @@ SELECT timezone FROM users WHERE id = ?;
 SELECT
     t.id,
     t.user_id,
+    t.created_by_user_id,
+    COALESCE(cb.display_name, '') AS created_by_display_name,
     t.account_id,
     t.type,
     t.kind,
@@ -63,13 +65,16 @@ LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
 LEFT JOIN accounts a ON a.id = t.account_id
 LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
+LEFT JOIN users cb ON cb.id = t.created_by_user_id
 LEFT JOIN credit_payments cp ON cp.transaction_id = t.id
-WHERE t.id = ? AND t.user_id = ?;
+WHERE t.id = sqlc.arg('id') AND t.user_id IN (sqlc.slice('owner_ids'));
 
 -- name: ListTransactionsByTransferGroup :many
 SELECT
     t.id,
     t.user_id,
+    t.created_by_user_id,
+    COALESCE(cb.display_name, '') AS created_by_display_name,
     t.account_id,
     t.type,
     t.kind,
@@ -118,8 +123,15 @@ LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
 LEFT JOIN accounts a ON a.id = t.account_id
 LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
-WHERE t.transfer_group_id = ? AND t.user_id = ?
+LEFT JOIN users cb ON cb.id = t.created_by_user_id
+WHERE t.transfer_group_id = sqlc.arg('transfer_group_id') AND t.user_id IN (sqlc.slice('owner_ids'))
 ORDER BY t.created_at ASC, t.id ASC;
+
+-- name: ListTransferGroupRows :many
+SELECT id, user_id, account_id, type, category_id
+FROM transactions
+WHERE transfer_group_id = sqlc.arg('transfer_group_id')
+ORDER BY created_at ASC, id ASC;
 
 -- name: GetLatestTransactionCreatedAtForAccount :one
 SELECT created_at
@@ -135,8 +147,8 @@ INSERT INTO transactions (
     id, user_id, account_id, type, kind, amount, description,
     category_id, subcategory_id, transfer_group_id, transfer_account_id,
     store_id, receipt_import_id, receipt_item_index,
-    transaction_date, affects_balance, subscription_id, merchant_id, created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    transaction_date, affects_balance, subscription_id, merchant_id, created_by_user_id, created_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: UpdateTransaction :exec
 UPDATE transactions
@@ -199,7 +211,7 @@ SELECT
     a.currency AS account_currency
 FROM transactions t
 JOIN accounts a ON a.id = t.account_id
-WHERE t.user_id = ?
+WHERE t.user_id IN (sqlc.slice('owner_ids'))
   AND t.kind = 'future'
   AND t.transaction_date <= ?
 ORDER BY t.transaction_date ASC, t.created_at ASC;
@@ -235,7 +247,7 @@ WHERE kind = 'future'
 SELECT COUNT(*) AS count
 FROM transactions t
 LEFT JOIN accounts a ON a.id = t.account_id
-WHERE t.user_id = ?
+WHERE t.user_id IN (sqlc.slice('owner_ids'))
   AND (? = '' OR t.account_id = ?)
   AND (? = '' OR t.type = ?)
   AND (? = '' OR t.category_id = ?)
@@ -270,6 +282,8 @@ WHERE t.user_id = ?
 SELECT
     t.id,
     t.user_id,
+    t.created_by_user_id,
+    COALESCE(cb.display_name, '') AS created_by_display_name,
     t.account_id,
     t.type,
     t.kind,
@@ -328,8 +342,9 @@ LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
 LEFT JOIN accounts a ON a.id = t.account_id
 LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
+LEFT JOIN users cb ON cb.id = t.created_by_user_id
 LEFT JOIN credit_payments cp ON cp.transaction_id = t.id
-WHERE t.user_id = ?
+WHERE t.user_id IN (sqlc.slice('owner_ids'))
   AND (? = '' OR t.account_id = ?)
   AND (? = '' OR t.type = ?)
   AND (? = '' OR t.category_id = ?)
@@ -366,6 +381,8 @@ LIMIT ? OFFSET ?;
 SELECT
     t.id,
     t.user_id,
+    t.created_by_user_id,
+    COALESCE(cb.display_name, '') AS created_by_display_name,
     t.account_id,
     t.type,
     t.kind,
@@ -424,8 +441,9 @@ LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
 LEFT JOIN accounts a ON a.id = t.account_id
 LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
+LEFT JOIN users cb ON cb.id = t.created_by_user_id
 LEFT JOIN credit_payments cp ON cp.transaction_id = t.id
-WHERE t.user_id = ?
+WHERE t.user_id IN (sqlc.slice('owner_ids'))
   AND (? = '' OR t.account_id = ?)
   AND (? = '' OR t.type = ?)
   AND (? = '' OR t.category_id = ?)
@@ -462,6 +480,8 @@ LIMIT ? OFFSET ?;
 SELECT
     t.id,
     t.user_id,
+    t.created_by_user_id,
+    COALESCE(cb.display_name, '') AS created_by_display_name,
     t.account_id,
     t.type,
     t.kind,
@@ -520,8 +540,9 @@ LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
 LEFT JOIN accounts a ON a.id = t.account_id
 LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
+LEFT JOIN users cb ON cb.id = t.created_by_user_id
 LEFT JOIN credit_payments cp ON cp.transaction_id = t.id
-WHERE t.user_id = ?
+WHERE t.user_id IN (sqlc.slice('owner_ids'))
   AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL)
   AND (
     t.type != 'transfer'
@@ -552,7 +573,7 @@ WHERE user_id = ? AND account_id = ? AND type = 'expense' AND kind = 'manual'
 -- name: SumTransferOutManual :one
 SELECT COALESCE(SUM(t.amount), 0) AS total
 FROM transactions t
-WHERE t.user_id = ? AND t.account_id = ? AND t.type = 'transfer' AND t.kind = 'manual'
+WHERE t.user_id IN (sqlc.slice('owner_ids')) AND t.account_id = ? AND t.type = 'transfer' AND t.kind = 'manual'
   AND t.affects_balance = 1 AND t.transaction_date <= ?
   AND t.transfer_group_id IS NOT NULL
   AND t.id = (
@@ -566,7 +587,7 @@ WHERE t.user_id = ? AND t.account_id = ? AND t.type = 'transfer' AND t.kind = 'm
 -- name: SumTransferInManual :one
 SELECT COALESCE(SUM(t.amount), 0) AS total
 FROM transactions t
-WHERE t.user_id = ? AND t.account_id = ? AND t.type = 'transfer' AND t.kind = 'manual'
+WHERE t.user_id IN (sqlc.slice('owner_ids')) AND t.account_id = ? AND t.type = 'transfer' AND t.kind = 'manual'
   AND t.affects_balance = 1 AND t.transaction_date <= ?
   AND t.transfer_group_id IS NOT NULL
   AND t.id = (
@@ -592,7 +613,7 @@ WHERE user_id = ? AND account_id = ? AND type = 'expense' AND kind = 'future'
 -- name: SumFutureTransferOutInRange :one
 SELECT COALESCE(SUM(t.amount), 0) AS total
 FROM transactions t
-WHERE t.user_id = ? AND t.account_id = ? AND t.type = 'transfer' AND kind = 'future'
+WHERE t.user_id IN (sqlc.slice('owner_ids')) AND t.account_id = ? AND t.type = 'transfer' AND kind = 'future'
   AND t.affects_balance = 1 AND t.transaction_date >= ? AND t.transaction_date <= ?
   AND t.transfer_group_id IS NOT NULL
   AND t.id = (
@@ -606,7 +627,7 @@ WHERE t.user_id = ? AND t.account_id = ? AND t.type = 'transfer' AND kind = 'fut
 -- name: SumFutureTransferInInRange :one
 SELECT COALESCE(SUM(t.amount), 0) AS total
 FROM transactions t
-WHERE t.user_id = ? AND t.account_id = ? AND t.type = 'transfer' AND kind = 'future'
+WHERE t.user_id IN (sqlc.slice('owner_ids')) AND t.account_id = ? AND t.type = 'transfer' AND kind = 'future'
   AND t.affects_balance = 1 AND t.transaction_date >= ? AND t.transaction_date <= ?
   AND t.transfer_group_id IS NOT NULL
   AND t.id = (
@@ -688,7 +709,7 @@ FROM (
             ORDER BY t.created_at ASC, t.id ASC
         ) AS leg
     FROM transactions t
-    WHERE t.user_id = ? AND t.type = 'transfer' AND t.kind = 'manual'
+    WHERE t.user_id IN (sqlc.slice('owner_ids')) AND t.type = 'transfer' AND t.kind = 'manual'
       AND t.affects_balance = 1 AND t.transaction_date <= ?
       AND t.transfer_group_id IS NOT NULL
 ) ranked
@@ -706,7 +727,7 @@ FROM (
             ORDER BY t.created_at ASC, t.id ASC
         ) AS leg
     FROM transactions t
-    WHERE t.user_id = ? AND t.type = 'transfer' AND t.kind = 'manual'
+    WHERE t.user_id IN (sqlc.slice('owner_ids')) AND t.type = 'transfer' AND t.kind = 'manual'
       AND t.affects_balance = 1 AND t.transaction_date <= ?
       AND t.transfer_group_id IS NOT NULL
 ) ranked
@@ -738,7 +759,7 @@ FROM (
             ORDER BY t.created_at ASC, t.id ASC
         ) AS leg
     FROM transactions t
-    WHERE t.user_id = ? AND t.type = 'transfer' AND t.kind = 'future'
+    WHERE t.user_id IN (sqlc.slice('owner_ids')) AND t.type = 'transfer' AND t.kind = 'future'
       AND t.affects_balance = 1 AND t.transaction_date >= ? AND t.transaction_date <= ?
       AND t.transfer_group_id IS NOT NULL
 ) ranked
@@ -756,7 +777,7 @@ FROM (
             ORDER BY t.created_at ASC, t.id ASC
         ) AS leg
     FROM transactions t
-    WHERE t.user_id = ? AND t.type = 'transfer' AND t.kind = 'future'
+    WHERE t.user_id IN (sqlc.slice('owner_ids')) AND t.type = 'transfer' AND t.kind = 'future'
       AND t.affects_balance = 1 AND t.transaction_date >= ? AND t.transaction_date <= ?
       AND t.transfer_group_id IS NOT NULL
 ) ranked
@@ -772,7 +793,7 @@ WHERE user_id = ? AND kind = 'future'
 -- name: CountInboxTransactions :one
 SELECT COUNT(*) AS count
 FROM transactions t
-WHERE t.user_id = ?
+WHERE t.user_id IN (sqlc.slice('owner_ids'))
   AND t.type IN ('income', 'expense')
   AND t.category_id IS NULL
   AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL);
@@ -781,6 +802,8 @@ WHERE t.user_id = ?
 SELECT
     t.id,
     t.user_id,
+    t.created_by_user_id,
+    COALESCE(cb.display_name, '') AS created_by_display_name,
     t.account_id,
     t.type,
     t.kind,
@@ -821,8 +844,9 @@ LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
 LEFT JOIN accounts a ON a.id = t.account_id
 LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
+LEFT JOIN users cb ON cb.id = t.created_by_user_id
 LEFT JOIN credit_payments cp ON cp.transaction_id = t.id
-WHERE t.user_id = ?
+WHERE t.user_id IN (sqlc.slice('owner_ids'))
   AND t.type IN ('income', 'expense')
   AND t.category_id IS NULL
   AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL)
@@ -833,6 +857,8 @@ LIMIT ? OFFSET ?;
 SELECT
     t.id,
     t.user_id,
+    t.created_by_user_id,
+    COALESCE(cb.display_name, '') AS created_by_display_name,
     t.account_id,
     t.type,
     t.kind,
@@ -873,8 +899,9 @@ LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN subcategories s ON s.id = t.subcategory_id
 LEFT JOIN accounts a ON a.id = t.account_id
 LEFT JOIN accounts ta ON ta.id = t.transfer_account_id
+LEFT JOIN users cb ON cb.id = t.created_by_user_id
 LEFT JOIN credit_payments cp ON cp.transaction_id = t.id
-WHERE t.user_id = ?
+WHERE t.user_id IN (sqlc.slice('owner_ids'))
   AND t.type IN ('income', 'expense')
   AND t.category_id IS NULL
   AND NOT (t.type = 'expense' AND t.transfer_group_id IS NOT NULL)

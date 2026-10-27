@@ -23,6 +23,7 @@ type Account struct {
 	CreatedAt                string  `json:"created_at"`
 	UpdatedAt                string  `json:"updated_at"`
 	Currency                 string  `json:"currency"`
+	OriginalOwnerUserID      *string `json:"original_owner_user_id"`
 }
 
 type AccountsNew struct {
@@ -198,6 +199,35 @@ type FeatureFlag struct {
 	Key       string `json:"key"`
 	Enabled   int64  `json:"enabled"`
 	UpdatedAt string `json:"updated_at"`
+}
+
+type Household struct {
+	ID              string `json:"id"`
+	Name            string `json:"name"`
+	Kind            string `json:"kind"`
+	OwnerUserID     string `json:"owner_user_id"`
+	PrincipalUserID string `json:"principal_user_id"`
+	CreatedAt       string `json:"created_at"`
+	UpdatedAt       string `json:"updated_at"`
+}
+
+type HouseholdInvite struct {
+	ID          string  `json:"id"`
+	HouseholdID string  `json:"household_id"`
+	Code        string  `json:"code"`
+	Status      string  `json:"status"`
+	CreatedBy   string  `json:"created_by"`
+	CreatedAt   string  `json:"created_at"`
+	ExpiresAt   string  `json:"expires_at"`
+	UsedBy      *string `json:"used_by"`
+	UsedAt      *string `json:"used_at"`
+}
+
+type HouseholdMember struct {
+	HouseholdID string `json:"household_id"`
+	UserID      string `json:"user_id"`
+	Role        string `json:"role"`
+	JoinedAt    string `json:"joined_at"`
 }
 
 type ImportIdempotency struct {
@@ -475,6 +505,7 @@ type Transaction struct {
 	AffectsBalance    int64   `json:"affects_balance"`
 	SubscriptionID    *string `json:"subscription_id"`
 	MerchantID        *string `json:"merchant_id"`
+	CreatedByUserID   *string `json:"created_by_user_id"`
 	CreatedAt         string  `json:"created_at"`
 	UpdatedAt         string  `json:"updated_at"`
 }
@@ -518,6 +549,7 @@ type User struct {
 	Timezone     string  `json:"timezone"`
 	Theme        string  `json:"theme"`
 	Status       string  `json:"status"`
+	Kind         string  `json:"kind"`
 	CreatedAt    string  `json:"created_at"`
 	UpdatedAt    string  `json:"updated_at"`
 }

@@ -43,6 +43,10 @@ type NetWorthResponse struct {
 const maxNetWorthMonths = 120
 
 func (s *Service) NetWorth(ctx context.Context, userID, from, to, groupBy, currency string) (NetWorthResponse, error) {
+	return s.NetWorthOwned(ctx, userID, []string{userID}, from, to, groupBy, currency)
+}
+
+func (s *Service) NetWorthOwned(ctx context.Context, userID string, ownerIDs []string, from, to, groupBy, currency string) (NetWorthResponse, error) {
 	if groupBy == "" {
 		groupBy = "month"
 	}
@@ -69,7 +73,10 @@ func (s *Service) NetWorth(ctx context.Context, userID, from, to, groupBy, curre
 		return NetWorthResponse{}, ErrInvalidDate
 	}
 
-	current, err := s.snapshotAt(ctx, userID, timeutil.FormatUTC(now), "", currency)
+	if len(ownerIDs) == 0 {
+		return NetWorthResponse{}, nil
+	}
+	current, err := s.snapshotAt(ctx, userID, ownerIDs, timeutil.FormatUTC(now), "", currency)
 	if err != nil {
 		return NetWorthResponse{}, err
 	}
@@ -78,7 +85,7 @@ func (s *Service) NetWorth(ctx context.Context, userID, from, to, groupBy, curre
 	for monthStart := rangeFrom; !monthStart.After(rangeTo); monthStart = monthStart.AddDate(0, 1, 0) {
 		periodKey := monthStart.Format("2006-01-02")
 		asOf := monthEndInTZ(monthStart, loc, now)
-		snap, err := s.snapshotAt(ctx, userID, asOf, periodKey, currency)
+		snap, err := s.snapshotAt(ctx, userID, ownerIDs, asOf, periodKey, currency)
 		if err != nil {
 			return NetWorthResponse{}, err
 		}
@@ -141,10 +148,10 @@ func monthCount(rangeFrom, rangeTo time.Time) int {
 	return n
 }
 
-func (s *Service) snapshotAt(ctx context.Context, userID, asOf, period, currency string) (NetWorthSnapshot, error) {
+func (s *Service) snapshotAt(ctx context.Context, userID string, ownerIDs []string, asOf, period, currency string) (NetWorthSnapshot, error) {
 	q := queries(s.db)
 	accRows, err := q.ListAccountsNetWorthByUser(ctx, sqlcdb.ListAccountsNetWorthByUserParams{
-		UserID: userID, Currency: currency,
+		OwnerIds: ownerIDs, Currency: currency,
 	})
 	if err != nil {
 		return NetWorthSnapshot{}, err
@@ -153,9 +160,15 @@ func (s *Service) snapshotAt(ctx context.Context, userID, asOf, period, currency
 	if err != nil {
 		return NetWorthSnapshot{}, ErrInvalidDate
 	}
-	balances, err := accountbalance.ComputeAllAsOf(ctx, s.db, userID, asOf)
-	if err != nil {
-		return NetWorthSnapshot{}, err
+	balances := map[string]int64{}
+	for _, oid := range ownerIDs {
+		part, err := accountbalance.ComputeAllAsOf(ctx, s.db, oid, asOf)
+		if err != nil {
+			return NetWorthSnapshot{}, err
+		}
+		for id, bal := range part {
+			balances[id] = bal
+		}
 	}
 
 	var cashBank, creditCardsDebt int64
@@ -182,7 +195,7 @@ func (s *Service) snapshotAt(ctx context.Context, userID, asOf, period, currency
 	}
 
 	debtRows, err := q.NetWorthDebtsByUser(ctx, sqlcdb.NetWorthDebtsByUserParams{
-		UserID:   userID,
+		OwnerIds: ownerIDs,
 		AsOf:     asOf,
 		Currency: currency,
 	})
@@ -203,7 +216,7 @@ func (s *Service) snapshotAt(ctx context.Context, userID, asOf, period, currency
 	}
 
 	creditRows, err := q.NetWorthCreditsByUser(ctx, sqlcdb.NetWorthCreditsByUserParams{
-		UserID:   userID,
+		OwnerIds: ownerIDs,
 		AsOf:     asOf,
 		Currency: currency,
 	})

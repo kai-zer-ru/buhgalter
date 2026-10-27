@@ -23,8 +23,10 @@
 		canRepeatTransaction,
 		canDeleteTransaction,
 		canLinkToSubscription,
-		canAttachReceipt
+		canAttachReceipt,
+		transactionContributor
 	} from '$lib/transaction-display';
+	import { user } from '$lib/stores/auth';
 	import { isReceiptScannerEnabled } from '$lib/receipt/receipt-module';
 	import { afterOnlineWrite } from '$lib/offline/after-online-write';
 	import { isPendingTransaction, pendingSyncFailed } from '$lib/offline/pending-display';
@@ -146,6 +148,13 @@
 		} catch (e) {
 			toast.error(formatApiError(e, 'receipt.detach.error'));
 		}
+	}
+
+	function contributorLine(tx: Transaction): string | null {
+		const info = transactionContributor(tx, $user?.id);
+		if (!info) return null;
+		if (info.kind === 'deleted') return $_('transactions.contributedDeleted');
+		return $_('transactions.contributed', { values: { name: info.name } });
 	}
 
 	function rowDateLabel(tx: Transaction): string {
@@ -317,6 +326,9 @@
 								<span title={$_('offline.pending')}> ⏳</span>
 							{/if}
 						</p>
+						{#if contributorLine(tx)}
+							<p class="mt-0.5 text-xs" style:color="var(--text-muted)">{contributorLine(tx)}</p>
+						{/if}
 						<p class="mt-1 text-sm font-medium">
 							<TransactionAccountCell {tx} {siblings} mode="prefix" />
 						</p>
@@ -418,6 +430,11 @@
 							{:else if isPendingTransaction(tx)}
 								<span title={$_('offline.pending')}> ⏳</span>
 							{/if}
+							{#if contributorLine(tx)}
+								<div class="text-xs font-normal" style:color="var(--text-muted)">
+									{contributorLine(tx)}
+								</div>
+							{/if}
 						</td>
 						<td class="p-3 align-middle whitespace-nowrap">
 							<TransactionAccountCell {tx} {siblings} mode="prefix" />
@@ -502,6 +519,9 @@
 								<span title={$_('offline.pending')}> ⏳</span>
 							{/if}
 						</p>
+						{#if contributorLine(tx)}
+							<p class="mt-0.5 text-xs" style:color="var(--text-muted)">{contributorLine(tx)}</p>
+						{/if}
 						<p class="mt-1 text-sm font-medium">
 							<TransactionAccountCell {tx} {siblings} mode="prefix" />
 						</p>

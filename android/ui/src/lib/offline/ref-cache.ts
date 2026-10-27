@@ -22,6 +22,12 @@ import { isDashboardRefPath, isDashboardShape, stableEqual } from '$lib/state-ut
 const REF_CACHE_VERSION = 'buhgalter.ref_cache.v1';
 
 /** GET paths that must never be served from stale cache. */
+/**
+ * Online: always network (cache only for offline / connection errors).
+ * Membership changed on another client (leave on web) — SWR kept the old group.
+ */
+const REF_CACHE_NETWORK_FIRST = new Set(['/api/v1/households/me', '/api/v1/households/me/invites']);
+
 const REF_CACHE_SKIP = new Set([
 	'/api/v1/health',
 	// Bootstrap flag (registration_enabled) — must not serve a pre-mutation snapshot on /login.
@@ -602,7 +608,10 @@ export async function fetchWithRefCache<T>(path: string, fetcher: () => Promise<
 		throw new OfflineCacheMissError(path);
 	}
 
-	const forceNetwork = forceNetworkRefCacheDepth > 0 || pendingNetworkRefresh.has(path);
+	const forceNetwork =
+		forceNetworkRefCacheDepth > 0 ||
+		pendingNetworkRefresh.has(path) ||
+		REF_CACHE_NETWORK_FIRST.has(path.split('?')[0] ?? path);
 	if (forceNetwork) {
 		try {
 			// Never return a body fetched under a superseded epoch (pre-mutation snapshot).
@@ -858,6 +867,7 @@ function accountFromBalanceSummary(summary: AccountBalanceSummary): Account {
 		status: 'active',
 		is_primary: summary.is_primary,
 		currency: summary.currency,
+		scope: summary.scope,
 		created_at: '',
 		updated_at: ''
 	};
@@ -876,7 +886,8 @@ function accountFromUIMetaRef(
 			type: ref.type,
 			bank_id: ref.bank_id ?? null,
 			bank_name: bank?.name ?? null,
-			status: ref.status
+			status: ref.status,
+			scope: ref.scope ?? summary.scope
 		};
 	}
 	return {
@@ -900,6 +911,7 @@ function accountFromUIMetaRef(
 		auto_topup_source_account_id: null,
 		status: ref.status,
 		is_primary: false,
+		scope: ref.scope,
 		created_at: '',
 		updated_at: ''
 	};
@@ -943,6 +955,20 @@ export function enrichAccountsWithCachedBalances(
 	if (!dash?.accounts?.length) return accounts;
 	const summaryById = new Map(dash.accounts.map((row) => [row.id, row]));
 	return accounts.map((acc) => applyBalanceSummary(acc, summaryById.get(acc.id)));
+}
+
+function mergeDashboardAccountsIntoList(
+	rows: Account[],
+	dashboard: Dashboard,
+	path: string
+): Account[] {
+	const enriched = enrichAccountsWithCachedBalances(rows, dashboard);
+	if (path.includes('status=archived') || path.includes('status=deleted')) return enriched;
+	const have = new Set(enriched.map((acc) => acc.id));
+	const extra = dashboard.accounts
+		.filter((row) => !have.has(row.id))
+		.map((row) => accountFromBalanceSummary(row));
+	return extra.length ? [...enriched, ...extra] : enriched;
 }
 
 /** @deprecated Use enrichAccountsWithCachedBalances */
@@ -991,7 +1017,7 @@ export function patchAccountListCachesFromDashboard(dashboard: Dashboard): void 
 	for (const path of paths) {
 		const rows = readRefCache<Account[]>(path);
 		if (!isNonEmptyList(rows)) continue;
-		writeRefCache(path, enrichAccountsWithCachedBalances(rows, dashboard));
+		writeRefCache(path, mergeDashboardAccountsIntoList(rows, dashboard, path));
 	}
 	for (const summary of dashboard.accounts) {
 		const acc = readRefCache<Account>(`/api/v1/accounts/${summary.id}`);

@@ -7,6 +7,7 @@ package sqlc
 
 import (
 	"context"
+	"strings"
 )
 
 const clearDebtTransactionLink = `-- name: ClearDebtTransactionLink :exec
@@ -171,12 +172,12 @@ JOIN debtors dt ON dt.id = d.debtor_id
 LEFT JOIN debt_transactions dtx_open ON dtx_open.debt_id = d.id AND dtx_open.role = 'open'
 LEFT JOIN transactions tx ON tx.id = COALESCE(dtx_open.transaction_id, d.transaction_id) AND tx.user_id = d.user_id
 LEFT JOIN accounts acc ON acc.id = tx.account_id
-WHERE d.id = ? AND d.user_id = ?
+WHERE d.id = ?1 AND d.user_id IN (/*SLICE:owner_ids*/?)
 `
 
 type GetDebtByIDParams struct {
-	ID     string `json:"id"`
-	UserID string `json:"user_id"`
+	ID       string   `json:"id"`
+	OwnerIds []string `json:"owner_ids"`
 }
 
 type GetDebtByIDRow struct {
@@ -200,7 +201,18 @@ type GetDebtByIDRow struct {
 }
 
 func (q *Queries) GetDebtByID(ctx context.Context, arg GetDebtByIDParams) (GetDebtByIDRow, error) {
-	row := q.db.QueryRowContext(ctx, getDebtByID, arg.ID, arg.UserID)
+	query := getDebtByID
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.ID)
+	if len(arg.OwnerIds) > 0 {
+		for _, v := range arg.OwnerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(arg.OwnerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	row := q.db.QueryRowContext(ctx, query, queryParams...)
 	var i GetDebtByIDRow
 	err := row.Scan(
 		&i.ID,
@@ -245,16 +257,27 @@ func (q *Queries) GetDebtLinkByTransactionID(ctx context.Context, transactionID 
 const getDebtorByID = `-- name: GetDebtorByID :one
 SELECT id, user_id, name, created_at
 FROM debtors
-WHERE id = ? AND user_id = ?
+WHERE id = ?1 AND user_id IN (/*SLICE:owner_ids*/?)
 `
 
 type GetDebtorByIDParams struct {
-	ID     string `json:"id"`
-	UserID string `json:"user_id"`
+	ID       string   `json:"id"`
+	OwnerIds []string `json:"owner_ids"`
 }
 
 func (q *Queries) GetDebtorByID(ctx context.Context, arg GetDebtorByIDParams) (Debtor, error) {
-	row := q.db.QueryRowContext(ctx, getDebtorByID, arg.ID, arg.UserID)
+	query := getDebtorByID
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.ID)
+	if len(arg.OwnerIds) > 0 {
+		for _, v := range arg.OwnerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(arg.OwnerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	row := q.db.QueryRowContext(ctx, query, queryParams...)
 	var i Debtor
 	err := row.Scan(
 		&i.ID,
@@ -394,7 +417,7 @@ JOIN debtors dt ON dt.id = d.debtor_id
 LEFT JOIN debt_transactions dtx_open ON dtx_open.debt_id = d.id AND dtx_open.role = 'open'
 LEFT JOIN transactions tx ON tx.id = COALESCE(dtx_open.transaction_id, d.transaction_id) AND tx.user_id = d.user_id
 LEFT JOIN accounts acc ON acc.id = tx.account_id
-WHERE d.user_id = ? AND d.is_settled = 0
+WHERE d.user_id IN (/*SLICE:owner_ids*/?) AND d.is_settled = 0
 ORDER BY d.debt_date DESC, d.created_at DESC
 `
 
@@ -418,8 +441,18 @@ type ListActiveDebtsByUserRow struct {
 	OpenAccountName *string `json:"open_account_name"`
 }
 
-func (q *Queries) ListActiveDebtsByUser(ctx context.Context, userID string) ([]ListActiveDebtsByUserRow, error) {
-	rows, err := q.db.QueryContext(ctx, listActiveDebtsByUser, userID)
+func (q *Queries) ListActiveDebtsByUser(ctx context.Context, ownerIds []string) ([]ListActiveDebtsByUserRow, error) {
+	query := listActiveDebtsByUser
+	var queryParams []interface{}
+	if len(ownerIds) > 0 {
+		for _, v := range ownerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(ownerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
 	if err != nil {
 		return nil, err
 	}
@@ -462,7 +495,7 @@ func (q *Queries) ListActiveDebtsByUser(ctx context.Context, userID string) ([]L
 const listActiveDebtsForSummary = `-- name: ListActiveDebtsForSummary :many
 SELECT direction, amount, due_date, currency
 FROM debts
-WHERE user_id = ? AND is_settled = 0
+WHERE is_settled = 0 AND user_id IN (/*SLICE:owner_ids*/?)
 `
 
 type ListActiveDebtsForSummaryRow struct {
@@ -472,8 +505,18 @@ type ListActiveDebtsForSummaryRow struct {
 	Currency  string `json:"currency"`
 }
 
-func (q *Queries) ListActiveDebtsForSummary(ctx context.Context, userID string) ([]ListActiveDebtsForSummaryRow, error) {
-	rows, err := q.db.QueryContext(ctx, listActiveDebtsForSummary, userID)
+func (q *Queries) ListActiveDebtsForSummary(ctx context.Context, ownerIds []string) ([]ListActiveDebtsForSummaryRow, error) {
+	query := listActiveDebtsForSummary
+	var queryParams []interface{}
+	if len(ownerIds) > 0 {
+		for _, v := range ownerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(ownerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
 	if err != nil {
 		return nil, err
 	}
@@ -524,7 +567,7 @@ JOIN debtors dt ON dt.id = d.debtor_id
 LEFT JOIN debt_transactions dtx_open ON dtx_open.debt_id = d.id AND dtx_open.role = 'open'
 LEFT JOIN transactions tx ON tx.id = COALESCE(dtx_open.transaction_id, d.transaction_id) AND tx.user_id = d.user_id
 LEFT JOIN accounts acc ON acc.id = tx.account_id
-WHERE d.user_id = ?
+WHERE d.user_id IN (/*SLICE:owner_ids*/?)
 ORDER BY d.is_settled ASC, d.debt_date DESC, d.created_at DESC
 `
 
@@ -548,8 +591,18 @@ type ListAllDebtsByUserRow struct {
 	OpenAccountName *string `json:"open_account_name"`
 }
 
-func (q *Queries) ListAllDebtsByUser(ctx context.Context, userID string) ([]ListAllDebtsByUserRow, error) {
-	rows, err := q.db.QueryContext(ctx, listAllDebtsByUser, userID)
+func (q *Queries) ListAllDebtsByUser(ctx context.Context, ownerIds []string) ([]ListAllDebtsByUserRow, error) {
+	query := listAllDebtsByUser
+	var queryParams []interface{}
+	if len(ownerIds) > 0 {
+		for _, v := range ownerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(ownerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
 	if err != nil {
 		return nil, err
 	}
@@ -623,12 +676,22 @@ func (q *Queries) ListDebtLinksByUser(ctx context.Context, userID string) ([]Deb
 const listDebtorsByUser = `-- name: ListDebtorsByUser :many
 SELECT id, user_id, name, created_at
 FROM debtors
-WHERE user_id = ?
+WHERE user_id IN (/*SLICE:owner_ids*/?)
 ORDER BY name COLLATE NOCASE ASC
 `
 
-func (q *Queries) ListDebtorsByUser(ctx context.Context, userID string) ([]Debtor, error) {
-	rows, err := q.db.QueryContext(ctx, listDebtorsByUser, userID)
+func (q *Queries) ListDebtorsByUser(ctx context.Context, ownerIds []string) ([]Debtor, error) {
+	query := listDebtorsByUser
+	var queryParams []interface{}
+	if len(ownerIds) > 0 {
+		for _, v := range ownerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(ownerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
 	if err != nil {
 		return nil, err
 	}
@@ -773,7 +836,7 @@ JOIN debtors dt ON dt.id = d.debtor_id
 LEFT JOIN debt_transactions dtx_open ON dtx_open.debt_id = d.id AND dtx_open.role = 'open'
 LEFT JOIN transactions tx ON tx.id = COALESCE(dtx_open.transaction_id, d.transaction_id) AND tx.user_id = d.user_id
 LEFT JOIN accounts acc ON acc.id = tx.account_id
-WHERE d.user_id = ? AND d.is_settled = 1
+WHERE d.user_id IN (/*SLICE:owner_ids*/?) AND d.is_settled = 1
 ORDER BY d.settled_at DESC, d.created_at DESC
 `
 
@@ -797,8 +860,18 @@ type ListSettledDebtsByUserRow struct {
 	OpenAccountName *string `json:"open_account_name"`
 }
 
-func (q *Queries) ListSettledDebtsByUser(ctx context.Context, userID string) ([]ListSettledDebtsByUserRow, error) {
-	rows, err := q.db.QueryContext(ctx, listSettledDebtsByUser, userID)
+func (q *Queries) ListSettledDebtsByUser(ctx context.Context, ownerIds []string) ([]ListSettledDebtsByUserRow, error) {
+	query := listSettledDebtsByUser
+	var queryParams []interface{}
+	if len(ownerIds) > 0 {
+		for _, v := range ownerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(ownerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
 	if err != nil {
 		return nil, err
 	}

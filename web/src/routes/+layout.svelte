@@ -15,6 +15,7 @@
 		parsePostLoginPath
 	} from '$lib/auth/post-login-redirect';
 	import { isPublicAppRoute, sessionExpiredTick } from '$lib/auth/session-expired';
+	import { householdMe, householdNavLabelKey } from '$lib/household/membership';
 	import { invalidateApiCache } from '$lib/api/cache';
 	import {
 		clearFeatureFlags,
@@ -240,6 +241,12 @@
 			isActive: (p) => p === '/settings/tokens'
 		},
 		{
+			path: '/settings/household',
+			labelKey: 'settings.tab.household',
+			feature: 'household',
+			isActive: (p) => p.startsWith('/settings/household')
+		},
+		{
 			path: '/settings/notifications',
 			labelKey: 'settings.tab.notifications',
 			feature: 'notifications',
@@ -265,9 +272,13 @@
 		);
 	});
 	const settingsNavItems = $derived(
-		settingsNavItemsAll.filter(
-			(item) => !item.feature || isFeatureEnabled(item.feature, $featureFlags)
-		)
+		settingsNavItemsAll
+			.filter((item) => !item.feature || isFeatureEnabled(item.feature, $featureFlags))
+			.map((item) =>
+				item.path === '/settings/household'
+					? { ...item, labelKey: householdNavLabelKey($householdMe) }
+					: item
+			)
 	);
 
 	const adminNavItems: NavDropdownItem[] = [

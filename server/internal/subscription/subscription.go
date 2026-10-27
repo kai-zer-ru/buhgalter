@@ -24,6 +24,8 @@ import (
 
 type Subscription struct {
 	ID              string   `json:"id"`
+	OwnerUserID     string   `json:"-"`
+	Scope           string   `json:"scope,omitempty"`
 	Name            string   `json:"name"`
 	Description     *string  `json:"description"`
 	Icon            *string  `json:"icon"`
@@ -139,7 +141,7 @@ func upcomingFromStored(raw string) []string {
 
 func fromRow(row sqlcdb.ListSubscriptionsByUserRow) Subscription {
 	return Subscription{
-		ID: row.ID, Name: row.Name, Description: row.Description, Icon: row.Icon, WebsiteURL: row.WebsiteUrl,
+		ID: row.ID, OwnerUserID: row.UserID, Name: row.Name, Description: row.Description, Icon: row.Icon, WebsiteURL: row.WebsiteUrl,
 		Amount: row.Amount, AmountDisplay: money.FormatRubles(row.Amount),
 		AccountID: row.AccountID, AccountName: row.AccountName,
 		SubcategoryID: row.SubcategoryID, SubcategoryName: row.SubcategoryName, SubcategoryIcon: row.SubcategoryIcon,
@@ -152,7 +154,7 @@ func fromRow(row sqlcdb.ListSubscriptionsByUserRow) Subscription {
 
 func fromGet(row sqlcdb.GetSubscriptionByIDRow) Subscription {
 	return Subscription{
-		ID: row.ID, Name: row.Name, Description: row.Description, Icon: row.Icon, WebsiteURL: row.WebsiteUrl,
+		ID: row.ID, OwnerUserID: row.UserID, Name: row.Name, Description: row.Description, Icon: row.Icon, WebsiteURL: row.WebsiteUrl,
 		Amount: row.Amount, AmountDisplay: money.FormatRubles(row.Amount),
 		AccountID: row.AccountID, AccountName: row.AccountName,
 		SubcategoryID: row.SubcategoryID, SubcategoryName: row.SubcategoryName, SubcategoryIcon: row.SubcategoryIcon,
@@ -164,7 +166,14 @@ func fromGet(row sqlcdb.GetSubscriptionByIDRow) Subscription {
 }
 
 func getByID(ctx context.Context, db *sql.DB, userID, id string) (Subscription, error) {
-	row, err := queries(db).GetSubscriptionByID(ctx, sqlcdb.GetSubscriptionByIDParams{ID: id, UserID: userID})
+	return getByIDForOwners(ctx, db, []string{userID}, id)
+}
+
+func getByIDForOwners(ctx context.Context, db *sql.DB, ownerIDs []string, id string) (Subscription, error) {
+	if len(ownerIDs) == 0 {
+		return Subscription{}, ErrNotFound
+	}
+	row, err := queries(db).GetSubscriptionByID(ctx, sqlcdb.GetSubscriptionByIDParams{ID: id, OwnerIds: ownerIDs})
 	if errors.Is(err, sql.ErrNoRows) {
 		return Subscription{}, ErrNotFound
 	}
@@ -175,7 +184,14 @@ func getByID(ctx context.Context, db *sql.DB, userID, id string) (Subscription, 
 }
 
 func List(ctx context.Context, db *sql.DB, userID string) ([]Subscription, error) {
-	rows, err := queries(db).ListSubscriptionsByUser(ctx, userID)
+	return ListForOwners(ctx, db, []string{userID})
+}
+
+func ListForOwners(ctx context.Context, db *sql.DB, ownerIDs []string) ([]Subscription, error) {
+	if len(ownerIDs) == 0 {
+		return []Subscription{}, nil
+	}
+	rows, err := queries(db).ListSubscriptionsByUser(ctx, ownerIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -276,7 +292,7 @@ func SummaryForUser(ctx context.Context, db *sql.DB, userID string, upcomingDays
 	if upcomingDays <= 0 {
 		upcomingDays = 14
 	}
-	rows, err := queries(db).ListSubscriptionsByUser(ctx, userID)
+	rows, err := queries(db).ListSubscriptionsByUser(ctx, []string{userID})
 	if err != nil {
 		return Summary{}, err
 	}
@@ -357,7 +373,7 @@ func ApplyDue(ctx context.Context, db *sql.DB, userID string, now time.Time, tz 
 	affected := map[string]struct{}{}
 	var lastAsOf time.Time
 	for _, op := range due {
-		if _, err := q.GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: op.AccountID, UserID: userID}); err != nil {
+		if _, err := q.GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: op.AccountID, OwnerIds: []string{userID}}); err != nil {
 			continue
 		}
 		subCatID, err := ensureSubcategory(ctx, db, userID, op.ID, op.Name, op.Icon)
@@ -462,7 +478,7 @@ func AttachTransactions(ctx context.Context, db *sql.DB, userID, subscriptionID 
 	now := timeutil.FormatUTC(timeutil.NowUTC())
 	q := queries(db)
 	for _, txID := range txIDs {
-		row, err := q.GetTransactionByID(ctx, sqlcdb.GetTransactionByIDParams{ID: txID, UserID: userID})
+		row, err := q.GetTransactionByID(ctx, sqlcdb.GetTransactionByIDParams{ID: txID, OwnerIds: []string{userID}})
 		if err != nil {
 			continue
 		}
@@ -809,7 +825,7 @@ func validateInput(ctx context.Context, db *sql.DB, userID string, in Input) err
 			return ErrInvalidURL
 		}
 	}
-	acc, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: in.AccountID, UserID: userID})
+	acc, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: in.AccountID, OwnerIds: []string{userID}})
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrInvalidAccount
 	}

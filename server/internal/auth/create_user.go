@@ -2,14 +2,27 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/kai-zer-ru/buhgalter/internal/categoryseed"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 )
 
+const HouseholdLoginPrefix = "household:"
+
+var ErrReservedLogin = errors.New("reserved login prefix")
+
+func IsReservedLogin(login string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(login)), HouseholdLoginPrefix)
+}
+
 func CreateUser(ctx context.Context, db sqlcdb.DBTX, login, passwordHash, displayName string, isAdmin bool, status UserStatus) (string, error) {
+	if IsReservedLogin(login) {
+		return "", ErrReservedLogin
+	}
 	if !status.Valid() {
 		status = UserStatusActive
 	}

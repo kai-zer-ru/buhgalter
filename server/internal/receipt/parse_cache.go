@@ -126,7 +126,7 @@ func previewFromReceiptImport(ctx context.Context, db *sql.DB, userID string, pa
 	if err != nil {
 		return fns.ParsedReceipt{}, false, err
 	}
-	row, err := q.GetReceiptImportByID(ctx, sqlcdb.GetReceiptImportByIDParams{ID: importID, UserID: userID})
+	row, err := q.GetReceiptImportByID(ctx, sqlcdb.GetReceiptImportByIDParams{ID: importID, OwnerIds: []string{userID}})
 	if err != nil {
 		return fns.ParsedReceipt{}, false, err
 	}

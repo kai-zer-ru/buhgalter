@@ -1,13 +1,13 @@
 -- name: ListDebtorsByUser :many
 SELECT id, user_id, name, created_at
 FROM debtors
-WHERE user_id = ?
+WHERE user_id IN (sqlc.slice('owner_ids'))
 ORDER BY name COLLATE NOCASE ASC;
 
 -- name: GetDebtorByID :one
 SELECT id, user_id, name, created_at
 FROM debtors
-WHERE id = ? AND user_id = ?;
+WHERE id = sqlc.arg('id') AND user_id IN (sqlc.slice('owner_ids'));
 
 -- name: GetDebtorByName :one
 SELECT id, user_id, name, created_at
@@ -59,7 +59,7 @@ JOIN debtors dt ON dt.id = d.debtor_id
 LEFT JOIN debt_transactions dtx_open ON dtx_open.debt_id = d.id AND dtx_open.role = 'open'
 LEFT JOIN transactions tx ON tx.id = COALESCE(dtx_open.transaction_id, d.transaction_id) AND tx.user_id = d.user_id
 LEFT JOIN accounts acc ON acc.id = tx.account_id
-WHERE d.user_id = ? AND d.is_settled = 0
+WHERE d.user_id IN (sqlc.slice('owner_ids')) AND d.is_settled = 0
 ORDER BY d.debt_date DESC, d.created_at DESC;
 
 -- name: ListSettledDebtsByUser :many
@@ -86,7 +86,7 @@ JOIN debtors dt ON dt.id = d.debtor_id
 LEFT JOIN debt_transactions dtx_open ON dtx_open.debt_id = d.id AND dtx_open.role = 'open'
 LEFT JOIN transactions tx ON tx.id = COALESCE(dtx_open.transaction_id, d.transaction_id) AND tx.user_id = d.user_id
 LEFT JOIN accounts acc ON acc.id = tx.account_id
-WHERE d.user_id = ? AND d.is_settled = 1
+WHERE d.user_id IN (sqlc.slice('owner_ids')) AND d.is_settled = 1
 ORDER BY d.settled_at DESC, d.created_at DESC;
 
 -- name: ListAllDebtsByUser :many
@@ -113,7 +113,7 @@ JOIN debtors dt ON dt.id = d.debtor_id
 LEFT JOIN debt_transactions dtx_open ON dtx_open.debt_id = d.id AND dtx_open.role = 'open'
 LEFT JOIN transactions tx ON tx.id = COALESCE(dtx_open.transaction_id, d.transaction_id) AND tx.user_id = d.user_id
 LEFT JOIN accounts acc ON acc.id = tx.account_id
-WHERE d.user_id = ?
+WHERE d.user_id IN (sqlc.slice('owner_ids'))
 ORDER BY d.is_settled ASC, d.debt_date DESC, d.created_at DESC;
 
 -- name: GetDebtByID :one
@@ -140,7 +140,7 @@ JOIN debtors dt ON dt.id = d.debtor_id
 LEFT JOIN debt_transactions dtx_open ON dtx_open.debt_id = d.id AND dtx_open.role = 'open'
 LEFT JOIN transactions tx ON tx.id = COALESCE(dtx_open.transaction_id, d.transaction_id) AND tx.user_id = d.user_id
 LEFT JOIN accounts acc ON acc.id = tx.account_id
-WHERE d.id = ? AND d.user_id = ?;
+WHERE d.id = sqlc.arg('id') AND d.user_id IN (sqlc.slice('owner_ids'));
 
 -- name: InsertDebt :exec
 INSERT INTO debts (
@@ -264,4 +264,4 @@ ORDER BY d.is_settled ASC, d.debt_date DESC, d.created_at DESC;
 -- name: ListActiveDebtsForSummary :many
 SELECT direction, amount, due_date, currency
 FROM debts
-WHERE user_id = ? AND is_settled = 0;
+WHERE is_settled = 0 AND user_id IN (sqlc.slice('owner_ids'));

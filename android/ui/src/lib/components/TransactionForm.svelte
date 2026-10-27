@@ -48,6 +48,7 @@
 	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
 	import { suggestCategoryFromMerchant } from '$lib/android/notification-intercept/category-suggest';
+	import { matchRefByName, refsForAccount, remapRefIds } from '$lib/household/refs-for-account';
 
 	function isCreditsExpenseCategory(cat: Category | undefined): boolean {
 		return Boolean(cat?.is_system && cat.name === 'Кредиты');
@@ -121,6 +122,7 @@
 	let timeExpanded = $state(false);
 	let timeInput = $state('');
 	let ruleHint = $state('');
+	let scopeHint = $state('');
 	let evaluateTimer: ReturnType<typeof setTimeout> | undefined;
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
@@ -132,9 +134,13 @@
 	});
 
 	const accountOptions = $derived(accountSelectOptions(accounts));
+	const selectedAcc = $derived(accounts.find((acc) => acc.id === selectedAccount));
+	const scopedCategories = $derived(refsForAccount(selectedAcc, categories));
+	const scopedMerchants = $derived(refsForAccount(selectedAcc, merchants));
+	const scopedTags = $derived(refsForAccount(selectedAcc, allTags));
 	const pickableCategories = $derived.by(() => {
-		const userCats = categories.filter((cat) => !cat.is_system);
-		const creditsCat = categories.find((cat) => isCreditsExpenseCategory(cat));
+		const userCats = scopedCategories.filter((cat) => !cat.is_system);
+		const creditsCat = scopedCategories.find((cat) => isCreditsExpenseCategory(cat));
 		let list = userCats;
 		if (txType === 'expense' && creditsCat && !editing) {
 			list = [...userCats, creditsCat];
@@ -159,7 +165,7 @@
 		}))
 	);
 	const merchantOptions = $derived(
-		merchants.map((m) => ({
+		scopedMerchants.map((m) => ({
 			value: m.id,
 			label: m.name,
 			keywords: m.aliases ?? [],
@@ -184,7 +190,7 @@
 	const tagSuggestions = $derived.by(() => {
 		const q = tagInput.trim().toLowerCase();
 		const selected = new Set(selectedTags.map((t) => t.name.toLowerCase()));
-		return allTags
+		return scopedTags
 			.filter((t) => !selected.has(t.name.toLowerCase()))
 			.filter((t) => !q || t.name.toLowerCase().includes(q))
 			.slice(0, 8);
@@ -446,6 +452,37 @@
 		scheduleRuleEvaluate();
 	}
 
+	async function onAccountChange() {
+		const acc = accounts.find((a) => a.id === selectedAccount);
+		const nextCats = refsForAccount(acc, categories);
+		const currentCat = categories.find((c) => c.id === categoryId);
+		const matchedCat = matchRefByName(currentCat, nextCats);
+		const hints: string[] = [];
+		if (currentCat && !matchedCat) {
+			hints.push($_('refs.reset.category'));
+			categoryId = nextCats.find((c) => c.is_primary && !c.is_system)?.id ?? nextCats[0]?.id ?? '';
+			await onCategoryChange(categoryId);
+		} else if (matchedCat && matchedCat.id !== categoryId) {
+			categoryId = matchedCat.id;
+			await onCategoryChange(categoryId);
+		}
+		const currentMerchant = merchants.find((m) => m.id === merchantId);
+		const nextMerchants = refsForAccount(acc, merchants);
+		const matchedMerchant = matchRefByName(currentMerchant, nextMerchants);
+		if (currentMerchant && !matchedMerchant) {
+			hints.push($_('refs.reset.merchant'));
+			merchantId = '';
+			merchantQuery = '';
+		} else if (matchedMerchant) {
+			merchantId = matchedMerchant.id;
+			merchantQuery = matchedMerchant.name;
+		}
+		const remappedTags = remapRefIds(selectedTags, refsForAccount(acc, allTags));
+		if (remappedTags.dropped) hints.push($_('refs.reset.tags'));
+		selectedTags = remappedTags.next;
+		scopeHint = hints.join(' ');
+	}
+
 	function onCreditChange(nextCreditId: string) {
 		const credit = activeCredits.find((c) => c.id === nextCreditId);
 		if (!credit) return;
@@ -576,7 +613,11 @@
 			bind:value={selectedAccount}
 			options={accountOptions}
 			usePortal
+			onchange={() => void onAccountChange()}
 		/>
+		{#if scopeHint}
+			<p class="text-sm" style:color="var(--text-muted)">{scopeHint}</p>
+		{/if}
 
 		<Select
 			id="tx-category"

@@ -7,6 +7,7 @@ package sqlc
 
 import (
 	"context"
+	"strings"
 )
 
 const deleteRecurringOperation = `-- name: DeleteRecurringOperation :execrows
@@ -54,12 +55,12 @@ FROM recurring_operations ro
 JOIN accounts a ON a.id = ro.account_id
 JOIN categories c ON c.id = ro.category_id
 LEFT JOIN subcategories s ON s.id = ro.subcategory_id
-WHERE ro.id = ? AND ro.user_id = ?
+WHERE ro.id = ?1 AND ro.user_id IN (/*SLICE:owner_ids*/?)
 `
 
 type GetRecurringOperationByIDParams struct {
-	ID     string `json:"id"`
-	UserID string `json:"user_id"`
+	ID       string   `json:"id"`
+	OwnerIds []string `json:"owner_ids"`
 }
 
 type GetRecurringOperationByIDRow struct {
@@ -87,7 +88,18 @@ type GetRecurringOperationByIDRow struct {
 }
 
 func (q *Queries) GetRecurringOperationByID(ctx context.Context, arg GetRecurringOperationByIDParams) (GetRecurringOperationByIDRow, error) {
-	row := q.db.QueryRowContext(ctx, getRecurringOperationByID, arg.ID, arg.UserID)
+	query := getRecurringOperationByID
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.ID)
+	if len(arg.OwnerIds) > 0 {
+		for _, v := range arg.OwnerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(arg.OwnerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	row := q.db.QueryRowContext(ctx, query, queryParams...)
 	var i GetRecurringOperationByIDRow
 	err := row.Scan(
 		&i.ID,
@@ -335,7 +347,7 @@ FROM recurring_operations ro
 JOIN accounts a ON a.id = ro.account_id
 JOIN categories c ON c.id = ro.category_id
 LEFT JOIN subcategories s ON s.id = ro.subcategory_id
-WHERE ro.user_id = ?
+WHERE ro.user_id IN (/*SLICE:owner_ids*/?)
 ORDER BY ro.created_at DESC
 `
 
@@ -363,8 +375,18 @@ type ListRecurringOperationsByUserRow struct {
 	UpdatedAt       string  `json:"updated_at"`
 }
 
-func (q *Queries) ListRecurringOperationsByUser(ctx context.Context, userID string) ([]ListRecurringOperationsByUserRow, error) {
-	rows, err := q.db.QueryContext(ctx, listRecurringOperationsByUser, userID)
+func (q *Queries) ListRecurringOperationsByUser(ctx context.Context, ownerIds []string) ([]ListRecurringOperationsByUserRow, error) {
+	query := listRecurringOperationsByUser
+	var queryParams []interface{}
+	if len(ownerIds) > 0 {
+		for _, v := range ownerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(ownerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
 	if err != nil {
 		return nil, err
 	}

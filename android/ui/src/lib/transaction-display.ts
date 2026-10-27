@@ -75,7 +75,7 @@ export function transferRoute(
 		const out = transferOutLeg(tx, legs);
 		return {
 			from: out.account_name ?? '',
-			to: out.transfer_account_name ?? ''
+			to: maskedTransferName(out)
 		};
 	}
 
@@ -83,13 +83,20 @@ export function transferRoute(
 	if (tx.transfer_is_out) {
 		return {
 			from: tx.account_name ?? '',
-			to: tx.transfer_account_name ?? ''
+			to: maskedTransferName(tx)
 		};
 	}
 	return {
-		from: tx.transfer_account_name ?? '',
+		from: maskedTransferName(tx),
 		to: tx.account_name ?? ''
 	};
+}
+
+function maskedTransferName(tx: Transaction): string {
+	if (tx.transfer_account_masked) {
+		return tx.transfer_account_label || tx.transfer_account_name || '';
+	}
+	return tx.transfer_account_name ?? '';
 }
 
 export type AccountLabelMode = 'plain' | 'prefix';
@@ -144,6 +151,7 @@ export function transferCommissionDisplay(
 /** Income/expense in the transaction form; not credit-linked payments or transfer commission. */
 export function canEditTransaction(tx: Transaction): boolean {
 	if (tx.credit_payment_linked) return false;
+	if (tx.transfer_account_masked) return false;
 	if (isTransferCommission(tx)) return false;
 	return true;
 }
@@ -158,7 +166,20 @@ export function canRepeatTransaction(tx: Transaction): boolean {
 /** Delete from list — debt-linked opening tx may be protected via API `deletable` flag. */
 export function canDeleteTransaction(tx: Transaction): boolean {
 	if (isTransferCommission(tx)) return false;
+	if (tx.transfer_account_masked) return false;
 	return tx.deletable !== false;
+}
+
+/** Author line for a household transaction created by someone else. */
+export function transactionContributor(
+	tx: Pick<Transaction, 'scope' | 'created_by'>,
+	meUserId: string | undefined
+): { kind: 'other'; name: string } | { kind: 'deleted' } | null {
+	if (tx.scope !== 'household') return null;
+	const authorId = tx.created_by?.user_id;
+	if (authorId && meUserId && authorId === meUserId) return null;
+	if (tx.created_by?.display_name) return { kind: 'other', name: tx.created_by.display_name };
+	return { kind: 'deleted' };
 }
 
 /** Expense not linked to a subscription or a credit payment — show subscription menu items. */

@@ -29,6 +29,7 @@ type AccountRef struct {
 	Status   string  `json:"status"`
 	BankID   *string `json:"bank_id,omitempty"`
 	Currency string  `json:"currency"`
+	Scope    string  `json:"scope,omitempty"`
 }
 
 type MetaResponse struct {
@@ -52,9 +53,10 @@ func (h *Handler) Meta(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	sqlDB := h.Store.DB()
-	userID := info.User.ID
+	sc := info.Scope
+	owners := sc.OwnerIDs()
 
-	accountRows, err := account.ListByUser(ctx, sqlDB, userID, "")
+	accountRows, err := account.ListByScope(ctx, sqlDB, sc, "")
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
@@ -63,7 +65,7 @@ func (h *Handler) Meta(w http.ResponseWriter, r *http.Request) {
 	for _, row := range accountRows {
 		accounts = append(accounts, AccountRef{
 			ID: row.ID, Name: row.Name, Type: row.Type, Status: row.Status, BankID: row.BankID,
-			Currency: row.Currency,
+			Currency: row.Currency, Scope: row.Scope,
 		})
 	}
 
@@ -73,44 +75,44 @@ func (h *Handler) Meta(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	expenseCategories, err := category.ListByUser(ctx, sqlDB, userID, "expense")
+	expenseCategories, err := category.ListByScope(ctx, sqlDB, sc, "", "expense")
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
-	incomeCategories, err := category.ListByUser(ctx, sqlDB, userID, "income")
-	if err != nil {
-		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
-		return
-	}
-
-	debtors, err := debt.ListDebtors(ctx, sqlDB, userID)
-	if err != nil {
-		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
-		return
-	}
-	merchants, err := merchant.List(ctx, sqlDB, userID)
-	if err != nil {
-		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
-		return
-	}
-	tags, err := tag.List(ctx, sqlDB, userID, "")
-	if err != nil {
-		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
-		return
-	}
-	templates, err := transactiontemplate.List(ctx, sqlDB, userID)
+	incomeCategories, err := category.ListByScope(ctx, sqlDB, sc, "", "income")
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
 
-	activeCredits, err := credit.List(ctx, sqlDB, userID, "active")
+	debtors, err := debt.ListDebtorsByScope(ctx, sqlDB, sc, "")
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
-	closedCredits, err := credit.List(ctx, sqlDB, userID, "closed")
+	merchants, err := merchant.ListByScope(ctx, sqlDB, sc, "")
+	if err != nil {
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	}
+	tags, err := tag.ListByScope(ctx, sqlDB, sc, "", "")
+	if err != nil {
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	}
+	templates, err := transactiontemplate.ListByScope(ctx, sqlDB, sc, "")
+	if err != nil {
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	}
+
+	activeCredits, err := credit.ListForOwners(ctx, sqlDB, owners, "active")
+	if err != nil {
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	}
+	closedCredits, err := credit.ListForOwners(ctx, sqlDB, owners, "closed")
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return

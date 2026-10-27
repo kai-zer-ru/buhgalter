@@ -31,6 +31,7 @@
 	import { confirm } from '$lib/confirm';
 	import { reportPageLoadFailure } from '$lib/page-load';
 	import { toast } from '$lib/toast';
+	import { matchRefByName, refsForAccount } from '$lib/household/refs-for-account';
 
 	let rules = $state<CategoryRule[]>([]);
 	let accounts = $state<Account[]>([]);
@@ -55,11 +56,20 @@
 	let overId = $state<string | null>(null);
 
 	const accountOptions = $derived(accountSelectOptions(accounts));
+	const selectedAcc = $derived(accounts.find((acc) => acc.id === defaultAccountId));
+	const scopedRuleCategories = $derived(
+		kind === 'category_account'
+			? refsForAccount(
+					selectedAcc,
+					ruleCategoryType === 'income' ? incomeCategories : expenseCategories
+				)
+			: ruleCategoryType === 'income'
+				? incomeCategories
+				: expenseCategories
+	);
 	const categoryOptions = $derived(
 		categorySelectOptions(
-			(ruleCategoryType === 'income' ? incomeCategories : expenseCategories).filter(
-				(c) => kind !== 'text_category' || !c.is_system
-			)
+			scopedRuleCategories.filter((c) => kind !== 'text_category' || !c.is_system)
 		)
 	);
 	const subcategoryOptions = $derived(subcategorySelectOptions(subcategories));
@@ -126,6 +136,22 @@
 	async function onCategoryChange() {
 		subcategoryId = '';
 		subcategories = categoryId ? await listSubcategories(categoryId).catch(() => []) : [];
+	}
+
+	function onRuleAccountChange() {
+		if (kind !== 'category_account') return;
+		const current = (ruleCategoryType === 'income' ? incomeCategories : expenseCategories).find(
+			(c) => c.id === categoryId
+		);
+		const matched = matchRefByName(current, scopedRuleCategories);
+		if (current && !matched) {
+			categoryId = scopedRuleCategories[0]?.id ?? '';
+			void onCategoryChange();
+			toast($_('refs.reset.category'));
+		} else if (matched && matched.id !== categoryId) {
+			categoryId = matched.id;
+			void onCategoryChange();
+		}
 	}
 
 	async function save(e: Event) {
@@ -320,6 +346,7 @@
 				label={$_('transactions.field.account')}
 				bind:value={defaultAccountId}
 				options={accountOptions}
+				onchange={() => onRuleAccountChange()}
 				usePortal
 			/>
 		{:else}

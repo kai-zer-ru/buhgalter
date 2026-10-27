@@ -12,6 +12,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
 	"github.com/kai-zer-ru/buhgalter/internal/money"
+	"github.com/kai-zer-ru/buhgalter/internal/scope"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
 )
 
@@ -21,7 +22,8 @@ type Handler struct {
 }
 
 type createDebtorRequest struct {
-	Name string `json:"name"`
+	Name  string `json:"name"`
+	Scope string `json:"scope"`
 }
 
 type updateDebtorRequest struct {
@@ -54,7 +56,7 @@ func (h *Handler) GetDebtor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := chi.URLParam(r, "id")
-	detail, err := GetDebtorDetail(r.Context(), h.Store.DB(), info.User.ID, id)
+	detail, err := GetDebtorDetailByScope(r.Context(), h.Store.DB(), info.Scope, id)
 	if writeDebtorError(w, r, err) {
 		return
 	}
@@ -73,7 +75,7 @@ func (h *Handler) ListDebtors(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
 		return
 	}
-	debtors, err := ListDebtors(r.Context(), h.Store.DB(), info.User.ID)
+	debtors, err := ListDebtorsByScope(r.Context(), h.Store.DB(), info.Scope, r.URL.Query().Get("scope"))
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
@@ -95,10 +97,15 @@ func (h *Handler) CreateDebtor(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_INVALID_JSON")
 		return
 	}
-	debtor, err := CreateDebtor(r.Context(), h.Store.DB(), info.User.ID, req.Name)
+	ownerID, err := scope.PrincipalForCreate(info.Scope, req.Scope)
+	if scope.WriteCreateError(w, r, err) {
+		return
+	}
+	debtor, err := CreateDebtor(r.Context(), h.Store.DB(), ownerID, req.Name)
 	if writeDebtorError(w, r, err) {
 		return
 	}
+	debtor.Scope = scope.AccountScope(info.Scope, ownerID)
 	_ = h.Audit.Log("debtor.create", info.User.ID, info.User.Login, clientIP(r), map[string]any{"debtor_id": debtor.ID})
 	writeJSON(w, http.StatusCreated, debtor)
 }
@@ -115,7 +122,11 @@ func (h *Handler) UpdateDebtor(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_INVALID_JSON")
 		return
 	}
-	debtor, err := UpdateDebtor(r.Context(), h.Store.DB(), info.User.ID, id, req.Name)
+	existing, err := GetDebtorByScope(r.Context(), h.Store.DB(), info.Scope, id)
+	if writeDebtorError(w, r, err) {
+		return
+	}
+	debtor, err := UpdateDebtor(r.Context(), h.Store.DB(), existing.OwnerUserID, id, req.Name)
 	if writeDebtorError(w, r, err) {
 		return
 	}
@@ -130,7 +141,11 @@ func (h *Handler) DeleteDebtor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := chi.URLParam(r, "id")
-	if err := DeleteDebtor(r.Context(), h.Store.DB(), info.User.ID, id); err != nil {
+	existing, err := GetDebtorByScope(r.Context(), h.Store.DB(), info.Scope, id)
+	if writeDebtorError(w, r, err) {
+		return
+	}
+	if err := DeleteDebtor(r.Context(), h.Store.DB(), existing.OwnerUserID, id); err != nil {
 		if writeDebtorError(w, r, err) {
 			return
 		}
@@ -147,7 +162,7 @@ func (h *Handler) ListDebts(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
 		return
 	}
-	debts, err := List(r.Context(), h.Store.DB(), info.User.ID, r.URL.Query().Get("settled"))
+	debts, err := ListForOwners(r.Context(), h.Store.DB(), info.Scope.OwnerIDs(), info.User.ID, r.URL.Query().Get("settled"))
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
@@ -165,7 +180,7 @@ func (h *Handler) GetDebt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := chi.URLParam(r, "id")
-	debt, err := GetByID(r.Context(), h.Store.DB(), info.User.ID, id)
+	debt, err := GetByIDForOwners(r.Context(), h.Store.DB(), info.Scope.OwnerIDs(), info.User.ID, id)
 	if writeDebtError(w, r, err) {
 		return
 	}
@@ -188,7 +203,20 @@ func (h *Handler) CreateDebt(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteDetail(w, r, http.StatusBadRequest, apperror.ValidationError, apperror.ValidationError, err.Error())
 		return
 	}
-	debt, err := Create(r.Context(), h.Store.DB(), info.User.ID, in)
+	ownerID := info.User.ID
+	if strings.TrimSpace(in.AccountID) != "" {
+		oid, err := scope.PrincipalForAccount(r.Context(), h.Store.DB(), info.Scope.OwnerIDs(), in.AccountID)
+		if err != nil {
+			if errors.Is(err, scope.ErrNotFound) {
+				writeDebtError(w, r, ErrInvalidAccount)
+				return
+			}
+			apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+			return
+		}
+		ownerID = oid
+	}
+	debt, err := Create(r.Context(), h.Store.DB(), ownerID, in)
 	if writeDebtError(w, r, err) {
 		return
 	}
@@ -245,7 +273,7 @@ func (h *Handler) Summary(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
 		return
 	}
-	summary, err := SummaryForUser(r.Context(), h.Store.DB(), info.User.ID)
+	summary, err := SummaryForOwners(r.Context(), h.Store.DB(), info.User.ID, info.Scope.OwnerIDs())
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return

@@ -13,7 +13,8 @@
 		canEditTransaction,
 		canRepeatTransaction,
 		canDeleteTransaction,
-		canLinkToSubscription
+		canLinkToSubscription,
+		transactionContributor
 	} from '$lib/transaction-display';
 	import TransactionCategoryCell from '$lib/components/TransactionCategoryCell.svelte';
 	import IconButton from '$lib/components/IconButton.svelte';
@@ -24,6 +25,7 @@
 	import { confirm } from '$lib/confirm';
 	import { toast } from '$lib/toast';
 	import { formatApiError } from '$lib/api/errors';
+	import { user } from '$lib/stores/auth';
 
 	let receiptOpen = $state(false);
 	let attachOpen = $state(false);
@@ -174,6 +176,13 @@
 	function openAttachReceipt(tx: Transaction) {
 		attachTx = tx;
 		attachOpen = true;
+	}
+
+	function contributorLine(tx: Transaction): string | null {
+		const info = transactionContributor(tx, $user?.id);
+		if (!info) return null;
+		if (info.kind === 'deleted') return $_('transactions.contributedDeleted');
+		return $_('transactions.contributed', { values: { name: info.name } });
 	}
 
 	function rowDateLabel(tx: Transaction): string {
@@ -331,6 +340,11 @@
 							{#if tx.kind === 'future'}
 								<span title={$_('transactions.planned')}> 📅</span>
 							{/if}
+							{#if contributorLine(tx)}
+								<div class="text-xs font-normal" style:color="var(--text-muted)">
+									{contributorLine(tx)}
+								</div>
+							{/if}
 						</td>
 						<td class="p-3 align-middle whitespace-nowrap">
 							<TransactionAccountCell {tx} {siblings} mode="prefix" />
@@ -411,6 +425,9 @@
 								<span title={$_('transactions.planned')}> 📅</span>
 							{/if}
 						</p>
+						{#if contributorLine(tx)}
+							<p class="mt-0.5 text-xs" style:color="var(--text-muted)">{contributorLine(tx)}</p>
+						{/if}
 						<p class="mt-1 text-sm font-medium">
 							<TransactionAccountCell {tx} {siblings} mode="prefix" />
 						</p>

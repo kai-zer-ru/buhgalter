@@ -32,7 +32,7 @@ SELECT
 FROM credits c
 JOIN accounts a ON a.id = c.debit_account_id
 LEFT JOIN banks b ON b.id = c.bank_id
-WHERE c.user_id = ?
+WHERE c.user_id IN (sqlc.slice('owner_ids'))
   AND (? = '' OR c.status = ?)
 ORDER BY c.status ASC, c.issue_date DESC, c.created_at DESC;
 
@@ -70,7 +70,7 @@ SELECT
 FROM credits c
 JOIN accounts a ON a.id = c.debit_account_id
 LEFT JOIN banks b ON b.id = c.bank_id
-WHERE c.id = ? AND c.user_id = ?;
+WHERE c.id = sqlc.arg('id') AND c.user_id IN (sqlc.slice('owner_ids'));
 
 -- name: InsertCredit :exec
 INSERT INTO credits (
@@ -238,7 +238,7 @@ SELECT
     c.status AS credit_status
 FROM credit_payments cp
 JOIN credits c ON c.id = cp.credit_id
-WHERE cp.transaction_id = ? AND c.user_id = ?;
+WHERE cp.transaction_id = sqlc.arg('transaction_id') AND c.user_id IN (sqlc.slice('owner_ids'));
 
 -- name: GetCreditPaymentForUser :one
 SELECT
@@ -253,7 +253,7 @@ SELECT
     c.status AS credit_status
 FROM credit_payments cp
 JOIN credits c ON c.id = cp.credit_id
-WHERE cp.id = ? AND cp.credit_id = ? AND c.user_id = ?;
+WHERE cp.id = sqlc.arg('id') AND cp.credit_id = sqlc.arg('credit_id') AND c.user_id IN (sqlc.slice('owner_ids'));
 
 -- name: UpdateScheduledCreditPaymentAmount :execrows
 UPDATE credit_payments

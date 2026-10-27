@@ -27,6 +27,7 @@
 		type ReceiptRowState
 	} from '$lib/receipt/receipt-items';
 	import { categorySelectOptions } from '$lib/select-options';
+	import { refsForAccount } from '$lib/household/refs-for-account';
 	import {
 		decodeQrFromImageFile,
 		startQrScanner,
@@ -65,7 +66,9 @@
 
 	const busy = $derived(loading || scanning);
 	const txAmount = $derived(transaction?.amount ?? 0);
-	const categoryOptions = $derived(categorySelectOptions(categories.filter((c) => !c.is_system)));
+	const categoryOptions = $derived(
+		categorySelectOptions(refsForAccount(transaction, categories).filter((c) => !c.is_system))
+	);
 	const missingCategory = $derived(includedRowsMissingCategory(rows));
 	const receiptBlocked = $derived(Boolean(receipt?.already_in_ledger));
 	const modalMaxWidth = $derived(receiptBlocked ? 'max-w-lg' : 'max-w-6xl');

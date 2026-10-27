@@ -161,7 +161,7 @@ func ensureReceiptImport(
 		if count > 0 {
 			return "", nil, ErrDuplicate
 		}
-		row, err := q.GetReceiptImportByID(ctx, sqlcdb.GetReceiptImportByIDParams{ID: existingID, UserID: userID})
+		row, err := q.GetReceiptImportByID(ctx, sqlcdb.GetReceiptImportByIDParams{ID: existingID, OwnerIds: []string{userID}})
 		if err != nil {
 			return "", nil, err
 		}

@@ -9,7 +9,9 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/scope"
 )
 
 const (
@@ -22,6 +24,8 @@ const (
 
 type Rule struct {
 	ID               string  `json:"id"`
+	OwnerUserID      string  `json:"-"`
+	Scope            string  `json:"scope,omitempty"`
 	Kind             string  `json:"kind"`
 	Pattern          *string `json:"pattern,omitempty"`
 	CategoryID       string  `json:"category_id"`
@@ -57,20 +61,38 @@ func queries(db sqlcdb.DBTX) *sqlcdb.Queries {
 }
 
 func List(ctx context.Context, db *sql.DB, userID string) ([]Rule, error) {
-	rows, err := queries(db).ListCategoryRulesByUser(ctx, userID)
+	return ListByScope(ctx, db, auth.Scope{UserID: userID}, "")
+}
+
+func ListByScope(ctx context.Context, db *sql.DB, sc auth.Scope, view string) ([]Rule, error) {
+	ids := scope.FilterOwnerIDs(sc, view)
+	if len(ids) == 0 {
+		return []Rule{}, nil
+	}
+	rows, err := queries(db).ListCategoryRulesByUser(ctx, ids)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]Rule, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, fromRow(row))
+		r := fromRow(row)
+		r.Scope = scope.AccountScope(sc, r.OwnerUserID)
+		out = append(out, r)
 	}
 	return out, nil
 }
 
 func Get(ctx context.Context, db *sql.DB, userID, id string) (Rule, error) {
+	return GetByScope(ctx, db, auth.Scope{UserID: userID}, id)
+}
+
+func GetByScope(ctx context.Context, db *sql.DB, sc auth.Scope, id string) (Rule, error) {
+	ids := sc.OwnerIDs()
+	if len(ids) == 0 {
+		return Rule{}, ErrNotFound
+	}
 	row, err := queries(db).GetCategoryRuleByID(ctx, sqlcdb.GetCategoryRuleByIDParams{
-		ID: id, UserID: userID,
+		ID: id, OwnerIds: ids,
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return Rule{}, ErrNotFound
@@ -78,7 +100,9 @@ func Get(ctx context.Context, db *sql.DB, userID, id string) (Rule, error) {
 	if err != nil {
 		return Rule{}, err
 	}
-	return fromRow(row), nil
+	r := fromRow(row)
+	r.Scope = scope.AccountScope(sc, r.OwnerUserID)
+	return r, nil
 }
 
 func Create(ctx context.Context, db *sql.DB, userID string, in Input) (Rule, error) {
@@ -211,7 +235,7 @@ func normalizeInput(ctx context.Context, db *sql.DB, userID string, in Input) (I
 	if catID == "" {
 		return Input{}, ErrInvalidCategory
 	}
-	catRow, err := queries(db).GetCategoryByID(ctx, sqlcdb.GetCategoryByIDParams{ID: catID, UserID: userID})
+	catRow, err := queries(db).GetCategoryByID(ctx, sqlcdb.GetCategoryByIDParams{ID: catID, OwnerIds: []string{userID}})
 	if errors.Is(err, sql.ErrNoRows) {
 		return Input{}, ErrInvalidCategory
 	}
@@ -224,7 +248,7 @@ func normalizeInput(ctx context.Context, db *sql.DB, userID string, in Input) (I
 
 	sub := trimPtr(in.SubcategoryID)
 	if sub != nil {
-		subRow, err := queries(db).GetSubcategoryByID(ctx, sqlcdb.GetSubcategoryByIDParams{ID: *sub, UserID: userID})
+		subRow, err := queries(db).GetSubcategoryByID(ctx, sqlcdb.GetSubcategoryByIDParams{ID: *sub, OwnerIds: []string{userID}})
 		if errors.Is(err, sql.ErrNoRows) {
 			return Input{}, ErrInvalidSubcategory
 		}
@@ -269,7 +293,7 @@ func normalizeInput(ctx context.Context, db *sql.DB, userID string, in Input) (I
 }
 
 func requireActiveAccount(ctx context.Context, db *sql.DB, userID, accountID string) error {
-	row, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: accountID, UserID: userID})
+	row, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: accountID, OwnerIds: []string{userID}})
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrInvalidAccount
 	}
@@ -297,6 +321,7 @@ func normalizePattern(p *string) *string {
 func fromRow(row sqlcdb.CategoryRule) Rule {
 	r := Rule{
 		ID:               row.ID,
+		OwnerUserID:      row.UserID,
 		Kind:             row.Kind,
 		CategoryID:       row.CategoryID,
 		SubcategoryID:    row.SubcategoryID,

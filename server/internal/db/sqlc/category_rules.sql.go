@@ -7,6 +7,7 @@ package sqlc
 
 import (
 	"context"
+	"strings"
 )
 
 const countCategoryRulesByUser = `-- name: CountCategoryRulesByUser :one
@@ -44,16 +45,27 @@ SELECT
     category_id, subcategory_id, default_account_id,
     priority, created_at, updated_at
 FROM category_rules
-WHERE id = ? AND user_id = ?
+WHERE id = ?1 AND user_id IN (/*SLICE:owner_ids*/?)
 `
 
 type GetCategoryRuleByIDParams struct {
-	ID     string `json:"id"`
-	UserID string `json:"user_id"`
+	ID       string   `json:"id"`
+	OwnerIds []string `json:"owner_ids"`
 }
 
 func (q *Queries) GetCategoryRuleByID(ctx context.Context, arg GetCategoryRuleByIDParams) (CategoryRule, error) {
-	row := q.db.QueryRowContext(ctx, getCategoryRuleByID, arg.ID, arg.UserID)
+	query := getCategoryRuleByID
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.ID)
+	if len(arg.OwnerIds) > 0 {
+		for _, v := range arg.OwnerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(arg.OwnerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	row := q.db.QueryRowContext(ctx, query, queryParams...)
 	var i CategoryRule
 	err := row.Scan(
 		&i.ID,
@@ -117,12 +129,22 @@ SELECT
     category_id, subcategory_id, default_account_id,
     priority, created_at, updated_at
 FROM category_rules
-WHERE user_id = ?
+WHERE user_id IN (/*SLICE:owner_ids*/?)
 ORDER BY priority ASC, id ASC
 `
 
-func (q *Queries) ListCategoryRulesByUser(ctx context.Context, userID string) ([]CategoryRule, error) {
-	rows, err := q.db.QueryContext(ctx, listCategoryRulesByUser, userID)
+func (q *Queries) ListCategoryRulesByUser(ctx context.Context, ownerIds []string) ([]CategoryRule, error) {
+	query := listCategoryRulesByUser
+	var queryParams []interface{}
+	if len(ownerIds) > 0 {
+		for _, v := range ownerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(ownerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
 	if err != nil {
 		return nil, err
 	}
@@ -161,17 +183,28 @@ SELECT
     category_id, subcategory_id, default_account_id,
     priority, created_at, updated_at
 FROM category_rules
-WHERE user_id = ? AND kind = ?
+WHERE kind = ?1 AND user_id IN (/*SLICE:owner_ids*/?)
 ORDER BY priority ASC, id ASC
 `
 
 type ListCategoryRulesByUserAndKindParams struct {
-	UserID string `json:"user_id"`
-	Kind   string `json:"kind"`
+	Kind     string   `json:"kind"`
+	OwnerIds []string `json:"owner_ids"`
 }
 
 func (q *Queries) ListCategoryRulesByUserAndKind(ctx context.Context, arg ListCategoryRulesByUserAndKindParams) ([]CategoryRule, error) {
-	rows, err := q.db.QueryContext(ctx, listCategoryRulesByUserAndKind, arg.UserID, arg.Kind)
+	query := listCategoryRulesByUserAndKind
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.Kind)
+	if len(arg.OwnerIds) > 0 {
+		for _, v := range arg.OwnerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(arg.OwnerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
 	if err != nil {
 		return nil, err
 	}

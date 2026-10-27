@@ -1,6 +1,12 @@
 package realtime
 
-import "sync"
+import (
+	"context"
+	"sync"
+
+	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/scope"
+)
 
 // NotifyUserDataChanged invalidates server GET cache and publishes to live clients
 // when wired from httpserver (scheduler, future activation, etc.).
@@ -29,6 +35,17 @@ func NotifyUserDataChanged(userID string) {
 	notifyMu.RUnlock()
 	if fn != nil {
 		fn(userID)
+	}
+}
+
+func NotifyOwnerDataChanged(ctx context.Context, db sqlcdb.DBTX, ownerID string) {
+	ids, err := scope.AffectedUsers(ctx, db, ownerID)
+	if err != nil || len(ids) == 0 {
+		NotifyUserDataChanged(ownerID)
+		return
+	}
+	for _, id := range ids {
+		NotifyUserDataChanged(id)
 	}
 }
 

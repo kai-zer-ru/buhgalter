@@ -40,8 +40,11 @@
 | `merchants_tags` | `true` |
 | `transaction_templates` | `true` |
 | `receipt_scanner` | `false` |
+| `household` | `true` |
 
 Модуль **`receipt_scanner`** (v1.10): кроме флага нужен токен API чеков в админке — без него parse/import/attach недоступны. См. [receipt-scanner.md](receipt-scanner.md).
+
+Модуль **`household`** (v1.11): группа, участники, инвайты, общие счета. Выключен — 404 `FEATURE_DISABLED` на `/households*` и `/household-invites*` и скрытые экраны UI; строки семьи не удаляются. См. [household.md](household.md).
 
 ## Клиенты
 

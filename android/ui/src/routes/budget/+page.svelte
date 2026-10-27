@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { householdMe, householdMeLoaded, inHousehold } from '$lib/household/membership';
+	import { onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
@@ -16,8 +17,11 @@
 		type Category,
 		type Subcategory,
 		type UIMetaAccountRef,
-		type Bank
+		type Bank,
+		type CatalogScope
 	} from '$lib/api/client';
+	import CatalogScopeTabs from '$lib/components/CatalogScopeTabs.svelte';
+	import { readStoredCatalogScope, writeStoredCatalogScope } from '$lib/household/catalog-scope';
 	import { formatApiError } from '$lib/api/errors';
 	import { createBudget, deleteBudget, updateBudget } from '$lib/offline/budgets-api';
 	import BackLink from '$lib/components/BackLink.svelte';
@@ -53,6 +57,7 @@
 		categorySelectOptions,
 		subcategorySelectOptions
 	} from '$lib/select-options';
+	import { matchRefByName, refsForAccount } from '$lib/household/refs-for-account';
 
 	let canCopyFromPrevious = $state(false);
 	let categories = $state<Category[]>([]);
@@ -81,6 +86,7 @@
 	let allItems = $state<BudgetSummaryItem[]>([]);
 	let availableCurrencies = $state<string[]>([]);
 	let budgetCurrency = $state('');
+	let catalogScope = $state<CatalogScope>('all');
 
 	const month = $derived($page.url.searchParams.get('month') ?? currentMonthKey());
 	const profileCurrency = $derived($user?.currency ?? 'RUB');
@@ -104,8 +110,11 @@
 		);
 	});
 
+	const selectedAcc = $derived(accounts.find((acc) => acc.id === accountId));
 	const expenseCategories = $derived(
-		categories.filter((c) => c.type === 'expense' && (!c.is_system || c.name === 'Подписки'))
+		(accountId ? refsForAccount(selectedAcc, categories) : categories).filter(
+			(c) => c.type === 'expense' && (!c.is_system || c.name === 'Подписки')
+		)
 	);
 	const hasAllExpenseBudget = $derived(
 		items.some((i) => i.scope === 'all_expense' && i.id !== editId)
@@ -158,6 +167,20 @@
 		return 'bg-emerald-500';
 	}
 
+	function onBudgetAccountChange() {
+		const current = categories.find((c) => c.id === categoryId);
+		const matched = matchRefByName(current, expenseCategories);
+		if (current && !matched) {
+			categoryId = expenseCategories[0]?.id ?? '';
+			subcategoryId = '';
+			void loadSubcategories();
+			toast($_('refs.reset.category'));
+		} else if (matched && matched.id !== categoryId) {
+			categoryId = matched.id;
+			void loadSubcategories();
+		}
+	}
+
 	function resetForm() {
 		editId = null;
 		name = '';
@@ -207,7 +230,10 @@
 	async function loadAll(opts: { background?: boolean } = {}) {
 		if (!opts.background) loading = true;
 		try {
-			const [summary, meta] = await Promise.all([getBudgetSummary(month), getUIMeta()]);
+			const [summary, meta] = await Promise.all([
+				getBudgetSummary(month, undefined, catalogScope),
+				getUIMeta()
+			]);
 			accounts = meta.accounts.filter((a) => a.status === 'active');
 			availableCurrencies = mergeAvailableCurrencies(
 				summary.available_currencies,
@@ -350,6 +376,7 @@
 	}
 
 	onMount(() => {
+		catalogScope = readStoredCatalogScope();
 		void loadAll();
 	});
 
@@ -406,6 +433,21 @@
 		}
 		if (scope === 'subcategory' && subcategoryId && usedSubcategoryIds.has(subcategoryId)) {
 			subcategoryId = subcategoryOptions[0]?.value ?? '';
+		}
+	});
+
+	function selectCatalogScope(next: CatalogScope | 'personal' | 'household') {
+		const scope: CatalogScope =
+			next === 'personal' || next === 'household' || next === 'all' ? next : 'all';
+		catalogScope = scope;
+		writeStoredCatalogScope(scope);
+		void loadAll();
+	}
+
+	// Left / kicked from the group: tabs are hidden, so fall back to «Все».
+	$effect(() => {
+		if ($householdMeLoaded && !inHousehold($householdMe) && catalogScope !== 'all') {
+			untrack(() => selectCatalogScope('all'));
 		}
 	});
 </script>
@@ -501,6 +543,7 @@
 				label={$_('budget.field.account')}
 				bind:value={accountId}
 				options={accountOptions}
+				onchange={() => onBudgetAccountChange()}
 				usePortal
 			/>
 			<div>
@@ -575,27 +618,30 @@
 			]}
 		/>
 
-		{#if showCurrencyChips}
-			<div class="flex flex-wrap items-center gap-2">
-				<span class="text-sm" style:color="var(--text-muted)">{$_('stats.currencyFilter')}</span>
-				{#each availableCurrencies as code (code)}
-					<button
-						type="button"
-						class={code === currency ? 'tab tab-active' : 'tab'}
-						onclick={() => {
-							budgetCurrency = code;
-							writeStoredStatsCurrency(code);
-							if (accountId) {
-								const acc = accounts.find((a) => a.id === accountId);
-								if (acc?.currency && acc.currency !== code) accountId = '';
-							}
-						}}
-					>
-						{code}
-					</button>
-				{/each}
-			</div>
-		{/if}
+		<div class="flex flex-wrap items-center gap-4">
+			<CatalogScopeTabs value={catalogScope} onchange={selectCatalogScope} />
+			{#if showCurrencyChips}
+				<div class="flex flex-wrap items-center gap-2">
+					<span class="text-sm" style:color="var(--text-muted)">{$_('stats.currencyFilter')}</span>
+					{#each availableCurrencies as code (code)}
+						<button
+							type="button"
+							class={code === currency ? 'tab tab-active' : 'tab'}
+							onclick={() => {
+								budgetCurrency = code;
+								writeStoredStatsCurrency(code);
+								if (accountId) {
+									const acc = accounts.find((a) => a.id === accountId);
+									if (acc?.currency && acc.currency !== code) accountId = '';
+								}
+							}}
+						>
+							{code}
+						</button>
+					{/each}
+				</div>
+			{/if}
+		</div>
 
 		<div class="flex flex-wrap items-center justify-between gap-3">
 			<h1 class="text-2xl font-semibold">{$_('budget.title')}</h1>

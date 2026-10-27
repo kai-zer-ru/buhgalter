@@ -1,5 +1,9 @@
+import { get } from 'svelte/store';
+import { _ } from 'svelte-i18n';
 import type { Account, Bank, Category, Subcategory, UIMetaAccountRef } from '$lib/api/client';
 import { sortAccountsForSelect } from '$lib/accounts';
+import { accountOwnership, accountOwnershipLabelKey } from '$lib/accounts/group-by-type';
+import { householdMe } from '$lib/household/membership';
 
 export type SelectOptionIcon =
 	| { type: 'account'; accountType: Account['type']; bankIcon?: string | null }
@@ -9,27 +13,30 @@ export type SelectOption = {
 	value: string;
 	label: string;
 	disabled?: boolean;
+	header?: boolean;
+	badge?: 'household';
 	icon?: SelectOptionIcon;
 };
 
 export function accountFromUIMetaRef(
 	acc: UIMetaAccountRef,
 	banks: readonly Bank[]
-): Pick<Account, 'id' | 'name' | 'type' | 'bank_id' | 'bank_icon' | 'currency'> {
+): Pick<Account, 'id' | 'name' | 'type' | 'bank_id' | 'bank_icon' | 'currency' | 'scope'> {
 	return {
 		id: acc.id,
 		name: acc.name,
 		type: acc.type,
 		bank_id: acc.bank_id ?? null,
 		bank_icon: acc.bank_id ? (banks.find((b) => b.id === acc.bank_id)?.icon_path ?? null) : null,
-		currency: acc.currency
+		currency: acc.currency,
+		scope: acc.scope
 	};
 }
 
 export function accountsFromUIMeta(
 	refs: readonly UIMetaAccountRef[],
 	banks: readonly Bank[]
-): Pick<Account, 'id' | 'name' | 'type' | 'bank_id' | 'bank_icon' | 'currency'>[] {
+): Pick<Account, 'id' | 'name' | 'type' | 'bank_id' | 'bank_icon' | 'currency' | 'scope'>[] {
 	return refs.map((acc) => accountFromUIMetaRef(acc, banks));
 }
 
@@ -56,14 +63,39 @@ export function subcategorySelectIcon(sub: Pick<Subcategory, 'icon'>): SelectOpt
 }
 
 export function accountSelectOption(acc: Account, label?: string): SelectOption {
-	return { value: acc.id, label: label ?? acc.name, icon: accountSelectIcon(acc) };
+	return {
+		value: acc.id,
+		label: label ?? acc.name,
+		icon: accountSelectIcon(acc),
+		...(acc.scope === 'household' ? { badge: 'household' as const } : {})
+	};
 }
 
 export function accountSelectOptions(
 	accounts: readonly Account[],
 	label?: (acc: Account) => string
 ): SelectOption[] {
-	return sortAccountsForSelect(accounts).map((acc) => accountSelectOption(acc, label?.(acc)));
+	const sorted = sortAccountsForSelect(accounts);
+	const hasBoth =
+		sorted.some((acc) => accountOwnership(acc) === 'household') &&
+		sorted.some((acc) => accountOwnership(acc) === 'personal');
+	const t = hasBoth ? get(_) : null;
+	const out: SelectOption[] = [];
+	let lastOwnership: ReturnType<typeof accountOwnership> | null = null;
+	for (const acc of sorted) {
+		const ownership = accountOwnership(acc);
+		if (hasBoth && t && ownership !== lastOwnership) {
+			out.push({
+				value: `__header_${ownership}`,
+				label: t(accountOwnershipLabelKey(ownership, get(householdMe).household?.kind)),
+				header: true,
+				disabled: true
+			});
+			lastOwnership = ownership;
+		}
+		out.push(accountSelectOption(acc, label?.(acc)));
+	}
+	return out;
 }
 
 export function accountRefSelectOption(
@@ -74,7 +106,8 @@ export function accountRefSelectOption(
 	return {
 		value: acc.id,
 		label: label ?? acc.name,
-		icon: accountRefSelectIcon(acc, banks)
+		icon: accountRefSelectIcon(acc, banks),
+		...(acc.scope === 'household' ? { badge: 'household' as const } : {})
 	};
 }
 

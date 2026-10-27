@@ -1,4 +1,4 @@
-VERSION ?= 1.10.1
+VERSION ?= 1.11.0
 INSTALL_METHOD ?= manual
 BUILD_COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILD_TIME ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -9,7 +9,7 @@ OPENAPI_DST := server/internal/docs/openapi.yaml
 UI_I18N_SRC := android/ui/src/lib/i18n
 UI_I18N_DST := server/ui_locales
 
-.PHONY: dev dev-server dev-web build build-arm web-build category-icons-json copy-static copy-openapi check-openapi-examples openapi-check copy-ui-i18n check-ui-i18n-keys ui-i18n-check inline-sql-check server-build server-build-arm fix-build-perms test test-unit test-server test-web test-android test-e2e test-e2e-web test-coverage lint lint-go prepare prepare-go prepare-web prepare-android prepare-gen prepare-sql-check prepare-ui-check docker-build act-push act-release act-keep-image act-prune tag-release migrate ci sqlc sqlc-check download-bank-logos download-marketplace-logos clear version android-icons android-ui-build android-sync android-apk android-apk-release android-install android-install-release android-ensure-sdk
+.PHONY: dev dev-server dev-web build build-arm web-build category-icons-json copy-static copy-openapi check-openapi-examples openapi-check copy-ui-i18n check-ui-i18n-keys ui-i18n-check inline-sql-check server-build server-build-arm fix-build-perms test test-unit test-server test-web test-android test-e2e test-e2e-web test-coverage lint lint-go prepare prepare-go prepare-web prepare-android prepare-gen prepare-sql-check prepare-ui-check docker-build act-push act-release act-keep-image act-prune tag-release migrate ci sqlc sqlc-check download-bank-logos download-marketplace-logos clear version android-icons android-ui-build android-sync android-apk android-apk-release android-install android-install-release android-ensure-sdk dev-android-ui android-live
 
 DOCKER_COMPOSE := docker compose -f docker/docker-compose.yml
 
@@ -279,6 +279,10 @@ dev-server: copy-openapi copy-ui-i18n
 dev-web:
 	cd web && npm run dev -- --host
 
+# Vite для android/ui на :5174 (web занимает :5173); нужен для make android-live.
+dev-android-ui:
+	cd android/ui && npm run dev -- --host --port $(ANDROID_LIVE_PORT) --strictPort
+
 # Полная очистка runtime-данных и артефактов сборки (без node_modules и ассетов в data/).
 # Перед clear остановите dev-server / buhgalter — иначе процесс держит удалённый файл БД открытым.
 clear:
@@ -437,3 +441,21 @@ android-install-release: android-apk-release
 	fi; \
 	echo "Installing $$apk"; \
 	adb install -r "$$apk"
+
+# Debug-APK, который грузит android/ui с vite на этом компьютере: правки UI видны
+# на телефоне сразу, без пересборки APK. Сначала в другом терминале: make dev-android-ui.
+# adb reverse пробрасывает порт, поэтому работает и по USB, и по adb over Wi-Fi.
+# Обычный make android-apk / android-install возвращает встроенную сборку UI.
+# Debug подписан debug-ключом с тем же appId: поверх release-сборки не встанет,
+# а удаление release стирает данные приложения на телефоне.
+ANDROID_LIVE_PORT ?= 5174
+
+android-live:
+	@curl -sf -o /dev/null "http://127.0.0.1:$(ANDROID_LIVE_PORT)/" || \
+		(echo "vite не отвечает на :$(ANDROID_LIVE_PORT): запустите make dev-android-ui" && exit 1)
+	@$(MAKE) --no-print-directory android-ensure-sdk
+	set -e; \
+	if [ -f scripts/android-env.sh ]; then . scripts/android-env.sh; fi; \
+	export PATH="$$JAVA_HOME/bin:$$PATH"; \
+	cd android && npx cap run android --live-reload --host localhost --port $(ANDROID_LIVE_PORT) \
+		--forwardPorts $(ANDROID_LIVE_PORT):$(ANDROID_LIVE_PORT)

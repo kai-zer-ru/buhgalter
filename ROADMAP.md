@@ -427,7 +427,7 @@
 
 ## v1.11.0
 
-- [ ] [Семья / команда](roadmap/team-collaboration.md) — household, личные + семейные счета; owner invite (ссылка/QR/код); [спека](roadmap/team-collaboration.md) зафиксирована
+- [x] [Семья / команда](roadmap/team-collaboration.md) — household `kind` family/team; личные + семейные счета; owner invite (ссылка/QR/код); [спека](roadmap/team-collaboration.md) зафиксирована
 - [x] [Валюта счёта](roadmap/multicurrency.md) — `accounts.currency`, отдельно от `users.currency`; сводки и переводы без тихого смешения валют
 
 ## v1.12.0

@@ -14,6 +14,8 @@ const PATH_FEATURE_GATES: Array<{ prefix: string; feature: string }> = [
 	{ prefix: '/recurring-operations', feature: 'recurring' },
 	{ prefix: '/subscriptions', feature: 'subscriptions' },
 	{ prefix: '/settings/notifications', feature: 'notifications' },
+	{ prefix: '/settings/household', feature: 'household' },
+	{ prefix: '/invite', feature: 'household' },
 	{ prefix: '/settings/import', feature: 'import_export' },
 	{ prefix: '/transaction-templates', feature: 'transaction_templates' }
 ];

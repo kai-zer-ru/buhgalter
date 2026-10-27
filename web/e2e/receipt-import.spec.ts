@@ -24,7 +24,7 @@ async function getExpenseCategories(page: import('@playwright/test').Page) {
 	return apiJSON<{ id: string; name: string; is_system?: boolean }[]>(
 		page,
 		'GET',
-		'/api/v1/categories?type=expense'
+		'/api/v1/categories?type=expense&scope=personal'
 	);
 }
 

@@ -25,7 +25,7 @@ FROM budgets b
 LEFT JOIN categories c ON c.id = b.category_id
 LEFT JOIN subcategories s ON s.id = b.subcategory_id
 LEFT JOIN accounts a ON a.id = b.account_id
-WHERE b.user_id = ?
+WHERE b.user_id IN (sqlc.slice('owner_ids'))
   AND (? = '' OR b.month = ?)
 ORDER BY b.created_at DESC;
 
@@ -63,7 +63,7 @@ FROM budgets b
 LEFT JOIN categories c ON c.id = b.category_id
 LEFT JOIN subcategories s ON s.id = b.subcategory_id
 LEFT JOIN accounts a ON a.id = b.account_id
-WHERE b.id = ? AND b.user_id = ?;
+WHERE b.id = sqlc.arg('id') AND b.user_id IN (sqlc.slice('owner_ids'));
 
 -- name: InsertBudget :exec
 INSERT INTO budgets (

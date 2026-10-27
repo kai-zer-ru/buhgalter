@@ -25,7 +25,7 @@ FROM recurring_operations ro
 JOIN accounts a ON a.id = ro.account_id
 JOIN categories c ON c.id = ro.category_id
 LEFT JOIN subcategories s ON s.id = ro.subcategory_id
-WHERE ro.user_id = ?
+WHERE ro.user_id IN (sqlc.slice('owner_ids'))
 ORDER BY ro.created_at DESC;
 
 -- name: GetRecurringOperationByID :one
@@ -55,7 +55,7 @@ FROM recurring_operations ro
 JOIN accounts a ON a.id = ro.account_id
 JOIN categories c ON c.id = ro.category_id
 LEFT JOIN subcategories s ON s.id = ro.subcategory_id
-WHERE ro.id = ? AND ro.user_id = ?;
+WHERE ro.id = sqlc.arg('id') AND ro.user_id IN (sqlc.slice('owner_ids'));
 
 -- name: InsertRecurringOperation :exec
 INSERT INTO recurring_operations (

@@ -14,6 +14,8 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/db"
 	"github.com/kai-zer-ru/buhgalter/internal/locale"
 	"github.com/kai-zer-ru/buhgalter/internal/receipt/fns"
+	"github.com/kai-zer-ru/buhgalter/internal/scope"
+	"github.com/kai-zer-ru/buhgalter/internal/transaction"
 )
 
 type Handler struct {
@@ -99,8 +101,18 @@ func (h *Handler) Import(w http.ResponseWriter, r *http.Request) {
 		items = append(items, ImportItemInput(it))
 	}
 	fn, fd, fp := NormalizeFiscalKey(req.FiscalDriveNumber, req.FiscalDocumentNumber, req.FiscalSign, req.Receipt)
-	result, err := Import(r.Context(), h.Store.DB(), info.User.ID, ImportInput{
-		AccountID:            strings.TrimSpace(req.AccountID),
+	accountID := strings.TrimSpace(req.AccountID)
+	ownerID, err := scope.PrincipalForAccount(r.Context(), h.Store.DB(), info.Scope.OwnerIDs(), accountID)
+	if err != nil {
+		if errors.Is(err, scope.ErrNotFound) {
+			apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_ACCOUNT_NOT_FOUND")
+			return
+		}
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	}
+	result, err := Import(r.Context(), h.Store.DB(), ownerID, ImportInput{
+		AccountID:            accountID,
 		FiscalDriveNumber:    fn,
 		FiscalDocumentNumber: fd,
 		FiscalSign:           fp,
@@ -136,7 +148,12 @@ func (h *Handler) Detach(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_RECEIPT_DETACH_TRANSACTION")
 		return
 	}
-	result, err := Detach(r.Context(), h.Store.DB(), info.User.ID, txID)
+	txRow, err := transaction.GetOwned(r.Context(), h.Store.DB(), info.Scope.OwnerIDs(), info.User.ID, txID)
+	if err != nil {
+		writeReceiptError(w, r, err)
+		return
+	}
+	result, err := Detach(r.Context(), h.Store.DB(), txRow.OwnerUserID, txID)
 	if writeReceiptError(w, r, err) {
 		return
 	}
@@ -166,7 +183,12 @@ func (h *Handler) Attach(w http.ResponseWriter, r *http.Request) {
 	for _, it := range req.Items {
 		items = append(items, ImportItemInput(it))
 	}
-	result, err := Attach(r.Context(), h.Store.DB(), info.User.ID, AttachInput{
+	txRow, err := transaction.GetOwned(r.Context(), h.Store.DB(), info.Scope.OwnerIDs(), info.User.ID, txID)
+	if err != nil {
+		writeReceiptError(w, r, err)
+		return
+	}
+	result, err := Attach(r.Context(), h.Store.DB(), txRow.OwnerUserID, AttachInput{
 		TransactionID:          txID,
 		FiscalDriveNumber:      firstNonEmpty(req.FiscalDriveNumber, req.Receipt.FiscalDriveNumber),
 		FiscalDocumentNumber:   firstNonEmpty(req.FiscalDocumentNumber, req.Receipt.FiscalDocumentNumber),
@@ -192,7 +214,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 	id := chi.URLParam(r, "id")
 	txID := strings.TrimSpace(r.URL.Query().Get("transaction_id"))
-	out, err := GetByID(r.Context(), h.Store.DB(), info.User.ID, id, txID)
+	out, err := GetByIDForOwners(r.Context(), h.Store.DB(), info.Scope.OwnerIDs(), id, txID)
 	if writeReceiptError(w, r, err) {
 		return
 	}

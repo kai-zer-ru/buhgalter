@@ -13,6 +13,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/categoryseed"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/money"
+	"github.com/kai-zer-ru/buhgalter/internal/scope"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
 )
 
@@ -47,6 +48,10 @@ type Transfer struct {
 }
 
 func CreateTransfer(ctx context.Context, db *sql.DB, userID string, in TransferInput) (Transfer, error) {
+	return CreateTransferOwned(ctx, db, []string{userID}, userID, in)
+}
+
+func CreateTransferOwned(ctx context.Context, db *sql.DB, ownerIDs []string, actorID string, in TransferInput) (Transfer, error) {
 	if in.FromAccountID == in.ToAccountID {
 		return Transfer{}, ErrSameAccount
 	}
@@ -57,16 +62,35 @@ func CreateTransfer(ctx context.Context, db *sql.DB, userID string, in TransferI
 		return Transfer{}, ErrInvalidAmount
 	}
 
-	kind, err := resolveKind(ctx, db, userID, in.TransactionDate)
+	fromOwner, err := scope.PrincipalForAccount(ctx, db, ownerIDs, in.FromAccountID)
+	if errors.Is(err, scope.ErrNotFound) {
+		return Transfer{}, ErrInvalidAccount
+	}
+	if err != nil {
+		return Transfer{}, err
+	}
+	toOwner, err := scope.PrincipalForAccount(ctx, db, ownerIDs, in.ToAccountID)
+	if errors.Is(err, scope.ErrNotFound) {
+		return Transfer{}, ErrInvalidAccount
+	}
 	if err != nil {
 		return Transfer{}, err
 	}
 
-	catID, err := categoryseed.TransferCategoryID(ctx, db, userID)
+	kind, err := resolveKind(ctx, db, fromOwner, in.TransactionDate)
 	if err != nil {
 		return Transfer{}, err
 	}
-	commissionCatID, err := categoryseed.CommissionCategoryID(ctx, db, userID)
+
+	catFrom, err := categoryseed.TransferCategoryID(ctx, db, fromOwner)
+	if err != nil {
+		return Transfer{}, err
+	}
+	catTo, err := categoryseed.TransferCategoryID(ctx, db, toOwner)
+	if err != nil {
+		return Transfer{}, err
+	}
+	commissionCatID, err := categoryseed.CommissionCategoryID(ctx, db, fromOwner)
 	if err != nil {
 		return Transfer{}, err
 	}
@@ -89,60 +113,68 @@ func CreateTransfer(ctx context.Context, db *sql.DB, userID string, in TransferI
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if err := lockTransferAccounts(ctx, tx, userID, in.FromAccountID, in.ToAccountID); err != nil {
+	if err := lockOwnedAccounts(ctx, tx, map[string]string{
+		in.FromAccountID: fromOwner,
+		in.ToAccountID:   toOwner,
+	}); err != nil {
 		return Transfer{}, err
 	}
-	if err := validateAccountForTransfer(ctx, tx, userID, in.FromAccountID, true); err != nil {
+	if err := validateAccountForTransfer(ctx, tx, ownerIDs, in.FromAccountID, true); err != nil {
 		return Transfer{}, err
 	}
-	if err := validateAccountForTransfer(ctx, tx, userID, in.ToAccountID, true); err != nil {
+	if err := validateAccountForTransfer(ctx, tx, ownerIDs, in.ToAccountID, true); err != nil {
 		return Transfer{}, err
 	}
-	toAmount, err := resolveTransferToAmount(ctx, tx, userID, in)
+	toAmount, err := resolveTransferToAmount(ctx, tx, ownerIDs, in)
 	if err != nil {
 		return Transfer{}, err
 	}
-	if err := validateCreditCardTransferAmount(ctx, tx, userID, in.ToAccountID, toAmount); err != nil {
+	if err := validateCreditCardTransferAmount(ctx, tx, ownerIDs, in.ToAccountID, toAmount); err != nil {
 		return Transfer{}, err
 	}
-	fromType, toType, err := accountTypes(ctx, tx, userID, in.FromAccountID, in.ToAccountID)
+	fromType, toType, err := accountTypes(ctx, tx, ownerIDs, in.FromAccountID, in.ToAccountID)
 	if err != nil {
 		return Transfer{}, err
 	}
 	commissionDesc := transferCommissionDescription(fromType, toType)
 
 	q := queries(tx)
+	createdBy := actorID
 	if err := q.InsertTransaction(ctx, sqlcdb.InsertTransactionParams{
-		ID: outID, UserID: userID, AccountID: in.FromAccountID,
+		ID: outID, UserID: fromOwner, AccountID: in.FromAccountID,
 		Type: "transfer", Kind: kind, Amount: in.Amount, Description: in.Description,
-		CategoryID: &catID, SubcategoryID: nil,
+		CategoryID: &catFrom, SubcategoryID: nil,
 		TransferGroupID: &groupID, TransferAccountID: &in.ToAccountID,
 		StoreID: nil, ReceiptImportID: nil, ReceiptItemIndex: nil,
-		TransactionDate: txDate, AffectsBalance: 1, CreatedAt: outCreated, UpdatedAt: updated,
+		TransactionDate: txDate, AffectsBalance: 1, CreatedByUserID: &createdBy, CreatedAt: outCreated, UpdatedAt: updated,
 	}); err != nil {
 		return Transfer{}, fmt.Errorf("insert transfer out: %w", err)
 	}
 	if err := q.InsertTransaction(ctx, sqlcdb.InsertTransactionParams{
-		ID: inID, UserID: userID, AccountID: in.ToAccountID,
+		ID: inID, UserID: toOwner, AccountID: in.ToAccountID,
 		Type: "transfer", Kind: kind, Amount: toAmount, Description: in.Description,
-		CategoryID: &catID, SubcategoryID: nil,
+		CategoryID: &catTo, SubcategoryID: nil,
 		TransferGroupID: &groupID, TransferAccountID: &in.FromAccountID,
 		StoreID: nil, ReceiptImportID: nil, ReceiptItemIndex: nil,
-		TransactionDate: txDate, AffectsBalance: 1, CreatedAt: inCreated, UpdatedAt: updated,
+		TransactionDate: txDate, AffectsBalance: 1, CreatedByUserID: &createdBy, CreatedAt: inCreated, UpdatedAt: updated,
 	}); err != nil {
 		return Transfer{}, fmt.Errorf("insert transfer in: %w", err)
 	}
-	if err := insertTransferCommission(ctx, q, userID, groupID, in.FromAccountID, commissionCatID, in.Commission, commissionDesc, kind, txDate, commissionCreated, updated); err != nil {
+	if err := insertTransferCommission(ctx, q, fromOwner, &createdBy, groupID, in.FromAccountID, commissionCatID, in.Commission, commissionDesc, kind, txDate, commissionCreated, updated); err != nil {
 		return Transfer{}, err
 	}
-	if err := refreshBalancesOnTx(ctx, tx, userID, in.FromAccountID, in.ToAccountID); err != nil {
+	if err := refreshBalancesOnTx(ctx, tx, fromOwner, in.FromAccountID); err != nil {
+		return Transfer{}, err
+	}
+	if err := refreshBalancesOnTx(ctx, tx, toOwner, in.ToAccountID); err != nil {
 		return Transfer{}, err
 	}
 	if err := tx.Commit(); err != nil {
 		return Transfer{}, err
 	}
-	notifyBalancesAfterCommit(ctx, db, userID, in.TransactionDate, in.FromAccountID, in.ToAccountID)
-	return GetTransfer(ctx, db, userID, groupID)
+	notifyBalancesAfterCommit(ctx, db, fromOwner, in.TransactionDate, in.FromAccountID)
+	notifyBalancesAfterCommit(ctx, db, toOwner, in.TransactionDate, in.ToAccountID)
+	return GetTransferOwned(ctx, db, ownerIDs, actorID, groupID)
 }
 
 // CreateTransferForAccountDelete moves the full balance when deleting cash/bank accounts.
@@ -178,16 +210,19 @@ func CreateTransferForAccountDeleteTx(ctx context.Context, db sqlcdb.DBTX, userI
 	if in.Commission != 0 {
 		return Transfer{}, ErrInvalidAmount
 	}
-	if err := lockTransferAccounts(ctx, db, userID, in.FromAccountID, in.ToAccountID); err != nil {
+	if err := lockOwnedAccounts(ctx, db, map[string]string{
+		in.FromAccountID: userID,
+		in.ToAccountID:   userID,
+	}); err != nil {
 		return Transfer{}, err
 	}
-	if err := validateAccountForTransfer(ctx, db, userID, in.FromAccountID, false); err != nil {
+	if err := validateAccountForTransfer(ctx, db, []string{userID}, in.FromAccountID, false); err != nil {
 		return Transfer{}, err
 	}
-	if err := validateAccountForTransfer(ctx, db, userID, in.ToAccountID, true); err != nil {
+	if err := validateAccountForTransfer(ctx, db, []string{userID}, in.ToAccountID, true); err != nil {
 		return Transfer{}, err
 	}
-	fromCur, toCur, err := transferCurrencies(ctx, db, userID, in.FromAccountID, in.ToAccountID)
+	fromCur, toCur, err := transferCurrencies(ctx, db, []string{userID}, in.FromAccountID, in.ToAccountID)
 	if err != nil {
 		return Transfer{}, err
 	}
@@ -195,7 +230,7 @@ func CreateTransferForAccountDeleteTx(ctx context.Context, db sqlcdb.DBTX, userI
 		return Transfer{}, ErrCurrencyMismatch
 	}
 	toAmount := in.Amount
-	if err := validateCreditCardTransferAmount(ctx, db, userID, in.ToAccountID, toAmount); err != nil {
+	if err := validateCreditCardTransferAmount(ctx, db, []string{userID}, in.ToAccountID, toAmount); err != nil {
 		return Transfer{}, err
 	}
 
@@ -212,7 +247,7 @@ func CreateTransferForAccountDeleteTx(ctx context.Context, db sqlcdb.DBTX, userI
 	if err != nil {
 		return Transfer{}, err
 	}
-	fromType, toType, err := accountTypes(ctx, db, userID, in.FromAccountID, in.ToAccountID)
+	fromType, toType, err := accountTypes(ctx, db, []string{userID}, in.FromAccountID, in.ToAccountID)
 	if err != nil {
 		return Transfer{}, err
 	}
@@ -231,13 +266,14 @@ func CreateTransferForAccountDeleteTx(ctx context.Context, db sqlcdb.DBTX, userI
 	inID := uuid.NewString()
 
 	q := queries(db)
+	createdBy := userID
 	if err := q.InsertTransaction(ctx, sqlcdb.InsertTransactionParams{
 		ID: outID, UserID: userID, AccountID: in.FromAccountID,
 		Type: "transfer", Kind: kind, Amount: in.Amount, Description: in.Description,
 		CategoryID: &catID, SubcategoryID: nil,
 		TransferGroupID: &groupID, TransferAccountID: &in.ToAccountID,
 		StoreID: nil, ReceiptImportID: nil, ReceiptItemIndex: nil,
-		TransactionDate: txDate, AffectsBalance: 1, CreatedAt: outCreated, UpdatedAt: updated,
+		TransactionDate: txDate, AffectsBalance: 1, CreatedByUserID: &createdBy, CreatedAt: outCreated, UpdatedAt: updated,
 	}); err != nil {
 		return Transfer{}, fmt.Errorf("insert transfer out: %w", err)
 	}
@@ -247,17 +283,21 @@ func CreateTransferForAccountDeleteTx(ctx context.Context, db sqlcdb.DBTX, userI
 		CategoryID: &catID, SubcategoryID: nil,
 		TransferGroupID: &groupID, TransferAccountID: &in.FromAccountID,
 		StoreID: nil, ReceiptImportID: nil, ReceiptItemIndex: nil,
-		TransactionDate: txDate, AffectsBalance: 1, CreatedAt: inCreated, UpdatedAt: updated,
+		TransactionDate: txDate, AffectsBalance: 1, CreatedByUserID: &createdBy, CreatedAt: inCreated, UpdatedAt: updated,
 	}); err != nil {
 		return Transfer{}, fmt.Errorf("insert transfer in: %w", err)
 	}
-	if err := insertTransferCommission(ctx, q, userID, groupID, in.FromAccountID, commissionCatID, 0, commissionDesc, kind, txDate, commissionCreated, updated); err != nil {
+	if err := insertTransferCommission(ctx, q, userID, &createdBy, groupID, in.FromAccountID, commissionCatID, 0, commissionDesc, kind, txDate, commissionCreated, updated); err != nil {
 		return Transfer{}, err
 	}
 	return Transfer{GroupID: groupID}, nil
 }
 
 func UpdateTransfer(ctx context.Context, db *sql.DB, userID, groupID string, in TransferInput) (Transfer, error) {
+	return UpdateTransferOwned(ctx, db, []string{userID}, userID, groupID, in)
+}
+
+func UpdateTransferOwned(ctx context.Context, db *sql.DB, ownerIDs []string, actorID, groupID string, in TransferInput) (Transfer, error) {
 	if in.FromAccountID == in.ToAccountID {
 		return Transfer{}, ErrSameAccount
 	}
@@ -268,13 +308,32 @@ func UpdateTransfer(ctx context.Context, db *sql.DB, userID, groupID string, in 
 		return Transfer{}, ErrInvalidAmount
 	}
 
+	all, err := queries(db).ListTransferGroupRows(ctx, &groupID)
+	if err != nil {
+		return Transfer{}, err
+	}
+	if !transferGroupVisible(all, ownerIDs) {
+		return Transfer{}, ErrTransferNotFound
+	}
+	accIDs := transferGroupAccountIDs(all, in.FromAccountID, in.ToAccountID)
+	if err := requireVisibleAccounts(ctx, db, ownerIDs, accIDs...); err != nil {
+		return Transfer{}, err
+	}
+	legOwners := transferGroupOwners(all)
 	rows, err := queries(db).ListTransactionsByTransferGroup(ctx, sqlcdb.ListTransactionsByTransferGroupParams{
-		TransferGroupID: &groupID, UserID: userID,
+		TransferGroupID: &groupID, OwnerIds: legOwners,
 	})
 	if err != nil {
 		return Transfer{}, err
 	}
-	commissionCatID, err := categoryseed.CommissionCategoryID(ctx, db, userID)
+	fromOwner, err := scope.PrincipalForAccount(ctx, db, ownerIDs, in.FromAccountID)
+	if errors.Is(err, scope.ErrNotFound) {
+		return Transfer{}, ErrInvalidAccount
+	}
+	if err != nil {
+		return Transfer{}, err
+	}
+	commissionCatID, err := categoryseed.CommissionCategoryID(ctx, db, fromOwner)
 	if err != nil {
 		return Transfer{}, err
 	}
@@ -284,9 +343,20 @@ func UpdateTransfer(ctx context.Context, db *sql.DB, userID, groupID string, in 
 		return Transfer{}, ErrTransferNotFound
 	}
 
-	kind, err := resolveKind(ctx, db, userID, in.TransactionDate)
+	kind, err := resolveKind(ctx, db, fromOwner, in.TransactionDate)
 	if err != nil {
 		return Transfer{}, err
+	}
+	toOwner, err := scope.PrincipalForAccount(ctx, db, ownerIDs, in.ToAccountID)
+	if errors.Is(err, scope.ErrNotFound) {
+		return Transfer{}, ErrInvalidAccount
+	}
+	if err != nil {
+		return Transfer{}, err
+	}
+	lockOwners := map[string]string{in.FromAccountID: fromOwner, in.ToAccountID: toOwner}
+	for _, row := range all {
+		lockOwners[row.AccountID] = row.UserID
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
@@ -298,20 +368,20 @@ func UpdateTransfer(ctx context.Context, db *sql.DB, userID, groupID string, in 
 	}
 	defer func() { _ = dbTx.Rollback() }()
 
-	if err := lockTransferAccounts(ctx, dbTx, userID, in.FromAccountID, in.ToAccountID); err != nil {
+	if err := lockOwnedAccounts(ctx, dbTx, lockOwners); err != nil {
 		return Transfer{}, err
 	}
-	if err := validateAccountForTransfer(ctx, dbTx, userID, in.FromAccountID, true); err != nil {
+	if err := validateAccountForTransfer(ctx, dbTx, ownerIDs, in.FromAccountID, true); err != nil {
 		return Transfer{}, err
 	}
-	if err := validateAccountForTransfer(ctx, dbTx, userID, in.ToAccountID, true); err != nil {
+	if err := validateAccountForTransfer(ctx, dbTx, ownerIDs, in.ToAccountID, true); err != nil {
 		return Transfer{}, err
 	}
-	toAmount, err := resolveTransferToAmount(ctx, dbTx, userID, in)
+	toAmount, err := resolveTransferToAmount(ctx, dbTx, ownerIDs, in)
 	if err != nil {
 		return Transfer{}, err
 	}
-	if err := validateCreditCardTransferAmount(ctx, dbTx, userID, in.ToAccountID, toAmount); err != nil {
+	if err := validateCreditCardTransferAmount(ctx, dbTx, ownerIDs, in.ToAccountID, toAmount); err != nil {
 		return Transfer{}, err
 	}
 
@@ -336,45 +406,64 @@ func UpdateTransfer(ctx context.Context, db *sql.DB, userID, groupID string, in 
 		if err := q.UpdateTransferLeg(ctx, sqlcdb.UpdateTransferLegParams{
 			AccountID: accountID, Amount: legAmount, Description: in.Description,
 			TransactionDate: txDate, Kind: kind, UpdatedAt: now,
-			ID: leg.ID, UserID: userID,
+			ID: leg.ID, UserID: leg.UserID,
 		}); err != nil {
 			return Transfer{}, err
 		}
-		if err := updateTransferAccountID(ctx, q, leg.ID, userID, transferAccountID, now); err != nil {
+		if err := updateTransferAccountID(ctx, q, leg.ID, leg.UserID, transferAccountID, now); err != nil {
 			return Transfer{}, err
 		}
-		if err := updateTransferCreatedAt(ctx, q, leg.ID, userID, legCreated); err != nil {
+		if err := updateTransferCreatedAt(ctx, q, leg.ID, leg.UserID, legCreated); err != nil {
 			return Transfer{}, err
 		}
 	}
 	commissionCreated := time.Now().UTC().Add(2 * time.Millisecond).Format(time.RFC3339Nano)
-	fromType, toType, err := accountTypes(ctx, db, userID, in.FromAccountID, in.ToAccountID)
+	fromType, toType, err := accountTypes(ctx, db, ownerIDs, in.FromAccountID, in.ToAccountID)
 	if err != nil {
 		return Transfer{}, err
 	}
 	commissionDesc := transferCommissionDescription(fromType, toType)
-	if err := syncTransferCommission(ctx, q, userID, groupID, in.FromAccountID, commissionCatID, in.Commission, commissionDesc, kind, txDate, now, commissionCreated, commissionLeg); err != nil {
+	if err := syncTransferCommission(ctx, q, fromOwner, groupID, in.FromAccountID, commissionCatID, in.Commission, commissionDesc, kind, txDate, now, commissionCreated, commissionLeg); err != nil {
 		return Transfer{}, err
 	}
-	accountIDs := uniqueAccountIDs(in.FromAccountID, in.ToAccountID)
-	for _, leg := range transferLegs {
-		accountIDs = append(accountIDs, leg.AccountID)
-	}
-	accountIDs = uniqueAccountIDs(accountIDs...)
-	if err := refreshBalancesOnTx(ctx, dbTx, userID, accountIDs...); err != nil {
+	accountIDs := uniqueAccountIDs(accIDs...)
+	if err := refreshTransferBalances(ctx, dbTx, ownerIDs, accountIDs...); err != nil {
 		return Transfer{}, err
 	}
 	if err := dbTx.Commit(); err != nil {
 		return Transfer{}, err
 	}
-	notifyBalancesAfterCommit(ctx, db, userID, in.TransactionDate, accountIDs...)
-	return GetTransfer(ctx, db, userID, groupID)
+	for _, accID := range accountIDs {
+		owner, err := scope.PrincipalForAccount(ctx, db, ownerIDs, accID)
+		if err != nil {
+			continue
+		}
+		notifyBalancesAfterCommit(ctx, db, owner, in.TransactionDate, accID)
+	}
+	return GetTransferOwned(ctx, db, ownerIDs, actorID, groupID)
 }
 
 func DeleteTransfer(ctx context.Context, db *sql.DB, userID, groupID string) error {
+	return DeleteTransferOwned(ctx, db, []string{userID}, userID, groupID)
+}
+
+func DeleteTransferOwned(ctx context.Context, db *sql.DB, ownerIDs []string, actorID, groupID string) error {
+	_ = actorID
 	gid := groupID
+	all, err := queries(db).ListTransferGroupRows(ctx, &gid)
+	if err != nil {
+		return err
+	}
+	if !transferGroupVisible(all, ownerIDs) {
+		return ErrTransferNotFound
+	}
+	accIDs := transferGroupAccountIDs(all)
+	if err := requireVisibleAccounts(ctx, db, ownerIDs, accIDs...); err != nil {
+		return err
+	}
+	legOwners := transferGroupOwners(all)
 	rows, err := queries(db).ListTransactionsByTransferGroup(ctx, sqlcdb.ListTransactionsByTransferGroupParams{
-		TransferGroupID: &gid, UserID: userID,
+		TransferGroupID: &gid, OwnerIds: legOwners,
 	})
 	if err != nil {
 		return err
@@ -382,30 +471,33 @@ func DeleteTransfer(ctx context.Context, db *sql.DB, userID, groupID string) err
 	if len(rows) == 0 {
 		return ErrTransferNotFound
 	}
-	accountIDs := make([]string, 0, len(rows))
 	var asOf time.Time
 	for i, row := range rows {
-		accountIDs = append(accountIDs, row.AccountID)
 		if i == 0 {
 			asOf, _ = timeutil.ParseUTC(row.TransactionDate)
 		}
 	}
-	n, err := queries(db).DeleteTransactionsByGroup(ctx, sqlcdb.DeleteTransactionsByGroupParams{
-		TransferGroupID: &gid, UserID: userID,
-	})
-	if err != nil {
-		return err
+	q := queries(db)
+	for _, row := range all {
+		n, err := q.DeleteTransaction(ctx, sqlcdb.DeleteTransactionParams{ID: row.ID, UserID: row.UserID})
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return ErrTransferNotFound
+		}
 	}
-	if n == 0 {
-		return ErrTransferNotFound
-	}
-	return refreshAccountBalances(ctx, db, userID, asOf, uniqueAccountIDs(accountIDs...)...)
+	return refreshTransferAccountBalances(ctx, db, ownerIDs, asOf, accIDs...)
 }
 
 func GetTransfer(ctx context.Context, db *sql.DB, userID, groupID string) (Transfer, error) {
+	return GetTransferOwned(ctx, db, []string{userID}, userID, groupID)
+}
+
+func GetTransferOwned(ctx context.Context, db *sql.DB, ownerIDs []string, actorID, groupID string) (Transfer, error) {
 	gid := groupID
 	rows, err := queries(db).ListTransactionsByTransferGroup(ctx, sqlcdb.ListTransactionsByTransferGroupParams{
-		TransferGroupID: &gid, UserID: userID,
+		TransferGroupID: &gid, OwnerIds: ownerIDs,
 	})
 	if err != nil {
 		return Transfer{}, err
@@ -414,7 +506,7 @@ func GetTransfer(ctx context.Context, db *sql.DB, userID, groupID string) (Trans
 		return Transfer{}, ErrTransferNotFound
 	}
 
-	commissionCatID, err := categoryseed.CommissionCategoryID(ctx, db, userID)
+	commissionCatID, err := categoryseed.CommissionCategoryID(ctx, db, rows[0].UserID)
 	if err != nil {
 		return Transfer{}, err
 	}
@@ -427,7 +519,9 @@ func GetTransfer(ctx context.Context, db *sql.DB, userID, groupID string) (Trans
 	legs := make([]Transaction, 0, len(transferLegs))
 	var fromID, toID string
 	for i, row := range transferLegs {
-		legs = append(legs, txFromGroupRow(row))
+		leg := txFromGroupRow(row)
+		decorateVisible(ctx, db, actorID, ownerIDs, &leg)
+		legs = append(legs, leg)
 		if i == 0 {
 			fromID = row.AccountID
 			if row.TransferAccountID != nil {
@@ -471,7 +565,9 @@ func GetTransfer(ctx context.Context, db *sql.DB, userID, groupID string) (Trans
 func insertTransferCommission(
 	ctx context.Context,
 	q *sqlcdb.Queries,
-	userID, groupID, fromAccountID, commissionCatID string,
+	userID string,
+	createdBy *string,
+	groupID, fromAccountID, commissionCatID string,
 	commission int64,
 	description *string,
 	kind, txDate, createdAt, updatedAt string,
@@ -486,7 +582,7 @@ func insertTransferCommission(
 		CategoryID: &commissionCatID, SubcategoryID: nil,
 		TransferGroupID: &groupID, TransferAccountID: nil,
 		StoreID: nil, ReceiptImportID: nil, ReceiptItemIndex: nil,
-		TransactionDate: txDate, AffectsBalance: 1, CreatedAt: createdAt, UpdatedAt: updatedAt,
+		TransactionDate: txDate, AffectsBalance: 1, CreatedByUserID: createdBy, CreatedAt: createdAt, UpdatedAt: updatedAt,
 	})
 }
 
@@ -519,13 +615,14 @@ func syncTransferCommission(
 			ID: existing.ID, UserID: userID,
 		})
 	}
+	createdBy := userID
 	return q.InsertTransaction(ctx, sqlcdb.InsertTransactionParams{
 		ID: uuid.NewString(), UserID: userID, AccountID: fromAccountID,
 		Type: "expense", Kind: kind, Amount: commission, Description: description,
 		CategoryID: &commissionCatID, SubcategoryID: nil,
 		TransferGroupID: &groupID, TransferAccountID: nil,
 		StoreID: nil, ReceiptImportID: nil, ReceiptItemIndex: nil,
-		TransactionDate: txDate, AffectsBalance: 1, CreatedAt: createdAt, UpdatedAt: updatedAt,
+		TransactionDate: txDate, AffectsBalance: 1, CreatedByUserID: &createdBy, CreatedAt: createdAt, UpdatedAt: updatedAt,
 	})
 }
 
@@ -574,15 +671,15 @@ func transferCreatedAt(in TransferInput) time.Time {
 	return time.Now().UTC()
 }
 
-func accountTypes(ctx context.Context, db sqlcdb.DBTX, userID, fromID, toID string) (string, string, error) {
-	fromRow, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: fromID, UserID: userID})
+func accountTypes(ctx context.Context, db sqlcdb.DBTX, ownerIDs []string, fromID, toID string) (string, string, error) {
+	fromRow, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: fromID, OwnerIds: ownerIDs})
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", "", ErrInvalidAccount
 	}
 	if err != nil {
 		return "", "", err
 	}
-	toRow, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: toID, UserID: userID})
+	toRow, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: toID, OwnerIds: ownerIDs})
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", "", ErrInvalidAccount
 	}
@@ -600,15 +697,15 @@ func legCurrency(row sqlcdb.ListTransactionsByTransferGroupRow) string {
 }
 
 // transferCurrencies returns the currencies of the source and target accounts.
-func transferCurrencies(ctx context.Context, db sqlcdb.DBTX, userID, fromID, toID string) (string, string, error) {
-	fromRow, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: fromID, UserID: userID})
+func transferCurrencies(ctx context.Context, db sqlcdb.DBTX, ownerIDs []string, fromID, toID string) (string, string, error) {
+	fromRow, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: fromID, OwnerIds: ownerIDs})
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", "", ErrInvalidAccount
 	}
 	if err != nil {
 		return "", "", err
 	}
-	toRow, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: toID, UserID: userID})
+	toRow, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: toID, OwnerIds: ownerIDs})
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", "", ErrInvalidAccount
 	}
@@ -620,8 +717,8 @@ func transferCurrencies(ctx context.Context, db sqlcdb.DBTX, userID, fromID, toI
 
 // resolveTransferToAmount applies the currency rule: same currency credits amount
 // (to_amount absent or equal), different currencies require an explicit to_amount.
-func resolveTransferToAmount(ctx context.Context, db sqlcdb.DBTX, userID string, in TransferInput) (int64, error) {
-	fromCur, toCur, err := transferCurrencies(ctx, db, userID, in.FromAccountID, in.ToAccountID)
+func resolveTransferToAmount(ctx context.Context, db sqlcdb.DBTX, ownerIDs []string, in TransferInput) (int64, error) {
+	fromCur, toCur, err := transferCurrencies(ctx, db, ownerIDs, in.FromAccountID, in.ToAccountID)
 	if err != nil {
 		return 0, err
 	}
@@ -653,11 +750,15 @@ func transferCommissionDescription(fromType, toType string) *string {
 	return nil
 }
 
-func lockTransferAccounts(ctx context.Context, db sqlcdb.DBTX, userID string, accountIDs ...string) error {
-	ids := uniqueAccountIDs(accountIDs...)
+func lockOwnedAccounts(ctx context.Context, db sqlcdb.DBTX, owners map[string]string) error {
+	ids := make([]string, 0, len(owners))
+	for id := range owners {
+		ids = append(ids, id)
+	}
 	sort.Strings(ids)
 	for _, id := range ids {
-		if err := account.LockRow(ctx, db, userID, id); err != nil {
+		owner := owners[id]
+		if err := account.LockRow(ctx, db, owner, id); err != nil {
 			if errors.Is(err, account.ErrNotFound) {
 				return ErrInvalidAccount
 			}
@@ -667,8 +768,8 @@ func lockTransferAccounts(ctx context.Context, db sqlcdb.DBTX, userID string, ac
 	return nil
 }
 
-func validateCreditCardTransferAmount(ctx context.Context, db sqlcdb.DBTX, userID, toAccountID string, amount int64) error {
-	row, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: toAccountID, UserID: userID})
+func validateCreditCardTransferAmount(ctx context.Context, db sqlcdb.DBTX, ownerIDs []string, toAccountID string, amount int64) error {
+	row, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: toAccountID, OwnerIds: ownerIDs})
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrInvalidAccount
 	}
@@ -684,6 +785,61 @@ func validateCreditCardTransferAmount(ctx context.Context, db sqlcdb.DBTX, userI
 	maxAmount := *row.CreditLimit - row.CurrentBalance
 	if amount > maxAmount {
 		return ErrCreditCardPaymentExceedsLimit
+	}
+	return nil
+}
+
+func transferGroupVisible(rows []sqlcdb.ListTransferGroupRowsRow, ownerIDs []string) bool {
+	vis := make(map[string]struct{}, len(ownerIDs))
+	for _, id := range ownerIDs {
+		vis[id] = struct{}{}
+	}
+	for _, row := range rows {
+		if _, ok := vis[row.UserID]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func transferGroupAccountIDs(rows []sqlcdb.ListTransferGroupRowsRow, extra ...string) []string {
+	ids := extra
+	for _, row := range rows {
+		ids = append(ids, row.AccountID)
+	}
+	return uniqueAccountIDs(ids...)
+}
+
+func transferGroupOwners(rows []sqlcdb.ListTransferGroupRowsRow) []string {
+	ids := make([]string, 0, len(rows))
+	for _, row := range rows {
+		ids = append(ids, row.UserID)
+	}
+	return uniqueAccountIDs(ids...)
+}
+
+func refreshTransferBalances(ctx context.Context, db sqlcdb.DBTX, ownerIDs []string, accountIDs ...string) error {
+	for _, id := range uniqueAccountIDs(accountIDs...) {
+		owner, err := scope.PrincipalForAccount(ctx, db, ownerIDs, id)
+		if err != nil {
+			return err
+		}
+		if err := refreshBalancesOnTx(ctx, db, owner, id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func refreshTransferAccountBalances(ctx context.Context, db *sql.DB, ownerIDs []string, asOf time.Time, accountIDs ...string) error {
+	for _, id := range uniqueAccountIDs(accountIDs...) {
+		owner, err := scope.PrincipalForAccount(ctx, db, ownerIDs, id)
+		if err != nil {
+			return err
+		}
+		if err := refreshAccountBalances(ctx, db, owner, asOf, id); err != nil {
+			return err
+		}
 	}
 	return nil
 }

@@ -17,6 +17,7 @@ import (
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/debt"
 	"github.com/kai-zer-ru/buhgalter/internal/money"
+	"github.com/kai-zer-ru/buhgalter/internal/scope"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
 )
 
@@ -60,7 +61,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	page, _ := strconv.Atoi(q.Get("page"))
 	limit, _ := strconv.Atoi(q.Get("limit"))
-	result, err := List(r.Context(), h.Store.DB(), info.User.ID, ListFilters{
+	result, err := ListOwned(r.Context(), h.Store.DB(), scope.FilterOwnerIDs(info.Scope, q.Get("scope")), info.User.ID, ListFilters{
 		AccountID:  q.Get("account_id"),
 		Type:       q.Get("type"),
 		CategoryID: q.Get("category_id"),
@@ -95,7 +96,7 @@ func (h *Handler) Inbox(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	page, _ := strconv.Atoi(q.Get("page"))
 	limit, _ := strconv.Atoi(q.Get("limit"))
-	result, err := ListInbox(r.Context(), h.Store.DB(), info.User.ID, page, limit, q.Get("sort"))
+	result, err := ListInboxOwned(r.Context(), h.Store.DB(), info.Scope.OwnerIDs(), page, limit, q.Get("sort"))
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
@@ -109,7 +110,7 @@ func (h *Handler) InboxCount(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
 		return
 	}
-	n, err := CountInbox(r.Context(), h.Store.DB(), info.User.ID)
+	n, err := CountInboxOwned(r.Context(), h.Store.DB(), info.Scope.OwnerIDs())
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
@@ -124,7 +125,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := chi.URLParam(r, "id")
-	tx, err := GetByID(r.Context(), h.Store.DB(), info.User.ID, id)
+	tx, err := GetOwned(r.Context(), h.Store.DB(), info.Scope.OwnerIDs(), info.User.ID, id)
 	if errors.Is(err, ErrNotFound) {
 		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
 		return
@@ -152,7 +153,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteDetail(w, r, http.StatusBadRequest, apperror.ValidationError, apperror.ValidationError, err.Error())
 		return
 	}
-	tx, err := Create(r.Context(), h.Store.DB(), info.User.ID, in)
+	tx, err := CreateOwned(r.Context(), h.Store.DB(), info.Scope.OwnerIDs(), info.User.ID, in)
 	if writeTxError(w, r, err) {
 		return
 	}
@@ -177,7 +178,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteDetail(w, r, http.StatusBadRequest, apperror.ValidationError, apperror.ValidationError, err.Error())
 		return
 	}
-	tx, err := Update(r.Context(), h.Store.DB(), info.User.ID, id, UpdateInput(in))
+	tx, err := UpdateOwned(r.Context(), h.Store.DB(), info.Scope.OwnerIDs(), info.User.ID, id, UpdateInput(in))
 	if errors.Is(err, ErrNotFound) {
 		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
 		return
@@ -229,7 +230,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := chi.URLParam(r, "id")
-	err := Delete(r.Context(), h.Store.DB(), info.User.ID, id)
+	err := DeleteOwned(r.Context(), h.Store.DB(), info.Scope.OwnerIDs(), info.User.ID, id)
 	if errors.Is(err, ErrNotFound) {
 		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
 		return
@@ -281,7 +282,7 @@ func (h *Handler) CreateTransfer(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteDetail(w, r, http.StatusBadRequest, apperror.ValidationError, apperror.ValidationError, err.Error())
 		return
 	}
-	tr, err := CreateTransfer(r.Context(), h.Store.DB(), info.User.ID, in)
+	tr, err := CreateTransferOwned(r.Context(), h.Store.DB(), info.Scope.OwnerIDs(), info.User.ID, in)
 	if writeTxError(w, r, err) {
 		return
 	}
@@ -306,7 +307,7 @@ func (h *Handler) UpdateTransfer(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteDetail(w, r, http.StatusBadRequest, apperror.ValidationError, apperror.ValidationError, err.Error())
 		return
 	}
-	tr, err := UpdateTransfer(r.Context(), h.Store.DB(), info.User.ID, groupID, in)
+	tr, err := UpdateTransferOwned(r.Context(), h.Store.DB(), info.Scope.OwnerIDs(), info.User.ID, groupID, in)
 	if errors.Is(err, ErrTransferNotFound) {
 		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
 		return
@@ -325,13 +326,12 @@ func (h *Handler) DeleteTransfer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	groupID := chi.URLParam(r, "group_id")
-	err := DeleteTransfer(r.Context(), h.Store.DB(), info.User.ID, groupID)
+	err := DeleteTransferOwned(r.Context(), h.Store.DB(), info.Scope.OwnerIDs(), info.User.ID, groupID)
 	if errors.Is(err, ErrTransferNotFound) {
 		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
 		return
 	}
-	if err != nil {
-		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+	if writeTxError(w, r, err) {
 		return
 	}
 	_ = h.Audit.Log("transfer.delete", info.User.ID, info.User.Login, clientIP(r), map[string]any{"group_id": groupID})
@@ -345,7 +345,7 @@ func (h *Handler) AccountBalance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := chi.URLParam(r, "id")
-	row, err := queries(h.Store.DB()).GetAccountByID(r.Context(), sqlcdb.GetAccountByIDParams{ID: id, UserID: info.User.ID})
+	row, err := queries(h.Store.DB()).GetAccountByID(r.Context(), sqlcdb.GetAccountByIDParams{ID: id, OwnerIds: info.Scope.OwnerIDs()})
 	if errors.Is(err, sql.ErrNoRows) {
 		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
 		return
@@ -354,7 +354,7 @@ func (h *Handler) AccountBalance(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
-	ab, err := EnrichAccountBalance(r.Context(), h.Store.DB(), info.User.ID, row.ID, row.Name, row.Type, row.BankIcon, row.InitialBalance, row.CreditLimit)
+	ab, err := EnrichAccountBalance(r.Context(), h.Store.DB(), row.UserID, row.ID, row.Name, row.Type, row.BankIcon, row.InitialBalance, row.CreditLimit)
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
@@ -368,7 +368,8 @@ func (h *Handler) AccountsSummary(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
 		return
 	}
-	summary, err := AccountsSummaryForUser(r.Context(), h.Store.DB(), info.User.ID)
+	ownerIDs := scope.FilterOwnerIDs(info.Scope, r.URL.Query().Get("scope"))
+	summary, err := AccountsSummaryForOwners(r.Context(), h.Store.DB(), info.User.ID, ownerIDs)
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
@@ -382,7 +383,8 @@ func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
 		return
 	}
-	dash, err := DashboardForUser(r.Context(), h.Store.DB(), info.User.ID)
+	ownerIDs := scope.FilterOwnerIDs(info.Scope, r.URL.Query().Get("scope"))
+	dash, err := DashboardForOwners(r.Context(), h.Store.DB(), info.User.ID, ownerIDs)
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
@@ -468,6 +470,10 @@ func writeTxError(w http.ResponseWriter, r *http.Request, err error) bool {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_TX_TYPE_CHANGE")
 	case errors.Is(err, ErrInvalidAmount):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_TX_AMOUNT_POSITIVE")
+	case errors.Is(err, ErrScopeMismatch):
+		apperror.WriteR(w, r, http.StatusBadRequest, "ERR_SCOPE_MISMATCH")
+	case errors.Is(err, ErrTransferForeign):
+		apperror.WriteR(w, r, http.StatusForbidden, "ERR_TRANSFER_FOREIGN_ACCOUNT")
 	case errors.Is(err, ErrInvalidAccount):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_ACCOUNT_NOT_FOUND")
 	case errors.Is(err, ErrAccountArchived):

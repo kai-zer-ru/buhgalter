@@ -74,5 +74,6 @@ describe('canSetAsPrimary', () => {
 		expect(canSetAsPrimary(account('a', 'Cash'))).toBe(true);
 		expect(canSetAsPrimary(account('b', 'Bank', true))).toBe(false);
 		expect(canSetAsPrimary({ ...account('c', 'Card'), type: 'credit_card' })).toBe(false);
+		expect(canSetAsPrimary({ ...account('d', 'Family'), scope: 'household' })).toBe(false);
 	});
 });

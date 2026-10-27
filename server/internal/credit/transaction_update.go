@@ -12,7 +12,7 @@ import (
 func GuardTransactionUpdate(ctx context.Context, db *sql.DB, userID, txID string) error {
 	_, err := queries(db).GetCreditPaymentLinkByTransactionID(ctx, sqlcdb.GetCreditPaymentLinkByTransactionIDParams{
 		TransactionID: &txID,
-		UserID:        userID,
+		OwnerIds:      []string{userID},
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil

@@ -37,6 +37,7 @@ type ImportRealtimeListener = (ev: ImportRealtimeEvent) => void;
 const importListeners = new Set<ImportRealtimeListener>();
 
 const REALTIME_PATH = '/api/v1/realtime';
+const HOUSEHOLD_ME_PATH = '/api/v1/households/me';
 
 let socket: WebSocket | null = null;
 let wantConnected = false;
@@ -148,6 +149,10 @@ function handleMessage(raw: string): void {
 	if (data.type === 'invalidate') {
 		if (wasRecentLocalMutation()) return;
 		const hints = (data.hint_paths ?? []).map((p) => p.trim()).filter(Boolean);
+		// Another member joined/left: scope tabs and nav labels read householdMe.
+		if (hints.length === 0 || hints.some((p) => p.startsWith(HOUSEHOLD_ME_PATH))) {
+			void import('$lib/household/membership').then((m) => m.refreshHouseholdMe().catch(() => {}));
+		}
 		if (hints.length === 0) {
 			notifyRealtimeInvalidate();
 			return;

@@ -34,11 +34,18 @@ type EvaluateResult struct {
 }
 
 func Evaluate(ctx context.Context, db *sql.DB, userID string, in EvaluateInput) (EvaluateResult, error) {
+	return EvaluateOwned(ctx, db, []string{userID}, in)
+}
+
+func EvaluateOwned(ctx context.Context, db *sql.DB, ownerIDs []string, in EvaluateInput) (EvaluateResult, error) {
 	out := EvaluateResult{TextMatches: []TextMatchRef{}}
+	if len(ownerIDs) == 0 {
+		return out, nil
+	}
 
 	textRows, err := queries(db).ListCategoryRulesByUserAndKind(ctx, sqlcdb.ListCategoryRulesByUserAndKindParams{
-		UserID: userID,
-		Kind:   KindTextCategory,
+		OwnerIds: ownerIDs,
+		Kind:     KindTextCategory,
 	})
 	if err != nil {
 		return out, err
@@ -69,7 +76,7 @@ func Evaluate(ctx context.Context, db *sql.DB, userID string, in EvaluateInput) 
 		if sub != "" {
 			subPtr = &sub
 		}
-		accID, ruleID, err := suggestAccountFromRows(ctx, db, userID, catID, subPtr)
+		accID, ruleID, err := suggestAccountFromRows(ctx, db, ownerIDs, catID, subPtr)
 		if err != nil {
 			return out, err
 		}
@@ -90,8 +97,8 @@ func ApplySilentTextCategory(ctx context.Context, db *sql.DB, userID string, cat
 		return nil
 	}
 	rows, err := queries(db).ListCategoryRulesByUserAndKind(ctx, sqlcdb.ListCategoryRulesByUserAndKindParams{
-		UserID: userID,
-		Kind:   KindTextCategory,
+		OwnerIds: []string{userID},
+		Kind:     KindTextCategory,
 	})
 	if err != nil {
 		return err
@@ -148,10 +155,10 @@ func foldCase(s string) string {
 	return strings.ToLower(s)
 }
 
-func suggestAccountFromRows(ctx context.Context, db *sql.DB, userID, categoryID string, subcategoryID *string) (*string, string, error) {
+func suggestAccountFromRows(ctx context.Context, db *sql.DB, ownerIDs []string, categoryID string, subcategoryID *string) (*string, string, error) {
 	rows, err := queries(db).ListCategoryRulesByUserAndKind(ctx, sqlcdb.ListCategoryRulesByUserAndKindParams{
-		UserID: userID,
-		Kind:   KindCategoryAccount,
+		OwnerIds: ownerIDs,
+		Kind:     KindCategoryAccount,
 	})
 	if err != nil {
 		return nil, "", err

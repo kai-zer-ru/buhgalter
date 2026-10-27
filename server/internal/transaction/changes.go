@@ -65,15 +65,22 @@ func clampChangesLimit(limit int) int {
 
 // ListChanges returns operations created/updated/deleted for the user after a cursor.
 func ListChanges(ctx context.Context, db *sql.DB, userID string, afterID int64, since string, limit int) (ChangesResult, error) {
+	return ListChangesOwned(ctx, db, []string{userID}, userID, afterID, since, limit)
+}
+
+func ListChangesOwned(ctx context.Context, db *sql.DB, ownerIDs []string, actorID string, afterID int64, since string, limit int) (ChangesResult, error) {
 	limit = clampChangesLimit(limit)
 	if afterID < 0 {
 		afterID = 0
 	}
+	if len(ownerIDs) == 0 {
+		ownerIDs = []string{actorID}
+	}
 	rows, err := queries(db).ListUserChangeEventsAfter(ctx, sqlcdb.ListUserChangeEventsAfterParams{
-		UserID:  userID,
-		AfterID: afterID,
-		Since:   since,
-		Limit:   int64(limit + 1),
+		OwnerIds: ownerIDs,
+		AfterID:  afterID,
+		Since:    since,
+		Limit:    int64(limit + 1),
 	})
 	if err != nil {
 		return ChangesResult{}, err
@@ -111,7 +118,7 @@ func ListChanges(ctx context.Context, db *sql.DB, userID string, afterID int64, 
 			Action:     "deleted",
 		}
 		if row.Action != "deleted" {
-			tx, getErr := GetByID(ctx, db, userID, entityID)
+			tx, getErr := GetOwned(ctx, db, ownerIDs, actorID, entityID)
 			if getErr == nil {
 				change.Action = "upsert"
 				change.Transaction = &tx
@@ -132,7 +139,7 @@ func (h *Handler) Changes(w http.ResponseWriter, r *http.Request) {
 	}
 	q := r.URL.Query()
 	if q.Get("watermark") == "1" {
-		maxRaw, err := queries(h.Store.DB()).MaxUserChangeEventID(r.Context(), info.User.ID)
+		maxRaw, err := queries(h.Store.DB()).MaxUserChangeEventID(r.Context(), info.Scope.OwnerIDs())
 		if err != nil {
 			apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 			return
@@ -164,7 +171,7 @@ func (h *Handler) Changes(w http.ResponseWriter, r *http.Request) {
 		since = timeutil.FormatUTC(t)
 	}
 	limit, _ := strconv.Atoi(q.Get("limit"))
-	result, err := ListChanges(r.Context(), h.Store.DB(), info.User.ID, afterID, since, limit)
+	result, err := ListChangesOwned(r.Context(), h.Store.DB(), info.Scope.OwnerIDs(), info.User.ID, afterID, since, limit)
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return

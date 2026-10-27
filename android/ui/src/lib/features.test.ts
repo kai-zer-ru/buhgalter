@@ -18,6 +18,8 @@ describe('android feature flags', () => {
 	it('maps paths to features', () => {
 		expect(featureRequiredForPath('/budget')).toBe('budget');
 		expect(featureRequiredForPath('/settings/import')).toBe('import_export');
+		expect(featureRequiredForPath('/settings/household')).toBe('household');
+		expect(featureRequiredForPath('/invite/ABC-DEF-GHJ')).toBe('household');
 		expect(featureRequiredForPath('/transaction-templates')).toBe('transaction_templates');
 		expect(featureRequiredForPath('/accounts/1/auto-topup')).toBe('balance_maintenance');
 	});

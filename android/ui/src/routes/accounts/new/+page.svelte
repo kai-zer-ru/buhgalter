@@ -28,6 +28,9 @@
 	import { dataRefreshTick } from '$lib/offline/sync';
 	import { bankIconUrl } from '$lib/finance';
 	import { toAPIAmount } from '$lib/money';
+	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
+	import { householdKindKey, householdMe, inHousehold } from '$lib/household/membership';
+	import { requireOnline } from '$lib/offline/require-online';
 
 	const returnTo = $derived(parseFormReturnPath($page.url.searchParams.get('from'), '/accounts'));
 
@@ -38,6 +41,7 @@
 	let creditLimit = $state('');
 	let initialBalance = $state('');
 	let paymentAccountId = $state('');
+	let shared = $state(false);
 	let currency = $state('RUB');
 	let currencies = $state<Currency[]>([]);
 	let banks = $state<Bank[]>([]);
@@ -76,6 +80,7 @@
 
 	async function submit(e: Event) {
 		e.preventDefault();
+		if (shared && !requireOnline()) return;
 		loading = true;
 		try {
 			await createAccount({
@@ -86,7 +91,8 @@
 				credit_limit: type === 'credit_card' ? toAPIAmount(creditLimit) : undefined,
 				payment_account_id:
 					type === 'credit_card' && paymentAccountId ? paymentAccountId : undefined,
-				currency
+				currency,
+				shared: inHousehold($householdMe) ? shared : undefined
 			});
 			dataRefreshTick.update((n) => n + 1);
 			await leaveForm(returnTo);
@@ -152,6 +158,24 @@
 					</button>
 				</div>
 			</div>
+
+			{#if inHousehold($householdMe)}
+				<div class="flex items-center gap-2">
+					<ToggleSwitch
+						checked={shared}
+						label={$_(householdKindKey('accounts.shared.toggle', $householdMe.household?.kind))}
+						onchange={() => (shared = !shared)}
+					/>
+					<div>
+						<span class="text-sm"
+							>{$_(householdKindKey('accounts.shared.toggle', $householdMe.household?.kind))}</span
+						>
+						<p class="text-xs" style:color="var(--text-muted)">
+							{$_(householdKindKey('accounts.shared.toggleHint', $householdMe.household?.kind))}
+						</p>
+					</div>
+				</div>
+			{/if}
 
 			<Select
 				id="account-currency"

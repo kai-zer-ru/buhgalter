@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 
+	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/money"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
@@ -40,18 +41,22 @@ type DebtorCurrency struct {
 }
 
 func GetDebtorDetail(ctx context.Context, db *sql.DB, userID, debtorID string) (DebtorDetail, error) {
-	debtor, err := GetDebtor(ctx, db, userID, debtorID)
+	return GetDebtorDetailByScope(ctx, db, auth.Scope{UserID: userID}, debtorID)
+}
+
+func GetDebtorDetailByScope(ctx context.Context, db *sql.DB, sc auth.Scope, debtorID string) (DebtorDetail, error) {
+	debtor, err := GetDebtorByScope(ctx, db, sc, debtorID)
 	if err != nil {
 		return DebtorDetail{}, err
 	}
-	tz, err := userTimezone(ctx, db, userID)
+	tz, err := userTimezone(ctx, db, sc.UserID)
 	if err != nil {
 		return DebtorDetail{}, err
 	}
 	now := timeutil.NowUTC()
 
 	rows, err := queries(db).ListDebtsByDebtor(ctx, sqlcdb.ListDebtsByDebtorParams{
-		UserID: userID, DebtorID: debtorID,
+		UserID: debtor.OwnerUserID, DebtorID: debtorID,
 	})
 	if err != nil {
 		return DebtorDetail{}, err
@@ -78,7 +83,7 @@ func GetDebtorDetail(ctx context.Context, db *sql.DB, userID, debtorID string) (
 			by[cur] = p
 		}
 	}
-	profile, err := queries(db).GetUserFormatting(ctx, userID)
+	profile, err := queries(db).GetUserFormatting(ctx, sc.UserID)
 	if err != nil {
 		return DebtorDetail{}, err
 	}
@@ -100,7 +105,7 @@ func GetDebtorDetail(ctx context.Context, db *sql.DB, userID, debtorID string) (
 
 	q := queries(db)
 	txIDRows, err := q.ListTransactionIDsByDebtor(ctx, sqlcdb.ListTransactionIDsByDebtorParams{
-		UserID: userID, DebtorID: debtorID,
+		UserID: debtor.OwnerUserID, DebtorID: debtorID,
 	})
 	if err != nil {
 		return DebtorDetail{}, err
@@ -108,7 +113,7 @@ func GetDebtorDetail(ctx context.Context, db *sql.DB, userID, debtorID string) (
 
 	txs := make([]DebtTransaction, 0, len(txIDRows))
 	for _, txID := range txIDRows {
-		tx, err := loadDebtTransaction(ctx, q, userID, txID)
+		tx, err := loadDebtTransaction(ctx, q, debtor.OwnerUserID, txID)
 		if err != nil {
 			continue
 		}
@@ -126,7 +131,7 @@ func GetDebtorDetail(ctx context.Context, db *sql.DB, userID, debtorID string) (
 }
 
 func loadDebtTransaction(ctx context.Context, q *sqlcdb.Queries, userID, id string) (DebtTransaction, error) {
-	row, err := q.GetTransactionByID(ctx, sqlcdb.GetTransactionByIDParams{ID: id, UserID: userID})
+	row, err := q.GetTransactionByID(ctx, sqlcdb.GetTransactionByIDParams{ID: id, OwnerIds: []string{userID}})
 	if errors.Is(err, sql.ErrNoRows) {
 		return DebtTransaction{}, err
 	}

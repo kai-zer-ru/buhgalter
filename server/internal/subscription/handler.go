@@ -16,6 +16,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/db"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/money"
+	"github.com/kai-zer-ru/buhgalter/internal/scope"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
 )
 
@@ -66,10 +67,13 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
 		return
 	}
-	items, err := List(r.Context(), h.Store.DB(), info.User.ID)
+	items, err := ListForOwners(r.Context(), h.Store.DB(), info.Scope.OwnerIDs())
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
+	}
+	for i := range items {
+		items[i].Scope = scope.AccountScope(info.Scope, items[i].OwnerUserID)
 	}
 	writeJSON(w, http.StatusOK, items)
 }
@@ -145,13 +149,22 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteDetail(w, r, http.StatusBadRequest, apperror.ValidationError, apperror.ValidationError, err.Error())
 		return
 	}
-	item, err := Create(r.Context(), h.Store.DB(), info.User.ID, in)
+	ownerID, err := scope.PrincipalForAccount(r.Context(), h.Store.DB(), info.Scope.OwnerIDs(), in.AccountID)
+	if err != nil {
+		if errors.Is(err, scope.ErrNotFound) {
+			writeSubError(w, r, ErrInvalidAccount)
+			return
+		}
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	}
+	item, err := Create(r.Context(), h.Store.DB(), ownerID, in)
 	if writeSubError(w, r, err) {
 		return
 	}
 	if req.AttachTxID != nil && *req.AttachTxID != "" {
-		_, _ = AttachTransactions(r.Context(), h.Store.DB(), info.User.ID, item.ID, []string{*req.AttachTxID})
-		item, _ = getByID(r.Context(), h.Store.DB(), info.User.ID, item.ID)
+		_, _ = AttachTransactions(r.Context(), h.Store.DB(), ownerID, item.ID, []string{*req.AttachTxID})
+		item, _ = getByID(r.Context(), h.Store.DB(), ownerID, item.ID)
 	}
 	_ = h.Audit.Log("subscription.create", info.User.ID, info.User.Login, clientIP(r), map[string]any{"id": item.ID})
 	writeJSON(w, http.StatusCreated, item)
@@ -174,7 +187,11 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteDetail(w, r, http.StatusBadRequest, apperror.ValidationError, apperror.ValidationError, err.Error())
 		return
 	}
-	item, err := Update(r.Context(), h.Store.DB(), info.User.ID, id, in)
+	existing, err := getByIDForOwners(r.Context(), h.Store.DB(), info.Scope.OwnerIDs(), id)
+	if writeSubError(w, r, err) {
+		return
+	}
+	item, err := Update(r.Context(), h.Store.DB(), existing.OwnerUserID, id, in)
 	if writeSubError(w, r, err) {
 		return
 	}
@@ -189,7 +206,11 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := chi.URLParam(r, "id")
-	if writeSubError(w, r, Delete(r.Context(), h.Store.DB(), info.User.ID, id)) {
+	existing, err := getByIDForOwners(r.Context(), h.Store.DB(), info.Scope.OwnerIDs(), id)
+	if writeSubError(w, r, err) {
+		return
+	}
+	if writeSubError(w, r, Delete(r.Context(), h.Store.DB(), existing.OwnerUserID, id)) {
 		return
 	}
 	_ = h.Audit.Log("subscription.delete", info.User.ID, info.User.Login, clientIP(r), map[string]any{"id": id})
@@ -208,7 +229,11 @@ func (h *Handler) Attach(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_INVALID_JSON")
 		return
 	}
-	res, err := AttachTransactions(r.Context(), h.Store.DB(), info.User.ID, id, req.IDs)
+	existing, err := getByIDForOwners(r.Context(), h.Store.DB(), info.Scope.OwnerIDs(), id)
+	if writeSubError(w, r, err) {
+		return
+	}
+	res, err := AttachTransactions(r.Context(), h.Store.DB(), existing.OwnerUserID, id, req.IDs)
 	if writeSubError(w, r, err) {
 		return
 	}

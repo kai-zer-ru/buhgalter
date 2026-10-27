@@ -510,6 +510,7 @@ function accountFromBalanceSummary(summary: AccountBalanceSummary): Account {
 		auto_topup_source_account_id: summary.auto_topup_source_account_id ?? null,
 		status: 'active',
 		is_primary: summary.is_primary,
+		scope: summary.scope,
 		created_at: '',
 		updated_at: ''
 	};
@@ -589,6 +590,20 @@ export function enrichAccountsWithCachedBalances(
 	return accounts.map((acc) => applyBalanceSummary(acc, summaryById.get(acc.id)));
 }
 
+function mergeDashboardAccountsIntoList(
+	rows: Account[],
+	dashboard: Dashboard,
+	path: string
+): Account[] {
+	const enriched = enrichAccountsWithCachedBalances(rows, dashboard);
+	if (path.includes('status=archived') || path.includes('status=deleted')) return enriched;
+	const have = new Set(enriched.map((acc) => acc.id));
+	const extra = dashboard.accounts
+		.filter((row) => !have.has(row.id))
+		.map((row) => accountFromBalanceSummary(row));
+	return extra.length ? [...enriched, ...extra] : enriched;
+}
+
 /** @deprecated Use enrichAccountsWithCachedBalances */
 export const mergeAccountsWithDashboard = enrichAccountsWithCachedBalances;
 
@@ -635,7 +650,7 @@ export function patchAccountListCachesFromDashboard(dashboard: Dashboard): void 
 	for (const path of paths) {
 		const rows = readRefCache<Account[]>(path);
 		if (!isNonEmptyList(rows)) continue;
-		writeRefCache(path, enrichAccountsWithCachedBalances(rows, dashboard));
+		writeRefCache(path, mergeDashboardAccountsIntoList(rows, dashboard, path));
 	}
 	for (const summary of dashboard.accounts) {
 		const acc = readRefCache<Account>(`/api/v1/accounts/${summary.id}`);

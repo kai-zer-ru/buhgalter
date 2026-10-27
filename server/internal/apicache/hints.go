@@ -134,6 +134,11 @@ func HintsForMutation(apiPath string) InvalidateHints {
 		return LedgerHints()
 	case strings.HasPrefix(path, "/api/v1/user/data"):
 		return LedgerHints()
+	case strings.HasPrefix(path, "/api/v1/households") || strings.HasPrefix(path, "/api/v1/household-invites"):
+		return InvalidateHints{
+			Paths:    []string{"/api/v1/households/me", "/api/v1/households/me/invites"},
+			Entities: []string{"household"},
+		}
 	default:
 		// Unknown write — coarse invalidate (empty Paths).
 		return InvalidateHints{}

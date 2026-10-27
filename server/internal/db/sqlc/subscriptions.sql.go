@@ -7,6 +7,7 @@ package sqlc
 
 import (
 	"context"
+	"strings"
 )
 
 const attachTransactionToSubscription = `-- name: AttachTransactionToSubscription :execrows
@@ -133,12 +134,12 @@ SELECT
 FROM subscriptions s
 JOIN accounts a ON a.id = s.account_id
 LEFT JOIN subcategories sub ON sub.id = s.subcategory_id
-WHERE s.id = ? AND s.user_id = ?
+WHERE s.id = ?1 AND s.user_id IN (/*SLICE:owner_ids*/?)
 `
 
 type GetSubscriptionByIDParams struct {
-	ID     string `json:"id"`
-	UserID string `json:"user_id"`
+	ID       string   `json:"id"`
+	OwnerIds []string `json:"owner_ids"`
 }
 
 type GetSubscriptionByIDRow struct {
@@ -169,7 +170,18 @@ type GetSubscriptionByIDRow struct {
 }
 
 func (q *Queries) GetSubscriptionByID(ctx context.Context, arg GetSubscriptionByIDParams) (GetSubscriptionByIDRow, error) {
-	row := q.db.QueryRowContext(ctx, getSubscriptionByID, arg.ID, arg.UserID)
+	query := getSubscriptionByID
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.ID)
+	if len(arg.OwnerIds) > 0 {
+		for _, v := range arg.OwnerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(arg.OwnerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	row := q.db.QueryRowContext(ctx, query, queryParams...)
 	var i GetSubscriptionByIDRow
 	err := row.Scan(
 		&i.ID,
@@ -599,7 +611,7 @@ SELECT
 FROM subscriptions s
 JOIN accounts a ON a.id = s.account_id
 LEFT JOIN subcategories sub ON sub.id = s.subcategory_id
-WHERE s.user_id = ?
+WHERE s.user_id IN (/*SLICE:owner_ids*/?)
 ORDER BY s.next_run_at ASC, s.created_at DESC
 `
 
@@ -630,8 +642,18 @@ type ListSubscriptionsByUserRow struct {
 	UpdatedAt       string  `json:"updated_at"`
 }
 
-func (q *Queries) ListSubscriptionsByUser(ctx context.Context, userID string) ([]ListSubscriptionsByUserRow, error) {
-	rows, err := q.db.QueryContext(ctx, listSubscriptionsByUser, userID)
+func (q *Queries) ListSubscriptionsByUser(ctx context.Context, ownerIds []string) ([]ListSubscriptionsByUserRow, error) {
+	query := listSubscriptionsByUser
+	var queryParams []interface{}
+	if len(ownerIds) > 0 {
+		for _, v := range ownerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(ownerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
 	if err != nil {
 		return nil, err
 	}

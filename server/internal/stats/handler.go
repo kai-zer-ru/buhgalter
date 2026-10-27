@@ -12,6 +12,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/db"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/money"
+	"github.com/kai-zer-ru/buhgalter/internal/scope"
 	"github.com/kai-zer-ru/buhgalter/internal/transaction"
 )
 
@@ -25,7 +26,7 @@ func (h *Handler) Summary(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
 		return
 	}
-	f, currency, available, ok := h.filtersWithCurrency(w, r, info.User.ID)
+	f, currency, available, ok := h.filtersWithCurrency(w, r, info)
 	if !ok {
 		return
 	}
@@ -45,7 +46,7 @@ func (h *Handler) ByCategory(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
 		return
 	}
-	f, currency, available, ok := h.filtersWithCurrency(w, r, info.User.ID)
+	f, currency, available, ok := h.filtersWithCurrency(w, r, info)
 	if !ok {
 		return
 	}
@@ -63,7 +64,7 @@ func (h *Handler) BySubcategory(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
 		return
 	}
-	f, currency, available, ok := h.filtersWithCurrency(w, r, info.User.ID)
+	f, currency, available, ok := h.filtersWithCurrency(w, r, info)
 	if !ok {
 		return
 	}
@@ -81,7 +82,7 @@ func (h *Handler) ByStore(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
 		return
 	}
-	f, currency, available, ok := h.filtersWithCurrency(w, r, info.User.ID)
+	f, currency, available, ok := h.filtersWithCurrency(w, r, info)
 	if !ok {
 		return
 	}
@@ -107,7 +108,7 @@ func (h *Handler) ByPeriod(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_GROUP_BY")
 		return
 	}
-	f, currency, available, ok := h.filtersWithCurrency(w, r, info.User.ID)
+	f, currency, available, ok := h.filtersWithCurrency(w, r, info)
 	if !ok {
 		return
 	}
@@ -129,11 +130,11 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 	search := q.Get("q")
 	page, _ := strconv.Atoi(q.Get("page"))
 	limit, _ := strconv.Atoi(q.Get("limit"))
-	currency, available, ok := h.resolveCurrency(w, r, info.User.ID)
+	currency, available, ok := h.resolveCurrency(w, r, info)
 	if !ok {
 		return
 	}
-	result, err := transaction.List(r.Context(), h.Store.DB(), info.User.ID, transaction.ListFilters{
+	result, err := transaction.ListOwned(r.Context(), h.Store.DB(), scope.FilterOwnerIDs(info.Scope, q.Get("scope")), info.User.ID, transaction.ListFilters{
 		AccountID:  q.Get("account_id"),
 		Type:       q.Get("type"),
 		CategoryID: q.Get("category_id"),
@@ -172,12 +173,13 @@ func (h *Handler) NetWorth(w http.ResponseWriter, r *http.Request) {
 	if groupBy == "" {
 		groupBy = "month"
 	}
-	currency, available, ok := h.resolveCurrency(w, r, info.User.ID)
+	currency, available, ok := h.resolveCurrency(w, r, info)
 	if !ok {
 		return
 	}
 	svc := New(h.Store.DB())
-	out, err := svc.NetWorth(r.Context(), info.User.ID, q.Get("from"), q.Get("to"), groupBy, currency)
+	ownerIDs := scope.FilterOwnerIDs(info.Scope, q.Get("scope"))
+	out, err := svc.NetWorthOwned(r.Context(), info.User.ID, ownerIDs, q.Get("from"), q.Get("to"), groupBy, currency)
 	if writeStatsError(w, r, err) {
 		return
 	}
@@ -193,7 +195,7 @@ func (h *Handler) Context(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
-	f, currency, available, ok := h.filtersWithCurrency(w, r, info.User.ID)
+	f, currency, available, ok := h.filtersWithCurrency(w, r, info)
 	if !ok {
 		return
 	}
@@ -205,9 +207,7 @@ func (h *Handler) Context(w http.ResponseWriter, r *http.Request) {
 	)
 	switch {
 	case q.Get("account_id") != "":
-		if acc, aerr := sqlcdb.New(h.Store.DB()).GetAccountByID(r.Context(), sqlcdb.GetAccountByIDParams{
-			ID: q.Get("account_id"), UserID: info.User.ID,
-		}); aerr == nil {
+		if acc, aerr := sqlcdb.New(h.Store.DB()).GetAccountByID(r.Context(), sqlcdb.GetAccountByIDParams{ID: q.Get("account_id"), OwnerIds: f.OwnerIDs}); aerr == nil {
 			currency = money.ProfileOrDefault(acc.Currency)
 			f.Currency = currency
 		}
@@ -216,11 +216,9 @@ func (h *Handler) Context(w http.ResponseWriter, r *http.Request) {
 		out, err = svc.ContextDebtor(r.Context(), info.User.ID, q.Get("debtor_id"), f)
 	case q.Get("credit_id") != "":
 		if cr, cerr := sqlcdb.New(h.Store.DB()).GetCreditByID(r.Context(), sqlcdb.GetCreditByIDParams{
-			ID: q.Get("credit_id"), UserID: info.User.ID,
+			ID: q.Get("credit_id"), OwnerIds: info.Scope.OwnerIDs(),
 		}); cerr == nil {
-			if acc, aerr := sqlcdb.New(h.Store.DB()).GetAccountByID(r.Context(), sqlcdb.GetAccountByIDParams{
-				ID: cr.DebitAccountID, UserID: info.User.ID,
-			}); aerr == nil {
+			if acc, aerr := sqlcdb.New(h.Store.DB()).GetAccountByID(r.Context(), sqlcdb.GetAccountByIDParams{ID: cr.DebitAccountID, OwnerIds: info.Scope.OwnerIDs()}); aerr == nil {
 				currency = money.ProfileOrDefault(acc.Currency)
 				f.Currency = currency
 			}
@@ -256,13 +254,14 @@ func filtersFromQuery(r *http.Request) Filters {
 	}
 }
 
-func (h *Handler) resolveCurrency(w http.ResponseWriter, r *http.Request, userID string) (currency string, available []string, ok bool) {
-	available, err := account.ActiveCurrencies(r.Context(), h.Store.DB(), userID)
+func (h *Handler) resolveCurrency(w http.ResponseWriter, r *http.Request, info auth.AuthInfo) (currency string, available []string, ok bool) {
+	ownerIDs := scope.FilterOwnerIDs(info.Scope, r.URL.Query().Get("scope"))
+	available, err := account.ActiveCurrenciesOwned(r.Context(), h.Store.DB(), info.User.ID, ownerIDs)
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return "", nil, false
 	}
-	profile, err := account.ProfileCurrency(r.Context(), h.Store.DB(), userID)
+	profile, err := account.ProfileCurrency(r.Context(), h.Store.DB(), info.User.ID)
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return "", nil, false
@@ -279,9 +278,10 @@ func (h *Handler) resolveCurrency(w http.ResponseWriter, r *http.Request, userID
 	return currency, available, true
 }
 
-func (h *Handler) filtersWithCurrency(w http.ResponseWriter, r *http.Request, userID string) (Filters, string, []string, bool) {
+func (h *Handler) filtersWithCurrency(w http.ResponseWriter, r *http.Request, info auth.AuthInfo) (Filters, string, []string, bool) {
 	f := filtersFromQuery(r)
-	currency, available, ok := h.resolveCurrency(w, r, userID)
+	f.OwnerIDs = scope.FilterOwnerIDs(info.Scope, r.URL.Query().Get("scope"))
+	currency, available, ok := h.resolveCurrency(w, r, info)
 	if !ok {
 		return Filters{}, "", nil, false
 	}

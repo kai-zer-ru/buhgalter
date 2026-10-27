@@ -10,36 +10,46 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kai-zer-ru/buhgalter/internal/accountbalance"
+	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	"github.com/kai-zer-ru/buhgalter/internal/bank"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/features"
 	"github.com/kai-zer-ru/buhgalter/internal/money"
+	"github.com/kai-zer-ru/buhgalter/internal/scope"
 )
 
+type PersonRef struct {
+	UserID      string `json:"user_id"`
+	DisplayName string `json:"display_name"`
+}
+
 type Account struct {
-	ID                        string  `json:"id"`
-	Name                      string  `json:"name"`
-	Type                      string  `json:"type"`
-	BankID                    *string `json:"bank_id"`
-	BankName                  *string `json:"bank_name,omitempty"`
-	BankIcon                  *string `json:"bank_icon,omitempty"`
-	Currency                  string  `json:"currency"`
-	InitialBalance            int64   `json:"initial_balance"`
-	Balance                   int64   `json:"balance"`
-	BalanceDisplay            string  `json:"balance_display"`
-	CreditLimit               *int64  `json:"credit_limit,omitempty"`
-	CreditLimitDisplay        *string `json:"credit_limit_display,omitempty"`
-	PaymentAccountID          *string `json:"payment_account_id,omitempty"`
-	AutoTopupEnabled          bool    `json:"auto_topup_enabled"`
-	AutoTopupThreshold        *int64  `json:"auto_topup_threshold,omitempty"`
-	AutoTopupThresholdDisplay *string `json:"auto_topup_threshold_display,omitempty"`
-	AutoTopupTarget           *int64  `json:"auto_topup_target,omitempty"`
-	AutoTopupTargetDisplay    *string `json:"auto_topup_target_display,omitempty"`
-	AutoTopupSourceAccountID  *string `json:"auto_topup_source_account_id,omitempty"`
-	Status                    string  `json:"status"`
-	IsPrimary                 bool    `json:"is_primary"`
-	CreatedAt                 string  `json:"created_at"`
-	UpdatedAt                 string  `json:"updated_at"`
+	ID                        string     `json:"id"`
+	OwnerUserID               string     `json:"-"`
+	Scope                     string     `json:"scope"`
+	OriginalOwner             *PersonRef `json:"original_owner"`
+	Name                      string     `json:"name"`
+	Type                      string     `json:"type"`
+	BankID                    *string    `json:"bank_id"`
+	BankName                  *string    `json:"bank_name,omitempty"`
+	BankIcon                  *string    `json:"bank_icon,omitempty"`
+	Currency                  string     `json:"currency"`
+	InitialBalance            int64      `json:"initial_balance"`
+	Balance                   int64      `json:"balance"`
+	BalanceDisplay            string     `json:"balance_display"`
+	CreditLimit               *int64     `json:"credit_limit,omitempty"`
+	CreditLimitDisplay        *string    `json:"credit_limit_display,omitempty"`
+	PaymentAccountID          *string    `json:"payment_account_id,omitempty"`
+	AutoTopupEnabled          bool       `json:"auto_topup_enabled"`
+	AutoTopupThreshold        *int64     `json:"auto_topup_threshold,omitempty"`
+	AutoTopupThresholdDisplay *string    `json:"auto_topup_threshold_display,omitempty"`
+	AutoTopupTarget           *int64     `json:"auto_topup_target,omitempty"`
+	AutoTopupTargetDisplay    *string    `json:"auto_topup_target_display,omitempty"`
+	AutoTopupSourceAccountID  *string    `json:"auto_topup_source_account_id,omitempty"`
+	Status                    string     `json:"status"`
+	IsPrimary                 bool       `json:"is_primary"`
+	CreatedAt                 string     `json:"created_at"`
+	UpdatedAt                 string     `json:"updated_at"`
 }
 
 func queries(db sqlcdb.DBTX) *sqlcdb.Queries {
@@ -62,8 +72,21 @@ func amountDisplayPtr(v *int64) *string {
 	return &s
 }
 
+func originalOwnerRef(id *string, displayName string) *PersonRef {
+	if id == nil || *id == "" {
+		return nil
+	}
+	return &PersonRef{UserID: *id, DisplayName: displayName}
+}
+
+func decorateScope(a Account, viewer auth.Scope) Account {
+	a.Scope = scope.AccountScope(viewer, a.OwnerUserID)
+	return a
+}
+
 func accountFromRow(
-	id, name, accType, status, createdAt, updatedAt string,
+	id, ownerUserID, name, accType, status, createdAt, updatedAt string,
+	originalOwner *PersonRef,
 	bankID *string,
 	initialBalance, currentBalance int64,
 	creditLimit *int64,
@@ -77,6 +100,8 @@ func accountFromRow(
 ) Account {
 	a := Account{
 		ID:                       id,
+		OwnerUserID:              ownerUserID,
+		OriginalOwner:            originalOwner,
 		Name:                     name,
 		Type:                     accType,
 		BankID:                   bankID,
@@ -105,7 +130,8 @@ func accountFromRow(
 
 func accountFromGetRow(row sqlcdb.GetAccountByIDRow) Account {
 	return accountFromRow(
-		row.ID, row.Name, row.Type, row.Status, row.CreatedAt, row.UpdatedAt,
+		row.ID, row.UserID, row.Name, row.Type, row.Status, row.CreatedAt, row.UpdatedAt,
+		originalOwnerRef(row.OriginalOwnerUserID, row.OriginalOwnerDisplayName),
 		row.BankID, row.InitialBalance, row.CurrentBalance,
 		row.CreditLimit, row.PaymentAccountID,
 		row.AutoTopupEnabled, row.AutoTopupThreshold, row.AutoTopupTarget, row.AutoTopupSourceAccountID,
@@ -115,7 +141,8 @@ func accountFromGetRow(row sqlcdb.GetAccountByIDRow) Account {
 
 func accountFromListActive(row sqlcdb.ListAccountsByUserActiveRow) Account {
 	return accountFromRow(
-		row.ID, row.Name, row.Type, row.Status, row.CreatedAt, row.UpdatedAt,
+		row.ID, row.UserID, row.Name, row.Type, row.Status, row.CreatedAt, row.UpdatedAt,
+		originalOwnerRef(row.OriginalOwnerUserID, row.OriginalOwnerDisplayName),
 		row.BankID, row.InitialBalance, row.CurrentBalance,
 		row.CreditLimit, row.PaymentAccountID,
 		row.AutoTopupEnabled, row.AutoTopupThreshold, row.AutoTopupTarget, row.AutoTopupSourceAccountID,
@@ -125,7 +152,8 @@ func accountFromListActive(row sqlcdb.ListAccountsByUserActiveRow) Account {
 
 func accountFromListStatus(row sqlcdb.ListAccountsByUserAndStatusRow) Account {
 	return accountFromRow(
-		row.ID, row.Name, row.Type, row.Status, row.CreatedAt, row.UpdatedAt,
+		row.ID, row.UserID, row.Name, row.Type, row.Status, row.CreatedAt, row.UpdatedAt,
+		originalOwnerRef(row.OriginalOwnerUserID, row.OriginalOwnerDisplayName),
 		row.BankID, row.InitialBalance, row.CurrentBalance,
 		row.CreditLimit, row.PaymentAccountID,
 		row.AutoTopupEnabled, row.AutoTopupThreshold, row.AutoTopupTarget, row.AutoTopupSourceAccountID,
@@ -134,42 +162,51 @@ func accountFromListStatus(row sqlcdb.ListAccountsByUserAndStatusRow) Account {
 }
 
 func ListByUser(ctx context.Context, db *sql.DB, userID, status string) ([]Account, error) {
+	return ListByScope(ctx, db, auth.Scope{UserID: userID}, status)
+}
+
+func ListByScope(ctx context.Context, db *sql.DB, sc auth.Scope, status string) ([]Account, error) {
 	q := queries(db)
+	ids := sc.OwnerIDs()
 	if status != "" {
 		rows, err := q.ListAccountsByUserAndStatus(ctx, sqlcdb.ListAccountsByUserAndStatusParams{
-			UserID: userID,
-			Status: status,
+			OwnerIds: ids,
+			Status:   status,
 		})
 		if err != nil {
 			return nil, err
 		}
 		out := make([]Account, 0, len(rows))
 		for _, row := range rows {
-			out = append(out, accountFromListStatus(row))
+			out = append(out, decorateScope(accountFromListStatus(row), sc))
 		}
 		return out, nil
 	}
 
-	rows, err := q.ListAccountsByUserActive(ctx, userID)
+	rows, err := q.ListAccountsByUserActive(ctx, ids)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]Account, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, accountFromListActive(row))
+		out = append(out, decorateScope(accountFromListActive(row), sc))
 	}
 	return out, nil
 }
 
 func GetByID(ctx context.Context, db sqlcdb.DBTX, userID, id string) (Account, error) {
-	row, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: id, UserID: userID})
+	return GetByScope(ctx, db, auth.Scope{UserID: userID}, id)
+}
+
+func GetByScope(ctx context.Context, db sqlcdb.DBTX, sc auth.Scope, id string) (Account, error) {
+	row, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: id, OwnerIds: sc.OwnerIDs()})
 	if errors.Is(err, sql.ErrNoRows) {
 		return Account{}, ErrNotFound
 	}
 	if err != nil {
 		return Account{}, err
 	}
-	return accountFromGetRow(row), nil
+	return decorateScope(accountFromGetRow(row), sc), nil
 }
 
 // LockRow takes a write lock on the account row (SQLite deferred tx → reserved).
@@ -184,6 +221,14 @@ func LockRow(ctx context.Context, db sqlcdb.DBTX, userID, id string) error {
 	return nil
 }
 
+func LockRowByScope(ctx context.Context, db sqlcdb.DBTX, sc auth.Scope, id string) error {
+	acc, err := GetByScope(ctx, db, sc, id)
+	if err != nil {
+		return err
+	}
+	return LockRow(ctx, db, acc.OwnerUserID, id)
+}
+
 var ErrNotFound = errors.New("account not found")
 var ErrArchived = errors.New("account is archived")
 var ErrCreditCardPrimary = errors.New("credit card cannot be primary")
@@ -193,6 +238,8 @@ var ErrCreditCardLimitDecreaseNotFullyPaid = errors.New("credit card must be ful
 var ErrInvalidCurrency = errors.New("invalid currency")
 var ErrCurrencyLocked = errors.New("account currency cannot be changed: account is in use")
 var ErrCurrencyMismatch = money.ErrCurrencyMismatch
+var ErrNotHouseholdMember = errors.New("not household member")
+var ErrSharedPrimary = errors.New("shared account cannot be primary")
 
 type CreateInput struct {
 	Name             string
@@ -203,6 +250,7 @@ type CreateInput struct {
 	PaymentAccountID *string
 	// Currency is optional; empty means the owner's profile currency.
 	Currency string
+	Shared   bool
 }
 
 func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Account, error) {
@@ -222,7 +270,7 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Acc
 	now := time.Now().UTC().Format(time.RFC3339)
 	q := queries(db)
 	isPrimary := int64(0)
-	if !IsCreditCard(in.Type) {
+	if !in.Shared && !IsCreditCard(in.Type) {
 		count, err := q.CountActivePrimaryEligibleAccountsByUser(ctx, userID)
 		if err != nil {
 			return Account{}, err
@@ -248,7 +296,14 @@ func Create(ctx context.Context, db *sql.DB, userID string, in CreateInput) (Acc
 	}); err != nil {
 		return Account{}, fmt.Errorf("insert account: %w", err)
 	}
-	return GetByID(ctx, db, userID, id)
+	acc, err := GetByID(ctx, db, userID, id)
+	if err != nil {
+		return Account{}, err
+	}
+	if in.Shared {
+		acc.Scope = scope.Household
+	}
+	return acc, nil
 }
 
 type UpdateInput struct {
@@ -270,10 +325,15 @@ type AutoTopupInput struct {
 }
 
 func Update(ctx context.Context, db *sql.DB, userID, id string, in UpdateInput) (Account, error) {
-	existing, err := GetByID(ctx, db, userID, id)
+	return UpdateByScope(ctx, db, auth.Scope{UserID: userID}, id, in)
+}
+
+func UpdateByScope(ctx context.Context, db *sql.DB, sc auth.Scope, id string, in UpdateInput) (Account, error) {
+	existing, err := GetByScope(ctx, db, sc, id)
 	if err != nil {
 		return Account{}, err
 	}
+	userID := existing.OwnerUserID
 	if existing.Status != "active" {
 		return Account{}, ErrArchived
 	}
@@ -363,7 +423,11 @@ func Update(ctx context.Context, db *sql.DB, userID, id string, in UpdateInput) 
 			return Account{}, err
 		}
 	}
-	return GetByID(ctx, db, userID, id)
+	acc, err := GetByID(ctx, db, userID, id)
+	if err != nil {
+		return Account{}, err
+	}
+	return decorateScope(acc, sc), nil
 }
 
 // resolveCreateCurrency validates an explicit code or falls back to the profile currency.
@@ -396,11 +460,18 @@ func ProfileCurrency(ctx context.Context, db sqlcdb.DBTX, userID string) (string
 
 // ActiveCurrencies is DISTINCT currencies of active accounts, profile first even if none.
 func ActiveCurrencies(ctx context.Context, db sqlcdb.DBTX, userID string) ([]string, error) {
-	profile, err := ProfileCurrency(ctx, db, userID)
+	return ActiveCurrenciesOwned(ctx, db, userID, []string{userID})
+}
+
+func ActiveCurrenciesOwned(ctx context.Context, db sqlcdb.DBTX, tzUserID string, ownerIDs []string) ([]string, error) {
+	profile, err := ProfileCurrency(ctx, db, tzUserID)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := queries(db).ListAccountsByUserActive(ctx, userID)
+	if len(ownerIDs) == 0 {
+		return money.OrderWithProfileFirst(profile, nil), nil
+	}
+	rows, err := queries(db).ListAccountsByUserActive(ctx, ownerIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -441,7 +512,11 @@ func resolveUpdateCurrency(ctx context.Context, db sqlcdb.DBTX, userID string, e
 // so debt (limit − balance) stays unchanged on increase. Decrease is allowed only when
 // the card is fully paid (balance >= current credit_limit).
 func ChangeCreditLimit(ctx context.Context, db *sql.DB, userID, id string, newLimit int64) (Account, error) {
-	existing, err := GetByID(ctx, db, userID, id)
+	return ChangeCreditLimitByScope(ctx, db, auth.Scope{UserID: userID}, id, newLimit)
+}
+
+func ChangeCreditLimitByScope(ctx context.Context, db *sql.DB, sc auth.Scope, id string, newLimit int64) (Account, error) {
+	existing, err := GetByScope(ctx, db, sc, id)
 	if err != nil {
 		return Account{}, err
 	}
@@ -467,6 +542,7 @@ func ChangeCreditLimit(ctx context.Context, db *sql.DB, userID, id string, newLi
 	}
 	newCL := newLimit
 	now := time.Now().UTC().Format(time.RFC3339)
+	owner := existing.OwnerUserID
 	if err := queries(db).UpdateAccount(ctx, sqlcdb.UpdateAccountParams{
 		Name:             existing.Name,
 		BankID:           existing.BankID,
@@ -475,14 +551,14 @@ func ChangeCreditLimit(ctx context.Context, db *sql.DB, userID, id string, newLi
 		PaymentAccountID: existing.PaymentAccountID,
 		UpdatedAt:        now,
 		ID:               id,
-		UserID:           userID,
+		UserID:           owner,
 	}); err != nil {
 		return Account{}, err
 	}
-	if err := accountbalance.Refresh(ctx, db, userID, id); err != nil {
+	if err := accountbalance.Refresh(ctx, db, owner, id); err != nil {
 		return Account{}, err
 	}
-	return GetByID(ctx, db, userID, id)
+	return GetByScope(ctx, db, sc, id)
 }
 
 // RequiresBalanceTransfer reports whether deleting the account must move remaining funds first.
@@ -511,10 +587,15 @@ func validateCreditCardFullyPaid(acc Account) error {
 }
 
 func SetStatus(ctx context.Context, db sqlcdb.DBTX, userID, id, status string) (Account, error) {
-	existing, err := GetByID(ctx, db, userID, id)
+	return SetStatusByScope(ctx, db, auth.Scope{UserID: userID}, id, status)
+}
+
+func SetStatusByScope(ctx context.Context, db sqlcdb.DBTX, sc auth.Scope, id, status string) (Account, error) {
+	existing, err := GetByScope(ctx, db, sc, id)
 	if err != nil {
 		return Account{}, err
 	}
+	userID := existing.OwnerUserID
 	if existing.Status == "deleted" {
 		return Account{}, ErrArchived
 	}
@@ -557,13 +638,20 @@ func SetStatus(ctx context.Context, db sqlcdb.DBTX, userID, id, status string) (
 			return Account{}, err
 		}
 	}
-	return GetByID(ctx, db, userID, id)
+	return GetByScope(ctx, db, sc, id)
 }
 
 func SetPrimary(ctx context.Context, db *sql.DB, userID, id string) (Account, error) {
-	acc, err := GetByID(ctx, db, userID, id)
+	return SetPrimaryByScope(ctx, db, auth.Scope{UserID: userID}, id)
+}
+
+func SetPrimaryByScope(ctx context.Context, db *sql.DB, sc auth.Scope, id string) (Account, error) {
+	acc, err := GetByScope(ctx, db, sc, id)
 	if err != nil {
 		return Account{}, err
+	}
+	if acc.Scope == scope.Household || (sc.PrincipalID != "" && acc.OwnerUserID == sc.PrincipalID) {
+		return Account{}, ErrSharedPrimary
 	}
 	if acc.Status != "active" {
 		return Account{}, ErrArchived
@@ -572,6 +660,7 @@ func SetPrimary(ctx context.Context, db *sql.DB, userID, id string) (Account, er
 		return Account{}, ErrCreditCardPrimary
 	}
 
+	userID := sc.UserID
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return Account{}, err
@@ -588,7 +677,7 @@ func SetPrimary(ctx context.Context, db *sql.DB, userID, id string) (Account, er
 	if err := tx.Commit(); err != nil {
 		return Account{}, err
 	}
-	return GetByID(ctx, db, userID, id)
+	return GetByScope(ctx, db, sc, id)
 }
 
 func promoteNextPrimary(ctx context.Context, db sqlcdb.DBTX, userID string) error {

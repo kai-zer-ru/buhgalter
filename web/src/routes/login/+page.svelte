@@ -114,9 +114,15 @@
 		{#if registrationEnabled}
 			<p class="mt-6 text-center text-sm" style:color="var(--text-muted)">
 				{$_('login.no_account')}
-				<a href={resolve('/register')} class="font-medium" style:color="var(--primary)"
-					>{$_('login.register')}</a
+				<!-- eslint-disable svelte/no-navigation-without-resolve -- query after resolved path -->
+				<a
+					href={$page.url.searchParams.get(LOGIN_NEXT_PARAM)
+						? `${resolve('/register')}?${LOGIN_NEXT_PARAM}=${encodeURIComponent($page.url.searchParams.get(LOGIN_NEXT_PARAM) ?? '')}`
+						: resolve('/register')}
+					class="font-medium"
+					style:color="var(--primary)">{$_('login.register')}</a
 				>
+				<!-- eslint-enable svelte/no-navigation-without-resolve -->
 			</p>
 		{/if}
 	</div>

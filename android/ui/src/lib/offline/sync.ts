@@ -633,6 +633,12 @@ async function runDeferredHeavyWarm(): Promise<void> {
 
 async function warmRefCacheBody(opts: WarmRefCacheOptions): Promise<void> {
 	debugLogInfo('sync', 'warmRefCache started');
+	try {
+		const { refreshHouseholdMe } = await import('$lib/household/membership');
+		await refreshHouseholdMe();
+	} catch (err) {
+		debugLogWarn('sync', 'household me refresh failed', { error: String(err) });
+	}
 	const cursorAtStart = transactionChangesCursorSinceId();
 	// Manual sync / cold cache: unblock UI — prefetch entity cards in the background.
 	const deferHeavy = opts.force || cursorAtStart <= 0;

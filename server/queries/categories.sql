@@ -1,6 +1,7 @@
 -- name: ListCategoriesByUser :many
 SELECT
     c.id,
+    c.user_id,
     c.name,
     c.type,
     c.icon,
@@ -10,12 +11,13 @@ SELECT
     c.created_at,
     (SELECT COUNT(*) FROM subcategories s WHERE s.category_id = c.id) AS sub_count
 FROM categories c
-WHERE c.user_id = ?
+WHERE c.user_id IN (sqlc.slice('owner_ids'))
 ORDER BY c.is_system ASC, c.sort_order ASC, c.name ASC;
 
 -- name: ListCategoriesByUserAndType :many
 SELECT
     c.id,
+    c.user_id,
     c.name,
     c.type,
     c.icon,
@@ -25,12 +27,22 @@ SELECT
     c.created_at,
     (SELECT COUNT(*) FROM subcategories s WHERE s.category_id = c.id) AS sub_count
 FROM categories c
-WHERE c.user_id = ? AND c.type = ?
+WHERE c.type = sqlc.arg('type') AND c.user_id IN (sqlc.slice('owner_ids'))
 ORDER BY c.is_system ASC, c.sort_order ASC, c.name ASC;
+
+-- name: GetCategoryUserID :one
+SELECT user_id FROM categories WHERE id = ?;
+
+-- name: GetSubcategoryOwner :one
+SELECT c.user_id, s.category_id
+FROM subcategories s
+JOIN categories c ON c.id = s.category_id
+WHERE s.id = ?;
 
 -- name: GetCategoryByID :one
 SELECT
     c.id,
+    c.user_id,
     c.name,
     c.type,
     c.icon,
@@ -40,7 +52,7 @@ SELECT
     c.created_at,
     (SELECT COUNT(*) FROM subcategories s WHERE s.category_id = c.id) AS sub_count
 FROM categories c
-WHERE c.id = ? AND c.user_id = ?;
+WHERE c.id = sqlc.arg('id') AND c.user_id IN (sqlc.slice('owner_ids'));
 
 -- name: InsertCategory :exec
 INSERT INTO categories (id, user_id, name, type, icon, sort_order, is_primary, is_system, created_at)
@@ -106,7 +118,7 @@ ORDER BY sort_order, name;
 SELECT s.id, s.category_id, s.name, s.icon, s.sort_order, s.created_at
 FROM subcategories s
 INNER JOIN categories c ON c.id = s.category_id
-WHERE c.user_id = ?
+WHERE c.user_id IN (sqlc.slice('owner_ids'))
 ORDER BY s.category_id, s.sort_order, s.name;
 
 -- name: InsertSubcategory :exec
@@ -117,7 +129,7 @@ VALUES (?, ?, ?, ?, ?, ?);
 SELECT s.id, s.category_id, s.name, s.icon, s.sort_order, s.created_at
 FROM subcategories s
 JOIN categories c ON c.id = s.category_id
-WHERE s.id = ? AND c.user_id = ?;
+WHERE s.id = sqlc.arg('id') AND c.user_id IN (sqlc.slice('owner_ids'));
 
 -- name: UpdateSubcategory :exec
 UPDATE subcategories

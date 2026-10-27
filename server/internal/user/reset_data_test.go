@@ -23,7 +23,7 @@ func TestResetUserDataWipesLedgerAndReseedsCategories(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cats, err := sqlcdb.New(db).ListCategoriesByUser(ctx, user.ID)
+	cats, err := sqlcdb.New(db).ListCategoriesByUser(ctx, []string{user.ID})
 	if err != nil || len(cats) == 0 {
 		t.Fatalf("categories: %v n=%d", err, len(cats))
 	}
@@ -65,7 +65,7 @@ func TestResetUserDataWipesLedgerAndReseedsCategories(t *testing.T) {
 	}
 
 	q := sqlcdb.New(db)
-	accounts, err := q.ListAccountsByUserActive(ctx, user.ID)
+	accounts, err := q.ListAccountsByUserActive(ctx, []string{user.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func TestResetUserDataWipesLedgerAndReseedsCategories(t *testing.T) {
 	if merchantCount != 0 {
 		t.Fatalf("merchants left: %d", merchantCount)
 	}
-	after, err := q.ListCategoriesByUser(ctx, user.ID)
+	after, err := q.ListCategoriesByUser(ctx, []string{user.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,14 +136,14 @@ func TestResetUserDataDoesNotTouchOtherUser(t *testing.T) {
 	}
 
 	q := sqlcdb.New(db)
-	self, err := q.ListAccountsByUserActive(ctx, user.ID)
+	self, err := q.ListAccountsByUserActive(ctx, []string{user.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(self) != 0 {
 		t.Fatalf("self accounts %d", len(self))
 	}
-	other, err := q.ListAccountsByUserActive(ctx, otherID)
+	other, err := q.ListAccountsByUserActive(ctx, []string{otherID})
 	if err != nil {
 		t.Fatal(err)
 	}

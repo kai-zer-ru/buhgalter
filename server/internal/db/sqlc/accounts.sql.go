@@ -7,6 +7,7 @@ package sqlc
 
 import (
 	"context"
+	"strings"
 )
 
 const accountCurrencyInUse = `-- name: AccountCurrencyInUse :one
@@ -201,6 +202,9 @@ func (q *Queries) FirstActiveAccountID(ctx context.Context, userID string) (stri
 const getAccountByID = `-- name: GetAccountByID :one
 SELECT
     a.id,
+    a.user_id,
+    a.original_owner_user_id,
+    COALESCE(ou.display_name, '') AS original_owner_display_name,
     a.name,
     a.type,
     a.bank_id,
@@ -221,16 +225,20 @@ SELECT
     b.icon_path AS bank_icon
 FROM accounts a
 LEFT JOIN banks b ON b.id = a.bank_id
-WHERE a.id = ? AND a.user_id = ?
+LEFT JOIN users ou ON ou.id = a.original_owner_user_id
+WHERE a.id = ?1 AND a.user_id IN (/*SLICE:owner_ids*/?)
 `
 
 type GetAccountByIDParams struct {
-	ID     string `json:"id"`
-	UserID string `json:"user_id"`
+	ID       string   `json:"id"`
+	OwnerIds []string `json:"owner_ids"`
 }
 
 type GetAccountByIDRow struct {
 	ID                       string  `json:"id"`
+	UserID                   string  `json:"user_id"`
+	OriginalOwnerUserID      *string `json:"original_owner_user_id"`
+	OriginalOwnerDisplayName string  `json:"original_owner_display_name"`
 	Name                     string  `json:"name"`
 	Type                     string  `json:"type"`
 	BankID                   *string `json:"bank_id"`
@@ -252,10 +260,24 @@ type GetAccountByIDRow struct {
 }
 
 func (q *Queries) GetAccountByID(ctx context.Context, arg GetAccountByIDParams) (GetAccountByIDRow, error) {
-	row := q.db.QueryRowContext(ctx, getAccountByID, arg.ID, arg.UserID)
+	query := getAccountByID
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.ID)
+	if len(arg.OwnerIds) > 0 {
+		for _, v := range arg.OwnerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(arg.OwnerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	row := q.db.QueryRowContext(ctx, query, queryParams...)
 	var i GetAccountByIDRow
 	err := row.Scan(
 		&i.ID,
+		&i.UserID,
+		&i.OriginalOwnerUserID,
+		&i.OriginalOwnerDisplayName,
 		&i.Name,
 		&i.Type,
 		&i.BankID,
@@ -275,6 +297,25 @@ func (q *Queries) GetAccountByID(ctx context.Context, arg GetAccountByIDParams) 
 		&i.BankName,
 		&i.BankIcon,
 	)
+	return i, err
+}
+
+const getAccountOwnerDisplay = `-- name: GetAccountOwnerDisplay :one
+SELECT a.user_id, COALESCE(u.display_name, '') AS display_name
+FROM accounts a
+JOIN users u ON u.id = a.user_id
+WHERE a.id = ?
+`
+
+type GetAccountOwnerDisplayRow struct {
+	UserID      string `json:"user_id"`
+	DisplayName string `json:"display_name"`
+}
+
+func (q *Queries) GetAccountOwnerDisplay(ctx context.Context, id string) (GetAccountOwnerDisplayRow, error) {
+	row := q.db.QueryRowContext(ctx, getAccountOwnerDisplay, id)
+	var i GetAccountOwnerDisplayRow
+	err := row.Scan(&i.UserID, &i.DisplayName)
 	return i, err
 }
 
@@ -404,7 +445,7 @@ func (q *Queries) InsertAccount(ctx context.Context, arg InsertAccountParams) er
 const listAccountRefsByUser = `-- name: ListAccountRefsByUser :many
 SELECT id, name, type, status, bank_id
 FROM accounts
-WHERE user_id = ?
+WHERE user_id IN (/*SLICE:owner_ids*/?)
 ORDER BY name
 `
 
@@ -416,8 +457,18 @@ type ListAccountRefsByUserRow struct {
 	BankID *string `json:"bank_id"`
 }
 
-func (q *Queries) ListAccountRefsByUser(ctx context.Context, userID string) ([]ListAccountRefsByUserRow, error) {
-	rows, err := q.db.QueryContext(ctx, listAccountRefsByUser, userID)
+func (q *Queries) ListAccountRefsByUser(ctx context.Context, ownerIds []string) ([]ListAccountRefsByUserRow, error) {
+	query := listAccountRefsByUser
+	var queryParams []interface{}
+	if len(ownerIds) > 0 {
+		for _, v := range ownerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(ownerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
 	if err != nil {
 		return nil, err
 	}
@@ -448,6 +499,9 @@ func (q *Queries) ListAccountRefsByUser(ctx context.Context, userID string) ([]L
 const listAccountsByUserActive = `-- name: ListAccountsByUserActive :many
 SELECT
     a.id,
+    a.user_id,
+    a.original_owner_user_id,
+    COALESCE(ou.display_name, '') AS original_owner_display_name,
     a.name,
     a.type,
     a.bank_id,
@@ -468,12 +522,16 @@ SELECT
     b.icon_path AS bank_icon
 FROM accounts a
 LEFT JOIN banks b ON b.id = a.bank_id
-WHERE a.user_id = ? AND a.status = 'active'
+LEFT JOIN users ou ON ou.id = a.original_owner_user_id
+WHERE a.user_id IN (/*SLICE:owner_ids*/?) AND a.status = 'active'
 ORDER BY a.name
 `
 
 type ListAccountsByUserActiveRow struct {
 	ID                       string  `json:"id"`
+	UserID                   string  `json:"user_id"`
+	OriginalOwnerUserID      *string `json:"original_owner_user_id"`
+	OriginalOwnerDisplayName string  `json:"original_owner_display_name"`
 	Name                     string  `json:"name"`
 	Type                     string  `json:"type"`
 	BankID                   *string `json:"bank_id"`
@@ -494,8 +552,18 @@ type ListAccountsByUserActiveRow struct {
 	BankIcon                 *string `json:"bank_icon"`
 }
 
-func (q *Queries) ListAccountsByUserActive(ctx context.Context, userID string) ([]ListAccountsByUserActiveRow, error) {
-	rows, err := q.db.QueryContext(ctx, listAccountsByUserActive, userID)
+func (q *Queries) ListAccountsByUserActive(ctx context.Context, ownerIds []string) ([]ListAccountsByUserActiveRow, error) {
+	query := listAccountsByUserActive
+	var queryParams []interface{}
+	if len(ownerIds) > 0 {
+		for _, v := range ownerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(ownerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
 	if err != nil {
 		return nil, err
 	}
@@ -505,6 +573,9 @@ func (q *Queries) ListAccountsByUserActive(ctx context.Context, userID string) (
 		var i ListAccountsByUserActiveRow
 		if err := rows.Scan(
 			&i.ID,
+			&i.UserID,
+			&i.OriginalOwnerUserID,
+			&i.OriginalOwnerDisplayName,
 			&i.Name,
 			&i.Type,
 			&i.BankID,
@@ -540,6 +611,9 @@ func (q *Queries) ListAccountsByUserActive(ctx context.Context, userID string) (
 const listAccountsByUserAndStatus = `-- name: ListAccountsByUserAndStatus :many
 SELECT
     a.id,
+    a.user_id,
+    a.original_owner_user_id,
+    COALESCE(ou.display_name, '') AS original_owner_display_name,
     a.name,
     a.type,
     a.bank_id,
@@ -560,17 +634,21 @@ SELECT
     b.icon_path AS bank_icon
 FROM accounts a
 LEFT JOIN banks b ON b.id = a.bank_id
-WHERE a.user_id = ? AND a.status = ?
+LEFT JOIN users ou ON ou.id = a.original_owner_user_id
+WHERE a.status = ?1 AND a.user_id IN (/*SLICE:owner_ids*/?)
 ORDER BY a.name
 `
 
 type ListAccountsByUserAndStatusParams struct {
-	UserID string `json:"user_id"`
-	Status string `json:"status"`
+	Status   string   `json:"status"`
+	OwnerIds []string `json:"owner_ids"`
 }
 
 type ListAccountsByUserAndStatusRow struct {
 	ID                       string  `json:"id"`
+	UserID                   string  `json:"user_id"`
+	OriginalOwnerUserID      *string `json:"original_owner_user_id"`
+	OriginalOwnerDisplayName string  `json:"original_owner_display_name"`
 	Name                     string  `json:"name"`
 	Type                     string  `json:"type"`
 	BankID                   *string `json:"bank_id"`
@@ -592,7 +670,18 @@ type ListAccountsByUserAndStatusRow struct {
 }
 
 func (q *Queries) ListAccountsByUserAndStatus(ctx context.Context, arg ListAccountsByUserAndStatusParams) ([]ListAccountsByUserAndStatusRow, error) {
-	rows, err := q.db.QueryContext(ctx, listAccountsByUserAndStatus, arg.UserID, arg.Status)
+	query := listAccountsByUserAndStatus
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.Status)
+	if len(arg.OwnerIds) > 0 {
+		for _, v := range arg.OwnerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(arg.OwnerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
 	if err != nil {
 		return nil, err
 	}
@@ -602,6 +691,9 @@ func (q *Queries) ListAccountsByUserAndStatus(ctx context.Context, arg ListAccou
 		var i ListAccountsByUserAndStatusRow
 		if err := rows.Scan(
 			&i.ID,
+			&i.UserID,
+			&i.OriginalOwnerUserID,
+			&i.OriginalOwnerDisplayName,
 			&i.Name,
 			&i.Type,
 			&i.BankID,

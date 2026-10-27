@@ -42,7 +42,7 @@ func UpdateCreditPaymentClock(ctx context.Context, db *sql.DB, userID, id string
 	}
 	_, err = queries(db).GetCreditPaymentLinkByTransactionID(ctx, sqlcdb.GetCreditPaymentLinkByTransactionIDParams{
 		TransactionID: &id,
-		UserID:        userID,
+		OwnerIds:      []string{userID},
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return Transaction{}, ErrClockNotCreditPayment

@@ -66,6 +66,9 @@ func (w *Worker) run(now time.Time) {
 		return
 	}
 	for _, user := range users {
+		if user.Kind == "household" {
+			continue
+		}
 		if err := q.EnsureNotificationSettings(ctx, user.ID); err != nil {
 			continue
 		}
@@ -144,7 +147,7 @@ func (w *Worker) processPlanned(
 		return nil
 	}
 	rows, err := q.ListDueFutureTransactions(ctx, sqlcdb.ListDueFutureTransactionsParams{
-		UserID:          userID,
+		OwnerIds:        []string{userID},
 		TransactionDate: cutoff,
 	})
 	if err != nil {
@@ -204,7 +207,7 @@ func (w *Worker) processDebts(
 	if enabled, err := features.IsEnabled(ctx, w.DB, features.Debts); err != nil || !enabled {
 		return err
 	}
-	rows, err := q.ListActiveDebtsByUser(ctx, userID)
+	rows, err := q.ListActiveDebtsByUser(ctx, []string{userID})
 	if err != nil {
 		return err
 	}

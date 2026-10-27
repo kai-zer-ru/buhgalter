@@ -11,6 +11,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/audit"
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
+	"github.com/kai-zer-ru/buhgalter/internal/scope"
 )
 
 type Handler struct {
@@ -19,7 +20,8 @@ type Handler struct {
 }
 
 type nameRequest struct {
-	Name string `json:"name"`
+	Name  string `json:"name"`
+	Scope string `json:"scope"`
 }
 
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
@@ -28,7 +30,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
 		return
 	}
-	items, err := List(r.Context(), h.Store.DB(), info.User.ID, r.URL.Query().Get("q"))
+	items, err := ListByScope(r.Context(), h.Store.DB(), info.Scope, r.URL.Query().Get("scope"), r.URL.Query().Get("q"))
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
@@ -50,10 +52,15 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_INVALID_JSON")
 		return
 	}
-	t, err := Create(r.Context(), h.Store.DB(), info.User.ID, req.Name)
+	ownerID, err := scope.PrincipalForCreate(info.Scope, req.Scope)
+	if scope.WriteCreateError(w, r, err) {
+		return
+	}
+	t, err := Create(r.Context(), h.Store.DB(), ownerID, req.Name)
 	if writeError(w, r, err) {
 		return
 	}
+	t.Scope = scope.AccountScope(info.Scope, ownerID)
 	_ = h.Audit.Log("tag.create", info.User.ID, info.User.Login, clientIP(r), map[string]any{"tag_id": t.ID})
 	writeJSON(w, http.StatusCreated, t)
 }
@@ -65,7 +72,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := chi.URLParam(r, "id")
-	t, err := Get(r.Context(), h.Store.DB(), info.User.ID, id)
+	t, err := GetByScope(r.Context(), h.Store.DB(), info.Scope, id)
 	if writeError(w, r, err) {
 		return
 	}
@@ -84,7 +91,11 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_INVALID_JSON")
 		return
 	}
-	t, err := Update(r.Context(), h.Store.DB(), info.User.ID, id, req.Name)
+	existing, err := GetByScope(r.Context(), h.Store.DB(), info.Scope, id)
+	if writeError(w, r, err) {
+		return
+	}
+	t, err := Update(r.Context(), h.Store.DB(), existing.OwnerUserID, id, req.Name)
 	if writeError(w, r, err) {
 		return
 	}
@@ -99,7 +110,11 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := chi.URLParam(r, "id")
-	if err := Delete(r.Context(), h.Store.DB(), info.User.ID, id); err != nil {
+	existing, err := GetByScope(r.Context(), h.Store.DB(), info.Scope, id)
+	if writeError(w, r, err) {
+		return
+	}
+	if err := Delete(r.Context(), h.Store.DB(), existing.OwnerUserID, id); err != nil {
 		if writeError(w, r, err) {
 			return
 		}

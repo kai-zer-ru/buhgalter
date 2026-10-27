@@ -15,6 +15,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/db"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/money"
+	"github.com/kai-zer-ru/buhgalter/internal/scope"
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
 )
 
@@ -105,13 +106,16 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_INVALID_STATUS")
 		return
 	}
-	credits, err := List(r.Context(), h.Store.DB(), info.User.ID, status)
+	credits, err := ListForOwners(r.Context(), h.Store.DB(), info.Scope.OwnerIDs(), status)
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
 	if credits == nil {
 		credits = []Credit{}
+	}
+	for i := range credits {
+		credits[i].Scope = scope.AccountScope(info.Scope, credits[i].OwnerUserID)
 	}
 	writeJSON(w, http.StatusOK, credits)
 }
@@ -123,10 +127,11 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := chi.URLParam(r, "id")
-	c, err := GetByID(r.Context(), h.Store.DB(), info.User.ID, id, true)
+	c, err := GetByIDForOwners(r.Context(), h.Store.DB(), info.Scope.OwnerIDs(), id, true)
 	if writeCreditError(w, r, err) {
 		return
 	}
+	c.Scope = scope.AccountScope(info.Scope, c.OwnerUserID)
 	writeJSON(w, http.StatusOK, c)
 }
 
@@ -146,10 +151,20 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteDetail(w, r, http.StatusBadRequest, apperror.ValidationError, apperror.ValidationError, err.Error())
 		return
 	}
-	c, err := Create(r.Context(), h.Store.DB(), info.User.ID, in)
+	ownerID, err := scope.PrincipalForAccount(r.Context(), h.Store.DB(), info.Scope.OwnerIDs(), in.DebitAccountID)
+	if err != nil {
+		if errors.Is(err, scope.ErrNotFound) {
+			apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_ACCOUNT")
+			return
+		}
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	}
+	c, err := Create(r.Context(), h.Store.DB(), ownerID, in)
 	if writeCreditError(w, r, err) {
 		return
 	}
+	c.Scope = scope.AccountScope(info.Scope, c.OwnerUserID)
 	_ = h.Audit.Log("credit.create", info.User.ID, info.User.Login, clientIP(r), map[string]any{"credit_id": c.ID})
 	writeJSON(w, http.StatusCreated, c)
 }
@@ -186,10 +201,15 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 			in.BankID = &bankID
 		}
 	}
-	c, err := Update(r.Context(), h.Store.DB(), info.User.ID, id, in)
+	existing, err := GetByIDForOwners(r.Context(), h.Store.DB(), info.Scope.OwnerIDs(), id, false)
 	if writeCreditError(w, r, err) {
 		return
 	}
+	c, err := Update(r.Context(), h.Store.DB(), existing.OwnerUserID, id, in)
+	if writeCreditError(w, r, err) {
+		return
+	}
+	c.Scope = scope.AccountScope(info.Scope, c.OwnerUserID)
 	_ = h.Audit.Log("credit.update", info.User.ID, info.User.Login, clientIP(r), map[string]any{"credit_id": id})
 	writeJSON(w, http.StatusOK, c)
 }
@@ -238,12 +258,17 @@ func (h *Handler) AddPayment(w http.ResponseWriter, r *http.Request) {
 	if req.AccountID != nil {
 		accountID = strings.TrimSpace(*req.AccountID)
 	}
-	c, err := PayNextScheduled(r.Context(), h.Store.DB(), info.User.ID, id, PayPaymentInput{
+	existing, err := GetByIDForOwners(r.Context(), h.Store.DB(), info.Scope.OwnerIDs(), id, false)
+	if writeCreditError(w, r, err) {
+		return
+	}
+	c, err := PayNextScheduled(r.Context(), h.Store.DB(), existing.OwnerUserID, id, PayPaymentInput{
 		Amount: amount, PaymentDate: payDate, AccountID: accountID, TransactionID: attachID,
 	})
 	if writeCreditError(w, r, err) {
 		return
 	}
+	c.Scope = scope.AccountScope(info.Scope, c.OwnerUserID)
 	_ = h.Audit.Log("credit.pay", info.User.ID, info.User.Login, clientIP(r), map[string]any{
 		"credit_id": id, "amount": amount, "transaction_id": attachID,
 	})
@@ -258,7 +283,11 @@ func (h *Handler) DeletePayment(w http.ResponseWriter, r *http.Request) {
 	}
 	creditID := chi.URLParam(r, "id")
 	paymentID := chi.URLParam(r, "paymentId")
-	c, err := RemovePayment(r.Context(), h.Store.DB(), info.User.ID, creditID, paymentID)
+	existing, err := GetByIDForOwners(r.Context(), h.Store.DB(), info.Scope.OwnerIDs(), creditID, false)
+	if writeCreditError(w, r, err) {
+		return
+	}
+	c, err := RemovePayment(r.Context(), h.Store.DB(), existing.OwnerUserID, creditID, paymentID)
 	if writeCreditError(w, r, err) {
 		return
 	}
@@ -295,7 +324,11 @@ func (h *Handler) Close(w http.ResponseWriter, r *http.Request) {
 		}
 		payDate = parsed
 	}
-	c, err := Complete(r.Context(), h.Store.DB(), info.User.ID, id, CompleteInput{
+	existing, err := GetByIDForOwners(r.Context(), h.Store.DB(), info.Scope.OwnerIDs(), id, false)
+	if writeCreditError(w, r, err) {
+		return
+	}
+	c, err := Complete(r.Context(), h.Store.DB(), existing.OwnerUserID, id, CompleteInput{
 		AffectsBalance: affectsBalance,
 		PaymentDate:    payDate,
 	})
@@ -316,7 +349,11 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 	id := chi.URLParam(r, "id")
 	mode := r.URL.Query().Get("mode")
-	if err := Delete(r.Context(), h.Store.DB(), info.User.ID, id, mode); writeCreditError(w, r, err) {
+	existing, err := GetByIDForOwners(r.Context(), h.Store.DB(), info.Scope.OwnerIDs(), id, false)
+	if writeCreditError(w, r, err) {
+		return
+	}
+	if err := Delete(r.Context(), h.Store.DB(), existing.OwnerUserID, id, mode); writeCreditError(w, r, err) {
 		return
 	}
 	_ = h.Audit.Log("credit.delete", info.User.ID, info.User.Login, clientIP(r), map[string]any{"credit_id": id, "mode": mode})
@@ -335,7 +372,7 @@ func (h *Handler) Schedule(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
-	if _, err := GetByID(r.Context(), h.Store.DB(), info.User.ID, id, false); writeCreditError(w, r, err) {
+	if _, err := GetByIDForOwners(r.Context(), h.Store.DB(), info.Scope.OwnerIDs(), id, false); writeCreditError(w, r, err) {
 		return
 	}
 	if schedule == nil {
@@ -369,7 +406,11 @@ func (h *Handler) UpdateSchedule(w http.ResponseWriter, r *http.Request) {
 		}
 		updates = append(updates, ScheduleAmountUpdate{PaymentID: p.ID, Amount: amount})
 	}
-	c, err := UpdateScheduleAmounts(r.Context(), h.Store.DB(), info.User.ID, id, updates)
+	existing, err := GetByIDForOwners(r.Context(), h.Store.DB(), info.Scope.OwnerIDs(), id, false)
+	if writeCreditError(w, r, err) {
+		return
+	}
+	c, err := UpdateScheduleAmounts(r.Context(), h.Store.DB(), existing.OwnerUserID, id, updates)
 	if writeCreditError(w, r, err) {
 		return
 	}
@@ -424,7 +465,7 @@ func (h *Handler) E2EApplyDue(w http.ResponseWriter, r *http.Request) {
 	creditID := chi.URLParam(r, "id")
 	ctx := r.Context()
 	sqlDB := h.Store.DB()
-	creditRow, err := GetByID(ctx, sqlDB, info.User.ID, creditID, false)
+	creditRow, err := GetByIDForOwners(ctx, sqlDB, info.Scope.OwnerIDs(), creditID, false)
 	if err != nil {
 		if writeCreditError(w, r, err) {
 			return
@@ -453,7 +494,7 @@ func (h *Handler) E2EApplyDue(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
-	applied, err := ApplyDuePayments(ctx, sqlDB, info.User.ID, cutoff, strings.TrimSpace(*creditRow.DebitTimeLocal))
+	applied, err := ApplyDuePayments(ctx, sqlDB, creditRow.OwnerUserID, cutoff, strings.TrimSpace(*creditRow.DebitTimeLocal))
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return

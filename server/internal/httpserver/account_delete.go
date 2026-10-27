@@ -34,7 +34,7 @@ func (h *accountDeleteHandler) deleteAccount(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	_, err := inactivateAccount(r.Context(), h.store.DB(), info.User.ID, id, "deleted", parseTransferToAccountID(r, req))
+	_, err := inactivateAccount(r.Context(), h.store.DB(), info.Scope, id, "deleted", parseTransferToAccountID(r, req))
 	if writeInactivateAccountError(w, r, err) {
 		return
 	}

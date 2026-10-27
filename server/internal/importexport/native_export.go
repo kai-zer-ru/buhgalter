@@ -183,7 +183,7 @@ func exportNative(ctx context.Context, db *sql.DB, userID, displayName string, f
 		})
 	}
 
-	budgets, err := q.ListBudgetsByUser(ctx, sqlcdb.ListBudgetsByUserParams{UserID: userID, Column2: "", Month: ""})
+	budgets, err := q.ListBudgetsByUser(ctx, sqlcdb.ListBudgetsByUserParams{OwnerIds: []string{userID}, Column2: "", Month: ""})
 	if err != nil {
 		return nil, "", err
 	}

@@ -13,8 +13,8 @@ import (
 // with a specific subcategory_id require an exact match.
 func SuggestDefaultAccount(ctx context.Context, db *sql.DB, userID, categoryID string, subcategoryID *string) (*string, error) {
 	rows, err := queries(db).ListCategoryRulesByUserAndKind(ctx, sqlcdb.ListCategoryRulesByUserAndKindParams{
-		UserID: userID,
-		Kind:   KindCategoryAccount,
+		OwnerIds: []string{userID},
+		Kind:     KindCategoryAccount,
 	})
 	if err != nil {
 		return nil, err

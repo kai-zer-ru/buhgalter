@@ -7,21 +7,33 @@ package sqlc
 
 import (
 	"context"
+	"strings"
 )
 
 const getStoreByID = `-- name: GetStoreByID :one
 SELECT id, user_id, name, name_normalized, created_at
 FROM stores
-WHERE id = ? AND user_id = ?
+WHERE id = ?1 AND user_id IN (/*SLICE:owner_ids*/?)
 `
 
 type GetStoreByIDParams struct {
-	ID     string `json:"id"`
-	UserID string `json:"user_id"`
+	ID       string   `json:"id"`
+	OwnerIds []string `json:"owner_ids"`
 }
 
 func (q *Queries) GetStoreByID(ctx context.Context, arg GetStoreByIDParams) (Store, error) {
-	row := q.db.QueryRowContext(ctx, getStoreByID, arg.ID, arg.UserID)
+	query := getStoreByID
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.ID)
+	if len(arg.OwnerIds) > 0 {
+		for _, v := range arg.OwnerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(arg.OwnerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	row := q.db.QueryRowContext(ctx, query, queryParams...)
 	var i Store
 	err := row.Scan(
 		&i.ID,
@@ -57,6 +69,17 @@ func (q *Queries) GetStoreByNormalizedName(ctx context.Context, arg GetStoreByNo
 	return i, err
 }
 
+const getStoreUserID = `-- name: GetStoreUserID :one
+SELECT user_id FROM stores WHERE id = ?
+`
+
+func (q *Queries) GetStoreUserID(ctx context.Context, id string) (string, error) {
+	row := q.db.QueryRowContext(ctx, getStoreUserID, id)
+	var user_id string
+	err := row.Scan(&user_id)
+	return user_id, err
+}
+
 const insertStore = `-- name: InsertStore :exec
 INSERT INTO stores (id, user_id, name, name_normalized, created_at)
 VALUES (?, ?, ?, ?, ?)
@@ -82,20 +105,31 @@ func (q *Queries) InsertStore(ctx context.Context, arg InsertStoreParams) error 
 }
 
 const listStoresByUser = `-- name: ListStoresByUser :many
-SELECT id, name, created_at
+SELECT id, user_id, name, created_at
 FROM stores
-WHERE user_id = ?
+WHERE user_id IN (/*SLICE:owner_ids*/?)
 ORDER BY name COLLATE NOCASE ASC
 `
 
 type ListStoresByUserRow struct {
 	ID        string `json:"id"`
+	UserID    string `json:"user_id"`
 	Name      string `json:"name"`
 	CreatedAt string `json:"created_at"`
 }
 
-func (q *Queries) ListStoresByUser(ctx context.Context, userID string) ([]ListStoresByUserRow, error) {
-	rows, err := q.db.QueryContext(ctx, listStoresByUser, userID)
+func (q *Queries) ListStoresByUser(ctx context.Context, ownerIds []string) ([]ListStoresByUserRow, error) {
+	query := listStoresByUser
+	var queryParams []interface{}
+	if len(ownerIds) > 0 {
+		for _, v := range ownerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(ownerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +137,12 @@ func (q *Queries) ListStoresByUser(ctx context.Context, userID string) ([]ListSt
 	items := []ListStoresByUserRow{}
 	for rows.Next() {
 		var i ListStoresByUserRow
-		if err := rows.Scan(&i.ID, &i.Name, &i.CreatedAt); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Name,
+			&i.CreatedAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

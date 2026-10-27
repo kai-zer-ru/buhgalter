@@ -11,6 +11,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/audit"
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
+	"github.com/kai-zer-ru/buhgalter/internal/household"
 	"github.com/kai-zer-ru/buhgalter/internal/money"
 )
 
@@ -27,6 +28,7 @@ type createRequest struct {
 	CreditLimit      *string `json:"credit_limit"`
 	PaymentAccountID *string `json:"payment_account_id"`
 	Currency         string  `json:"currency"`
+	Shared           bool    `json:"shared"`
 }
 
 type updateRequest struct {
@@ -49,7 +51,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	status := r.URL.Query().Get("status")
-	accounts, err := ListByUser(r.Context(), h.Store.DB(), info.User.ID, status)
+	accounts, err := ListByScope(r.Context(), h.Store.DB(), info.Scope, status)
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
@@ -67,7 +69,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := chi.URLParam(r, "id")
-	acc, err := GetByID(r.Context(), h.Store.DB(), info.User.ID, id)
+	acc, err := GetByScope(r.Context(), h.Store.DB(), info.Scope, id)
 	if errors.Is(err, ErrNotFound) {
 		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
 		return
@@ -100,7 +102,15 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_ACCOUNT_INVALID_CREDIT_LIMIT")
 		return
 	}
-	acc, err := Create(r.Context(), h.Store.DB(), info.User.ID, CreateInput{
+	ownerID := info.User.ID
+	if req.Shared {
+		if !info.Scope.InHousehold() {
+			apperror.WriteR(w, r, http.StatusConflict, "ERR_HOUSEHOLD_NOT_MEMBER")
+			return
+		}
+		ownerID = info.Scope.PrincipalID
+	}
+	acc, err := Create(r.Context(), h.Store.DB(), ownerID, CreateInput{
 		Name:             strings.TrimSpace(req.Name),
 		Type:             req.Type,
 		BankID:           req.BankID,
@@ -108,6 +118,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		CreditLimit:      creditLimit,
 		PaymentAccountID: req.PaymentAccountID,
 		Currency:         req.Currency,
+		Shared:           req.Shared,
 	})
 	if err := writeAccountError(w, r, err); err != nil {
 		return
@@ -147,7 +158,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		_ = writeAccountError(w, r, err)
 		return
 	}
-	acc, err := Update(r.Context(), h.Store.DB(), info.User.ID, id, UpdateInput{
+	acc, err := UpdateByScope(r.Context(), h.Store.DB(), info.Scope, id, UpdateInput{
 		Name:             strings.TrimSpace(req.Name),
 		BankID:           req.BankID,
 		InitialBalance:   balancePtr,
@@ -189,7 +200,7 @@ func (h *Handler) ChangeCreditLimit(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_ACCOUNT_INVALID_CREDIT_LIMIT")
 		return
 	}
-	acc, err := ChangeCreditLimit(r.Context(), h.Store.DB(), info.User.ID, id, limit)
+	acc, err := ChangeCreditLimitByScope(r.Context(), h.Store.DB(), info.Scope, id, limit)
 	if errors.Is(err, ErrNotFound) {
 		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
 		return
@@ -224,9 +235,13 @@ func (h *Handler) SetPrimary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := chi.URLParam(r, "id")
-	acc, err := SetPrimary(r.Context(), h.Store.DB(), info.User.ID, id)
+	acc, err := SetPrimaryByScope(r.Context(), h.Store.DB(), info.Scope, id)
 	if errors.Is(err, ErrNotFound) {
 		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
+		return
+	}
+	if errors.Is(err, ErrSharedPrimary) {
+		apperror.WriteR(w, r, http.StatusBadRequest, "ERR_ACCOUNT_SHARED_PRIMARY")
 		return
 	}
 	if errors.Is(err, ErrArchived) {
@@ -245,6 +260,82 @@ func (h *Handler) SetPrimary(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, acc)
 }
 
+func (h *Handler) Share(w http.ResponseWriter, r *http.Request) {
+	info, ok := auth.FromContext(r.Context())
+	if !ok {
+		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
+		return
+	}
+	id := chi.URLParam(r, "id")
+	out, err := Share(r.Context(), h.Store.DB(), info.Scope, id)
+	if errors.Is(err, ErrNotFound) {
+		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
+		return
+	}
+	if errors.Is(err, ErrNotHouseholdMember) {
+		apperror.WriteR(w, r, http.StatusConflict, "ERR_HOUSEHOLD_NOT_MEMBER")
+		return
+	}
+	if IsLinkedPersonal(err) {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(http.StatusConflict)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error":   map[string]string{"code": "ERR_SHARE_LINKED_PERSONAL", "message": "ERR_SHARE_LINKED_PERSONAL"},
+			"details": map[string]any{"links": LinkedPersonalLinks(err)},
+		})
+		return
+	}
+	if err := writeAccountError(w, r, err); err != nil {
+		return
+	}
+	_ = h.Audit.Log("account.share", info.User.ID, info.User.Login, clientIP(r), map[string]any{
+		"account_id": id, "moved": out.Details.Moved,
+	})
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (h *Handler) Unshare(w http.ResponseWriter, r *http.Request) {
+	info, ok := auth.FromContext(r.Context())
+	if !ok {
+		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
+		return
+	}
+	id := chi.URLParam(r, "id")
+	out, err := Unshare(r.Context(), h.Store.DB(), info.Scope, id)
+	if errors.Is(err, ErrNotFound) {
+		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
+		return
+	}
+	if errors.Is(err, ErrNotHouseholdMember) {
+		apperror.WriteR(w, r, http.StatusConflict, "ERR_HOUSEHOLD_NOT_MEMBER")
+		return
+	}
+	if errors.Is(err, household.ErrOwnerOnly) {
+		apperror.WriteR(w, r, http.StatusForbidden, "ERR_HOUSEHOLD_OWNER_ONLY")
+		return
+	}
+	if errors.Is(err, household.ErrNoOriginalOwner) {
+		apperror.WriteR(w, r, http.StatusConflict, "ERR_UNSHARE_NO_ORIGINAL_OWNER")
+		return
+	}
+	if IsLinkedPersonal(err) {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(http.StatusConflict)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error":   map[string]string{"code": "ERR_SHARE_LINKED_PERSONAL", "message": "ERR_SHARE_LINKED_PERSONAL"},
+			"details": map[string]any{"links": LinkedPersonalLinks(err)},
+		})
+		return
+	}
+	if err := writeAccountError(w, r, err); err != nil {
+		return
+	}
+	_ = h.Audit.Log("account.unshare", info.User.ID, info.User.Login, clientIP(r), map[string]any{
+		"account_id": id, "moved": out.Details.Moved,
+	})
+	writeJSON(w, http.StatusOK, out)
+}
+
 func (h *Handler) setStatus(w http.ResponseWriter, r *http.Request, status, auditAction string) {
 	info, ok := auth.FromContext(r.Context())
 	if !ok {
@@ -252,7 +343,7 @@ func (h *Handler) setStatus(w http.ResponseWriter, r *http.Request, status, audi
 		return
 	}
 	id := chi.URLParam(r, "id")
-	acc, err := SetStatus(r.Context(), h.Store.DB(), info.User.ID, id, status)
+	acc, err := SetStatusByScope(r.Context(), h.Store.DB(), info.Scope, id, status)
 	if errors.Is(err, ErrNotFound) {
 		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
 		return
@@ -314,6 +405,10 @@ func writeAccountError(w http.ResponseWriter, r *http.Request, err error) error 
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_ACCOUNT_CURRENCY_LOCKED")
 	case errors.Is(err, ErrCurrencyMismatch):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CURRENCY_MISMATCH")
+	case errors.Is(err, ErrNotHouseholdMember):
+		apperror.WriteR(w, r, http.StatusConflict, "ERR_HOUSEHOLD_NOT_MEMBER")
+	case errors.Is(err, ErrSharedPrimary):
+		apperror.WriteR(w, r, http.StatusBadRequest, "ERR_ACCOUNT_SHARED_PRIMARY")
 	default:
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 	}

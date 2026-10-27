@@ -40,6 +40,7 @@ describe('android nav items', () => {
 		expect(paths.some((href) => href.endsWith('/settings/profile'))).toBe(true);
 		expect(paths.some((href) => href.endsWith('/settings/server'))).toBe(true);
 		expect(paths.some((href) => href.endsWith('/settings/import'))).toBe(true);
+		expect(paths.some((href) => href.endsWith('/settings/household'))).toBe(true);
 		expect(paths.some((href) => href.endsWith('/settings/notifications'))).toBe(false);
 		expect(paths.some((href) => href.endsWith('/settings/bank-notifications'))).toBe(true);
 		expect(paths.some((href) => href.endsWith('/settings/categories'))).toBe(false);

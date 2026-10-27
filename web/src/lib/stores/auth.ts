@@ -6,6 +6,7 @@ import { clearFeatureFlags, loadFeatureFlags } from '$lib/features';
 import { clearRefCache, setRefCacheUserId } from '$lib/ref-cache';
 import { warmRefCache } from '$lib/ref-cache-warm';
 import { connectRealtime, disconnectRealtime } from '$lib/realtime';
+import { clearHouseholdMe, refreshHouseholdMe } from '$lib/household/membership';
 
 export const user = writable<User | null>(null);
 export const authReady = writable(false);
@@ -60,6 +61,7 @@ export async function loadUser(): Promise<LoadUserResult> {
 			await loadFeatureFlags();
 			void warmRefCache();
 			connectRealtime();
+			void refreshHouseholdMe().catch(() => {});
 			return 'ok';
 		} catch (err) {
 			const retryable =
@@ -78,6 +80,7 @@ export async function loadUser(): Promise<LoadUserResult> {
 				clearRefCache();
 				clearFeatureFlags();
 				setRefCacheUserId(null);
+				clearHouseholdMe();
 				user.set(null);
 				return 'unauthorized';
 			}
@@ -99,5 +102,6 @@ export async function logout() {
 	clearRefCache();
 	clearFeatureFlags();
 	setRefCacheUserId(null);
+	clearHouseholdMe();
 	user.set(null);
 }

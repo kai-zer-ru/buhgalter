@@ -84,6 +84,12 @@ export function applyOutboxToAccount(account: Account, tz: string): Account {
 	};
 }
 
+/**
+ * Hook for part 2: shared ledger snapshots. Part 1 has no separate ledger cache;
+ * outbox overlay is derived from the outbox store.
+ */
+export function resetLedgerLocalState(): void {}
+
 export function applyOutboxToAccounts(accounts: Account[], tz: string): Account[] {
 	const deltas = computeOutboxAccountDeltas(tz);
 	return accounts.map((acc) => {

@@ -25,3 +25,11 @@ VALUES (?, ?, ?, ?);
 -- name: InsertNotificationInterceptCardBinding :exec
 INSERT INTO notification_intercept_card_bindings (user_id, bank_id, last4, account_id)
 VALUES (?, ?, ?, ?);
+
+-- name: DeleteInterceptBankBindingsOnPrincipalAccounts :exec
+DELETE FROM notification_intercept_bank_bindings
+WHERE notification_intercept_bank_bindings.user_id = ? AND account_id IN (SELECT id FROM accounts WHERE accounts.user_id = ?);
+
+-- name: DeleteInterceptCardBindingsOnPrincipalAccounts :exec
+DELETE FROM notification_intercept_card_bindings
+WHERE notification_intercept_card_bindings.user_id = ? AND account_id IN (SELECT id FROM accounts WHERE accounts.user_id = ?);

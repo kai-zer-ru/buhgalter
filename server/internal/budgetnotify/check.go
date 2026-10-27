@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	"github.com/kai-zer-ru/buhgalter/internal/budget"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/features"
@@ -45,7 +46,8 @@ func CheckThresholdsForUser(ctx context.Context, db *sql.DB, userID string) erro
 	if err != nil {
 		return err
 	}
-	items, err := budget.Summary(ctx, db, userID, month)
+	sc := auth.LoadScope(ctx, db, userID)
+	items, err := budget.SummaryForOwners(ctx, db, userID, sc.OwnerIDs(), month)
 	if err != nil {
 		return err
 	}

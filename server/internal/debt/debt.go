@@ -79,7 +79,14 @@ func queries(db sqlcdb.DBTX) *sqlcdb.Queries {
 }
 
 func List(ctx context.Context, db *sql.DB, userID string, settledFilter string) ([]Debt, error) {
-	tz, err := userTimezone(ctx, db, userID)
+	return ListForOwners(ctx, db, []string{userID}, userID, settledFilter)
+}
+
+func ListForOwners(ctx context.Context, db *sql.DB, ownerIDs []string, tzUserID, settledFilter string) ([]Debt, error) {
+	if len(ownerIDs) == 0 {
+		return []Debt{}, nil
+	}
+	tz, err := userTimezone(ctx, db, tzUserID)
 	if err != nil {
 		return nil, err
 	}
@@ -88,11 +95,11 @@ func List(ctx context.Context, db *sql.DB, userID string, settledFilter string) 
 	var rows interface{}
 	switch settledFilter {
 	case "true", "1":
-		rows, err = queries(db).ListSettledDebtsByUser(ctx, userID)
+		rows, err = queries(db).ListSettledDebtsByUser(ctx, ownerIDs)
 	case "false", "0":
-		rows, err = queries(db).ListActiveDebtsByUser(ctx, userID)
+		rows, err = queries(db).ListActiveDebtsByUser(ctx, ownerIDs)
 	default:
-		rows, err = queries(db).ListAllDebtsByUser(ctx, userID)
+		rows, err = queries(db).ListAllDebtsByUser(ctx, ownerIDs)
 	}
 	if err != nil {
 		return nil, err
@@ -214,14 +221,21 @@ func debtFromFields(f debtRowFields, tz string, now time.Time) (Debt, error) {
 }
 
 func GetByID(ctx context.Context, db *sql.DB, userID, id string) (Debt, error) {
-	row, err := queries(db).GetDebtByID(ctx, sqlcdb.GetDebtByIDParams{ID: id, UserID: userID})
+	return GetByIDForOwners(ctx, db, []string{userID}, userID, id)
+}
+
+func GetByIDForOwners(ctx context.Context, db *sql.DB, ownerIDs []string, tzUserID, id string) (Debt, error) {
+	if len(ownerIDs) == 0 {
+		return Debt{}, ErrNotFound
+	}
+	row, err := queries(db).GetDebtByID(ctx, sqlcdb.GetDebtByIDParams{ID: id, OwnerIds: ownerIDs})
 	if errors.Is(err, sql.ErrNoRows) {
 		return Debt{}, ErrNotFound
 	}
 	if err != nil {
 		return Debt{}, err
 	}
-	tz, err := userTimezone(ctx, db, userID)
+	tz, err := userTimezone(ctx, db, tzUserID)
 	if err != nil {
 		return Debt{}, err
 	}
@@ -331,7 +345,7 @@ func Settle(ctx context.Context, db *sql.DB, userID, id string, in SettleInput) 
 		if err := validateActiveAccount(ctx, db, userID, in.AccountID); err != nil {
 			return Debt{}, err
 		}
-		acc, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: in.AccountID, UserID: userID})
+		acc, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: in.AccountID, OwnerIds: []string{userID}})
 		if err != nil {
 			return Debt{}, err
 		}
@@ -453,7 +467,7 @@ func insertDebtTransaction(ctx context.Context, db sqlcdb.DBTX, userID string, i
 	if err != nil {
 		return "", err
 	}
-	debtor, err := q.GetDebtorByID(ctx, sqlcdb.GetDebtorByIDParams{ID: debtorID, UserID: userID})
+	debtor, err := q.GetDebtorByID(ctx, sqlcdb.GetDebtorByIDParams{ID: debtorID, OwnerIds: []string{userID}})
 	if err != nil {
 		return "", err
 	}
@@ -559,7 +573,7 @@ func validateDebtDirection(ctx context.Context, db sqlcdb.DBTX, userID, debtorID
 }
 
 func validateActiveAccount(ctx context.Context, db sqlcdb.DBTX, userID, accountID string) error {
-	row, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: accountID, UserID: userID})
+	row, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: accountID, OwnerIds: []string{userID}})
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrInvalidAccount
 	}
@@ -575,7 +589,7 @@ func validateActiveAccount(ctx context.Context, db sqlcdb.DBTX, userID, accountI
 // openDebtCurrency is the opening account's currency, or the profile currency without an account.
 func openDebtCurrency(ctx context.Context, db *sql.DB, userID string, in CreateInput) (string, error) {
 	if in.AffectsBalance && in.AccountID != "" {
-		acc, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: in.AccountID, UserID: userID})
+		acc, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: in.AccountID, OwnerIds: []string{userID}})
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", ErrInvalidAccount
 		}

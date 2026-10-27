@@ -53,9 +53,7 @@ func PreviewSpent(ctx context.Context, db *sql.DB, userID string, in SpentPrevie
 	}
 	currency := in.Currency
 	if scopeIn.AccountID != nil && *scopeIn.AccountID != "" {
-		acc, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{
-			ID: *scopeIn.AccountID, UserID: userID,
-		})
+		acc, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: *scopeIn.AccountID, OwnerIds: []string{userID}})
 		if err != nil {
 			return SpentPreview{}, err
 		}
@@ -103,7 +101,7 @@ func validateSpentPreviewInput(ctx context.Context, db *sql.DB, userID string, i
 			return ErrInvalidSub
 		}
 		sub, err := queries(db).GetSubcategoryByID(ctx, sqlcdb.GetSubcategoryByIDParams{
-			ID: *in.SubcategoryID, UserID: userID,
+			ID: *in.SubcategoryID, OwnerIds: []string{userID},
 		})
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrInvalidSub
@@ -116,9 +114,7 @@ func validateSpentPreviewInput(ctx context.Context, db *sql.DB, userID string, i
 		}
 	}
 	if in.AccountID != nil && *in.AccountID != "" {
-		acc, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{
-			ID: *in.AccountID, UserID: userID,
-		})
+		acc, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: *in.AccountID, OwnerIds: []string{userID}})
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrInvalidAccount
 		}

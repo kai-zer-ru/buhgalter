@@ -40,16 +40,27 @@ func (q *Queries) DeleteTransactionTags(ctx context.Context, transactionID strin
 const getTagByID = `-- name: GetTagByID :one
 SELECT id, user_id, name, created_at
 FROM tags
-WHERE id = ? AND user_id = ?
+WHERE id = ?1 AND user_id IN (/*SLICE:owner_ids*/?)
 `
 
 type GetTagByIDParams struct {
-	ID     string `json:"id"`
-	UserID string `json:"user_id"`
+	ID       string   `json:"id"`
+	OwnerIds []string `json:"owner_ids"`
 }
 
 func (q *Queries) GetTagByID(ctx context.Context, arg GetTagByIDParams) (Tag, error) {
-	row := q.db.QueryRowContext(ctx, getTagByID, arg.ID, arg.UserID)
+	query := getTagByID
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.ID)
+	if len(arg.OwnerIds) > 0 {
+		for _, v := range arg.OwnerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(arg.OwnerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	row := q.db.QueryRowContext(ctx, query, queryParams...)
 	var i Tag
 	err := row.Scan(
 		&i.ID,
@@ -81,6 +92,17 @@ func (q *Queries) GetTagByName(ctx context.Context, arg GetTagByNameParams) (Tag
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const getTagUserID = `-- name: GetTagUserID :one
+SELECT user_id FROM tags WHERE id = ?
+`
+
+func (q *Queries) GetTagUserID(ctx context.Context, id string) (string, error) {
+	row := q.db.QueryRowContext(ctx, getTagUserID, id)
+	var user_id string
+	err := row.Scan(&user_id)
+	return user_id, err
 }
 
 const insertTag = `-- name: InsertTag :exec
@@ -159,19 +181,29 @@ func (q *Queries) ListTagsByTransactionID(ctx context.Context, transactionID str
 const listTagsByUser = `-- name: ListTagsByUser :many
 SELECT id, user_id, name, created_at
 FROM tags
-WHERE user_id = ?
-  AND (? = '' OR name LIKE '%' || ? || '%')
+WHERE (?1 = '' OR name LIKE '%' || ?1 || '%')
+  AND user_id IN (/*SLICE:owner_ids*/?)
 ORDER BY name COLLATE NOCASE ASC
 `
 
 type ListTagsByUserParams struct {
-	UserID  string      `json:"user_id"`
-	Column2 interface{} `json:"column_2"`
-	Column3 *string     `json:"column_3"`
+	Q        interface{} `json:"q"`
+	OwnerIds []string    `json:"owner_ids"`
 }
 
 func (q *Queries) ListTagsByUser(ctx context.Context, arg ListTagsByUserParams) ([]Tag, error) {
-	rows, err := q.db.QueryContext(ctx, listTagsByUser, arg.UserID, arg.Column2, arg.Column3)
+	query := listTagsByUser
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.Q)
+	if len(arg.OwnerIds) > 0 {
+		for _, v := range arg.OwnerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(arg.OwnerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
 	if err != nil {
 		return nil, err
 	}

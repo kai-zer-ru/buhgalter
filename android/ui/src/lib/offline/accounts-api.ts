@@ -61,6 +61,7 @@ function localAccount(id: string, payload: AccountCreatePayload): Account {
 		credit_limit: payload.credit_limit ? Number.parseFloat(payload.credit_limit) : null,
 		payment_account_id: payload.payment_account_id ?? null,
 		currency: payload.currency,
+		scope: payload.shared ? 'household' : 'personal',
 		status: 'active',
 		is_primary: false,
 		created_at: ts,
@@ -69,7 +70,7 @@ function localAccount(id: string, payload: AccountCreatePayload): Account {
 }
 
 export async function createAccount(payload: AccountCreatePayload): Promise<Account> {
-	if (!shouldUseOfflineQueue()) {
+	if (payload.shared || !shouldUseOfflineQueue()) {
 		const account = await apiCreateAccount(payload);
 		onAccountCreated(account);
 		void refreshMergeMeta();

@@ -28,12 +28,16 @@ export async function clearInboxQueue(page: Page): Promise<void> {
 				const cats = await apiJSON<{ id: string }[]>(
 					page,
 					'GET',
-					'/api/v1/categories?type=expense'
+					'/api/v1/categories?type=expense&scope=personal'
 				);
 				expenseCategoryId = cats[0]?.id;
 			}
 			if (tx.type === 'income' && !incomeCategoryId) {
-				const cats = await apiJSON<{ id: string }[]>(page, 'GET', '/api/v1/categories?type=income');
+				const cats = await apiJSON<{ id: string }[]>(
+					page,
+					'GET',
+					'/api/v1/categories?type=income&scope=personal'
+				);
 				incomeCategoryId = cats[0]?.id;
 			}
 			const categoryId = tx.type === 'income' ? incomeCategoryId : expenseCategoryId;

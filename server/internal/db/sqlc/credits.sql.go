@@ -7,6 +7,7 @@ package sqlc
 
 import (
 	"context"
+	"strings"
 )
 
 const applyCreditPayment = `-- name: ApplyCreditPayment :execrows
@@ -350,12 +351,12 @@ SELECT
 FROM credits c
 JOIN accounts a ON a.id = c.debit_account_id
 LEFT JOIN banks b ON b.id = c.bank_id
-WHERE c.id = ? AND c.user_id = ?
+WHERE c.id = ?1 AND c.user_id IN (/*SLICE:owner_ids*/?)
 `
 
 type GetCreditByIDParams struct {
-	ID     string `json:"id"`
-	UserID string `json:"user_id"`
+	ID       string   `json:"id"`
+	OwnerIds []string `json:"owner_ids"`
 }
 
 type GetCreditByIDRow struct {
@@ -391,7 +392,18 @@ type GetCreditByIDRow struct {
 }
 
 func (q *Queries) GetCreditByID(ctx context.Context, arg GetCreditByIDParams) (GetCreditByIDRow, error) {
-	row := q.db.QueryRowContext(ctx, getCreditByID, arg.ID, arg.UserID)
+	query := getCreditByID
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.ID)
+	if len(arg.OwnerIds) > 0 {
+		for _, v := range arg.OwnerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(arg.OwnerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	row := q.db.QueryRowContext(ctx, query, queryParams...)
 	var i GetCreditByIDRow
 	err := row.Scan(
 		&i.ID,
@@ -470,13 +482,13 @@ SELECT
     c.status AS credit_status
 FROM credit_payments cp
 JOIN credits c ON c.id = cp.credit_id
-WHERE cp.id = ? AND cp.credit_id = ? AND c.user_id = ?
+WHERE cp.id = ?1 AND cp.credit_id = ?2 AND c.user_id IN (/*SLICE:owner_ids*/?)
 `
 
 type GetCreditPaymentForUserParams struct {
-	ID       string `json:"id"`
-	CreditID string `json:"credit_id"`
-	UserID   string `json:"user_id"`
+	ID       string   `json:"id"`
+	CreditID string   `json:"credit_id"`
+	OwnerIds []string `json:"owner_ids"`
 }
 
 type GetCreditPaymentForUserRow struct {
@@ -492,7 +504,19 @@ type GetCreditPaymentForUserRow struct {
 }
 
 func (q *Queries) GetCreditPaymentForUser(ctx context.Context, arg GetCreditPaymentForUserParams) (GetCreditPaymentForUserRow, error) {
-	row := q.db.QueryRowContext(ctx, getCreditPaymentForUser, arg.ID, arg.CreditID, arg.UserID)
+	query := getCreditPaymentForUser
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.ID)
+	queryParams = append(queryParams, arg.CreditID)
+	if len(arg.OwnerIds) > 0 {
+		for _, v := range arg.OwnerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(arg.OwnerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	row := q.db.QueryRowContext(ctx, query, queryParams...)
 	var i GetCreditPaymentForUserRow
 	err := row.Scan(
 		&i.ID,
@@ -519,12 +543,12 @@ SELECT
     c.status AS credit_status
 FROM credit_payments cp
 JOIN credits c ON c.id = cp.credit_id
-WHERE cp.transaction_id = ? AND c.user_id = ?
+WHERE cp.transaction_id = ?1 AND c.user_id IN (/*SLICE:owner_ids*/?)
 `
 
 type GetCreditPaymentLinkByTransactionIDParams struct {
-	TransactionID *string `json:"transaction_id"`
-	UserID        string  `json:"user_id"`
+	TransactionID *string  `json:"transaction_id"`
+	OwnerIds      []string `json:"owner_ids"`
 }
 
 type GetCreditPaymentLinkByTransactionIDRow struct {
@@ -538,7 +562,18 @@ type GetCreditPaymentLinkByTransactionIDRow struct {
 }
 
 func (q *Queries) GetCreditPaymentLinkByTransactionID(ctx context.Context, arg GetCreditPaymentLinkByTransactionIDParams) (GetCreditPaymentLinkByTransactionIDRow, error) {
-	row := q.db.QueryRowContext(ctx, getCreditPaymentLinkByTransactionID, arg.TransactionID, arg.UserID)
+	query := getCreditPaymentLinkByTransactionID
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.TransactionID)
+	if len(arg.OwnerIds) > 0 {
+		for _, v := range arg.OwnerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(arg.OwnerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	row := q.db.QueryRowContext(ctx, query, queryParams...)
 	var i GetCreditPaymentLinkByTransactionIDRow
 	err := row.Scan(
 		&i.PaymentID,
@@ -862,15 +897,15 @@ SELECT
 FROM credits c
 JOIN accounts a ON a.id = c.debit_account_id
 LEFT JOIN banks b ON b.id = c.bank_id
-WHERE c.user_id = ?
+WHERE c.user_id IN (/*SLICE:owner_ids*/?)
   AND (? = '' OR c.status = ?)
 ORDER BY c.status ASC, c.issue_date DESC, c.created_at DESC
 `
 
 type ListCreditsByUserParams struct {
-	UserID  string      `json:"user_id"`
-	Column2 interface{} `json:"column_2"`
-	Status  string      `json:"status"`
+	OwnerIds []string    `json:"owner_ids"`
+	Column2  interface{} `json:"column_2"`
+	Status   string      `json:"status"`
 }
 
 type ListCreditsByUserRow struct {
@@ -906,7 +941,19 @@ type ListCreditsByUserRow struct {
 }
 
 func (q *Queries) ListCreditsByUser(ctx context.Context, arg ListCreditsByUserParams) ([]ListCreditsByUserRow, error) {
-	rows, err := q.db.QueryContext(ctx, listCreditsByUser, arg.UserID, arg.Column2, arg.Status)
+	query := listCreditsByUser
+	var queryParams []interface{}
+	if len(arg.OwnerIds) > 0 {
+		for _, v := range arg.OwnerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(arg.OwnerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	queryParams = append(queryParams, arg.Column2)
+	queryParams = append(queryParams, arg.Status)
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
 	if err != nil {
 		return nil, err
 	}

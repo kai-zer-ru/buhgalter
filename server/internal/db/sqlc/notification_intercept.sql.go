@@ -9,6 +9,36 @@ import (
 	"context"
 )
 
+const deleteInterceptBankBindingsOnPrincipalAccounts = `-- name: DeleteInterceptBankBindingsOnPrincipalAccounts :exec
+DELETE FROM notification_intercept_bank_bindings
+WHERE notification_intercept_bank_bindings.user_id = ? AND account_id IN (SELECT id FROM accounts WHERE accounts.user_id = ?)
+`
+
+type DeleteInterceptBankBindingsOnPrincipalAccountsParams struct {
+	UserID   string `json:"user_id"`
+	UserID_2 string `json:"user_id_2"`
+}
+
+func (q *Queries) DeleteInterceptBankBindingsOnPrincipalAccounts(ctx context.Context, arg DeleteInterceptBankBindingsOnPrincipalAccountsParams) error {
+	_, err := q.db.ExecContext(ctx, deleteInterceptBankBindingsOnPrincipalAccounts, arg.UserID, arg.UserID_2)
+	return err
+}
+
+const deleteInterceptCardBindingsOnPrincipalAccounts = `-- name: DeleteInterceptCardBindingsOnPrincipalAccounts :exec
+DELETE FROM notification_intercept_card_bindings
+WHERE notification_intercept_card_bindings.user_id = ? AND account_id IN (SELECT id FROM accounts WHERE accounts.user_id = ?)
+`
+
+type DeleteInterceptCardBindingsOnPrincipalAccountsParams struct {
+	UserID   string `json:"user_id"`
+	UserID_2 string `json:"user_id_2"`
+}
+
+func (q *Queries) DeleteInterceptCardBindingsOnPrincipalAccounts(ctx context.Context, arg DeleteInterceptCardBindingsOnPrincipalAccountsParams) error {
+	_, err := q.db.ExecContext(ctx, deleteInterceptCardBindingsOnPrincipalAccounts, arg.UserID, arg.UserID_2)
+	return err
+}
+
 const deleteNotificationInterceptBankBindings = `-- name: DeleteNotificationInterceptBankBindings :exec
 DELETE FROM notification_intercept_bank_bindings
 WHERE user_id = ?

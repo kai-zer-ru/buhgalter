@@ -75,7 +75,7 @@ func computeDeltas(ctx context.Context, db sqlcdb.DBTX, userID, cutoff string) (
 	}
 
 	rows3, err := q.SumTransferOutManualByUser(ctx, sqlcdb.SumTransferOutManualByUserParams{
-		UserID: userID, TransactionDate: cutoff,
+		OwnerIds: []string{userID}, TransactionDate: cutoff,
 	})
 	if err != nil {
 		return nil, nil, nil, nil, err
@@ -89,7 +89,7 @@ func computeDeltas(ctx context.Context, db sqlcdb.DBTX, userID, cutoff string) (
 	}
 
 	rows4, err := q.SumTransferInManualByUser(ctx, sqlcdb.SumTransferInManualByUserParams{
-		UserID: userID, TransactionDate: cutoff,
+		OwnerIds: []string{userID}, TransactionDate: cutoff,
 	})
 	if err != nil {
 		return nil, nil, nil, nil, err
@@ -271,7 +271,7 @@ func ForecastsByUser(ctx context.Context, db *sql.DB, userID, tz string, balance
 	}
 
 	rows3, err := q.SumFutureTransferOutByUser(ctx, sqlcdb.SumFutureTransferOutByUserParams{
-		UserID: userID, TransactionDate: monthStart, TransactionDate_2: monthEnd,
+		OwnerIds: []string{userID}, TransactionDate: monthStart, TransactionDate_2: monthEnd,
 	})
 	if err != nil {
 		return nil, err
@@ -285,7 +285,7 @@ func ForecastsByUser(ctx context.Context, db *sql.DB, userID, tz string, balance
 	}
 
 	rows4, err := q.SumFutureTransferInByUser(ctx, sqlcdb.SumFutureTransferInByUserParams{
-		UserID: userID, TransactionDate: monthStart, TransactionDate_2: monthEnd,
+		OwnerIds: []string{userID}, TransactionDate: monthStart, TransactionDate_2: monthEnd,
 	})
 	if err != nil {
 		return nil, err

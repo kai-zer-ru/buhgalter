@@ -7,6 +7,7 @@ package sqlc
 
 import (
 	"context"
+	"strings"
 )
 
 const budgetSpent = `-- name: BudgetSpent :one
@@ -164,12 +165,12 @@ FROM budgets b
 LEFT JOIN categories c ON c.id = b.category_id
 LEFT JOIN subcategories s ON s.id = b.subcategory_id
 LEFT JOIN accounts a ON a.id = b.account_id
-WHERE b.id = ? AND b.user_id = ?
+WHERE b.id = ?1 AND b.user_id IN (/*SLICE:owner_ids*/?)
 `
 
 type GetBudgetByIDParams struct {
-	ID     string `json:"id"`
-	UserID string `json:"user_id"`
+	ID       string   `json:"id"`
+	OwnerIds []string `json:"owner_ids"`
 }
 
 type GetBudgetByIDRow struct {
@@ -197,7 +198,18 @@ type GetBudgetByIDRow struct {
 }
 
 func (q *Queries) GetBudgetByID(ctx context.Context, arg GetBudgetByIDParams) (GetBudgetByIDRow, error) {
-	row := q.db.QueryRowContext(ctx, getBudgetByID, arg.ID, arg.UserID)
+	query := getBudgetByID
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.ID)
+	if len(arg.OwnerIds) > 0 {
+		for _, v := range arg.OwnerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(arg.OwnerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	row := q.db.QueryRowContext(ctx, query, queryParams...)
 	var i GetBudgetByIDRow
 	err := row.Scan(
 		&i.ID,
@@ -482,15 +494,15 @@ FROM budgets b
 LEFT JOIN categories c ON c.id = b.category_id
 LEFT JOIN subcategories s ON s.id = b.subcategory_id
 LEFT JOIN accounts a ON a.id = b.account_id
-WHERE b.user_id = ?
+WHERE b.user_id IN (/*SLICE:owner_ids*/?)
   AND (? = '' OR b.month = ?)
 ORDER BY b.created_at DESC
 `
 
 type ListBudgetsByUserParams struct {
-	UserID  string      `json:"user_id"`
-	Column2 interface{} `json:"column_2"`
-	Month   string      `json:"month"`
+	OwnerIds []string    `json:"owner_ids"`
+	Column2  interface{} `json:"column_2"`
+	Month    string      `json:"month"`
 }
 
 type ListBudgetsByUserRow struct {
@@ -518,7 +530,19 @@ type ListBudgetsByUserRow struct {
 }
 
 func (q *Queries) ListBudgetsByUser(ctx context.Context, arg ListBudgetsByUserParams) ([]ListBudgetsByUserRow, error) {
-	rows, err := q.db.QueryContext(ctx, listBudgetsByUser, arg.UserID, arg.Column2, arg.Month)
+	query := listBudgetsByUser
+	var queryParams []interface{}
+	if len(arg.OwnerIds) > 0 {
+		for _, v := range arg.OwnerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(arg.OwnerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	queryParams = append(queryParams, arg.Column2)
+	queryParams = append(queryParams, arg.Month)
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
 	if err != nil {
 		return nil, err
 	}

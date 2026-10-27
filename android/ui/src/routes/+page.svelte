@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { _ } from 'svelte-i18n';
@@ -10,6 +10,7 @@
 		listTransactionTemplates,
 		listTransactions,
 		type BudgetSummaryItem,
+		type CatalogScope,
 		type Dashboard,
 		type Transaction,
 		type TransactionTemplate
@@ -65,15 +66,29 @@
 	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
 	import { resolveAutoTopupSourceName } from '$lib/accounts/auto-topup';
-	import { groupAccountsByType, accountGroupKind } from '$lib/accounts/group-by-type';
+	import {
+		groupAccountsForDisplay,
+		groupAccountsByOwnership,
+		accountGroupKind,
+		accountOwnershipLabelKey
+	} from '$lib/accounts/group-by-type';
+	import { householdMe, householdMeLoaded, inHousehold } from '$lib/household/membership';
+	import FamilyBadge from '$lib/components/FamilyBadge.svelte';
+	import CatalogScopeTabs from '$lib/components/CatalogScopeTabs.svelte';
+	import {
+		catalogScopeQuery,
+		dashboardRefPath,
+		readStoredCatalogScope,
+		writeStoredCatalogScope
+	} from '$lib/household/catalog-scope';
 	import { ownFundsTotalsByCurrency, sortRowsByProfileCurrency } from '$lib/currency';
 	import { aggregateForecastLabelFlags, forecastWithLabelKey } from '$lib/forecast-label';
 	import AccountGroupPanel from '$lib/components/AccountGroupPanel.svelte';
 	import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
+	import { pullFromServer } from '$lib/offline/sync';
 	import PullToRefresh from '$lib/components/PullToRefresh.svelte';
 	import {
-		HOME_DASHBOARD_PATH,
 		applyCachedDashboardSnapshot,
 		hasHomeDashboardSnapshot,
 		homeDashboardGateMessage,
@@ -88,16 +103,18 @@
 	} from '$lib/android/notification-intercept';
 	import { requireOnline } from '$lib/offline/require-online';
 
-	const DASHBOARD_PATH = HOME_DASHBOARD_PATH;
 	const PAST_TX_PATH = HOME_PAST_TRANSACTIONS_PATH;
 	const PLANNED_TX_PATH = HOME_PLANNED_TRANSACTIONS_PATH;
 	const BUDGET_PATH = '/api/v1/budgets/summary';
 	const TEMPLATES_PATH = '/api/v1/transaction-templates';
 	const HOME_TEMPLATE_LIMIT = 12;
 
-	let dashBase = $state<Dashboard | null>(readRefCache<Dashboard>(DASHBOARD_PATH));
-	let loading = $state(!refCacheReady(DASHBOARD_PATH));
+	let catalogScope = $state<CatalogScope>(readStoredCatalogScope());
+	const DASHBOARD_PATH = $derived(dashboardRefPath(catalogScope));
+	let dashBase = $state<Dashboard | null>(readRefCache<Dashboard>(dashboardRefPath(catalogScope)));
+	let loading = $state(!refCacheReady(dashboardRefPath(catalogScope)));
 	let loadError = $state<string | null>(null);
+	let catalogLoadGen = 0;
 
 	const txLimit = 10;
 	const pastCached = readRefCache<{ data: Transaction[]; meta: { total: number } }>(PAST_TX_PATH);
@@ -164,7 +181,11 @@
 	const debtsByCurrency = $derived(
 		sortRowsByProfileCurrency(dash?.debts_summary.by_currency ?? [], currency)
 	);
-	const accountGroups = $derived(dash ? groupAccountsByType(dash.accounts) : []);
+	const accountGroups = $derived(dash ? groupAccountsForDisplay(dash.accounts) : []);
+	const accountSections = $derived(groupAccountsByOwnership(accountGroups));
+	const showOwnershipHeadings = $derived(
+		accountGroups.some((group) => group.ownership === 'household')
+	);
 	const recentTotal = $derived(pastTotal + plannedTotal);
 	const ownForecastFlags = $derived(
 		dash ? aggregateForecastLabelFlags(dash.accounts.filter((a) => a.type !== 'credit_card')) : {}
@@ -200,7 +221,7 @@
 	}
 
 	onMount(() => {
-		if (homeNeedsForegroundLoad(dashBase)) {
+		if (homeNeedsForegroundLoad(dashBase, catalogScope)) {
 			void loadAll();
 		} else {
 			// Snapshot is enough for the summary. Lists may still be cold — refresh in the
@@ -219,8 +240,9 @@
 
 	$effect(() => {
 		const seq = $dashboardSnapshotSeq;
+		const scope = catalogScope;
 		if (seq === 0) return;
-		const next = applyCachedDashboardSnapshot({ dashBase, loadError, loading });
+		const next = applyCachedDashboardSnapshot({ dashBase, loadError, loading }, scope);
 		if (next.dashBase !== dashBase) dashBase = next.dashBase;
 		if (next.loadError !== loadError) loadError = next.loadError;
 		if (next.loading !== loading) loading = next.loading;
@@ -229,8 +251,8 @@
 	$effect(() => {
 		const update = $refCacheUpdate;
 		if (!update) return;
-		if (refCachePathMatches(update.path, DASHBOARD_PATH)) {
-			const next = applyCachedDashboardSnapshot({ dashBase, loadError, loading });
+		if (update.path === DASHBOARD_PATH) {
+			const next = applyCachedDashboardSnapshot({ dashBase, loadError, loading }, catalogScope);
 			if (next.dashBase !== dashBase) dashBase = next.dashBase;
 			if (next.loadError !== loadError) loadError = next.loadError;
 			if (next.loading !== loading) loading = next.loading;
@@ -242,71 +264,98 @@
 		}
 	});
 
-	async function loadDashboard(opts: { background?: boolean } = {}) {
-		if (!opts.background && !hasHomeDashboardSnapshot(dashBase)) loading = true;
+	async function loadDashboard(opts: { background?: boolean; gen?: number } = {}) {
+		const scope = catalogScope;
+		const gen = opts.gen;
+		if (!opts.background && !hasHomeDashboardSnapshot(dashBase, scope)) loading = true;
 		try {
-			const next = await getDashboard();
+			const next = await getDashboard(scope);
+			if (gen !== undefined && gen !== catalogLoadGen) return;
+			if (scope !== catalogScope) return;
 			dashBase = opts.background ? assignIfChanged(dashBase, next) : next;
 			if (dashBase) mergeAccountsFallback(dashBase.accounts);
 			loadError = null;
 		} catch (err) {
+			if (gen !== undefined && gen !== catalogLoadGen) return;
+			if (scope !== catalogScope) return;
 			loadError = homeDashboardGateMessage(err, dashBase);
 		} finally {
-			loading = false;
+			if (gen === undefined || gen === catalogLoadGen) loading = false;
 		}
 	}
 
-	async function loadPastTx(opts: { background?: boolean } = {}) {
+	function homeTxParams(kind: 'manual' | 'future'): Record<string, string> {
+		const params: Record<string, string> = {
+			kind,
+			sort: 'date_desc',
+			page: '1',
+			limit: String(txLimit)
+		};
+		const scope = catalogScopeQuery(catalogScope);
+		if (scope) params.scope = scope;
+		return params;
+	}
+
+	function preferredHouseholdAccountId(): string | undefined {
+		if (catalogScope !== 'household') return undefined;
+		return dash?.accounts.find((acc) => acc.scope === 'household')?.id;
+	}
+
+	async function loadPastTx(opts: { background?: boolean; gen?: number } = {}) {
+		const scope = catalogScope;
+		const gen = opts.gen;
 		if (!opts.background && !refCacheReady(PAST_TX_PATH)) pastLoading = true;
 		try {
-			const res = await listTransactions({
-				kind: 'manual',
-				sort: 'date_desc',
-				page: '1',
-				limit: String(txLimit)
-			});
+			const res = await listTransactions(homeTxParams('manual'));
+			if (gen !== undefined && gen !== catalogLoadGen) return;
+			if (scope !== catalogScope) return;
 			const nextData = res.data;
 			serverPastTx = opts.background ? assignIfChanged(serverPastTx, nextData) : nextData;
 			pastTotal = opts.background ? assignIfChanged(pastTotal, res.meta.total) : res.meta.total;
 		} catch (err) {
+			if (gen !== undefined && gen !== catalogLoadGen) return;
 			reportHomeListLoadFailure(err);
 		} finally {
-			pastLoading = false;
+			if (gen === undefined || gen === catalogLoadGen) pastLoading = false;
 		}
 	}
 
-	async function loadPlannedTx(opts: { background?: boolean } = {}) {
+	async function loadPlannedTx(opts: { background?: boolean; gen?: number } = {}) {
+		const scope = catalogScope;
+		const gen = opts.gen;
 		if (!opts.background && !refCacheReady(PLANNED_TX_PATH)) plannedLoading = true;
 		try {
-			const res = await listTransactions({
-				kind: 'future',
-				sort: 'date_desc',
-				page: '1',
-				limit: String(txLimit)
-			});
+			const res = await listTransactions(homeTxParams('future'));
+			if (gen !== undefined && gen !== catalogLoadGen) return;
+			if (scope !== catalogScope) return;
 			const nextData = res.data;
 			serverPlannedTx = opts.background ? assignIfChanged(serverPlannedTx, nextData) : nextData;
 			plannedTotal = opts.background
 				? assignIfChanged(plannedTotal, res.meta.total)
 				: res.meta.total;
 		} catch (err) {
+			if (gen !== undefined && gen !== catalogLoadGen) return;
 			reportHomeListLoadFailure(err);
 		} finally {
-			plannedLoading = false;
+			if (gen === undefined || gen === catalogLoadGen) plannedLoading = false;
 		}
 	}
 
-	async function loadBudget(opts: { background?: boolean } = {}) {
+	async function loadBudget(opts: { background?: boolean; gen?: number } = {}) {
 		if (!isFeatureEnabled('budget')) {
 			budgetItems = [];
 			return;
 		}
+		const scope = catalogScope;
+		const gen = opts.gen;
 		try {
-			const res = await getBudgetSummary();
+			const res = await getBudgetSummary(undefined, undefined, scope);
+			if (gen !== undefined && gen !== catalogLoadGen) return;
+			if (scope !== catalogScope) return;
 			const next = res.items;
 			budgetItems = opts.background ? assignIfChanged(budgetItems, next) : next;
 		} catch {
-			if (!opts.background) budgetItems = [];
+			if (!opts.background && (gen === undefined || gen === catalogLoadGen)) budgetItems = [];
 		}
 	}
 
@@ -324,8 +373,8 @@
 	}
 
 	async function loadAll(opts: { background?: boolean } = {}) {
-		const background = opts.background === true || hasHomeDashboardSnapshot(dashBase);
-		const run = { background };
+		const background = opts.background === true || hasHomeDashboardSnapshot(dashBase, catalogScope);
+		const run = { background, gen: catalogLoadGen };
 		await refreshMergeMeta().catch(() => undefined);
 		await loadDashboard(run);
 		await Promise.all([loadPastTx(run), loadPlannedTx(run), loadBudget(run), loadTemplates(run)]);
@@ -349,7 +398,9 @@
 	}
 
 	function openNewTransaction(type: 'expense' | 'income') {
-		void goto(resolve(transactionNewPath({ type, from: '/' })));
+		void goto(
+			resolve(transactionNewPath({ type, from: '/', accountId: preferredHouseholdAccountId() }))
+		);
 	}
 
 	function openEdit(tx: Transaction) {
@@ -435,13 +486,40 @@
 			toast.fromError(err);
 		}
 	}
+
+	function selectCatalogScope(next: CatalogScope | 'personal' | 'household') {
+		const scope: CatalogScope =
+			next === 'personal' || next === 'household' || next === 'all' ? next : 'all';
+		catalogScope = scope;
+		writeStoredCatalogScope(scope);
+		const cached = readRefCache<Dashboard>(dashboardRefPath(scope));
+		if (cached) dashBase = cached;
+		const gen = ++catalogLoadGen;
+		void loadDashboard({ gen });
+		void loadBudget({ gen });
+		void loadPastTx({ gen });
+		void loadPlannedTx({ gen });
+	}
+
+	// Left / kicked from the group: tabs are hidden, so fall back to «Все».
+	$effect(() => {
+		if ($householdMeLoaded && !inHousehold($householdMe) && catalogScope !== 'all') {
+			untrack(() => selectCatalogScope('all'));
+		}
+	});
 </script>
 
 <svelte:head>
 	<title>{$_('dashboard.title')} — {$_('app.title')}</title>
 </svelte:head>
 
-<PullToRefresh onRefresh={() => loadAll({ background: true })}>
+<PullToRefresh
+	onRefresh={async () => {
+		// Same as drawer «Синхронизировать»: outbox, forced warm (incl. household membership).
+		await pullFromServer();
+		await loadAll({ background: true });
+	}}
+>
 	<div class="space-y-6">
 		{#if (dash?.inbox_count ?? 0) > 0}
 			<div class="card flex flex-wrap items-center justify-between gap-3">
@@ -457,7 +535,10 @@
 			</div>
 		{/if}
 		<div class="flex flex-wrap items-center justify-between gap-3">
-			<h1 class="text-2xl font-semibold">{$_('dashboard.title')}</h1>
+			<div class="space-y-2">
+				<h1 class="text-2xl font-semibold">{$_('dashboard.title')}</h1>
+				<CatalogScopeTabs value={catalogScope} onchange={selectCatalogScope} />
+			</div>
 			<div class="flex shrink-0 items-center gap-1">
 				{#if dash?.accounts.length === 0}
 					<a
@@ -471,7 +552,10 @@
 					onincome={() => openNewTransaction('income')}
 					onexpense={() => openNewTransaction('expense')}
 					onreceipt={receiptScannerActive ? openReceiptImport : undefined}
-					ontransfer={() => void goto(resolve(transferNewPath({ from: '/' })))}
+					ontransfer={() =>
+						void goto(
+							resolve(transferNewPath({ from: '/', accountId: preferredHouseholdAccountId() }))
+						)}
 				/>
 			</div>
 		</div>
@@ -786,60 +870,83 @@
 					{#if dash.accounts.length === 0}
 						<EmptyStateCard message={$_('dashboard.accountsEmpty')} />
 					{:else}
-						{#each accountGroups as group (accountGroupKind(group))}
-							{@const kind = accountGroupKind(group)}
-							<AccountGroupPanel {kind} count={group.length}>
-								<div class="grid gap-4 sm:grid-cols-2">
-									{#each group as acc (acc.id)}
-										<a
-											href={resolve(`/accounts/${acc.id}`)}
-											class="card flex items-center gap-4 transition hover:opacity-90"
-										>
-											<AccountIcon type={acc.type} bankIcon={acc.bank_icon} size={48} />
-											<div class="min-w-0 flex-1">
-												<p class="truncate font-medium">{acc.name}</p>
-												<p class="mt-1 text-xl font-semibold tabular-nums">
-													<MoneyDisplay
-														value={acc.balance_display}
-														currency={acc.currency}
-														class=""
-													/>
-												</p>
-												{#if acc.credit_limit_display}
-													<p class="mt-0.5 text-sm tabular-nums" style:color="var(--text-muted)">
-														{$_('accounts.field.creditLimit')}:
-														<MoneyDisplay
-															value={acc.credit_limit_display}
-															currency={acc.currency}
-															class=""
-														/>
-													</p>
-												{/if}
-												{#if acc.type === 'bank' && isFeatureEnabled('balance_maintenance', $featureFlags)}
-													{@const autoTopupSource = resolveAutoTopupSourceName(acc, dash.accounts)}
-													{#if autoTopupSource}
-														<p class="mt-1 text-sm" style:color="var(--text-muted)">
-															{$_('accounts.autoTopup.status', {
-																values: { source: autoTopupSource }
-															})}
+						{#each accountSections as section (section.ownership)}
+							<div class="space-y-4">
+								{#if showOwnershipHeadings}
+									<p
+										class="mb-1 text-xs font-medium uppercase tracking-wide"
+										style:color="var(--text-muted)"
+									>
+										{$_(accountOwnershipLabelKey(section.ownership, $householdMe.household?.kind))}
+									</p>
+								{/if}
+								{#each section.groups as group (`${group.kind}`)}
+									{@const kind = accountGroupKind(group.accounts)}
+									<AccountGroupPanel {kind} count={group.accounts.length}>
+										<div class="grid gap-4 sm:grid-cols-2">
+											{#each group.accounts as acc (acc.id)}
+												<a
+													href={resolve(`/accounts/${acc.id}`)}
+													class="card flex items-center gap-4 transition hover:opacity-90"
+												>
+													<AccountIcon type={acc.type} bankIcon={acc.bank_icon} size={48} />
+													<div class="min-w-0 flex-1">
+														<p class="truncate font-medium">
+															{acc.name}
+															{#if acc.scope === 'household'}
+																<FamilyBadge compact />
+															{/if}
 														</p>
-													{/if}
-												{/if}
-												{#if acc.forecast_balance !== acc.balance}
-													<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
-														{$_(forecastWithLabelKey(acc))}:
-														<MoneyDisplay
-															value={acc.forecast_display}
-															currency={acc.currency}
-															class=""
-														/>
-													</p>
-												{/if}
-											</div>
-										</a>
-									{/each}
-								</div>
-							</AccountGroupPanel>
+														<p class="mt-1 text-xl font-semibold tabular-nums">
+															<MoneyDisplay
+																value={acc.balance_display}
+																currency={acc.currency}
+																class=""
+															/>
+														</p>
+														{#if acc.credit_limit_display}
+															<p
+																class="mt-0.5 text-sm tabular-nums"
+																style:color="var(--text-muted)"
+															>
+																{$_('accounts.field.creditLimit')}:
+																<MoneyDisplay
+																	value={acc.credit_limit_display}
+																	currency={acc.currency}
+																	class=""
+																/>
+															</p>
+														{/if}
+														{#if acc.type === 'bank' && isFeatureEnabled('balance_maintenance', $featureFlags)}
+															{@const autoTopupSource = resolveAutoTopupSourceName(
+																acc,
+																dash.accounts
+															)}
+															{#if autoTopupSource}
+																<p class="mt-1 text-sm" style:color="var(--text-muted)">
+																	{$_('accounts.autoTopup.status', {
+																		values: { source: autoTopupSource }
+																	})}
+																</p>
+															{/if}
+														{/if}
+														{#if acc.forecast_balance !== acc.balance}
+															<p class="mt-1 text-sm tabular-nums" style:color="var(--text-muted)">
+																{$_(forecastWithLabelKey(acc))}:
+																<MoneyDisplay
+																	value={acc.forecast_display}
+																	currency={acc.currency}
+																	class=""
+																/>
+															</p>
+														{/if}
+													</div>
+												</a>
+											{/each}
+										</div>
+									</AccountGroupPanel>
+								{/each}
+							</div>
 						{/each}
 					{/if}
 				</div>

@@ -10,12 +10,14 @@ import (
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/debt"
 	"github.com/kai-zer-ru/buhgalter/internal/money"
+	"github.com/kai-zer-ru/buhgalter/internal/scope"
 )
 
 type AccountBalance struct {
 	ID                        string  `json:"id"`
 	Name                      string  `json:"name"`
 	Type                      string  `json:"type"`
+	Scope                     string  `json:"scope,omitempty"`
 	Currency                  string  `json:"currency"`
 	BankIcon                  *string `json:"bank_icon,omitempty"`
 	Balance                   int64   `json:"balance"`
@@ -82,7 +84,7 @@ type Dashboard struct {
 
 // Balance returns stored current balance for an account.
 func Balance(ctx context.Context, db *sql.DB, userID, accountID string, initialBalance int64) (int64, error) {
-	row, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: accountID, UserID: userID})
+	row, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: accountID, OwnerIds: []string{userID}})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return initialBalance, nil
@@ -162,7 +164,7 @@ func EnrichAccountBalance(ctx context.Context, db *sql.DB, userID, accountID, ac
 		return AccountBalance{}, err
 	}
 	fc := forecasts[accountID]
-	accRow, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: accountID, UserID: userID})
+	accRow, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: accountID, OwnerIds: []string{userID}})
 	if err != nil {
 		return AccountBalance{}, err
 	}
@@ -170,6 +172,11 @@ func EnrichAccountBalance(ctx context.Context, db *sql.DB, userID, accountID, ac
 		accountID, accountName, accountType, accRow.Currency, bankIcon, bal, accRow.IsPrimary, creditLimit,
 		accRow.AutoTopupEnabled, accRow.AutoTopupThreshold, accRow.AutoTopupTarget, accRow.AutoTopupSourceAccountID,
 	)
+	if accRow.UserID != userID {
+		ab.Scope = scope.Household
+	} else {
+		ab.Scope = scope.Personal
+	}
 	ab.ForecastBalance = fc.Balance
 	ab.ForecastDisplay = money.FormatRubles(fc.Balance)
 	ab.HasFutureThisMonth = fc.HasFutureThisMonth
@@ -179,7 +186,14 @@ func EnrichAccountBalance(ctx context.Context, db *sql.DB, userID, accountID, ac
 }
 
 func AccountsSummaryForUser(ctx context.Context, db *sql.DB, userID string) (AccountsSummary, error) {
-	rows, err := queries(db).ListAccountsByUserActive(ctx, userID)
+	return AccountsSummaryForOwners(ctx, db, userID, []string{userID})
+}
+
+func AccountsSummaryForOwners(ctx context.Context, db *sql.DB, tzUserID string, ownerIDs []string) (AccountsSummary, error) {
+	if len(ownerIDs) == 0 {
+		return AccountsSummary{Accounts: []AccountBalance{}}, nil
+	}
+	rows, err := queries(db).ListAccountsByUserActive(ctx, ownerIDs)
 	if err != nil {
 		return AccountsSummary{}, err
 	}
@@ -191,17 +205,28 @@ func AccountsSummaryForUser(ctx context.Context, db *sql.DB, userID string) (Acc
 			row.ID, row.Name, row.Type, row.Currency, row.BankIcon, row.CurrentBalance, row.IsPrimary, row.CreditLimit,
 			row.AutoTopupEnabled, row.AutoTopupThreshold, row.AutoTopupTarget, row.AutoTopupSourceAccountID,
 		)
+		if row.UserID != tzUserID {
+			ab.Scope = scope.Household
+		} else {
+			ab.Scope = scope.Personal
+		}
 		ab.ForecastBalance = row.CurrentBalance
 		ab.ForecastDisplay = money.FormatRubles(row.CurrentBalance)
 		out = append(out, ab)
 	}
-	tz, err := userTimezone(ctx, db, userID)
+	tz, err := userTimezone(ctx, db, tzUserID)
 	if err != nil {
 		return AccountsSummary{}, err
 	}
-	forecasts, err := accountbalance.ForecastsByUser(ctx, db, userID, tz, balances)
-	if err != nil {
-		return AccountsSummary{}, err
+	forecasts := map[string]accountbalance.Forecast{}
+	for _, oid := range ownerIDs {
+		part, err := accountbalance.ForecastsByUser(ctx, db, oid, tz, balances)
+		if err != nil {
+			return AccountsSummary{}, err
+		}
+		for id, fc := range part {
+			forecasts[id] = fc
+		}
 	}
 	for i := range out {
 		if fc, ok := forecasts[out[i].ID]; ok {
@@ -212,7 +237,7 @@ func AccountsSummaryForUser(ctx context.Context, db *sql.DB, userID string) (Acc
 			out[i].HasSubscriptionsThisMonth = fc.HasSubscriptionsThisMonth
 		}
 	}
-	profile, err := account.ProfileCurrency(ctx, db, userID)
+	profile, err := account.ProfileCurrency(ctx, db, tzUserID)
 	if err != nil {
 		return AccountsSummary{}, err
 	}
@@ -322,22 +347,26 @@ func creditCardsByCurrency(accounts []AccountBalance, profile string) ([]CreditC
 }
 
 func DashboardForUser(ctx context.Context, db *sql.DB, userID string) (Dashboard, error) {
-	summary, err := AccountsSummaryForUser(ctx, db, userID)
+	return DashboardForOwners(ctx, db, userID, []string{userID})
+}
+
+func DashboardForOwners(ctx context.Context, db *sql.DB, tzUserID string, ownerIDs []string) (Dashboard, error) {
+	summary, err := AccountsSummaryForOwners(ctx, db, tzUserID, ownerIDs)
 	if err != nil {
 		return Dashboard{}, err
 	}
-	recent, err := ListRecent(ctx, db, userID, 10)
+	recent, err := ListRecentOwned(ctx, db, ownerIDs, tzUserID, 10)
 	if err != nil {
 		return Dashboard{}, err
 	}
 	if recent == nil {
 		recent = []Transaction{}
 	}
-	debtsSummary, err := debt.SummaryForUser(ctx, db, userID)
+	debtsSummary, err := debt.SummaryForOwners(ctx, db, tzUserID, ownerIDs)
 	if err != nil {
 		return Dashboard{}, err
 	}
-	inboxCount, err := CountInbox(ctx, db, userID)
+	inboxCount, err := CountInboxOwned(ctx, db, ownerIDs)
 	if err != nil {
 		return Dashboard{}, err
 	}

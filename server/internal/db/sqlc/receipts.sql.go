@@ -7,6 +7,7 @@ package sqlc
 
 import (
 	"context"
+	"strings"
 )
 
 const attachReceiptToTransaction = `-- name: AttachReceiptToTransaction :execrows
@@ -142,12 +143,12 @@ SELECT
     s.name AS store_name
 FROM receipt_imports ri
 LEFT JOIN stores s ON s.id = ri.store_id
-WHERE ri.id = ? AND ri.user_id = ?
+WHERE ri.id = ?1 AND ri.user_id IN (/*SLICE:owner_ids*/?)
 `
 
 type GetReceiptImportByIDParams struct {
-	ID     string `json:"id"`
-	UserID string `json:"user_id"`
+	ID       string   `json:"id"`
+	OwnerIds []string `json:"owner_ids"`
 }
 
 type GetReceiptImportByIDRow struct {
@@ -166,7 +167,18 @@ type GetReceiptImportByIDRow struct {
 }
 
 func (q *Queries) GetReceiptImportByID(ctx context.Context, arg GetReceiptImportByIDParams) (GetReceiptImportByIDRow, error) {
-	row := q.db.QueryRowContext(ctx, getReceiptImportByID, arg.ID, arg.UserID)
+	query := getReceiptImportByID
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.ID)
+	if len(arg.OwnerIds) > 0 {
+		for _, v := range arg.OwnerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(arg.OwnerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	row := q.db.QueryRowContext(ctx, query, queryParams...)
 	var i GetReceiptImportByIDRow
 	err := row.Scan(
 		&i.ID,

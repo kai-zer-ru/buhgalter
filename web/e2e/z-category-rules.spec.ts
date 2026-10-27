@@ -13,7 +13,11 @@ test('category rules page loads and can open create dialog', async ({ page }) =>
 
 test('category rule via API appears in list', async ({ page }) => {
 	const account = await createCashAccount(page);
-	const cats = await apiJSON<{ id: string }[]>(page, 'GET', '/api/v1/categories?type=expense');
+	const cats = await apiJSON<{ id: string }[]>(
+		page,
+		'GET',
+		'/api/v1/categories?type=expense&scope=personal'
+	);
 	await apiJSON(page, 'POST', '/api/v1/category-rules', {
 		kind: 'category_account',
 		category_id: cats[0].id,

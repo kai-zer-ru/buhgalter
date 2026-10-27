@@ -21,6 +21,8 @@
 	import { reportPageLoadFailure } from '$lib/page-load';
 	import { writeMerchantsRefSnapshot } from '$lib/ref-cache';
 	import { toast } from '$lib/toast';
+	import CatalogScopeTabs from '$lib/components/CatalogScopeTabs.svelte';
+	import { householdMe, inHousehold } from '$lib/household/membership';
 
 	const iconSize = 40;
 
@@ -37,6 +39,7 @@
 	let editAliases = $state('');
 	let editIcon = $state('default');
 	let listQuery = $state('');
+	let catalogScope = $state<'personal' | 'household'>('personal');
 
 	let mergeTarget = $state<Merchant | null>(null);
 	let mergeSelected = $state<string[]>([]);
@@ -75,7 +78,7 @@
 	async function load() {
 		loading = true;
 		try {
-			merchants = await listMerchants();
+			merchants = await listMerchants(inHousehold($householdMe) ? catalogScope : undefined);
 			loadError = null;
 		} catch (err) {
 			const msg = reportPageLoadFailure(err, { hasData: merchants.length > 0 });
@@ -89,7 +92,12 @@
 		const name = newName.trim();
 		if (!name) return;
 		try {
-			await createMerchant(name, newIcon, parseAliases(newAliases));
+			await createMerchant(
+				name,
+				newIcon,
+				parseAliases(newAliases),
+				inHousehold($householdMe) ? catalogScope : undefined
+			);
 			newName = '';
 			newAliases = '';
 			newIcon = defaultIconForKind('expense');
@@ -202,6 +210,14 @@
 </script>
 
 <div class="space-y-6">
+	<CatalogScopeTabs
+		mode="catalog"
+		value={catalogScope}
+		onchange={(next) => {
+			catalogScope = next === 'household' ? 'household' : 'personal';
+			void load();
+		}}
+	/>
 	<div class="card space-y-3">
 		<h2 class="font-medium">{$_('merchants.add')}</h2>
 		<div class="flex items-center gap-2">

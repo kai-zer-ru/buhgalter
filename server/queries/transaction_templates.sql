@@ -5,7 +5,7 @@ SELECT
     amount, description, merchant_id, icon, sort_order,
     created_at, updated_at
 FROM transaction_templates
-WHERE user_id = ?
+WHERE user_id IN (sqlc.slice('owner_ids'))
 ORDER BY sort_order ASC, name COLLATE NOCASE ASC;
 
 -- name: GetTransactionTemplateByID :one
@@ -15,7 +15,7 @@ SELECT
     amount, description, merchant_id, icon, sort_order,
     created_at, updated_at
 FROM transaction_templates
-WHERE id = ? AND user_id = ?;
+WHERE id = sqlc.arg('id') AND user_id IN (sqlc.slice('owner_ids'));
 
 -- name: CountTransactionTemplatesByUser :one
 SELECT COUNT(*) FROM transaction_templates WHERE user_id = ?;

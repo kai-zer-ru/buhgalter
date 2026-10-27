@@ -28,12 +28,33 @@ erDiagram
     users {
         TEXT id PK
         TEXT login UK
+        TEXT kind "person|household"
         TEXT language
         TEXT timezone
         TEXT currency
         TEXT theme "light|dark|system"
         INTEGER is_admin
         TEXT status
+    }
+
+    households {
+        TEXT id PK
+        TEXT name
+        TEXT kind "family|team"
+        TEXT owner_user_id
+        TEXT principal_user_id UK
+    }
+
+    household_members {
+        TEXT household_id
+        TEXT user_id UK
+        TEXT role "owner|member"
+    }
+
+    household_invites {
+        TEXT code UK
+        TEXT status "pending|used|revoked"
+        TEXT expires_at
     }
 
     sessions {
@@ -61,6 +82,8 @@ erDiagram
         TEXT status "active|archived|deleted"
         INTEGER is_primary
         INTEGER initial_balance
+        TEXT original_owner_user_id "кто отдал счёт в семью"
+        TEXT user_id "принципал: человек или household-user"
     }
 
     categories {
@@ -95,6 +118,7 @@ erDiagram
         INTEGER affects_balance
         TEXT transfer_group_id
         TEXT merchant_id
+        TEXT created_by_user_id "кто создал; user_id — принципал строки"
     }
 
     user_change_events {
@@ -393,7 +417,9 @@ erDiagram
 | `accounts.payment_account_id` | счёт по умолчанию для переводов на карту (опционально); та же валюта, иначе `ERR_CURRENCY_MISMATCH` |
 | `accounts.auto_topup_*` | автопополнение bank-счёта — см. [balance-maintenance.md](balance-maintenance.md) |
 | `accounts.status` | `active`, `archived`, `deleted` |
-| `accounts.is_primary` | `1` — основной счёт среди активных `cash`/`bank`; не более одного на пользователя; **кредитная карта основным быть не может** |
+| `accounts.is_primary` | `1` — основной счёт среди активных `cash`/`bank`; не более одного на пользователя; **кредитная карта основным быть не может**; семейный счёт (`user_id` принципала группы) основным не бывает |
+| `accounts.original_owner_user_id` | Кто отдал личный счёт в семью через `POST /accounts/{id}/share`; `null` у счёта, созданного сразу с `shared: true`, и после unshare/dissolve |
+| `transactions.created_by_user_id` | Пользователь, создавший операцию; `transactions.user_id` — принципал (личный или household) |
 | `POST /accounts/{id}/archive` | см. [accounts-archive-delete.md](accounts-archive-delete.md) |
 | `DELETE /accounts/{id}` | см. [accounts-archive-delete.md](accounts-archive-delete.md) |
 | API | `POST /api/v1/accounts/{id}/primary` (отклоняет `credit_card` — `ERR_ACCOUNT_PRIMARY_CREDIT_CARD`) |
@@ -428,9 +454,13 @@ erDiagram
 
 Подробнее: [budget.md](budget.md).
 
+## Семья
+
+Миграция `065_household.sql`; тип группы `households.kind` (`family` | `team`) — `067_household_kind.sql`. Человек (`users.kind = 'person'`) — не больше одной группы. Принципал семьи (`kind = 'household'`, логин `household:{id}`) владеет общими сущностями (`scope=household`). Подробнее: [household.md](household.md).
+
 ## Изоляция данных
 
-Все пользовательские сущности имеют `user_id`. В каждом запросе обязателен фильтр `user_id = ?` из контекста авторизации.
+Все пользовательские сущности имеют `user_id`. В каждом запросе обязателен фильтр `user_id = ?` из контекста авторизации. Для человека без семьи это его id; `AuthInfo.Scope` несёт household id, доменные запросы — `IN (owner_ids)`.
 
 ## Деньги и даты
 
@@ -461,6 +491,7 @@ erDiagram
 | notifications | `internal/notify` | `notifications.sql` | sqlc |
 | import / export | `internal/importexport` | `import.sql` | sqlc |
 | users | `internal/auth`, `internal/user`, `internal/admin`, `internal/setup` | `users.sql` | sqlc |
+| households | `internal/household` | `households.sql` | sqlc |
 | sessions | `internal/auth` | `sessions.sql` | sqlc |
 | api_tokens | `internal/auth`, `internal/user` | `api_tokens.sql` | sqlc |
 | password_reset | `internal/auth` | `password_reset_requests.sql` | sqlc |

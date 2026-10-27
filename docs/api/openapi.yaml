@@ -23,7 +23,7 @@ info:
     Лимит кредитной карты меняется только через `PUT /accounts/{id}/credit-limit` (см. [ui-credit-cards.md](../ui-credit-cards.md)).
     В форме «Начальный баланс» — значение `initial_balance`, не текущий `balance_display` (см. [data-model.md](../data-model.md)).
     Подробнее — [ui-row-actions.md](../ui-row-actions.md).
-  version: 1.10.1
+  version: 1.11.0
 servers:
   - url: /api/v1
 paths:
@@ -334,6 +334,281 @@ paths:
               examples:
                 unauthorized:
                   $ref: '#/components/examples/ApiErrorUnauthorized'
+  /households/me:
+    get:
+      tags: [Household]
+      summary: Текущая семья
+      description: |
+        Без группы — `{ "household": null }`. Флаг `household` (default on); выключен — 404 `FEATURE_DISABLED`.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Семья или null
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HouseholdMe'
+    patch:
+      tags: [Household]
+      summary: Переименовать семью
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  maxLength: 64
+      responses:
+        '200':
+          description: Обновлённая семья
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HouseholdMe'
+        '403':
+          description: Не owner (`ERR_HOUSEHOLD_OWNER_ONLY`)
+        '404':
+          description: Не состоит в семье (`ERR_HOUSEHOLD_NOT_MEMBER`)
+  /households:
+    post:
+      tags: [Household]
+      summary: Создать семью или команду
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  maxLength: 64
+                kind:
+                  type: string
+                  enum: [family, team]
+                  description: Тип группы. Пустое значение — family.
+      responses:
+        '201':
+          description: Создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HouseholdMe'
+        '400':
+          description: Некорректный тип (`ERR_HOUSEHOLD_KIND`)
+        '409':
+          description: Уже в группе (`ERR_HOUSEHOLD_ALREADY_MEMBER`)
+  /households/me/invites:
+    get:
+      tags: [Household]
+      summary: Активные приглашения
+      description: Только owner. Коды pending и не просроченные.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Список
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HouseholdInvite'
+        '403':
+          description: '`ERR_HOUSEHOLD_OWNER_ONLY`'
+    post:
+      tags: [Household]
+      summary: Создать приглашение
+      description: Одноразовый код `XXX-XXX-XXX`, ссылка `{base}/invite/{code}`, TTL 7 суток.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '201':
+          description: Приглашение
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HouseholdInvite'
+        '403':
+          description: '`ERR_HOUSEHOLD_OWNER_ONLY`'
+  /households/me/invites/{id}:
+    delete:
+      tags: [Household]
+      summary: Отозвать приглашение
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Отозвано
+        '400':
+          description: '`ERR_INVITE_INVALID`'
+        '403':
+          description: '`ERR_HOUSEHOLD_OWNER_ONLY`'
+  /household-invites/preview:
+    post:
+      tags: [Household]
+      summary: Просмотр приглашения
+      description: Rate limit 10/мин на пользователя. Код нормализуется (дефисы, регистр).
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code:
+                  type: string
+      responses:
+        '200':
+          description: Превью
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HouseholdInvitePreview'
+        '400':
+          description: '`ERR_INVITE_INVALID`'
+        '409':
+          description: '`ERR_HOUSEHOLD_ALREADY_MEMBER`'
+        '429':
+          description: Слишком много попыток
+  /household-invites/accept:
+    post:
+      tags: [Household]
+      summary: Принять приглашение
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code:
+                  type: string
+      responses:
+        '200':
+          description: Членство
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HouseholdMe'
+        '400':
+          description: '`ERR_INVITE_INVALID`'
+        '409':
+          description: '`ERR_HOUSEHOLD_ALREADY_MEMBER`'
+        '429':
+          description: Слишком много попыток
+  /households/me/leave:
+    post:
+      tags: [Household]
+      summary: Выйти из семьи
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Вышел
+        '409':
+          description: Owner не может выйти (`ERR_HOUSEHOLD_OWNER_CANNOT_LEAVE`)
+  /households/me/members/{user_id}:
+    delete:
+      tags: [Household]
+      summary: Исключить участника
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Исключён
+        '400':
+          description: Kick себя
+        '403':
+          description: '`ERR_HOUSEHOLD_OWNER_ONLY`'
+        '404':
+          description: '`ERR_HOUSEHOLD_MEMBER_NOT_FOUND`'
+  /households/me/transfer:
+    post:
+      tags: [Household]
+      summary: Передать владение
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id]
+              properties:
+                user_id:
+                  type: string
+      responses:
+        '200':
+          description: Обновлённая семья
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HouseholdMe'
+        '403':
+          description: '`ERR_HOUSEHOLD_OWNER_ONLY`'
+        '404':
+          description: '`ERR_HOUSEHOLD_MEMBER_NOT_FOUND`'
+  /households/me/dissolve:
+    post:
+      tags: [Household]
+      summary: Распустить семью
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                confirm_members:
+                  type: boolean
+      responses:
+        '204':
+          description: Распущена
+        '409':
+          description: |
+            Есть участники без `confirm_members` (`ERR_HOUSEHOLD_HAS_MEMBERS`).
+            Семейные счета раздаются исходным владельцам (или owner, если исходный уже не член).
   /auth/me:
     get:
       summary: Текущий пользователь
@@ -887,6 +1162,8 @@ paths:
       responses:
         '204':
           description: Пользователь удалён
+        '409':
+          description: Owner семьи с другими членами (`ERR_HOUSEHOLD_OWNER_DELETE`)
   /admin/users/{id}/status:
     put:
       summary: Изменить статус пользователя
@@ -1196,6 +1473,8 @@ paths:
           description: |
             Ошибка валидации; неизвестная валюта — `ERR_CURRENCY`; `payment_account_id` в другой
             валюте — `ERR_CURRENCY_MISMATCH`
+        '409':
+          description: '`shared: true` без группы (`ERR_HOUSEHOLD_NOT_MEMBER`)'
   /accounts/{id}:
     get:
       summary: Получить счёт
@@ -1381,7 +1660,57 @@ paths:
         '200':
           description: "Счёт с `is_primary: true`"
         '400':
-          description: Архивный счёт или кредитная карта (`ERR_ACCOUNT_PRIMARY_ARCHIVED` / `ERR_ACCOUNT_PRIMARY_CREDIT_CARD`)
+          description: |
+            Архивный счёт, кредитная карта или семейный счёт
+            (`ERR_ACCOUNT_PRIMARY_ARCHIVED` / `ERR_ACCOUNT_PRIMARY_CREDIT_CARD` / `ERR_ACCOUNT_SHARED_PRIMARY`)
+  /accounts/{id}/share:
+    post:
+      summary: Отдать личный счёт в семью
+      description: |
+        Переносит личный счёт вызывающего к принципалу группы (`MoveAccount`).
+        Связь с другим личным счётом — 409 `ERR_SHARE_LINKED_PERSONAL` (`details.links`).
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: "Счёт с scope household, original_owner и details.moved"
+        '404':
+          description: Счёт не найден или не личный
+        '409':
+          description: |
+            Нет группы (`ERR_HOUSEHOLD_NOT_MEMBER`) или есть связка с другим личным счётом
+            (`ERR_SHARE_LINKED_PERSONAL`)
+  /accounts/{id}/unshare:
+    post:
+      summary: Вернуть семейный счёт исходному владельцу
+      description: |
+        Только owner группы. `MoveAccount` к `original_owner_user_id`, который ещё член.
+        Иначе 409 `ERR_UNSHARE_NO_ORIGINAL_OWNER`. Member → 403 `ERR_HOUSEHOLD_OWNER_ONLY`.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Счёт снова личный, original_owner пустой, details.moved
+        '403':
+          description: '`ERR_HOUSEHOLD_OWNER_ONLY`'
+        '404':
+          description: Счёт не найден или не семейный
+        '409':
+          description: '`ERR_UNSHARE_NO_ORIGINAL_OWNER`'
   /accounts/{id}/credit-limit:
     put:
       summary: Изменить кредитный лимит
@@ -1424,6 +1753,8 @@ paths:
       security:
         - sessionCookie: []
         - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CatalogScope'
       responses:
         '200':
           description: Сводка
@@ -1466,6 +1797,8 @@ paths:
       security:
         - sessionCookie: []
         - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CatalogScope'
       responses:
         '200':
           description: Данные дашборда
@@ -1625,6 +1958,7 @@ paths:
         - $ref: '#/components/parameters/StatsMerchantId'
         - $ref: '#/components/parameters/StatsIncludeFuture'
         - $ref: '#/components/parameters/StatsCurrency'
+        - $ref: '#/components/parameters/CatalogScope'
       responses:
         '200':
           description: Сводка
@@ -1654,6 +1988,7 @@ paths:
         - $ref: '#/components/parameters/StatsStoreId'
         - $ref: '#/components/parameters/StatsMerchantId'
         - $ref: '#/components/parameters/StatsCurrency'
+        - $ref: '#/components/parameters/CatalogScope'
       responses:
         '200':
           description: Список категорий
@@ -1697,6 +2032,7 @@ paths:
         - $ref: '#/components/parameters/StatsStoreId'
         - $ref: '#/components/parameters/StatsMerchantId'
         - $ref: '#/components/parameters/StatsCurrency'
+        - $ref: '#/components/parameters/CatalogScope'
       responses:
         '200':
           description: Список подкатегорий
@@ -1738,6 +2074,7 @@ paths:
         - $ref: '#/components/parameters/StatsKind'
         - $ref: '#/components/parameters/StatsSearch'
         - $ref: '#/components/parameters/StatsCurrency'
+        - $ref: '#/components/parameters/CatalogScope'
       responses:
         '200':
           description: Список магазинов
@@ -1788,6 +2125,7 @@ paths:
         - $ref: '#/components/parameters/StatsStoreId'
         - $ref: '#/components/parameters/StatsMerchantId'
         - $ref: '#/components/parameters/StatsCurrency'
+        - $ref: '#/components/parameters/CatalogScope'
       responses:
         '200':
           description: Доход и расход по периодам
@@ -1844,6 +2182,7 @@ paths:
             type: integer
             default: 20
         - $ref: '#/components/parameters/StatsCurrency'
+        - $ref: '#/components/parameters/CatalogScope'
       responses:
         '200':
           description: Страница операций
@@ -1888,6 +2227,7 @@ paths:
         - $ref: '#/components/parameters/StatsKind'
         - $ref: '#/components/parameters/StatsSearch'
         - $ref: '#/components/parameters/StatsCurrency'
+        - $ref: '#/components/parameters/CatalogScope'
       responses:
         '200':
           description: Контекстная сводка
@@ -1920,6 +2260,7 @@ paths:
             default: month
           description: Пока поддерживается только `month`
         - $ref: '#/components/parameters/StatsCurrency'
+        - $ref: '#/components/parameters/CatalogScope'
       responses:
         '200':
           description: Текущий нетто и ряд по месяцам
@@ -2049,6 +2390,7 @@ paths:
           schema:
             type: integer
             default: 50
+        - $ref: '#/components/parameters/CatalogScope'
       responses:
         '200':
           description: Страница операций
@@ -2081,6 +2423,7 @@ paths:
             Ошибка валидации.
             Для системных категорий (`category.is_system=true`) запрещено создавать плановые операции (`kind=future`);
             возвращается сообщение по ключу `ERR_SYSTEM_CATEGORY_PLANNED`.
+            Справочник другого принципала — `ERR_SCOPE_MISMATCH`.
   /categories:
     get:
       summary: Список категорий
@@ -2095,6 +2438,7 @@ paths:
           schema:
             type: string
             enum: [income, expense]
+        - $ref: '#/components/parameters/CatalogScope'
       responses:
         '200':
           description: Список категорий
@@ -2283,6 +2627,8 @@ paths:
       security:
         - sessionCookie: []
         - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CatalogScope'
       responses:
         '200':
           description: Список
@@ -2415,6 +2761,7 @@ paths:
           in: query
           schema:
             type: string
+        - $ref: '#/components/parameters/CatalogScope'
       responses:
         '200':
           description: Список
@@ -2488,10 +2835,12 @@ paths:
       summary: Список шаблонов операций
       description: |
         Именованные пресеты для быстрого создания операций. Кеш GET TTL 5 мин.
-        Сортировка: `sort_order`, затем имя.
+        Сортировка: `sort_order`, затем имя. Принципал шаблона — принципал счёта.
       security:
         - sessionCookie: []
         - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CatalogScope'
       responses:
         '200':
           description: Список
@@ -2613,6 +2962,8 @@ paths:
       security:
         - sessionCookie: []
         - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CatalogScope'
       responses:
         '200':
           description: Список
@@ -2755,6 +3106,8 @@ paths:
       security:
         - sessionCookie: []
         - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CatalogScope'
       responses:
         '200':
           description: Список
@@ -3799,6 +4152,8 @@ paths:
       security:
         - sessionCookie: []
         - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CatalogScope'
       responses:
         '200':
           description: Магазины пользователя
@@ -4043,6 +4398,8 @@ paths:
           description: |
             Ошибка валидации (тот же счёт, сумма и т.д.), `ERR_TRANSFER_TO_AMOUNT_REQUIRED`,
             `ERR_TRANSFER_TO_AMOUNT_MISMATCH`
+        '403':
+          description: Второй счёт перевода невидим (`ERR_TRANSFER_FOREIGN_ACCOUNT`)
   /transfers/{group_id}:
     put:
       summary: Обновить перевод
@@ -4073,6 +4430,8 @@ paths:
                 $ref: '#/components/schemas/Transfer'
         '400':
           description: Ошибка валидации, `ERR_TRANSFER_TO_AMOUNT_REQUIRED`, `ERR_TRANSFER_TO_AMOUNT_MISMATCH`
+        '403':
+          description: Второй счёт перевода невидим (`ERR_TRANSFER_FOREIGN_ACCOUNT`)
         '404':
           description: Не найден
     delete:
@@ -4090,6 +4449,8 @@ paths:
       responses:
         '204':
           description: Удалён
+        '403':
+          description: Второй счёт перевода невидим (`ERR_TRANSFER_FOREIGN_ACCOUNT`)
         '404':
           description: Не найден
   /import/headers:
@@ -4375,6 +4736,15 @@ components:
       schema:
         type: string
       description: Фильтр по каталогу магазинов (`merchants`). Сужает те же выборки, что и `store_id`.
+    CatalogScope:
+      name: scope
+      in: query
+      schema:
+        type: string
+        enum: [all, personal, household]
+      description: |
+        Фильтр каталога. Без параметра или `all` — личный и семейный.
+        `household` без группы — пустой список, не 4xx.
     StatsKind:
       name: kind
       in: query
@@ -5326,6 +5696,10 @@ components:
           type: integer
         created_at:
           type: string
+        scope:
+          type: string
+          enum: [personal, household]
+          description: Каталог принципала относительно вызывающего
     CategoryCreate:
       type: object
       required: [name, type, icon]
@@ -5339,6 +5713,10 @@ components:
           type: string
         sort_order:
           type: integer
+        scope:
+          type: string
+          enum: [personal, household]
+          description: Без поля — personal. `household` без группы — 409 `ERR_HOUSEHOLD_NOT_MEMBER`
     CategoryReorder:
       type: object
       required: [type, ids]
@@ -5399,6 +5777,10 @@ components:
       properties:
         name:
           type: string
+        scope:
+          type: string
+          enum: [personal, household]
+          description: Без поля — personal. `household` без группы — 409 `ERR_HOUSEHOLD_NOT_MEMBER`
     TransactionTemplate:
       type: object
       required: [id, name, type, sort_order, tags, created_at, updated_at]
@@ -5406,6 +5788,9 @@ components:
       properties:
         id:
           type: string
+        scope:
+          type: string
+          enum: [personal, household]
         name:
           type: string
         type:
@@ -5493,6 +5878,9 @@ components:
       properties:
         id:
           type: string
+        scope:
+          type: string
+          enum: [personal, household]
         kind:
           type: string
           enum: [category_account, text_category]
@@ -5536,6 +5924,10 @@ components:
         default_account_id:
           type: string
           nullable: true
+        scope:
+          type: string
+          enum: [personal, household]
+          description: Без поля — personal. `household` без группы — 409 `ERR_HOUSEHOLD_NOT_MEMBER`
     CategoryRuleEvaluateRequest:
       type: object
       properties:
@@ -5589,6 +5981,9 @@ components:
       properties:
         id:
           type: string
+        scope:
+          type: string
+          enum: [personal, household]
         name:
           type: string
         icon:
@@ -5617,6 +6012,10 @@ components:
             При обновлении заменяет список; нет поля — список не меняется.
           items:
             type: string
+        scope:
+          type: string
+          enum: [personal, household]
+          description: Без поля — personal. `household` без группы — 409 `ERR_HOUSEHOLD_NOT_MEMBER`
     MerchantMerge:
       type: object
       required: [source_ids]
@@ -5631,6 +6030,9 @@ components:
       properties:
         id:
           type: string
+        scope:
+          type: string
+          enum: [personal, household]
         name:
           type: string
         created_at:
@@ -5651,6 +6053,19 @@ components:
       properties:
         id:
           type: string
+        scope:
+          type: string
+          enum: [personal, household]
+          description: Принципал счёта ноги относительно вызывающего
+        created_by:
+          type: object
+          nullable: true
+          description: Кто создал операцию (для личных тоже заполнено)
+          properties:
+            user_id:
+              type: string
+            display_name:
+              type: string
         account_id:
           type: string
         account_name:
@@ -5732,7 +6147,13 @@ components:
         transfer_account_id:
           type: string
           nullable: true
-          description: ID второго счёта перевода
+          description: ID второго счёта перевода; `null`, если счёт невидим вызывающему
+        transfer_account_masked:
+          type: boolean
+          description: Второй счёт перевода не входит в видимое множество
+        transfer_account_label:
+          type: string
+          description: Подпись вместо имени чужого счёта, например «Личный счёт Иван»
         transfer_account_name:
           type: string
           nullable: true
@@ -5901,6 +6322,9 @@ components:
       properties:
         id:
           type: string
+        scope:
+          type: string
+          enum: [personal, household]
         name:
           type: string
         created_at:
@@ -6237,6 +6661,19 @@ components:
           type: string
         updated_at:
           type: string
+        scope:
+          type: string
+          enum: [personal, household]
+          description: Личный счёт вызывающего или счёт семьи
+        original_owner:
+          type: object
+          nullable: true
+          description: Кто отдал счёт в семью через share; null у счёта, созданного сразу семейным
+          properties:
+            user_id:
+              type: string
+            display_name:
+              type: string
     AccountCreate:
       type: object
       required: [name, type]
@@ -6262,6 +6699,11 @@ components:
         currency:
           type: string
           description: Код из `GET /currencies`; по умолчанию — валюта профиля. Неизвестный код — `ERR_CURRENCY`
+        shared:
+          type: boolean
+          description: |
+            Создать счёт у принципала семьи. Без группы — 409 `ERR_HOUSEHOLD_NOT_MEMBER`.
+            Семейный счёт не бывает основным.
     AccountUpdate:
       type: object
       properties:
@@ -6316,6 +6758,10 @@ components:
           type: string
           enum: [cash, bank, credit_card]
           description: Для иконки на главной (`AccountIcon`)
+        scope:
+          type: string
+          enum: [personal, household]
+          description: Личный или семейный счёт (для бейджа и группировки на главной)
         bank_icon:
           type: string
           nullable: true
@@ -6706,6 +7152,9 @@ components:
       properties:
         id:
           type: string
+        scope:
+          type: string
+          enum: [personal, household]
         name:
           type: string
         created_at:
@@ -7802,3 +8251,71 @@ components:
             never_expires:
               type: boolean
               description: "true, если токен бессрочный"
+    Household:
+      type: object
+      required: [id, name, kind, created_at]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        kind:
+          type: string
+          enum: [family, team]
+        created_at:
+          type: string
+    HouseholdMember:
+      type: object
+      required: [user_id, display_name, login, role, joined_at]
+      properties:
+        user_id:
+          type: string
+        display_name:
+          type: string
+        login:
+          type: string
+        role:
+          type: string
+          enum: [owner, member]
+        joined_at:
+          type: string
+    HouseholdMe:
+      type: object
+      required: [household]
+      properties:
+        household:
+          allOf:
+            - $ref: '#/components/schemas/Household'
+          nullable: true
+        role:
+          type: string
+          enum: [owner, member]
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/HouseholdMember'
+    HouseholdInvite:
+      type: object
+      required: [id, code, expires_at]
+      properties:
+        id:
+          type: string
+        code:
+          type: string
+          description: Отображение XXX-XXX-XXX
+        url:
+          type: string
+        created_at:
+          type: string
+        expires_at:
+          type: string
+    HouseholdInvitePreview:
+      type: object
+      required: [household_name, owner_display_name, expires_at]
+      properties:
+        household_name:
+          type: string
+        owner_display_name:
+          type: string
+        expires_at:
+          type: string

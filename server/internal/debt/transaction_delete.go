@@ -56,11 +56,11 @@ func OnTransactionDelete(ctx context.Context, q *sqlcdb.Queries, userID, txID st
 		}
 		return nil
 	case "settle":
-		txRow, err := q.GetTransactionByID(ctx, sqlcdb.GetTransactionByIDParams{ID: txID, UserID: userID})
+		txRow, err := q.GetTransactionByID(ctx, sqlcdb.GetTransactionByIDParams{ID: txID, OwnerIds: []string{userID}})
 		if err != nil {
 			return err
 		}
-		debtRow, err := q.GetDebtByID(ctx, sqlcdb.GetDebtByIDParams{ID: link.DebtID, UserID: userID})
+		debtRow, err := q.GetDebtByID(ctx, sqlcdb.GetDebtByIDParams{ID: link.DebtID, OwnerIds: []string{userID}})
 		if err != nil {
 			return err
 		}

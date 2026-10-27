@@ -1,14 +1,17 @@
 -- name: ListTagsByUser :many
 SELECT id, user_id, name, created_at
 FROM tags
-WHERE user_id = ?
-  AND (? = '' OR name LIKE '%' || ? || '%')
+WHERE (sqlc.arg('q') = '' OR name LIKE '%' || sqlc.arg('q') || '%')
+  AND user_id IN (sqlc.slice('owner_ids'))
 ORDER BY name COLLATE NOCASE ASC;
+
+-- name: GetTagUserID :one
+SELECT user_id FROM tags WHERE id = ?;
 
 -- name: GetTagByID :one
 SELECT id, user_id, name, created_at
 FROM tags
-WHERE id = ? AND user_id = ?;
+WHERE id = sqlc.arg('id') AND user_id IN (sqlc.slice('owner_ids'));
 
 -- name: GetTagByName :one
 SELECT id, user_id, name, created_at

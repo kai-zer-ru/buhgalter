@@ -18,7 +18,7 @@
 		mode?: AccountLabelMode;
 	} = $props();
 
-	type AccountRef = { id: string; name: string; status?: string };
+	type AccountRef = { id: string; name: string; status?: string; masked?: boolean };
 
 	function statusForAccountId(accountId: string): string | undefined {
 		if (accountId === tx.account_id) return tx.account_status;
@@ -39,19 +39,23 @@
 
 		const names = transferRoute(tx, siblings);
 		const { fromAccountId, toAccountId } = transferAccountIds(tx, siblings);
+		const maskTo = Boolean(tx.transfer_account_masked && tx.transfer_is_out);
+		const maskFrom = Boolean(tx.transfer_account_masked && !tx.transfer_is_out);
 		const accounts: AccountRef[] = [];
-		if (names.from && fromAccountId) {
+		if (names.from && (fromAccountId || maskFrom)) {
 			accounts.push({
 				id: fromAccountId,
 				name: names.from,
-				status: statusForAccountId(fromAccountId)
+				status: statusForAccountId(fromAccountId),
+				masked: maskFrom
 			});
 		}
-		if (names.to && toAccountId) {
+		if (names.to && (toAccountId || maskTo)) {
 			accounts.push({
 				id: toAccountId,
 				name: names.to,
-				status: statusForAccountId(toAccountId)
+				status: statusForAccountId(toAccountId),
+				masked: maskTo
 			});
 		}
 		return { prefix: '', accounts };
@@ -59,7 +63,11 @@
 </script>
 
 {#snippet accountLink(ref: AccountRef)}
-	<EntityLink kind="account" id={ref.id} label={ref.name} />
+	{#if ref.masked || !ref.id}
+		<span>{ref.name}</span>
+	{:else}
+		<EntityLink kind="account" id={ref.id} label={ref.name} />
+	{/if}
 	{#if ref.status === 'archived'}
 		<span class="text-xs" style:color="var(--text-muted)"> ({$_('accounts.status.archived')})</span>
 	{:else if ref.status === 'deleted'}

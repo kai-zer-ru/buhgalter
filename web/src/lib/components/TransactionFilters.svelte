@@ -7,6 +7,7 @@
 	import FilterPanel from '$lib/components/FilterPanel.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import { accountSelectOptions, categorySelectOptions } from '$lib/select-options';
+	import { refsForAccount } from '$lib/household/refs-for-account';
 
 	type Props = {
 		fromLocal: string;
@@ -63,10 +64,16 @@
 		...accountSelectOptions(accounts)
 	]);
 
+	const selectedAcc = $derived(accounts.find((acc) => acc.id === accountId));
+	const scopedCategories = $derived(
+		accountId ? refsForAccount(selectedAcc, categories) : categories
+	);
+	const scopedMerchants = $derived(accountId ? refsForAccount(selectedAcc, merchants) : merchants);
+	const scopedTags = $derived(accountId ? refsForAccount(selectedAcc, tags) : tags);
 	const filteredCategories = $derived(
 		type === 'income' || type === 'expense'
-			? categories.filter((cat) => cat.type === type)
-			: categories
+			? scopedCategories.filter((cat) => cat.type === type)
+			: scopedCategories
 	);
 
 	const categoryOptions = $derived([
@@ -91,7 +98,7 @@
 
 	const merchantOptions = $derived([
 		{ value: '', label: $_('transactions.filters.allMerchants') },
-		...merchants.map((m) => ({
+		...scopedMerchants.map((m) => ({
 			value: m.id,
 			label: m.name,
 			icon: { type: 'category' as const, icon: m.icon || 'default' }
@@ -100,7 +107,7 @@
 
 	const tagOptions = $derived([
 		{ value: '', label: $_('transactions.filters.allTags') },
-		...tags.map((t) => ({ value: t.id, label: t.name }))
+		...scopedTags.map((t) => ({ value: t.id, label: t.name }))
 	]);
 </script>
 

@@ -13,6 +13,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
 	"github.com/kai-zer-ru/buhgalter/internal/money"
+	"github.com/kai-zer-ru/buhgalter/internal/scope"
 )
 
 type Handler struct {
@@ -40,7 +41,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	month := r.URL.Query().Get("month")
-	items, err := List(r.Context(), h.Store.DB(), info.User.ID, month)
+	items, err := ListForOwners(r.Context(), h.Store.DB(), info.Scope.OwnerIDs(), month)
 	if writeBudgetError(w, r, err) {
 		return
 	}
@@ -54,11 +55,11 @@ func (h *Handler) Summary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	month := r.URL.Query().Get("month")
-	result, err := Summary(r.Context(), h.Store.DB(), info.User.ID, month)
+	result, err := SummaryForOwners(r.Context(), h.Store.DB(), info.User.ID, info.Scope.OwnerIDs(), month)
 	if writeBudgetError(w, r, err) {
 		return
 	}
-	available, err := account.ActiveCurrencies(r.Context(), h.Store.DB(), info.User.ID)
+	available, err := account.ActiveCurrenciesOwned(r.Context(), h.Store.DB(), info.User.ID, info.Scope.OwnerIDs())
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
@@ -132,7 +133,20 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in.Month = month
-	item, err := Create(r.Context(), h.Store.DB(), info.User.ID, in)
+	ownerID := info.User.ID
+	if in.AccountID != nil && strings.TrimSpace(*in.AccountID) != "" {
+		oid, err := scope.PrincipalForAccount(r.Context(), h.Store.DB(), info.Scope.OwnerIDs(), strings.TrimSpace(*in.AccountID))
+		if err != nil {
+			if errors.Is(err, scope.ErrNotFound) {
+				writeBudgetError(w, r, ErrInvalidAccount)
+				return
+			}
+			apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+			return
+		}
+		ownerID = oid
+	}
+	item, err := Create(r.Context(), h.Store.DB(), ownerID, in)
 	if writeBudgetError(w, r, err) {
 		return
 	}
@@ -158,7 +172,11 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	month := r.URL.Query().Get("month")
-	item, err := Update(r.Context(), h.Store.DB(), info.User.ID, id, in, month)
+	existing, err := GetForOwners(r.Context(), h.Store.DB(), info.Scope.OwnerIDs(), id)
+	if writeBudgetError(w, r, err) {
+		return
+	}
+	item, err := Update(r.Context(), h.Store.DB(), existing.OwnerUserID, id, in, month)
 	if writeBudgetError(w, r, err) {
 		return
 	}
@@ -173,7 +191,11 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := chi.URLParam(r, "id")
-	if err := Delete(r.Context(), h.Store.DB(), info.User.ID, id); writeBudgetError(w, r, err) {
+	existing, err := GetForOwners(r.Context(), h.Store.DB(), info.Scope.OwnerIDs(), id)
+	if writeBudgetError(w, r, err) {
+		return
+	}
+	if err := Delete(r.Context(), h.Store.DB(), existing.OwnerUserID, id); writeBudgetError(w, r, err) {
 		return
 	}
 	_ = h.Audit.Log("budget.delete", info.User.ID, info.User.Login, clientIP(r), map[string]any{"id": id})
@@ -187,7 +209,11 @@ func (h *Handler) CopyNext(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := chi.URLParam(r, "id")
-	item, err := CopyToNextMonth(r.Context(), h.Store.DB(), info.User.ID, id)
+	existing, err := GetForOwners(r.Context(), h.Store.DB(), info.Scope.OwnerIDs(), id)
+	if writeBudgetError(w, r, err) {
+		return
+	}
+	item, err := CopyToNextMonth(r.Context(), h.Store.DB(), existing.OwnerUserID, id)
 	if writeBudgetError(w, r, err) {
 		return
 	}

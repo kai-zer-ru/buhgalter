@@ -40,6 +40,8 @@
 	} from '$lib/offline/ref-cache-mutations';
 	import { refCachePathMatches } from '$lib/offline/ref-cache-watch';
 	import { beginPointerDrag, moveId, type DragGhostView } from '$lib/drag-reorder';
+	import CatalogScopeTabs from '$lib/components/CatalogScopeTabs.svelte';
+	import { householdMe, inHousehold } from '$lib/household/membership';
 
 	type Tab = 'expense' | 'income';
 	type SubDialogState =
@@ -57,6 +59,7 @@
 	}
 
 	let tab = $state<Tab>(tabFromSearchParams(get(page).url.searchParams));
+	let catalogScope = $state<'personal' | 'household'>('personal');
 	let categories = $state<Category[]>([]);
 	let subs = $state<Record<string, Subcategory[]>>({});
 	let expanded = $state<Record<string, boolean>>({});
@@ -140,7 +143,7 @@
 	async function load(opts: { background?: boolean } = {}) {
 		if (!opts.background) loading = true;
 		try {
-			categories = await listCategories(tab);
+			categories = await listCategories(tab, inHousehold($householdMe) ? catalogScope : undefined);
 			loadError = null;
 		} catch (err) {
 			const msg = reportPageLoadFailure(err, { hasData: categories.length > 0 });
@@ -193,7 +196,12 @@
 	async function addCategory() {
 		if (!newName.trim()) return;
 		try {
-			const category = await createCategory({ name: newName.trim(), type: tab, icon: newIcon });
+			const category = await createCategory({
+				name: newName.trim(),
+				type: tab,
+				icon: newIcon,
+				scope: inHousehold($householdMe) ? catalogScope : undefined
+			});
 			categories = [...categories, category];
 			newName = '';
 			newIcon = defaultIconForKind(tab);
@@ -394,6 +402,14 @@
 {/if}
 
 <div class="space-y-6">
+	<CatalogScopeTabs
+		mode="catalog"
+		value={catalogScope}
+		onchange={(next) => {
+			catalogScope = next === 'household' ? 'household' : 'personal';
+			void load();
+		}}
+	/>
 	<div class="page-tabs-scroll">
 		<div class="page-tabs-row">
 			<button

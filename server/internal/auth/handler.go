@@ -2,6 +2,7 @@ package auth
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -192,6 +193,10 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 
 	userID, err := CreateUser(r.Context(), h.Store.DB(), login, hash, displayName, false, UserStatusPending)
 	if err != nil {
+		if errors.Is(err, ErrReservedLogin) {
+			apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_LOGIN_RESERVED")
+			return
+		}
 		if strings.Contains(err.Error(), "UNIQUE") {
 			apperror.WriteR(w, r, http.StatusConflict, apperror.ValidationError, "CONFLICT_LOGIN_TAKEN")
 			return

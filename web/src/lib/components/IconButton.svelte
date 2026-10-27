@@ -13,13 +13,15 @@
 		| 'expense'
 		| 'pay'
 		| 'transfer'
+		| 'share'
 		| 'save'
 		| 'cancel'
 		| 'create'
 		| 'archive'
 		| 'repeat'
 		| 'bank'
-		| 'receipt';
+		| 'receipt'
+		| 'qr';
 
 	let {
 		icon,

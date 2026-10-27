@@ -10,11 +10,15 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/scope"
 )
 
 type Category struct {
 	ID               string        `json:"id"`
+	OwnerUserID      string        `json:"-"`
+	Scope            string        `json:"scope,omitempty"`
 	Name             string        `json:"name"`
 	Type             string        `json:"type"`
 	Icon             string        `json:"icon"`
@@ -48,11 +52,12 @@ func queries(db sqlcdb.DBTX) *sqlcdb.Queries {
 }
 
 func categoryFromRow(
-	id, name, catType, icon, createdAt string,
+	id, ownerUserID, name, catType, icon, createdAt string,
 	sortOrder, isPrimary, isSystem, subCount int64,
 ) Category {
 	return Category{
 		ID:               id,
+		OwnerUserID:      ownerUserID,
 		Name:             name,
 		Type:             catType,
 		Icon:             icon,
@@ -64,16 +69,21 @@ func categoryFromRow(
 	}
 }
 
+func withCatScope(sc auth.Scope, c Category) Category {
+	c.Scope = scope.AccountScope(sc, c.OwnerUserID)
+	return c
+}
+
 func categoryFromGet(row sqlcdb.GetCategoryByIDRow) Category {
-	return categoryFromRow(row.ID, row.Name, row.Type, row.Icon, row.CreatedAt, row.SortOrder, row.IsPrimary, row.IsSystem, row.SubCount)
+	return categoryFromRow(row.ID, row.UserID, row.Name, row.Type, row.Icon, row.CreatedAt, row.SortOrder, row.IsPrimary, row.IsSystem, row.SubCount)
 }
 
 func categoryFromList(row sqlcdb.ListCategoriesByUserRow) Category {
-	return categoryFromRow(row.ID, row.Name, row.Type, row.Icon, row.CreatedAt, row.SortOrder, row.IsPrimary, row.IsSystem, row.SubCount)
+	return categoryFromRow(row.ID, row.UserID, row.Name, row.Type, row.Icon, row.CreatedAt, row.SortOrder, row.IsPrimary, row.IsSystem, row.SubCount)
 }
 
 func categoryFromListType(row sqlcdb.ListCategoriesByUserAndTypeRow) Category {
-	return categoryFromRow(row.ID, row.Name, row.Type, row.Icon, row.CreatedAt, row.SortOrder, row.IsPrimary, row.IsSystem, row.SubCount)
+	return categoryFromRow(row.ID, row.UserID, row.Name, row.Type, row.Icon, row.CreatedAt, row.SortOrder, row.IsPrimary, row.IsSystem, row.SubCount)
 }
 
 func subcategoryFromRow(id, categoryID, name, icon, createdAt string, sortOrder int64) Subcategory {
@@ -129,42 +139,58 @@ func maxSortOrder(ctx context.Context, q *sqlcdb.Queries, userID, catType string
 }
 
 func ListByUser(ctx context.Context, db *sql.DB, userID, catType string) ([]Category, error) {
+	return ListByScope(ctx, db, auth.Scope{UserID: userID}, "", catType)
+}
+
+func ListByScope(ctx context.Context, db *sql.DB, sc auth.Scope, view, catType string) ([]Category, error) {
+	ids := scope.FilterOwnerIDs(sc, view)
+	if len(ids) == 0 {
+		return []Category{}, nil
+	}
 	q := queries(db)
 	if catType != "" {
 		rows, err := q.ListCategoriesByUserAndType(ctx, sqlcdb.ListCategoriesByUserAndTypeParams{
-			UserID: userID,
-			Type:   catType,
+			OwnerIds: ids,
+			Type:     catType,
 		})
 		if err != nil {
 			return nil, err
 		}
 		out := make([]Category, 0, len(rows))
 		for _, row := range rows {
-			out = append(out, categoryFromListType(row))
+			out = append(out, withCatScope(sc, categoryFromListType(row)))
 		}
 		return out, nil
 	}
 
-	rows, err := q.ListCategoriesByUser(ctx, userID)
+	rows, err := q.ListCategoriesByUser(ctx, ids)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]Category, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, categoryFromList(row))
+		out = append(out, withCatScope(sc, categoryFromList(row)))
 	}
 	return out, nil
 }
 
 func GetByID(ctx context.Context, db *sql.DB, userID, id string) (Category, error) {
-	row, err := queries(db).GetCategoryByID(ctx, sqlcdb.GetCategoryByIDParams{ID: id, UserID: userID})
+	return GetByScope(ctx, db, auth.Scope{UserID: userID}, id)
+}
+
+func GetByScope(ctx context.Context, db *sql.DB, sc auth.Scope, id string) (Category, error) {
+	ids := sc.OwnerIDs()
+	if len(ids) == 0 {
+		return Category{}, ErrNotFound
+	}
+	row, err := queries(db).GetCategoryByID(ctx, sqlcdb.GetCategoryByIDParams{ID: id, OwnerIds: ids})
 	if errors.Is(err, sql.ErrNoRows) {
 		return Category{}, ErrNotFound
 	}
 	if err != nil {
 		return Category{}, err
 	}
-	return categoryFromGet(row), nil
+	return withCatScope(sc, categoryFromGet(row)), nil
 }
 
 func Create(ctx context.Context, db *sql.DB, userID, name, catType, icon string, sortOrder int) (Category, error) {
@@ -222,10 +248,15 @@ func Create(ctx context.Context, db *sql.DB, userID, name, catType, icon string,
 }
 
 func Update(ctx context.Context, db *sql.DB, userID, id, name, icon string, sortOrder *int) (Category, error) {
-	existing, err := GetByID(ctx, db, userID, id)
+	return UpdateByScope(ctx, db, auth.Scope{UserID: userID}, id, name, icon, sortOrder)
+}
+
+func UpdateByScope(ctx context.Context, db *sql.DB, sc auth.Scope, id, name, icon string, sortOrder *int) (Category, error) {
+	existing, err := GetByScope(ctx, db, sc, id)
 	if err != nil {
 		return Category{}, err
 	}
+	userID := existing.OwnerUserID
 	if existing.IsSystem {
 		return Category{}, ErrSystemCategory
 	}
@@ -252,14 +283,18 @@ func Update(ctx context.Context, db *sql.DB, userID, id, name, icon string, sort
 	}); err != nil {
 		return Category{}, err
 	}
-	return GetByID(ctx, db, userID, id)
+	return GetByScope(ctx, db, sc, id)
 }
 
 func Reorder(ctx context.Context, db *sql.DB, userID, catType string, ids []string) error {
+	return ReorderByScope(ctx, db, auth.Scope{UserID: userID}, catType, ids)
+}
+
+func ReorderByScope(ctx context.Context, db *sql.DB, sc auth.Scope, catType string, ids []string) error {
 	if catType != "income" && catType != "expense" {
 		return ErrInvalidReorder
 	}
-	existing, err := ListByUser(ctx, db, userID, catType)
+	existing, err := ListByScope(ctx, db, sc, "", catType)
 	if err != nil {
 		return err
 	}
@@ -294,11 +329,16 @@ func Reorder(ctx context.Context, db *sql.DB, userID, catType string, ids []stri
 	defer func() { _ = tx.Rollback() }()
 
 	q := queries(tx)
+	byID := make(map[string]Category, len(existing))
+	for _, c := range existing {
+		byID[c.ID] = c
+	}
 	for i, id := range ids {
+		owner := byID[id].OwnerUserID
 		if err := q.UpdateCategorySortOrder(ctx, sqlcdb.UpdateCategorySortOrderParams{
 			SortOrder: int64(i + 1),
 			ID:        id,
-			UserID:    userID,
+			UserID:    owner,
 		}); err != nil {
 			return err
 		}
@@ -351,10 +391,15 @@ func normalizeCategoryOrder(existing []Category, ids []string) ([]string, error)
 }
 
 func SetPrimary(ctx context.Context, db *sql.DB, userID, id string) (Category, error) {
-	cat, err := GetByID(ctx, db, userID, id)
+	return SetPrimaryByScope(ctx, db, auth.Scope{UserID: userID}, id)
+}
+
+func SetPrimaryByScope(ctx context.Context, db *sql.DB, sc auth.Scope, id string) (Category, error) {
+	cat, err := GetByScope(ctx, db, sc, id)
 	if err != nil {
 		return Category{}, err
 	}
+	userID := cat.OwnerUserID
 	if cat.IsSystem {
 		return Category{}, ErrSystemCategory
 	}
@@ -381,11 +426,15 @@ func SetPrimary(ctx context.Context, db *sql.DB, userID, id string) (Category, e
 	if err := tx.Commit(); err != nil {
 		return Category{}, err
 	}
-	return GetByID(ctx, db, userID, id)
+	return GetByScope(ctx, db, sc, id)
 }
 
 func Delete(ctx context.Context, db *sql.DB, userID, id string) error {
-	cat, err := GetByID(ctx, db, userID, id)
+	return DeleteByScope(ctx, db, auth.Scope{UserID: userID}, id)
+}
+
+func DeleteByScope(ctx context.Context, db *sql.DB, sc auth.Scope, id string) error {
+	cat, err := GetByScope(ctx, db, sc, id)
 	if err != nil {
 		return err
 	}
@@ -395,6 +444,7 @@ func Delete(ctx context.Context, db *sql.DB, userID, id string) error {
 	wasPrimary := cat.IsPrimary
 	catType := cat.Type
 
+	userID := cat.OwnerUserID
 	n, err := queries(db).DeleteCategory(ctx, sqlcdb.DeleteCategoryParams{ID: id, UserID: userID})
 	if err != nil {
 		return err
@@ -461,7 +511,7 @@ func ListSubcategories(ctx context.Context, db *sql.DB, userID, categoryID strin
 }
 
 func ListSubcategoriesByUser(ctx context.Context, db *sql.DB, userID string) ([]Subcategory, error) {
-	rows, err := queries(db).ListSubcategoriesByUser(ctx, userID)
+	rows, err := queries(db).ListSubcategoriesByUser(ctx, []string{userID})
 	if err != nil {
 		return nil, err
 	}
@@ -562,7 +612,14 @@ func CreateSubcategory(ctx context.Context, db *sql.DB, userID, categoryID, name
 }
 
 func GetSubcategory(ctx context.Context, db *sql.DB, userID, id string) (Subcategory, error) {
-	row, err := queries(db).GetSubcategoryByID(ctx, sqlcdb.GetSubcategoryByIDParams{ID: id, UserID: userID})
+	return GetSubcategoryOwned(ctx, db, []string{userID}, id)
+}
+
+func GetSubcategoryOwned(ctx context.Context, db *sql.DB, ownerIDs []string, id string) (Subcategory, error) {
+	if len(ownerIDs) == 0 {
+		return Subcategory{}, ErrSubNotFound
+	}
+	row, err := queries(db).GetSubcategoryByID(ctx, sqlcdb.GetSubcategoryByIDParams{ID: id, OwnerIds: ownerIDs})
 	if errors.Is(err, sql.ErrNoRows) {
 		return Subcategory{}, ErrSubNotFound
 	}
@@ -573,7 +630,11 @@ func GetSubcategory(ctx context.Context, db *sql.DB, userID, id string) (Subcate
 }
 
 func UpdateSubcategory(ctx context.Context, db *sql.DB, userID, id, name, icon string) (Subcategory, error) {
-	existing, err := GetSubcategory(ctx, db, userID, id)
+	return UpdateSubcategoryOwned(ctx, db, []string{userID}, id, name, icon)
+}
+
+func UpdateSubcategoryOwned(ctx context.Context, db *sql.DB, ownerIDs []string, id, name, icon string) (Subcategory, error) {
+	existing, err := GetSubcategoryOwned(ctx, db, ownerIDs, id)
 	if err != nil {
 		return Subcategory{}, err
 	}
@@ -590,11 +651,15 @@ func UpdateSubcategory(ctx context.Context, db *sql.DB, userID, id, name, icon s
 		}
 		return Subcategory{}, err
 	}
-	return GetSubcategory(ctx, db, userID, id)
+	return GetSubcategoryOwned(ctx, db, ownerIDs, id)
 }
 
 func DeleteSubcategory(ctx context.Context, db *sql.DB, userID, id string) error {
-	if _, err := GetSubcategory(ctx, db, userID, id); err != nil {
+	return DeleteSubcategoryOwned(ctx, db, []string{userID}, id)
+}
+
+func DeleteSubcategoryOwned(ctx context.Context, db *sql.DB, ownerIDs []string, id string) error {
+	if _, err := GetSubcategoryOwned(ctx, db, ownerIDs, id); err != nil {
 		return err
 	}
 	n, err := queries(db).DeleteSubcategory(ctx, id)

@@ -94,6 +94,31 @@ describe('fetchWithRefCache SWR', () => {
 		);
 	});
 
+	it('household membership is network-first online (left on web → phone sees it)', async () => {
+		writeRefCache('/api/v1/households/me', { household: { id: 'h1' } });
+		const fetcher = vi.fn().mockResolvedValue({ household: null });
+		await expect(fetchWithRefCache('/api/v1/households/me', fetcher)).resolves.toEqual({
+			household: null
+		});
+		expect(fetcher).toHaveBeenCalledOnce();
+		expect(readRefCache('/api/v1/households/me')).toEqual({ household: null });
+	});
+
+	it('household invites are network-first online (accepted invite disappears)', async () => {
+		writeRefCache('/api/v1/households/me/invites', [{ id: 'i1' }]);
+		const fetcher = vi.fn().mockResolvedValue([]);
+		await expect(fetchWithRefCache('/api/v1/households/me/invites', fetcher)).resolves.toEqual([]);
+		expect(fetcher).toHaveBeenCalledOnce();
+	});
+
+	it('household membership falls back to cache on connection error', async () => {
+		writeRefCache('/api/v1/households/me', { household: { id: 'h1' } });
+		const fetcher = vi.fn().mockRejectedValue(Object.assign(new Error('x'), { status: 503 }));
+		await expect(fetchWithRefCache('/api/v1/households/me', fetcher)).resolves.toEqual({
+			household: { id: 'h1' }
+		});
+	});
+
 	it('does not rewrite cache or notify when revalidate payload is identical', async () => {
 		const dash = {
 			total_balance: 100,
@@ -451,6 +476,49 @@ describe('readAccountsFromOfflineCache', () => {
 		expect(readCategoriesFromOfflineCache('expense')).toMatchObject([{ id: 'c1', name: 'Еда' }]);
 	});
 
+	it('adds household dashboard accounts missing from the stale accounts list', async () => {
+		const { readRefCache, writeRefCache } = await import('./ref-cache');
+		writeRefCache('/api/v1/accounts?status=active', [
+			{
+				id: 'personal',
+				name: 'Мой',
+				type: 'cash' as const,
+				bank_id: null,
+				initial_balance: 0,
+				balance: 0,
+				balance_display: '0.00',
+				status: 'active' as const,
+				is_primary: true,
+				created_at: '',
+				updated_at: ''
+			}
+		]);
+		writeRefCache('/api/v1/dashboard?scope=household', {
+			total_balance: 0,
+			total_forecast: 0,
+			accounts: [
+				{
+					id: 'hh-cash',
+					name: 'Наличка',
+					type: 'cash',
+					scope: 'household',
+					balance: 0,
+					balance_display: '0.00',
+					forecast_balance: 0,
+					forecast_display: '0.00',
+					has_future_this_month: false,
+					is_primary: false
+				}
+			],
+			debts_summary: { i_owe: 0, owed_to_me: 0 }
+		});
+		const rows = readRefCache<Array<{ id: string; scope?: string }>>(
+			'/api/v1/accounts?status=active'
+		);
+		expect(rows?.map((row) => row.id).sort()).toEqual(['hh-cash', 'personal']);
+		expect(rows?.find((row) => row.id === 'hh-cash')?.scope).toBe('household');
+	});
+
 	it('merges dashboard balances into ui/meta accounts', async () => {
 		const { readAccountsFromOfflineCache, writeRefCache } = await import('./ref-cache');
 		writeRefCache('/api/v1/ui/meta', {
@@ -603,6 +671,26 @@ describe('isPreservedOfflineRefPath', () => {
 		expect(isPreservedOfflineRefPath('/api/v1/debtors/abc')).toBe(true);
 		expect(isPreservedOfflineRefPath('/api/v1/setup/status')).toBe(false);
 		expect(isPreservedOfflineRefPath('/api/v1/sync/transaction-changes')).toBe(false);
+	});
+});
+
+describe('ref-cache catalog scope', () => {
+	beforeEach(() => {
+		resetRefCacheForTests();
+		currentServerUrl = 'http://test.local:8765';
+	});
+
+	afterEach(() => {
+		resetRefCacheForTests();
+	});
+
+	it('stores scope on catalog rows for offline refsForAccount', () => {
+		writeRefCache('/api/v1/categories?type=expense&scope=household', [
+			{ id: 'c1', name: 'Food', scope: 'household' }
+		]);
+		expect(readRefCache('/api/v1/categories?type=expense&scope=household')).toEqual([
+			{ id: 'c1', name: 'Food', scope: 'household' }
+		]);
 	});
 });
 

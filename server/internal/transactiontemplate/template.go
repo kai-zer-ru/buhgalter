@@ -9,7 +9,9 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/scope"
 	"github.com/kai-zer-ru/buhgalter/internal/tag"
 )
 
@@ -21,6 +23,8 @@ const (
 
 type Template struct {
 	ID            string    `json:"id"`
+	OwnerUserID   string    `json:"-"`
+	Scope         string    `json:"scope,omitempty"`
 	Name          string    `json:"name"`
 	Type          string    `json:"type"`
 	AccountID     *string   `json:"account_id,omitempty"`
@@ -69,25 +73,42 @@ func queries(db sqlcdb.DBTX) *sqlcdb.Queries {
 }
 
 func List(ctx context.Context, db *sql.DB, userID string) ([]Template, error) {
-	rows, err := queries(db).ListTransactionTemplatesByUser(ctx, userID)
+	return ListByScope(ctx, db, auth.Scope{UserID: userID}, "")
+}
+
+func ListByScope(ctx context.Context, db *sql.DB, sc auth.Scope, view string) ([]Template, error) {
+	ids := scope.FilterOwnerIDs(sc, view)
+	if len(ids) == 0 {
+		return []Template{}, nil
+	}
+	rows, err := queries(db).ListTransactionTemplatesByUser(ctx, ids)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]Template, 0, len(rows))
-	ids := make([]string, 0, len(rows))
+	tmplIDs := make([]string, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, fromRow(row))
-		ids = append(ids, row.ID)
+		tmplIDs = append(tmplIDs, row.ID)
 	}
-	if err := attachTags(ctx, db, out, ids); err != nil {
+	if err := attachTags(ctx, db, out, tmplIDs); err != nil {
 		return nil, err
 	}
+	decorateTemplates(sc, out)
 	return out, nil
 }
 
 func Get(ctx context.Context, db *sql.DB, userID, id string) (Template, error) {
+	return GetByScope(ctx, db, auth.Scope{UserID: userID}, id)
+}
+
+func GetByScope(ctx context.Context, db *sql.DB, sc auth.Scope, id string) (Template, error) {
+	ids := sc.OwnerIDs()
+	if len(ids) == 0 {
+		return Template{}, ErrNotFound
+	}
 	row, err := queries(db).GetTransactionTemplateByID(ctx, sqlcdb.GetTransactionTemplateByIDParams{
-		ID: id, UserID: userID,
+		ID: id, OwnerIds: ids,
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return Template{}, ErrNotFound
@@ -101,6 +122,7 @@ func Get(ctx context.Context, db *sql.DB, userID, id string) (Template, error) {
 		return Template{}, err
 	}
 	t.Tags = tags
+	t.Scope = scope.AccountScope(sc, t.OwnerUserID)
 	return t, nil
 }
 
@@ -312,7 +334,7 @@ func normalizeInput(ctx context.Context, db *sql.DB, userID string, in Input) (I
 	}
 	cat := trimPtr(in.CategoryID)
 	if cat != nil {
-		row, err := queries(db).GetCategoryByID(ctx, sqlcdb.GetCategoryByIDParams{ID: *cat, UserID: userID})
+		row, err := queries(db).GetCategoryByID(ctx, sqlcdb.GetCategoryByIDParams{ID: *cat, OwnerIds: []string{userID}})
 		if errors.Is(err, sql.ErrNoRows) {
 			return Input{}, ErrInvalidCategory
 		}
@@ -329,7 +351,7 @@ func normalizeInput(ctx context.Context, db *sql.DB, userID string, in Input) (I
 		if cat == nil {
 			return Input{}, ErrInvalidCategory
 		}
-		row, err := queries(db).GetSubcategoryByID(ctx, sqlcdb.GetSubcategoryByIDParams{ID: *sub, UserID: userID})
+		row, err := queries(db).GetSubcategoryByID(ctx, sqlcdb.GetSubcategoryByIDParams{ID: *sub, OwnerIds: []string{userID}})
 		if errors.Is(err, sql.ErrNoRows) {
 			return Input{}, ErrInvalidCategory
 		}
@@ -343,7 +365,7 @@ func normalizeInput(ctx context.Context, db *sql.DB, userID string, in Input) (I
 	}
 	merch := trimPtr(in.MerchantID)
 	if merch != nil {
-		if _, err := queries(db).GetMerchantByID(ctx, sqlcdb.GetMerchantByIDParams{ID: *merch, UserID: userID}); err != nil {
+		if _, err := queries(db).GetMerchantByID(ctx, sqlcdb.GetMerchantByIDParams{ID: *merch, OwnerIds: []string{userID}}); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return Input{}, ErrInvalidMerchant
 			}
@@ -352,7 +374,7 @@ func normalizeInput(ctx context.Context, db *sql.DB, userID string, in Input) (I
 		out.MerchantID = merch
 	}
 	for _, tagID := range out.TagIDs {
-		if _, err := queries(db).GetTagByID(ctx, sqlcdb.GetTagByIDParams{ID: tagID, UserID: userID}); err != nil {
+		if _, err := queries(db).GetTagByID(ctx, sqlcdb.GetTagByIDParams{ID: tagID, OwnerIds: []string{userID}}); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return Input{}, ErrInvalidTag
 			}
@@ -363,7 +385,7 @@ func normalizeInput(ctx context.Context, db *sql.DB, userID string, in Input) (I
 }
 
 func requireActiveAccount(ctx context.Context, db *sql.DB, userID, accountID string) error {
-	row, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: accountID, UserID: userID})
+	row, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: accountID, OwnerIds: []string{userID}})
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrInvalidAccount
 	}
@@ -381,7 +403,7 @@ func replaceTags(ctx context.Context, db *sql.DB, userID, templateID string, tag
 		return err
 	}
 	for _, tagID := range tagIDs {
-		if _, err := queries(db).GetTagByID(ctx, sqlcdb.GetTagByIDParams{ID: tagID, UserID: userID}); err != nil {
+		if _, err := queries(db).GetTagByID(ctx, sqlcdb.GetTagByIDParams{ID: tagID, OwnerIds: []string{userID}}); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return ErrInvalidTag
 			}
@@ -433,9 +455,16 @@ func attachTags(ctx context.Context, db *sql.DB, items []Template, ids []string)
 	return nil
 }
 
+func decorateTemplates(sc auth.Scope, items []Template) {
+	for i := range items {
+		items[i].Scope = scope.AccountScope(sc, items[i].OwnerUserID)
+	}
+}
+
 func fromRow(row sqlcdb.TransactionTemplate) Template {
 	t := Template{
 		ID:            row.ID,
+		OwnerUserID:   row.UserID,
 		Name:          row.Name,
 		Type:          row.Type,
 		AccountID:     row.AccountID,

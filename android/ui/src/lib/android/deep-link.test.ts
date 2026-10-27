@@ -17,6 +17,9 @@ describe('parseAppDeepLink', () => {
 			'/transactions/new?type=income'
 		);
 		expect(parseAppDeepLink('ru.kai_zer.buhgalter://transfers/new')).toBe('/transfers/new');
+		expect(parseAppDeepLink('ru.kai_zer.buhgalter://invite/ABC-DEF-GHJ')).toBe(
+			'/invite/ABC-DEF-GHJ'
+		);
 		expect(parseAppDeepLink('ru.kai_zer.buhgalter://')).toBe('/');
 		expect(parseAppDeepLink('ru.kai_zer.buhgalter://accounts/a1')).toBe('/accounts/a1');
 	});

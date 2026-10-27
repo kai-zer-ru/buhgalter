@@ -13,6 +13,7 @@ import { isServerOfflineMode, markServerOffline } from '$lib/offline/server-conn
 import { clearFeatureFlags, loadFeatureFlags } from '$lib/features';
 import { clearAuthToken, getAuthToken, getAuthTokenKind } from '$lib/platform/auth-token';
 import { clearAppLock } from '$lib/platform/app-lock';
+import { clearHouseholdMe, refreshHouseholdMe } from '$lib/household/membership';
 
 export const user = writable<User | null>(null);
 export const authReady = writable(false);
@@ -155,6 +156,7 @@ export async function loadUser(): Promise<LoadUserResult> {
 			persistLastUser(me);
 			markSessionHint();
 			await loadFeatureFlags();
+			void refreshHouseholdMe().catch(() => {});
 			return 'ok';
 		} catch (err) {
 			const retryable =
@@ -170,6 +172,7 @@ export async function loadUser(): Promise<LoadUserResult> {
 			if (err instanceof ApiError && err.status === 401) {
 				clearSessionHint();
 				clearFeatureFlags();
+				clearHouseholdMe();
 				user.set(null);
 				return 'unauthorized';
 			}
@@ -206,5 +209,6 @@ export async function logout() {
 	clearRefCache();
 	clearFeatureFlags();
 	clearLastUser();
+	clearHouseholdMe();
 	user.set(null);
 }

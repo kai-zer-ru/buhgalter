@@ -1,13 +1,13 @@
 -- name: ListUserChangeEventsAfter :many
 SELECT id, user_id, entity_type, entity_id, action, occurred_at
 FROM user_change_events
-WHERE user_id = sqlc.arg(user_id)
-  AND id > sqlc.arg(after_id)
+WHERE id > sqlc.arg(after_id)
   AND (sqlc.arg(since) = '' OR occurred_at >= sqlc.arg(since))
+  AND user_id IN (sqlc.slice('owner_ids'))
 ORDER BY id ASC
 LIMIT sqlc.arg(limit);
 
 -- name: MaxUserChangeEventID :one
 SELECT IFNULL(MAX(id), 0)
 FROM user_change_events
-WHERE user_id = ?;
+WHERE user_id IN (sqlc.slice('owner_ids'));

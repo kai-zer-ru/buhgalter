@@ -1,6 +1,5 @@
 import type { Account } from '$lib/api/client';
-import { sortAccountsForSelect } from '$lib/accounts';
-import { accountSelectOption, type SelectOption } from '$lib/select-options';
+import { accountSelectOptions, type SelectOption } from '$lib/select-options';
 
 export type AccountSelectOption = SelectOption;
 
@@ -9,9 +8,7 @@ export function transferAccountOptions(
 	accounts: readonly Account[],
 	excludeId: string
 ): AccountSelectOption[] {
-	return sortAccountsForSelect(accounts)
-		.filter((acc) => acc.id !== excludeId)
-		.map((acc) => accountSelectOption(acc));
+	return accountSelectOptions(accounts.filter((acc) => acc.id !== excludeId));
 }
 
 /** Cash/bank with positive balance must transfer funds before archive or delete. */
@@ -22,10 +19,11 @@ export function needsBalanceTransfer(acc: Account): boolean {
 /** Default target for balance transfer: primary account, else first in the list. */
 export function defaultTransferAccountId(accounts: readonly Account[], excludeId: string): string {
 	const options = transferAccountOptions(accounts, excludeId);
-	if (options.length === 0) return '';
+	const first = options.find((option) => !option.header && !option.disabled);
+	if (!first) return '';
 	const primary = accounts.find((acc) => acc.is_primary && acc.id !== excludeId);
 	if (primary) return primary.id;
-	return options[0].value;
+	return first.value;
 }
 
 /** @deprecated Use defaultTransferAccountId */

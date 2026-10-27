@@ -71,6 +71,14 @@
 	import { toast } from '$lib/toast';
 	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
 	import { canSetAsPrimary, formatAccountInitialBalanceForEdit } from '$lib/accounts';
+	import FamilyBadge from '$lib/components/FamilyBadge.svelte';
+	import { householdMe } from '$lib/household/membership';
+	import {
+		canShareAccount,
+		canUnshareAccount,
+		promptShareAccount,
+		promptUnshareAccount
+	} from '$lib/household/share-account';
 	import { toAPIAmount } from '$lib/money';
 	import { fromDateLocalEnd, fromDateLocalStart } from '$lib/dates';
 	import { dedupeTransferLegs } from '$lib/transaction-display';
@@ -435,6 +443,24 @@
 
 	const accountTxReadOnly = $derived(acc?.status === 'deleted');
 
+	async function onShare() {
+		if (!acc) return;
+		const result = await promptShareAccount(acc, allAccounts);
+		if (result) await load({ background: true });
+	}
+
+	async function onUnshare() {
+		if (!acc) return;
+		const result = await promptUnshareAccount(acc);
+		if (result) {
+			if (result.scope === 'personal' && result.original_owner?.user_id !== $user?.id) {
+				await goto(resolve('/accounts'));
+				return;
+			}
+			await load({ background: true });
+		}
+	}
+
 	function accountActions(includeTransactions = false): RowAction[] {
 		if (!acc || acc.status === 'deleted') return [];
 		const actions: RowAction[] = [];
@@ -482,6 +508,20 @@
 					}
 				}
 			);
+		}
+		if (canShareAccount(acc, $householdMe)) {
+			actions.push({
+				icon: 'share',
+				label: $_('accounts.share'),
+				onclick: () => void onShare()
+			});
+		}
+		if (canUnshareAccount(acc, $householdMe)) {
+			actions.push({
+				icon: 'transfer',
+				label: $_('accounts.unshare'),
+				onclick: () => void onUnshare()
+			});
 		}
 		actions.push({
 			icon: 'edit',
@@ -749,6 +789,9 @@
 										{/if}
 										<div class="flex items-center gap-2">
 											<h1 class="text-2xl font-semibold">{acc.name}</h1>
+											{#if acc.scope === 'household'}
+												<FamilyBadge />
+											{/if}
 											{#if acc.is_primary}
 												<span
 													class="shrink-0"
@@ -769,6 +812,13 @@
 												</span>
 											{/if}
 										</div>
+										{#if acc.original_owner?.display_name}
+											<p class="mt-1 text-sm" style:color="var(--text-muted)">
+												{$_('accounts.originalOwner', {
+													values: { name: acc.original_owner.display_name }
+												})}
+											</p>
+										{/if}
 										<p class="mt-1 text-3xl font-semibold tabular-nums">
 											<MoneyDisplay
 												value={accBalance?.balance_display ?? acc.balance_display}

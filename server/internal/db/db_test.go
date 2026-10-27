@@ -99,10 +99,24 @@ func TestReceiptMigrationsAfterMerchantAliasVersion(t *testing.T) {
 	if _, err := mgr.DB().Exec(`DROP TABLE merchant_aliases`); err != nil {
 		t.Fatal(err)
 	}
-	// 063 runs again after the replayed receipt chain; undo its columns first.
+	// 063–066 run again after the replayed receipt chain; undo their objects first.
 	// 064's index covers budgets.currency, so it must go before the column.
 	if _, err := mgr.DB().Exec(`DROP INDEX idx_budgets_active_unique`); err != nil {
 		t.Fatal(err)
+	}
+	for _, table := range []string{"household_invites", "household_members", "households"} {
+		if _, err := mgr.DB().Exec(`DROP TABLE ` + table); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, stmt := range []string{
+		`ALTER TABLE users DROP COLUMN kind`,
+		`ALTER TABLE transactions DROP COLUMN created_by_user_id`,
+		`ALTER TABLE accounts DROP COLUMN original_owner_user_id`,
+	} {
+		if _, err := mgr.DB().Exec(stmt); err != nil {
+			t.Fatal(err)
+		}
 	}
 	for _, table := range []string{"accounts", "budgets", "debts"} {
 		if _, err := mgr.DB().Exec(`ALTER TABLE ` + table + ` DROP COLUMN currency`); err != nil {
@@ -124,8 +138,8 @@ func assertMigrationChain(t *testing.T, sqlDB *sql.DB) {
 	if err := sqlDB.QueryRow(`SELECT COALESCE(MAX(version_id), 0) FROM goose_db_version WHERE is_applied = 1`).Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	if version != 64 {
-		t.Fatalf("goose version %d, want 64", version)
+	if version != 67 {
+		t.Fatalf("goose version %d, want 67", version)
 	}
 	for _, table := range []string{
 		"merchant_aliases",
@@ -134,6 +148,9 @@ func assertMigrationChain(t *testing.T, sqlDB *sql.DB) {
 		"receipt_imports",
 		"receipt_fiscal_previews",
 		"receipt_import_item_categories",
+		"households",
+		"household_members",
+		"household_invites",
 	} {
 		var n int
 		if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?`, table).Scan(&n); err != nil {

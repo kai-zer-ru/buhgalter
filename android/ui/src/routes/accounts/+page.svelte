@@ -32,10 +32,19 @@
 	import { isAutoTopupEligible } from '$lib/accounts/auto-topup';
 	import { featureFlags, isFeatureEnabled } from '$lib/features';
 	import {
-		groupAccountsByType,
-		accountGroupKind,
-		accountGroupLabelKey
+		groupAccountsForDisplay,
+		groupAccountsByOwnership,
+		accountGroupLabelKey,
+		accountOwnershipLabelKey
 	} from '$lib/accounts/group-by-type';
+	import FamilyBadge from '$lib/components/FamilyBadge.svelte';
+	import { householdMe } from '$lib/household/membership';
+	import {
+		canShareAccount,
+		canUnshareAccount,
+		promptShareAccount,
+		promptUnshareAccount
+	} from '$lib/household/share-account';
 	import { isCreditCard } from '$lib/credit-card';
 	import BackLink from '$lib/components/BackLink.svelte';
 	import AccountIcon from '$lib/components/AccountIcon.svelte';
@@ -100,7 +109,11 @@
 	});
 	const bankOptions = $derived(banks.map((bank) => ({ value: bank.id, label: bank.name })));
 	const currencyOptions = $derived(currencySelectOptions(currencies));
-	const accountGroups = $derived(groupAccountsByType(accounts));
+	const accountGroups = $derived(groupAccountsForDisplay(accounts));
+	const accountSections = $derived(groupAccountsByOwnership(accountGroups));
+	const showOwnershipHeadings = $derived(
+		accountGroups.some((group) => group.ownership === 'household')
+	);
 
 	onMount(() => {
 		const status = $page.url.searchParams.get('status');
@@ -263,6 +276,16 @@
 		}
 	}
 
+	async function onShare(acc: Account) {
+		const result = await promptShareAccount(acc, accounts);
+		if (result) await load();
+	}
+
+	async function onUnshare(acc: Account) {
+		const result = await promptUnshareAccount(acc);
+		if (result) await load();
+	}
+
 	async function remove(acc: Account) {
 		if (!acc.id || actionSavingId) return;
 		const confirmed = await promptDeleteAccount({ acc, activeAccounts });
@@ -313,6 +336,22 @@
 					}
 				}
 			);
+		}
+		if (filter === 'active' && canShareAccount(acc, $householdMe)) {
+			actions.push({
+				icon: 'share',
+				label: $_('accounts.share'),
+				disabled: busy || editingId !== null,
+				onclick: () => void onShare(acc)
+			});
+		}
+		if (filter === 'active' && canUnshareAccount(acc, $householdMe)) {
+			actions.push({
+				icon: 'transfer',
+				label: $_('accounts.unshare'),
+				disabled: busy || editingId !== null,
+				onclick: () => void onUnshare(acc)
+			});
 		}
 		actions.push({
 			icon: 'edit',
@@ -413,20 +452,31 @@
 							{$_('common.loading')}
 						</p>
 					{/if}
-					{#each accountGroups as group (accountGroupKind(group))}
-						{@const kind = accountGroupKind(group)}
-						<section>
-							<h2 class="mb-3 text-lg font-medium">
-								{$_(accountGroupLabelKey(kind))}
-								<span class="font-normal tabular-nums" style:color="var(--text-muted)">
-									({group.length})
-								</span>
-							</h2>
-							<div class="grid gap-4 sm:grid-cols-2">
-								{#each group as acc (acc.id)}
-									{@render accountCard(acc)}
-								{/each}
-							</div>
+					{#each accountSections as section (section.ownership)}
+						<section class="space-y-6">
+							{#if showOwnershipHeadings}
+								<p
+									class="mb-1 text-xs font-medium uppercase tracking-wide"
+									style:color="var(--text-muted)"
+								>
+									{$_(accountOwnershipLabelKey(section.ownership, $householdMe.household?.kind))}
+								</p>
+							{/if}
+							{#each section.groups as group (`${group.kind}`)}
+								<div>
+									<h2 class="mb-3 text-lg font-medium">
+										{$_(accountGroupLabelKey(group.kind))}
+										<span class="font-normal tabular-nums" style:color="var(--text-muted)">
+											({group.accounts.length})
+										</span>
+									</h2>
+									<div class="grid gap-4 sm:grid-cols-2">
+										{#each group.accounts as acc (acc.id)}
+											{@render accountCard(acc)}
+										{/each}
+									</div>
+								</div>
+							{/each}
 						</section>
 					{/each}
 				</div>
@@ -547,6 +597,9 @@
 					<div class="min-w-0 flex-1">
 						<div class="flex items-center gap-1">
 							<p class="truncate font-medium">{acc.name}</p>
+							{#if acc.scope === 'household'}
+								<FamilyBadge compact />
+							{/if}
 							{#if acc.is_primary}
 								<span
 									class="shrink-0"

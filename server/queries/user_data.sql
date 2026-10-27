@@ -1,4 +1,5 @@
--- Wipe financial data for one user (keep profile, sessions, API tokens, notification settings).
+-- Wipe financial data for one user (keep profile, sessions, API tokens).
+-- Household dissolve also deletes notification_settings / templates leftover on the principal.
 
 -- name: DeleteUserCreditPayments :exec
 DELETE FROM credit_payments
@@ -64,3 +65,27 @@ DELETE FROM user_change_events WHERE user_id = ?;
 
 -- name: DeleteUserNotificationLog :exec
 DELETE FROM notification_log WHERE user_id = ?;
+
+-- name: DeleteUserNotificationSettings :exec
+DELETE FROM notification_settings WHERE user_id = ?;
+
+-- name: DeleteUserNotificationTemplates :exec
+DELETE FROM notification_templates WHERE user_id = ?;
+
+-- name: DeleteUserReceiptImportItemCategories :exec
+DELETE FROM receipt_import_item_categories WHERE user_id = ?;
+
+-- name: DeleteUserStores :exec
+DELETE FROM stores WHERE user_id = ?;
+
+-- name: DeleteUserReceiptImports :exec
+DELETE FROM receipt_imports WHERE user_id = ?;
+
+-- name: DeleteUserReceiptScanJobs :exec
+DELETE FROM receipt_scan_jobs WHERE user_id = ?;
+
+-- name: DeleteUserMerchantAliases :exec
+DELETE FROM merchant_aliases WHERE user_id = ?;
+
+-- name: DeleteUserReceiptFiscalPreviews :exec
+DELETE FROM receipt_fiscal_previews WHERE user_id = ?;

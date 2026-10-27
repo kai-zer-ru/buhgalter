@@ -11,6 +11,7 @@
 		| '/settings/security'
 		| '/settings/server'
 		| '/settings/tokens'
+		| '/settings/household'
 		| '/settings/notifications'
 		| '/settings/bank-notifications'
 		| '/settings/bank-notifications/drafts'

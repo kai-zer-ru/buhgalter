@@ -7,6 +7,7 @@ package sqlc
 
 import (
 	"context"
+	"strings"
 )
 
 const clearCategoryPrimary = `-- name: ClearCategoryPrimary :exec
@@ -137,6 +138,7 @@ func (q *Queries) DeleteSubcategory(ctx context.Context, id string) (int64, erro
 const getCategoryByID = `-- name: GetCategoryByID :one
 SELECT
     c.id,
+    c.user_id,
     c.name,
     c.type,
     c.icon,
@@ -146,16 +148,17 @@ SELECT
     c.created_at,
     (SELECT COUNT(*) FROM subcategories s WHERE s.category_id = c.id) AS sub_count
 FROM categories c
-WHERE c.id = ? AND c.user_id = ?
+WHERE c.id = ?1 AND c.user_id IN (/*SLICE:owner_ids*/?)
 `
 
 type GetCategoryByIDParams struct {
-	ID     string `json:"id"`
-	UserID string `json:"user_id"`
+	ID       string   `json:"id"`
+	OwnerIds []string `json:"owner_ids"`
 }
 
 type GetCategoryByIDRow struct {
 	ID        string `json:"id"`
+	UserID    string `json:"user_id"`
 	Name      string `json:"name"`
 	Type      string `json:"type"`
 	Icon      string `json:"icon"`
@@ -167,10 +170,22 @@ type GetCategoryByIDRow struct {
 }
 
 func (q *Queries) GetCategoryByID(ctx context.Context, arg GetCategoryByIDParams) (GetCategoryByIDRow, error) {
-	row := q.db.QueryRowContext(ctx, getCategoryByID, arg.ID, arg.UserID)
+	query := getCategoryByID
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.ID)
+	if len(arg.OwnerIds) > 0 {
+		for _, v := range arg.OwnerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(arg.OwnerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	row := q.db.QueryRowContext(ctx, query, queryParams...)
 	var i GetCategoryByIDRow
 	err := row.Scan(
 		&i.ID,
+		&i.UserID,
 		&i.Name,
 		&i.Type,
 		&i.Icon,
@@ -183,20 +198,42 @@ func (q *Queries) GetCategoryByID(ctx context.Context, arg GetCategoryByIDParams
 	return i, err
 }
 
+const getCategoryUserID = `-- name: GetCategoryUserID :one
+SELECT user_id FROM categories WHERE id = ?
+`
+
+func (q *Queries) GetCategoryUserID(ctx context.Context, id string) (string, error) {
+	row := q.db.QueryRowContext(ctx, getCategoryUserID, id)
+	var user_id string
+	err := row.Scan(&user_id)
+	return user_id, err
+}
+
 const getSubcategoryByID = `-- name: GetSubcategoryByID :one
 SELECT s.id, s.category_id, s.name, s.icon, s.sort_order, s.created_at
 FROM subcategories s
 JOIN categories c ON c.id = s.category_id
-WHERE s.id = ? AND c.user_id = ?
+WHERE s.id = ?1 AND c.user_id IN (/*SLICE:owner_ids*/?)
 `
 
 type GetSubcategoryByIDParams struct {
-	ID     string `json:"id"`
-	UserID string `json:"user_id"`
+	ID       string   `json:"id"`
+	OwnerIds []string `json:"owner_ids"`
 }
 
 func (q *Queries) GetSubcategoryByID(ctx context.Context, arg GetSubcategoryByIDParams) (Subcategory, error) {
-	row := q.db.QueryRowContext(ctx, getSubcategoryByID, arg.ID, arg.UserID)
+	query := getSubcategoryByID
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.ID)
+	if len(arg.OwnerIds) > 0 {
+		for _, v := range arg.OwnerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(arg.OwnerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	row := q.db.QueryRowContext(ctx, query, queryParams...)
 	var i Subcategory
 	err := row.Scan(
 		&i.ID,
@@ -206,6 +243,25 @@ func (q *Queries) GetSubcategoryByID(ctx context.Context, arg GetSubcategoryByID
 		&i.SortOrder,
 		&i.CreatedAt,
 	)
+	return i, err
+}
+
+const getSubcategoryOwner = `-- name: GetSubcategoryOwner :one
+SELECT c.user_id, s.category_id
+FROM subcategories s
+JOIN categories c ON c.id = s.category_id
+WHERE s.id = ?
+`
+
+type GetSubcategoryOwnerRow struct {
+	UserID     string `json:"user_id"`
+	CategoryID string `json:"category_id"`
+}
+
+func (q *Queries) GetSubcategoryOwner(ctx context.Context, id string) (GetSubcategoryOwnerRow, error) {
+	row := q.db.QueryRowContext(ctx, getSubcategoryOwner, id)
+	var i GetSubcategoryOwnerRow
+	err := row.Scan(&i.UserID, &i.CategoryID)
 	return i, err
 }
 
@@ -270,6 +326,7 @@ func (q *Queries) InsertSubcategory(ctx context.Context, arg InsertSubcategoryPa
 const listCategoriesByUser = `-- name: ListCategoriesByUser :many
 SELECT
     c.id,
+    c.user_id,
     c.name,
     c.type,
     c.icon,
@@ -279,12 +336,13 @@ SELECT
     c.created_at,
     (SELECT COUNT(*) FROM subcategories s WHERE s.category_id = c.id) AS sub_count
 FROM categories c
-WHERE c.user_id = ?
+WHERE c.user_id IN (/*SLICE:owner_ids*/?)
 ORDER BY c.is_system ASC, c.sort_order ASC, c.name ASC
 `
 
 type ListCategoriesByUserRow struct {
 	ID        string `json:"id"`
+	UserID    string `json:"user_id"`
 	Name      string `json:"name"`
 	Type      string `json:"type"`
 	Icon      string `json:"icon"`
@@ -295,8 +353,18 @@ type ListCategoriesByUserRow struct {
 	SubCount  int64  `json:"sub_count"`
 }
 
-func (q *Queries) ListCategoriesByUser(ctx context.Context, userID string) ([]ListCategoriesByUserRow, error) {
-	rows, err := q.db.QueryContext(ctx, listCategoriesByUser, userID)
+func (q *Queries) ListCategoriesByUser(ctx context.Context, ownerIds []string) ([]ListCategoriesByUserRow, error) {
+	query := listCategoriesByUser
+	var queryParams []interface{}
+	if len(ownerIds) > 0 {
+		for _, v := range ownerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(ownerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
 	if err != nil {
 		return nil, err
 	}
@@ -306,6 +374,7 @@ func (q *Queries) ListCategoriesByUser(ctx context.Context, userID string) ([]Li
 		var i ListCategoriesByUserRow
 		if err := rows.Scan(
 			&i.ID,
+			&i.UserID,
 			&i.Name,
 			&i.Type,
 			&i.Icon,
@@ -331,6 +400,7 @@ func (q *Queries) ListCategoriesByUser(ctx context.Context, userID string) ([]Li
 const listCategoriesByUserAndType = `-- name: ListCategoriesByUserAndType :many
 SELECT
     c.id,
+    c.user_id,
     c.name,
     c.type,
     c.icon,
@@ -340,17 +410,18 @@ SELECT
     c.created_at,
     (SELECT COUNT(*) FROM subcategories s WHERE s.category_id = c.id) AS sub_count
 FROM categories c
-WHERE c.user_id = ? AND c.type = ?
+WHERE c.type = ?1 AND c.user_id IN (/*SLICE:owner_ids*/?)
 ORDER BY c.is_system ASC, c.sort_order ASC, c.name ASC
 `
 
 type ListCategoriesByUserAndTypeParams struct {
-	UserID string `json:"user_id"`
-	Type   string `json:"type"`
+	Type     string   `json:"type"`
+	OwnerIds []string `json:"owner_ids"`
 }
 
 type ListCategoriesByUserAndTypeRow struct {
 	ID        string `json:"id"`
+	UserID    string `json:"user_id"`
 	Name      string `json:"name"`
 	Type      string `json:"type"`
 	Icon      string `json:"icon"`
@@ -362,7 +433,18 @@ type ListCategoriesByUserAndTypeRow struct {
 }
 
 func (q *Queries) ListCategoriesByUserAndType(ctx context.Context, arg ListCategoriesByUserAndTypeParams) ([]ListCategoriesByUserAndTypeRow, error) {
-	rows, err := q.db.QueryContext(ctx, listCategoriesByUserAndType, arg.UserID, arg.Type)
+	query := listCategoriesByUserAndType
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.Type)
+	if len(arg.OwnerIds) > 0 {
+		for _, v := range arg.OwnerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(arg.OwnerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
 	if err != nil {
 		return nil, err
 	}
@@ -372,6 +454,7 @@ func (q *Queries) ListCategoriesByUserAndType(ctx context.Context, arg ListCateg
 		var i ListCategoriesByUserAndTypeRow
 		if err := rows.Scan(
 			&i.ID,
+			&i.UserID,
 			&i.Name,
 			&i.Type,
 			&i.Icon,
@@ -435,12 +518,22 @@ const listSubcategoriesByUser = `-- name: ListSubcategoriesByUser :many
 SELECT s.id, s.category_id, s.name, s.icon, s.sort_order, s.created_at
 FROM subcategories s
 INNER JOIN categories c ON c.id = s.category_id
-WHERE c.user_id = ?
+WHERE c.user_id IN (/*SLICE:owner_ids*/?)
 ORDER BY s.category_id, s.sort_order, s.name
 `
 
-func (q *Queries) ListSubcategoriesByUser(ctx context.Context, userID string) ([]Subcategory, error) {
-	rows, err := q.db.QueryContext(ctx, listSubcategoriesByUser, userID)
+func (q *Queries) ListSubcategoriesByUser(ctx context.Context, ownerIds []string) ([]Subcategory, error) {
+	query := listSubcategoriesByUser
+	var queryParams []interface{}
+	if len(ownerIds) > 0 {
+		for _, v := range ownerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(ownerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
 	if err != nil {
 		return nil, err
 	}

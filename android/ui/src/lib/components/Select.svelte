@@ -8,6 +8,7 @@
 		type DropdownPlacement
 	} from '$lib/dropdown-position';
 	import SelectOptionIcon from '$lib/components/SelectOptionIcon.svelte';
+	import FamilyBadge from '$lib/components/FamilyBadge.svelte';
 	import type { SelectOption } from '$lib/select-options';
 
 	let {
@@ -58,6 +59,7 @@
 	const visibleOptions = $derived.by(() => {
 		const q = searchable ? query.trim().toLowerCase() : '';
 		return options.filter((option) => {
+			if (option.header) return !q;
 			if (option.disabled && option.value !== value) return false;
 			if (!q) return true;
 			return option.label.toLowerCase().includes(q);
@@ -212,6 +214,9 @@
 				<span class="min-w-0 truncate" style:color={value ? 'var(--text)' : 'var(--text-muted)'}
 					>{selectedLabel}</span
 				>
+				{#if selectedOption?.badge === 'household'}
+					<FamilyBadge compact />
+				{/if}
 			</span>
 			<span class="shrink-0" aria-hidden="true" style:color="var(--text-muted)">▾</span>
 		</button>
@@ -254,22 +259,34 @@
 					{:else}
 						{#each visibleOptions as option, index (option.value)}
 							<li>
-								<button
-									type="button"
-									class="flex w-full cursor-pointer items-center gap-2 px-4 py-2 text-left text-sm hover:opacity-90"
-									class:font-medium={option.value === value}
-									style:background-color={index === highlighted || option.value === value
-										? 'color-mix(in srgb, var(--primary) 12%, transparent)'
-										: 'transparent'}
-									disabled={option.disabled}
-									onmousedown={(event) => event.preventDefault()}
-									onclick={() => selectOption(option.value)}
-								>
-									{#if option.icon}
-										<SelectOptionIcon icon={option.icon} />
-									{/if}
-									<span class="min-w-0 truncate">{option.label}</span>
-								</button>
+								{#if option.header}
+									<div
+										class="px-4 py-1.5 text-xs font-medium uppercase tracking-wide"
+										style:color="var(--text-muted)"
+									>
+										{option.label}
+									</div>
+								{:else}
+									<button
+										type="button"
+										class="flex w-full cursor-pointer items-center gap-2 px-4 py-2 text-left text-sm hover:opacity-90"
+										class:font-medium={option.value === value}
+										style:background-color={index === highlighted || option.value === value
+											? 'color-mix(in srgb, var(--primary) 12%, transparent)'
+											: 'transparent'}
+										disabled={option.disabled}
+										onmousedown={(event) => event.preventDefault()}
+										onclick={() => selectOption(option.value)}
+									>
+										{#if option.icon}
+											<SelectOptionIcon icon={option.icon} />
+										{/if}
+										<span class="min-w-0 truncate">{option.label}</span>
+										{#if option.badge === 'household'}
+											<FamilyBadge compact />
+										{/if}
+									</button>
+								{/if}
 							</li>
 						{/each}
 					{/if}

@@ -11,6 +11,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/account"
 	"github.com/kai-zer-ru/buhgalter/internal/accountbalance"
 	"github.com/kai-zer-ru/buhgalter/internal/apperror"
+	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
 	"github.com/kai-zer-ru/buhgalter/internal/transaction"
 )
@@ -91,7 +92,8 @@ func transferBalanceBeforeInactive(
 func inactivateAccount(
 	ctx context.Context,
 	db *sql.DB,
-	userID, id, status, toID string,
+	sc auth.Scope,
+	id, status, toID string,
 ) (account.Account, error) {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
@@ -99,13 +101,14 @@ func inactivateAccount(
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if err := account.LockRow(ctx, tx, userID, id); err != nil {
+	if err := account.LockRowByScope(ctx, tx, sc, id); err != nil {
 		return account.Account{}, err
 	}
-	acc, err := account.GetByID(ctx, tx, userID, id)
+	acc, err := account.GetByScope(ctx, tx, sc, id)
 	if err != nil {
 		return account.Account{}, err
 	}
+	userID := acc.OwnerUserID
 	if acc.Status == "deleted" {
 		return account.Account{}, account.ErrArchived
 	}
@@ -133,7 +136,7 @@ func inactivateAccount(
 		}
 	}
 
-	updated, err := account.SetStatus(ctx, tx, userID, id, status)
+	updated, err := account.SetStatusByScope(ctx, tx, sc, id, status)
 	if err != nil {
 		return account.Account{}, err
 	}
@@ -142,7 +145,7 @@ func inactivateAccount(
 	}
 	if transferredTo != "" {
 		if err := transaction.RefreshBalances(ctx, db, userID, now, id, transferredTo); err == nil {
-			if fresh, err := account.GetByID(ctx, db, userID, id); err == nil {
+			if fresh, err := account.GetByScope(ctx, db, sc, id); err == nil {
 				updated = fresh
 			}
 		}

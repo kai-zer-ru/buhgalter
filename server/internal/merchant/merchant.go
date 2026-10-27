@@ -8,15 +8,19 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/scope"
 )
 
 type Merchant struct {
-	ID        string   `json:"id"`
-	Name      string   `json:"name"`
-	Icon      string   `json:"icon"`
-	Aliases   []string `json:"aliases"`
-	CreatedAt string   `json:"created_at"`
+	ID          string   `json:"id"`
+	OwnerUserID string   `json:"-"`
+	Scope       string   `json:"scope,omitempty"`
+	Name        string   `json:"name"`
+	Icon        string   `json:"icon"`
+	Aliases     []string `json:"aliases"`
+	CreatedAt   string   `json:"created_at"`
 }
 
 var (
@@ -100,16 +104,16 @@ func isUnique(err error) bool {
 
 func fromRow(row sqlcdb.Merchant) Merchant {
 	return Merchant{
-		ID: row.ID, Name: row.Name, Icon: row.Icon,
+		ID: row.ID, OwnerUserID: row.UserID, Name: row.Name, Icon: row.Icon,
 		Aliases: []string{}, CreatedAt: row.CreatedAt,
 	}
 }
 
-func attachAliases(ctx context.Context, db sqlcdb.DBTX, userID string, items []Merchant) ([]Merchant, error) {
+func attachAliases(ctx context.Context, db sqlcdb.DBTX, ownerIDs []string, items []Merchant) ([]Merchant, error) {
 	if items == nil {
 		items = []Merchant{}
 	}
-	rows, err := queries(db).ListMerchantAliasesByUser(ctx, userID)
+	rows, err := queries(db).ListMerchantAliasesByUser(ctx, ownerIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -128,26 +132,46 @@ func attachAliases(ctx context.Context, db sqlcdb.DBTX, userID string, items []M
 }
 
 func List(ctx context.Context, db sqlcdb.DBTX, userID string) ([]Merchant, error) {
-	rows, err := queries(db).ListMerchantsByUser(ctx, userID)
+	return ListByScope(ctx, db, auth.Scope{UserID: userID}, "")
+}
+
+func ListByScope(ctx context.Context, db sqlcdb.DBTX, sc auth.Scope, view string) ([]Merchant, error) {
+	ids := scope.FilterOwnerIDs(sc, view)
+	if len(ids) == 0 {
+		return []Merchant{}, nil
+	}
+	rows, err := queries(db).ListMerchantsByUser(ctx, ids)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]Merchant, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, fromRow(row))
+		m := fromRow(row)
+		m.Scope = scope.AccountScope(sc, m.OwnerUserID)
+		out = append(out, m)
 	}
-	return attachAliases(ctx, db, userID, out)
+	return attachAliases(ctx, db, ids, out)
 }
 
 func Get(ctx context.Context, db sqlcdb.DBTX, userID, id string) (Merchant, error) {
-	row, err := queries(db).GetMerchantByID(ctx, sqlcdb.GetMerchantByIDParams{ID: id, UserID: userID})
+	return GetByScope(ctx, db, auth.Scope{UserID: userID}, id)
+}
+
+func GetByScope(ctx context.Context, db sqlcdb.DBTX, sc auth.Scope, id string) (Merchant, error) {
+	ids := sc.OwnerIDs()
+	if len(ids) == 0 {
+		return Merchant{}, ErrNotFound
+	}
+	row, err := queries(db).GetMerchantByID(ctx, sqlcdb.GetMerchantByIDParams{ID: id, OwnerIds: ids})
 	if errors.Is(err, sql.ErrNoRows) {
 		return Merchant{}, ErrNotFound
 	}
 	if err != nil {
 		return Merchant{}, err
 	}
-	items, err := attachAliases(ctx, db, userID, []Merchant{fromRow(row)})
+	m := fromRow(row)
+	m.Scope = scope.AccountScope(sc, m.OwnerUserID)
+	items, err := attachAliases(ctx, db, ids, []Merchant{m})
 	if err != nil {
 		return Merchant{}, err
 	}
@@ -163,7 +187,7 @@ func findExisting(ctx context.Context, db sqlcdb.DBTX, userID, name string) (Mer
 	if !errors.Is(err, sql.ErrNoRows) {
 		return Merchant{}, false, err
 	}
-	rows, err := queries(db).ListMerchantsByUser(ctx, userID)
+	rows, err := queries(db).ListMerchantsByUser(ctx, []string{userID})
 	if err != nil {
 		return Merchant{}, false, err
 	}
@@ -173,7 +197,7 @@ func findExisting(ctx context.Context, db sqlcdb.DBTX, userID, name string) (Mer
 			return m, true, gerr
 		}
 	}
-	aliases, err := queries(db).ListMerchantAliasesByUser(ctx, userID)
+	aliases, err := queries(db).ListMerchantAliasesByUser(ctx, []string{userID})
 	if err != nil {
 		return Merchant{}, false, err
 	}
@@ -187,7 +211,7 @@ func findExisting(ctx context.Context, db sqlcdb.DBTX, userID, name string) (Mer
 }
 
 func nameTaken(ctx context.Context, db sqlcdb.DBTX, userID, name string, allow map[string]struct{}) (bool, error) {
-	rows, err := queries(db).ListMerchantsByUser(ctx, userID)
+	rows, err := queries(db).ListMerchantsByUser(ctx, []string{userID})
 	if err != nil {
 		return false, err
 	}
@@ -199,7 +223,7 @@ func nameTaken(ctx context.Context, db sqlcdb.DBTX, userID, name string, allow m
 			return true, nil
 		}
 	}
-	aliases, err := queries(db).ListMerchantAliasesByUser(ctx, userID)
+	aliases, err := queries(db).ListMerchantAliasesByUser(ctx, []string{userID})
 	if err != nil {
 		return false, err
 	}

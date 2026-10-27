@@ -55,6 +55,7 @@
 		subcategorySelectOptions
 	} from '$lib/select-options';
 	import { user } from '$lib/stores/auth';
+	import { matchRefByName, refsForAccount } from '$lib/household/refs-for-account';
 
 	const RECURRING_PATH = '/api/v1/recurring-operations';
 
@@ -83,8 +84,13 @@
 	let active = $state(true);
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
+	const selectedAcc = $derived(accounts.find((acc) => acc.id === accountId));
 	const categoryOptions = $derived(
-		categorySelectOptions(categories.filter((item) => item.type === type && !item.is_system))
+		categorySelectOptions(
+			refsForAccount(selectedAcc, categories).filter(
+				(item) => item.type === type && !item.is_system
+			)
+		)
 	);
 	const accountOptions = $derived(accountSelectOptions(accounts));
 	const subcategoryOptions = $derived(subcategorySelectOptions(subcategories));
@@ -125,7 +131,26 @@
 	}
 
 	function firstCategoryByType(nextType: 'income' | 'expense') {
-		return categories.find((item) => item.type === nextType && !item.is_system);
+		return refsForAccount(selectedAcc, categories).find(
+			(item) => item.type === nextType && !item.is_system
+		);
+	}
+
+	function onRecurringAccountChange() {
+		const nextCats = refsForAccount(selectedAcc, categories).filter(
+			(item) => item.type === type && !item.is_system
+		);
+		const current = categories.find((c) => c.id === categoryId);
+		const matched = matchRefByName(current, nextCats);
+		if (current && !matched) {
+			categoryId = nextCats[0]?.id ?? '';
+			subcategoryId = '';
+			void loadSubcategories();
+			toast($_('refs.reset.category'));
+		} else if (matched && matched.id !== categoryId) {
+			categoryId = matched.id;
+			void loadSubcategories();
+		}
 	}
 
 	async function loadAll(opts: { background?: boolean } = {}) {
@@ -440,6 +465,7 @@
 				label={$_('transactions.field.account')}
 				bind:value={accountId}
 				options={accountOptions}
+				onchange={() => onRecurringAccountChange()}
 				usePortal
 			/>
 			<Select

@@ -96,6 +96,21 @@
 	</svg>
 {:else if icon === 'transfer'}
 	<span class="fa-solid-glyph {className}" aria-hidden="true">{faTransfer}</span>
+{:else if icon === 'share'}
+	<svg
+		aria-hidden="true"
+		class={className}
+		viewBox="0 0 24 24"
+		fill="none"
+		stroke="currentColor"
+		stroke-width="2"
+	>
+		<circle cx="18" cy="5" r="2.5" />
+		<circle cx="6" cy="12" r="2.5" />
+		<circle cx="18" cy="19" r="2.5" />
+		<path d="m8.6 13.5 6.8 4" />
+		<path d="m15.4 6.5-6.8 4" />
+	</svg>
 {:else if icon === 'save'}
 	<svg
 		aria-hidden="true"
@@ -183,5 +198,17 @@
 	>
 		<path d="M4 2h16v20l-4-2-4 2-4-2-4 2V2Z" />
 		<path d="M8 7h8M8 11h8M8 15h5" />
+	</svg>
+{:else if icon === 'qr'}
+	<svg
+		aria-hidden="true"
+		class={className}
+		viewBox="0 0 24 24"
+		fill="none"
+		stroke="currentColor"
+		stroke-width="2"
+	>
+		<path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4z" />
+		<path d="M14 14h3v3h-3zM19 14h1v1h-1zM14 19h1v1h-1zM17 17h3v3h-3z" />
 	</svg>
 {/if}

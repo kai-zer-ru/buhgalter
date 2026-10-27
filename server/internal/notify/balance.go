@@ -29,10 +29,7 @@ func (b balanceLookup) currentBalance(ctx context.Context, accountID string) (in
 	if value, ok := b.cache[accountID]; ok {
 		return value, true
 	}
-	acc, err := b.q.GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{
-		ID:     accountID,
-		UserID: b.userID,
-	})
+	acc, err := b.q.GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: accountID, OwnerIds: []string{b.userID}})
 	if err != nil {
 		return 0, false
 	}

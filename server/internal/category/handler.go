@@ -11,6 +11,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/audit"
 	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
+	"github.com/kai-zer-ru/buhgalter/internal/scope"
 )
 
 type Handler struct {
@@ -23,6 +24,7 @@ type createCategoryRequest struct {
 	Type      string `json:"type"`
 	Icon      string `json:"icon"`
 	SortOrder int    `json:"sort_order"`
+	Scope     string `json:"scope"`
 }
 
 type updateCategoryRequest struct {
@@ -52,7 +54,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	catType := r.URL.Query().Get("type")
-	cats, err := ListByUser(r.Context(), h.Store.DB(), info.User.ID, catType)
+	cats, err := ListByScope(r.Context(), h.Store.DB(), info.Scope, r.URL.Query().Get("scope"), catType)
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
@@ -74,10 +76,15 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_INVALID_JSON")
 		return
 	}
-	cat, err := Create(r.Context(), h.Store.DB(), info.User.ID, req.Name, req.Type, req.Icon, req.SortOrder)
+	ownerID, err := scope.PrincipalForCreate(info.Scope, req.Scope)
+	if writeScopeCreateError(w, r, err) {
+		return
+	}
+	cat, err := Create(r.Context(), h.Store.DB(), ownerID, req.Name, req.Type, req.Icon, req.SortOrder)
 	if writeCategoryError(w, r, err) {
 		return
 	}
+	cat.Scope = scope.AccountScope(info.Scope, ownerID)
 	_ = h.Audit.Log("category.create", info.User.ID, info.User.Login, clientIP(r), map[string]any{"category_id": cat.ID})
 	writeJSON(w, http.StatusCreated, cat)
 }
@@ -94,7 +101,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_INVALID_JSON")
 		return
 	}
-	cat, err := Update(r.Context(), h.Store.DB(), info.User.ID, id, req.Name, req.Icon, req.SortOrder)
+	cat, err := UpdateByScope(r.Context(), h.Store.DB(), info.Scope, id, req.Name, req.Icon, req.SortOrder)
 	if errors.Is(err, ErrNotFound) {
 		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
 		return
@@ -121,7 +128,7 @@ func (h *Handler) Reorder(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_INVALID_JSON")
 		return
 	}
-	if err := Reorder(r.Context(), h.Store.DB(), info.User.ID, req.Type, req.IDs); err != nil {
+	if err := ReorderByScope(r.Context(), h.Store.DB(), info.Scope, req.Type, req.IDs); err != nil {
 		if errors.Is(err, ErrInvalidReorder) {
 			apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CATEGORY_REORDER")
 			return
@@ -129,7 +136,7 @@ func (h *Handler) Reorder(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
-	cats, err := ListByUser(r.Context(), h.Store.DB(), info.User.ID, req.Type)
+	cats, err := ListByScope(r.Context(), h.Store.DB(), info.Scope, "", req.Type)
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
@@ -148,7 +155,7 @@ func (h *Handler) SetPrimary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := chi.URLParam(r, "id")
-	cat, err := SetPrimary(r.Context(), h.Store.DB(), info.User.ID, id)
+	cat, err := SetPrimaryByScope(r.Context(), h.Store.DB(), info.Scope, id)
 	if errors.Is(err, ErrNotFound) {
 		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
 		return
@@ -168,7 +175,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := chi.URLParam(r, "id")
-	err := Delete(r.Context(), h.Store.DB(), info.User.ID, id)
+	err := DeleteByScope(r.Context(), h.Store.DB(), info.Scope, id)
 	if errors.Is(err, ErrNotFound) {
 		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
 		return
@@ -192,7 +199,16 @@ func (h *Handler) ListSubcategories(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	categoryID := chi.URLParam(r, "id")
-	subs, err := ListSubcategories(r.Context(), h.Store.DB(), info.User.ID, categoryID)
+	parent, err := GetByScope(r.Context(), h.Store.DB(), info.Scope, categoryID)
+	if errors.Is(err, ErrNotFound) {
+		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
+		return
+	}
+	if err != nil {
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	}
+	subs, err := ListSubcategories(r.Context(), h.Store.DB(), parent.OwnerUserID, categoryID)
 	if errors.Is(err, ErrNotFound) {
 		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
 		return
@@ -219,7 +235,16 @@ func (h *Handler) CreateSubcategory(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_INVALID_JSON")
 		return
 	}
-	sub, err := CreateSubcategory(r.Context(), h.Store.DB(), info.User.ID, categoryID, req.Name, req.Icon)
+	parent, err := GetByScope(r.Context(), h.Store.DB(), info.Scope, categoryID)
+	if errors.Is(err, ErrNotFound) {
+		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
+		return
+	}
+	if err != nil {
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	}
+	sub, err := CreateSubcategory(r.Context(), h.Store.DB(), parent.OwnerUserID, categoryID, req.Name, req.Icon)
 	if errors.Is(err, ErrNotFound) {
 		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
 		return
@@ -245,7 +270,16 @@ func (h *Handler) ReorderSubcategories(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_INVALID_JSON")
 		return
 	}
-	subs, err := ReorderSubcategories(r.Context(), h.Store.DB(), info.User.ID, categoryID, req.IDs)
+	parent, err := GetByScope(r.Context(), h.Store.DB(), info.Scope, categoryID)
+	if errors.Is(err, ErrNotFound) {
+		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
+		return
+	}
+	if err != nil {
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+		return
+	}
+	subs, err := ReorderSubcategories(r.Context(), h.Store.DB(), parent.OwnerUserID, categoryID, req.IDs)
 	if errors.Is(err, ErrNotFound) {
 		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
 		return
@@ -277,7 +311,7 @@ func (h *Handler) UpdateSubcategory(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_INVALID_JSON")
 		return
 	}
-	sub, err := UpdateSubcategory(r.Context(), h.Store.DB(), info.User.ID, id, req.Name, req.Icon)
+	sub, err := UpdateSubcategoryOwned(r.Context(), h.Store.DB(), info.Scope.OwnerIDs(), id, req.Name, req.Icon)
 	if errors.Is(err, ErrSubNotFound) {
 		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
 		return
@@ -296,7 +330,7 @@ func (h *Handler) DeleteSubcategory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := chi.URLParam(r, "id")
-	err := DeleteSubcategory(r.Context(), h.Store.DB(), info.User.ID, id)
+	err := DeleteSubcategoryOwned(r.Context(), h.Store.DB(), info.Scope.OwnerIDs(), id)
 	if errors.Is(err, ErrSubNotFound) {
 		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
 		return
@@ -307,6 +341,21 @@ func (h *Handler) DeleteSubcategory(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = h.Audit.Log("subcategory.delete", info.User.ID, info.User.Login, clientIP(r), map[string]any{"subcategory_id": id})
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func writeScopeCreateError(w http.ResponseWriter, r *http.Request, err error) bool {
+	if err == nil {
+		return false
+	}
+	switch {
+	case errors.Is(err, scope.ErrNoHousehold):
+		apperror.WriteR(w, r, http.StatusConflict, "ERR_HOUSEHOLD_NOT_MEMBER")
+	case errors.Is(err, scope.ErrInvalidScope):
+		apperror.WriteR(w, r, http.StatusBadRequest, "ERR_SCOPE_MISMATCH")
+	default:
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
+	}
+	return true
 }
 
 func writeCategoryError(w http.ResponseWriter, r *http.Request, err error) bool {

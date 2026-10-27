@@ -80,7 +80,14 @@ func Parse(ctx context.Context, fetcher Fetcher, qr string) (fns.ParsedReceipt, 
 }
 
 func GetByID(ctx context.Context, db *sql.DB, userID, id, transactionID string) (Detail, error) {
-	row, err := queries(db).GetReceiptImportByID(ctx, sqlcdb.GetReceiptImportByIDParams{ID: id, UserID: userID})
+	return GetByIDForOwners(ctx, db, []string{userID}, id, transactionID)
+}
+
+func GetByIDForOwners(ctx context.Context, db *sql.DB, ownerIDs []string, id, transactionID string) (Detail, error) {
+	if len(ownerIDs) == 0 {
+		return Detail{}, ErrNotFound
+	}
+	row, err := queries(db).GetReceiptImportByID(ctx, sqlcdb.GetReceiptImportByIDParams{ID: id, OwnerIds: ownerIDs})
 	if errors.Is(err, sql.ErrNoRows) {
 		return Detail{}, ErrNotFound
 	}
@@ -108,6 +115,7 @@ func GetByID(ctx context.Context, db *sql.DB, userID, id, transactionID string) 
 	} else if payload.StoreName != "" {
 		detail.StoreName = payload.StoreName
 	}
+	userID := row.UserID
 	byIndex, attachCat := loadLinkedCategories(ctx, db, userID, id)
 	detail.Items = detailItemsFromPayload(payload.Items, byIndex, attachCat)
 	if transactionID != "" {

@@ -116,7 +116,7 @@ func repairCreditSchedule(ctx context.Context, db *sql.DB, c repairCreditRow) er
 	}
 
 	if retroPaid > 0 {
-		creditRow, err := q.GetCreditByID(ctx, sqlcdb.GetCreditByIDParams{ID: c.id, UserID: c.userID})
+		creditRow, err := q.GetCreditByID(ctx, sqlcdb.GetCreditByIDParams{ID: c.id, OwnerIds: []string{c.userID}})
 		if err != nil {
 			return err
 		}

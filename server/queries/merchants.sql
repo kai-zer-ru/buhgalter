@@ -1,13 +1,16 @@
 -- name: ListMerchantsByUser :many
 SELECT id, user_id, name, icon, created_at
 FROM merchants
-WHERE user_id = ?
+WHERE user_id IN (sqlc.slice('owner_ids'))
 ORDER BY name COLLATE NOCASE ASC;
+
+-- name: GetMerchantUserID :one
+SELECT user_id FROM merchants WHERE id = ?;
 
 -- name: GetMerchantByID :one
 SELECT id, user_id, name, icon, created_at
 FROM merchants
-WHERE id = ? AND user_id = ?;
+WHERE id = sqlc.arg('id') AND user_id IN (sqlc.slice('owner_ids'));
 
 -- name: GetMerchantByName :one
 SELECT id, user_id, name, icon, created_at
@@ -30,7 +33,7 @@ WHERE id = ? AND user_id = ?;
 -- name: ListMerchantAliasesByUser :many
 SELECT id, user_id, merchant_id, name, created_at
 FROM merchant_aliases
-WHERE user_id = ?
+WHERE user_id IN (sqlc.slice('owner_ids'))
 ORDER BY name COLLATE NOCASE ASC, id ASC;
 
 -- name: InsertMerchantAlias :exec

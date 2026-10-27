@@ -8,13 +8,17 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/scope"
 )
 
 type Debtor struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	CreatedAt string `json:"created_at"`
+	ID          string `json:"id"`
+	OwnerUserID string `json:"-"`
+	Scope       string `json:"scope,omitempty"`
+	Name        string `json:"name"`
+	CreatedAt   string `json:"created_at"`
 }
 
 var (
@@ -25,13 +29,23 @@ var (
 )
 
 func ListDebtors(ctx context.Context, db *sql.DB, userID string) ([]Debtor, error) {
-	rows, err := queries(db).ListDebtorsByUser(ctx, userID)
+	return ListDebtorsByScope(ctx, db, auth.Scope{UserID: userID}, "")
+}
+
+func ListDebtorsByScope(ctx context.Context, db *sql.DB, sc auth.Scope, view string) ([]Debtor, error) {
+	ids := scope.FilterOwnerIDs(sc, view)
+	if len(ids) == 0 {
+		return []Debtor{}, nil
+	}
+	rows, err := queries(db).ListDebtorsByUser(ctx, ids)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]Debtor, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, debtorFromRow(row))
+		d := debtorFromRow(row)
+		d.Scope = scope.AccountScope(sc, d.OwnerUserID)
+		out = append(out, d)
 	}
 	return out, nil
 }
@@ -65,14 +79,24 @@ func CreateDebtor(ctx context.Context, db *sql.DB, userID, name string) (Debtor,
 }
 
 func GetDebtor(ctx context.Context, db *sql.DB, userID, id string) (Debtor, error) {
-	row, err := queries(db).GetDebtorByID(ctx, sqlcdb.GetDebtorByIDParams{ID: id, UserID: userID})
+	return GetDebtorByScope(ctx, db, auth.Scope{UserID: userID}, id)
+}
+
+func GetDebtorByScope(ctx context.Context, db *sql.DB, sc auth.Scope, id string) (Debtor, error) {
+	ids := sc.OwnerIDs()
+	if len(ids) == 0 {
+		return Debtor{}, ErrDebtorNotFound
+	}
+	row, err := queries(db).GetDebtorByID(ctx, sqlcdb.GetDebtorByIDParams{ID: id, OwnerIds: ids})
 	if errors.Is(err, sql.ErrNoRows) {
 		return Debtor{}, ErrDebtorNotFound
 	}
 	if err != nil {
 		return Debtor{}, err
 	}
-	return debtorFromRow(row), nil
+	d := debtorFromRow(row)
+	d.Scope = scope.AccountScope(sc, d.OwnerUserID)
+	return d, nil
 }
 
 func UpdateDebtor(ctx context.Context, db *sql.DB, userID, id, name string) (Debtor, error) {
@@ -148,5 +172,5 @@ func resolveDebtor(ctx context.Context, db *sql.DB, userID string, debtorID, deb
 }
 
 func debtorFromRow(row sqlcdb.Debtor) Debtor {
-	return Debtor{ID: row.ID, Name: row.Name, CreatedAt: row.CreatedAt}
+	return Debtor{ID: row.ID, OwnerUserID: row.UserID, Name: row.Name, CreatedAt: row.CreatedAt}
 }

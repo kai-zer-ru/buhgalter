@@ -7,6 +7,7 @@ package sqlc
 
 import (
 	"context"
+	"strings"
 )
 
 const deleteMerchant = `-- name: DeleteMerchant :execrows
@@ -45,16 +46,27 @@ func (q *Queries) DeleteMerchantAliasesByMerchant(ctx context.Context, arg Delet
 const getMerchantByID = `-- name: GetMerchantByID :one
 SELECT id, user_id, name, icon, created_at
 FROM merchants
-WHERE id = ? AND user_id = ?
+WHERE id = ?1 AND user_id IN (/*SLICE:owner_ids*/?)
 `
 
 type GetMerchantByIDParams struct {
-	ID     string `json:"id"`
-	UserID string `json:"user_id"`
+	ID       string   `json:"id"`
+	OwnerIds []string `json:"owner_ids"`
 }
 
 func (q *Queries) GetMerchantByID(ctx context.Context, arg GetMerchantByIDParams) (Merchant, error) {
-	row := q.db.QueryRowContext(ctx, getMerchantByID, arg.ID, arg.UserID)
+	query := getMerchantByID
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.ID)
+	if len(arg.OwnerIds) > 0 {
+		for _, v := range arg.OwnerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(arg.OwnerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	row := q.db.QueryRowContext(ctx, query, queryParams...)
 	var i Merchant
 	err := row.Scan(
 		&i.ID,
@@ -88,6 +100,17 @@ func (q *Queries) GetMerchantByName(ctx context.Context, arg GetMerchantByNamePa
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const getMerchantUserID = `-- name: GetMerchantUserID :one
+SELECT user_id FROM merchants WHERE id = ?
+`
+
+func (q *Queries) GetMerchantUserID(ctx context.Context, id string) (string, error) {
+	row := q.db.QueryRowContext(ctx, getMerchantUserID, id)
+	var user_id string
+	err := row.Scan(&user_id)
+	return user_id, err
 }
 
 const insertMerchant = `-- name: InsertMerchant :exec
@@ -141,12 +164,22 @@ func (q *Queries) InsertMerchantAlias(ctx context.Context, arg InsertMerchantAli
 const listMerchantAliasesByUser = `-- name: ListMerchantAliasesByUser :many
 SELECT id, user_id, merchant_id, name, created_at
 FROM merchant_aliases
-WHERE user_id = ?
+WHERE user_id IN (/*SLICE:owner_ids*/?)
 ORDER BY name COLLATE NOCASE ASC, id ASC
 `
 
-func (q *Queries) ListMerchantAliasesByUser(ctx context.Context, userID string) ([]MerchantAlias, error) {
-	rows, err := q.db.QueryContext(ctx, listMerchantAliasesByUser, userID)
+func (q *Queries) ListMerchantAliasesByUser(ctx context.Context, ownerIds []string) ([]MerchantAlias, error) {
+	query := listMerchantAliasesByUser
+	var queryParams []interface{}
+	if len(ownerIds) > 0 {
+		for _, v := range ownerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(ownerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
 	if err != nil {
 		return nil, err
 	}
@@ -177,12 +210,22 @@ func (q *Queries) ListMerchantAliasesByUser(ctx context.Context, userID string) 
 const listMerchantsByUser = `-- name: ListMerchantsByUser :many
 SELECT id, user_id, name, icon, created_at
 FROM merchants
-WHERE user_id = ?
+WHERE user_id IN (/*SLICE:owner_ids*/?)
 ORDER BY name COLLATE NOCASE ASC
 `
 
-func (q *Queries) ListMerchantsByUser(ctx context.Context, userID string) ([]Merchant, error) {
-	rows, err := q.db.QueryContext(ctx, listMerchantsByUser, userID)
+func (q *Queries) ListMerchantsByUser(ctx context.Context, ownerIds []string) ([]Merchant, error) {
+	query := listMerchantsByUser
+	var queryParams []interface{}
+	if len(ownerIds) > 0 {
+		for _, v := range ownerIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", strings.Repeat(",?", len(ownerIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:owner_ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
 	if err != nil {
 		return nil, err
 	}

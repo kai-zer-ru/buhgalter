@@ -106,7 +106,7 @@ test('recurring expense updates account balance when applied', async ({ page }) 
 	const categories = await apiJSON<{ id: string }[]>(
 		page,
 		'GET',
-		'/api/v1/categories?type=expense'
+		'/api/v1/categories?type=expense&scope=personal'
 	);
 	const description = `E2E Rec Balance ${Date.now()}`;
 

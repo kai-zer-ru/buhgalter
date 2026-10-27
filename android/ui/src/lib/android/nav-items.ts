@@ -111,7 +111,7 @@ export function androidMainNavItems(): AndroidNavItem[] {
 	]);
 }
 
-export function androidSettingsNavItems(): AndroidNavItem[] {
+export function androidSettingsNavItems(opts?: { householdLabelKey?: string }): AndroidNavItem[] {
 	return filterByFeature([
 		{
 			href: resolve('/settings/profile'),
@@ -137,6 +137,12 @@ export function androidSettingsNavItems(): AndroidNavItem[] {
 			href: resolve('/settings/tokens'),
 			labelKey: 'settings.tab.tokens',
 			isActive: (p) => p === '/settings/tokens'
+		},
+		{
+			href: resolve('/settings/household'),
+			labelKey: opts?.householdLabelKey ?? 'settings.tab.household',
+			feature: 'household',
+			isActive: (p) => p.startsWith('/settings/household')
 		},
 		{
 			href: resolve('/settings/bank-notifications'),

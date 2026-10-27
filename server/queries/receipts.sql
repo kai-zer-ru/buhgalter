@@ -14,7 +14,7 @@ SELECT
     s.name AS store_name
 FROM receipt_imports ri
 LEFT JOIN stores s ON s.id = ri.store_id
-WHERE ri.id = ? AND ri.user_id = ?;
+WHERE ri.id = sqlc.arg('id') AND ri.user_id IN (sqlc.slice('owner_ids'));
 
 -- name: GetReceiptImportByFiscalKey :one
 SELECT id

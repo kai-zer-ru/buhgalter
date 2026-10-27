@@ -25,7 +25,9 @@ func creditAuthRequest(t *testing.T, userID, method, path string, body []byte) *
 		req = httptest.NewRequest(method, path, nil)
 	}
 	user := auth.User{ID: userID, Login: "credituser"}
-	ctx := context.WithValue(req.Context(), auth.AuthContextKey, auth.AuthInfo{User: user})
+	ctx := context.WithValue(req.Context(), auth.AuthContextKey, auth.AuthInfo{
+		User: user, Scope: auth.Scope{UserID: userID},
+	})
 	return req.WithContext(ctx)
 }
 

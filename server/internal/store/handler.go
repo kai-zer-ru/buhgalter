@@ -19,7 +19,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		apperror.WriteR(w, r, http.StatusUnauthorized, apperror.Unauthorized)
 		return
 	}
-	items, err := List(r.Context(), h.Store.DB(), info.User.ID)
+	items, err := ListByScope(r.Context(), h.Store.DB(), info.Scope, r.URL.Query().Get("scope"))
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return

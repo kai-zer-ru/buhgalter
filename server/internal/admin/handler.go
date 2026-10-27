@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -18,6 +19,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/config"
 	"github.com/kai-zer-ru/buhgalter/internal/db"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/household"
 	"github.com/kai-zer-ru/buhgalter/internal/notify"
 	"github.com/kai-zer-ru/buhgalter/internal/receipt"
 	"github.com/kai-zer-ru/buhgalter/internal/settingscache"
@@ -311,6 +313,10 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 
 	userID, err := auth.CreateUser(r.Context(), h.Store.DB(), login, hash, displayName, req.IsAdmin, auth.UserStatusActive)
 	if err != nil {
+		if errors.Is(err, auth.ErrReservedLogin) {
+			apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_LOGIN_RESERVED")
+			return
+		}
 		if strings.Contains(err.Error(), "UNIQUE") {
 			apperror.WriteR(w, r, http.StatusConflict, apperror.ValidationError, "CONFLICT_LOGIN_TAKEN")
 			return
@@ -358,6 +364,14 @@ func (h *Handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	login, err := q.GetUserLogin(r.Context(), targetID)
 	if err != nil {
 		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
+		return
+	}
+
+	if err := household.PrepareAdminDelete(r.Context(), h.Store.DB(), targetID); errors.Is(err, household.ErrOwnerDeleteBlocked) {
+		apperror.WriteR(w, r, http.StatusConflict, "ERR_HOUSEHOLD_OWNER_DELETE")
+		return
+	} else if err != nil {
+		apperror.WriteR(w, r, http.StatusInternalServerError, apperror.InternalError)
 		return
 	}
 

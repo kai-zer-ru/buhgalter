@@ -8,13 +8,17 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/kai-zer-ru/buhgalter/internal/auth"
 	sqlcdb "github.com/kai-zer-ru/buhgalter/internal/db/sqlc"
+	"github.com/kai-zer-ru/buhgalter/internal/scope"
 )
 
 type Tag struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	CreatedAt string `json:"created_at"`
+	ID          string `json:"id"`
+	OwnerUserID string `json:"-"`
+	Scope       string `json:"scope,omitempty"`
+	Name        string `json:"name"`
+	CreatedAt   string `json:"created_at"`
 }
 
 type Ref struct {
@@ -33,19 +37,27 @@ func queries(db sqlcdb.DBTX) *sqlcdb.Queries {
 }
 
 func List(ctx context.Context, db *sql.DB, userID, q string) ([]Tag, error) {
+	return ListByScope(ctx, db, auth.Scope{UserID: userID}, "", q)
+}
+
+func ListByScope(ctx context.Context, db *sql.DB, sc auth.Scope, view, q string) ([]Tag, error) {
+	ids := scope.FilterOwnerIDs(sc, view)
+	if len(ids) == 0 {
+		return []Tag{}, nil
+	}
 	q = strings.TrimSpace(q)
-	qPtr := q
 	rows, err := queries(db).ListTagsByUser(ctx, sqlcdb.ListTagsByUserParams{
-		UserID:  userID,
-		Column2: q,
-		Column3: &qPtr,
+		OwnerIds: ids,
+		Q:        q,
 	})
 	if err != nil {
 		return nil, err
 	}
 	out := make([]Tag, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, fromRow(row))
+		t := fromRow(row)
+		t.Scope = scope.AccountScope(sc, t.OwnerUserID)
+		out = append(out, t)
 	}
 	return out, nil
 }
@@ -84,7 +96,7 @@ func Create(ctx context.Context, db *sql.DB, userID, name string) (Tag, error) {
 
 func findByEqualFold(ctx context.Context, db *sql.DB, userID, name string) (Tag, bool) {
 	rows, err := queries(db).ListTagsByUser(ctx, sqlcdb.ListTagsByUserParams{
-		UserID: userID, Column2: "", Column3: strPtr(""),
+		OwnerIds: []string{userID}, Q: "",
 	})
 	if err != nil {
 		return Tag{}, false
@@ -97,17 +109,25 @@ func findByEqualFold(ctx context.Context, db *sql.DB, userID, name string) (Tag,
 	return Tag{}, false
 }
 
-func strPtr(s string) *string { return &s }
-
 func Get(ctx context.Context, db *sql.DB, userID, id string) (Tag, error) {
-	row, err := queries(db).GetTagByID(ctx, sqlcdb.GetTagByIDParams{ID: id, UserID: userID})
+	return GetByScope(ctx, db, auth.Scope{UserID: userID}, id)
+}
+
+func GetByScope(ctx context.Context, db *sql.DB, sc auth.Scope, id string) (Tag, error) {
+	ids := sc.OwnerIDs()
+	if len(ids) == 0 {
+		return Tag{}, ErrNotFound
+	}
+	row, err := queries(db).GetTagByID(ctx, sqlcdb.GetTagByIDParams{ID: id, OwnerIds: ids})
 	if errors.Is(err, sql.ErrNoRows) {
 		return Tag{}, ErrNotFound
 	}
 	if err != nil {
 		return Tag{}, err
 	}
-	return fromRow(row), nil
+	t := fromRow(row)
+	t.Scope = scope.AccountScope(sc, t.OwnerUserID)
+	return t, nil
 }
 
 func Update(ctx context.Context, db *sql.DB, userID, id, name string) (Tag, error) {
@@ -239,5 +259,5 @@ func MapForTransactions(ctx context.Context, db *sql.DB, transactionIDs []string
 }
 
 func fromRow(row sqlcdb.Tag) Tag {
-	return Tag{ID: row.ID, Name: row.Name, CreatedAt: row.CreatedAt}
+	return Tag{ID: row.ID, OwnerUserID: row.UserID, Name: row.Name, CreatedAt: row.CreatedAt}
 }

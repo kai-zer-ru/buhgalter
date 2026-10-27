@@ -27,7 +27,16 @@ func createTestAccount(t *testing.T, env *testEnv, name string) string {
 
 func getExpenseCategory(t *testing.T, env *testEnv) string {
 	t.Helper()
-	resp, err := env.authedRequest(http.MethodGet, "/api/v1/categories?type=expense", nil)
+	return getExpenseCategoryScoped(t, env, "")
+}
+
+func getExpenseCategoryScoped(t *testing.T, env *testEnv, catalogScope string) string {
+	t.Helper()
+	path := "/api/v1/categories?type=expense"
+	if catalogScope != "" {
+		path += "&scope=" + catalogScope
+	}
+	resp, err := env.authedRequest(http.MethodGet, path, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

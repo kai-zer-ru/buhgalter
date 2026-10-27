@@ -64,11 +64,18 @@ func ComputeSummary(rows []summaryRow, tz string, now time.Time) (Summary, error
 }
 
 func SummaryForUser(ctx context.Context, db *sql.DB, userID string) (Summary, error) {
-	tz, err := userTimezone(ctx, db, userID)
+	return SummaryForOwners(ctx, db, userID, []string{userID})
+}
+
+func SummaryForOwners(ctx context.Context, db *sql.DB, tzUserID string, ownerIDs []string) (Summary, error) {
+	if len(ownerIDs) == 0 {
+		return Summary{}, nil
+	}
+	tz, err := userTimezone(ctx, db, tzUserID)
 	if err != nil {
 		return Summary{}, err
 	}
-	rows, err := queries(db).ListActiveDebtsForSummary(ctx, userID)
+	rows, err := queries(db).ListActiveDebtsForSummary(ctx, ownerIDs)
 	if err != nil {
 		return Summary{}, err
 	}
@@ -82,7 +89,7 @@ func SummaryForUser(ctx context.Context, db *sql.DB, userID string) (Summary, er
 		})
 	}
 	now := timeutil.NowUTC()
-	profile, err := account.ProfileCurrency(ctx, db, userID)
+	profile, err := account.ProfileCurrency(ctx, db, tzUserID)
 	if err != nil {
 		return Summary{}, err
 	}

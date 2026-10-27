@@ -27,6 +27,11 @@ FILE_EXCEPTIONS: dict[str, list[re.Pattern[str]]] = {
     "internal/db/receipt_column_repair.go": [
         re.compile(r"goose_db_version", re.I),
     ],
+    "internal/household/leftover.go": [
+        re.compile(r"sqlite_master", re.I),
+        re.compile(r"pragma_table_info", re.I),
+        re.compile(r"SELECT COUNT", re.I),
+    ],
 }
 
 DB_CALL = re.compile(r"\.(Exec|Query|QueryRow)(Context)?\s*\(", re.MULTILINE)

@@ -41,7 +41,8 @@
 | [receipt-scanner-proverkacheka.md](receipt-scanner-proverkacheka.md) | Интеграция API (dev) |
 | [../roadmap/transaction-templates.md](../roadmap/transaction-templates.md) | Шаблоны операций для быстрого добавления |
 | [../roadmap/multicurrency.md](../roadmap/multicurrency.md) | (v1.11.0) Валюта счёта, обмен, итоги по валютам без смешения |
-| [../roadmap/team-collaboration.md](../roadmap/team-collaboration.md) | (спека v1.11 готова, код после валюты счёта) Семья / команда: household-принципал, инвайты, общие счета |
+| [household.md](household.md) | Семья / команда (`kind`): группа, инвайты, общие счета, бейджи и scope в UI (web + Android) |
+| [../roadmap/team-collaboration.md](../roadmap/team-collaboration.md) | (v1.11) Семья / команда (реализовано) |
 | [../roadmap/transaction-enrichment.md](../roadmap/transaction-enrichment.md) | (план) Теги, контрагент, split, вложения |
 | [../roadmap/savings-reports-import.md](../roadmap/savings-reports-import.md) | (план) Цели накопления, PDF-отчёты, расширенный импорт |
 | [accounts-archive-delete.md](accounts-archive-delete.md) | Архивация, мягкое удаление счётов, автоперевод остатка |

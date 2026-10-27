@@ -90,7 +90,7 @@ test('repeat after editing a receipt expense does not send that store id', async
 	const cats = await apiJSON<{ id: string; is_system?: boolean }[]>(
 		page,
 		'GET',
-		'/api/v1/categories?type=expense'
+		'/api/v1/categories?type=expense&scope=personal'
 	);
 	const cat = cats.find((row) => !row.is_system) ?? cats[0];
 	expect(cat).toBeTruthy();

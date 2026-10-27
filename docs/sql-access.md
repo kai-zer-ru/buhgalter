@@ -34,6 +34,7 @@ func queries(db *sql.DB) *sqlcdb.Queries {
 | `server/internal/accountbalance/hook.go` | `pragma_table_info(...)` | метаданные схемы SQLite |
 | `admin/handler.go` | `SELECT version_id FROM goose_db_version` | инфраструктура миграций |
 | `internal/db/receipt_column_repair.go` | `INSERT INTO goose_db_version` | повтор миграций 057/059, если колонка чека уже есть |
+| `internal/household/leftover.go` | `sqlite_master` / `pragma_table_info` / `COUNT(*)` по `user_id` | dissolve: нет строк принципала ни в одной таблице |
 
 Новые исключения добавлять только с явным обоснованием в PR (и строкой в `FILE_EXCEPTIONS` в `scripts/check_inline_sql.py`).
 
@@ -48,6 +49,19 @@ func queries(db *sql.DB) *sqlcdb.Queries {
 - Писать `SELECT` / `INSERT` / `UPDATE` / `DELETE` к таблицам в `.go`-файлах production-кода (кроме исключений выше).
 - Дублировать один запрос и в sqlc, и inline.
 - Редактировать `server/internal/db/sqlc/*.sql.go` вручную.
+
+## Видимое множество семьи (`owner_ids`)
+
+Чтение доменных строк для члена группы — `user_id IN (sqlc.slice('owner_ids'))` (не больше двух id: я и принципал).  
+Скалярные `sqlc.arg` в WHERE ставить **до** `IN (sqlc.slice(...))`.
+
+Сознательно остаются `user_id = ?` (один человек, не видимое множество):
+
+- личные таблицы: `sessions`, `api_tokens`, `password_reset_requests`, `notifications`, `user_change_events`, `feature_flags`, `system_settings`
+- запись уже загруженной строки (`user_id = row.user_id`)
+- schedulers и reset_data по одному принципалу
+- scan-job / import job / intercept bindings — задача пользователя, не семейный каталог
+- экспорт — только личное
 
 ## Правило на будущее
 
