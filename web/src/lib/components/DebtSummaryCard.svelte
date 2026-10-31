@@ -13,17 +13,19 @@
 	const currency = $derived($user?.currency ?? 'RUB');
 </script>
 
-<div class="card flex flex-wrap gap-6">
-	<div>
-		<p class="text-sm" style:color="var(--text-muted)">{$_('debts.summary.iOwe')}</p>
-		<p class="text-xl font-semibold tabular-nums" style:color="var(--danger)">
-			<MoneyDisplay cents={iOwe} {currency} class="" />
-		</p>
-	</div>
-	<div>
-		<p class="text-sm" style:color="var(--text-muted)">{$_('debts.summary.owedToMe')}</p>
-		<p class="text-xl font-semibold tabular-nums" style:color="var(--primary)">
-			<MoneyDisplay cents={owedToMe} {currency} class="" />
-		</p>
+<div class="card overflow-hidden p-0 sm:p-0">
+	<div class="stat-grid grid-cols-2">
+		<div>
+			<p class="stat-label">{$_('debts.summary.iOwe')}</p>
+			<p class="stat-value sm:text-2xl" style:color="var(--danger)">
+				<MoneyDisplay cents={iOwe} {currency} class="" />
+			</p>
+		</div>
+		<div>
+			<p class="stat-label">{$_('debts.summary.owedToMe')}</p>
+			<p class="stat-value sm:text-2xl" style:color="var(--primary)">
+				<MoneyDisplay cents={owedToMe} {currency} class="" />
+			</p>
+		</div>
 	</div>
 </div>

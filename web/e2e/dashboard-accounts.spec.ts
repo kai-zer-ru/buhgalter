@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { apiJSON, waitAppReady } from './helpers/auth';
-import { createCashAccount } from './helpers/setup-data';
+import { createCashAccount, createCreditCardAccount } from './helpers/setup-data';
 
 test('home: account groups collapsed on mobile by default', async ({ page }) => {
 	const unique = Date.now();
@@ -50,4 +50,33 @@ test('home: recent transactions collapsed by default', async ({ page }) => {
 	await panel.locator('summary.account-group-summary').click();
 	await expect(panel).toHaveAttribute('open', '');
 	await expect(panel.getByRole('row').first()).toBeVisible({ timeout: 10_000 });
+});
+
+test('home: account group spoilers keep the same gap as other spoilers', async ({ page }) => {
+	const unique = Date.now();
+	await createCashAccount(page, `E2E Gap Cash ${unique}`);
+	await createCreditCardAccount(page, `E2E Gap Card ${unique}`);
+
+	// Mobile width: every home spoiler starts collapsed.
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.goto('/');
+	await waitAppReady(page);
+
+	const panel = (label: string) =>
+		page.locator('details.account-group-panel').filter({ hasText: label }).first();
+	const own = panel('Мои средства');
+	const credit = panel('Кредитные средства');
+	const recent = panel('Последние операции');
+	await expect(credit).toBeVisible({ timeout: 10_000 });
+
+	const box = async (loc: typeof own) => {
+		const b = await loc.boundingBox();
+		if (!b) throw new Error('panel has no box');
+		return b;
+	};
+	const [a, b, c] = [await box(own), await box(credit), await box(recent)];
+	const groupGap = b.y - (a.y + a.height);
+	const sectionGap = c.y - (b.y + b.height);
+	expect(groupGap).toBeGreaterThan(0);
+	expect(Math.abs(groupGap - sectionGap)).toBeLessThanOrEqual(1);
 });

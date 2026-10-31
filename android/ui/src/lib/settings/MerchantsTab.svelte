@@ -12,7 +12,7 @@
 	import CategoryIcon from '$lib/components/CategoryIcon.svelte';
 	import CategoryIconPicker from '$lib/components/CategoryIconPicker.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
-	import IconButton from '$lib/components/IconButton.svelte';
+	import GroupHeading from '$lib/components/GroupHeading.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
 	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
@@ -209,7 +209,7 @@
 	}
 </script>
 
-<div class="space-y-6">
+<div class="space-y-8">
 	<CatalogScopeTabs
 		mode="catalog"
 		value={catalogScope}
@@ -218,8 +218,11 @@
 			void load();
 		}}
 	/>
-	<div class="card space-y-3">
-		<h2 class="font-medium">{$_('merchants.add')}</h2>
+	<section class="card space-y-3">
+		<div class="space-y-1">
+			<h2 class="font-semibold">{$_('merchants.add')}</h2>
+			<p class="text-sm" style:color="var(--text-muted)">{$_('merchants.add_hint')}</p>
+		</div>
 		<div class="flex items-center gap-2">
 			<CategoryIconPicker
 				bind:value={newIcon}
@@ -233,6 +236,9 @@
 				class="input min-w-0 flex-1"
 				placeholder={$_('merchants.field.name')}
 				bind:value={newName}
+				onkeydown={(e) => {
+					if (e.key === 'Enter') void addMerchant();
+				}}
 			/>
 			<button type="button" class="btn-primary shrink-0 sm:px-4" onclick={() => void addMerchant()}>
 				{$_('common.create')}
@@ -245,78 +251,91 @@
 			aria-label={$_('merchants.field.aliases')}
 			bind:value={newAliases}
 		/>
-	</div>
-
-	{#if merchants.length > 0}
-		<input
-			class="input w-full"
-			type="search"
-			placeholder={$_('common.searchPlaceholder')}
-			bind:value={listQuery}
-		/>
-	{/if}
+	</section>
 
 	<PageLoadGate {loading} error={loadError} onretry={() => void load()} inline>
 		{#if merchants.length === 0}
 			<EmptyStateCard message={$_('merchants.empty')} />
-		{:else if filteredMerchants.length === 0}
-			<EmptyStateCard message={$_('common.notFound')} />
 		{:else}
-			<div class="space-y-2">
-				{#each filteredMerchants as m (m.id)}
-					<div class="card space-y-2">
-						<div class="flex flex-wrap items-center gap-1 sm:flex-nowrap">
-							{#if editingId !== m.id}
-								<span class="inline-flex shrink-0 items-center justify-center min-h-11 min-w-11">
-									<CategoryIcon icon={m.icon || 'default'} size={iconSize} />
-								</span>
-								<div class="min-w-0 flex-1">
-									<div class="truncate font-medium">{m.name}</div>
-									{#if m.aliases?.length}
-										<div class="truncate text-sm" style:color="var(--text-muted)">
-											{m.aliases.join(', ')}
-										</div>
-									{/if}
-								</div>
-								<RowActionsMenu actions={rowActions(m)} />
-							{:else}
-								{#key editingId}
-									<CategoryIconPicker
-										bind:value={editIcon}
-										bind:categoryName={editName}
-										categoryType="expense"
-										lockName={true}
-										variant="button"
-										quickSize={iconSize}
-										{iconSize}
+			<section class="space-y-3">
+				<GroupHeading
+					title={$_('merchants.group.all', { values: { count: merchants.length } })}
+					hint={$_('merchants.group.all_hint')}
+				/>
+				<div class="card list-divided p-0 sm:p-0">
+					<div class="p-2 sm:p-3">
+						<input
+							class="input w-full"
+							type="search"
+							placeholder={$_('common.searchPlaceholder')}
+							bind:value={listQuery}
+						/>
+					</div>
+					{#if filteredMerchants.length === 0}
+						<p class="px-4 py-6 text-center text-sm" style:color="var(--text-muted)">
+							{$_('common.notFound')}
+						</p>
+					{/if}
+					{#each filteredMerchants as m (m.id)}
+						<div data-testid="merchant-row">
+							{#if editingId === m.id}
+								<div class="space-y-3 p-3 sm:p-4">
+									<div class="flex items-center gap-2">
+										{#key editingId}
+											<CategoryIconPicker
+												bind:value={editIcon}
+												bind:categoryName={editName}
+												categoryType="expense"
+												lockName={true}
+												variant="button"
+												quickSize={iconSize}
+												{iconSize}
+											/>
+										{/key}
+										<input
+											class="input min-w-0 flex-1"
+											bind:value={editName}
+											onkeydown={(e) => {
+												if (e.key === 'Enter') void saveEdit();
+											}}
+										/>
+									</div>
+									<input
+										id="merchant-edit-aliases"
+										class="input w-full"
+										placeholder={$_('merchants.field.aliasesPlaceholder')}
+										aria-label={$_('merchants.field.aliases')}
+										bind:value={editAliases}
 									/>
-								{/key}
-								<input class="input min-w-0 flex-1" bind:value={editName} />
-								<IconButton
-									icon="save"
-									label={$_('common.save')}
-									variant="primary"
-									onclick={() => void saveEdit()}
-								/>
-								<IconButton
-									icon="cancel"
-									label={$_('common.cancel')}
-									onclick={() => (editingId = null)}
-								/>
+									<div class="flex justify-end gap-2">
+										<button type="button" class="btn-ghost" onclick={() => (editingId = null)}>
+											{$_('common.cancel')}
+										</button>
+										<button type="button" class="btn-primary" onclick={() => void saveEdit()}>
+											{$_('common.save')}
+										</button>
+									</div>
+								</div>
+							{:else}
+								<div class="flex items-center gap-3 py-1.5 pr-1.5 pl-2 sm:pr-2 sm:pl-3">
+									<span class="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center">
+										<CategoryIcon icon={m.icon || 'default'} size={iconSize} />
+									</span>
+									<div class="min-w-0 flex-1">
+										<div class="truncate font-medium">{m.name}</div>
+										{#if m.aliases?.length}
+											<div class="truncate text-xs" style:color="var(--text-muted)">
+												{$_('merchants.aliases_line', { values: { list: m.aliases.join(', ') } })}
+											</div>
+										{/if}
+									</div>
+									<RowActionsMenu actions={rowActions(m)} />
+								</div>
 							{/if}
 						</div>
-						{#if editingId === m.id}
-							<input
-								id="merchant-edit-aliases"
-								class="input w-full"
-								placeholder={$_('merchants.field.aliasesPlaceholder')}
-								aria-label={$_('merchants.field.aliases')}
-								bind:value={editAliases}
-							/>
-						{/if}
-					</div>
-				{/each}
-			</div>
+					{/each}
+				</div>
+			</section>
 		{/if}
 	</PageLoadGate>
 </div>
@@ -332,17 +351,21 @@
 	{#if mergeOthers.length === 0}
 		<p class="mt-3 text-sm">{$_('merchants.merge.empty')}</p>
 	{:else}
-		<ul class="mt-3 space-y-2">
+		<ul
+			class="list-divided mt-3 max-h-[50vh] overflow-y-auto rounded-xl border"
+			style:border-color="var(--border)"
+		>
 			{#each mergeOthers as m (m.id)}
 				<li>
-					<label class="flex items-center gap-2">
+					<label class="merge-option flex cursor-pointer items-center gap-3 px-3 py-2">
 						<input
 							type="checkbox"
 							checked={mergeSelected.includes(m.id)}
 							onchange={(event) =>
 								toggleMerge(m.id, (event.currentTarget as HTMLInputElement).checked)}
 						/>
-						<span>{m.name}</span>
+						<CategoryIcon icon={m.icon || 'default'} size={28} />
+						<span class="min-w-0 flex-1 truncate">{m.name}</span>
 					</label>
 				</li>
 			{/each}
@@ -362,3 +385,9 @@
 		</button>
 	{/snippet}
 </ModalShell>
+
+<style>
+	.merge-option:hover {
+		background-color: color-mix(in srgb, var(--border) 30%, transparent);
+	}
+</style>

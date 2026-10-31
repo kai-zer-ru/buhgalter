@@ -317,9 +317,9 @@
 		{:else if items.length === 0}
 			<EmptyStateCard message={$_('subscriptions.find.empty')} />
 		{:else}
-			<div class="card md:overflow-x-auto" class:opacity-60={searching}>
+			<div class="card overflow-x-auto p-0 sm:p-0" class:opacity-60={searching}>
 				<div class="hidden md:block">
-					<table class="w-full text-left text-sm">
+					<table class="data-table w-full text-left text-sm">
 						<thead>
 							<tr style:color="var(--text-muted)">
 								<th class="p-3 w-10"></th>
@@ -362,9 +362,9 @@
 					</table>
 				</div>
 
-				<div class="space-y-3 p-3 md:hidden">
+				<div class="list-divided md:hidden">
 					{#each items as item (item.id)}
-						<article class="rounded-xl border p-4" style:border-color="var(--border)">
+						<article class="p-4">
 							<label class="flex items-start gap-3">
 								<input
 									class="mt-1"

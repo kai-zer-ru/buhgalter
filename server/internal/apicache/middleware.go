@@ -41,13 +41,11 @@ func (rr *responseRecorder) flush() {
 	if !rr.wroteHeader {
 		rr.WriteHeader(http.StatusOK)
 	}
+	// rr.Header() is the wrapped writer's map (embedded ResponseWriter), so headers set by
+	// outer middleware (CORS, Vary) and the handler are already there. Copying them again
+	// duplicated every value, and browsers reject a doubled Access-Control-Allow-Origin.
 	if rr.Header().Get("Content-Type") == "" {
 		rr.Header().Set("Content-Type", "application/json; charset=utf-8")
-	}
-	for key, values := range rr.Header() {
-		for _, value := range values {
-			rr.ResponseWriter.Header().Add(key, value)
-		}
 	}
 	rr.ResponseWriter.WriteHeader(rr.status)
 	_, _ = rr.ResponseWriter.Write(rr.body.Bytes())

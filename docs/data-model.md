@@ -378,7 +378,7 @@ erDiagram
 
 - `notification_settings.trigger_negative_balance` — дописывать суффикс о недостатке средств к исходящим напоминаниям (кредит, плановый расход/перевод, долг «я должен»).
 - `notification_settings.trigger_budget` — уведомления `budget_threshold` при достижении порога лимита (см. [budget.md](budget.md)).
-- `notification_templates.trigger_type` включает `balance_shortfall` — шаблон суффикса с placeholder `{amount}` (недостающая сумма); редактирование в API/UI только при включённом связанном переключателе в блоке «Настройки» (долги → `debt_*`, кредиты → `credit_payment`, и т.д.).
+- `notification_templates.trigger_type` включает `balance_shortfall` — шаблон суффикса с placeholder `{amount}` (недостающая сумма); редактирование в API/UI только при включённом связанном переключателе в блоке «Типы уведомлений» (долги → `debt_*`, кредиты → `credit_payment`, и т.д.).
 - Блокировка периодов и расписания при выключенном toggle — [notifications.md](notifications.md).
 - Подробнее о недостатке средств: [balance-shortfall-notifications.md](../roadmap/balance-shortfall-notifications.md).
 

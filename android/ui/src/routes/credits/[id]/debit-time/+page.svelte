@@ -89,10 +89,8 @@
 					/>
 				</div>
 				{#if autoDebitEnabled}
-					<label class="block space-y-1">
-						<span class="text-sm" style:color="var(--text-muted)"
-							>{$_('credits.field.debitTime')}</span
-						>
+					<label class="block">
+						<span class="field-label">{$_('credits.field.debitTime')}</span>
 						<input
 							type="time"
 							use:nativeTimePicker

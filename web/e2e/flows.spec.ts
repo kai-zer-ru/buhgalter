@@ -95,7 +95,7 @@ test('export tab opens download link', async ({ page }) => {
 test('settings change theme', async ({ page }) => {
 	await page.goto('/settings');
 	await waitAppReady(page);
-	await selectCombobox(page, 'theme', { label: 'Тёмная' });
+	await page.locator('#theme').getByRole('radio', { name: 'Тёмная' }).click();
 	await page.getByRole('button', { name: 'Сохранить' }).click();
 	await expectToast(page, 'success', 'Сохранено');
 
@@ -122,7 +122,10 @@ test('settings change ui_style', async ({ page }) => {
 	await expect(profileForm.getByRole('heading', { name: 'Удалить данные' })).toHaveCount(0);
 	await expect(page.locator('.card').filter({ hasText: 'Удалить данные' })).toBeVisible();
 
-	await selectCombobox(page, 'ui-style', { label: 'MaterialBased' });
+	await page.locator('#ui-style').getByRole('radio', { name: 'MaterialBased' }).click();
+	// Style applies only on save, together with the rest of the profile.
+	await expect(page.locator('html')).toHaveAttribute('data-ui-style', 'classic');
+	await profileForm.getByRole('button', { name: 'Сохранить' }).click();
 	await expect(page.locator('html')).toHaveAttribute('data-ui-style', 'material');
 	await expect(profileForm).toHaveCSS('border-top-color', 'rgba(0, 0, 0, 0)');
 
@@ -131,14 +134,15 @@ test('settings change ui_style', async ({ page }) => {
 	await expect(page.locator('html')).toHaveAttribute('data-ui-style', 'material');
 	await expect(page.getByText('MaterialBased', { exact: true }).first()).toBeVisible();
 
-	await selectCombobox(page, 'ui-style', { label: 'Классика' });
+	await page.locator('#ui-style').getByRole('radio', { name: 'Классика' }).click();
+	await page.locator('form.card').getByRole('button', { name: 'Сохранить' }).click();
 	await expect(page.locator('html')).toHaveAttribute('data-ui-style', 'classic');
 });
 
 test('settings theme system follows color scheme', async ({ page }) => {
 	await page.goto('/settings');
 	await waitAppReady(page);
-	await selectCombobox(page, 'theme', { label: 'Как на устройстве' });
+	await page.locator('#theme').getByRole('radio', { name: 'Как на устройстве' }).click();
 	await page.getByRole('button', { name: 'Сохранить' }).click();
 	await expectToast(page, 'success', 'Сохранено');
 
@@ -295,11 +299,12 @@ test('notifications negative balance toggle locks template', async ({ page }) =>
 
 	await page.goto('/settings/notifications');
 	await waitAppReady(page);
-	const settingsCard = (await expandCollapsibleSection(page, 'Настройки')).locator('.card');
-	await expect(settingsCard.getByRole('row', { name: /Отрицательный баланс/ })).toBeVisible();
-	const negativeBalanceSwitch = settingsCard
-		.getByRole('row', { name: /Отрицательный баланс/ })
-		.getByRole('switch');
+	const settingsCard = await expandCollapsibleSection(page, 'Типы уведомлений');
+	const negativeBalanceRow = settingsCard
+		.locator('li')
+		.filter({ hasText: /^Отрицательный баланс/ });
+	await expect(negativeBalanceRow).toBeVisible();
+	const negativeBalanceSwitch = negativeBalanceRow.getByRole('switch');
 	if (await negativeBalanceSwitch.isChecked()) {
 		await negativeBalanceSwitch.click();
 	}
@@ -310,7 +315,9 @@ test('notifications negative balance toggle locks template', async ({ page }) =>
 	await expect(
 		page
 			.getByTestId('notifications-template-balance_shortfall')
-			.getByText('Включите «Отрицательный баланс» в настройках, чтобы редактировать шаблон.')
+			.getByText(
+				'Включите «Отрицательный баланс» в блоке «Типы уведомлений», чтобы редактировать шаблон.'
+			)
 	).toBeVisible();
 	await expect(page.locator('#tpl-balance_shortfall')).toBeDisabled();
 });
@@ -324,8 +331,11 @@ test('notifications debt toggle locks template', async ({ page }) => {
 	await page.goto('/settings/notifications');
 	await waitAppReady(page);
 
-	const settingsCard = (await expandCollapsibleSection(page, 'Настройки')).locator('.card');
-	const debtSwitch = settingsCard.getByRole('row', { name: /^Долги/ }).getByRole('switch');
+	const settingsCard = await expandCollapsibleSection(page, 'Типы уведомлений');
+	const debtSwitch = settingsCard
+		.locator('li')
+		.filter({ hasText: /^Долги/ })
+		.getByRole('switch');
 	if (await debtSwitch.isChecked()) {
 		await debtSwitch.click();
 	}
@@ -335,7 +345,9 @@ test('notifications debt toggle locks template', async ({ page }) => {
 	await expandCollapsibleSection(page, 'Просроченный долг');
 	const debtTemplateCard = page.getByTestId('notifications-template-debt_overdue');
 	await expect(
-		debtTemplateCard.getByText('Включите «Долги» в настройках, чтобы редактировать шаблон.')
+		debtTemplateCard.getByText(
+			'Включите «Долги» в блоке «Типы уведомлений», чтобы редактировать шаблон.'
+		)
 	).toBeVisible();
 	await expect(page.locator('#tpl-debt_overdue')).toBeDisabled();
 });

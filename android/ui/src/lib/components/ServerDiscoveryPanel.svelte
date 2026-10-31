@@ -84,7 +84,7 @@
 
 <section class="space-y-3" aria-labelledby="lan-discovery-heading">
 	<div class="flex items-center justify-between gap-2">
-		<h2 id="lan-discovery-heading" class="text-sm font-semibold">
+		<h2 id="lan-discovery-heading" class="font-semibold">
 			{$_('serverDiscovery.title')}
 		</h2>
 		<button type="button" class="btn-ghost text-sm" disabled={scanning} onclick={() => void scan()}>

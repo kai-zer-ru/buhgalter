@@ -429,6 +429,10 @@
 
 - [x] [Семья / команда](roadmap/team-collaboration.md) — household `kind` family/team; личные + семейные счета; owner invite (ссылка/QR/код); [спека](roadmap/team-collaboration.md) зафиксирована
 - [x] [Валюта счёта](roadmap/multicurrency.md) — `accounts.currency`, отдельно от `users.currency`; сводки и переводы без тихого смешения валют
+- [x] [Редизайн веба и Android](docs/ui-visual-style.md) — все экраны в стиле справочников: группы с подсказками, списки одной карточкой, сводки плитками (`.stat-grid`), таблицы `.data-table`, бейджи статуса, футер с действиями, «Опасная зона»; хабы настроек и админки Android со значками и подсказками
+- [x] БАГ. Сервер: кеш GET (`apicache`) дублировал все заголовки ответа, включая `Access-Control-Allow-Origin` и `Vary`; браузер отбрасывал кросс-доменные ответы (Android-UI в браузере, сторонние клиенты), веб с того же origin не затронут
+- [x] БАГ. Android: экран «Черновики», открытый до загрузки пользователя (холодный старт, переход из уведомления), показывал «Включите перехват уведомлений», хотя перехват включён
+- [ ] БАГ. [Android: внешний URL из найденного сервера](roadmap/android-discovery-external-url.md) — при выборе сервера из LAN discovery `external_url` из `/health` не попадает в `remoteUrl` профиля, поле «Внешний URL» в настройках сервера остаётся пустым
 
 ## v1.12.0
 
@@ -456,6 +460,7 @@
 - [ ] [Эволюция уведомлений](roadmap/notifications-evolution.md) — частота, тихие часы, эскалация, wizard
 - [ ] [Открытие приложения через ссылку](roadmap/app-open-links.md) — https **и локальные** (`http` LAN / `:8765`, localhost) при совпадении с профилем сервера в APK; custom scheme для виджетов; единый builder (notify / Telegram)
 - [ ] [Внутренняя ссылка в уведомлениях](roadmap/app-open-links.md#cap-6--внутренний-base-когда-external_url-пуст) — fallback вместо текста «настройте внешний URL»; LAN / scheme / опциональный internal base
+- [ ] Приложение для часов Zepp
 
 ## На подумать
 

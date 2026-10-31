@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
 	import { onMount } from 'svelte';
 	import { get } from 'svelte/store';
 	import { _ } from 'svelte-i18n';
@@ -107,7 +108,7 @@
 
 <div class="space-y-4">
 	<div>
-		<label class="mb-1.5 block text-sm font-medium" for="server-lan-url">
+		<label class="field-label" for="server-lan-url">
 			{$_('serverProfile.lanUrlLabel')}
 		</label>
 		<input
@@ -125,7 +126,7 @@
 
 	{#if variant === 'full'}
 		<div>
-			<label class="mb-1.5 block text-sm font-medium" for="server-remote-url">
+			<label class="field-label" for="server-remote-url">
 				{$_('serverProfile.remoteUrlLabel')}
 			</label>
 			<input
@@ -141,20 +142,26 @@
 				{$_('serverProfile.remoteUrlHint')}
 			</p>
 			{#if remoteUrl.trim()}
-				<label class="mt-3 flex items-start gap-2 text-sm">
-					<input type="checkbox" class="mt-0.5" bind:checked={lanFallbackRemote} />
-					<span>
-						<span class="font-medium">{$_('serverProfile.lanFallbackRemoteLabel')}</span>
-						<span class="mt-0.5 block text-xs" style:color="var(--text-muted)">
-							{$_('serverProfile.lanFallbackRemoteHint')}
+				<div class="mt-3">
+					<div class="flex items-center justify-between gap-4">
+						<span class="min-w-0 text-sm">
+							<span class="font-medium">{$_('serverProfile.lanFallbackRemoteLabel')}</span>
+							<span class="mt-0.5 block text-xs" style:color="var(--text-muted)"
+								>{$_('serverProfile.lanFallbackRemoteHint')}</span
+							>
 						</span>
-					</span>
-				</label>
+						<ToggleSwitch
+							checked={lanFallbackRemote}
+							label={$_('serverProfile.lanFallbackRemoteLabel')}
+							onchange={() => (lanFallbackRemote = !lanFallbackRemote)}
+						/>
+					</div>
+				</div>
 			{/if}
 		</div>
 
 		<fieldset class="space-y-3">
-			<legend class="mb-1.5 block text-sm font-medium">{$_('serverProfile.homeWifiTitle')}</legend>
+			<legend class="field-label">{$_('serverProfile.homeWifiTitle')}</legend>
 			<p class="text-xs" style:color="var(--text-muted)">{$_('serverProfile.homeWifiHint')}</p>
 			{#each ssidSlots as ssid, index (index)}
 				<input

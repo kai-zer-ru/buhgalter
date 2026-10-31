@@ -18,6 +18,7 @@
 	import { creditActionPath } from '$lib/android/form-routes';
 	import { nextPendingPayment } from '$lib/credits/pay-helpers';
 	import BackLink from '$lib/components/BackLink.svelte';
+	import GroupHeading from '$lib/components/GroupHeading.svelte';
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
 	import FieldHint from '$lib/components/FieldHint.svelte';
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
@@ -31,7 +32,8 @@
 		formatAPIOperationDateTimeForDisplay,
 		formatCreditPaymentDateForDisplay,
 		dateOnlyLocalValue,
-		toDatetimeLocalValue
+		toDatetimeLocalValue,
+		todayDateLocal
 	} from '$lib/dates';
 	import { bankIconUrl } from '$lib/finance';
 	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
@@ -163,6 +165,13 @@
 		return $_('credits.payment.status.applied');
 	}
 
+	/** Badge colour: pending — warning, debited — success, the rest neutral. */
+	function paymentTone(p: CreditPayment): 'warning' | 'success' | 'neutral' {
+		if (!p.is_applied) return 'warning';
+		if (p.kind !== 'retroactive' && p.transaction_kind !== 'future') return 'success';
+		return 'neutral';
+	}
+
 	function paymentStatusExtra(p: NonNullable<Credit['schedule']>[number]): string {
 		if (p.kind === 'retroactive' && p.transaction_id) {
 			return $_('credits.payment.status.debitedFromAccount');
@@ -219,6 +228,19 @@
 	function openChangeBank() {
 		if (!credit) return;
 		void goto(resolve(creditActionPath(credit.id, 'change-bank', { from: creditPath })));
+	}
+
+	/** «сегодня / завтра / через N дн. / просрочен на N дн.» for the next-payment card. */
+	function paymentDueLabel(p: CreditPayment): string {
+		const today = todayDateLocal(tz).slice(0, 10);
+		const due = p.payment_date.slice(0, 10);
+		const days = Math.round(
+			(Date.parse(`${due}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000
+		);
+		if (days === 0) return $_('credits.next.today');
+		if (days === 1) return $_('credits.next.tomorrow');
+		if (days > 1) return $_('credits.next.inDays', { values: { n: days } });
+		return $_('credits.next.overdue', { values: { n: -days } });
 	}
 
 	function paymentDateDisplay(p: CreditPayment): string {
@@ -458,7 +480,7 @@
 	<title>{credit ? creditName(credit) : $_('credits.title')} — {$_('app.title')}</title>
 </svelte:head>
 
-<div class="space-y-4">
+<div class="space-y-6">
 	<BackLink
 		items={[
 			{ href: '/', label: $_('nav.home') },
@@ -469,7 +491,8 @@
 
 	<PageLoadGate {loading} error={loadError} onretry={() => void load()} inline>
 		{#if credit}
-			<div class="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-start md:justify-between">
+			{@const nextPayment = credit.status === 'active' ? nextPending(credit) : undefined}
+			<div class="flex items-start justify-between gap-3">
 				<div>
 					<div class="flex items-center gap-2">
 						{#if creditBankIcon(credit)}
@@ -499,317 +522,444 @@
 						{/if}
 					</div>
 				</div>
-				<div class="flex w-full shrink-0 items-center justify-end gap-2 md:w-auto">
-					{#if credit.status === 'active' && nextPending(credit)}
-						<button type="button" class="btn-primary" onclick={openPay}>
-							{$_('credits.action.pay')}
-						</button>
-					{/if}
+				<div class="flex shrink-0 items-center gap-2">
 					<RowActionsMenu actions={creditPageActions()} />
 				</div>
 			</div>
 
-			<div class="card grid gap-3 p-4 text-sm md:grid-cols-3">
-				<div>
-					<span style:color="var(--text-muted)">{$_('credits.field.principal')}</span>
-					<p class="font-medium">
-						<MoneyDisplay value={credit.principal_amount_display} {currency} class="" />
-					</p>
-				</div>
-				{#if credit.credit_kind === 'mortgage'}
-					<div>
-						<span style:color="var(--text-muted)">{$_('credits.field.propertyPrice')}</span>
-						<p class="font-medium">
-							{#if credit.property_price_display}
-								<MoneyDisplay value={credit.property_price_display} {currency} class="" />
-							{:else}
-								—
-							{/if}
-						</p>
-					</div>
-					<div>
-						<span style:color="var(--text-muted)">{$_('credits.field.downPayment')}</span>
-						<p class="font-medium">
-							{#if credit.down_payment_display}
-								<MoneyDisplay value={credit.down_payment_display} {currency} class="" />
-							{:else}
-								—
-							{/if}
-						</p>
-					</div>
-				{/if}
-				{#if !credit.is_installment}
-					<div>
-						<span style:color="var(--text-muted)">{$_('credits.field.totalInterest')}</span>
-						<p class="font-medium">
-							<MoneyDisplay cents={totalInterestCents(credit)} {currency} class="" />
-						</p>
-					</div>
-				{/if}
-				<div>
-					<span style:color="var(--text-muted)">{$_('credits.field.payment')}</span>
-					<p class="font-medium">
-						<MoneyDisplay value={credit.monthly_payment_display} {currency} class="" />
-					</p>
-				</div>
-				{#if !credit.is_installment}
-					<div>
-						<span style:color="var(--text-muted)">{$_('credits.field.rate')}</span>
-						<p class="font-medium">
-							{$_('credits.header.rate', {
-								values: { rate: formatInterestRate(credit.interest_rate) }
-							})}
-						</p>
-					</div>
-				{/if}
-				<div>
-					<span style:color="var(--text-muted)">{$_('credits.field.issueDate')}</span>
-					<p class="font-medium">{formatAPIDateForDisplay(credit.issue_date, tz)}</p>
-				</div>
-				{#if credit.added_retroactively}
-					<div>
-						<span style:color="var(--text-muted)">{$_('credits.field.recordedAt')}</span>
-						<p class="font-medium">
-							{formatAPIOperationDateTimeForDisplay(credit.recorded_at, tz)}
-						</p>
-					</div>
-				{/if}
-				<div>
-					<span style:color="var(--text-muted)">{$_('credits.field.debitAccount')}</span>
-					<p>
-						<a
-							href={resolve(`/accounts/${credit.debit_account_id}`)}
-							class="font-medium hover:underline"
-						>
-							{credit.debit_account_name}
-						</a>
-					</p>
-				</div>
-				{#if credit.debit_time_local}
-					<div>
-						<span style:color="var(--text-muted)">{$_('credits.field.debitTime')}</span>
-						<p class="font-medium">{credit.debit_time_local}</p>
-					</div>
-				{/if}
-				<div>
-					<span style:color="var(--text-muted)">{$_('credits.field.bank')}</span>
-					<p class="font-medium">{credit.bank_name || $_('credits.field.bankNotSelected')}</p>
-				</div>
-			</div>
-			{#if refreshing}
-				<p class="text-sm" style:color="var(--text-muted)">
-					{$_('credits.loading.updating')}
-				</p>
-			{/if}
-
-			{#if credit.schedule?.length}
-				<div class="card relative overflow-hidden">
-					{#if refreshing}
-						<div
-							class="absolute inset-0 z-20 flex items-center justify-center bg-[color-mix(in_srgb,var(--bg)_72%,transparent)]"
-						>
-							<span class="badge">{$_('credits.loading.updating')}</span>
-						</div>
-					{/if}
-					<h2 class="border-b px-4 py-3 text-sm font-semibold" style:border-color="var(--border)">
-						{$_('credits.schedule.title')}
-					</h2>
-
-					{#snippet paymentTable(payments: CreditPayment[], editable = false)}
-						<div class="hidden overflow-x-auto md:block">
-							<table class="w-full text-left text-sm">
-								<thead>
-									<tr style:color="var(--text-muted)">
-										<th class="p-3">{$_('credits.pay.date')}</th>
-										<th class="p-3">{$_('transactions.col.amount')}</th>
-										<th class="p-3">{$_('transactions.col.status')}</th>
-										{#if creditIsActive && !editable}
-											<th class="p-3"></th>
+			<div class="space-y-8">
+				<div class="space-y-3">
+					<div class="card overflow-hidden p-0 sm:p-0">
+						<div class="stat-grid grid-cols-2 text-sm md:grid-cols-3">
+							<div>
+								<p class="stat-label">{$_('credits.field.principal')}</p>
+								<p class="font-medium">
+									<MoneyDisplay value={credit.principal_amount_display} {currency} class="" />
+								</p>
+							</div>
+							{#if credit.credit_kind === 'mortgage'}
+								<div>
+									<p class="stat-label">{$_('credits.field.propertyPrice')}</p>
+									<p class="font-medium">
+										{#if credit.property_price_display}
+											<MoneyDisplay value={credit.property_price_display} {currency} class="" />
+										{:else}
+											—
 										{/if}
-									</tr>
-								</thead>
-								<tbody>
-									{#each payments as p (p.id)}
-										<tr class="border-t" style:border-color="var(--border)">
-											<td class="p-3">{paymentDateDisplay(p)}</td>
-											<td class="p-3">
-												{#if editable && canEditPayment(p)}
-													{@const editIdx = scheduleEditRows.findIndex((row) => row.id === p.id)}
-													{#if editIdx >= 0}
-														<MoneyInput bind:value={scheduleEditRows[editIdx].amount} />
-													{/if}
-												{:else}
-													<MoneyDisplay value={p.amount_display} {currency} class="" />
-												{/if}
-											</td>
-											<td class="p-3">
-												{paymentStatus(p)}
-												{#if paymentStatusExtra(p)}
-													<span class="badge ml-2">{paymentStatusExtra(p)}</span>
-												{/if}
-											</td>
-											{#if creditIsActive && !editable}
-												<td class="p-3 text-right">
-													<RowActionsMenu actions={paymentRowActions(p)} />
-												</td>
-											{/if}
-										</tr>
-									{/each}
-								</tbody>
-							</table>
-						</div>
-						<div class="space-y-3 p-3 md:hidden">
-							{#each payments as p (p.id)}
-								{@const paymentActions = paymentRowActions(p)}
-								<article class="rounded-xl border p-3" style:border-color="var(--border)">
-									<dl class="grid gap-2 text-sm">
-										<div class="flex justify-between gap-2">
-											<dt style:color="var(--text-muted)">{$_('credits.pay.date')}</dt>
-											<dd>{paymentDateDisplay(p)}</dd>
-										</div>
-										<div class="flex justify-between gap-2">
-											<dt style:color="var(--text-muted)">{$_('transactions.col.amount')}</dt>
-											<dd class="font-medium tabular-nums">
-												{#if editable && canEditPayment(p)}
-													{@const editIdx = scheduleEditRows.findIndex((row) => row.id === p.id)}
-													{#if editIdx >= 0}
-														<MoneyInput bind:value={scheduleEditRows[editIdx].amount} />
-													{/if}
-												{:else}
-													<MoneyDisplay value={p.amount_display} {currency} class="" />
-												{/if}
-											</dd>
-										</div>
-										<div class="flex justify-between gap-2">
-											<dt style:color="var(--text-muted)">{$_('transactions.col.status')}</dt>
-											<dd>
-												{paymentStatus(p)}
-												{#if paymentStatusExtra(p)}
-													<span class="badge ml-2">{paymentStatusExtra(p)}</span>
-												{/if}
-											</dd>
-										</div>
-									</dl>
-									{#if creditIsActive && !editable && paymentActions.length > 0}
-										<div class="mt-3 flex justify-end">
-											<RowActionsMenu actions={paymentActions} />
-										</div>
-									{/if}
-								</article>
-							{/each}
-						</div>
-					{/snippet}
-
-					{#if scheduleGroups.pending.length > 0}
-						<details open class="border-b" style:border-color="var(--border)">
-							<summary
-								class="cursor-pointer list-none px-4 py-3 text-sm font-medium select-none [&::-webkit-details-marker]:hidden"
-							>
-								<div class="flex flex-wrap items-center justify-between gap-2">
-									<span>
-										{$_('credits.schedule.group.pending')}
-										<span class="ml-1 font-normal tabular-nums" style:color="var(--text-muted)">
-											({scheduleGroups.pending.length})
-										</span>
-									</span>
-									{#if creditIsActive && !scheduleEditing && scheduleGroups.pending.some(canEditPayment)}
-										<IconButton
-											icon="edit"
-											label={$_('credits.schedule.edit')}
-											onclick={(e) => {
-												e.preventDefault();
-												openScheduleEdit();
-											}}
-										/>
-									{/if}
+									</p>
 								</div>
-							</summary>
-							{#if scheduleEditing}
-								<div class="px-4 pb-2">
-									<FieldHint text={$_('credits.schedule.editHint')} />
-									<div class="mt-2 flex flex-wrap gap-2">
-										<button
-											type="button"
-											class="btn-primary"
-											disabled={scheduleSaving}
-											onclick={() => void submitScheduleEdit()}
-										>
-											{$_('common.save')}
-										</button>
-										<button
-											type="button"
-											class="btn-ghost"
-											disabled={scheduleSaving}
-											onclick={cancelScheduleEdit}
-										>
-											{$_('common.cancel')}
-										</button>
-									</div>
+								<div>
+									<p class="stat-label">{$_('credits.field.downPayment')}</p>
+									<p class="font-medium">
+										{#if credit.down_payment_display}
+											<MoneyDisplay value={credit.down_payment_display} {currency} class="" />
+										{:else}
+											—
+										{/if}
+									</p>
 								</div>
 							{/if}
-							{@render paymentTable(visiblePendingPayments, scheduleEditing)}
-							<div class="px-4 pb-4">
-								<TransactionPagination
-									page={pendingPageSafe}
-									limit={schedulePageSize}
-									total={scheduleGroups.pending.length}
-									onchange={(p) => (pendingPage = p)}
-								/>
+							{#if !credit.is_installment}
+								<div>
+									<p class="stat-label">{$_('credits.field.totalInterest')}</p>
+									<p class="font-medium">
+										<MoneyDisplay cents={totalInterestCents(credit)} {currency} class="" />
+									</p>
+								</div>
+							{/if}
+							<div>
+								<p class="stat-label">{$_('credits.field.payment')}</p>
+								<p class="font-medium">
+									<MoneyDisplay value={credit.monthly_payment_display} {currency} class="" />
+								</p>
 							</div>
-						</details>
-					{/if}
-
-					{#if scheduleGroups.applied.length > 0}
-						<details class="border-b" style:border-color="var(--border)">
-							<summary
-								class="cursor-pointer list-none px-4 py-3 text-sm font-medium select-none [&::-webkit-details-marker]:hidden"
-							>
-								{$_('credits.schedule.group.applied')}
-								<span class="ml-1 font-normal tabular-nums" style:color="var(--text-muted)">
-									({scheduleGroups.applied.length})
-								</span>
-							</summary>
-							<div class="px-4 pb-3">
-								<FieldHint text={$_('credits.schedule.appliedHint')} />
+							{#if !credit.is_installment}
+								<div>
+									<p class="stat-label">{$_('credits.field.rate')}</p>
+									<p class="font-medium">
+										{$_('credits.header.rate', {
+											values: { rate: formatInterestRate(credit.interest_rate) }
+										})}
+									</p>
+								</div>
+							{/if}
+							<div>
+								<p class="stat-label">{$_('credits.field.issueDate')}</p>
+								<p class="font-medium">{formatAPIDateForDisplay(credit.issue_date, tz)}</p>
 							</div>
-							{@render paymentTable(visibleAppliedPayments)}
-							<div class="px-4 pb-4">
-								<TransactionPagination
-									page={appliedPageSafe}
-									limit={schedulePageSize}
-									total={scheduleGroups.applied.length}
-									onchange={(p) => (appliedPage = p)}
-								/>
+							{#if credit.added_retroactively}
+								<div>
+									<p class="stat-label">{$_('credits.field.recordedAt')}</p>
+									<p class="font-medium">
+										{formatAPIOperationDateTimeForDisplay(credit.recorded_at, tz)}
+									</p>
+								</div>
+							{/if}
+							<div>
+								<p class="stat-label">{$_('credits.field.debitAccount')}</p>
+								<p>
+									<a
+										href={resolve(`/accounts/${credit.debit_account_id}`)}
+										class="font-medium hover:underline"
+									>
+										{credit.debit_account_name}
+									</a>
+								</p>
 							</div>
-						</details>
-					{/if}
-
-					{#if scheduleGroups.retroactive.length > 0}
-						<details class="border-b last:border-b-0" style:border-color="var(--border)">
-							<summary
-								class="cursor-pointer list-none px-4 py-3 text-sm font-medium select-none [&::-webkit-details-marker]:hidden"
-							>
-								{$_('credits.schedule.group.retroactive')}
-								<span class="ml-1 font-normal tabular-nums" style:color="var(--text-muted)">
-									({scheduleGroups.retroactive.length})
-								</span>
-							</summary>
-							<div class="px-4 pb-3">
-								<FieldHint text={$_('credits.field.retroactiveHint')} />
+							{#if credit.debit_time_local}
+								<div>
+									<p class="stat-label">{$_('credits.field.debitTime')}</p>
+									<p class="font-medium">{credit.debit_time_local}</p>
+								</div>
+							{/if}
+							<div>
+								<p class="stat-label">{$_('credits.field.bank')}</p>
+								<p class="font-medium">{credit.bank_name || $_('credits.field.bankNotSelected')}</p>
 							</div>
-							{@render paymentTable(visibleRetroactivePayments)}
-							<div class="px-4 pb-4">
-								<TransactionPagination
-									page={retroactivePageSafe}
-									limit={schedulePageSize}
-									total={scheduleGroups.retroactive.length}
-									onchange={(p) => (retroactivePage = p)}
-								/>
-							</div>
-						</details>
+						</div>
+					</div>
+					{#if refreshing}
+						<p class="text-sm" style:color="var(--text-muted)">
+							{$_('credits.loading.updating')}
+						</p>
 					{/if}
 				</div>
-			{/if}
+
+				{#if nextPayment}
+					<section class="space-y-3">
+						<GroupHeading title={$_('credits.next.title')} />
+						<div class="card flex flex-wrap items-center gap-x-8 gap-y-3">
+							<span class="pay-glyph pay-glyph-pending" aria-hidden="true">
+								<svg
+									class="h-5 w-5"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								>
+									<circle cx="12" cy="12" r="9" />
+									<path d="M12 7v5l3 2" />
+								</svg>
+							</span>
+							<div class="space-y-0.5">
+								<p class="stat-label">{$_('transactions.col.amount')}</p>
+								<p class="text-xl font-bold tabular-nums">
+									<MoneyDisplay value={nextPayment.amount_display} {currency} class="" />
+								</p>
+							</div>
+							<div class="basis-full space-y-0.5 sm:basis-auto">
+								<p class="stat-label">{$_('credits.pay.date')}</p>
+								<p class="flex items-center gap-2 font-medium whitespace-nowrap">
+									{paymentDateDisplay(nextPayment)}
+									<span class="badge pay-badge-warning">{paymentDueLabel(nextPayment)}</span>
+								</p>
+							</div>
+							<div class="min-w-0 basis-full space-y-0.5 sm:flex-1 sm:basis-auto">
+								<p class="stat-label">{$_('credits.field.debitAccount')}</p>
+								<p class="truncate font-medium">{credit.debit_account_name}</p>
+							</div>
+							<button type="button" class="btn-primary w-full sm:w-auto" onclick={openPay}>
+								{$_('credits.action.pay')}
+							</button>
+						</div>
+					</section>
+				{/if}
+
+				{#if credit.schedule?.length}
+					<section class="space-y-3">
+						<GroupHeading title={$_('credits.schedule.title')} />
+						<div class="card relative overflow-hidden p-0 sm:p-0">
+							{#if refreshing}
+								<div
+									class="absolute inset-0 z-20 flex items-center justify-center bg-[color-mix(in_srgb,var(--bg)_72%,transparent)]"
+								>
+									<span class="badge">{$_('credits.loading.updating')}</span>
+								</div>
+							{/if}
+
+							{#snippet paymentTable(payments: CreditPayment[], editable = false)}
+								<div class="hidden overflow-x-auto md:block">
+									<table class="data-table w-full table-fixed text-left text-sm">
+										<colgroup>
+											<col class="w-[34%]" />
+											<col class="w-[30%]" />
+											<col />
+											<col class="w-20" />
+										</colgroup>
+										<thead>
+											<tr>
+												<th class="p-3">{$_('credits.pay.date')}</th>
+												<th class="p-3">{$_('transactions.col.status')}</th>
+												<th class="p-3 text-right">{$_('transactions.col.amount')}</th>
+												<th class="p-3"></th>
+											</tr>
+										</thead>
+										<tbody>
+											{#each payments as p (p.id)}
+												{@const rowActions =
+													creditIsActive && !editable ? paymentRowActions(p) : []}
+												<tr>
+													<td class="p-3">{paymentDateDisplay(p)}</td>
+													<td class="p-3">
+														<span class="inline-flex flex-wrap items-center gap-1.5">
+															<span
+																class="badge"
+																class:badge-success={paymentTone(p) === 'success'}
+																class:pay-badge-warning={paymentTone(p) === 'warning'}
+																>{paymentStatus(p)}</span
+															>
+															{#if paymentStatusExtra(p)}
+																<span class="badge">{paymentStatusExtra(p)}</span>
+															{/if}
+														</span>
+													</td>
+													<td class="p-3 text-right font-semibold tabular-nums">
+														{#if editable && canEditPayment(p)}
+															{@const editIdx = scheduleEditRows.findIndex(
+																(row) => row.id === p.id
+															)}
+															{#if editIdx >= 0}
+																<div class="ml-auto max-w-40">
+																	<MoneyInput bind:value={scheduleEditRows[editIdx].amount} />
+																</div>
+															{/if}
+														{:else}
+															<MoneyDisplay value={p.amount_display} {currency} class="" />
+														{/if}
+													</td>
+													<td class="p-3 text-right">
+														{#if rowActions.length > 0}
+															<RowActionsMenu actions={rowActions} />
+														{:else}
+															<!-- Same footprint as the menu button keeps every row the same height. -->
+															<span class="inline-block h-11 w-11 align-middle" aria-hidden="true"
+															></span>
+														{/if}
+													</td>
+												</tr>
+											{/each}
+										</tbody>
+									</table>
+								</div>
+								<div class="list-divided md:hidden">
+									{#each payments as p (p.id)}
+										{@const paymentActions = paymentRowActions(p)}
+										{@const editIdx =
+											editable && canEditPayment(p)
+												? scheduleEditRows.findIndex((row) => row.id === p.id)
+												: -1}
+										<article class="flex items-center gap-3 px-4 py-3">
+											<span
+												class="pay-glyph"
+												class:pay-glyph-pending={!p.is_applied}
+												aria-hidden="true"
+											>
+												<svg
+													class="h-5 w-5"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+												>
+													{#if p.is_applied}
+														<path d="M20 6 9 17l-5-5" />
+													{:else}
+														<circle cx="12" cy="12" r="9" />
+														<path d="M12 7v5l3 2" />
+													{/if}
+												</svg>
+											</span>
+											<div class="min-w-0 flex-1">
+												<p class="truncate text-sm font-medium">{paymentDateDisplay(p)}</p>
+												<p
+													class="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs"
+													style:color="var(--text-muted)"
+												>
+													{paymentStatus(p)}
+													{#if paymentStatusExtra(p)}
+														<span class="badge">{paymentStatusExtra(p)}</span>
+													{/if}
+												</p>
+											</div>
+											{#if editIdx >= 0}
+												<div class="w-32 shrink-0">
+													<MoneyInput bind:value={scheduleEditRows[editIdx].amount} />
+												</div>
+											{:else}
+												<span class="shrink-0 font-semibold tabular-nums">
+													<MoneyDisplay value={p.amount_display} {currency} class="" />
+												</span>
+											{/if}
+											{#if creditIsActive && !editable && paymentActions.length > 0}
+												<RowActionsMenu actions={paymentActions} />
+											{/if}
+										</article>
+									{/each}
+								</div>
+							{/snippet}
+
+							{#if scheduleGroups.pending.length > 0}
+								<details class="border-b" style:border-color="var(--border)">
+									<summary
+										class="cursor-pointer list-none px-4 py-3 text-sm font-medium select-none [&::-webkit-details-marker]:hidden"
+									>
+										<div class="flex flex-wrap items-center justify-between gap-2">
+											<span class="inline-flex items-center gap-1">
+												{$_('credits.schedule.group.pending')}
+												<span class="ml-1 font-normal tabular-nums" style:color="var(--text-muted)"
+													>· {scheduleGroups.pending.length}</span
+												><svg
+													class="spoiler-chevron"
+													aria-hidden="true"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2"><path d="m6 9 6 6 6-6" /></svg
+												>
+											</span>
+											{#if creditIsActive && !scheduleEditing && scheduleGroups.pending.some(canEditPayment)}
+												<IconButton
+													icon="edit"
+													label={$_('credits.schedule.edit')}
+													onclick={(e) => {
+														e.preventDefault();
+														openScheduleEdit();
+													}}
+												/>
+											{/if}
+										</div>
+									</summary>
+									{#if scheduleEditing}
+										<div class="px-4 pb-2">
+											<FieldHint text={$_('credits.schedule.editHint')} />
+											<div class="mt-2 flex flex-wrap gap-2">
+												<button
+													type="button"
+													class="btn-primary"
+													disabled={scheduleSaving}
+													onclick={() => void submitScheduleEdit()}
+												>
+													{$_('common.save')}
+												</button>
+												<button
+													type="button"
+													class="btn-ghost"
+													disabled={scheduleSaving}
+													onclick={cancelScheduleEdit}
+												>
+													{$_('common.cancel')}
+												</button>
+											</div>
+										</div>
+									{/if}
+									{@render paymentTable(visiblePendingPayments, scheduleEditing)}
+									<div class="px-4 pb-4">
+										<TransactionPagination
+											page={pendingPageSafe}
+											limit={schedulePageSize}
+											total={scheduleGroups.pending.length}
+											onchange={(p) => (pendingPage = p)}
+										/>
+									</div>
+								</details>
+							{/if}
+
+							{#if scheduleGroups.applied.length > 0}
+								<details class="border-b" style:border-color="var(--border)">
+									<summary
+										class="flex items-center gap-1 cursor-pointer list-none px-4 py-3 text-sm font-medium select-none [&::-webkit-details-marker]:hidden"
+									>
+										{$_('credits.schedule.group.applied')}
+										<span class="ml-1 font-normal tabular-nums" style:color="var(--text-muted)"
+											>· {scheduleGroups.applied.length}</span
+										><svg
+											class="spoiler-chevron"
+											aria-hidden="true"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"><path d="m6 9 6 6 6-6" /></svg
+										>
+									</summary>
+									<div class="px-4 pb-3">
+										<FieldHint text={$_('credits.schedule.appliedHint')} />
+									</div>
+									{@render paymentTable(visibleAppliedPayments)}
+									<div class="px-4 pb-4">
+										<TransactionPagination
+											page={appliedPageSafe}
+											limit={schedulePageSize}
+											total={scheduleGroups.applied.length}
+											onchange={(p) => (appliedPage = p)}
+										/>
+									</div>
+								</details>
+							{/if}
+
+							{#if scheduleGroups.retroactive.length > 0}
+								<details class="border-b last:border-b-0" style:border-color="var(--border)">
+									<summary
+										class="flex items-center gap-1 cursor-pointer list-none px-4 py-3 text-sm font-medium select-none [&::-webkit-details-marker]:hidden"
+									>
+										{$_('credits.schedule.group.retroactive')}
+										<span class="ml-1 font-normal tabular-nums" style:color="var(--text-muted)"
+											>· {scheduleGroups.retroactive.length}</span
+										><svg
+											class="spoiler-chevron"
+											aria-hidden="true"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"><path d="m6 9 6 6 6-6" /></svg
+										>
+									</summary>
+									<div class="px-4 pb-3">
+										<FieldHint text={$_('credits.field.retroactiveHint')} />
+									</div>
+									{@render paymentTable(visibleRetroactivePayments)}
+									<div class="px-4 pb-4">
+										<TransactionPagination
+											page={retroactivePageSafe}
+											limit={schedulePageSize}
+											total={scheduleGroups.retroactive.length}
+											onchange={(p) => (retroactivePage = p)}
+										/>
+									</div>
+								</details>
+							{/if}
+						</div>
+					</section>
+				{/if}
+			</div>
 		{/if}
 	</PageLoadGate>
 </div>
+
+<style>
+	.pay-glyph {
+		display: inline-flex;
+		height: 2.5rem;
+		width: 2.5rem;
+		flex-shrink: 0;
+		align-items: center;
+		justify-content: center;
+		border-radius: 0.75rem;
+		color: var(--primary);
+		background-color: color-mix(in srgb, var(--primary) 12%, transparent);
+	}
+
+	.pay-badge-warning {
+		color: var(--warning);
+		border-color: color-mix(in srgb, var(--warning) 30%, transparent);
+		background-color: color-mix(in srgb, var(--warning) 14%, transparent);
+	}
+
+	.pay-glyph-pending {
+		color: var(--warning);
+		background-color: color-mix(in srgb, var(--warning) 14%, transparent);
+	}
+</style>

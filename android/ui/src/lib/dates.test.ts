@@ -6,12 +6,14 @@ import {
 	formatAPIDateForDisplay,
 	formatAPIDateTimeForDisplay,
 	formatAPIDayMonthTimeForDisplay,
+	formatAPIDayMonthTimeShortForDisplay,
 	formatAPIOperationDateTimeForDisplay,
 	formatCreditPaymentDateForDisplay,
 	formatDisplayDate,
 	formatDisplayDateTime,
 	formatDisplayDateTimeShort,
 	formatDisplayDayMonthTime,
+	formatDisplayDayMonthTimeShort,
 	formatISODateForDisplay,
 	toApiUtcDateTime
 } from './dates';
@@ -120,6 +122,23 @@ describe('formatCreditPaymentDateForDisplay', () => {
 	it('falls back to default formatting without debit time', () => {
 		expect(formatCreditPaymentDateForDisplay('2026-12-31 00:00:00', 'UTC', null)).toBe(
 			'31.12.2026 00:00'
+		);
+	});
+});
+
+describe('formatDisplayDayMonthTimeShort', () => {
+	it('uses a short month and a comma before the time', () => {
+		expect(formatDisplayDayMonthTimeShort(new Date(2026, 10, 5, 10, 0), 'ru')).toBe(
+			'5 нояб., 10:00'
+		);
+		expect(formatDisplayDayMonthTimeShort(new Date(2026, 10, 5, 10, 0), 'en')).toBe('Nov 5, 10:00');
+	});
+});
+
+describe('formatAPIDayMonthTimeShortForDisplay', () => {
+	it('converts API datetime to the given time zone', () => {
+		expect(formatAPIDayMonthTimeShortForDisplay('2027-05-04 09:22:00', 'UTC', 'ru')).toBe(
+			'4 мая, 09:22'
 		);
 	});
 });

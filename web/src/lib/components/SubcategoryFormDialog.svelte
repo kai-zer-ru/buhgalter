@@ -83,7 +83,7 @@
 					lockName={mode === 'edit'}
 					variant="button"
 				/>
-				<span class="text-sm" style:color="var(--text-muted)">{$_('categories.icons.change')}</span>
+				<span class="field-label">{$_('categories.icons.change')}</span>
 			</div>
 		</div>
 	</div>

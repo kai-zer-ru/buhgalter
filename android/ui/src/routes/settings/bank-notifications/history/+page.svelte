@@ -4,6 +4,7 @@
 	import { resolve } from '$app/paths';
 	import { get } from 'svelte/store';
 	import { _ } from 'svelte-i18n';
+	import GroupHeading from '$lib/components/GroupHeading.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
 	import { transactionNewPath, transferNewPath } from '$lib/android/form-routes';
 	import { toast } from '$lib/toast';
@@ -196,117 +197,138 @@
 </script>
 
 {#if !isNativeApp()}
-	<p class="text-sm" style:color="var(--text-muted)">{$_('bankNotifications.nativeOnly')}</p>
+	<EmptyStateCard message={$_('bankNotifications.nativeOnly')} />
 {:else}
-	<p class="mb-4 text-sm" style:color="var(--text-muted)">{$_('bankNotifications.history.hint')}</p>
-	<p class="mb-4 text-sm" style:color="var(--text-muted)">
-		{$_('bankNotifications.history.createHint')}
-	</p>
-	<p class="mb-4 text-sm" style:color="var(--text-muted)">
-		{$_('bankNotifications.history.scanActiveHint')}
-	</p>
+	<div class="space-y-8">
+		<div
+			class="space-y-2 rounded-xl border p-3 text-sm leading-relaxed"
+			style:border-color="var(--border)"
+			style:color="var(--text-muted)"
+		>
+			<p>{$_('bankNotifications.history.createHint')}</p>
+			<p>{$_('bankNotifications.history.scanActiveHint')}</p>
+			{#if debug}
+				<p class="font-mono text-xs">
+					{$_('bankNotifications.history.debug', {
+						values: {
+							listener: debug.listenerConnected
+								? $_('bankNotifications.history.debugOn')
+								: $_('bankNotifications.history.debugOff'),
+							capture: debug.captureEnabled
+								? $_('bankNotifications.history.debugOn')
+								: $_('bankNotifications.history.debugOff'),
+							access: debug.notificationAccess
+								? $_('bankNotifications.history.debugOn')
+								: $_('bankNotifications.history.debugOff'),
+							packages: debug.allowedPackageCount,
+							history: debug.historyCount
+						}
+					})}
+				</p>
+			{/if}
+		</div>
 
-	{#if debug}
-		<p class="mb-4 text-xs" style:color="var(--text-muted)">
-			{$_('bankNotifications.history.debug', {
-				values: {
-					listener: debug.listenerConnected
-						? $_('bankNotifications.history.debugOn')
-						: $_('bankNotifications.history.debugOff'),
-					capture: debug.captureEnabled
-						? $_('bankNotifications.history.debugOn')
-						: $_('bankNotifications.history.debugOff'),
-					access: debug.notificationAccess
-						? $_('bankNotifications.history.debugOn')
-						: $_('bankNotifications.history.debugOff'),
-					packages: debug.allowedPackageCount,
-					history: debug.historyCount
-				}
-			})}
-		</p>
-	{/if}
+		<section class="space-y-3">
+			<div class="flex flex-wrap items-end justify-between gap-3">
+				<GroupHeading
+					title={$_('bankNotifications.history.group', { values: { count: items.length } })}
+					hint={$_('bankNotifications.history.hint')}
+				/>
+			</div>
+			<div class="flex flex-wrap gap-2">
+				<button
+					type="button"
+					class="btn-primary"
+					disabled={scanning}
+					onclick={() => void scanActive()}
+				>
+					{$_('bankNotifications.history.scanActive')}
+				</button>
+				<button type="button" class="btn-ghost" disabled={scanning} onclick={() => refresh()}>
+					{$_('bankNotifications.history.refresh')}
+				</button>
+				<button
+					type="button"
+					class="btn-ghost ml-auto"
+					onclick={() => void clear()}
+					disabled={!items.length}
+				>
+					{$_('bankNotifications.history.clear')}
+				</button>
+			</div>
 
-	<div class="mb-4 flex flex-wrap gap-2">
-		<button type="button" class="btn" disabled={scanning} onclick={() => void scanActive()}>
-			{$_('bankNotifications.history.scanActive')}
-		</button>
-		<button type="button" class="btn-ghost" disabled={scanning} onclick={() => refresh()}>
-			{$_('bankNotifications.history.refresh')}
-		</button>
-		<button type="button" class="btn-ghost" onclick={() => void clear()} disabled={!items.length}>
-			{$_('bankNotifications.history.clear')}
-		</button>
-	</div>
-
-	{#if items.length === 0}
-		<EmptyStateCard message={$_('bankNotifications.history.empty')} />
-	{:else}
-		<ul class="space-y-3">
-			{#each items as row (rowKey(row))}
-				<li class="card space-y-1.5 text-sm">
-					<div class="flex flex-wrap items-baseline justify-between gap-2">
-						<p class="font-semibold break-all">{row.packageName}</p>
-						<p class="shrink-0 tabular-nums" style:color="var(--text-muted)">
-							{formatWhen(row.postedAt)}
-						</p>
-					</div>
-					{#if bankIdForPackage(row.packageName)}
-						<p style:color="var(--text-muted)">
-							{$_('bankNotifications.history.bankId')}: {bankIdForPackage(row.packageName)}
-						</p>
-					{:else if walletLabel(row.packageName)}
-						<p style:color="var(--text-muted)">
-							{$_('bankNotifications.history.walletId')}: {walletLabel(row.packageName)}
-						</p>
-					{/if}
-					{#if row.channel}
-						<p style:color="var(--text-muted)">
-							{$_('bankNotifications.history.channel')}:
-							{row.channel === 'sms'
-								? $_('bankNotifications.history.channel.sms')
-								: $_('bankNotifications.history.channel.push')}
-						</p>
-					{/if}
-					{#if row.title}
-						<p>
-							<span style:color="var(--text-muted)"
-								>{$_('bankNotifications.history.titleLabel')}:</span
-							>
-							{row.title}
-						</p>
-					{/if}
-					<p class="whitespace-pre-wrap break-words">{body(row)}</p>
-					<p
-						class="text-xs font-medium"
-						style:color={isHistoryRowAllowlisted(row) ? 'var(--primary)' : 'var(--danger)'}
-					>
-						{statusLabel(row)}
-					</p>
-					{#if canCreateFromHistory(row)}
-						<div class="pt-1">
-							{#if isTransferPair(row)}
-								<button
-									type="button"
-									class="btn-primary"
-									disabled={creatingKey === rowKey(row)}
-									onclick={() => void createTransfer(row)}
-								>
-									{$_('bankNotifications.drafts.createTransfer')}
-								</button>
-							{:else}
-								<button
-									type="button"
-									class="btn-primary"
-									disabled={creatingKey === rowKey(row)}
-									onclick={() => void createOperation(row)}
-								>
-									{$_('bankNotifications.drafts.create')}
-								</button>
+			{#if items.length === 0}
+				<EmptyStateCard message={$_('bankNotifications.history.empty')} />
+			{:else}
+				<ul class="card list-divided p-0 sm:p-0">
+					{#each items as row (rowKey(row))}
+						{@const source = bankIdForPackage(row.packageName) || walletLabel(row.packageName)}
+						{@const ok = isHistoryRowAllowlisted(row)}
+						<li class="space-y-1.5 px-4 py-3 text-sm">
+							<div class="flex items-start justify-between gap-2">
+								<div class="min-w-0">
+									<div class="flex flex-wrap items-center gap-1.5">
+										<span class="font-semibold">{source || row.packageName}</span>
+										{#if row.channel}
+											<span class="badge"
+												>{row.channel === 'sms'
+													? $_('bankNotifications.history.channel.sms')
+													: $_('bankNotifications.history.channel.push')}</span
+											>
+										{/if}
+									</div>
+									{#if source}
+										<p class="break-all font-mono text-xs" style:color="var(--text-muted)">
+											{row.packageName}
+										</p>
+									{/if}
+								</div>
+								<span class="shrink-0 text-xs tabular-nums" style:color="var(--text-muted)">
+									{formatWhen(row.postedAt)}
+								</span>
+							</div>
+							{#if row.title}
+								<p class="font-medium">{row.title}</p>
 							{/if}
-						</div>
-					{/if}
-				</li>
-			{/each}
-		</ul>
-	{/if}
+							<p class="whitespace-pre-wrap break-words" style:color="var(--text-muted)">
+								{body(row)}
+							</p>
+							<p class="flex items-center gap-1.5 text-xs font-medium">
+								<span
+									class="h-2 w-2 shrink-0 rounded-full"
+									style:background-color={ok ? 'var(--primary)' : 'var(--danger)'}
+									aria-hidden="true"
+								></span>
+								<span style:color={ok ? 'var(--primary)' : 'var(--danger)'}>{statusLabel(row)}</span
+								>
+							</p>
+							{#if canCreateFromHistory(row)}
+								<div class="pt-1">
+									{#if isTransferPair(row)}
+										<button
+											type="button"
+											class="btn-primary"
+											disabled={creatingKey === rowKey(row)}
+											onclick={() => void createTransfer(row)}
+										>
+											{$_('bankNotifications.drafts.createTransfer')}
+										</button>
+									{:else}
+										<button
+											type="button"
+											class="btn-primary"
+											disabled={creatingKey === rowKey(row)}
+											onclick={() => void createOperation(row)}
+										>
+											{$_('bankNotifications.drafts.create')}
+										</button>
+									{/if}
+								</div>
+							{/if}
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		</section>
+	</div>
 {/if}

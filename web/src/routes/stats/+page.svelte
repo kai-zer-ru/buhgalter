@@ -479,7 +479,7 @@
 		<CatalogScopeTabs value={catalogScope} onchange={selectCatalogScope} />
 		{#if showCurrencyChips}
 			<div class="flex flex-wrap items-center gap-2">
-				<span class="text-sm" style:color="var(--text-muted)">{$_('stats.currencyFilter')}</span>
+				<span class="field-label">{$_('stats.currencyFilter')}</span>
 				{#each availableCurrencies as code (code)}
 					<button
 						type="button"
@@ -546,7 +546,7 @@
 				usePortal
 			/>
 			<label class="block min-w-0 sm:col-span-2">
-				<span class="mb-1.5 block text-sm font-medium">{$_('stats.filters.search')}</span>
+				<span class="field-label">{$_('stats.filters.search')}</span>
 				<input
 					class="input w-full"
 					bind:value={search}
@@ -584,27 +584,27 @@
 			{/if}
 
 			<div class="grid gap-3 sm:grid-cols-3">
-				<div class="card">
-					<p class="text-xs" style:color="var(--text-muted)">{$_('stats.summary.income')}</p>
-					<p class="text-xl font-semibold">
+				<div class="card space-y-1">
+					<p class="stat-label">{$_('stats.summary.income')}</p>
+					<p class="text-xl font-semibold" style:color="var(--primary)">
 						<MoneyDisplay cents={summary?.income_total ?? 0} {currency} class="" />
 					</p>
 				</div>
-				<div class="card">
-					<p class="text-xs" style:color="var(--text-muted)">{$_('stats.summary.expense')}</p>
-					<p class="text-xl font-semibold">
+				<div class="card space-y-1">
+					<p class="stat-label">{$_('stats.summary.expense')}</p>
+					<p class="text-xl font-semibold" style:color="var(--danger)">
 						<MoneyDisplay cents={summary?.expense_total ?? 0} {currency} class="" />
 					</p>
 				</div>
-				<div class="card">
-					<p class="text-xs" style:color="var(--text-muted)">{$_('stats.summary.count')}</p>
+				<div class="card space-y-1">
+					<p class="stat-label">{$_('stats.summary.count')}</p>
 					<p class="tabular-nums text-xl font-semibold">{summary?.transaction_count ?? 0}</p>
 				</div>
 			</div>
 
 			{#if search.trim()}
 				<div class="card md:overflow-x-auto">
-					<h2 class="mb-2 text-lg font-medium">{$_('stats.section.search')}</h2>
+					<h2 class="mb-3 text-base font-semibold">{$_('stats.section.search')}</h2>
 					<TransactionList
 						transactions={searchRows}
 						siblings={searchRows}
@@ -618,7 +618,7 @@
 			{/if}
 
 			<div class="card md:overflow-x-auto">
-				<h2 class="mb-2 text-lg font-medium">{$_('stats.section.categories')}</h2>
+				<h2 class="mb-3 text-base font-semibold">{$_('stats.section.categories')}</h2>
 				{#if byCategory.length === 0}
 					<EmptyStateCard message={$_('transactions.empty')} />
 				{:else}
@@ -657,8 +657,8 @@
 
 			{#if byStore.length > 0 && showCategoryExpense}
 				<div class="card md:overflow-x-auto">
-					<h2 class="mb-2 text-lg font-medium">{$_('stats.byStore')}</h2>
-					<table class="w-full text-left text-sm">
+					<h2 class="mb-3 text-base font-semibold">{$_('stats.byStore')}</h2>
+					<table class="data-table w-full text-left text-sm">
 						<thead>
 							<tr style:color="var(--text-muted)">
 								<th class="p-3">{$_('stores.field')}</th>
@@ -684,7 +684,7 @@
 			{/if}
 
 			<div class="card md:overflow-x-auto">
-				<h2 class="mb-2 text-lg font-medium">{$_('stats.section.period')}</h2>
+				<h2 class="mb-3 text-base font-semibold">{$_('stats.section.period')}</h2>
 				{#if byPeriod.length === 0}
 					<EmptyStateCard message={$_('transactions.empty')} />
 				{:else}
@@ -709,7 +709,7 @@
 							</div>
 						{/each}
 					</div>
-					<table class="hidden w-full text-left text-sm md:table">
+					<table class="data-table hidden w-full text-left text-sm md:table">
 						<thead>
 							<tr style:color="var(--text-muted)">
 								<th class="p-2">{$_('stats.period')}</th>
@@ -734,10 +734,10 @@
 </div>
 
 {#snippet categorySection(rows: StatsCategoryItem[], showBudget = false)}
-	<div class="space-y-3 md:hidden">
+	<div class="list-divided md:hidden">
 		{#each rows as row (row.category_id)}
 			{@const subs = subByCategory[row.category_id] ?? []}
-			<article class="rounded-xl border p-3" style:border-color="var(--border)">
+			<article class="py-3">
 				<a
 					href={resolve(`/transactions?${categoryDrilldownQuery(row)}`)}
 					class="font-medium hover:underline"
@@ -804,7 +804,7 @@
 			</article>
 		{/each}
 	</div>
-	<table class="hidden w-full text-left text-sm md:table">
+	<table class="data-table hidden w-full text-left text-sm md:table">
 		<thead>
 			<tr style:color="var(--text-muted)">
 				<th class="p-2">{$_('transactions.col.category')}</th>

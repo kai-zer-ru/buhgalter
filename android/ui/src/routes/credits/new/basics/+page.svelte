@@ -141,8 +141,8 @@
 		onback={() => abandonCreditCreate(returnTo)}
 	>
 		<div class="space-y-4">
-			<label class="block space-y-1">
-				<span class="text-sm" style:color="var(--text-muted)">{$_('credits.field.name')}</span>
+			<label class="block">
+				<span class="field-label">{$_('credits.field.name')}</span>
 				<input type="text" class="input w-full" bind:value={name} />
 			</label>
 
@@ -180,26 +180,20 @@
 			</fieldset>
 
 			{#if productType === 'mortgage'}
-				<label class="block space-y-1">
-					<span class="text-sm" style:color="var(--text-muted)"
-						>{$_('credits.field.propertyPrice')}</span
-					>
+				<label class="block">
+					<span class="field-label">{$_('credits.field.propertyPrice')}</span>
 					<MoneyInput bind:value={propertyPrice} />
 				</label>
-				<label class="block space-y-1">
-					<span class="text-sm" style:color="var(--text-muted)"
-						>{$_('credits.field.downPayment')}</span
-					>
+				<label class="block">
+					<span class="field-label">{$_('credits.field.downPayment')}</span>
 					<MoneyInput bind:value={downPayment} />
 				</label>
-				<label class="block space-y-1">
-					<span class="text-sm" style:color="var(--text-muted)"
-						>{$_('credits.field.principalComputed')}</span
-					>
+				<label class="block">
+					<span class="field-label">{$_('credits.field.principalComputed')}</span>
 					<input class="input w-full" value={principalComputed} readonly />
 				</label>
-				<label class="block space-y-1">
-					<span class="text-sm" style:color="var(--text-muted)">{$_('credits.field.rate')}</span>
+				<label class="block">
+					<span class="field-label">{$_('credits.field.rate')}</span>
 					<input type="number" step="0.1" min="0" class="input w-full" bind:value={interestRate} />
 				</label>
 				{#if hasDownPayment({ ...emptyCreditCreateDraft(tz), downPayment })}
@@ -223,10 +217,8 @@
 					{/if}
 				{/if}
 			{:else}
-				<label class="block space-y-1">
-					<span class="text-sm" style:color="var(--text-muted)"
-						>{$_('credits.field.principal')}</span
-					>
+				<label class="block">
+					<span class="field-label">{$_('credits.field.principal')}</span>
 					<MoneyInput bind:value={principal} />
 				</label>
 			{/if}
@@ -237,14 +229,14 @@
 				{...dateOnlyPicker}
 			/>
 
-			<label class="block space-y-1">
-				<span class="text-sm" style:color="var(--text-muted)">{$_('credits.field.term')}</span>
+			<label class="block">
+				<span class="field-label">{$_('credits.field.term')}</span>
 				<input type="number" min="1" class="input w-full" bind:value={termMonths} />
 			</label>
 
 			{#if productType === 'credit'}
-				<label class="block space-y-1">
-					<span class="text-sm" style:color="var(--text-muted)">{$_('credits.field.rate')}</span>
+				<label class="block">
+					<span class="field-label">{$_('credits.field.rate')}</span>
 					<input type="number" step="0.1" min="0" class="input w-full" bind:value={interestRate} />
 				</label>
 			{/if}

@@ -15,6 +15,5 @@
 			{ href: '/transaction-templates', label: $_('settings.tab.templates') }
 		]}
 	/>
-	<h1 class="text-2xl font-semibold">{$_('settings.tab.templates')}</h1>
 	<TransactionTemplatesTab />
 </div>

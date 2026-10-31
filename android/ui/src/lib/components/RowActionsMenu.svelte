@@ -64,7 +64,7 @@
 		if (action.disabled) return;
 		close();
 		action.onclick();
-		triggerEl?.focus();
+		triggerEl?.focus({ preventScroll: true });
 	}
 
 	function onDocumentPointerDown(event: PointerEvent) {

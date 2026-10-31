@@ -57,6 +57,7 @@
 | Документ | Описание |
 |----------|----------|
 | [date-time-display.md](date-time-display.md) | Форматы даты/времени и DateTimePicker |
+| [ui-visual-style.md](ui-visual-style.md) | Визуальный стиль веба: группы, списки-карточки, бейджи, формы |
 | [ui-dialogs.md](ui-dialogs.md) | Диалоги, подтверждения, Esc |
 | [ui-navigation.md](ui-navigation.md) | Хлебные крошки и кликабельные сущности |
 | [ui-row-actions.md](ui-row-actions.md) | Меню «⋯» в строках и спойлер фильтров |

@@ -4,7 +4,7 @@
 	import { replaceState } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
-	import { _ } from 'svelte-i18n';
+	import { _, locale } from 'svelte-i18n';
 	import {
 		createCategory,
 		createSubcategory,
@@ -25,7 +25,7 @@
 	import CategoryIcon from '$lib/components/CategoryIcon.svelte';
 	import CategoryIconPicker from '$lib/components/CategoryIconPicker.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
-	import IconButton from '$lib/components/IconButton.svelte';
+	import GroupHeading from '$lib/components/GroupHeading.svelte';
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
 	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
 	import ReorderDragGhost from '$lib/components/ReorderDragGhost.svelte';
@@ -42,6 +42,7 @@
 		| { mode: 'edit'; categoryId: string; subId: string; name: string; icon: string };
 
 	const categoryIconSize = 40;
+	const subIconSize = 32;
 
 	function tabFromSearchParams(params: URLSearchParams): Tab {
 		return params.get('type') === 'income' ? 'income' : 'expense';
@@ -162,6 +163,16 @@
 
 	function canExpandCategory(cat: Category): boolean {
 		return !cat.is_system || isSubscriptionsSystemCategory(cat);
+	}
+
+	/** Loaded list wins over the server count: it reflects subs added or removed here. */
+	function subCount(cat: Category): number {
+		return subs[cat.id]?.length ?? cat.subcategory_count;
+	}
+
+	function subCountLabel(count: number): string {
+		const form = new Intl.PluralRules($locale ?? 'ru').select(count);
+		return $_(`categories.sub.count.${form}`, { values: { count } });
 	}
 
 	async function toggleExpand(cat: Category) {
@@ -370,263 +381,297 @@
 	<ReorderDragGhost ghost={dragGhost} />
 {/if}
 
-<div class="space-y-6">
-	<CatalogScopeTabs
-		mode="catalog"
-		value={catalogScope}
-		onchange={(next) => {
-			catalogScope = next === 'household' ? 'household' : 'personal';
-			void load();
-		}}
-	/>
-	<div class="page-tabs-scroll">
-		<div class="page-tabs-row">
-			<button
-				type="button"
-				class="tab shrink-0 {tab === 'expense' ? 'tab-active' : ''}"
-				onclick={() => selectTab('expense')}
-			>
-				{$_('categories.tab.expense')}
-			</button>
-			<button
-				type="button"
-				class="tab shrink-0 {tab === 'income' ? 'tab-active' : ''}"
-				onclick={() => selectTab('income')}
-			>
-				{$_('categories.tab.income')}
-			</button>
+{#snippet chevron(open: boolean)}
+	<svg
+		class="h-5 w-5 shrink-0 transition-transform duration-150"
+		class:rotate-180={open}
+		style:color="var(--text-muted)"
+		aria-hidden="true"
+		viewBox="0 0 24 24"
+		fill="none"
+		stroke="currentColor"
+		stroke-width="2"
+	>
+		<path d="m6 9 6 6 6-6" />
+	</svg>
+{/snippet}
+
+{#snippet categoryRow(cat: Category)}
+	{@const open = (expanded[cat.id] ?? false) && canExpandCategory(cat)}
+	{@const count = subCount(cat)}
+	<div
+		class="category-row transition-opacity"
+		class:opacity-30={draggingId === cat.id}
+		data-drag-id={cat.id}
+		data-drag-kind="category"
+		style:box-shadow={overId === cat.id && draggingId !== null && draggingId !== cat.id
+			? 'inset 0 2px 0 var(--primary)'
+			: undefined}
+	>
+		{#if editingId === cat.id}
+			<div class="flex items-start gap-3 p-3 sm:p-4">
+				<span class="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center">
+					<CategoryIcon icon={editIcon} size={categoryIconSize} />
+				</span>
+				<div class="flex min-w-0 flex-1 flex-col gap-3">
+					<input class="input w-full" bind:value={editName} />
+					<CategoryIconPicker
+						bind:value={editIcon}
+						bind:categoryName={editName}
+						categoryType={tab}
+						lockName={true}
+						quickSize={categoryIconSize}
+						iconSize={categoryIconSize}
+					/>
+					<div class="flex flex-wrap justify-end gap-2">
+						<button type="button" class="btn-ghost" onclick={() => (editingId = null)}>
+							{$_('common.cancel')}
+						</button>
+						<button type="button" class="btn-primary" onclick={saveEdit}>
+							{$_('common.save')}
+						</button>
+					</div>
+				</div>
+			</div>
+		{:else}
+			<div class="flex items-center gap-1 px-1.5 py-1.5 sm:px-2" data-drag-row>
+				{#if !cat.is_system}
+					<span
+						class="list-drag-handle"
+						role="button"
+						tabindex="-1"
+						aria-label={$_('categories.drag.handle')}
+						onpointerdown={(e) =>
+							startCategoryDrag(e, cat, e.currentTarget.closest('[data-drag-id]') as HTMLElement)}
+					>
+						⠿
+					</span>
+				{:else}
+					<span class="w-2 shrink-0" aria-hidden="true"></span>
+				{/if}
+				{#snippet rowBody()}
+					<span class="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center">
+						<CategoryIcon icon={cat.icon} size={categoryIconSize} />
+					</span>
+					<span class="min-w-0 flex-1">
+						<span class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+							<span class="truncate font-medium">{cat.name}</span>
+							{#if cat.is_primary}
+								<span
+									class="badge badge-success"
+									title={$_('categories.primary.badge')}
+									aria-label={$_('categories.primary.badge')}
+								>
+									{$_('categories.primary.short')}
+								</span>
+							{/if}
+						</span>
+						{#if count > 0}
+							<span class="block text-xs" style:color="var(--text-muted)">
+								{subCountLabel(count)}
+							</span>
+						{/if}
+					</span>
+				{/snippet}
+				{#if canExpandCategory(cat)}
+					<button
+						type="button"
+						class="list-row-button"
+						aria-expanded={open}
+						onclick={() => toggleExpand(cat)}
+					>
+						{@render rowBody()}
+						{@render chevron(open)}
+					</button>
+				{:else}
+					<div class="list-row-button cursor-default">
+						{@render rowBody()}
+					</div>
+				{/if}
+				{#if !cat.is_system}
+					<RowActionsMenu actions={categoryActions(cat)} />
+				{/if}
+			</div>
+		{/if}
+
+		{#if open}
+			{@const readOnlySubs = isSubscriptionsSystemCategory(cat)}
+			<div class="sub-list">
+				{#each subs[cat.id] ?? [] as sub (sub.id)}
+					<div
+						class="transition-opacity"
+						class:opacity-30={!readOnlySubs && draggingId === sub.id}
+						data-drag-id={sub.id}
+						data-drag-kind="sub"
+						style:box-shadow={!readOnlySubs &&
+						overId === sub.id &&
+						draggingId !== null &&
+						draggingId !== sub.id
+							? 'inset 0 2px 0 var(--primary)'
+							: undefined}
+					>
+						<div class="flex min-w-0 items-center gap-1 py-1 pr-1.5 sm:pr-2" data-drag-row>
+							{#if !readOnlySubs}
+								<span
+									class="list-drag-handle"
+									role="button"
+									tabindex="-1"
+									aria-label={$_('categories.drag.handle')}
+									onpointerdown={(e) =>
+										startSubDrag(
+											e,
+											cat.id,
+											sub,
+											e.currentTarget.closest('[data-drag-id]') as HTMLElement
+										)}
+								>
+									⠿
+								</span>
+							{:else}
+								<span class="w-2 shrink-0" aria-hidden="true"></span>
+							{/if}
+							<span class="inline-flex min-h-10 min-w-10 shrink-0 items-center justify-center">
+								<CategoryIcon icon={sub.icon || 'default'} size={subIconSize} />
+							</span>
+							<span class="min-w-0 flex-1 truncate pl-2 text-sm">{sub.name}</span>
+							{#if !readOnlySubs}
+								<RowActionsMenu
+									actions={[
+										{
+											icon: 'edit',
+											label: $_('accounts.action.edit'),
+											onclick: () => openEditSub(cat.id, sub)
+										},
+										{
+											icon: 'delete',
+											label: $_('common.delete'),
+											variant: 'danger',
+											onclick: () => removeSub(cat.id, sub.id)
+										}
+									]}
+								/>
+							{/if}
+						</div>
+					</div>
+				{:else}
+					{#if subs[cat.id]}
+						<p class="py-2 pl-4 text-sm" style:color="var(--text-muted)">
+							{$_('categories.sub.empty')}
+						</p>
+					{/if}
+				{/each}
+				{#if !readOnlySubs}
+					<div class="py-2 pr-2 pl-3">
+						<button type="button" class="add-sub-btn" onclick={() => openCreateSub(cat)}>
+							<svg
+								aria-hidden="true"
+								class="h-4 w-4"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+							>
+								<path d="M12 5v14M5 12h14" />
+							</svg>
+							{$_('categories.sub.addButton')}
+						</button>
+					</div>
+				{/if}
+			</div>
+		{/if}
+	</div>
+{/snippet}
+
+<div class="space-y-8">
+	<div class="space-y-4">
+		<CatalogScopeTabs
+			mode="catalog"
+			value={catalogScope}
+			onchange={(next) => {
+				catalogScope = next === 'household' ? 'household' : 'personal';
+				void load();
+			}}
+		/>
+		<div class="page-tabs-scroll">
+			<div class="page-tabs-row">
+				<button
+					type="button"
+					class="tab shrink-0 {tab === 'expense' ? 'tab-active' : ''}"
+					onclick={() => selectTab('expense')}
+				>
+					{$_('categories.tab.expense')}
+				</button>
+				<button
+					type="button"
+					class="tab shrink-0 {tab === 'income' ? 'tab-active' : ''}"
+					onclick={() => selectTab('income')}
+				>
+					{$_('categories.tab.income')}
+				</button>
+			</div>
 		</div>
 	</div>
 
-	<div class="card space-y-3">
-		<h2 class="font-medium">{$_('categories.add')}</h2>
+	<section class="card space-y-3">
+		<div class="space-y-1">
+			<h2 class="font-semibold">{$_('categories.add')}</h2>
+			<p class="text-sm" style:color="var(--text-muted)">{$_('categories.add_hint')}</p>
+		</div>
 		<div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
 			<input
 				class="input min-w-[12rem] flex-1"
 				placeholder={$_('categories.field.name')}
 				bind:value={newName}
+				onkeydown={(e) => {
+					if (e.key === 'Enter') void addCategory();
+				}}
 			/>
-			<CategoryIconPicker bind:value={newIcon} bind:categoryName={newName} categoryType={tab} />
-			<button
-				type="button"
-				class="btn-primary btn-icon sm:min-w-[auto] sm:px-4"
-				onclick={addCategory}
-			>
-				<span class="sr-only">{$_('common.create')}</span>
-				<svg
-					aria-hidden="true"
-					class="h-5 w-5 sm:hidden"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-				>
-					<path d="M12 5v14M5 12h14" />
-				</svg>
-				<span class="hidden sm:inline">{$_('common.create')}</span>
+			<CategoryIconPicker
+				bind:value={newIcon}
+				bind:categoryName={newName}
+				categoryType={tab}
+				quickLimit={5}
+				fill
+			/>
+			<button type="button" class="btn-primary w-full sm:w-auto sm:px-4" onclick={addCategory}>
+				{$_('common.create')}
 			</button>
 		</div>
-	</div>
+	</section>
 
 	<PageLoadGate {loading} error={loadError} onretry={() => void load()} inline>
 		{#if categories.length === 0}
 			<EmptyStateCard message={$_('categories.empty')} />
 		{:else}
-			<div class="space-y-2">
-				{#each categories as cat (cat.id)}
-					<div
-						class="card transition-opacity"
-						class:opacity-30={draggingId === cat.id}
-						class:border-t-2={overId === cat.id && draggingId !== null && draggingId !== cat.id}
-						data-drag-id={cat.id}
-						data-drag-kind="category"
-						style:border-color={overId === cat.id ? 'var(--primary)' : undefined}
-					>
-						<div class="flex flex-wrap items-center gap-1 sm:flex-nowrap" data-drag-row>
-							{#if editingId !== cat.id}
-								{#if !cat.is_system}
-									<span
-										class="btn-icon btn-ghost cursor-grab touch-none text-lg leading-none select-none active:cursor-grabbing"
-										role="button"
-										tabindex="-1"
-										aria-label={$_('categories.drag.handle')}
-										onpointerdown={(e) =>
-											startCategoryDrag(
-												e,
-												cat,
-												e.currentTarget.closest('[data-drag-id]') as HTMLElement
-											)}
-									>
-										⠿
-									</span>
-								{:else}
-									<span class="btn-icon shrink-0" aria-hidden="true"></span>
-								{/if}
-								<span class="inline-flex shrink-0 items-center justify-center min-h-11 min-w-11">
-									<CategoryIcon icon={cat.icon} size={categoryIconSize} />
-								</span>
-								{#if canExpandCategory(cat)}
-									<button
-										type="button"
-										class="min-w-0 flex-1 truncate text-left font-medium inline-flex items-center gap-1.5"
-										aria-expanded={expanded[cat.id] ?? false}
-										onclick={() => toggleExpand(cat)}
-									>
-										<span class="inline-flex min-w-0 items-center gap-1 truncate">
-											<span class="truncate">{cat.name}</span>
-											{#if cat.is_system}
-												<span class="ml-1 shrink-0 text-xs" style:color="var(--text-muted)"
-													>({$_('categories.system.badge')})</span
-												>
-											{/if}
-											{#if cat.is_primary}
-												<span
-													class="shrink-0"
-													style:color="var(--primary)"
-													title={$_('categories.primary.badge')}
-													aria-label={$_('categories.primary.badge')}
-												>
-													<svg
-														aria-hidden="true"
-														class="h-4 w-4"
-														viewBox="0 0 24 24"
-														fill="none"
-														stroke="currentColor"
-														stroke-width="2"
-													>
-														<path d="M20 6 9 17l-5-5" />
-													</svg>
-												</span>
-											{/if}
-										</span>
-										<span class="shrink-0 text-xs leading-none" aria-hidden="true">
-											{expanded[cat.id] ? '▼' : '▶'}
-										</span>
-									</button>
-								{:else}
-									<span class="min-w-0 flex-1 truncate font-medium">
-										{cat.name}
-										<span class="ml-1 text-xs" style:color="var(--text-muted)"
-											>({$_('categories.system.badge')})</span
-										>
-									</span>
-								{/if}
-								{#if !cat.is_system}
-									<RowActionsMenu actions={categoryActions(cat)} />
-								{/if}
-							{:else}
-								<span class="inline-flex shrink-0 items-center justify-center min-h-11 min-w-11">
-									<CategoryIcon icon={cat.icon} size={categoryIconSize} />
-								</span>
-								<div class="flex min-w-0 flex-1 flex-col gap-3">
-									<input class="input w-full" bind:value={editName} />
-									<CategoryIconPicker
-										bind:value={editIcon}
-										bind:categoryName={editName}
-										categoryType={tab}
-										lockName={true}
-										quickSize={categoryIconSize}
-										iconSize={categoryIconSize}
-									/>
-									<div class="flex flex-wrap gap-2">
-										<IconButton
-											icon="save"
-											label={$_('common.save')}
-											variant="primary"
-											onclick={saveEdit}
-										/>
-										<IconButton
-											icon="cancel"
-											label={$_('common.cancel')}
-											onclick={() => (editingId = null)}
-										/>
-									</div>
-								</div>
-							{/if}
+			{@const userCategories = categories.filter((c) => !c.is_system)}
+			{@const systemCategories = categories.filter((c) => c.is_system)}
+			<div class="space-y-8">
+				{#if userCategories.length > 0}
+					<section class="space-y-3">
+						<GroupHeading
+							title={$_('categories.group.mine', { values: { count: userCategories.length } })}
+							hint={$_('categories.group.mine_hint')}
+						/>
+						<div class="card list-divided p-0 sm:p-0">
+							{#each userCategories as cat (cat.id)}
+								{@render categoryRow(cat)}
+							{/each}
 						</div>
-
-						{#if expanded[cat.id] && canExpandCategory(cat)}
-							{@const readOnlySubs = isSubscriptionsSystemCategory(cat)}
-							<div
-								class="mt-3 space-y-3 border-t pt-3 pl-4 sm:pl-10"
-								style:border-color="var(--border)"
-							>
-								{#each subs[cat.id] ?? [] as sub (sub.id)}
-									<div
-										class="flex flex-wrap items-center gap-2 rounded-lg transition-opacity"
-										class:opacity-30={!readOnlySubs && draggingId === sub.id}
-										class:border-t-2={!readOnlySubs &&
-											overId === sub.id &&
-											draggingId !== null &&
-											draggingId !== sub.id}
-										data-drag-id={sub.id}
-										data-drag-kind="sub"
-										style:border-color={!readOnlySubs && overId === sub.id
-											? 'var(--primary)'
-											: undefined}
-									>
-										<div
-											class="flex min-w-0 flex-1 items-center gap-1 overflow-hidden"
-											data-drag-row
-										>
-											{#if !readOnlySubs}
-												<span
-													class="btn-icon btn-ghost cursor-grab touch-none text-base leading-none select-none active:cursor-grabbing"
-													role="button"
-													tabindex="-1"
-													aria-label={$_('categories.drag.handle')}
-													onpointerdown={(e) =>
-														startSubDrag(
-															e,
-															cat.id,
-															sub,
-															e.currentTarget.closest('[data-drag-id]') as HTMLElement
-														)}
-												>
-													⠿
-												</span>
-											{:else}
-												<span class="btn-icon shrink-0" aria-hidden="true"></span>
-											{/if}
-											<span
-												class="inline-flex shrink-0 items-center justify-center min-h-11 min-w-11"
-											>
-												<CategoryIcon icon={sub.icon || 'default'} size={categoryIconSize} />
-											</span>
-											<span class="min-w-0 flex-1 truncate">{sub.name}</span>
-											{#if !readOnlySubs}
-												<RowActionsMenu
-													actions={[
-														{
-															icon: 'edit',
-															label: $_('accounts.action.edit'),
-															onclick: () => openEditSub(cat.id, sub)
-														},
-														{
-															icon: 'delete',
-															label: $_('common.delete'),
-															variant: 'danger',
-															onclick: () => removeSub(cat.id, sub.id)
-														}
-													]}
-												/>
-											{/if}
-										</div>
-									</div>
-								{/each}
-								{#if !readOnlySubs}
-									<button
-										type="button"
-										class="btn-ghost w-full sm:w-auto"
-										onclick={() => openCreateSub(cat)}
-									>
-										{$_('categories.sub.addButton')}
-									</button>
-								{/if}
-							</div>
-						{/if}
-					</div>
-				{/each}
+					</section>
+				{/if}
+				{#if systemCategories.length > 0}
+					<section class="space-y-3">
+						<GroupHeading
+							title={$_('categories.group.system')}
+							hint={$_('categories.group.system_hint')}
+						/>
+						<div class="card list-divided p-0 sm:p-0">
+							{#each systemCategories as cat (cat.id)}
+								{@render categoryRow(cat)}
+							{/each}
+						</div>
+					</section>
+				{/if}
 			</div>
 		{/if}
 	</PageLoadGate>
@@ -644,3 +689,40 @@
 		onclose={closeSubDialog}
 	/>
 {/if}
+
+<style>
+	.sub-list {
+		margin: 0 0.75rem 0.75rem 2.25rem;
+		border-left: 2px solid var(--border);
+		padding-left: 0.25rem;
+	}
+
+	.sub-list > :global([data-drag-kind='sub'] + [data-drag-kind='sub']) {
+		border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+	}
+
+	.add-sub-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.375rem;
+		border: 1px dashed var(--border);
+		border-radius: 0.75rem;
+		padding: 0.375rem 0.75rem;
+		font-size: 0.875rem;
+		color: var(--text-muted);
+		transition:
+			color 120ms,
+			border-color 120ms;
+	}
+
+	.add-sub-btn:hover {
+		color: var(--primary);
+		border-color: var(--primary);
+	}
+
+	@media (min-width: 640px) {
+		.sub-list {
+			margin-left: 3.25rem;
+		}
+	}
+</style>

@@ -4,6 +4,7 @@
 	import { resolve } from '$app/paths';
 	import { _ } from 'svelte-i18n';
 	import { getAdminFeatures, putAdminFeatures, type AdminFeatureFlag } from '$lib/api/client';
+	import GroupHeading from '$lib/components/GroupHeading.svelte';
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
 	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
 	import { loadFeatureFlags } from '$lib/features';
@@ -61,36 +62,36 @@
 	}
 </script>
 
-<div class="max-w-lg space-y-4">
+<div>
 	<PageLoadGate loading={pageLoading} error={loadError} onretry={() => void reload()}>
-		<p class="text-sm" style:color="var(--text-muted)">{$_('admin.features.warn.module')}</p>
-
-		<ul class="card space-y-0 overflow-hidden !p-0">
-			{#each featureItems as item, i (item.key)}
-				<li
-					class="flex items-center gap-4 px-4 py-3 sm:px-6"
-					class:border-t={i > 0}
-					style:border-color="var(--border)"
-				>
-					<div class="min-w-0 flex-1">
-						<p class="text-sm font-medium">{$_(item.title_key)}</p>
-						<p class="mt-0.5 text-xs leading-snug" style:color="var(--text-muted)">
-							{$_(item.description_key)}
-						</p>
-						{#if item.key === 'registration' && !item.enabled}
-							<p class="mt-1 text-xs leading-snug" style:color="var(--text-muted)">
-								{$_('admin.features.warn.registration')}
+		<section class="space-y-3">
+			<GroupHeading
+				title={$_('admin.features.group.title')}
+				hint={$_('admin.features.warn.module')}
+			/>
+			<ul class="card list-divided p-0 sm:p-0">
+				{#each featureItems as item (item.key)}
+					<li class="flex items-center gap-4 px-4 py-3 sm:px-5">
+						<div class="min-w-0 flex-1">
+							<p class="text-sm font-medium">{$_(item.title_key)}</p>
+							<p class="mt-0.5 text-xs leading-snug" style:color="var(--text-muted)">
+								{$_(item.description_key)}
 							</p>
-						{/if}
-					</div>
-					<ToggleSwitch
-						checked={item.enabled}
-						disabled={savingKey !== null}
-						label={$_(item.title_key)}
-						onchange={() => void toggle(item.key)}
-					/>
-				</li>
-			{/each}
-		</ul>
+							{#if item.key === 'registration' && !item.enabled}
+								<p class="mt-1 text-xs leading-snug" style:color="var(--warning)">
+									{$_('admin.features.warn.registration')}
+								</p>
+							{/if}
+						</div>
+						<ToggleSwitch
+							checked={item.enabled}
+							disabled={savingKey !== null}
+							label={$_(item.title_key)}
+							onchange={() => void toggle(item.key)}
+						/>
+					</li>
+				{/each}
+			</ul>
+		</section>
 	</PageLoadGate>
 </div>

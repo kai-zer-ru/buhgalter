@@ -28,6 +28,7 @@
 	import { user, clearLastUser } from '$lib/stores/auth';
 	import { toast } from '$lib/toast';
 	import { confirm } from '$lib/confirm';
+	import GroupHeading from '$lib/components/GroupHeading.svelte';
 	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
 	import {
 		exportDebugLogToDownloads,
@@ -190,72 +191,98 @@
 	<title>{$_('serverSettings.title')} — {$_('app.title')}</title>
 </svelte:head>
 
-<div class="card mx-auto max-w-lg space-y-6">
-	<div>
-		<h1 class="text-2xl font-semibold">{$_('serverSettings.title')}</h1>
-		<p class="mt-1 text-sm" style:color="var(--text-muted)">{$_('serverSettings.subtitle')}</p>
-	</div>
-	<ServerDiscoveryPanel
-		onselect={(origin) => {
-			lanUrl = origin;
-			formError = null;
-		}}
-	/>
-	<div class="border-t" style:border-color="var(--border)"></div>
-	<form class="space-y-4" onsubmit={submit}>
-		<ServerProfileFields
-			bind:lanUrl
-			bind:remoteUrl
-			bind:homeSsids
-			bind:lanFallbackRemote
-			showActiveStatus
-			activeMode={$activeServerMode}
-			{currentSsid}
+<div class="space-y-8">
+	<section class="space-y-3">
+		<GroupHeading
+			title={$_('serverSettings.group.connection')}
+			hint={$_('serverSettings.subtitle')}
 		/>
-		{#if formError}
-			<p class="text-sm" style:color="var(--danger)" role="alert">{formError}</p>
-		{/if}
-		<button type="submit" class="btn-primary" disabled={loading}>
-			{loading ? $_('serverSetup.checking') : $_('common.save')}
-		</button>
-	</form>
-	<div class="space-y-2 border-t pt-4" style:border-color="var(--border)">
-		<div class="flex items-start justify-between gap-3">
-			<div class="min-w-0">
-				<h2 class="text-sm font-medium">{$_('serverSettings.logging.title')}</h2>
-				<p class="mt-1 text-xs leading-snug" style:color="var(--text-muted)">
-					{$_('serverSettings.logging.hint')}
-				</p>
-			</div>
-			<ToggleSwitch
-				checked={loggingEnabled}
-				disabled={savingLog}
-				label={$_('serverSettings.logging.title')}
-				onchange={() => void toggleLogging()}
+		<div class="card">
+			<ServerDiscoveryPanel
+				onselect={(origin) => {
+					lanUrl = origin;
+					formError = null;
+				}}
 			/>
 		</div>
-	</div>
-	<div class="space-y-2 border-t pt-4" style:border-color="var(--border)">
-		<div>
-			<h2 class="text-sm font-medium">{$_('serverSettings.exportOutbox')}</h2>
-			<p class="mt-1 text-xs leading-snug" style:color="var(--text-muted)">
-				{$_('serverSettings.exportOutboxHint')}
-			</p>
+		<form class="card space-y-4" onsubmit={submit}>
+			<ServerProfileFields
+				bind:lanUrl
+				bind:remoteUrl
+				bind:homeSsids
+				bind:lanFallbackRemote
+				showActiveStatus
+				activeMode={$activeServerMode}
+				{currentSsid}
+			/>
+			{#if formError}
+				<p class="text-sm" style:color="var(--danger)" role="alert">{formError}</p>
+			{/if}
+			<div class="flex justify-end border-t pt-4" style:border-color="var(--border)">
+				<button type="submit" class="btn-primary" disabled={loading}>
+					{loading ? $_('serverSetup.checking') : $_('common.save')}
+				</button>
+			</div>
+		</form>
+	</section>
+
+	<section class="space-y-3">
+		<GroupHeading
+			title={$_('serverSettings.group.debug')}
+			hint={$_('serverSettings.group.debug_hint')}
+		/>
+		<div class="card list-divided p-0 sm:p-0">
+			<div class="flex items-center justify-between gap-4 px-4 py-3.5">
+				<div class="min-w-0">
+					<p class="font-medium">{$_('serverSettings.logging.title')}</p>
+					<p class="mt-0.5 text-sm leading-snug" style:color="var(--text-muted)">
+						{$_('serverSettings.logging.hint')}
+					</p>
+				</div>
+				<ToggleSwitch
+					checked={loggingEnabled}
+					disabled={savingLog}
+					label={$_('serverSettings.logging.title')}
+					onchange={() => void toggleLogging()}
+				/>
+			</div>
+			<div class="space-y-3 px-4 py-3.5">
+				<div class="min-w-0">
+					<p class="font-medium">{$_('serverSettings.exportOutbox')}</p>
+					<p class="mt-0.5 text-sm leading-snug" style:color="var(--text-muted)">
+						{$_('serverSettings.exportOutboxHint')}
+					</p>
+				</div>
+				<button
+					type="button"
+					class="btn-ghost"
+					disabled={exportingOutbox}
+					onclick={() => void exportOutbox()}
+				>
+					{exportingOutbox ? $_('common.loading') : $_('offline.export.button')}
+				</button>
+			</div>
 		</div>
-		<button
-			type="button"
-			class="btn-ghost text-sm"
-			disabled={exportingOutbox}
-			onclick={() => void exportOutbox()}
+	</section>
+
+	<section class="space-y-3">
+		<GroupHeading title={$_('settings.profile.section.danger')} />
+		<div
+			class="card flex flex-col gap-3 sm:flex-row sm:items-center"
+			style:border-color="color-mix(in srgb, var(--danger) 40%, var(--border))"
 		>
-			{exportingOutbox ? $_('common.loading') : $_('offline.export.button')}
-		</button>
-	</div>
-	<div class="border-t pt-4" style:border-color="var(--border)">
-		<button type="button" class="btn-ghost text-sm" onclick={() => void disconnect()}>
-			{$_('serverSettings.disconnect')}
-		</button>
-	</div>
+			<p class="min-w-0 flex-1 text-sm" style:color="var(--text-muted)">
+				{$_('serverSettings.disconnect_hint')}
+			</p>
+			<button
+				type="button"
+				class="btn-danger self-end sm:self-auto"
+				onclick={() => void disconnect()}
+			>
+				{$_('serverSettings.disconnect')}
+			</button>
+		</div>
+	</section>
 </div>
 
 <ServerTrustDialog

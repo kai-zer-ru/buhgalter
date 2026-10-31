@@ -9,6 +9,7 @@
 	import { creditNewPath } from '$lib/android/form-routes';
 	import BackLink from '$lib/components/BackLink.svelte';
 	import CreditList from '$lib/components/CreditList.svelte';
+	import GroupHeading from '$lib/components/GroupHeading.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
 	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
@@ -167,37 +168,40 @@
 		</SectionHeader>
 
 		{#if attachTxId}
-			<div class="card space-y-3">
-				<h2 class="text-base font-semibold">{$_('credits.selectToAttach')}</h2>
+			<section class="space-y-3">
+				<GroupHeading
+					title={$_('credits.selectToAttach')}
+					hint={$_('credits.selectToAttach_hint')}
+				/>
 				{#if credits.length === 0}
-					<p class="text-sm" style:color="var(--text-muted)">{$_('credits.empty')}</p>
+					<p class="card text-sm" style:color="var(--text-muted)">{$_('credits.empty')}</p>
 				{:else}
-					<ul class="space-y-2">
+					<ul class="card list-divided p-0 sm:p-0">
 						{#each credits as item (item.id)}
 							<li>
 								<button
 									type="button"
-									class="btn-ghost w-full justify-start text-left"
+									class="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-[color-mix(in_srgb,var(--border)_30%,transparent)]"
 									disabled={attaching}
 									onclick={() => void attachToCredit(item)}
 								>
-									<span class="inline-flex items-center gap-2">
-										<span class="font-medium">{creditName(item)}</span>
-										{#if item.monthly_payment_display}
-											<span class="text-sm" style:color="var(--text-muted)">
-												<MoneyDisplay value={item.monthly_payment_display} {currency} class="" />
-											</span>
-										{/if}
-									</span>
+									<span class="min-w-0 truncate font-medium">{creditName(item)}</span>
+									{#if item.monthly_payment_display}
+										<span class="shrink-0 text-sm tabular-nums" style:color="var(--text-muted)">
+											<MoneyDisplay value={item.monthly_payment_display} {currency} class="" />
+										</span>
+									{/if}
 								</button>
 							</li>
 						{/each}
 					</ul>
 				{/if}
-				<button type="button" class="btn-ghost" onclick={clearAttach}>
-					{$_('common.cancel')}
-				</button>
-			</div>
+				<div class="flex justify-end">
+					<button type="button" class="btn-ghost" onclick={clearAttach}>
+						{$_('common.cancel')}
+					</button>
+				</div>
+			</section>
 		{/if}
 
 		<PageTabs
@@ -217,7 +221,7 @@
 					message={tab === 'closed' ? $_('credits.empty.closed') : $_('credits.empty')}
 				/>
 			{:else}
-				<div class="relative card md:overflow-x-auto" class:opacity-60={filterLoading}>
+				<div class="relative card overflow-x-auto p-0 sm:p-0" class:opacity-60={filterLoading}>
 					{#if filterLoading}
 						<p
 							class="pointer-events-none absolute inset-x-0 top-0 z-10 py-2 text-center text-sm"

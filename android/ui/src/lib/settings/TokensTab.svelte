@@ -11,6 +11,8 @@
 	} from '$lib/api/client';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
+	import GroupHeading from '$lib/components/GroupHeading.svelte';
+	import RowActionsMenu from '$lib/components/RowActionsMenu.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
 	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
@@ -122,14 +124,16 @@
 	}
 </script>
 
-<div class="space-y-6">
-	<PageLoadGate loading={pageLoading} error={loadError} onretry={() => void reloadPage()}>
+<PageLoadGate loading={pageLoading} error={loadError} onretry={() => void reloadPage()}>
+	<div class="space-y-8">
 		<form class="card space-y-4" onsubmit={handleCreateToken}>
+			<div class="space-y-1">
+				<h2 class="font-semibold">{$_('settings.tokens.add')}</h2>
+				<p class="text-sm" style:color="var(--text-muted)">{$_('settings.tokens.add_hint')}</p>
+			</div>
 			<div class="grid gap-4 sm:grid-cols-2">
 				<div>
-					<label class="mb-1.5 block text-sm font-medium" for="token-name"
-						>{$_('settings.tokens.name')}</label
-					>
+					<label class="field-label" for="token-name">{$_('settings.tokens.name')}</label>
 					<input
 						id="token-name"
 						class="input w-full"
@@ -148,24 +152,28 @@
 					{...futureDateOnlyPicker}
 				/>
 			</div>
-			<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-				<label class="flex cursor-pointer items-center gap-3">
-					<ToggleSwitch
-						checked={newTokenNeverExpires}
-						label={$_('settings.tokens.never_expires')}
-						onchange={() => (newTokenNeverExpires = !newTokenNeverExpires)}
-					/>
-					<span class="text-sm">{$_('settings.tokens.never_expires')}</span>
-				</label>
+			<div class="flex items-center justify-between gap-4">
+				<span class="text-sm">{$_('settings.tokens.never_expires')}</span>
+				<ToggleSwitch
+					checked={newTokenNeverExpires}
+					label={$_('settings.tokens.never_expires')}
+					onchange={() => (newTokenNeverExpires = !newTokenNeverExpires)}
+				/>
+			</div>
+			{#if newTokenNeverExpires}
+				<p
+					class="rounded-xl border p-3 text-sm font-medium"
+					style:color="var(--danger)"
+					style:border-color="color-mix(in srgb, var(--danger) 40%, var(--border))"
+				>
+					{$_('settings.tokens.perpetual_warning')}
+				</p>
+			{/if}
+			<div class="flex justify-end border-t pt-4" style:border-color="var(--border)">
 				<button type="submit" class="btn-primary w-full sm:w-auto" disabled={loading}>
 					{$_('common.create')}
 				</button>
 			</div>
-			{#if newTokenNeverExpires}
-				<p class="text-sm font-medium" style:color="var(--danger)">
-					{$_('settings.tokens.perpetual_warning')}
-				</p>
-			{/if}
 		</form>
 
 		{#if createdToken}
@@ -192,60 +200,81 @@
 		{#if tokens.length === 0}
 			<EmptyStateCard message={$_('settings.tokens.empty')} />
 		{:else}
-			<div class="card md:overflow-x-auto">
-				<div class="hidden md:block">
-					<table class="w-full text-left text-sm">
-						<thead>
-							<tr style:color="var(--text-muted)">
-								<th class="pb-3 pr-4">{$_('settings.tokens.col.name')}</th>
-								<th class="pb-3 pr-4">Prefix</th>
-								<th class="pb-3 pr-4">{$_('settings.tokens.col.expires')}</th>
-								<th class="pb-3 pr-4">{$_('settings.tokens.col.last_used')}</th>
-								<th class="pb-3"></th>
-							</tr>
-						</thead>
-						<tbody>
-							{#each tokens as t (t.id)}
-								<tr class="border-t" style:border-color="var(--border)">
-									<td class="py-3 pr-4">{t.name}</td>
-									<td class="py-3 pr-4 font-mono">{t.token_prefix}</td>
-									<td class="py-3 pr-4">{formatTokenExpiry(t.expires_at)}</td>
-									<td class="py-3 pr-4">{formatOptional(t.last_used_at)}</td>
-									<td class="py-3 text-right">
-										<button type="button" class="btn-ghost" onclick={() => revokeToken(t.id)}>
-											{$_('common.delete')}
-										</button>
-									</td>
-								</tr>
-							{/each}
-						</tbody>
-					</table>
-				</div>
-				<div class="space-y-3 md:hidden">
+			<section class="space-y-3">
+				<GroupHeading
+					title={$_('settings.tokens.group.all', { values: { count: tokens.length } })}
+					hint={$_('settings.tokens.group.all_hint')}
+				/>
+				<div class="card list-divided p-0 sm:p-0">
 					{#each tokens as t (t.id)}
-						<article class="rounded-xl border p-4" style:border-color="var(--border)">
-							<p class="font-medium">{t.name}</p>
-							<dl class="mt-2 grid gap-2 text-sm">
-								<div class="flex justify-between gap-2">
-									<dt style:color="var(--text-muted)">Prefix</dt>
-									<dd class="font-mono">{t.token_prefix}</dd>
+						{@const perpetual = !t.expires_at || t.expires_at.trim() === ''}
+						<div
+							class="flex items-center gap-3 py-2 pr-1.5 pl-3 sm:pr-2 sm:pl-4"
+							data-testid="token-row"
+						>
+							<span class="token-glyph" aria-hidden="true">
+								<svg
+									class="h-5 w-5"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								>
+									<circle cx="7.5" cy="15.5" r="3.5" />
+									<path d="m10 13 9-9M16 7l2 2M14 9l2 2" />
+								</svg>
+							</span>
+							<div class="min-w-0 flex-1">
+								<div class="flex flex-wrap items-center gap-2">
+									<span class="truncate font-medium">{t.name}</span>
+									<code class="text-xs" style:color="var(--text-muted)">{t.token_prefix}…</code>
+									{#if perpetual}
+										<span class="badge token-badge-danger">{$_('settings.tokens.col.never')}</span>
+									{/if}
 								</div>
-								<div class="flex justify-between gap-2">
-									<dt style:color="var(--text-muted)">{$_('settings.tokens.col.expires')}</dt>
-									<dd>{formatTokenExpiry(t.expires_at)}</dd>
+								<div class="mt-0.5 text-xs" style:color="var(--text-muted)">
+									{#if !perpetual}
+										{$_('settings.tokens.col.expires')}: {formatTokenExpiry(t.expires_at)} ·
+									{/if}
+									{$_('settings.tokens.col.last_used')}: {formatOptional(t.last_used_at)}
 								</div>
-								<div class="flex justify-between gap-2">
-									<dt style:color="var(--text-muted)">{$_('settings.tokens.col.last_used')}</dt>
-									<dd>{formatOptional(t.last_used_at)}</dd>
-								</div>
-							</dl>
-							<button type="button" class="btn-ghost mt-3 w-full" onclick={() => revokeToken(t.id)}>
-								{$_('common.delete')}
-							</button>
-						</article>
+							</div>
+							<RowActionsMenu
+								actions={[
+									{
+										icon: 'delete',
+										label: $_('common.delete'),
+										variant: 'danger',
+										onclick: () => void revokeToken(t.id)
+									}
+								]}
+							/>
+						</div>
 					{/each}
 				</div>
-			</div>
+			</section>
 		{/if}
-	</PageLoadGate>
-</div>
+	</div>
+</PageLoadGate>
+
+<style>
+	.token-glyph {
+		display: inline-flex;
+		height: 2.25rem;
+		width: 2.25rem;
+		flex-shrink: 0;
+		align-items: center;
+		justify-content: center;
+		border-radius: 0.75rem;
+		color: var(--primary);
+		background-color: color-mix(in srgb, var(--primary) 12%, transparent);
+	}
+
+	.token-badge-danger {
+		color: var(--danger);
+		border-color: color-mix(in srgb, var(--danger) 30%, transparent);
+		background-color: color-mix(in srgb, var(--danger) 12%, transparent);
+	}
+</style>

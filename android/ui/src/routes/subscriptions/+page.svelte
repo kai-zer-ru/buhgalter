@@ -21,6 +21,7 @@
 	import { subscriptionEditPath, subscriptionNewPath } from '$lib/android/form-routes';
 	import BackLink from '$lib/components/BackLink.svelte';
 	import CategoryIcon from '$lib/components/CategoryIcon.svelte';
+	import GroupHeading from '$lib/components/GroupHeading.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
 	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
@@ -29,7 +30,7 @@
 	import { confirm } from '$lib/confirm';
 	import {
 		formatAPIDayMonthTimeForDisplay,
-		formatAPIOperationDateTimeForDisplay
+		formatAPIDayMonthTimeShortForDisplay
 	} from '$lib/dates';
 	import { reportPageLoadFailure } from '$lib/page-load';
 	import { toast } from '$lib/toast';
@@ -206,7 +207,7 @@
 	<title>{$_('subscriptions.title')} — {$_('app.title')}</title>
 </svelte:head>
 
-<div class="space-y-5">
+<div class="space-y-6">
 	<BackLink
 		items={[
 			{ href: '/', label: $_('nav.home') },
@@ -226,88 +227,101 @@
 		{/snippet}
 	</SectionHeader>
 
-	{#if attachTxId}
-		<div class="card space-y-3">
-			<h2 class="text-base font-semibold">{$_('subscriptions.selectToAttach')}</h2>
-			{#if items.length === 0}
-				<p class="text-sm" style:color="var(--text-muted)">{$_('subscriptions.empty')}</p>
-			{:else}
-				<ul class="space-y-2">
-					{#each items as item (item.id)}
-						<li>
-							<button
-								type="button"
-								class="btn-ghost w-full justify-start text-left"
-								disabled={attaching}
-								onclick={() => void attachToSubscription(item)}
-							>
-								<span class="inline-flex items-center gap-2">
-									<CategoryIcon icon={item.icon || 'default'} size={24} />
-									<span class="font-medium">{item.name}</span>
-									<span class="text-sm" style:color="var(--text-muted)">
+	<div class="space-y-8">
+		{#if attachTxId}
+			<section class="space-y-3">
+				<GroupHeading
+					title={$_('subscriptions.selectToAttach')}
+					hint={$_('subscriptions.selectToAttach_hint')}
+				/>
+				{#if items.length === 0}
+					<p class="card text-sm" style:color="var(--text-muted)">{$_('subscriptions.empty')}</p>
+				{:else}
+					<ul class="card list-divided p-0 sm:p-0">
+						{#each items as item (item.id)}
+							<li>
+								<button
+									type="button"
+									class="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-[color-mix(in_srgb,var(--border)_30%,transparent)]"
+									disabled={attaching}
+									onclick={() => void attachToSubscription(item)}
+								>
+									<CategoryIcon icon={item.icon || 'default'} size={32} />
+									<span class="min-w-0 flex-1 truncate font-medium">{item.name}</span>
+									<span class="shrink-0 text-sm tabular-nums" style:color="var(--text-muted)">
 										<MoneyDisplay value={item.amount_display} {currency} class="" />
 									</span>
-								</span>
-							</button>
-						</li>
-					{/each}
-				</ul>
-			{/if}
-			<button type="button" class="btn-ghost" onclick={() => (attachTxId = null)}>
-				{$_('common.cancel')}
-			</button>
-		</div>
-	{/if}
-
-	{#if summary}
-		<div class="grid gap-3 sm:grid-cols-2">
-			<div class="card p-4">
-				<p class="text-sm" style:color="var(--text-muted)">{$_('subscriptions.summary.monthly')}</p>
-				<p class="mt-1 text-xl font-semibold tabular-nums">
-					<MoneyDisplay value={summary.monthly_total_display} {currency} class="" />
-				</p>
-			</div>
-			<div class="card p-4">
-				<p class="text-sm" style:color="var(--text-muted)">{$_('subscriptions.summary.yearly')}</p>
-				<p class="mt-1 text-xl font-semibold tabular-nums">
-					<MoneyDisplay value={summary.yearly_total_display} {currency} class="" />
-				</p>
-			</div>
-		</div>
-		{#if summary.upcoming.length > 0}
-			<div class="card space-y-3 p-4">
-				<h2 class="text-base font-semibold">{$_('subscriptions.upcoming')}</h2>
-				<ul class="space-y-2 text-sm">
-					{#each summary.upcoming as item (item.id)}
-						<li class="flex flex-wrap items-center justify-between gap-2">
-							<span class="inline-flex min-w-0 items-center gap-2">
-								<CategoryIcon icon={item.icon || 'default'} size={24} />
-								<span class="truncate font-medium">{item.name}</span>
-							</span>
-							<span class="shrink-0 tabular-nums" style:color="var(--text-muted)">
-								{formatAPIDayMonthTimeForDisplay(item.next_run_at, tz, $locale ?? 'ru')}
-								·
-								<MoneyDisplay value={item.amount_display} {currency} class="" />
-							</span>
-						</li>
-					{/each}
-				</ul>
-			</div>
+								</button>
+							</li>
+						{/each}
+					</ul>
+				{/if}
+				<div class="flex justify-end">
+					<button type="button" class="btn-ghost" onclick={() => (attachTxId = null)}>
+						{$_('common.cancel')}
+					</button>
+				</div>
+			</section>
 		{/if}
-	{/if}
 
-	<PageLoadGate {loading} error={loadError} onretry={() => void loadAll()} inline>
-		{#if items.length === 0}
-			<EmptyStateCard message={$_('subscriptions.empty')} />
-		{:else}
-			<div class="card space-y-3 p-3">
-				{#each items as item (item.id)}
-					<article class="rounded-xl border p-4" style:border-color="var(--border)">
-						<div class="flex items-start justify-between gap-3">
-							<div class="flex min-w-0 items-start gap-2">
-								<CategoryIcon icon={item.icon || 'default'} size={28} />
-								<div class="min-w-0">
-									<p class="font-medium">
+		{#if summary}
+			<div class="card overflow-hidden p-0 sm:p-0">
+				<div class="stat-grid grid-cols-2">
+					<div>
+						<p class="stat-label">{$_('subscriptions.summary.monthly')}</p>
+						<p class="stat-value sm:text-2xl">
+							<MoneyDisplay value={summary.monthly_total_display} {currency} class="" />
+						</p>
+					</div>
+					<div>
+						<p class="stat-label">{$_('subscriptions.summary.yearly')}</p>
+						<p class="stat-value sm:text-2xl">
+							<MoneyDisplay value={summary.yearly_total_display} {currency} class="" />
+						</p>
+					</div>
+				</div>
+			</div>
+			{#if summary.upcoming.length > 0}
+				<section class="space-y-3">
+					<GroupHeading
+						title={$_('subscriptions.upcoming')}
+						hint={$_('subscriptions.upcoming_hint')}
+					/>
+					<ul class="card list-divided p-0 sm:p-0">
+						{#each summary.upcoming as item (item.id)}
+							<li class="flex items-center gap-3 px-4 py-2.5 text-sm">
+								<CategoryIcon icon={item.icon || 'default'} size={32} />
+								<span class="min-w-0 flex-1">
+									<span class="block truncate font-medium">{item.name}</span>
+									<span class="block text-xs" style:color="var(--text-muted)">
+										{formatAPIDayMonthTimeForDisplay(item.next_run_at, tz, $locale ?? 'ru')}
+									</span>
+								</span>
+								<span class="shrink-0 font-medium tabular-nums">
+									<MoneyDisplay value={item.amount_display} {currency} class="" />
+								</span>
+							</li>
+						{/each}
+					</ul>
+				</section>
+			{/if}
+		{/if}
+
+		<PageLoadGate {loading} error={loadError} onretry={() => void loadAll()} inline>
+			{#if items.length === 0}
+				<EmptyStateCard message={$_('subscriptions.empty')} />
+			{:else}
+				<section class="space-y-3">
+					<GroupHeading
+						title={$_('subscriptions.group.all', { values: { count: items.length } })}
+						hint={$_('subscriptions.group.all_hint')}
+					/>
+					<div class="card list-divided p-0 sm:p-0">
+						{#each items as item (item.id)}
+							<article class="flex items-center gap-3 px-4 py-3">
+								<CategoryIcon icon={item.icon || 'default'} size={36} />
+								<div class="min-w-0 flex-1">
+									<p class="truncate text-sm font-medium">
 										{item.name}
 										{#if !item.active}
 											<span class="text-xs font-normal" style:color="var(--text-muted)">
@@ -315,37 +329,24 @@
 											</span>
 										{/if}
 									</p>
-									{#if item.description}
-										<p class="mt-1 text-xs" style:color="var(--text-muted)">{item.description}</p>
-									{/if}
+									<p class="truncate text-xs" style:color="var(--text-muted)">
+										{periodLabel(item.period)} · {item.account_name}
+									</p>
 								</div>
-							</div>
-							<p class="shrink-0 text-sm font-semibold tabular-nums">
-								<MoneyDisplay value={item.amount_display} {currency} class="" />
-							</p>
-						</div>
-						<dl class="mt-3 grid gap-2 text-sm">
-							<div class="flex justify-between gap-2">
-								<dt style:color="var(--text-muted)">{$_('recurring.period')}</dt>
-								<dd>{periodLabel(item.period)}</dd>
-							</div>
-							<div class="flex justify-between gap-2">
-								<dt style:color="var(--text-muted)">{$_('transactions.field.account')}</dt>
-								<dd class="text-right">{item.account_name}</dd>
-							</div>
-							<div class="flex justify-between gap-2">
-								<dt style:color="var(--text-muted)">{$_('recurring.nextRun')}</dt>
-								<dd class="text-right">
-									{formatAPIOperationDateTimeForDisplay(item.next_run_at, tz)}
-								</dd>
-							</div>
-						</dl>
-						<div class="mt-3 flex justify-end">
-							<RowActionsMenu actions={rowActions(item)} />
-						</div>
-					</article>
-				{/each}
-			</div>
-		{/if}
-	</PageLoadGate>
+								<div class="shrink-0 text-right">
+									<p class="text-sm font-semibold tabular-nums">
+										<MoneyDisplay value={item.amount_display} {currency} class="" />
+									</p>
+									<p class="text-xs" style:color="var(--text-muted)">
+										{formatAPIDayMonthTimeShortForDisplay(item.next_run_at, tz, $locale ?? 'ru')}
+									</p>
+								</div>
+								<RowActionsMenu actions={rowActions(item)} />
+							</article>
+						{/each}
+					</div>
+				</section>
+			{/if}
+		</PageLoadGate>
+	</div>
 </div>

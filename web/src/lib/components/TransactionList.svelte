@@ -314,7 +314,7 @@
 	<EmptyStateCard message={emptyMessage} />
 {:else}
 	<div class="hidden md:block">
-		<table class="w-full text-left text-sm">
+		<table class="data-table w-full text-left text-sm">
 			<thead>
 				<tr style:color="var(--text-muted)">
 					<th class="p-3">{$_('transactions.col.date')}</th>
@@ -413,10 +413,10 @@
 		</table>
 	</div>
 
-	<div class="space-y-3 md:hidden">
+	<div class="list-divided md:hidden">
 		{#each transactions as tx (tx.id)}
 			{@const commissionDisplay = transferCommissionDisplay(tx, siblings)}
-			<article class="rounded-xl border p-4" style:border-color="var(--border)">
+			<article class="p-4">
 				<div class="flex items-start justify-between gap-3">
 					<div class="min-w-0">
 						<p class="text-sm" style:color="var(--text-muted)">

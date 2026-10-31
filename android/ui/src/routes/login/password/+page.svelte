@@ -1,4 +1,5 @@
 <script lang="ts">
+	import AuthBrand from '$lib/components/AuthBrand.svelte';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -79,16 +80,16 @@
 
 <div class="flex min-h-screen items-center justify-center px-4 py-10">
 	<div class="card w-full max-w-md">
-		<h1 class="mb-2 text-2xl font-semibold">{$_('login.title')}</h1>
+		<AuthBrand />
+		<h1 class="mb-2 text-xl font-semibold">{$_('login.title')}</h1>
 		<p class="mb-6 text-sm" style:color="var(--text-muted)">{$_('androidAuth.method.password')}</p>
 		<form class="space-y-4" onsubmit={submit}>
 			<div>
-				<label class="mb-1.5 block text-sm font-medium" for="login">{$_('login.login')}</label>
+				<label class="field-label" for="login">{$_('login.login')}</label>
 				<input id="login" class="input" bind:value={loginName} autocomplete="username" required />
 			</div>
 			<div>
-				<label class="mb-1.5 block text-sm font-medium" for="password">{$_('login.password')}</label
-				>
+				<label class="field-label" for="password">{$_('login.password')}</label>
 				<input
 					id="password"
 					type="password"
@@ -129,8 +130,8 @@
 				<p class="text-sm" style:color="var(--text-muted)">{$_('login.reset.sentHint')}</p>
 			{:else}
 				<p class="text-sm" style:color="var(--text-muted)">{$_('login.reset.hint')}</p>
-				<label class="block space-y-1">
-					<span class="text-sm" style:color="var(--text-muted)">{$_('login.login')}</span>
+				<label class="block">
+					<span class="field-label">{$_('login.login')}</span>
 					<input class="input w-full" bind:value={resetLogin} autocomplete="username" required />
 				</label>
 			{/if}

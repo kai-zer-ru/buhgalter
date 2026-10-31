@@ -107,121 +107,161 @@
 	}
 </script>
 
-<div class="space-y-4">
-	<PageLoadGate loading={pageLoading} error={loadError} onretry={() => void reloadSettings()}>
-		<form class="card max-w-lg space-y-4" onsubmit={submit}>
-			<div>
-				<label class="mb-1.5 block text-sm font-medium" for="external"
-					>{$_('admin.system.external_url')}</label
-				>
-				<input
-					id="external"
-					type="url"
-					class="input"
-					placeholder="https://buhgalter.example.com"
-					bind:value={externalURL}
-				/>
+{#snippet statusBadge(set: boolean, setKey: string, unsetKey: string)}
+	<span class="badge" class:badge-success={set} class:admin-badge-warning={!set}
+		>{$_(set ? setKey : unsetKey)}</span
+	>
+{/snippet}
+
+<PageLoadGate loading={pageLoading} error={loadError} onretry={() => void reloadSettings()}>
+	<div class="space-y-4">
+		<form class="card space-y-4" onsubmit={submit}>
+			<div class="space-y-1">
+				<h2 class="font-semibold">{$_('admin.system.external_url')}</h2>
+				<p class="text-sm" style:color="var(--text-muted)">
+					{$_('admin.system.external_url_hint')}
+				</p>
 			</div>
-			<button type="submit" class="btn-primary" disabled={loading}>{$_('common.save')}</button>
+			<input
+				id="external"
+				type="url"
+				class="input"
+				aria-label={$_('admin.system.external_url')}
+				placeholder="https://buhgalter.example.com"
+				bind:value={externalURL}
+			/>
+			<div class="flex justify-end border-t pt-4" style:border-color="var(--border)">
+				<button type="submit" class="btn-primary" disabled={loading}>{$_('common.save')}</button>
+			</div>
 		</form>
 
-		<div class="card max-w-lg space-y-2">
-			<p class="text-sm font-medium">{$_('admin.system.secret.title')}</p>
-			<p class="text-xs" style:color="var(--text-muted)">{$_('admin.system.secret.hint')}</p>
-			<p class="text-xs" style:color="var(--text-muted)">
-				{$_('admin.system.secret.status')}
-				{secretKeySet
-					? $_('admin.system.secret.status.set')
-					: $_('admin.system.secret.status.unset')}
-			</p>
-			<label class="mb-1.5 block text-sm font-medium" for="notification-secret">
-				{$_('admin.system.secret.label')}
-			</label>
-			<input
-				id="notification-secret"
-				type="password"
-				class="input"
-				placeholder={$_('admin.system.secret.placeholder')}
-				bind:value={notificationSecretKey}
-				autocomplete="new-password"
-				minlength="32"
-				maxlength="32"
-			/>
-			<button type="button" class="btn-primary" onclick={saveSecretKey} disabled={loading}>
-				{$_('admin.system.secret.save')}
-			</button>
-		</div>
+		<div class="grid gap-4 lg:grid-cols-2">
+			<div class="card flex h-full flex-col gap-4">
+				<div class="space-y-1">
+					<div class="flex flex-wrap items-center gap-2">
+						<h2 class="font-semibold">{$_('admin.system.secret.title')}</h2>
+						{@render statusBadge(
+							secretKeySet,
+							'admin.system.secret.status.set',
+							'admin.system.secret.status.unset'
+						)}
+					</div>
+					<p class="text-sm" style:color="var(--text-muted)">{$_('admin.system.secret.hint')}</p>
+				</div>
+				<div>
+					<label class="field-label" for="notification-secret">
+						{$_('admin.system.secret.label')}
+					</label>
+					<input
+						id="notification-secret"
+						type="password"
+						class="input"
+						placeholder={$_('admin.system.secret.placeholder')}
+						bind:value={notificationSecretKey}
+						autocomplete="new-password"
+						minlength="32"
+						maxlength="32"
+					/>
+				</div>
+				<div class="mt-auto flex justify-end border-t pt-4" style:border-color="var(--border)">
+					<button type="button" class="btn-primary" onclick={saveSecretKey} disabled={loading}>
+						{$_('admin.system.secret.save')}
+					</button>
+				</div>
+			</div>
 
-		<div class="card max-w-lg space-y-2">
-			<p class="text-sm font-medium">{$_('admin.system.receiptToken.title')}</p>
-			<p class="text-xs" style:color="var(--text-muted)">
-				{$_('admin.system.receiptToken.hintBefore')}<a
-					href="https://proverkacheka.com/"
-					target="_blank"
-					rel="noopener noreferrer"
-					class="underline underline-offset-2"
-					style:color="var(--text-primary)">proverkacheka.com</a
-				>{$_('admin.system.receiptToken.hintAfter')}
-			</p>
-			<details>
-				<summary class="cursor-pointer text-xs" style:color="var(--text-muted)">
-					{$_('admin.system.receiptToken.more')}
-				</summary>
-				<p class="mt-1 text-xs" style:color="var(--text-muted)">
-					{$_('admin.system.receiptToken.limits')}
-				</p>
-			</details>
-			<p class="text-xs" style:color="var(--text-muted)">
-				{$_('admin.system.receiptToken.status')}
-				{receiptApiTokenSet
-					? $_('admin.system.receiptToken.status.set')
-					: $_('admin.system.receiptToken.status.unset')}
-			</p>
-			<p class="text-xs" style:color="var(--text-muted)">
-				{$_('admin.system.receiptToken.enableModuleBeforeLink')}<a
-					href={resolve('/admin/features')}
-					class="underline underline-offset-2"
-					style:color="var(--text-primary)">{$_('admin.tab.features')}</a
-				>{$_('admin.system.receiptToken.enableModuleAfterLink')}
-			</p>
-			<label class="mb-1.5 block text-sm font-medium" for="receipt-api-token">
-				{$_('admin.system.receiptToken.label')}
-			</label>
-			<input
-				id="receipt-api-token"
-				type="password"
-				class="input"
-				placeholder={$_('admin.system.receiptToken.placeholder')}
-				bind:value={receiptApiToken}
-				autocomplete="new-password"
-			/>
-			<div class="flex flex-wrap gap-2 pt-1">
-				<button type="button" class="btn-primary" onclick={saveReceiptApiToken} disabled={loading}>
-					{$_('admin.system.receiptToken.save')}
-				</button>
-				<a
-					href="https://proverkacheka.com/cabinet/profile/edit"
-					target="_blank"
-					rel="noopener noreferrer"
-					class="btn-ghost inline-flex items-center gap-2"
+			<div class="card flex h-full flex-col gap-4">
+				<div class="space-y-1">
+					<div class="flex flex-wrap items-center gap-2">
+						<h2 class="font-semibold">{$_('admin.system.receiptToken.title')}</h2>
+						{@render statusBadge(
+							receiptApiTokenSet,
+							'admin.system.receiptToken.status.set',
+							'admin.system.receiptToken.status.unset'
+						)}
+					</div>
+					<p class="text-sm" style:color="var(--text-muted)">
+						{$_('admin.system.receiptToken.hintBefore')}<a
+							href="https://proverkacheka.com/"
+							target="_blank"
+							rel="noopener noreferrer"
+							class="underline underline-offset-2">proverkacheka.com</a
+						>{$_('admin.system.receiptToken.hintAfter')}
+					</p>
+				</div>
+				<div
+					class="space-y-2 rounded-xl border p-3 text-xs leading-relaxed"
+					style:border-color="var(--border)"
+					style:color="var(--text-muted)"
 				>
-					<svg
-						aria-hidden="true"
-						class="h-4 w-4 shrink-0"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
+					<p>
+						{$_('admin.system.receiptToken.enableModuleBeforeLink')}<a
+							href={resolve('/admin/features')}
+							class="underline underline-offset-2">{$_('admin.tab.features')}</a
+						>{$_('admin.system.receiptToken.enableModuleAfterLink')}
+					</p>
+					<details>
+						<summary class="cursor-pointer">{$_('admin.system.receiptToken.more')}</summary>
+						<p class="mt-1">{$_('admin.system.receiptToken.limits')}</p>
+					</details>
+				</div>
+				<div>
+					<label class="field-label" for="receipt-api-token">
+						{$_('admin.system.receiptToken.label')}
+					</label>
+					<input
+						id="receipt-api-token"
+						type="password"
+						class="input"
+						placeholder={$_('admin.system.receiptToken.placeholder')}
+						bind:value={receiptApiToken}
+						autocomplete="new-password"
+					/>
+				</div>
+				<div
+					class="mt-auto flex flex-wrap items-center justify-end gap-2 border-t pt-4"
+					style:border-color="var(--border)"
+				>
+					<a
+						href="https://proverkacheka.com/cabinet/profile/edit"
+						target="_blank"
+						rel="noopener noreferrer"
+						class="btn-ghost inline-flex items-center gap-2 sm:mr-auto"
 					>
-						<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-						<polyline points="15 3 21 3 21 9" />
-						<line x1="10" y1="14" x2="21" y2="3" />
-					</svg>
-					{$_('admin.system.receiptToken.getToken')}
-				</a>
+						<svg
+							aria-hidden="true"
+							class="h-4 w-4 shrink-0"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+							<polyline points="15 3 21 3 21 9" />
+							<line x1="10" y1="14" x2="21" y2="3" />
+						</svg>
+						{$_('admin.system.receiptToken.getToken')}
+					</a>
+					<button
+						type="button"
+						class="btn-primary"
+						onclick={saveReceiptApiToken}
+						disabled={loading}
+					>
+						{$_('admin.system.receiptToken.save')}
+					</button>
+				</div>
 			</div>
 		</div>
-	</PageLoadGate>
-</div>
+	</div>
+</PageLoadGate>
+
+<style>
+	.admin-badge-warning {
+		color: var(--warning);
+		border-color: color-mix(in srgb, var(--warning) 30%, transparent);
+		background-color: color-mix(in srgb, var(--warning) 14%, transparent);
+	}
+</style>

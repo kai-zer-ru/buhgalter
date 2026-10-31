@@ -33,7 +33,7 @@ test('merchant alias is found in the form and merge keeps one journal name', asy
 	await expect(page.locator('.font-medium', { hasText: other })).toHaveCount(0);
 	await page.getByPlaceholder('Поиск…').fill('');
 
-	const targetCard = page.locator('.card').filter({
+	const targetCard = page.getByTestId('merchant-row').filter({
 		has: page.locator('.font-medium', { hasText: primary })
 	});
 	await rowMenuAction(page, targetCard, 'Изменить');

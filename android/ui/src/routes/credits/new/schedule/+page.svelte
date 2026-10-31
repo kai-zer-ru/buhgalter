@@ -163,10 +163,10 @@
 					{scheduleLoading ? $_('credits.schedule.loading') : $_('credits.schedule.empty')}
 				</p>
 			{:else}
-				<div class="space-y-3" class:opacity-50={scheduleLoading}>
+				<div class="card list-divided p-0 sm:p-0" class:opacity-50={scheduleLoading}>
 					{#each visible as item (item.index)}
 						{@const status = rowStatus(draftForStatus(), rows[item.index], tz)}
-						<article class="rounded-xl border p-3" style:border-color="var(--border)">
+						<article class="p-4">
 							<p class="mb-2 text-xs font-medium" style:color="var(--text-muted)">
 								{$_('credits.schedule.paymentNumber', { values: { n: item.index + 1 } })}
 							</p>

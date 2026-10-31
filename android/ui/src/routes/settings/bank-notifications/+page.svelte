@@ -3,6 +3,8 @@
 	import { _ } from 'svelte-i18n';
 	import { listAccounts, listBanks, type Account, type Bank } from '$lib/api/client';
 	import Select from '$lib/components/Select.svelte';
+	import RowActionsMenu from '$lib/components/RowActionsMenu.svelte';
+	import GroupHeading from '$lib/components/GroupHeading.svelte';
 	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
 	import { accountSelectOptions } from '$lib/select-options';
 	import { toast } from '$lib/toast';
@@ -273,219 +275,302 @@
 	}
 </script>
 
+{#snippet status(ok: boolean, text: string, bad: 'danger' | 'muted' = 'muted')}
+	<p class="mt-1 flex items-start gap-1.5 text-sm leading-snug">
+		<span
+			class="mt-1.5 h-2 w-2 shrink-0 rounded-full"
+			style:background-color={ok
+				? 'var(--primary)'
+				: bad === 'danger'
+					? 'var(--danger)'
+					: 'var(--text-muted)'}
+			aria-hidden="true"
+		></span>
+		<span
+			style:color={ok ? 'var(--primary)' : bad === 'danger' ? 'var(--danger)' : 'var(--text-muted)'}
+			>{text}</span
+		>
+	</p>
+{/snippet}
+
 {#if loading}
 	<p class="text-sm" style:color="var(--text-muted)">{$_('common.loading')}</p>
 {:else}
-	<div class="card space-y-6">
-		<p class="text-sm" style:color="var(--text-muted)">{$_('bankNotifications.hint')}</p>
-
-		{#if !isNativeApp()}
-			<p class="text-sm" style:color="var(--text-muted)">{$_('bankNotifications.nativeOnly')}</p>
-		{/if}
-
-		<div class="flex items-center justify-between gap-4">
-			<div>
-				<p class="font-medium">{$_('bankNotifications.enable')}</p>
-				<p class="text-sm" style:color="var(--text-muted)">{$_('bankNotifications.enableHint')}</p>
-			</div>
-			<ToggleSwitch
-				label={$_('bankNotifications.enable')}
-				checked={settings.enabled}
-				disabled={!isNativeApp() || !$user}
-				onchange={() => void toggleEnabled()}
+	<div class="space-y-8">
+		<section class="space-y-3">
+			<GroupHeading
+				title={$_('bankNotifications.group.capture')}
+				hint={$_('bankNotifications.hint')}
 			/>
-		</div>
-
-		<div class="space-y-2 border-t pt-4" style:border-color="var(--border)">
-			<div class="flex items-center justify-between gap-4">
-				<div>
-					<p class="font-medium">{$_('bankNotifications.shade.enable')}</p>
-					<p class="text-sm" style:color="var(--text-muted)">
-						{$_('bankNotifications.shade.enableHint')}
-					</p>
-				</div>
-				<ToggleSwitch
-					label={$_('bankNotifications.shade.enable')}
-					checked={settings.shadeNotifications !== false}
-					disabled={!isNativeApp() || !$user || !settings.enabled}
-					onchange={() => void toggleShadeNotifications()}
-				/>
-			</div>
-			{#if settings.enabled && settings.shadeNotifications !== false}
-				<p class="text-sm" style:color={postNotifications ? 'var(--primary)' : 'var(--text-muted)'}>
-					{postNotifications
-						? $_('bankNotifications.shade.permissionOn')
-						: $_('bankNotifications.shade.permissionOff')}
+			{#if !isNativeApp()}
+				<p
+					class="rounded-xl border p-3 text-sm"
+					style:border-color="color-mix(in srgb, var(--warning) 40%, var(--border))"
+					style:color="var(--text-muted)"
+				>
+					{$_('bankNotifications.nativeOnly')}
 				</p>
-				{#if !postNotifications}
+			{/if}
+			<div class="card list-divided p-0 sm:p-0">
+				<div class="flex items-center justify-between gap-4 px-4 py-3.5">
+					<div class="min-w-0">
+						<p class="font-medium">{$_('bankNotifications.enable')}</p>
+						<p class="mt-0.5 text-sm leading-snug" style:color="var(--text-muted)">
+							{$_('bankNotifications.enableHint')}
+						</p>
+					</div>
+					<ToggleSwitch
+						label={$_('bankNotifications.enable')}
+						checked={settings.enabled}
+						disabled={!isNativeApp() || !$user}
+						onchange={() => void toggleEnabled()}
+					/>
+				</div>
+				<div class="space-y-3 px-4 py-3.5">
+					<div class="flex items-center justify-between gap-4">
+						<div class="min-w-0">
+							<p class="font-medium">{$_('bankNotifications.shade.enable')}</p>
+							<p class="mt-0.5 text-sm leading-snug" style:color="var(--text-muted)">
+								{$_('bankNotifications.shade.enableHint')}
+							</p>
+						</div>
+						<ToggleSwitch
+							label={$_('bankNotifications.shade.enable')}
+							checked={settings.shadeNotifications !== false}
+							disabled={!isNativeApp() || !$user || !settings.enabled}
+							onchange={() => void toggleShadeNotifications()}
+						/>
+					</div>
+					{#if settings.enabled && settings.shadeNotifications !== false}
+						{@render status(
+							postNotifications,
+							postNotifications
+								? $_('bankNotifications.shade.permissionOn')
+								: $_('bankNotifications.shade.permissionOff')
+						)}
+						{#if !postNotifications}
+							<button
+								type="button"
+								class="btn-ghost"
+								disabled={!isNativeApp() || requestingPost}
+								onclick={() => void grantPostNotifications()}
+							>
+								{$_('bankNotifications.shade.requestPermission')}
+							</button>
+						{/if}
+					{/if}
+				</div>
+			</div>
+		</section>
+
+		<section class="space-y-3">
+			<GroupHeading
+				title={$_('bankNotifications.group.system')}
+				hint={$_('bankNotifications.group.system_hint')}
+			/>
+			<div class="card list-divided p-0 sm:p-0">
+				<div class="space-y-3 px-4 py-3.5">
+					<div>
+						<p class="font-medium">{$_('bankNotifications.access.title')}</p>
+						{@render status(
+							accessEnabled,
+							accessEnabled
+								? $_('bankNotifications.access.on')
+								: $_('bankNotifications.access.off'),
+							'danger'
+						)}
+					</div>
 					<button
 						type="button"
 						class="btn-ghost"
-						disabled={!isNativeApp() || requestingPost}
-						onclick={() => void grantPostNotifications()}
+						onclick={() => void openAccess()}
+						disabled={!isNativeApp()}
 					>
-						{$_('bankNotifications.shade.requestPermission')}
+						{$_('bankNotifications.access.open')}
 					</button>
-				{/if}
-			{/if}
-		</div>
+				</div>
+				<div class="space-y-3 px-4 py-3.5">
+					<div>
+						<p class="font-medium">{$_('bankNotifications.listener.title')}</p>
+						{@render status(
+							listenerConnected,
+							listenerConnected
+								? $_('bankNotifications.listener.on')
+								: $_('bankNotifications.listener.off'),
+							'danger'
+						)}
+					</div>
+					<button
+						type="button"
+						class="btn-ghost"
+						disabled={!isNativeApp() || reconnecting}
+						onclick={() => void reconnectListener()}
+					>
+						{$_('bankNotifications.listener.reconnect')}
+					</button>
+				</div>
+				<div class="space-y-3 px-4 py-3.5">
+					<div>
+						<p class="font-medium">{$_('bankNotifications.sms.title')}</p>
+						<p class="mt-0.5 text-sm leading-snug" style:color="var(--text-muted)">
+							{$_('bankNotifications.sms.hint')}
+						</p>
+						{@render status(
+							smsPermission,
+							smsPermission ? $_('bankNotifications.sms.on') : $_('bankNotifications.sms.off')
+						)}
+					</div>
+					{#if !smsPermission}
+						<div class="flex flex-wrap gap-2">
+							<button
+								type="button"
+								class="btn-ghost"
+								disabled={!isNativeApp() || requestingSms}
+								onclick={() => void grantSms()}
+							>
+								{$_('bankNotifications.sms.request')}
+							</button>
+							<button
+								type="button"
+								class="btn-ghost"
+								disabled={!isNativeApp()}
+								onclick={() => void openAppPermissionSettings()}
+							>
+								{$_('bankNotifications.sms.openSettings')}
+							</button>
+						</div>
+					{/if}
+				</div>
+				<div class="space-y-3 px-4 py-3.5">
+					<div>
+						<p class="font-medium">{$_('bankNotifications.background.title')}</p>
+						<p class="mt-0.5 text-sm leading-snug" style:color="var(--text-muted)">
+							{$_('bankNotifications.background.hint')}
+						</p>
+					</div>
+					<button
+						type="button"
+						class="btn-ghost"
+						disabled={!isNativeApp()}
+						onclick={() => void openBackgroundRestrictionsSettings()}
+					>
+						{$_('bankNotifications.background.open')}
+					</button>
+				</div>
+			</div>
+		</section>
 
-		<div class="space-y-2 border-t pt-4" style:border-color="var(--border)">
-			<p class="font-medium">{$_('bankNotifications.access.title')}</p>
-			<p class="text-sm" style:color="var(--text-muted)">
-				{accessEnabled ? $_('bankNotifications.access.on') : $_('bankNotifications.access.off')}
-			</p>
-			<button
-				type="button"
-				class="btn-ghost"
-				onclick={() => void openAccess()}
-				disabled={!isNativeApp()}
-			>
-				{$_('bankNotifications.access.open')}
-			</button>
-		</div>
-
-		<div class="space-y-2 border-t pt-4" style:border-color="var(--border)">
-			<p class="font-medium">{$_('bankNotifications.listener.title')}</p>
-			<p class="text-sm" style:color={listenerConnected ? 'var(--primary)' : 'var(--danger)'}>
-				{listenerConnected
-					? $_('bankNotifications.listener.on')
-					: $_('bankNotifications.listener.off')}
-			</p>
-			<button
-				type="button"
-				class="btn"
-				disabled={!isNativeApp() || reconnecting}
-				onclick={() => void reconnectListener()}
-			>
-				{$_('bankNotifications.listener.reconnect')}
-			</button>
-		</div>
-
-		<div class="space-y-2 border-t pt-4" style:border-color="var(--border)">
-			<p class="font-medium">{$_('bankNotifications.sms.title')}</p>
-			<p class="text-sm" style:color="var(--text-muted)">{$_('bankNotifications.sms.hint')}</p>
-			<p class="text-sm" style:color={smsPermission ? 'var(--primary)' : 'var(--text-muted)'}>
-				{smsPermission ? $_('bankNotifications.sms.on') : $_('bankNotifications.sms.off')}
-			</p>
-			<button
-				type="button"
-				class="btn-ghost"
-				disabled={!isNativeApp() || requestingSms || smsPermission}
-				onclick={() => void grantSms()}
-			>
-				{$_('bankNotifications.sms.request')}
-			</button>
-			{#if !smsPermission}
-				<button
-					type="button"
-					class="btn-ghost"
-					disabled={!isNativeApp()}
-					onclick={() => void openAppPermissionSettings()}
-				>
-					{$_('bankNotifications.sms.openSettings')}
-				</button>
-			{/if}
-		</div>
-
-		<div class="space-y-2 border-t pt-4" style:border-color="var(--border)">
-			<p class="font-medium">{$_('bankNotifications.background.title')}</p>
-			<p class="text-sm" style:color="var(--text-muted)">
-				{$_('bankNotifications.background.hint')}
-			</p>
-			<button
-				type="button"
-				class="btn-ghost"
-				disabled={!isNativeApp()}
-				onclick={() => void openBackgroundRestrictionsSettings()}
-			>
-				{$_('bankNotifications.background.open')}
-			</button>
-		</div>
-
-		<div class="space-y-3 border-t pt-4" style:border-color="var(--border)">
-			<p class="font-medium">{$_('bankNotifications.banks.title')}</p>
-			<p class="text-sm" style:color="var(--text-muted)">{$_('bankNotifications.banks.hint')}</p>
+		<section class="space-y-3">
+			<GroupHeading
+				title={$_('bankNotifications.banks.title')}
+				hint={$_('bankNotifications.banks.hint')}
+			/>
 			{#if bindableAccounts.length === 0}
-				<p class="text-sm" style:color="var(--text-muted)">
+				<p class="card text-sm" style:color="var(--text-muted)">
 					{$_('bankNotifications.accounts.empty')}
 				</p>
 			{:else}
-				{#each bindableAccounts as acc (acc.id)}
-					<label class="block space-y-1.5">
-						<span class="text-sm font-medium">{acc.name}</span>
-						<Select
-							value={bankIdForAccount(acc.id)}
-							options={bankOptions}
-							onchange={(v) => setAccountBank(acc.id, v)}
-						/>
-					</label>
-				{/each}
+				<div class="card list-divided p-0 sm:p-0">
+					{#each bindableAccounts as acc (acc.id)}
+						<label class="block space-y-1.5 px-4 py-3">
+							<span class="field-label">{acc.name}</span>
+							<Select
+								value={bankIdForAccount(acc.id)}
+								options={bankOptions}
+								onchange={(v) => setAccountBank(acc.id, v)}
+							/>
+						</label>
+					{/each}
+				</div>
 			{/if}
-		</div>
+		</section>
 
-		<div class="space-y-3 border-t pt-4" style:border-color="var(--border)">
-			<p class="font-medium">{$_('bankNotifications.cards.title')}</p>
-			<p class="text-sm" style:color="var(--text-muted)">{$_('bankNotifications.cards.hint')}</p>
-
+		<section class="space-y-3">
+			<GroupHeading
+				title={$_('bankNotifications.cards.title')}
+				hint={$_('bankNotifications.cards.hint')}
+			/>
 			{#if settings.cardBindings.length}
-				<ul class="space-y-2">
+				<ul class="card list-divided p-0 sm:p-0">
 					{#each settings.cardBindings as card (card.bankId + card.last4)}
-						<li
-							class="flex items-center justify-between gap-2 rounded-lg border px-3 py-2"
-							style:border-color="var(--border)"
-						>
-							<div class="min-w-0 text-sm">
-								<p class="font-medium">
+						<li class="flex items-center gap-3 py-2 pr-1.5 pl-4">
+							<span class="card-glyph" aria-hidden="true">*{card.last4}</span>
+							<div class="min-w-0 flex-1">
+								<p class="truncate font-medium">
 									{accounts.find((a) => a.id === card.accountId)?.name ?? card.accountId}
-									· *{card.last4}
 								</p>
-								<p class="truncate" style:color="var(--text-muted)">{bankName(card.bankId)}</p>
+								<p class="truncate text-xs" style:color="var(--text-muted)">
+									{bankName(card.bankId)}
+								</p>
 							</div>
-							<button type="button" class="btn-ghost shrink-0" onclick={() => removeCard(card)}>
-								{$_('common.delete')}
-							</button>
+							<RowActionsMenu
+								actions={[
+									{
+										icon: 'delete',
+										label: $_('common.delete'),
+										variant: 'danger',
+										onclick: () => removeCard(card)
+									}
+								]}
+							/>
 						</li>
 					{/each}
 				</ul>
 			{/if}
-
-			<div class="grid gap-2 sm:grid-cols-3">
-				<label class="block space-y-1">
-					<span class="text-xs" style:color="var(--text-muted)"
-						>{$_('bankNotifications.card.account')}</span
+			<div class="card space-y-4">
+				<h3 class="font-semibold">{$_('bankNotifications.card.add')}</h3>
+				<div class="grid gap-3 sm:grid-cols-3">
+					<label class="block space-y-1.5">
+						<span class="field-label">{$_('bankNotifications.card.account')}</span>
+						<Select
+							value={newCardAccountId}
+							options={accountSelectOptions(bindableAccounts)}
+							onchange={onNewCardAccount}
+						/>
+					</label>
+					<label class="block space-y-1.5">
+						<span class="field-label">{$_('bankNotifications.card.last4')}</span>
+						<input
+							class="input w-full"
+							inputmode="numeric"
+							maxlength="4"
+							placeholder="1234"
+							bind:value={newCardLast4}
+						/>
+					</label>
+					<label class="block space-y-1.5">
+						<span class="field-label">{$_('bankNotifications.card.bank')}</span>
+						<select class="input w-full" bind:value={newCardBankId}>
+							{#each KNOWN_BANK_APPS as bank (bank.bankId)}
+								<option value={bank.bankId}>{bankName(bank.bankId)}</option>
+							{/each}
+						</select>
+					</label>
+				</div>
+				<div class="flex justify-end border-t pt-4" style:border-color="var(--border)">
+					<button type="button" class="btn-primary" onclick={addCard}
+						>{$_('bankNotifications.card.add')}</button
 					>
-					<Select
-						value={newCardAccountId}
-						options={accountSelectOptions(bindableAccounts)}
-						onchange={onNewCardAccount}
-					/>
-				</label>
-				<label class="block space-y-1">
-					<span class="text-xs" style:color="var(--text-muted)"
-						>{$_('bankNotifications.card.last4')}</span
-					>
-					<input
-						class="input w-full"
-						inputmode="numeric"
-						maxlength="4"
-						placeholder="1234"
-						bind:value={newCardLast4}
-					/>
-				</label>
-				<label class="block space-y-1">
-					<span class="text-xs" style:color="var(--text-muted)"
-						>{$_('bankNotifications.card.bank')}</span
-					>
-					<select class="input w-full" bind:value={newCardBankId}>
-						{#each KNOWN_BANK_APPS as bank (bank.bankId)}
-							<option value={bank.bankId}>{bankName(bank.bankId)}</option>
-						{/each}
-					</select>
-				</label>
+				</div>
 			</div>
-			<button type="button" class="btn" onclick={addCard}>{$_('bankNotifications.card.add')}</button
-			>
-		</div>
+		</section>
 	</div>
 {/if}
+
+<style>
+	.card-glyph {
+		display: inline-flex;
+		height: 2.5rem;
+		min-width: 3.25rem;
+		flex-shrink: 0;
+		align-items: center;
+		justify-content: center;
+		border-radius: 0.75rem;
+		padding: 0 0.375rem;
+		font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: var(--primary);
+		background-color: color-mix(in srgb, var(--primary) 12%, transparent);
+	}
+</style>

@@ -1,10 +1,12 @@
 <script lang="ts">
+	import CategoryIcon from '$lib/components/CategoryIcon.svelte';
+	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
 	import { nativeTimePicker } from '$lib/actions/native-time-picker';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
-	import { _ } from 'svelte-i18n';
+	import { _, locale } from 'svelte-i18n';
 	import {
 		createSubscriptionFromRecurring,
 		getTransaction,
@@ -30,6 +32,7 @@
 	import BackLink from '$lib/components/BackLink.svelte';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
 	import { dateOnlyPicker } from '$lib/datetime-picker-standards';
+	import GroupHeading from '$lib/components/GroupHeading.svelte';
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
 	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
 	import Select from '$lib/components/Select.svelte';
@@ -38,7 +41,8 @@
 		todayDateLocal,
 		fromDatetimeLocalValue,
 		toDatetimeLocalValue,
-		formatAPIOperationDateTimeForDisplay
+		formatAPIOperationDateTimeForDisplay,
+		formatAPIDayMonthTimeShortForDisplay
 	} from '$lib/dates';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
 	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
@@ -563,10 +567,16 @@
 				/>
 			</div>
 		</details>
-		<label class="inline-flex items-center gap-2 text-sm">
-			<input type="checkbox" bind:checked={active} />
-			{$_('recurring.active')}
-		</label>
+		<div class="flex items-center justify-between gap-4">
+			<span class="min-w-0 text-sm">
+				<span class="font-medium">{$_('recurring.active')}</span>
+			</span>
+			<ToggleSwitch
+				checked={active}
+				label={$_('recurring.active')}
+				onchange={() => (active = !active)}
+			/>
+		</div>
 		<div class="flex flex-wrap gap-2">
 			<button type="submit" class="btn-primary" disabled={saving}>
 				{saving
@@ -586,7 +596,7 @@
 	<title>{$_('nav.recurring')} — {$_('app.title')}</title>
 </svelte:head>
 
-<div class="space-y-5">
+<div class="space-y-6">
 	<BackLink
 		items={[
 			{ href: '/', label: $_('nav.home') },
@@ -602,105 +612,107 @@
 		{/snippet}
 	</SectionHeader>
 
-	{#if formOpen && !editId}
-		<div class="card">
-			{@render operationForm('create')}
-		</div>
-	{/if}
-
-	<PageLoadGate {loading} error={loadError} onretry={() => void loadAll()} inline>
-		{#if items.length === 0 && !formOpen}
-			<EmptyStateCard message={$_('recurring.empty')} />
-		{:else if items.length > 0}
-			<div class="card md:overflow-x-auto">
-				<div class="hidden md:block">
-					<table class="w-full text-left text-sm">
-						<thead>
-							<tr style:color="var(--text-muted)">
-								<th class="p-3">{$_('transactions.col.description')}</th>
-								<th class="p-3">{$_('recurring.period')}</th>
-								<th class="p-3">{$_('transactions.field.account')}</th>
-								<th class="p-3">{$_('recurring.nextRun')}</th>
-								<th class="p-3"></th>
-							</tr>
-						</thead>
-						<tbody>
-							{#each items as item (item.id)}
-								<tr class="border-t" style:border-color="var(--border)">
-									<td class="p-3">
-										<div class="font-medium">{item.description || item.category_name}</div>
-										<div class="text-xs" style:color="var(--text-muted)">
-											{item.category_name}
-											{#if item.subcategory_name}
-												• {item.subcategory_name}
-											{/if}
-											• <MoneyDisplay value={item.amount_display} class="" />
-										</div>
-									</td>
-									<td class="p-3">{periodLabel(item.period)}</td>
-									<td class="p-3">{item.account_name}</td>
-									<td class="p-3">{formatAPIOperationDateTimeForDisplay(item.next_run_at, tz)}</td>
-									<td class="p-3 text-right">
-										<RowActionsMenu actions={rowActions(item)} />
-									</td>
-								</tr>
-								{#if editId === item.id}
-									<tr class="border-t" style:border-color="var(--border)">
-										<td colspan="5" class="p-3">
-											{@render operationForm('edit')}
-										</td>
-									</tr>
-								{/if}
-							{/each}
-						</tbody>
-					</table>
-				</div>
-
-				<div class="space-y-3 p-3 md:hidden">
-					{#each items as item (item.id)}
-						<article class="rounded-xl border p-4" style:border-color="var(--border)">
-							<div class="flex items-start justify-between gap-3">
-								<div class="min-w-0">
-									<p class="font-medium">{item.description || item.category_name}</p>
-									<p class="mt-1 text-xs" style:color="var(--text-muted)">
-										{item.category_name}
-										{#if item.subcategory_name}
-											• {item.subcategory_name}
-										{/if}
-									</p>
-								</div>
-								<p class="shrink-0 text-sm font-semibold tabular-nums">
-									<MoneyDisplay value={item.amount_display} class="" />
-								</p>
-							</div>
-							<dl class="mt-3 grid gap-2 text-sm">
-								<div class="flex justify-between gap-2">
-									<dt style:color="var(--text-muted)">{$_('recurring.period')}</dt>
-									<dd>{periodLabel(item.period)}</dd>
-								</div>
-								<div class="flex justify-between gap-2">
-									<dt style:color="var(--text-muted)">{$_('transactions.field.account')}</dt>
-									<dd class="text-right">{item.account_name}</dd>
-								</div>
-								<div class="flex justify-between gap-2">
-									<dt style:color="var(--text-muted)">{$_('recurring.nextRun')}</dt>
-									<dd class="text-right">
-										{formatAPIOperationDateTimeForDisplay(item.next_run_at, tz)}
-									</dd>
-								</div>
-							</dl>
-							<div class="mt-3 flex justify-end">
-								<RowActionsMenu actions={rowActions(item)} />
-							</div>
-						</article>
-						{#if editId === item.id}
-							<div class="rounded-xl border p-4" style:border-color="var(--border)">
-								{@render operationForm('edit-mobile')}
-							</div>
-						{/if}
-					{/each}
-				</div>
+	<div class="space-y-8">
+		{#if formOpen && !editId}
+			<div class="card">
+				{@render operationForm('create')}
 			</div>
 		{/if}
-	</PageLoadGate>
+
+		<PageLoadGate {loading} error={loadError} onretry={() => void loadAll()} inline>
+			{#if items.length === 0 && !formOpen}
+				<EmptyStateCard message={$_('recurring.empty')} />
+			{:else if items.length > 0}
+				<section class="space-y-3">
+					<GroupHeading
+						title={$_('recurring.group.all', { values: { count: items.length } })}
+						hint={$_('recurring.group.all_hint')}
+					/>
+					<div class="card overflow-x-auto p-0 sm:p-0">
+						<div class="hidden md:block">
+							<table class="data-table w-full text-left text-sm">
+								<thead>
+									<tr style:color="var(--text-muted)">
+										<th class="p-3">{$_('transactions.col.description')}</th>
+										<th class="p-3">{$_('recurring.period')}</th>
+										<th class="p-3">{$_('transactions.field.account')}</th>
+										<th class="p-3">{$_('recurring.nextRun')}</th>
+										<th class="p-3"></th>
+									</tr>
+								</thead>
+								<tbody>
+									{#each items as item (item.id)}
+										<tr class="border-t" style:border-color="var(--border)">
+											<td class="p-3">
+												<div class="font-medium">{item.description || item.category_name}</div>
+												<div class="text-xs" style:color="var(--text-muted)">
+													{item.category_name}
+													{#if item.subcategory_name}
+														• {item.subcategory_name}
+													{/if}
+													• <MoneyDisplay value={item.amount_display} class="" />
+												</div>
+											</td>
+											<td class="p-3">{periodLabel(item.period)}</td>
+											<td class="p-3">{item.account_name}</td>
+											<td class="p-3"
+												>{formatAPIOperationDateTimeForDisplay(item.next_run_at, tz)}</td
+											>
+											<td class="p-3 text-right">
+												<RowActionsMenu actions={rowActions(item)} />
+											</td>
+										</tr>
+										{#if editId === item.id}
+											<tr class="border-t" style:border-color="var(--border)">
+												<td colspan="5" class="p-3">
+													{@render operationForm('edit')}
+												</td>
+											</tr>
+										{/if}
+									{/each}
+								</tbody>
+							</table>
+						</div>
+
+						<div class="list-divided md:hidden">
+							{#each items as item (item.id)}
+								<article class="flex items-center gap-3 px-4 py-3">
+									<CategoryIcon
+										icon={categories.find((c) => c.id === item.category_id)?.icon || 'default'}
+										size={36}
+									/>
+									<div class="min-w-0 flex-1">
+										<p class="truncate text-sm font-medium">
+											{item.description || item.category_name}
+										</p>
+										<p class="truncate text-xs" style:color="var(--text-muted)">
+											{item.category_name}{#if item.subcategory_name}&nbsp;› {item.subcategory_name}{/if}
+											· {item.account_name}
+										</p>
+									</div>
+									<div class="shrink-0 text-right">
+										<p class="text-sm font-semibold tabular-nums">
+											<MoneyDisplay value={item.amount_display} class="" />
+										</p>
+										<p class="text-xs" style:color="var(--text-muted)">
+											{formatAPIDayMonthTimeShortForDisplay(item.next_run_at, tz, $locale ?? 'ru')}
+										</p>
+									</div>
+									<RowActionsMenu actions={rowActions(item)} />
+								</article>
+								{#if editId === item.id}
+									<div
+										class="p-4"
+										style:background-color="color-mix(in srgb, var(--border) 15%, transparent)"
+									>
+										{@render operationForm('edit-mobile')}
+									</div>
+								{/if}
+							{/each}
+						</div>
+					</div>
+				</section>
+			{/if}
+		</PageLoadGate>
+	</div>
 </div>

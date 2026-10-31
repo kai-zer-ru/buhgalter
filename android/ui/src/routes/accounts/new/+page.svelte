@@ -134,24 +134,16 @@
 				<span class="mb-2 block text-sm" style:color="var(--text-muted)"
 					>{$_('accounts.field.type')}</span
 				>
-				<div class="flex flex-wrap gap-2">
-					<button
-						type="button"
-						class={type === 'cash' ? 'tab tab-active' : 'tab'}
-						onclick={() => (type = 'cash')}
-					>
+				<div class="segmented">
+					<button type="button" aria-pressed={type === 'cash'} onclick={() => (type = 'cash')}>
 						{$_('accounts.type.cash')}
 					</button>
-					<button
-						type="button"
-						class={type === 'bank' ? 'tab tab-active' : 'tab'}
-						onclick={() => (type = 'bank')}
-					>
+					<button type="button" aria-pressed={type === 'bank'} onclick={() => (type = 'bank')}>
 						{$_('accounts.type.bank')}
 					</button>
 					<button
 						type="button"
-						class={type === 'credit_card' ? 'tab tab-active' : 'tab'}
+						aria-pressed={type === 'credit_card'}
 						onclick={() => (type = 'credit_card')}
 					>
 						{$_('accounts.type.credit_card')}
@@ -254,7 +246,10 @@
 				{/if}
 			</div>
 
-			<div class="flex gap-2 pt-2">
+			<div
+				class="flex flex-row-reverse justify-start gap-2 border-t pt-4"
+				style:border-color="var(--border)"
+			>
 				<button
 					type="submit"
 					class="btn-primary"

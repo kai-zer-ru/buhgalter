@@ -41,25 +41,53 @@
 	}
 </script>
 
-<form class="card max-w-lg space-y-4" onsubmit={savePassword}>
-	<div>
-		<label class="mb-1.5 block text-sm font-medium" for="old"
-			>{$_('settings.password.current')}</label
-		>
-		<input id="old" type="password" class="input" bind:value={oldPassword} required />
+<form class="card max-w-lg space-y-6" onsubmit={savePassword}>
+	<section class="space-y-4">
+		<div class="space-y-1">
+			<h2 class="font-semibold">{$_('settings.password.section')}</h2>
+			<p class="text-sm" style:color="var(--text-muted)">{$_('settings.password.section_hint')}</p>
+		</div>
+		<div>
+			<label class="field-label" for="old">{$_('settings.password.current')}</label>
+			<input
+				id="old"
+				type="password"
+				class="input"
+				autocomplete="current-password"
+				bind:value={oldPassword}
+				required
+			/>
+		</div>
+	</section>
+	<section class="space-y-4 border-t pt-6" style:border-color="var(--border)">
+		<div>
+			<label class="field-label" for="new">{$_('settings.password.new')}</label>
+			<input
+				id="new"
+				type="password"
+				class="input"
+				autocomplete="new-password"
+				bind:value={newPassword}
+				minlength="8"
+				required
+			/>
+			<p class="mt-1 text-xs" style:color="var(--text-muted)">
+				{$_('auth.password.requirements')}
+			</p>
+		</div>
+		<div>
+			<label class="field-label" for="confirm">{$_('settings.password.confirm')}</label>
+			<input
+				id="confirm"
+				type="password"
+				class="input"
+				autocomplete="new-password"
+				bind:value={confirmPassword}
+				required
+			/>
+		</div>
+	</section>
+	<div class="flex justify-end border-t pt-4" style:border-color="var(--border)">
+		<button type="submit" class="btn-primary" disabled={loading}>{$_('settings.save')}</button>
 	</div>
-	<div>
-		<label class="mb-1.5 block text-sm font-medium" for="new">{$_('settings.password.new')}</label>
-		<input id="new" type="password" class="input" bind:value={newPassword} minlength="8" required />
-		<p class="mt-1 text-xs" style:color="var(--text-muted)">
-			{$_('auth.password.requirements')}
-		</p>
-	</div>
-	<div>
-		<label class="mb-1.5 block text-sm font-medium" for="confirm"
-			>{$_('settings.password.confirm')}</label
-		>
-		<input id="confirm" type="password" class="input" bind:value={confirmPassword} required />
-	</div>
-	<button type="submit" class="btn-primary" disabled={loading}>{$_('settings.save')}</button>
 </form>

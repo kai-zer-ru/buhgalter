@@ -99,6 +99,13 @@ vi.mock('svelte/store', async (importOriginal) => {
 
 ---
 
+## Необязательные параметры в `.svelte`: падает SSR, `check` молчит
+
+Компилятор Svelte вырезает типы TypeScript и превращает необязательный параметр в невалидный JS: `(id?: string) =>` → `(id?) =>`, `{#snippet tile(label: string, color?: string)}` → `function tile($$renderer, label, color?)`. `svelte-check` и линт проходят, а страница в dev и на сервере отдаёт **500** (`Expected , or ) but found ?`).
+
+- В стрелочных функциях и сниппетах внутри `.svelte` писать явный тип: `id: string | null | undefined`, `color: string | undefined` — и передавать аргумент явно (`undefined`).
+- Проверка: открыть страницу в dev или отрендерить компонент через `vite.ssrLoadModule` + `render` из `svelte/server`.
+
 ## Secure storage / WebCrypto (android)
 
 - В APK: `@aparajita/capacitor-secure-storage`. В browser / e2e: **не** вызывать плагин — memory + `localStorage` (`buhgalter.secure.*`), иначе bootstrap зависает на «Загрузка…».

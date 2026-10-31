@@ -61,6 +61,7 @@
 	import { refCacheUpdateMatches } from '$lib/ref-cache-watch';
 	import { reportPageLoadFailure } from '$lib/page-load';
 	import { assignIfChanged } from '$lib/state-utils';
+	import SectionHeader from '$lib/components/SectionHeader.svelte';
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
 	import PullToRefresh from '$lib/components/PullToRefresh.svelte';
 
@@ -403,17 +404,18 @@
 			]}
 		/>
 
-		<div class="flex flex-wrap items-center justify-between gap-3">
-			<h1 class="text-2xl font-semibold">{$_('accounts.title')}</h1>
-			<!-- eslint-disable svelte/no-navigation-without-resolve -- query after resolved path -->
-			<a
-				href={`${resolve('/accounts/new')}?from=${encodeURIComponent('/accounts')}`}
-				class="btn-primary"
-			>
-				{$_('accounts.new')}
-			</a>
-			<!-- eslint-enable svelte/no-navigation-without-resolve -->
-		</div>
+		<SectionHeader title={$_('accounts.title')}>
+			{#snippet actions()}
+				<!-- eslint-disable svelte/no-navigation-without-resolve -- query after resolved path -->
+				<a
+					href={`${resolve('/accounts/new')}?from=${encodeURIComponent('/accounts')}`}
+					class="btn-primary"
+				>
+					{$_('accounts.new')}
+				</a>
+				<!-- eslint-enable svelte/no-navigation-without-resolve -->
+			{/snippet}
+		</SectionHeader>
 
 		<PageTabs
 			active={filter}
@@ -443,21 +445,18 @@
 					{#each accountSections as section (section.ownership)}
 						<section class="space-y-6">
 							{#if showOwnershipHeadings}
-								<p
-									class="mb-1 text-xs font-medium uppercase tracking-wide"
-									style:color="var(--text-muted)"
-								>
+								<h2 class="text-lg font-semibold">
 									{$_(accountOwnershipLabelKey(section.ownership, $householdMe.household?.kind))}
-								</p>
+								</h2>
 							{/if}
 							{#each section.groups as group (`${group.kind}`)}
 								<div>
-									<h2 class="mb-3 text-lg font-medium">
+									<h3 class="mb-3 px-1 text-base font-semibold">
 										{$_(accountGroupLabelKey(group.kind))}
 										<span class="font-normal tabular-nums" style:color="var(--text-muted)">
-											({group.accounts.length})
+											· {group.accounts.length}
 										</span>
-									</h2>
+									</h3>
 									<div class="grid gap-4 sm:grid-cols-2">
 										{#each group.accounts as acc (acc.id)}
 											{@render accountCard(acc)}
@@ -590,7 +589,7 @@
 				>
 					<AccountIcon type={acc.type} bankIcon={acc.bank_icon} size={48} />
 					<div class="min-w-0 flex-1">
-						<div class="flex items-center gap-1">
+						<div class="flex items-center gap-1.5">
 							<p class="truncate font-medium">{acc.name}</p>
 							{#if acc.scope === 'household'}
 								<FamilyBadge compact />
@@ -602,22 +601,10 @@
 							{/if}
 							{#if acc.is_primary}
 								<span
-									class="shrink-0"
-									style:color="var(--primary)"
+									class="badge badge-success shrink-0"
 									title={$_('accounts.primary.badge')}
-									aria-label={$_('accounts.primary.badge')}
+									aria-label={$_('accounts.primary.badge')}>{$_('accounts.primary.short')}</span
 								>
-									<svg
-										aria-hidden="true"
-										class="h-4 w-4"
-										viewBox="0 0 24 24"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="2"
-									>
-										<path d="M20 6 9 17l-5-5" />
-									</svg>
-								</span>
 							{/if}
 						</div>
 						<p class="mt-1 text-xl font-semibold tabular-nums">

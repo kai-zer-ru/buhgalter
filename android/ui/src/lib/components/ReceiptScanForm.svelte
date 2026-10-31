@@ -679,7 +679,7 @@
 					/>
 				{/if}
 
-				<details class="rounded-lg border p-3" style:border-color="var(--border)">
+				<details class="rounded-xl border p-3" style:border-color="var(--border)">
 					<summary class="cursor-pointer text-sm font-medium">
 						{$_('receipt.bulkCategory')}
 					</summary>
@@ -696,7 +696,7 @@
 								void loadBulkSubcategories(bulkCategoryId);
 							}}
 						/>
-						<span class="block text-sm font-medium">{$_('transactions.field.subcategory')}</span>
+						<span class="field-label">{$_('transactions.field.subcategory')}</span>
 						<ReceiptInlineSubcategoryField
 							id="receipt-bulk-subcategory"
 							categoryId={bulkCategoryId}

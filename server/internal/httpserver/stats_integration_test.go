@@ -273,9 +273,13 @@ func TestStatsSummaryIncludesCreditPaymentTransactions(t *testing.T) {
 	env.login(t, "admin", "secret123")
 	accID := createTestAccount(t, env, "Кредит-стат")
 
+	// Issue on the 1st of last month: the first payment lands on the 1st of this month, already past.
+	// AddDate(0, -1, 0) on the 31st normalizes into this month and pushes that payment into the future.
+	now := time.Now().UTC()
+	issue := time.Date(now.Year(), now.Month()-1, 1, 0, 0, 0, 0, time.UTC)
 	credit := createCredit(t, env, map[string]any{
 		"principal_amount":    "12000.00",
-		"issue_date":          time.Now().UTC().AddDate(0, -1, 0).Format("2006-01-02 00:00:00"),
+		"issue_date":          issue.Format("2006-01-02 00:00:00"),
 		"term_months":         6,
 		"interest_rate":       0,
 		"debit_account_id":    accID,

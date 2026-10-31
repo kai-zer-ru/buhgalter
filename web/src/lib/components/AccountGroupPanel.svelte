@@ -30,9 +30,9 @@
 
 <details class="account-group-panel" bind:this={panelEl}>
 	<summary class="account-group-summary">
-		<span class="text-lg font-medium">
+		<span class="text-base font-semibold">
 			{$_(accountGroupLabelKey(kind))}
-			<span class="font-normal tabular-nums" style:color="var(--text-muted)">({count})</span>
+			<span class="font-normal tabular-nums" style:color="var(--text-muted)">· {count}</span>
 		</span>
 		<svg
 			class="account-group-chevron"

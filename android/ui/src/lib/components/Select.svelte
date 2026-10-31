@@ -87,7 +87,7 @@
 		highlighted = index >= 0 ? index : 0;
 		requestAnimationFrame(() => {
 			positionList();
-			if (searchable) searchEl?.focus();
+			if (searchable) searchEl?.focus({ preventScroll: true });
 		});
 	}
 
@@ -103,7 +103,7 @@
 		}
 		onchange?.(next);
 		close();
-		triggerEl?.focus();
+		triggerEl?.focus({ preventScroll: true });
 	}
 
 	function onDocumentPointerDown(event: PointerEvent) {
@@ -128,7 +128,7 @@
 		if (!open) return;
 		return pushModalEscape(() => {
 			close();
-			triggerEl?.focus();
+			triggerEl?.focus({ preventScroll: true });
 		});
 	});
 
@@ -159,7 +159,7 @@
 		if (event.key === 'Escape') {
 			event.preventDefault();
 			close();
-			triggerEl?.focus();
+			triggerEl?.focus({ preventScroll: true });
 			return;
 		}
 		if (event.key === 'ArrowDown') {

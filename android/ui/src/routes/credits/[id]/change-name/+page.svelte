@@ -70,8 +70,8 @@
 <PageLoadGate {loading} error={loadError} onretry={() => void load()} inline>
 	{#if credit}
 		<FormPageShell title={$_('credits.action.changeName')} backHref={returnTo} onback={finish}>
-			<label class="block space-y-1">
-				<span class="text-sm" style:color="var(--text-muted)">{$_('credits.field.name')}</span>
+			<label class="block">
+				<span class="field-label">{$_('credits.field.name')}</span>
 				<input class="input w-full" bind:value={newCreditName} maxlength="128" />
 			</label>
 			{#snippet footer()}

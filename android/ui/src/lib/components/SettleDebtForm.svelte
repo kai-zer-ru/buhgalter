@@ -110,8 +110,8 @@
 				{settledDebt.debtor_name} · <MoneyDisplay value={settledDebt.amount_display} class="" />
 			</p>
 
-			<label class="block space-y-1">
-				<span class="text-sm" style:color="var(--text-muted)">{$_('debts.settle.amount')}</span>
+			<label class="block">
+				<span class="field-label">{$_('debts.settle.amount')}</span>
 				<MoneyInput bind:value={amount} />
 			</label>
 

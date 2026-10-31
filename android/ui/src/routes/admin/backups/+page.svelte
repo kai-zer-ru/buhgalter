@@ -16,6 +16,9 @@
 	import { formatAPIDateTimeForDisplay } from '$lib/dates';
 	import { logout, user } from '$lib/stores/auth';
 	import { confirm } from '$lib/confirm';
+	import GroupHeading from '$lib/components/GroupHeading.svelte';
+	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
+	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
 	import { toast } from '$lib/toast';
 	import { reportPageLoadFailure } from '$lib/page-load';
@@ -139,35 +142,28 @@
 	}
 </script>
 
-<div class="space-y-4">
-	<PageLoadGate loading={pageLoading} error={loadError} onretry={() => void refresh()}>
+<PageLoadGate loading={pageLoading} error={loadError} onretry={() => void refresh()}>
+	<div class="space-y-8">
 		<form class="card space-y-4" onsubmit={saveSettings}>
-			<h2 class="text-lg font-medium">{$_('admin.backups.schedule')}</h2>
+			<div class="space-y-1">
+				<h2 class="font-semibold">{$_('admin.backups.schedule')}</h2>
+				<p class="text-sm" style:color="var(--text-muted)">{$_('admin.backups.schedule_hint')}</p>
+			</div>
 			<div class="flex items-center justify-between gap-4">
-				<span class="text-sm">{$_('admin.backups.auto')}</span>
-				<button
-					type="button"
-					role="switch"
-					aria-label={$_('admin.backups.auto')}
-					aria-checked={backupEnabled}
-					class="relative h-6 w-11 shrink-0 rounded-full transition-colors"
-					style:background-color={backupEnabled ? 'var(--primary)' : 'var(--border)'}
-					onclick={() => (backupEnabled = !backupEnabled)}
-				>
-					<span
-						class="absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform"
-						class:translate-x-5={backupEnabled}
-					></span>
-				</button>
+				<span class="text-sm font-medium">{$_('admin.backups.auto')}</span>
+				<ToggleSwitch
+					checked={backupEnabled}
+					label={$_('admin.backups.auto')}
+					onchange={() => (backupEnabled = !backupEnabled)}
+				/>
 			</div>
 			<div class="grid gap-4 sm:grid-cols-2">
 				<div>
-					<label class="mb-1.5 block text-sm" for="time">{$_('admin.backups.time')}</label>
+					<label class="field-label" for="time">{$_('admin.backups.time')}</label>
 					<input id="time" type="time" use:nativeTimePicker class="input" bind:value={backupTime} />
 				</div>
 				<div>
-					<label class="mb-1.5 block text-sm" for="retention">{$_('admin.backups.retention')}</label
-					>
+					<label class="field-label" for="retention">{$_('admin.backups.retention')}</label>
 					<input
 						id="retention"
 						type="number"
@@ -178,130 +174,140 @@
 					/>
 				</div>
 			</div>
-			<div class="flex flex-wrap gap-2">
-				<button type="submit" class="btn-primary" disabled={loading}>{$_('common.save')}</button>
-				<button type="button" class="btn-primary" disabled={loading} onclick={manualBackup}>
+			<div
+				class="flex flex-wrap items-center justify-end gap-2 border-t pt-4"
+				style:border-color="var(--border)"
+			>
+				<button
+					type="button"
+					class="btn-ghost sm:mr-auto"
+					disabled={loading}
+					onclick={manualBackup}
+				>
 					{$_('admin.backups.run_now')}
 				</button>
+				<button type="submit" class="btn-primary" disabled={loading}>{$_('common.save')}</button>
 			</div>
 		</form>
 
-		<div class="card">
-			<h2 class="mb-4 text-lg font-medium">{$_('admin.backups.archive')}</h2>
-			<div class="hidden md:block md:overflow-x-auto">
-				<table class="w-full text-left text-sm">
-					<thead>
-						<tr style:color="var(--text-muted)">
-							<th class="pb-3 pr-4">{$_('admin.backups.col.file')}</th>
-							<th class="pb-3 pr-4">{$_('admin.backups.col.size')}</th>
-							<th class="pb-3 pr-4">{$_('admin.backups.col.date')}</th>
-							<th class="pb-3"></th>
-						</tr>
-					</thead>
-					<tbody>
+		<section class="space-y-3">
+			<GroupHeading
+				title={$_('admin.backups.group.archive', { values: { count: files.length } })}
+				hint={$_('admin.backups.group.archive_hint')}
+			/>
+			{#if files.length === 0}
+				<EmptyStateCard message={$_('admin.backups.empty')} />
+			{:else}
+				<div class="card overflow-hidden p-0 sm:p-0">
+					<table class="hidden w-full text-left text-sm md:table">
+						<thead>
+							<tr class="text-xs uppercase tracking-wide" style:color="var(--text-muted)">
+								<th class="px-4 py-3 font-medium">{$_('admin.backups.col.file')}</th>
+								<th class="px-3 py-3 font-medium">{$_('admin.backups.col.size')}</th>
+								<th class="px-3 py-3 font-medium">{$_('admin.backups.col.date')}</th>
+								<th class="px-3 py-3"></th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each files as f (f.filename)}
+								<tr class="border-t" style:border-color="var(--border)">
+									<td class="px-4 py-2.5 font-mono text-xs">{f.filename}</td>
+									<td class="px-3 py-2.5 tabular-nums">{formatSize(f.size)}</td>
+									<td class="px-3 py-2.5">{formatAPIDateTimeForDisplay(f.created_at, tz)}</td>
+									<td class="px-3 py-2 text-right">
+										<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- API download endpoint -->
+										<a class="btn-ghost inline-block" href={backupDownloadUrl(f.filename)}>
+											{$_('admin.backups.download')}
+										</a>
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+					<ul class="list-divided md:hidden">
 						{#each files as f (f.filename)}
-							<tr class="border-t" style:border-color="var(--border)">
-								<td class="py-3 pr-4 font-mono text-xs">{f.filename}</td>
-								<td class="py-3 pr-4">{formatSize(f.size)}</td>
-								<td class="py-3 pr-4">{formatAPIDateTimeForDisplay(f.created_at, tz)}</td>
-								<td class="py-3 text-right">
-									<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- API download endpoint -->
-									<a class="btn-ghost inline-block" href={backupDownloadUrl(f.filename)}>
-										{$_('admin.backups.download')}
-									</a>
-								</td>
-							</tr>
-						{:else}
-							<tr>
-								<td colspan="4" class="py-4" style:color="var(--text-muted)"
-									>{$_('admin.backups.empty')}</td
-								>
-							</tr>
+							<li class="flex items-center gap-3 px-4 py-2.5">
+								<div class="min-w-0 flex-1">
+									<p class="break-all font-mono text-xs">{f.filename}</p>
+									<p class="mt-0.5 text-xs" style:color="var(--text-muted)">
+										{formatAPIDateTimeForDisplay(f.created_at, tz)} · {formatSize(f.size)}
+									</p>
+								</div>
+								<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- API download endpoint -->
+								<a class="btn-ghost shrink-0" href={backupDownloadUrl(f.filename)}>
+									{$_('admin.backups.download')}
+								</a>
+							</li>
 						{/each}
-					</tbody>
-				</table>
-			</div>
-			<div class="space-y-3 md:hidden">
-				{#each files as f (f.filename)}
-					<article class="rounded-xl border p-4" style:border-color="var(--border)">
-						<p class="break-all font-mono text-xs">{f.filename}</p>
-						<dl class="mt-2 grid gap-2 text-sm">
-							<div class="flex justify-between gap-2">
-								<dt style:color="var(--text-muted)">{$_('admin.backups.col.size')}</dt>
-								<dd>{formatSize(f.size)}</dd>
-							</div>
-							<div class="flex justify-between gap-2">
-								<dt style:color="var(--text-muted)">{$_('admin.backups.col.date')}</dt>
-								<dd>{formatAPIDateTimeForDisplay(f.created_at, tz)}</dd>
-							</div>
-						</dl>
-						<!-- eslint-disable svelte/no-navigation-without-resolve -- API download endpoint, not app route -->
-						<a
-							class="btn-ghost mt-3 inline-block w-full text-center"
-							href={backupDownloadUrl(f.filename)}
-						>
-							{$_('admin.backups.download')}
-						</a>
-						<!-- eslint-enable svelte/no-navigation-without-resolve -->
-					</article>
-				{:else}
-					<p class="py-4 text-sm" style:color="var(--text-muted)">{$_('admin.backups.empty')}</p>
-				{/each}
-			</div>
-		</div>
-
-		<form class="card space-y-4" onsubmit={handleRestore}>
-			<h2 class="text-lg font-medium">{$_('admin.backups.restore')}</h2>
-			<p class="text-sm" style:color="var(--text-muted)">
-				{$_('admin.backups.restore.hint')}
-			</p>
-
-			<div class="space-y-3">
-				<label class="mb-1.5 block text-sm font-medium" for="restore-file">
-					{$_('admin.backups.restore.file')}
-				</label>
-				<input
-					id="restore-file"
-					bind:this={restoreFileInput}
-					type="file"
-					accept=".db"
-					class="sr-only"
-					onchange={onFileChange}
-				/>
-				<div class="flex flex-wrap items-center gap-3">
-					<button type="button" class="btn-primary" onclick={pickRestoreFile}>
-						{$_('admin.backups.restore.upload')}
-					</button>
-					{#if restoreFile}
-						<span class="text-sm font-mono" style:color="var(--text-muted)">{restoreFile.name}</span
-						>
-						<button type="button" class="btn-ghost" onclick={clearRestoreFile}>
-							{$_('admin.backups.restore.remove')}
-						</button>
-					{:else}
-						<span class="text-sm" style:color="var(--text-muted)"
-							>{$_('admin.backups.restore.no_file')}</span
-						>
-					{/if}
+					</ul>
 				</div>
-			</div>
+			{/if}
+		</section>
 
-			<div class="max-w-xs">
-				<label class="mb-1.5 block text-sm font-medium" for="restore-confirm">
-					{$_('admin.backups.restore.confirm')}
-				</label>
-				<input
-					id="restore-confirm"
-					class="input"
-					placeholder="RESTORE"
-					bind:value={restoreConfirm}
-					autocomplete="off"
-				/>
-			</div>
+		<section class="space-y-3">
+			<GroupHeading title={$_('settings.profile.section.danger')} />
+			<form
+				class="card space-y-4"
+				style:border-color="color-mix(in srgb, var(--danger) 40%, var(--border))"
+				onsubmit={handleRestore}
+			>
+				<div class="space-y-1">
+					<h3 class="font-semibold">{$_('admin.backups.restore')}</h3>
+					<p class="text-sm" style:color="var(--text-muted)">
+						{$_('admin.backups.restore.hint')}
+					</p>
+				</div>
 
-			<button type="submit" class="btn-primary" disabled={loading || !restoreReady}>
-				{$_('admin.backups.restore.submit')}
-			</button>
-		</form>
-	</PageLoadGate>
-</div>
+				<div class="space-y-2">
+					<label class="block text-sm font-medium" for="restore-file">
+						{$_('admin.backups.restore.file')}
+					</label>
+					<input
+						id="restore-file"
+						bind:this={restoreFileInput}
+						type="file"
+						accept=".db"
+						class="sr-only"
+						onchange={onFileChange}
+					/>
+					<div class="flex flex-wrap items-center gap-3">
+						<button type="button" class="btn-ghost" onclick={pickRestoreFile}>
+							{$_('admin.backups.restore.upload')}
+						</button>
+						{#if restoreFile}
+							<span class="font-mono text-sm" style:color="var(--text-muted)"
+								>{restoreFile.name}</span
+							>
+							<button type="button" class="btn-ghost" onclick={clearRestoreFile}>
+								{$_('admin.backups.restore.remove')}
+							</button>
+						{:else}
+							<span class="text-sm" style:color="var(--text-muted)"
+								>{$_('admin.backups.restore.no_file')}</span
+							>
+						{/if}
+					</div>
+				</div>
+
+				<div class="max-w-xs">
+					<label class="field-label" for="restore-confirm">
+						{$_('admin.backups.restore.confirm')}
+					</label>
+					<input
+						id="restore-confirm"
+						class="input font-mono"
+						placeholder="RESTORE"
+						bind:value={restoreConfirm}
+						autocomplete="off"
+					/>
+				</div>
+
+				<div class="flex justify-end border-t pt-4" style:border-color="var(--border)">
+					<button type="submit" class="btn-danger" disabled={loading || !restoreReady}>
+						{$_('admin.backups.restore.submit')}
+					</button>
+				</div>
+			</form>
+		</section>
+	</div>
+</PageLoadGate>

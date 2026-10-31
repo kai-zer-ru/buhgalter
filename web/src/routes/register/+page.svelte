@@ -1,4 +1,5 @@
 <script lang="ts">
+	import AuthBrand from '$lib/components/AuthBrand.svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { _ } from 'svelte-i18n';
@@ -58,24 +59,22 @@
 
 <div class="flex min-h-screen items-center justify-center px-4 py-10">
 	<div class="card w-full max-w-md">
-		<h1 class="mb-6 text-2xl font-semibold">{$_('register.title')}</h1>
+		<AuthBrand />
+		<h1 class="mb-5 text-xl font-semibold">{$_('register.title')}</h1>
 		<form class="space-y-4" onsubmit={submit}>
 			<div>
-				<label class="mb-1.5 block text-sm font-medium" for="login">{$_('login.login')}</label>
+				<label class="field-label" for="login">{$_('login.login')}</label>
 				<input id="login" class="input" bind:value={loginName} minlength="3" required />
 				{#if loginError}
 					<p class="mt-1 text-xs" style:color="var(--danger)">{loginError}</p>
 				{/if}
 			</div>
 			<div>
-				<label class="mb-1.5 block text-sm font-medium" for="display"
-					>{$_('register.display_name')}</label
-				>
+				<label class="field-label" for="display">{$_('register.display_name')}</label>
 				<input id="display" class="input" bind:value={displayName} />
 			</div>
 			<div>
-				<label class="mb-1.5 block text-sm font-medium" for="password">{$_('login.password')}</label
-				>
+				<label class="field-label" for="password">{$_('login.password')}</label>
 				<input
 					id="password"
 					type="password"
@@ -93,8 +92,7 @@
 				{/if}
 			</div>
 			<div>
-				<label class="mb-1.5 block text-sm font-medium" for="password-confirm"
-					>{$_('admin.users.passwordConfirm')}</label
+				<label class="field-label" for="password-confirm">{$_('admin.users.passwordConfirm')}</label
 				>
 				<input
 					id="password-confirm"

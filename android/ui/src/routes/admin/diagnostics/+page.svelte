@@ -94,60 +94,56 @@
 
 <PageLoadGate {loading} error={loadError} onretry={() => void reloadDiagnostics()}>
 	{#if diagnostics}
-		<div class="space-y-4">
-			<div class="card space-y-3">
-				<div class="flex flex-wrap items-center justify-between gap-3">
-					<h2 class="text-lg font-semibold">{$_('admin.diagnostics.title')}</h2>
+		{@const envText = Object.entries(diagnostics.env)
+			.sort(([a], [b]) => a.localeCompare(b))
+			.map(([k, v]) => `${k}=${v}`)
+			.join('\n')}
+		<div class="space-y-8">
+			<section class="space-y-3">
+				<div class="flex flex-wrap items-end justify-between gap-3">
+					<div class="space-y-1 px-1">
+						<h2 class="text-base font-semibold">{$_('admin.diagnostics.title')}</h2>
+						<p class="text-sm" style:color="var(--text-muted)">
+							{$_('admin.diagnostics.hint')}
+						</p>
+					</div>
 					<button type="button" class="btn-primary" onclick={copyForReport}>
 						{$_('admin.diagnostics.copy')}
 					</button>
 				</div>
-			</div>
-
-			<div class="card md:overflow-x-auto">
-				<div class="hidden md:block">
-					<table class="w-full text-left text-sm">
+				<div class="card overflow-hidden p-0 sm:p-0">
+					<table class="hidden w-full text-left text-sm md:table">
 						<tbody>
 							{#each orderedFields as [field, label] (field)}
 								<tr class="border-t first:border-t-0" style:border-color="var(--border)">
-									<td class="w-64 py-3 pr-4 font-medium">{label}</td>
-									<td class="break-all py-3">{display(field, diagnostics[field])}</td>
+									<td class="w-64 px-4 py-2.5 font-mono text-xs" style:color="var(--text-muted)"
+										>{label}</td
+									>
+									<td class="break-all px-4 py-2.5">{display(field, diagnostics[field])}</td>
 								</tr>
 							{/each}
-							<tr class="border-t" style:border-color="var(--border)">
-								<td class="w-64 py-3 pr-4 font-medium">env</td>
-								<td class="py-3">
-									<pre
-										class="overflow-x-auto rounded-lg p-3 text-xs"
-										style:background-color="var(--bg)">
-{Object.entries(diagnostics.env)
-											.sort(([a], [b]) => a.localeCompare(b))
-											.map(([k, v]) => `${k}=${v}`)
-											.join('\n')}</pre>
-								</td>
-							</tr>
 						</tbody>
 					</table>
+					<dl class="list-divided md:hidden">
+						{#each orderedFields as [field, label] (field)}
+							<div class="px-4 py-2.5">
+								<dt class="font-mono text-xs" style:color="var(--text-muted)">{label}</dt>
+								<dd class="mt-0.5 break-all text-sm">{display(field, diagnostics[field])}</dd>
+							</div>
+						{/each}
+					</dl>
 				</div>
-				<div class="space-y-3 p-3 md:hidden">
-					{#each orderedFields as [field, label] (field)}
-						<article class="rounded-xl border p-3" style:border-color="var(--border)">
-							<p class="text-xs font-medium" style:color="var(--text-muted)">{label}</p>
-							<p class="mt-1 break-all text-sm">{display(field, diagnostics[field])}</p>
-						</article>
-					{/each}
-					<article class="rounded-xl border p-3" style:border-color="var(--border)">
-						<p class="text-xs font-medium" style:color="var(--text-muted)">env</p>
-						<pre
-							class="mt-2 overflow-x-auto rounded-lg p-3 text-xs"
-							style:background-color="var(--bg)">
-{Object.entries(diagnostics.env)
-								.sort(([a], [b]) => a.localeCompare(b))
-								.map(([k, v]) => `${k}=${v}`)
-								.join('\n')}</pre>
-					</article>
+			</section>
+
+			<section class="space-y-3">
+				<div class="space-y-1 px-1">
+					<h2 class="text-base font-semibold">{$_('admin.diagnostics.env')}</h2>
+					<p class="text-sm" style:color="var(--text-muted)">{$_('admin.diagnostics.env_hint')}</p>
 				</div>
-			</div>
+				<div class="card p-0 sm:p-0">
+					<pre class="overflow-x-auto p-4 text-xs leading-relaxed">{envText}</pre>
+				</div>
+			</section>
 		</div>
 	{/if}
 </PageLoadGate>

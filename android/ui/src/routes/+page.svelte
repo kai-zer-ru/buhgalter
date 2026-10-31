@@ -842,11 +842,11 @@
 				<div class="space-y-6">
 					{#if isFeatureEnabled('transaction_templates', $featureFlags) && homeTemplates.length > 0}
 						<CollapsibleSection label={$_('templates.widget.title')} count={homeTemplates.length}>
-							<div class="card space-y-0.5 px-3 py-2">
+							<div class="card list-divided overflow-hidden p-0 sm:p-0">
 								{#each homeTemplates as tpl (tpl.id)}
 									<button
 										type="button"
-										class="flex w-full items-center justify-between gap-2 rounded-lg px-1 py-1.5 text-left text-sm hover:bg-[color-mix(in_srgb,var(--primary)_8%,transparent)]"
+										class="flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left text-sm transition-colors hover:bg-[color-mix(in_srgb,var(--border)_30%,transparent)]"
 										onclick={() => applyTemplate(tpl)}
 									>
 										<span class="min-w-0 truncate">{tpl.name}</span>
@@ -871,7 +871,7 @@
 						<EmptyStateCard message={$_('dashboard.accountsEmpty')} />
 					{:else}
 						{#each accountSections as section (section.ownership)}
-							<div class="space-y-4">
+							<div class="space-y-6">
 								{#if showOwnershipHeadings}
 									<p
 										class="mb-1 text-xs font-medium uppercase tracking-wide"
@@ -973,13 +973,22 @@
 										style:border-color="var(--border)"
 									>
 										<summary
-											class="cursor-pointer list-none px-4 py-3 text-sm font-medium select-none [&::-webkit-details-marker]:hidden"
+											class="flex items-center justify-between gap-2 cursor-pointer list-none px-4 py-3 text-sm font-medium select-none [&::-webkit-details-marker]:hidden"
+											><span
+												>{$_('dashboard.group.planned')}
+												<span class="ml-1 font-normal tabular-nums" style:color="var(--text-muted)">
+													· {plannedTotal}
+												</span></span
+											>
+											<svg
+												class="spoiler-chevron"
+												aria-hidden="true"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"><path d="m6 9 6 6 6-6" /></svg
+											></summary
 										>
-											{$_('dashboard.group.planned')}
-											<span class="ml-1 font-normal tabular-nums" style:color="var(--text-muted)">
-												({plannedTotal})
-											</span>
-										</summary>
 										{#if plannedLoading}
 											<p class="px-4 pb-4 text-sm" style:color="var(--text-muted)">
 												{$_('common.loading')}
@@ -1014,13 +1023,22 @@
 								{#if pastTotal > 0 || pastLoading}
 									<details open>
 										<summary
-											class="cursor-pointer list-none px-4 py-3 text-sm font-medium select-none [&::-webkit-details-marker]:hidden"
+											class="flex items-center justify-between gap-2 cursor-pointer list-none px-4 py-3 text-sm font-medium select-none [&::-webkit-details-marker]:hidden"
+											><span
+												>{$_('dashboard.group.past')}
+												<span class="ml-1 font-normal tabular-nums" style:color="var(--text-muted)">
+													· {pastTotal}
+												</span></span
+											>
+											<svg
+												class="spoiler-chevron"
+												aria-hidden="true"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"><path d="m6 9 6 6 6-6" /></svg
+											></summary
 										>
-											{$_('dashboard.group.past')}
-											<span class="ml-1 font-normal tabular-nums" style:color="var(--text-muted)">
-												({pastTotal})
-											</span>
-										</summary>
 										{#if pastLoading}
 											<p class="px-4 pb-4 text-sm" style:color="var(--text-muted)">
 												{$_('common.loading')}

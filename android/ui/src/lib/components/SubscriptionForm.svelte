@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
 	import { nativeTimePicker } from '$lib/actions/native-time-picker';
 	import { _, locale } from 'svelte-i18n';
 	import { tr } from '$lib/i18n';
@@ -430,10 +431,16 @@
 					/>
 				</div>
 			</details>
-			<label class="inline-flex items-center gap-2 text-sm">
-				<input type="checkbox" bind:checked={active} />
-				{$_('subscriptions.active')}
-			</label>
+			<div class="flex items-center justify-between gap-4">
+				<span class="min-w-0 text-sm">
+					<span class="font-medium">{$_('subscriptions.active')}</span>
+				</span>
+				<ToggleSwitch
+					checked={active}
+					label={$_('subscriptions.active')}
+					onchange={() => (active = !active)}
+				/>
+			</div>
 		</form>
 	{:else}
 		<p class="text-sm" style:color="var(--text-muted)">{$_('common.loading')}</p>

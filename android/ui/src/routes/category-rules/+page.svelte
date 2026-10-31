@@ -15,6 +15,5 @@
 			{ href: '/category-rules', label: $_('categoryRules.title') }
 		]}
 	/>
-	<h1 class="text-2xl font-semibold">{$_('categoryRules.title')}</h1>
 	<CategoryRulesTab />
 </div>

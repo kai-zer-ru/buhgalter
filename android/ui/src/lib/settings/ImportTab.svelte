@@ -888,7 +888,7 @@
 
 	{#if tab === 'export'}
 		<div class="card space-y-4">
-			<h2 class="text-lg font-medium">{$_('import.export.title')}</h2>
+			<h2 class="font-semibold">{$_('import.export.title')}</h2>
 			<div class="space-y-2">
 				<p class="text-sm font-medium">{$_('import.export.format')}</p>
 				<label class="flex items-center gap-2">
@@ -1005,10 +1005,10 @@
 			</div>
 		{:else if step === 'mapping'}
 			<div class="card space-y-4">
-				<h2 class="text-lg font-medium">{$_('import.mapping.title')}</h2>
+				<h2 class="font-semibold">{$_('import.mapping.title')}</h2>
 				<p class="text-sm" style:color="var(--text-muted)">{$_('import.mapping.hint')}</p>
 				<div class="hidden overflow-x-auto md:block">
-					<table class="w-full text-sm">
+					<table class="data-table w-full text-sm">
 						<thead>
 							<tr class="border-b" style:border-color="var(--border)">
 								<th class="py-2 text-left">{$_('import.mapping.field')}</th>
@@ -1038,9 +1038,9 @@
 						</tbody>
 					</table>
 				</div>
-				<div class="space-y-3 md:hidden">
+				<div class="list-divided md:hidden">
 					{#each IMPORT_COLUMN_FIELDS as field (field.id)}
-						<article class="rounded-xl border p-3" style:border-color="var(--border)">
+						<article class="py-3">
 							<p class="text-sm font-medium">
 								{$_(`import.mapping.fields.${field.id}`)}
 								{#if field.required}
@@ -1070,7 +1070,7 @@
 			</div>
 		{:else if step === 'accounts' && report}
 			<div class="card space-y-4">
-				<h2 class="text-lg font-medium">{$_('import.accounts.title')}</h2>
+				<h2 class="font-semibold">{$_('import.accounts.title')}</h2>
 				<p class="text-sm" style:color="var(--text-muted)">{$_('import.accounts.hint')}</p>
 				<p class="text-xs" style:color="var(--text-muted)">
 					{$_('import.accounts.unique_note', {
@@ -1200,7 +1200,7 @@
 			</div>
 		{:else if step === 'categories' && report}
 			<div class="card space-y-4">
-				<h2 class="text-lg font-medium">{$_('import.categories.title')}</h2>
+				<h2 class="font-semibold">{$_('import.categories.title')}</h2>
 				<p class="text-sm" style:color="var(--text-muted)">{$_('import.categories.hint')}</p>
 				<p class="text-xs" style:color="var(--text-muted)">
 					{$_('import.categories.unique_note', {
@@ -1308,7 +1308,7 @@
 			</div>
 		{:else if step === 'subcategories' && report}
 			<div class="card space-y-4">
-				<h2 class="text-lg font-medium">{$_('import.subcategories.title')}</h2>
+				<h2 class="font-semibold">{$_('import.subcategories.title')}</h2>
 				<p class="text-sm" style:color="var(--text-muted)">{$_('import.subcategories.hint')}</p>
 				<p class="text-xs" style:color="var(--text-muted)">
 					{$_('import.subcategories.unique_note', {
@@ -1407,7 +1407,7 @@
 			</div>
 		{:else if step === 'preview' && report}
 			<div class="card space-y-4">
-				<h2 class="text-lg font-medium">{$_('import.preview.title')}</h2>
+				<h2 class="font-semibold">{$_('import.preview.title')}</h2>
 				<p class="text-sm" style:color="var(--text-muted)">{$_('import.preview.hint')}</p>
 				<div
 					class="grid gap-3 rounded-xl border p-4 text-sm sm:grid-cols-2"
@@ -1465,7 +1465,7 @@
 			</div>
 		{:else if step === 'done' && finalReport}
 			<div class="card space-y-3">
-				<h2 class="text-lg font-medium">{$_('import.done.title')}</h2>
+				<h2 class="font-semibold">{$_('import.done.title')}</h2>
 				<div
 					class="grid gap-3 rounded-xl border p-4 text-sm sm:grid-cols-2"
 					style:border-color="var(--border)"
@@ -1532,7 +1532,7 @@
 			{@const progress = progressPercent(jobReport.total_rows, processedRows)}
 			{@const eta = etaSeconds(jobReport.total_rows, processedRows, importJob.started_at)}
 			<div class="card space-y-3">
-				<h2 class="text-lg font-medium">{$_('import.job.title')}</h2>
+				<h2 class="font-semibold">{$_('import.job.title')}</h2>
 				<p class="text-sm" style:color="var(--text-muted)">
 					{$_('import.job.hint', { values: { file: importJob.filename } })}
 				</p>

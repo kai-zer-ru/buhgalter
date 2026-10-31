@@ -89,7 +89,7 @@ test('admin root saves system settings', async ({ page }) => {
 
 	await page.locator('#external').fill('https://e2e.example.com');
 	await page
-		.locator('form.card.max-w-lg')
+		.locator('form.card')
 		.first()
 		.getByRole('button', { name: 'Сохранить', exact: true })
 		.click();
@@ -98,7 +98,7 @@ test('admin root saves system settings', async ({ page }) => {
 
 	await page.locator('#external').fill('');
 	await page
-		.locator('form.card.max-w-lg')
+		.locator('form.card')
 		.first()
 		.getByRole('button', { name: 'Сохранить', exact: true })
 		.click();

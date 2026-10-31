@@ -18,7 +18,7 @@
 
 <div class="card space-y-4">
 	<div>
-		<h2 class="text-lg font-medium">{$_('stats.netWorth.title')}</h2>
+		<h2 class="text-base font-semibold">{$_('stats.netWorth.title')}</h2>
 		<p class="text-2xl font-semibold tabular-nums">
 			<MoneyDisplay cents={current.net_worth} {currency} class="" />
 		</p>

@@ -80,49 +80,74 @@
 	}
 </script>
 
-<div class="space-y-4">
-	<PageLoadGate loading={pageLoading} error={loadError} onretry={() => void reloadSettings()}>
-		<form class="card max-w-lg space-y-4" onsubmit={submit}>
-			<div>
-				<label class="mb-1.5 block text-sm font-medium" for="external"
-					>{$_('admin.system.external_url')}</label
-				>
-				<input
-					id="external"
-					type="url"
-					class="input"
-					placeholder="https://buhgalter.example.com"
-					bind:value={externalURL}
-				/>
+{#snippet statusBadge(set: boolean, setKey: string, unsetKey: string)}
+	<span class="badge" class:badge-success={set} class:admin-badge-warning={!set}
+		>{$_(set ? setKey : unsetKey)}</span
+	>
+{/snippet}
+
+<PageLoadGate loading={pageLoading} error={loadError} onretry={() => void reloadSettings()}>
+	<div class="space-y-4">
+		<form class="card space-y-4" onsubmit={submit}>
+			<div class="space-y-1">
+				<h2 class="font-semibold">{$_('admin.system.external_url')}</h2>
+				<p class="text-sm" style:color="var(--text-muted)">
+					{$_('admin.system.external_url_hint')}
+				</p>
 			</div>
-			<button type="submit" class="btn-primary" disabled={loading}>{$_('common.save')}</button>
+			<input
+				id="external"
+				type="url"
+				class="input"
+				aria-label={$_('admin.system.external_url')}
+				placeholder="https://buhgalter.example.com"
+				bind:value={externalURL}
+			/>
+			<div class="flex justify-end border-t pt-4" style:border-color="var(--border)">
+				<button type="submit" class="btn-primary" disabled={loading}>{$_('common.save')}</button>
+			</div>
 		</form>
 
-		<div class="card max-w-lg space-y-2">
-			<p class="text-sm font-medium">{$_('admin.system.secret.title')}</p>
-			<p class="text-xs" style:color="var(--text-muted)">{$_('admin.system.secret.hint')}</p>
-			<p class="text-xs" style:color="var(--text-muted)">
-				{$_('admin.system.secret.status')}
-				{secretKeySet
-					? $_('admin.system.secret.status.set')
-					: $_('admin.system.secret.status.unset')}
-			</p>
-			<label class="mb-1.5 block text-sm font-medium" for="notification-secret">
-				{$_('admin.system.secret.label')}
-			</label>
-			<input
-				id="notification-secret"
-				type="password"
-				class="input"
-				placeholder={$_('admin.system.secret.placeholder')}
-				bind:value={notificationSecretKey}
-				autocomplete="new-password"
-				minlength="32"
-				maxlength="32"
-			/>
-			<button type="button" class="btn-primary" onclick={saveSecretKey} disabled={loading}>
-				{$_('admin.system.secret.save')}
-			</button>
+		<div class="card space-y-4">
+			<div class="space-y-1">
+				<div class="flex flex-wrap items-center gap-2">
+					<h2 class="font-semibold">{$_('admin.system.secret.title')}</h2>
+					{@render statusBadge(
+						secretKeySet,
+						'admin.system.secret.status.set',
+						'admin.system.secret.status.unset'
+					)}
+				</div>
+				<p class="text-sm" style:color="var(--text-muted)">{$_('admin.system.secret.hint')}</p>
+			</div>
+			<div>
+				<label class="field-label" for="notification-secret">
+					{$_('admin.system.secret.label')}
+				</label>
+				<input
+					id="notification-secret"
+					type="password"
+					class="input"
+					placeholder={$_('admin.system.secret.placeholder')}
+					bind:value={notificationSecretKey}
+					autocomplete="new-password"
+					minlength="32"
+					maxlength="32"
+				/>
+			</div>
+			<div class="flex justify-end border-t pt-4" style:border-color="var(--border)">
+				<button type="button" class="btn-primary" onclick={saveSecretKey} disabled={loading}>
+					{$_('admin.system.secret.save')}
+				</button>
+			</div>
 		</div>
-	</PageLoadGate>
-</div>
+	</div>
+</PageLoadGate>
+
+<style>
+	.admin-badge-warning {
+		color: var(--warning);
+		border-color: color-mix(in srgb, var(--warning) 30%, transparent);
+		background-color: color-mix(in srgb, var(--warning) 14%, transparent);
+	}
+</style>

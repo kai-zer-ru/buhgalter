@@ -35,6 +35,12 @@ export function formatDisplayDayMonthTime(d: Date, locale = 'ru'): string {
 	return `${dayMonth} ${prep} ${time}`;
 }
 
+/** Compact day-month for list rows: `5 нояб., 10:00` / `Nov 5, 10:00`. */
+export function formatDisplayDayMonthTimeShort(d: Date, locale = 'ru'): string {
+	const dayMonth = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short' }).format(d);
+	return `${dayMonth}, ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
 /** Date parts → `DISPLAY_DATE_FORMAT` */
 export function formatDatePartsForDisplay(year: number, month: number, day: number): string {
 	return `${pad2(day)}.${pad2(month)}.${year}`;
@@ -162,6 +168,14 @@ export function formatAPIOperationDateTimeForDisplay(s: string, tz: string): str
 export function formatAPIDayMonthTimeForDisplay(s: string, tz: string, locale = 'ru'): string {
 	try {
 		return formatDisplayDayMonthTime(fromAPIDateTime(s, tz), locale);
+	} catch {
+		return s;
+	}
+}
+
+export function formatAPIDayMonthTimeShortForDisplay(s: string, tz: string, locale = 'ru'): string {
+	try {
+		return formatDisplayDayMonthTimeShort(fromAPIDateTime(s, tz), locale);
 	} catch {
 		return s;
 	}

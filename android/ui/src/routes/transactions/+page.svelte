@@ -503,13 +503,22 @@
 									style:border-color="var(--border)"
 								>
 									<summary
-										class="cursor-pointer list-none px-4 py-3 text-sm font-medium select-none [&::-webkit-details-marker]:hidden"
+										class="flex items-center justify-between gap-2 cursor-pointer list-none px-4 py-3 text-sm font-medium select-none [&::-webkit-details-marker]:hidden"
+										><span
+											>{$_('dashboard.group.planned')}
+											<span class="ml-1 font-normal tabular-nums" style:color="var(--text-muted)">
+												· {plannedTotal}
+											</span></span
+										>
+										<svg
+											class="spoiler-chevron"
+											aria-hidden="true"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"><path d="m6 9 6 6 6-6" /></svg
+										></summary
 									>
-										{$_('dashboard.group.planned')}
-										<span class="ml-1 font-normal tabular-nums" style:color="var(--text-muted)">
-											({plannedTotal})
-										</span>
-									</summary>
 									{#if plannedLoading}
 										<p class="px-4 pb-4 text-sm" style:color="var(--text-muted)">
 											{$_('common.loading')}
@@ -544,13 +553,22 @@
 							{#if pastTotal > 0 || pastLoading}
 								<details open>
 									<summary
-										class="cursor-pointer list-none px-4 py-3 text-sm font-medium select-none [&::-webkit-details-marker]:hidden"
+										class="flex items-center justify-between gap-2 cursor-pointer list-none px-4 py-3 text-sm font-medium select-none [&::-webkit-details-marker]:hidden"
+										><span
+											>{$_('dashboard.group.past')}
+											<span class="ml-1 font-normal tabular-nums" style:color="var(--text-muted)">
+												· {pastTotal}
+											</span></span
+										>
+										<svg
+											class="spoiler-chevron"
+											aria-hidden="true"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"><path d="m6 9 6 6 6-6" /></svg
+										></summary
 									>
-										{$_('dashboard.group.past')}
-										<span class="ml-1 font-normal tabular-nums" style:color="var(--text-muted)">
-											({pastTotal})
-										</span>
-									</summary>
 									{#if pastLoading}
 										<p class="px-4 pb-4 text-sm" style:color="var(--text-muted)">
 											{$_('common.loading')}
@@ -595,7 +613,7 @@
 				<TransactionPagination {page} {limit} total={pastTotal} onchange={onPageChange} />
 			{:else}
 				<div class="relative space-y-3">
-					<div class="card md:overflow-x-auto" class:opacity-60={filterLoading}>
+					<div class="card overflow-x-auto p-0 sm:p-0" class:opacity-60={filterLoading}>
 						<TransactionList
 							transactions={visibleTx}
 							siblings={transactions}

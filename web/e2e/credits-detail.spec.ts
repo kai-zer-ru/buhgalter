@@ -81,10 +81,34 @@ test('pay credit from schedule row menu', async ({ page }) => {
 	await page.goto(`/credits/${credit.id}`);
 	await waitAppReady(page);
 
+	// Schedule groups start collapsed.
+	await page.locator('summary', { hasText: 'Неоплаченные' }).click();
 	const pendingRow = page.locator('table tbody tr').first();
 	await rowMenuAction(page, pendingRow, 'Оплатить');
 	const modal = page.getByRole('dialog');
 	await modal.getByRole('button', { name: 'Оплатить' }).click();
 
 	await expect(page.getByText('Списан').first()).toBeVisible({ timeout: 15_000 });
+});
+
+test('next payment card shows the pending payment and opens pay', async ({ page }) => {
+	const account = await createCashAccount(page);
+	const credit = await createCredit(page, account.id, `E2E Next Pay ${Date.now()}`);
+
+	await page.goto(`/credits/${credit.id}`);
+	await waitAppReady(page);
+
+	await expect(page.getByRole('heading', { name: 'Ближайший платёж' })).toBeVisible();
+	const nextCard = page
+		.locator('section')
+		.filter({ has: page.getByRole('heading', { name: 'Ближайший платёж' }) });
+	await expect(nextCard).toContainText('Счёт списания');
+	await expect(nextCard).toContainText(account.name);
+	// Groups are collapsed by default: the pending table rows are hidden.
+	await expect(page.locator('details').filter({ hasText: 'Неоплаченные' })).not.toHaveAttribute(
+		'open',
+		''
+	);
+	await page.getByRole('button', { name: 'Оплатить', exact: true }).first().click();
+	await expect(page.getByRole('dialog')).toBeVisible();
 });

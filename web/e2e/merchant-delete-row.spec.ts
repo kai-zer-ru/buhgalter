@@ -3,7 +3,7 @@ import { apiJSON, waitAppReady } from './helpers/auth';
 import { confirmDialog, expectToast, rowMenuAction } from './helpers/ui';
 
 function merchantCard(page: Page, name: string) {
-	return page.locator('.card').filter({
+	return page.getByTestId('merchant-row').filter({
 		has: page.locator('.font-medium').getByText(name, { exact: true })
 	});
 }

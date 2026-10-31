@@ -18,7 +18,9 @@
 		lockName = false,
 		variant = 'quick',
 		iconSize = 40,
-		quickSize = 40
+		quickSize = 40,
+		quickLimit = 0,
+		fill = false
 	}: {
 		value?: string;
 		categoryName?: string;
@@ -29,6 +31,10 @@
 		variant?: 'quick' | 'button';
 		iconSize?: number;
 		quickSize?: number;
+		/** Max quick icons (0 = all); the selected icon always stays in the row. */
+		quickLimit?: number;
+		/** Spread the quick row across the full width on phones. */
+		fill?: boolean;
 	} = $props();
 
 	let open = $state(false);
@@ -37,9 +43,13 @@
 	let lastAutoName = $state('');
 	let pinnedQuickIcon = $state<string | null>(null);
 
-	const displayQuick = $derived(
-		quickIconsDisplay(categoryType, { pinned: pinnedQuickIcon, selected: value })
-	);
+	const displayQuick = $derived.by(() => {
+		const all = quickIconsDisplay(categoryType, { pinned: pinnedQuickIcon, selected: value });
+		if (quickLimit <= 0 || all.length <= quickLimit) return all;
+		const head = all.slice(0, quickLimit);
+		if (head.includes(value) || !all.includes(value)) return head;
+		return [...head.slice(0, quickLimit - 1), value];
+	});
 	const filtered = $derived(searchCategoryIcons(search, categoryType));
 
 	const modalTitle = $derived.by(() => {
@@ -120,7 +130,7 @@
 		<CategoryIcon icon={value} size={quickSize} />
 	</button>
 {:else}
-	<div class="flex flex-wrap items-center gap-1.5">
+	<div class="flex items-center gap-1.5 {fill ? 'justify-between sm:justify-start' : 'flex-wrap'}">
 		{#each displayQuick as iconId (iconId)}
 			<button
 				type="button"

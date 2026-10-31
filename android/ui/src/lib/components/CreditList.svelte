@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { _ } from 'svelte-i18n';
 	import type { Credit } from '$lib/api/client';
@@ -19,10 +20,16 @@
 		nameFor: (credit: Credit) => string;
 		bankIconFor?: (credit: Credit) => string | null;
 	} = $props();
+
+	/** Whole row opens the credit; the name link and nested controls keep their own click. */
+	function openCredit(e: MouseEvent, id: string) {
+		if ((e.target as HTMLElement).closest('a, button')) return;
+		void goto(resolve(`/credits/${id}`));
+	}
 </script>
 
 <div class="hidden md:block">
-	<table class="w-full text-left text-sm">
+	<table class="data-table w-full text-left text-sm">
 		<thead>
 			<tr style:color="var(--text-muted)">
 				<th class="p-3">{$_('credits.col.name')}</th>
@@ -33,7 +40,7 @@
 		</thead>
 		<tbody>
 			{#each credits as c (c.id)}
-				<tr class="border-t" style:border-color="var(--border)">
+				<tr class="cursor-pointer" onclick={(e) => openCredit(e, c.id)}>
 					<td class="p-3">
 						<div class="flex items-center gap-2">
 							{#if bankIconFor(c)}
@@ -80,9 +87,11 @@
 	</table>
 </div>
 
-<div class="space-y-3 md:hidden">
+<div class="list-divided md:hidden">
 	{#each credits as c (c.id)}
-		<article class="rounded-xl border p-4" style:border-color="var(--border)">
+		<!-- The name link is the keyboard target; the row click is a mouse/touch shortcut. -->
+		<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+		<article class="cursor-pointer p-4" onclick={(e) => openCredit(e, c.id)}>
 			<div class="flex items-start justify-between gap-3">
 				<div class="min-w-0">
 					<div class="flex items-center gap-2">

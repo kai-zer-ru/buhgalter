@@ -246,3 +246,34 @@ func TestMiddlewareInvalidatesAdminUsersOnRegister(t *testing.T) {
 		t.Fatalf("expected admin users cache miss after register, calls=%d", calls)
 	}
 }
+
+func TestMiddlewareDoesNotDuplicateHeaders(t *testing.T) {
+	cache := New()
+	inner := Middleware(cache)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Handler", "1")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	// Outer middleware (CORS) sets headers before the cache layer runs.
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:5174")
+		w.Header().Add("Vary", "Origin")
+		inner.ServeHTTP(w, r)
+	})
+
+	for _, tc := range []struct{ method, path string }{
+		{http.MethodGet, "/api/v1/accounts"},
+		{http.MethodPost, "/api/v1/accounts"},
+	} {
+		req := httptest.NewRequest(tc.method, tc.path, nil)
+		req = req.WithContext(context.WithValue(req.Context(), auth.AuthContextKey, auth.AuthInfo{
+			User: auth.User{ID: "u1"},
+		}))
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		for _, h := range []string{"Access-Control-Allow-Origin", "Vary", "X-Handler", "Content-Type"} {
+			if got := rec.Header().Values(h); len(got) != 1 {
+				t.Fatalf("%s %s: header %s = %q, want one value", tc.method, tc.path, h, got)
+			}
+		}
+	}
+}

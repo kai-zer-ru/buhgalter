@@ -138,7 +138,7 @@
 					message={tab === 'settled' ? $_('debts.empty.settled') : $_('debts.empty')}
 				/>
 			{:else}
-				<div class="relative card md:overflow-x-auto" class:opacity-60={filterLoading}>
+				<div class="relative card overflow-x-auto p-0 sm:p-0" class:opacity-60={filterLoading}>
 					{#if filterLoading}
 						<p
 							class="pointer-events-none absolute inset-x-0 top-0 z-10 py-2 text-center text-sm"

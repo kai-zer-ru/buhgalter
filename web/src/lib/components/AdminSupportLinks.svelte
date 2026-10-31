@@ -5,13 +5,34 @@
 	const SUPPORT_URL = 'https://www.tbank.ru/rm/r_wKLcbFgjYa.ncgWMwrHSA/vyQvd5941/';
 </script>
 
-<div class="card max-w-lg !p-3 sm:!p-3">
-	<div class="flex flex-wrap gap-2">
+<div class="card mt-4 flex flex-col gap-4 sm:flex-row sm:items-center">
+	<div class="flex min-w-0 flex-1 items-center gap-4">
+		<span class="support-glyph" aria-hidden="true">
+			<svg
+				class="h-6 w-6"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+			>
+				<path
+					d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
+				/>
+			</svg>
+		</span>
+		<div class="min-w-0 flex-1 space-y-1">
+			<h2 class="font-semibold">{$_('admin.support.title')}</h2>
+			<p class="text-sm" style:color="var(--text-muted)">{$_('admin.support.hint')}</p>
+		</div>
+	</div>
+	<div class="grid shrink-0 grid-cols-1 gap-2 min-[440px]:grid-cols-2 sm:flex">
 		<a
 			href={SUPPORT_URL}
 			target="_blank"
 			rel="noopener noreferrer"
-			class="btn-primary inline-flex items-center gap-2"
+			class="btn-primary inline-flex items-center justify-center gap-2 whitespace-nowrap"
 		>
 			<svg
 				aria-hidden="true"
@@ -33,7 +54,7 @@
 			href={REPOSITORY_URL}
 			target="_blank"
 			rel="noopener noreferrer"
-			class="btn-ghost inline-flex items-center gap-2"
+			class="btn-ghost inline-flex items-center justify-center gap-2 whitespace-nowrap"
 		>
 			<svg aria-hidden="true" class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor">
 				<path
@@ -44,3 +65,17 @@
 		</a>
 	</div>
 </div>
+
+<style>
+	.support-glyph {
+		display: inline-flex;
+		height: 3rem;
+		width: 3rem;
+		flex-shrink: 0;
+		align-items: center;
+		justify-content: center;
+		border-radius: 0.75rem;
+		color: var(--primary);
+		background-color: color-mix(in srgb, var(--primary) 12%, transparent);
+	}
+</style>

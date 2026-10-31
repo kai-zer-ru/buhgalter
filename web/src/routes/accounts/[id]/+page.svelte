@@ -72,6 +72,7 @@
 	import { refCacheUpdateMatches } from '$lib/ref-cache-watch';
 	import { reportPageLoadFailure } from '$lib/page-load';
 	import { assignIfChanged } from '$lib/state-utils';
+	import GroupHeading from '$lib/components/GroupHeading.svelte';
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
 	import PullToRefresh from '$lib/components/PullToRefresh.svelte';
 	import FamilyBadge from '$lib/components/FamilyBadge.svelte';
@@ -724,13 +725,19 @@
 								<div class="flex items-start justify-between gap-2">
 									<div class="min-w-0">
 										{#if acc.status === 'archived' || acc.status === 'deleted'}
-											<p class="mb-1 text-sm" style:color="var(--text-muted)">
+											<p
+												class="mb-3 rounded-xl border px-3 py-2 text-sm"
+												style:border-color="color-mix(in srgb, {acc.status === 'deleted'
+													? 'var(--danger)'
+													: 'var(--warning)'} 40%, var(--border))"
+												style:color="var(--text-muted)"
+											>
 												{acc.status === 'archived'
 													? $_('accounts.banner.archived')
 													: $_('accounts.banner.deleted')}
 											</p>
 										{/if}
-										<div class="flex items-center gap-2">
+										<div class="flex flex-wrap items-center gap-2">
 											<h1 class="text-2xl font-semibold">{acc.name}</h1>
 											{#if acc.scope === 'household'}
 												<FamilyBadge />
@@ -742,22 +749,11 @@
 											{/if}
 											{#if acc.is_primary}
 												<span
-													class="shrink-0"
-													style:color="var(--primary)"
+													class="badge badge-success"
 													title={$_('accounts.primary.badge')}
 													aria-label={$_('accounts.primary.badge')}
+													>{$_('accounts.primary.short')}</span
 												>
-													<svg
-														aria-hidden="true"
-														class="h-5 w-5"
-														viewBox="0 0 24 24"
-														fill="none"
-														stroke="currentColor"
-														stroke-width="2"
-													>
-														<path d="M20 6 9 17l-5-5" />
-													</svg>
-												</span>
 											{/if}
 										</div>
 										{#if acc.original_owner?.display_name}
@@ -834,6 +830,9 @@
 				</div>
 
 				<div class="relative space-y-3">
+					<GroupHeading
+						title={$_('accounts.detail.transactions', { values: { count: txTotal } })}
+					/>
 					<TransactionFilters
 						bind:fromLocal
 						bind:toLocal
@@ -858,7 +857,7 @@
 						transactionCount={txTotal}
 					/>
 
-					<div class:opacity-60={filterLoading} class="card md:overflow-x-auto">
+					<div class:opacity-60={filterLoading} class="card overflow-x-auto p-0 sm:p-0">
 						<TransactionList
 							transactions={visibleTx}
 							siblings={transactions}

@@ -3,6 +3,8 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { _ } from 'svelte-i18n';
+	import GroupHeading from '$lib/components/GroupHeading.svelte';
+	import RowActionsMenu from '$lib/components/RowActionsMenu.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
 	import { transactionNewPath, transferNewPath } from '$lib/android/form-routes';
 	import { formatMoneyDisplay } from '$lib/money';
@@ -47,6 +49,8 @@
 	});
 	const enabled = $derived.by(() => {
 		void $interceptDraftsTick;
+		// Settings are per user: re-read once the user loads (cold start / deep link).
+		void $user;
 		return getCurrentInterceptSettings().enabled;
 	});
 	const allPairs = $derived(listUniqueTransferPairs(drafts));
@@ -180,126 +184,181 @@
 	}
 </script>
 
-{#if !enabled}
-	<p class="text-sm" style:color="var(--text-muted)">{$_('bankNotifications.drafts.disabled')}</p>
-{:else}
-	{#if isNativeApp() && listenerConnected === false}
-		<p class="mb-3 text-sm" style:color="var(--danger)">
-			{$_('bankNotifications.drafts.listenerOff')}
-		</p>
-	{/if}
-	<div class="mb-4 space-y-2">
-		<button
-			type="button"
-			class="btn-primary w-full"
-			disabled={scanning}
-			onclick={() => void scanActive()}
+{#snippet typeGlyph(kind: 'expense' | 'income' | 'transfer')}
+	<span class="draft-glyph draft-{kind}" aria-hidden="true">
+		<svg
+			class="h-5 w-5"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			stroke-width="2"
+			stroke-linecap="round"
+			stroke-linejoin="round"
 		>
-			{$_('bankNotifications.history.scanActive')}
-		</button>
-		<p class="text-xs" style:color="var(--text-muted)">
-			{$_('bankNotifications.history.scanActiveHint')}
-		</p>
+			{#if kind === 'income'}
+				<path d="M12 19V5M5 12l7-7 7 7" />
+			{:else if kind === 'transfer'}
+				<path d="M4 8h14l-4-4M20 16H6l4 4" />
+			{:else}
+				<path d="M12 5v14M19 12l-7 7-7-7" />
+			{/if}
+		</svg>
+	</span>
+{/snippet}
+
+{#if !enabled}
+	<EmptyStateCard message={$_('bankNotifications.drafts.disabled')} />
+{:else}
+	<div class="space-y-8">
+		{#if isNativeApp() && listenerConnected === false}
+			<p
+				class="rounded-xl border p-3 text-sm"
+				style:color="var(--danger)"
+				style:border-color="color-mix(in srgb, var(--danger) 40%, var(--border))"
+			>
+				{$_('bankNotifications.drafts.listenerOff')}
+			</p>
+		{/if}
+
+		<div class="card flex flex-col gap-3 sm:flex-row sm:items-center">
+			<p class="min-w-0 flex-1 text-sm" style:color="var(--text-muted)">
+				{$_('bankNotifications.history.scanActiveHint')}
+			</p>
+			<button
+				type="button"
+				class="btn-primary shrink-0"
+				disabled={scanning}
+				onclick={() => void scanActive()}
+			>
+				{$_('bankNotifications.history.scanActive')}
+			</button>
+		</div>
+
+		{#if drafts.length === 0}
+			<EmptyStateCard message={$_('bankNotifications.drafts.empty')} />
+		{:else}
+			{#if transferPairs.length > 0}
+				<section class="space-y-3">
+					<GroupHeading
+						title={$_('bankNotifications.drafts.group.pairs', {
+							values: { count: transferPairs.length }
+						})}
+						hint={$_('bankNotifications.drafts.transferHint')}
+					/>
+					<ul class="space-y-3">
+						{#each transferPairs as pair (`${pair.from.id}:${pair.to.id}`)}
+							<li class="card space-y-3">
+								<div class="flex items-start gap-3">
+									{@render typeGlyph('transfer')}
+									<div class="min-w-0 flex-1">
+										<p class="truncate font-medium">
+											{$_('bankNotifications.drafts.fromTo', {
+												values: { from: sideLabel(pair.from), to: sideLabel(pair.to) }
+											})}
+										</p>
+										<p class="text-xs" style:color="var(--text-muted)">
+											{$_('bankNotifications.drafts.kindTransferPair')} · {formatWhen(
+												pair.from.parsed.occurredAt
+											)}
+										</p>
+									</div>
+									<span class="shrink-0 font-semibold tabular-nums"
+										>{formatMoneyDisplay(pair.from.parsed.amount)} ₽</span
+									>
+								</div>
+								<div class="flex items-center gap-2">
+									<button
+										type="button"
+										class="btn-primary flex-1"
+										onclick={() => openPairTransfer(pair)}
+									>
+										{$_('bankNotifications.drafts.createTransfer')}
+									</button>
+									<RowActionsMenu
+										actions={[
+											{
+												icon: 'repeat',
+												label: $_('bankNotifications.drafts.showSeparate'),
+												onclick: () => showAsSeparate(pair)
+											},
+											{
+												icon: 'delete',
+												label: $_('bankNotifications.drafts.delete'),
+												variant: 'danger',
+												onclick: () => removeDrafts([pair.from.id, pair.to.id])
+											}
+										]}
+									/>
+								</div>
+							</li>
+						{/each}
+					</ul>
+				</section>
+			{/if}
+
+			{#if visibleDrafts.length > 0}
+				<section class="space-y-3">
+					<GroupHeading
+						title={$_('bankNotifications.drafts.group.single', {
+							values: { count: visibleDrafts.length }
+						})}
+						hint={$_('bankNotifications.drafts.group.single_hint')}
+					/>
+					<ul class="space-y-3">
+						{#each visibleDrafts as draft (draft.id)}
+							{@const kind = draftTxType(draft) === 'income' ? 'income' : 'expense'}
+							<li class="card space-y-3">
+								<div class="flex items-start gap-3">
+									{@render typeGlyph(kind)}
+									<div class="min-w-0 flex-1">
+										<p class="truncate font-medium">
+											{draft.merchantName ||
+												draft.parsed.merchantText ||
+												$_('bankNotifications.drafts.noMerchant')}
+										</p>
+										<p class="text-xs" style:color="var(--text-muted)">
+											{sideLabel(draft)}{#if draft.parsed.last4}&nbsp;· *{draft.parsed.last4}{/if} · {formatWhen(
+												draft.parsed.occurredAt
+											)}
+										</p>
+									</div>
+									<span
+										class="shrink-0 font-semibold tabular-nums"
+										style:color={kind === 'income' ? 'var(--primary)' : undefined}
+										>{kind === 'income' ? '+' : '−'}{formatMoneyDisplay(draft.parsed.amount)} ₽</span
+									>
+								</div>
+								<div class="flex items-center gap-2">
+									<button type="button" class="btn-primary flex-1" onclick={() => openDraft(draft)}>
+										{$_('bankNotifications.drafts.create')}
+									</button>
+									<RowActionsMenu
+										actions={[
+											{
+												icon: 'transfer',
+												label: $_('bankNotifications.drafts.createTransfer'),
+												onclick: () => openTransfer(transferPrefillFromDrafts(draft))
+											},
+											{
+												icon: 'delete',
+												label: $_('bankNotifications.drafts.delete'),
+												variant: 'danger',
+												onclick: () => removeDrafts([draft.id])
+											}
+										]}
+									/>
+								</div>
+							</li>
+						{/each}
+					</ul>
+				</section>
+			{/if}
+		{/if}
 	</div>
-	{#if drafts.length === 0}
-		<EmptyStateCard message={$_('bankNotifications.drafts.empty')} />
-	{:else}
-		<p class="mb-3 text-xs" style:color="var(--text-muted)">
-			{$_('bankNotifications.drafts.transferHint')}
-		</p>
-		{#if transferPairs.length > 0}
-			<ul class="mb-3 space-y-3">
-				{#each transferPairs as pair (`${pair.from.id}:${pair.to.id}`)}
-					<li class="card space-y-2">
-						<p class="text-sm" style:color="var(--text-muted)">
-							{$_('bankNotifications.drafts.kindTransferPair')}
-						</p>
-						<p class="text-lg font-semibold">{formatMoneyDisplay(pair.from.parsed.amount)} ₽</p>
-						<p class="font-medium">
-							{$_('bankNotifications.drafts.fromTo', {
-								values: { from: sideLabel(pair.from), to: sideLabel(pair.to) }
-							})}
-						</p>
-						<p class="text-sm" style:color="var(--text-muted)">
-							{formatWhen(pair.from.parsed.occurredAt)}
-						</p>
-						<div class="space-y-2">
-							<button
-								type="button"
-								class="btn-primary w-full"
-								onclick={() => openPairTransfer(pair)}
-							>
-								{$_('bankNotifications.drafts.createTransfer')}
-							</button>
-							<button type="button" class="btn-ghost w-full" onclick={() => showAsSeparate(pair)}>
-								{$_('bankNotifications.drafts.showSeparate')}
-							</button>
-							<button
-								type="button"
-								class="btn-ghost w-full"
-								onclick={() => removeDrafts([pair.from.id, pair.to.id])}
-							>
-								{$_('bankNotifications.drafts.delete')}
-							</button>
-						</div>
-					</li>
-				{/each}
-			</ul>
-		{/if}
-		{#if visibleDrafts.length > 0}
-			<ul class="space-y-3">
-				{#each visibleDrafts as draft (draft.id)}
-					<li class="card space-y-2">
-						<div class="min-w-0">
-							<p class="text-sm" style:color="var(--text-muted)">
-								{draftTxType(draft) === 'income'
-									? $_('bankNotifications.drafts.kindIncome')
-									: $_('bankNotifications.drafts.kindExpense')}
-							</p>
-							<p class="text-lg font-semibold">
-								{formatMoneyDisplay(draft.parsed.amount)} ₽
-							</p>
-							<p class="truncate font-medium">
-								{draft.merchantName ||
-									draft.parsed.merchantText ||
-									$_('bankNotifications.drafts.noMerchant')}
-							</p>
-							<p class="text-sm" style:color="var(--text-muted)">
-								{sideLabel(draft)}
-								{#if draft.parsed.last4}
-									· *{draft.parsed.last4}
-								{/if}
-								· {formatWhen(draft.parsed.occurredAt)}
-							</p>
-						</div>
-						<div class="space-y-2">
-							<button type="button" class="btn-primary w-full" onclick={() => openDraft(draft)}>
-								{$_('bankNotifications.drafts.create')}
-							</button>
-							<button
-								type="button"
-								class="btn-ghost w-full"
-								onclick={() => openTransfer(transferPrefillFromDrafts(draft))}
-							>
-								{$_('bankNotifications.drafts.createTransfer')}
-							</button>
-							<button
-								type="button"
-								class="btn-ghost w-full"
-								onclick={() => removeDrafts([draft.id])}
-							>
-								{$_('bankNotifications.drafts.delete')}
-							</button>
-						</div>
-					</li>
-				{/each}
-			</ul>
-		{/if}
-	{/if}
 {/if}
 
 {#if isNativeApp()}
-	<div class="mt-4">
+	<div class="mt-8">
 		<button
 			type="button"
 			class="btn-ghost w-full"
@@ -309,3 +368,27 @@
 		</button>
 	</div>
 {/if}
+
+<style>
+	.draft-glyph {
+		display: inline-flex;
+		height: 2.5rem;
+		width: 2.5rem;
+		flex-shrink: 0;
+		align-items: center;
+		justify-content: center;
+		border-radius: 0.75rem;
+		color: var(--text-muted);
+		background-color: color-mix(in srgb, var(--border) 45%, transparent);
+	}
+
+	.draft-expense {
+		color: var(--danger);
+		background-color: color-mix(in srgb, var(--danger) 12%, transparent);
+	}
+
+	.draft-income {
+		color: var(--primary);
+		background-color: color-mix(in srgb, var(--primary) 12%, transparent);
+	}
+</style>

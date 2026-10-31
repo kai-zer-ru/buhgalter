@@ -94,7 +94,7 @@
 			</div>
 
 			<div class="overflow-x-auto">
-				<table class="w-full text-sm">
+				<table class="data-table w-full text-sm">
 					<thead>
 						<tr style:color="var(--text-muted)">
 							<th class="p-2 text-left">{$_('receipt.col.item')}</th>

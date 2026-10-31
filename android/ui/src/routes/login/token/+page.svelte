@@ -1,4 +1,5 @@
 <script lang="ts">
+	import AuthBrand from '$lib/components/AuthBrand.svelte';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -57,11 +58,12 @@
 
 <div class="flex min-h-screen items-center justify-center px-4 py-10">
 	<div class="card w-full max-w-md">
-		<h1 class="mb-2 text-2xl font-semibold">{$_('androidAuth.title')}</h1>
+		<AuthBrand />
+		<h1 class="mb-2 text-xl font-semibold">{$_('androidAuth.title')}</h1>
 		<p class="mb-6 text-sm" style:color="var(--text-muted)">{$_('androidAuth.subtitle')}</p>
 		<form class="space-y-4" onsubmit={submit}>
 			<div>
-				<label class="mb-1.5 block text-sm font-medium" for="api-token">
+				<label class="field-label" for="api-token">
 					{$_('androidAuth.tokenLabel')}
 				</label>
 				<input

@@ -622,7 +622,7 @@
 			<CatalogScopeTabs value={catalogScope} onchange={selectCatalogScope} />
 			{#if showCurrencyChips}
 				<div class="flex flex-wrap items-center gap-2">
-					<span class="text-sm" style:color="var(--text-muted)">{$_('stats.currencyFilter')}</span>
+					<span class="field-label">{$_('stats.currencyFilter')}</span>
 					{#each availableCurrencies as code (code)}
 						<button
 							type="button"
@@ -709,7 +709,17 @@
 						<article class="card space-y-3">
 							<div class="flex items-start justify-between gap-2">
 								<div class="min-w-0">
-									<h2 class="font-medium">{item.name}</h2>
+									<div class="flex flex-wrap items-center gap-2">
+										<h2 class="font-semibold">{item.name}</h2>
+										<span
+											class="badge tabular-nums"
+											style:color={item.status === 'exceeded'
+												? 'var(--danger)'
+												: item.status === 'warning'
+													? 'var(--warning)'
+													: 'var(--primary)'}>{Math.round(item.percent)}%</span
+										>
+									</div>
 									<p class="text-sm" style:color="var(--text-muted)">
 										{tr('budget.progress', {
 											values: {
@@ -733,7 +743,7 @@
 							<p class="text-sm tabular-nums" style:color="var(--text-muted)">
 								{budgetStatusLine(item)}
 							</p>
-							<p class="text-sm" style:color="var(--text-muted)">
+							<span class="badge" class:badge-success={item.copy_forward}>
 								{tr('budget.copy_status', {
 									values: {
 										value: item.copy_forward
@@ -741,7 +751,7 @@
 											: $_('budget.copy_status.no')
 									}
 								})}
-							</p>
+							</span>
 							{#if item.scope === 'all_expense' && item.children_planned_display}
 								<p class="text-sm tabular-nums" style:color="var(--text-muted)">
 									{tr('budget.children', {

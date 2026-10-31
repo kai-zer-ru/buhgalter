@@ -518,7 +518,7 @@
 					usePortal
 				/>
 
-				<div class="space-y-2 rounded-lg border p-3" style:border-color="var(--border)">
+				<div class="space-y-2 rounded-xl border p-3" style:border-color="var(--border)">
 					<p class="text-sm font-medium">{$_('receipt.bulkCategory')}</p>
 					<p class="text-xs" style:color="var(--text-muted)">{$_('receipt.bulkCategoryHint')}</p>
 					<div class="flex flex-wrap items-end gap-2">
@@ -561,7 +561,7 @@
 					</div>
 				</div>
 
-				<table class="w-full table-fixed text-sm">
+				<table class="data-table w-full table-fixed text-sm">
 					<thead>
 						<tr style:color="var(--text-muted)">
 							<th class="w-[12%] p-2 text-left"></th>

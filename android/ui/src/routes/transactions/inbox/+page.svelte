@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
 	import { onMount } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import { createCategoryRule, listInboxTransactions, type Transaction } from '$lib/api/client';
@@ -87,15 +88,29 @@
 	<p class="text-sm" style:color="var(--text-muted)">{$_('inbox.hint')}</p>
 
 	<PageLoadGate {loading} error={loadError} onretry={() => void load()}>
-		<TransactionList
-			{transactions}
-			{tz}
-			emptyMessage={$_('inbox.empty')}
-			showEdit
-			showDescription
-			showCategory={false}
-			onedit={openEdit}
-		/>
+		{#if transactions.length > 0}
+			<div class="card overflow-x-auto p-0 sm:p-0">
+				<TransactionList
+					{transactions}
+					{tz}
+					emptyMessage={$_('inbox.empty')}
+					showEdit
+					showDescription
+					showCategory={false}
+					onedit={openEdit}
+				/>
+			</div>
+		{:else}
+			<TransactionList
+				{transactions}
+				{tz}
+				emptyMessage={$_('inbox.empty')}
+				showEdit
+				showDescription
+				showCategory={false}
+				onedit={openEdit}
+			/>
+		{/if}
 		<TransactionPagination
 			{page}
 			{limit}
@@ -109,11 +124,17 @@
 </div>
 
 {#if txOpen && editTx}
-	<div class="mb-4 space-y-2 rounded-lg border p-3" style:border-color="var(--border)">
-		<label class="flex items-center gap-2 text-sm">
-			<input type="checkbox" bind:checked={saveAsRule} />
-			{$_('inbox.saveAsRule')}
-		</label>
+	<div class="mb-4 space-y-2 rounded-xl border p-3" style:border-color="var(--border)">
+		<div class="flex items-center justify-between gap-4">
+			<span class="min-w-0 text-sm">
+				<span class="font-medium">{$_('inbox.saveAsRule')}</span>
+			</span>
+			<ToggleSwitch
+				checked={saveAsRule}
+				label={$_('inbox.saveAsRule')}
+				onchange={() => (saveAsRule = !saveAsRule)}
+			/>
+		</div>
 		{#if saveAsRule}
 			<label class="block space-y-1 text-sm">
 				<span>{$_('categoryRules.field.pattern')}</span>

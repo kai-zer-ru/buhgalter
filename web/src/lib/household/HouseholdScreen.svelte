@@ -22,6 +22,7 @@
 	import { formatApiError } from '$lib/api/errors';
 	import { confirm } from '$lib/confirm';
 	import { formatDisplayDateTime } from '$lib/dates';
+	import GroupHeading from '$lib/components/GroupHeading.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
 	import IconGlyph from '$lib/components/IconGlyph.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
@@ -284,8 +285,8 @@
 			</div>
 		</EmptyStateCard>
 	{:else}
-		<div class="space-y-6">
-			<div class="card space-y-3">
+		<div class="space-y-8">
+			<div class="card">
 				{#if editingName && isOwner}
 					<form
 						class="flex flex-wrap items-end gap-2"
@@ -295,80 +296,93 @@
 						}}
 					>
 						<label class="min-w-48 flex-1 space-y-1">
-							<span class="text-sm" style:color="var(--text-muted)">{$_('household.name')}</span>
+							<span class="field-label">{$_('household.name')}</span>
 							<input class="input w-full" bind:value={nameDraft} maxlength="64" required />
 						</label>
-						<button type="submit" class="btn-primary" disabled={savingName}>
-							{$_('common.save')}
-						</button>
 						<button type="button" class="btn-ghost" onclick={() => (editingName = false)}>
 							{$_('common.cancel')}
 						</button>
+						<button type="submit" class="btn-primary" disabled={savingName}>
+							{$_('common.save')}
+						</button>
 					</form>
 				{:else}
-					<div class="flex items-start justify-between gap-2">
-						<div>
-							<h2 class="text-xl font-semibold">{me.household.name}</h2>
+					<div class="flex items-center gap-4">
+						<span class="household-glyph" aria-hidden="true">
+							<IconGlyph icon="share" class="h-6 w-6" />
+						</span>
+						<div class="min-w-0 flex-1">
+							<div class="flex flex-wrap items-center gap-2">
+								<h2 class="truncate text-xl font-semibold">{me.household.name}</h2>
+								<span class="badge badge-success">{$_(kindKey('household.badge'))}</span>
+							</div>
+							<p class="text-sm" style:color="var(--text-muted)">
+								{$_('household.summary', { values: { count: members.length } })}
+							</p>
 						</div>
 						{#if isOwner}
-							<button type="button" class="btn-ghost" onclick={() => (editingName = true)}>
+							<button type="button" class="btn-ghost shrink-0" onclick={() => (editingName = true)}>
 								{$_('common.edit')}
 							</button>
 						{/if}
 					</div>
 				{/if}
+			</div>
 
-				<ul class="divide-y" style:border-color="var(--border)">
+			<section class="space-y-3">
+				<GroupHeading
+					title={$_('household.members.title', { values: { count: members.length } })}
+					hint={isOwner ? $_('household.members.hint_owner') : ''}
+				/>
+				<ul class="card list-divided p-0 sm:p-0">
 					{#each members as member (member.user_id)}
 						<li
-							class="flex items-center justify-between gap-3 py-3"
+							class="flex items-center gap-3 py-2 pr-1.5 pl-3 sm:pr-2 sm:pl-4"
 							data-testid="household-member-row"
 						>
-							<div>
-								<p class="font-medium">{member.display_name}</p>
-								<p class="text-sm" style:color="var(--text-muted)">{member.login}</p>
+							<span class="member-avatar" aria-hidden="true"
+								>{(member.display_name || member.login).slice(0, 1).toUpperCase()}</span
+							>
+							<div class="min-w-0 flex-1">
+								<div class="flex flex-wrap items-center gap-2">
+									<span class="truncate font-medium">{member.display_name}</span>
+									{#if member.role === 'owner'}
+										<span class="badge badge-success">{$_('household.owner')}</span>
+									{/if}
+								</div>
+								<p class="truncate text-xs" style:color="var(--text-muted)">{member.login}</p>
 							</div>
-							<div class="flex items-center gap-2">
-								{#if member.role === 'owner'}
-									<span class="rounded-full px-2 py-0.5 text-xs" style:background="var(--muted)"
-										>{$_('household.owner')}</span
-									>
-								{/if}
-								{#if isOwner && member.role === 'member'}
-									<RowActionsMenu
-										actions={[
-											{
-												icon: 'edit',
-												label: $_('household.transfer'),
-												onclick: () => void onTransfer(member.user_id, member.display_name)
-											},
-											{
-												icon: 'delete',
-												label: $_('household.kick'),
-												variant: 'danger',
-												onclick: () => void onKick(member.user_id, member.display_name)
-											}
-										]}
-									/>
-								{/if}
-							</div>
+							{#if isOwner && member.role === 'member'}
+								<RowActionsMenu
+									actions={[
+										{
+											icon: 'edit',
+											label: $_('household.transfer'),
+											onclick: () => void onTransfer(member.user_id, member.display_name)
+										},
+										{
+											icon: 'delete',
+											label: $_('household.kick'),
+											variant: 'danger',
+											onclick: () => void onKick(member.user_id, member.display_name)
+										}
+									]}
+								/>
+							{:else}
+								<span class="min-h-11" aria-hidden="true"></span>
+							{/if}
 						</li>
 					{/each}
 				</ul>
-			</div>
+			</section>
 
 			{#if isOwner}
-				<div class="card space-y-3">
-					<div class="flex items-center justify-between gap-2">
-						<h3 class="flex items-center gap-2 font-semibold">
-							{$_('household.invite.title')}
-							{#if invites.length > 0}
-								<span
-									class="rounded-full px-2 py-0.5 text-xs font-medium"
-									style:background="var(--muted)">{invites.length}</span
-								>
-							{/if}
-						</h3>
+				<section class="space-y-3">
+					<div class="flex flex-wrap items-end justify-between gap-3">
+						<GroupHeading
+							title={$_('household.invites.title', { values: { count: invites.length } })}
+							hint={$_('household.invites.hint')}
+						/>
 						<button
 							type="button"
 							class="btn-primary"
@@ -379,79 +393,85 @@
 							{$_('household.invite.create')}
 						</button>
 					</div>
-					{#if invites.length === 0}
-						<p class="text-sm" style:color="var(--text-muted)">{$_('household.invite.empty')}</p>
-					{:else}
-						<ul
-							class="divide-y overflow-hidden rounded-xl border"
-							style:border-color="var(--border)"
-						>
-							{#each invites as invite (invite.id)}
-								<li
-									class="flex items-center gap-3 px-3 py-3"
-									style:border-color="var(--border)"
-									data-testid="household-invite-row"
+					<ul class="card list-divided p-0 sm:p-0">
+						{#if invites.length === 0}
+							<li class="px-4 py-6 text-center text-sm" style:color="var(--text-muted)">
+								{$_('household.invite.empty')}
+							</li>
+						{/if}
+						{#each invites as invite (invite.id)}
+							<li
+								class="flex items-center gap-3 py-2 pr-1.5 pl-3 sm:pr-2 sm:pl-4"
+								data-testid="household-invite-row"
+							>
+								<button
+									type="button"
+									class="invite-qr"
+									aria-label={$_('household.invite.showQr')}
+									onclick={() => void showInvite(invite)}
 								>
-									<button
-										type="button"
-										class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg"
-										style:background="var(--muted)"
-										aria-label={$_('household.invite.showQr')}
-										onclick={() => void showInvite(invite)}
+									<IconGlyph icon="qr" class="h-5 w-5" />
+								</button>
+								<div class="min-w-0 flex-1">
+									<p
+										class="font-mono text-base font-semibold tracking-wider"
+										data-testid="household-invite-code"
 									>
-										<IconGlyph icon="qr" class="h-5 w-5" />
-									</button>
-									<div class="min-w-0 flex-1">
-										<p
-											class="font-mono text-base font-semibold tracking-wider"
-											data-testid="household-invite-code"
-										>
-											{formatInviteCode(invite.code)}
-										</p>
-										<p class="text-xs" style:color="var(--text-muted)">
-											{$_('household.invite.until', {
-												values: { date: inviteUntil(invite.expires_at) }
-											})}
-										</p>
-									</div>
-									<RowActionsMenu
-										actions={[
-											{
-												icon: 'qr',
-												label: $_('household.invite.showQr'),
-												onclick: () => void showInvite(invite)
-											},
-											{
-												icon: 'delete',
-												label: $_('household.invite.revoke'),
-												variant: 'danger',
-												onclick: () => void onRevoke(invite.id)
-											}
-										]}
-									/>
-								</li>
-							{/each}
-						</ul>
-					{/if}
-				</div>
+										{formatInviteCode(invite.code)}
+									</p>
+									<p class="text-xs" style:color="var(--text-muted)">
+										{$_('household.invite.until', {
+											values: { date: inviteUntil(invite.expires_at) }
+										})}
+									</p>
+								</div>
+								<RowActionsMenu
+									actions={[
+										{
+											icon: 'qr',
+											label: $_('household.invite.showQr'),
+											onclick: () => void showInvite(invite)
+										},
+										{
+											icon: 'delete',
+											label: $_('household.invite.revoke'),
+											variant: 'danger',
+											onclick: () => void onRevoke(invite.id)
+										}
+									]}
+								/>
+							</li>
+						{/each}
+					</ul>
+				</section>
 			{/if}
 
-			<div class="card space-y-2">
-				{#if isOwner}
-					{#if otherMembers.length > 0}
-						<p class="text-sm" style:color="var(--text-muted)">
-							{$_('household.ownerCannotLeave')}
-						</p>
+			<section class="space-y-3">
+				<GroupHeading title={$_('settings.profile.section.danger')} />
+				<div
+					class="card flex flex-wrap items-center justify-between gap-3"
+					style:border-color="color-mix(in srgb, var(--danger) 40%, var(--border))"
+				>
+					<p class="min-w-0 flex-1 text-sm" style:color="var(--text-muted)">
+						{#if isOwner}
+							{otherMembers.length > 0
+								? $_('household.ownerCannotLeave')
+								: $_(kindKey('household.dissolve.hint'))}
+						{:else}
+							{$_(kindKey('household.leave.hint'))}
+						{/if}
+					</p>
+					{#if isOwner}
+						<button type="button" class="btn-danger" onclick={() => void onDissolve()}>
+							{$_(kindKey('household.dissolve'))}
+						</button>
+					{:else}
+						<button type="button" class="btn-danger" onclick={() => void onLeave()}>
+							{$_(kindKey('household.leave'))}
+						</button>
 					{/if}
-					<button type="button" class="btn-danger" onclick={() => void onDissolve()}>
-						{$_(kindKey('household.dissolve'))}
-					</button>
-				{:else}
-					<button type="button" class="btn-danger" onclick={() => void onLeave()}>
-						{$_(kindKey('household.leave'))}
-					</button>
-				{/if}
-			</div>
+				</div>
+			</section>
 		</div>
 	{/if}
 </PageLoadGate>
@@ -499,3 +519,33 @@
 		</button>
 	{/snippet}
 </ModalShell>
+
+<style>
+	.household-glyph,
+	.member-avatar,
+	.invite-qr {
+		display: inline-flex;
+		flex-shrink: 0;
+		align-items: center;
+		justify-content: center;
+		border-radius: 0.75rem;
+		color: var(--primary);
+		background-color: color-mix(in srgb, var(--primary) 12%, transparent);
+	}
+
+	.household-glyph {
+		height: 3rem;
+		width: 3rem;
+	}
+
+	.member-avatar,
+	.invite-qr {
+		height: 2.5rem;
+		width: 2.5rem;
+		font-weight: 600;
+	}
+
+	.member-avatar {
+		border-radius: 9999px;
+	}
+</style>

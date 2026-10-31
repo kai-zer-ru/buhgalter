@@ -14,6 +14,8 @@
 	import DebtForm from '$lib/components/DebtForm.svelte';
 	import DebtList from '$lib/components/DebtList.svelte';
 	import DebtSummaryCard from '$lib/components/DebtSummaryCard.svelte';
+	import SectionHeader from '$lib/components/SectionHeader.svelte';
+	import GroupHeading from '$lib/components/GroupHeading.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
 	import PageTabs from '$lib/components/PageTabs.svelte';
@@ -109,7 +111,7 @@
 	<title>{detail?.name ?? $_('debts.title')} — {$_('app.title')}</title>
 </svelte:head>
 
-<div class="space-y-4">
+<div class="space-y-6">
 	<BackLink
 		items={[
 			{ href: '/', label: $_('nav.home') },
@@ -120,9 +122,8 @@
 
 	<PageLoadGate loading={loading && !detail} error={loadError} onretry={() => void load()} inline>
 		{#if detail}
-			<div class="flex flex-wrap items-center justify-between gap-3">
-				<h1 class="text-2xl font-semibold">{detail.name}</h1>
-				<div class="flex flex-wrap gap-2">
+			<SectionHeader title={detail.name}>
+				{#snippet actions()}
 					{#if hasAnyActiveDebt}
 						{#if hasActiveLent}
 							<button type="button" class="btn-primary" onclick={() => openDebtForm('lent')}>
@@ -146,64 +147,68 @@
 							{$_('debts.action.borrow')}
 						</button>
 					{/if}
+				{/snippet}
+			</SectionHeader>
+
+			<div class="space-y-8">
+				<div class="space-y-4">
+					<DebtSummaryCard iOwe={detail.i_owe} owedToMe={detail.owed_to_me} />
+					<TransactionContextStats params={{ debtor_id: detail.id }} />
 				</div>
-			</div>
 
-			<DebtSummaryCard iOwe={detail.i_owe} owedToMe={detail.owed_to_me} />
-			<TransactionContextStats params={{ debtor_id: detail.id }} />
+				<section class="space-y-3">
+					<GroupHeading title={$_('debts.title')} />
 
-			<section>
-				<h2 class="mb-3 text-lg font-medium">{$_('debts.title')}</h2>
+					<PageTabs
+						active={tab}
+						tabs={[
+							{ id: 'active', label: $_('debts.tab.active') },
+							{ id: 'settled', label: $_('debts.tab.settled') }
+						]}
+						onchange={(next) => (tab = next as 'active' | 'settled')}
+					/>
 
-				<PageTabs
-					active={tab}
-					tabs={[
-						{ id: 'active', label: $_('debts.tab.active') },
-						{ id: 'settled', label: $_('debts.tab.settled') }
-					]}
-					onchange={(next) => (tab = next as 'active' | 'settled')}
-				/>
+					<div>
+						{#if visibleDebts.length === 0}
+							<EmptyStateCard
+								message={tab === 'settled' ? $_('debts.empty.settled') : $_('debts.empty')}
+							/>
+						{:else}
+							<div class="card overflow-x-auto p-0 sm:p-0">
+								<DebtList
+									debts={visibleDebts}
+									{tz}
+									{currency}
+									showDebtor={false}
+									onsettle={openSettle}
+									ondelete={(d) => void remove(d)}
+								/>
+							</div>
+						{/if}
+					</div>
+				</section>
 
-				<div class="mt-4">
-					{#if visibleDebts.length === 0}
-						<EmptyStateCard
-							message={tab === 'settled' ? $_('debts.empty.settled') : $_('debts.empty')}
-						/>
-					{:else}
-						<div class="card md:overflow-x-auto">
-							<DebtList
-								debts={visibleDebts}
+				{#if detail.transactions.length > 0}
+					<CollapsibleSection
+						label={$_('debts.recentTransactions')}
+						count={detail.transactions.length}
+					>
+						<div class="card overflow-x-auto p-0 sm:p-0">
+							<TransactionList
+								transactions={relatedTransactions}
+								siblings={relatedTransactions}
 								{tz}
-								{currency}
-								showDebtor={false}
-								onsettle={openSettle}
-								ondelete={(d) => void remove(d)}
+								emptyMessage={$_('transactions.empty')}
+								showDescription
+								showAmountSign
+								showCategory={false}
+								showDelete
+								ondelete={(tx) => void removeTx(tx)}
 							/>
 						</div>
-					{/if}
-				</div>
-			</section>
-
-			{#if detail.transactions.length > 0}
-				<CollapsibleSection
-					label={$_('debts.recentTransactions')}
-					count={detail.transactions.length}
-				>
-					<div class="card md:overflow-x-auto">
-						<TransactionList
-							transactions={relatedTransactions}
-							siblings={relatedTransactions}
-							{tz}
-							emptyMessage={$_('transactions.empty')}
-							showDescription
-							showAmountSign
-							showCategory={false}
-							showDelete
-							ondelete={(tx) => void removeTx(tx)}
-						/>
-					</div>
-				</CollapsibleSection>
-			{/if}
+					</CollapsibleSection>
+				{/if}
+			</div>
 		{/if}
 	</PageLoadGate>
 </div>

@@ -44,8 +44,17 @@
 	}
 </script>
 
+{#snippet tile(label: string, cents: number, color: string | undefined)}
+	<div>
+		<p class="stat-label">{label}</p>
+		<p class="stat-value" style:color>
+			<MoneyDisplay {cents} {currency} class="" />
+		</p>
+	</div>
+{/snippet}
+
 {#if loading || loadError || summary}
-	<div class="card">
+	<div class="card overflow-hidden {summary && !loading && !loadError ? 'p-0 sm:p-0' : ''}">
 		{#if loading}
 			<p class="text-sm" style:color="var(--text-muted)">{$_('common.loading')}</p>
 		{:else if loadError}
@@ -56,54 +65,24 @@
 				</button>
 			</div>
 		{:else if summary}
-			<div class="grid gap-3 md:grid-cols-3">
+			<div class="stat-grid grid-cols-2 md:grid-cols-3">
+				{@render tile($_('stats.context.income'), summary.income_total, 'var(--primary)')}
+				{@render tile($_('stats.context.expense'), summary.expense_total, 'var(--danger)')}
 				<div>
-					<p class="text-xs" style:color="var(--text-muted)">{$_('stats.context.income')}</p>
-					<p class="tabular-nums font-medium">
-						<MoneyDisplay cents={summary.income_total} {currency} class="" />
-					</p>
-				</div>
-				<div>
-					<p class="text-xs" style:color="var(--text-muted)">{$_('stats.context.expense')}</p>
-					<p class="tabular-nums font-medium">
-						<MoneyDisplay cents={summary.expense_total} {currency} class="" />
-					</p>
-				</div>
-				<div>
-					<p class="text-xs" style:color="var(--text-muted)">{$_('stats.context.count')}</p>
-					<p class="tabular-nums font-medium">{transactionCount ?? summary.transaction_count}</p>
+					<p class="stat-label">{$_('stats.context.count')}</p>
+					<p class="stat-value">{transactionCount ?? summary.transaction_count}</p>
 				</div>
 				{#if summary.lent_total !== undefined}
-					<div>
-						<p class="text-xs" style:color="var(--text-muted)">{$_('stats.context.lent')}</p>
-						<p class="tabular-nums font-medium">
-							<MoneyDisplay cents={summary.lent_total} {currency} class="" />
-						</p>
-					</div>
+					{@render tile($_('stats.context.lent'), summary.lent_total, undefined)}
 				{/if}
 				{#if summary.borrowed_total !== undefined}
-					<div>
-						<p class="text-xs" style:color="var(--text-muted)">{$_('stats.context.borrowed')}</p>
-						<p class="tabular-nums font-medium">
-							<MoneyDisplay cents={summary.borrowed_total} {currency} class="" />
-						</p>
-					</div>
+					{@render tile($_('stats.context.borrowed'), summary.borrowed_total, undefined)}
 				{/if}
 				{#if summary.paid_total !== undefined}
-					<div>
-						<p class="text-xs" style:color="var(--text-muted)">{$_('stats.context.paid')}</p>
-						<p class="tabular-nums font-medium">
-							<MoneyDisplay cents={summary.paid_total} {currency} class="" />
-						</p>
-					</div>
+					{@render tile($_('stats.context.paid'), summary.paid_total, undefined)}
 				{/if}
 				{#if summary.remaining_amount !== undefined}
-					<div>
-						<p class="text-xs" style:color="var(--text-muted)">{$_('stats.context.remaining')}</p>
-						<p class="tabular-nums font-medium">
-							<MoneyDisplay cents={summary.remaining_amount} {currency} class="" />
-						</p>
-					</div>
+					{@render tile($_('stats.context.remaining'), summary.remaining_amount, undefined)}
 				{/if}
 			</div>
 		{/if}

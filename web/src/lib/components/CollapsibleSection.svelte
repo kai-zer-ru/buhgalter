@@ -14,10 +14,10 @@
 
 <details class="account-group-panel">
 	<summary class="account-group-summary">
-		<span class="text-lg font-medium">
+		<span class="text-base font-semibold">
 			{label}
 			{#if count != null && count > 0}
-				<span class="font-normal tabular-nums" style:color="var(--text-muted)">({count})</span>
+				<span class="font-normal tabular-nums" style:color="var(--text-muted)">· {count}</span>
 			{/if}
 		</span>
 		<svg

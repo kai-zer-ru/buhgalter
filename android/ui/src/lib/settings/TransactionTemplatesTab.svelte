@@ -24,12 +24,16 @@
 	} from '$lib/api/client';
 	import { transactionNewPath, transferNewPath } from '$lib/android/form-routes';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
+	import GroupHeading from '$lib/components/GroupHeading.svelte';
+	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
 	import ReorderDragGhost from '$lib/components/ReorderDragGhost.svelte';
 	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
+	import SectionHeader from '$lib/components/SectionHeader.svelte';
 	import Select from '$lib/components/Select.svelte';
+	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
 	import {
 		accountSelectOptions,
 		categorySelectOptions,
@@ -330,9 +334,26 @@
 		return $_('transactions.type.expense');
 	}
 
-	function amountLabel(t: TransactionTemplate) {
-		if (t.amount == null) return $_('templates.amount.open');
-		return fromCents(t.amount);
+	/** Account, category and merchant names for the row subtitle; unknown refs are skipped. */
+	function templateDetails(t: TransactionTemplate): string {
+		const accName = (id: string | null | undefined) => accounts.find((a) => a.id === id)?.name;
+		if (t.type === 'transfer') {
+			const from = accName(t.account_id);
+			const to = accName(t.to_account_id);
+			return from && to ? `${from} → ${to}` : (from ?? to ?? '');
+		}
+		const cats = t.type === 'income' ? incomeCategories : expenseCategories;
+		return [
+			accName(t.account_id),
+			cats.find((c) => c.id === t.category_id)?.name,
+			merchants.find((m) => m.id === t.merchant_id)?.name
+		]
+			.filter(Boolean)
+			.join(' · ');
+	}
+
+	function templateCurrency(t: TransactionTemplate): string | undefined {
+		return accounts.find((a) => a.id === t.account_id)?.currency;
 	}
 
 	function startDrag(e: PointerEvent, t: TransactionTemplate, rowEl: HTMLElement) {
@@ -369,49 +390,99 @@
 	});
 </script>
 
-<div class="space-y-4">
-	<div class="flex justify-end">
-		<button type="button" class="btn btn-primary" onclick={openCreate}>
-			{$_('templates.add')}
-		</button>
-	</div>
+<div class="space-y-8">
+	<SectionHeader title={$_('settings.tab.templates')}>
+		{#snippet actions()}
+			<button type="button" class="btn-primary" onclick={openCreate}>
+				{$_('templates.add')}
+			</button>
+		{/snippet}
+	</SectionHeader>
 
 	<PageLoadGate {loading} error={loadError} onretry={() => void load()} inline>
 		{#if templates.length === 0}
 			<EmptyStateCard message={$_('templates.empty')} />
 		{:else}
-			<div class="space-y-2">
-				{#each templates as t (t.id)}
-					<div
-						class="card transition-opacity"
-						class:opacity-30={draggingId === t.id}
-						class:border-t-2={overId === t.id && draggingId !== null && draggingId !== t.id}
-						data-drag-id={t.id}
-						data-drag-kind="template"
-						style:border-color={overId === t.id ? 'var(--primary)' : undefined}
-					>
-						<div class="flex items-center gap-1" data-drag-row>
-							<span
-								class="btn-icon btn-ghost cursor-grab touch-none text-lg leading-none select-none active:cursor-grabbing"
-								role="button"
-								tabindex="-1"
-								aria-label={$_('templates.drag.handle')}
-								onpointerdown={(e) =>
-									startDrag(e, t, e.currentTarget.closest('[data-drag-id]') as HTMLElement)}
-							>
-								⠿
-							</span>
-							<div class="min-w-0 flex-1">
-								<div class="truncate font-medium">{t.name}</div>
-								<div class="text-xs" style:color="var(--text-muted)">
-									{typeLabel(t.type)} · {amountLabel(t)}
-								</div>
+			<section class="space-y-3">
+				<GroupHeading
+					title={$_('templates.group.all', { values: { count: templates.length } })}
+					hint={$_('templates.group.all_hint')}
+				/>
+				<div class="card list-divided p-0 sm:p-0">
+					{#each templates as t (t.id)}
+						{@const details = templateDetails(t)}
+						<div
+							class="transition-opacity"
+							class:opacity-30={draggingId === t.id}
+							data-drag-id={t.id}
+							data-drag-kind="template"
+							style:box-shadow={overId === t.id && draggingId !== null && draggingId !== t.id
+								? 'inset 0 2px 0 var(--primary)'
+								: undefined}
+						>
+							<div class="flex items-center gap-1 px-1.5 py-1.5 sm:px-2" data-drag-row>
+								<span
+									class="list-drag-handle"
+									role="button"
+									tabindex="-1"
+									aria-label={$_('templates.drag.handle')}
+									onpointerdown={(e) =>
+										startDrag(e, t, e.currentTarget.closest('[data-drag-id]') as HTMLElement)}
+								>
+									⠿
+								</span>
+								<button
+									type="button"
+									class="list-row-button"
+									title={$_('templates.createTransaction')}
+									onclick={() => createFromTemplate(t)}
+								>
+									<span class="type-glyph type-{t.type}" aria-label={typeLabel(t.type)}>
+										<svg
+											aria-hidden="true"
+											class="h-5 w-5"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+										>
+											{#if t.type === 'income'}
+												<path d="M12 19V5M5 12l7-7 7 7" />
+											{:else if t.type === 'transfer'}
+												<path d="M4 8h14l-4-4M20 16H6l4 4" />
+											{:else}
+												<path d="M12 5v14M19 12l-7 7-7-7" />
+											{/if}
+										</svg>
+									</span>
+									<span class="min-w-0 flex-1">
+										<span class="block truncate font-medium">{t.name}</span>
+										<span class="block truncate text-xs" style:color="var(--text-muted)">
+											{typeLabel(t.type)}{details ? ` · ${details}` : ''}
+										</span>
+									</span>
+									<span class="shrink-0 text-right text-sm">
+										{#if t.amount != null}
+											<MoneyDisplay
+												cents={t.amount}
+												currency={templateCurrency(t)}
+												class="font-medium tabular-nums"
+											/>
+										{:else}
+											<span class="text-xs" style:color="var(--text-muted)"
+												>{$_('templates.amount.open')}</span
+											>
+										{/if}
+									</span>
+								</button>
+								<RowActionsMenu actions={rowActions(t)} />
 							</div>
-							<RowActionsMenu actions={rowActions(t)} />
 						</div>
-					</div>
-				{/each}
-			</div>
+					{/each}
+				</div>
+			</section>
 		{/if}
 	</PageLoadGate>
 </div>
@@ -428,54 +499,56 @@
 		maxWidth="max-w-md"
 	>
 		<form class="space-y-3" onsubmit={saveForm}>
-			<label class="block space-y-1">
-				<span class="text-sm" style:color="var(--text-muted)">{$_('templates.field.name')}</span>
+			<label class="block">
+				<span class="field-label">{$_('templates.field.name')}</span>
 				<input class="input w-full" bind:value={name} maxlength={80} required />
 			</label>
-			<label class="block space-y-1">
-				<span class="text-sm" style:color="var(--text-muted)">{$_('templates.field.type')}</span>
-				<Select
-					options={typeOptions}
-					value={tplType}
-					onchange={(v) => {
-						tplType = v as 'expense' | 'income' | 'transfer';
-						categoryId = '';
-						subcategoryId = '';
-						merchantId = '';
-						selectedTagIds = [];
-					}}
-				/>
-			</label>
+			<div class="space-y-1">
+				<span class="field-label">{$_('templates.field.type')}</span>
+				<div class="segmented" role="radiogroup" aria-label={$_('templates.field.type')}>
+					{#each typeOptions as opt (opt.value)}
+						<button
+							type="button"
+							role="radio"
+							aria-checked={tplType === opt.value}
+							onclick={() => {
+								if (tplType === opt.value) return;
+								tplType = opt.value as 'expense' | 'income' | 'transfer';
+								categoryId = '';
+								subcategoryId = '';
+								merchantId = '';
+								selectedTagIds = [];
+							}}
+						>
+							{opt.label}
+						</button>
+					{/each}
+				</div>
+			</div>
 			{#if tplType === 'transfer'}
-				<label class="block space-y-1">
-					<span class="text-sm" style:color="var(--text-muted)"
-						>{$_('transactions.field.from')}</span
-					>
+				<label class="block">
+					<span class="field-label">{$_('transactions.field.from')}</span>
 					<Select
 						options={accountOptions}
 						bind:value={accountId}
 						onchange={() => onTemplateAccountChange()}
 					/>
 				</label>
-				<label class="block space-y-1">
-					<span class="text-sm" style:color="var(--text-muted)">{$_('transactions.field.to')}</span>
+				<label class="block">
+					<span class="field-label">{$_('transactions.field.to')}</span>
 					<Select options={accountOptions} bind:value={toAccountId} />
 				</label>
 			{:else}
-				<label class="block space-y-1">
-					<span class="text-sm" style:color="var(--text-muted)"
-						>{$_('transactions.field.account')}</span
-					>
+				<label class="block">
+					<span class="field-label">{$_('transactions.field.account')}</span>
 					<Select
 						options={accountOptions}
 						bind:value={accountId}
 						onchange={() => onTemplateAccountChange()}
 					/>
 				</label>
-				<label class="block space-y-1">
-					<span class="text-sm" style:color="var(--text-muted)"
-						>{$_('transactions.field.category')}</span
-					>
+				<label class="block">
+					<span class="field-label">{$_('transactions.field.category')}</span>
 					<Select
 						options={[{ value: '', label: '—' }, ...categoryOptions]}
 						bind:value={categoryId}
@@ -484,20 +557,16 @@
 						}}
 					/>
 				</label>
-				<label class="block space-y-1">
-					<span class="text-sm" style:color="var(--text-muted)"
-						>{$_('transactions.field.subcategory')}</span
-					>
+				<label class="block">
+					<span class="field-label">{$_('transactions.field.subcategory')}</span>
 					<Select
 						options={[{ value: '', label: '—' }, ...subcategoryOptions]}
 						bind:value={subcategoryId}
 						disabled={!categoryId}
 					/>
 				</label>
-				<label class="block space-y-1">
-					<span class="text-sm" style:color="var(--text-muted)"
-						>{$_('transactions.field.merchant')}</span
-					>
+				<label class="block">
+					<span class="field-label">{$_('transactions.field.merchant')}</span>
 					<Select options={merchantOptions} bind:value={merchantId} />
 				</label>
 				{#if scopedTags.length > 0}
@@ -525,32 +594,57 @@
 					</div>
 				{/if}
 			{/if}
-			<label class="flex items-center gap-2 text-sm">
-				<input type="checkbox" bind:checked={amountFixed} />
-				{$_('templates.field.amountFixed')}
-			</label>
+			<div
+				class="flex items-center justify-between gap-4 border-t pt-3"
+				style:border-color="var(--border)"
+			>
+				<span class="text-sm">{$_('templates.field.amountFixed')}</span>
+				<ToggleSwitch
+					checked={amountFixed}
+					label={$_('templates.field.amountFixed')}
+					onchange={() => (amountFixed = !amountFixed)}
+				/>
+			</div>
 			{#if amountFixed}
-				<label class="block space-y-1">
-					<span class="text-sm" style:color="var(--text-muted)"
-						>{$_('transactions.field.amount')}</span
-					>
+				<label class="block">
+					<span class="field-label">{$_('transactions.field.amount')}</span>
 					<MoneyInput bind:value={amount} />
 				</label>
 			{/if}
-			<label class="block space-y-1">
-				<span class="text-sm" style:color="var(--text-muted)"
-					>{$_('transactions.field.description')}</span
-				>
+			<label class="block">
+				<span class="field-label">{$_('transactions.field.description')}</span>
 				<input class="input w-full" bind:value={description} maxlength={500} />
 			</label>
 			<div class="flex justify-end gap-2 pt-2">
-				<button type="button" class="btn btn-ghost" onclick={closeForm}
-					>{$_('common.cancel')}</button
-				>
-				<button type="submit" class="btn btn-primary" disabled={saving}>
+				<button type="button" class="btn-ghost" onclick={closeForm}>{$_('common.cancel')}</button>
+				<button type="submit" class="btn-primary" disabled={saving}>
 					{$_('common.save')}
 				</button>
 			</div>
 		</form>
 	</ModalShell>
 {/if}
+
+<style>
+	.type-glyph {
+		display: inline-flex;
+		height: 2.5rem;
+		width: 2.5rem;
+		flex-shrink: 0;
+		align-items: center;
+		justify-content: center;
+		border-radius: 0.75rem;
+		color: var(--text-muted);
+		background-color: color-mix(in srgb, var(--border) 45%, transparent);
+	}
+
+	.type-glyph.type-expense {
+		color: var(--danger);
+		background-color: color-mix(in srgb, var(--danger) 12%, transparent);
+	}
+
+	.type-glyph.type-income {
+		color: var(--primary);
+		background-color: color-mix(in srgb, var(--primary) 12%, transparent);
+	}
+</style>

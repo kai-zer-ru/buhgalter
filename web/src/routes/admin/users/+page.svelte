@@ -16,6 +16,7 @@
 	import { formatAuthUserApiError } from '$lib/auth/api-errors';
 	import { user } from '$lib/stores/auth';
 	import { confirm } from '$lib/confirm';
+	import GroupHeading from '$lib/components/GroupHeading.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
@@ -364,23 +365,38 @@
 	}
 </script>
 
-<div class="space-y-4">
+{#snippet statusBadge(status: UserStatus)}
+	<span
+		class="badge"
+		class:badge-success={status === 'active'}
+		class:user-badge-warning={status === 'pending'}
+		class:user-badge-danger={status === 'banned'}>{statusLabel(status)}</span
+	>
+{/snippet}
+
+{#snippet avatar(u: { login: string; display_name: string })}
+	<span class="user-avatar" aria-hidden="true"
+		>{(u.display_name || u.login).slice(0, 1).toUpperCase()}</span
+	>
+{/snippet}
+
+<div class="space-y-8">
 	<form class="card space-y-4" onsubmit={submit}>
-		<h2 class="text-lg font-medium">{$_('admin.users.create.title')}</h2>
+		<div class="space-y-1">
+			<h2 class="font-semibold">{$_('admin.users.create.title')}</h2>
+			<p class="text-sm" style:color="var(--text-muted)">{$_('admin.users.create.hint')}</p>
+		</div>
 		<div class="grid gap-4 sm:grid-cols-2">
 			<div>
-				<label class="mb-1.5 block text-sm font-medium" for="login">{$_('login.login')}</label>
+				<label class="field-label" for="login">{$_('login.login')}</label>
 				<input id="login" class="input" bind:value={login} minlength="3" required />
 			</div>
 			<div>
-				<label class="mb-1.5 block text-sm font-medium" for="display"
-					>{$_('register.display_name')}</label
-				>
+				<label class="field-label" for="display">{$_('register.display_name')}</label>
 				<input id="display" class="input" bind:value={displayName} />
 			</div>
 			<div>
-				<label class="mb-1.5 block text-sm font-medium" for="password">{$_('login.password')}</label
-				>
+				<label class="field-label" for="password">{$_('login.password')}</label>
 				<input
 					id="password"
 					class="input"
@@ -395,8 +411,7 @@
 				</p>
 			</div>
 			<div>
-				<label class="mb-1.5 block text-sm font-medium" for="password-confirm"
-					>{$_('admin.users.passwordConfirm')}</label
+				<label class="field-label" for="password-confirm">{$_('admin.users.passwordConfirm')}</label
 				>
 				<input
 					id="password-confirm"
@@ -413,83 +428,111 @@
 					</p>
 				{/if}
 			</div>
-			<div class="flex items-center justify-between gap-4 sm:col-span-2">
-				<span class="text-sm">{$_('admin.users.roleAdmin')}</span>
-				<ToggleSwitch
-					checked={isAdmin}
-					label={$_('admin.users.roleAdmin')}
-					onchange={() => (isAdmin = !isAdmin)}
-				/>
-			</div>
 		</div>
-		<button type="submit" class="btn-primary" disabled={loading || !formValid}>
-			{$_('common.create')}
-		</button>
+		<div
+			class="flex items-center justify-between gap-4 border-t pt-4"
+			style:border-color="var(--border)"
+		>
+			<span class="text-sm">{$_('admin.users.roleAdmin')}</span>
+			<ToggleSwitch
+				checked={isAdmin}
+				label={$_('admin.users.roleAdmin')}
+				onchange={() => (isAdmin = !isAdmin)}
+			/>
+		</div>
+		<div class="flex justify-end border-t pt-4" style:border-color="var(--border)">
+			<button type="submit" class="btn-primary" disabled={loading || !formValid}>
+				{$_('common.create')}
+			</button>
+		</div>
 	</form>
 
 	<PageLoadGate loading={pageLoading} error={loadError} onretry={() => void reloadUsers()} inline>
 		{#if users.length === 0}
 			<EmptyStateCard message={$_('admin.users.empty')} />
 		{:else}
-			<div class="card md:overflow-x-auto">
-				<div class="hidden md:block">
-					<table class="w-full table-fixed text-left text-sm">
-						<colgroup>
-							<col />
-							<col />
-							<col class="w-[11rem]" />
-							<col class="w-[9.5rem]" />
-							<col class="w-12" />
-						</colgroup>
-						<thead>
-							<tr style:color="var(--text-muted)">
-								<th class="p-3">{$_('login.login')}</th>
-								<th class="p-3">{$_('register.display_name')}</th>
-								<th class="p-3 whitespace-nowrap">{$_('admin.users.role')}</th>
-								<th class="p-3 whitespace-nowrap">{$_('admin.users.status')}</th>
-								<th class="p-3 w-0"></th>
-							</tr>
-						</thead>
-						<tbody>
-							{#each users as u (u.id)}
-								<tr class="border-t" style:border-color="var(--border)">
-									<td class="p-3 align-middle">{u.login}</td>
-									<td class="p-3 align-middle">{u.display_name}</td>
-									<td class="p-3 align-middle whitespace-nowrap">{roleLabel(u.is_admin)}</td>
-									<td class="p-3 align-middle whitespace-nowrap">{statusLabel(u.status)}</td>
-									<td class="p-3 w-0 align-middle text-right whitespace-nowrap">
-										<RowActionsMenu actions={rowActions(u)} />
-									</td>
+			<section class="space-y-3">
+				<GroupHeading
+					title={$_('admin.users.group.all', { values: { count: users.length } })}
+					hint={$_('admin.users.group.all_hint')}
+				/>
+				<div class="card overflow-hidden p-0 sm:p-0">
+					<div class="hidden md:block">
+						<table class="w-full table-fixed text-left text-sm">
+							<colgroup>
+								<col />
+								<col class="w-[10rem]" />
+								<col class="w-[9rem]" />
+								<col class="w-14" />
+							</colgroup>
+							<thead>
+								<tr class="text-xs uppercase tracking-wide" style:color="var(--text-muted)">
+									<th class="px-4 py-3 font-medium">{$_('login.login')}</th>
+									<th class="px-3 py-3 font-medium">{$_('admin.users.role')}</th>
+									<th class="px-3 py-3 font-medium">{$_('admin.users.status')}</th>
+									<th class="px-3 py-3"></th>
 								</tr>
-							{/each}
-						</tbody>
-					</table>
-				</div>
-				<div class="space-y-3 md:hidden">
-					{#each users as u (u.id)}
-						<article class="rounded-xl border p-4" style:border-color="var(--border)">
-							<div class="flex items-start justify-between gap-2">
-								<p class="font-medium">{u.login}</p>
+							</thead>
+							<tbody>
+								{#each users as u (u.id)}
+									<tr class="user-row border-t" style:border-color="var(--border)">
+										<td class="px-4 py-2 align-middle">
+											<div class="flex min-w-0 items-center gap-3">
+												{@render avatar(u)}
+												<div class="min-w-0">
+													<div class="truncate font-medium">{u.login}</div>
+													{#if u.display_name}
+														<div class="truncate text-xs" style:color="var(--text-muted)">
+															{u.display_name}
+														</div>
+													{/if}
+												</div>
+											</div>
+										</td>
+										<td class="px-3 py-2 align-middle whitespace-nowrap">
+											{#if u.is_admin}
+												<span class="badge badge-success">{roleLabel(u.is_admin)}</span>
+											{:else}
+												<span style:color="var(--text-muted)">{roleLabel(u.is_admin)}</span>
+											{/if}
+										</td>
+										<td class="px-3 py-2 align-middle whitespace-nowrap">
+											{@render statusBadge(u.status)}
+										</td>
+										<td class="px-2 py-2 align-middle text-right">
+											<RowActionsMenu actions={rowActions(u)} />
+										</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+					<ul class="list-divided md:hidden">
+						{#each users as u (u.id)}
+							<li class="flex items-center gap-3 py-2 pr-1.5 pl-3">
+								{@render avatar(u)}
+								<div class="min-w-0 flex-1">
+									<div class="flex flex-wrap items-center gap-1.5">
+										<span class="truncate font-medium">{u.login}</span>
+										{#if u.is_admin}
+											<span class="badge badge-success">{roleLabel(u.is_admin)}</span>
+										{/if}
+										{#if u.status !== 'active'}
+											{@render statusBadge(u.status)}
+										{/if}
+									</div>
+									{#if u.display_name}
+										<div class="truncate text-xs" style:color="var(--text-muted)">
+											{u.display_name}
+										</div>
+									{/if}
+								</div>
 								<RowActionsMenu actions={rowActions(u)} />
-							</div>
-							<dl class="mt-2 grid gap-2 text-sm">
-								<div class="flex justify-between gap-2">
-									<dt style:color="var(--text-muted)">{$_('register.display_name')}</dt>
-									<dd>{u.display_name}</dd>
-								</div>
-								<div class="flex justify-between gap-2">
-									<dt style:color="var(--text-muted)">{$_('admin.users.role')}</dt>
-									<dd>{roleLabel(u.is_admin)}</dd>
-								</div>
-								<div class="flex justify-between gap-2">
-									<dt style:color="var(--text-muted)">{$_('admin.users.status')}</dt>
-									<dd>{statusLabel(u.status)}</dd>
-								</div>
-							</dl>
-						</article>
-					{/each}
+							</li>
+						{/each}
+					</ul>
 				</div>
-			</div>
+			</section>
 		{/if}
 	</PageLoadGate>
 </div>
@@ -504,10 +547,8 @@
 			<p class="text-sm" style:color="var(--text-muted)">
 				{$_('admin.users.reset.forUser', { values: { login: resetUser.login } })}
 			</p>
-			<label class="block space-y-1">
-				<span class="text-sm" style:color="var(--text-muted)"
-					>{$_('admin.users.reset.newPassword')}</span
-				>
+			<label class="block">
+				<span class="field-label">{$_('admin.users.reset.newPassword')}</span>
 				<input
 					class="input w-full"
 					type="password"
@@ -517,10 +558,8 @@
 					required
 				/>
 			</label>
-			<label class="block space-y-1">
-				<span class="text-sm" style:color="var(--text-muted)"
-					>{$_('admin.users.passwordConfirm')}</span
-				>
+			<label class="block">
+				<span class="field-label">{$_('admin.users.passwordConfirm')}</span>
 				<input
 					class="input w-full"
 					type="password"
@@ -594,3 +633,34 @@
 		{/snippet}
 	</ModalShell>
 {/if}
+
+<style>
+	.user-avatar {
+		display: inline-flex;
+		height: 2.25rem;
+		width: 2.25rem;
+		flex-shrink: 0;
+		align-items: center;
+		justify-content: center;
+		border-radius: 9999px;
+		font-weight: 600;
+		color: var(--primary);
+		background-color: color-mix(in srgb, var(--primary) 12%, transparent);
+	}
+
+	.user-row:hover {
+		background-color: color-mix(in srgb, var(--border) 20%, transparent);
+	}
+
+	.user-badge-warning {
+		color: var(--warning);
+		border-color: color-mix(in srgb, var(--warning) 30%, transparent);
+		background-color: color-mix(in srgb, var(--warning) 14%, transparent);
+	}
+
+	.user-badge-danger {
+		color: var(--danger);
+		border-color: color-mix(in srgb, var(--danger) 30%, transparent);
+		background-color: color-mix(in srgb, var(--danger) 12%, transparent);
+	}
+</style>

@@ -81,8 +81,8 @@ test('tokens: revoke created API token', async ({ page }) => {
 	await page.getByRole('button', { name: 'Закрыть' }).click();
 	await expect(page.getByText(tokenName).first()).toBeVisible();
 
-	const row = page.getByRole('row', { name: new RegExp(tokenName) });
-	await row.getByRole('button', { name: 'Удалить' }).click();
+	const row = page.getByTestId('token-row').filter({ hasText: tokenName });
+	await rowMenuAction(page, row, 'Удалить');
 	await confirmDialog(page, 'Удалить');
 
 	await expect(page.getByText(tokenName)).toHaveCount(0, { timeout: 10_000 });
@@ -111,7 +111,7 @@ test('categories: delete expense category', async ({ page }) => {
 	await page.getByRole('button', { name: 'Создать' }).click();
 	await expect(page.getByText(name)).toBeVisible({ timeout: 10_000 });
 
-	const row = page.locator('.space-y-2 > .card').filter({ hasText: name }).first();
+	const row = page.locator('[data-drag-kind="category"]').filter({ hasText: name }).first();
 	await rowMenuAction(page, row, 'Удалить');
 	await confirmDialog(page);
 	await expect(page.getByText(name)).toHaveCount(0, { timeout: 10_000 });
@@ -137,7 +137,7 @@ test('categories: make primary shows badge', async ({ page }) => {
 	await page.getByRole('button', { name: 'Создать' }).click();
 	await expect(page.getByText(name)).toBeVisible({ timeout: 10_000 });
 
-	const row = page.locator('.space-y-2 > .card').filter({ hasText: name }).first();
+	const row = page.locator('[data-drag-kind="category"]').filter({ hasText: name }).first();
 	await row.getByRole('button', { name: 'Действия' }).click();
 	await page.getByRole('menuitem', { name: 'Сделать главной' }).click();
 	await expect(row.getByLabel('Главная категория')).toBeVisible({ timeout: 10_000 });
@@ -154,7 +154,7 @@ test('categories: create and edit subcategory via dialog', async ({ page }) => {
 	await page.getByRole('button', { name: 'Создать' }).click();
 	await expect(page.getByText(catName)).toBeVisible({ timeout: 10_000 });
 
-	const row = page.locator('.space-y-2 > .card').filter({ hasText: catName }).first();
+	const row = page.locator('[data-drag-kind="category"]').filter({ hasText: catName }).first();
 	await row.getByRole('button', { name: catName }).click();
 	const addSubBtn = row.getByRole('button', { name: 'Добавить подкатегорию' });
 	await expect(addSubBtn).toBeVisible({ timeout: 10_000 });

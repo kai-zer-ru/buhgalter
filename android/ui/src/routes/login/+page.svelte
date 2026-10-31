@@ -1,4 +1,5 @@
 <script lang="ts">
+	import AuthBrand from '$lib/components/AuthBrand.svelte';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -20,7 +21,8 @@
 
 <div class="flex min-h-screen items-center justify-center px-4 py-10">
 	<div class="card w-full max-w-md">
-		<h1 class="mb-2 text-2xl font-semibold">{$_('androidAuth.chooseTitle')}</h1>
+		<AuthBrand />
+		<h1 class="mb-2 text-xl font-semibold">{$_('androidAuth.chooseTitle')}</h1>
 		<p class="mb-6 text-sm" style:color="var(--text-muted)">{$_('androidAuth.chooseSubtitle')}</p>
 		<div class="space-y-3">
 			<a

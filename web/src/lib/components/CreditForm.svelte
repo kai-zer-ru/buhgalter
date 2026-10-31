@@ -564,8 +564,8 @@
 
 <ModalShell bind:open title={$_('credits.new')} maxWidth="max-w-2xl" {onclose}>
 	<div class="space-y-4">
-		<label class="block space-y-1">
-			<span class="text-sm" style:color="var(--text-muted)">{$_('credits.field.name')}</span>
+		<label class="block">
+			<span class="field-label">{$_('credits.field.name')}</span>
 			<input type="text" class="input w-full" bind:value={name} />
 		</label>
 
@@ -608,33 +608,25 @@
 
 		<div class="grid gap-4 sm:grid-cols-2">
 			{#if productType === 'mortgage'}
-				<label class="block space-y-1">
-					<span class="text-sm" style:color="var(--text-muted)"
-						>{$_('credits.field.propertyPrice')}</span
-					>
+				<label class="block">
+					<span class="field-label">{$_('credits.field.propertyPrice')}</span>
 					<MoneyInput bind:value={propertyPrice} />
 				</label>
-				<label class="block space-y-1">
-					<span class="text-sm" style:color="var(--text-muted)"
-						>{$_('credits.field.downPayment')}</span
-					>
+				<label class="block">
+					<span class="field-label">{$_('credits.field.downPayment')}</span>
 					<MoneyInput bind:value={downPayment} />
 				</label>
-				<label class="block space-y-1">
-					<span class="text-sm" style:color="var(--text-muted)"
-						>{$_('credits.field.principalComputed')}</span
-					>
+				<label class="block">
+					<span class="field-label">{$_('credits.field.principalComputed')}</span>
 					<input class="input w-full" value={effectivePrincipal} readonly />
 				</label>
-				<label class="block space-y-1">
-					<span class="text-sm" style:color="var(--text-muted)">{$_('credits.field.rate')}</span>
+				<label class="block">
+					<span class="field-label">{$_('credits.field.rate')}</span>
 					<input type="number" step="0.1" min="0" class="input w-full" bind:value={interestRate} />
 				</label>
 			{:else}
-				<label class="block space-y-1">
-					<span class="text-sm" style:color="var(--text-muted)"
-						>{$_('credits.field.principal')}</span
-					>
+				<label class="block">
+					<span class="field-label">{$_('credits.field.principal')}</span>
 					<MoneyInput bind:value={principal} />
 				</label>
 			{/if}
@@ -644,13 +636,13 @@
 				{...dateOnlyPicker}
 				usePortal
 			/>
-			<label class="block space-y-1">
-				<span class="text-sm" style:color="var(--text-muted)">{$_('credits.field.term')}</span>
+			<label class="block">
+				<span class="field-label">{$_('credits.field.term')}</span>
 				<input type="number" min="1" class="input w-full" bind:value={termMonths} />
 			</label>
 			{#if productType === 'credit'}
-				<label class="block space-y-1">
-					<span class="text-sm" style:color="var(--text-muted)">{$_('credits.field.rate')}</span>
+				<label class="block">
+					<span class="field-label">{$_('credits.field.rate')}</span>
 					<input type="number" step="0.1" min="0" class="input w-full" bind:value={interestRate} />
 				</label>
 			{/if}
@@ -793,7 +785,7 @@
 						class="hidden md:block overflow-x-auto transition-opacity duration-150"
 						class:opacity-50={scheduleLoading}
 					>
-						<table class="w-full border-separate border-spacing-0">
+						<table class="data-table w-full border-separate border-spacing-0">
 							<thead>
 								<tr>
 									<th
@@ -881,14 +873,14 @@
 						</table>
 					</div>
 					<div
-						class="space-y-3 p-3 md:hidden transition-opacity duration-150"
+						class="list-divided md:hidden transition-opacity duration-150"
 						class:opacity-50={scheduleLoading}
 					>
 						{#each visibleScheduleRows as item (item.index)}
 							{@const row = item.row}
 							{@const i = item.index}
 							{@const status = rowStatus(row)}
-							<article class="rounded-xl border p-3" style:border-color="var(--border)">
+							<article class="py-3">
 								<p class="mb-2 text-xs font-medium" style:color="var(--text-muted)">
 									{$_('credits.schedule.paymentNumber', { values: { n: i + 1 } })}
 								</p>
@@ -987,8 +979,8 @@
 		{/if}
 
 		{#if showDebitTimeField}
-			<label class="block space-y-1">
-				<span class="text-sm" style:color="var(--text-muted)">{$_('credits.field.debitTime')}</span>
+			<label class="block">
+				<span class="field-label">{$_('credits.field.debitTime')}</span>
 				<input type="time" class="input w-full" bind:value={debitTimeLocal} />
 				<FieldHint text={$_('credits.field.debitTimeHint')} />
 			</label>

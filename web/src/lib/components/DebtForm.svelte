@@ -209,16 +209,15 @@
 			/>
 
 			{#if !debtorId}
-				<label class="block space-y-1">
-					<span class="text-sm" style:color="var(--text-muted)">{$_('debts.field.debtorName')}</span
-					>
+				<label class="block">
+					<span class="field-label">{$_('debts.field.debtorName')}</span>
 					<input class="input w-full" bind:value={newDebtorName} />
 				</label>
 			{/if}
 		{/if}
 
-		<label class="block space-y-1">
-			<span class="text-sm" style:color="var(--text-muted)">{$_('transactions.field.amount')}</span>
+		<label class="block">
+			<span class="field-label">{$_('transactions.field.amount')}</span>
 			<MoneyInput bind:value={amount} />
 		</label>
 
@@ -265,10 +264,8 @@
 			/>
 		{/if}
 
-		<label class="block space-y-1">
-			<span class="text-sm" style:color="var(--text-muted)"
-				>{$_('transactions.field.description')}</span
-			>
+		<label class="block">
+			<span class="field-label">{$_('transactions.field.description')}</span>
 			<input class="input w-full" bind:value={description} />
 		</label>
 

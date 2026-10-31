@@ -174,6 +174,83 @@ html[data-ui-style='material'] .modal-panel {
 		border-color: var(--border);
 	}
 
+	/* Catalog lists (/categories, /merchants, /tags): `.card p-0` with rows split by a hairline. */
+	.list-divided > * + * {
+		border-top: 1px solid var(--border);
+	}
+
+	/* Summary tiles inside `.card p-0 overflow-hidden`: hairline grid between cells. */
+	.stat-grid {
+		display: grid;
+		gap: 1px;
+		background-color: var(--border);
+	}
+
+	.stat-grid > * {
+		@apply space-y-1 p-4 sm:px-5;
+		background-color: var(--bg-elevated);
+	}
+
+	.stat-label {
+		@apply text-xs;
+		color: var(--text-muted);
+	}
+
+	.stat-value {
+		@apply text-lg font-semibold tabular-nums;
+	}
+
+	/* Data tables inside `.card p-0`: muted caps header, hairline rows, hover. */
+	.data-table {
+		@apply w-full text-left text-sm;
+	}
+
+	.data-table thead th {
+		@apply text-xs font-medium tracking-wide uppercase;
+		color: var(--text-muted);
+	}
+
+	.data-table tbody tr {
+		border-top: 1px solid var(--border);
+		transition: background-color 120ms;
+	}
+
+	.data-table tbody tr:hover {
+		background-color: color-mix(in srgb, var(--border) 20%, transparent);
+	}
+
+	.list-drag-handle {
+		@apply inline-flex min-h-11 w-7 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg opacity-60 transition-opacity select-none hover:opacity-100 active:cursor-grabbing;
+		color: var(--text-muted);
+	}
+
+	.list-row-button {
+		@apply flex min-w-0 flex-1 items-center gap-3 rounded-xl py-1 pr-2 pl-1 text-left transition-colors;
+	}
+
+	button.list-row-button:hover {
+		background-color: color-mix(in srgb, var(--border) 30%, transparent);
+	}
+
+	/* Segmented choice inside forms; buttons get `role="radio"` + `aria-checked`. */
+	.segmented {
+		@apply grid grid-flow-col gap-1 rounded-xl border p-1;
+		grid-auto-columns: minmax(0, 1fr);
+		border-color: var(--border);
+	}
+
+	.segmented > button {
+		@apply rounded-lg px-1 py-2 text-sm transition-colors;
+		color: var(--text-muted);
+	}
+
+	.segmented > button[aria-checked='true'],
+	.segmented > button[aria-pressed='true'] {
+		@apply font-medium;
+		color: var(--primary);
+		background-color: color-mix(in srgb, var(--primary) 14%, transparent);
+	}
+
 	.popover-panel {
 		@apply rounded-xl border;
 		background-color: var(--bg-popover);
@@ -458,6 +535,15 @@ html[data-ui-style='material'] .modal-panel {
 		display: none;
 	}
 
+	.spoiler-chevron {
+		@apply h-4 w-4 shrink-0 transition-transform duration-150;
+		color: var(--text-muted);
+	}
+
+	details[open] > summary .spoiler-chevron {
+		transform: rotate(180deg);
+	}
+
 	.account-group-panel > summary {
 		@apply cursor-pointer list-none select-none;
 	}
@@ -542,4 +628,23 @@ html[data-ui-style='material'] .modal-panel {
 			display: none;
 		}
 	}
+}
+
+/* Unlayered on purpose: beats cell utilities like `p-3`, so first/last columns keep the card inset. */
+.data-table :is(th, td):first-child {
+	padding-left: 1.25rem;
+}
+
+.data-table :is(th, td):last-child {
+	padding-right: 1.25rem;
+}
+
+.data-table :is(th, td) {
+	padding-top: 0.875rem;
+	padding-bottom: 0.875rem;
+}
+
+.data-table thead th {
+	padding-top: 0.75rem;
+	padding-bottom: 0.75rem;
 }

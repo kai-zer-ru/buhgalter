@@ -97,8 +97,8 @@
 	{#if credit}
 		<FormPageShell title={$_('credits.pay.title')} backHref={returnTo} onback={finish}>
 			<div class="space-y-4">
-				<label class="block space-y-1">
-					<span class="text-sm" style:color="var(--text-muted)">{$_('credits.pay.amount')}</span>
+				<label class="block">
+					<span class="field-label">{$_('credits.pay.amount')}</span>
 					<MoneyInput bind:value={payAmount} />
 				</label>
 				<Select

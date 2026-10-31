@@ -171,7 +171,7 @@
 	<div class="grid gap-4 lg:grid-cols-2">
 		{#if showNetChart}
 			<div class="card">
-				<h2 class="mb-2 text-lg font-medium">{$_('stats.charts.netWorth')}</h2>
+				<h2 class="mb-2 text-base font-semibold">{$_('stats.charts.netWorth')}</h2>
 				<div class="relative h-56">
 					<canvas bind:this={netCanvas} aria-label={$_('stats.charts.netWorth')}></canvas>
 				</div>
@@ -179,7 +179,7 @@
 		{/if}
 		{#if showPeriodChart}
 			<div class="card">
-				<h2 class="mb-2 text-lg font-medium">{$_('stats.charts.byPeriod')}</h2>
+				<h2 class="mb-2 text-base font-semibold">{$_('stats.charts.byPeriod')}</h2>
 				<div class="relative h-56">
 					<canvas bind:this={periodCanvas} aria-label={$_('stats.charts.byPeriod')}></canvas>
 				</div>
@@ -187,7 +187,7 @@
 		{/if}
 		{#if showCategoryChart}
 			<div class="card lg:col-span-2">
-				<h2 class="mb-2 text-lg font-medium">{$_('stats.charts.expensesByCategory')}</h2>
+				<h2 class="mb-2 text-base font-semibold">{$_('stats.charts.expensesByCategory')}</h2>
 				<div class="relative mx-auto h-72 max-w-md">
 					<canvas bind:this={categoryCanvas} aria-label={$_('stats.charts.expensesByCategory')}
 					></canvas>

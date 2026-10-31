@@ -20,6 +20,7 @@
 	import { APP_VERSION } from '$lib/platform/app-version';
 	import { fetchAppVersionInfo } from '$lib/version-check';
 	import TimezonePicker from '$lib/components/TimezonePicker.svelte';
+	import GroupHeading from '$lib/components/GroupHeading.svelte';
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import { confirm } from '$lib/confirm';
@@ -54,7 +55,6 @@
 	function onUiStyleChange(value: string) {
 		if (!isUiStyle(value)) return;
 		uiStyle = value;
-		setUiStyle(value);
 	}
 
 	async function loadProfile() {
@@ -89,6 +89,7 @@
 				theme
 			});
 			localStorage.setItem('theme', updated.theme);
+			setUiStyle(uiStyle);
 			if (isThemePreference(updated.theme)) {
 				applyThemePreference(updated.theme);
 			}
@@ -147,79 +148,153 @@
 	}
 </script>
 
+{#snippet segmented(
+	id: string,
+	label: string,
+	value: string,
+	options: { value: string; label: string }[],
+	onpick: (v: string) => void
+)}
+	<div class="space-y-1.5">
+		<span class="block text-sm font-medium" id={`${id}-label`}>{label}</span>
+		<div class="segmented" role="radiogroup" {id} aria-labelledby={`${id}-label`}>
+			{#each options as opt (opt.value)}
+				<button
+					type="button"
+					role="radio"
+					aria-checked={value === opt.value}
+					onclick={() => onpick(opt.value)}
+				>
+					{opt.label}
+				</button>
+			{/each}
+		</div>
+	</div>
+{/snippet}
+
 <PageLoadGate loading={pageLoading} error={loadError} onretry={() => void loadProfile()}>
-	<form class="card max-w-lg space-y-4" onsubmit={saveProfile}>
-		<div>
-			<label class="mb-1.5 block text-sm font-medium" for="login">{$_('settings.login')}</label>
-			<input
-				id="login"
-				class="input cursor-not-allowed opacity-80"
-				type="text"
-				value={$user?.login ?? ''}
-				readonly
-				tabindex="-1"
+	<div class="max-w-2xl space-y-8">
+		<form class="card space-y-6" onsubmit={saveProfile}>
+			<section class="space-y-4">
+				<div class="space-y-1">
+					<h2 class="font-semibold">{$_('settings.profile.section.account')}</h2>
+					<p class="text-sm" style:color="var(--text-muted)">
+						{$_('settings.profile.section.account_hint')}
+					</p>
+				</div>
+				<div class="grid gap-4 sm:grid-cols-2">
+					<div>
+						<label class="field-label" for="login">{$_('settings.login')}</label>
+						<input
+							id="login"
+							class="input cursor-not-allowed opacity-80"
+							type="text"
+							value={$user?.login ?? ''}
+							readonly
+							tabindex="-1"
+						/>
+						<p class="mt-1 text-xs" style:color="var(--text-muted)">
+							{$_('settings.login.readonly')}
+						</p>
+					</div>
+					<div>
+						<label class="field-label" for="display">{$_('register.display_name')}</label>
+						<input id="display" class="input" bind:value={displayName} />
+					</div>
+				</div>
+			</section>
+
+			<section class="space-y-4 border-t pt-6" style:border-color="var(--border)">
+				<div class="space-y-1">
+					<h2 class="font-semibold">{$_('settings.profile.section.region')}</h2>
+					<p class="text-sm" style:color="var(--text-muted)">
+						{$_('settings.profile.section.region_hint')}
+					</p>
+				</div>
+				<div class="grid gap-4 sm:grid-cols-2">
+					<Select
+						id="lang"
+						label={$_('settings.language')}
+						bind:value={language}
+						options={[
+							{ value: 'ru', label: 'Русский' },
+							{ value: 'en', label: 'English' }
+						]}
+					/>
+					<Select
+						id="currency"
+						label={$_('settings.currency')}
+						bind:value={currency}
+						options={currencySelectOptions(currencies)}
+					/>
+				</div>
+				<TimezonePicker
+					id="tz"
+					label={$_('settings.timezone')}
+					hint={$_('settings.timezone.hint')}
+					bind:value={timezone}
+				/>
+			</section>
+
+			<section class="space-y-4 border-t pt-6" style:border-color="var(--border)">
+				<div class="space-y-1">
+					<h2 class="font-semibold">{$_('settings.profile.section.appearance')}</h2>
+					<p class="text-sm" style:color="var(--text-muted)">
+						{$_('settings.profile.section.appearance_hint')}
+					</p>
+				</div>
+				{@render segmented(
+					'theme',
+					$_('settings.theme'),
+					theme,
+					[
+						{ value: 'system', label: $_('settings.theme.system') },
+						{ value: 'light', label: $_('settings.theme.light') },
+						{ value: 'dark', label: $_('settings.theme.dark') }
+					],
+					(v) => {
+						if (isThemePreference(v)) theme = v;
+					}
+				)}
+				{@render segmented(
+					'ui-style',
+					$_('settings.ui_style'),
+					uiStyle,
+					[
+						{ value: 'classic', label: $_('settings.ui_style.classic') },
+						{ value: 'material', label: $_('settings.ui_style.material') }
+					],
+					onUiStyleChange
+				)}
+			</section>
+
+			<div class="flex justify-end border-t pt-4" style:border-color="var(--border)">
+				<button type="submit" class="btn-primary" disabled={loading || wiping}
+					>{$_('settings.save')}</button
+				>
+			</div>
+		</form>
+
+		<section class="space-y-3">
+			<GroupHeading
+				title={$_('settings.profile.section.danger')}
+				hint={$_('settings.profile.section.danger_hint')}
 			/>
-			<p class="mt-1 text-xs" style:color="var(--text-muted)">{$_('settings.login.readonly')}</p>
-		</div>
-		<div>
-			<label class="mb-1.5 block text-sm font-medium" for="display"
-				>{$_('register.display_name')}</label
+			<div
+				class="card space-y-3"
+				style:border-color="color-mix(in srgb, var(--danger) 40%, var(--border))"
 			>
-			<input id="display" class="input" bind:value={displayName} />
-		</div>
-		<Select
-			id="lang"
-			label={$_('settings.language')}
-			bind:value={language}
-			options={[
-				{ value: 'ru', label: 'Русский' },
-				{ value: 'en', label: 'English' }
-			]}
-		/>
-		<Select
-			id="currency"
-			label={$_('settings.currency')}
-			bind:value={currency}
-			options={currencySelectOptions(currencies)}
-		/>
-		<TimezonePicker
-			id="tz"
-			label={$_('settings.timezone')}
-			hint={$_('settings.timezone.hint')}
-			bind:value={timezone}
-		/>
-		<Select
-			id="theme"
-			label={$_('settings.theme')}
-			bind:value={theme}
-			options={[
-				{ value: 'system', label: $_('settings.theme.system') },
-				{ value: 'light', label: $_('settings.theme.light') },
-				{ value: 'dark', label: $_('settings.theme.dark') }
-			]}
-		/>
-		<Select
-			id="ui-style"
-			label={$_('settings.ui_style')}
-			value={uiStyle}
-			onchange={onUiStyleChange}
-			options={[
-				{ value: 'classic', label: $_('settings.ui_style.classic') },
-				{ value: 'material', label: $_('settings.ui_style.material') }
-			]}
-		/>
-		<button type="submit" class="btn-primary" disabled={loading || wiping}
-			>{$_('settings.save')}</button
-		>
-	</form>
-	<div class="card mt-4 max-w-lg space-y-3">
-		<h2 class="font-medium">{$_('settings.data.title')}</h2>
-		<p class="text-sm" style:color="var(--text-muted)">{$_('settings.data.hint')}</p>
-		<button
-			type="button"
-			class="btn-danger"
-			disabled={loading || wiping}
-			onclick={() => void wipeData()}>{$_('settings.data.title')}</button
-		>
+				<h3 class="font-medium">{$_('settings.data.title')}</h3>
+				<p class="text-sm" style:color="var(--text-muted)">{$_('settings.data.hint')}</p>
+				<div class="flex justify-end">
+					<button
+						type="button"
+						class="btn-danger"
+						disabled={loading || wiping}
+						onclick={() => void wipeData()}>{$_('settings.data.title')}</button
+					>
+				</div>
+			</div>
+		</section>
 	</div>
 </PageLoadGate>
