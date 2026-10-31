@@ -553,20 +553,17 @@
 				</div>
 			{/if}
 		</div>
-		<details>
-			<summary class="cursor-pointer text-sm" style:color="var(--text-muted)">
-				{$_('recurring.timeAdvanced')}
-			</summary>
-			<div class="mt-2">
-				<input
-					class="input w-full"
-					type="time"
-					use:nativeTimePicker
-					bind:value={timeLocal}
-					step="60"
-				/>
-			</div>
-		</details>
+		<div>
+			<label class="field-label" for="recurring-time">{$_('recurring.time')}</label>
+			<input
+				id="recurring-time"
+				class="input w-full"
+				type="time"
+				use:nativeTimePicker
+				bind:value={timeLocal}
+				step="60"
+			/>
+		</div>
 		<div class="flex items-center justify-between gap-4">
 			<span class="min-w-0 text-sm">
 				<span class="font-medium">{$_('recurring.active')}</span>

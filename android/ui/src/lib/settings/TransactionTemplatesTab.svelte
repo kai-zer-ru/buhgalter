@@ -449,11 +449,11 @@
 											stroke-linejoin="round"
 										>
 											{#if t.type === 'income'}
-												<path d="M12 19V5M5 12l7-7 7 7" />
+												<path d="M12 5v14M19 12l-7 7-7-7" />
 											{:else if t.type === 'transfer'}
 												<path d="M4 8h14l-4-4M20 16H6l4 4" />
 											{:else}
-												<path d="M12 5v14M19 12l-7 7-7-7" />
+												<path d="M12 19V5M5 12l7-7 7 7" />
 											{/if}
 										</svg>
 									</span>

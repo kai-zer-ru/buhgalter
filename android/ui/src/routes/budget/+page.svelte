@@ -29,6 +29,7 @@
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
 	import PullToRefresh from '$lib/components/PullToRefresh.svelte';
 	import IntegerInput from '$lib/components/IntegerInput.svelte';
+	import ModalShell from '$lib/components/ModalShell.svelte';
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
 	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
 	import Select from '$lib/components/Select.svelte';
@@ -768,11 +769,6 @@
 									})}
 								</p>
 							{/if}
-							{#if editId === item.id}
-								<div class="border-t pt-3" style:border-color="var(--border)">
-									{@render budgetForm('edit')}
-								</div>
-							{/if}
 						</article>
 					{/each}
 				</div>
@@ -780,3 +776,7 @@
 		</PageLoadGate>
 	</div>
 </PullToRefresh>
+
+<ModalShell open={editId !== null} title={$_('budget.edit')} onclose={resetForm}>
+	{@render budgetForm('edit')}
+</ModalShell>
