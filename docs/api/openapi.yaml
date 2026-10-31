@@ -3984,6 +3984,10 @@ paths:
   /budgets/{id}/copy-next:
     post:
       summary: Копировать бюджет на следующий месяц
+      description: >-
+        Включает у бюджета copy_forward и пишет его в месяц month + 1, как сохранение с
+        copy_forward: бюджет того же scope и валюты в следующем месяце перезаписывается,
+        иначе создаётся новый.
       security:
         - sessionCookie: []
         - bearerAuth: []
@@ -3995,15 +3999,13 @@ paths:
             type: string
       responses:
         '201':
-          description: Новый бюджет в следующем месяце (copy_forward = false)
+          description: Бюджет в следующем месяце, созданный или перезаписанный (copy_forward = false)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/BudgetItem'
         '404':
           description: Не найден
-        '409':
-          description: В следующем месяце уже есть бюджет с тем же scope (ERR_BUDGET_COPY_EXISTS)
   /transactions/{id}:
     get:
       summary: Получить операцию

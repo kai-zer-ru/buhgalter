@@ -60,7 +60,7 @@
 | Нет строки | Создаётся копия с теми же полями и `copy_forward = 0`, в том числе неактивная. Из нескольких строк одного scope обновляется активная, иначе неактивная с более поздним `updated_at`. `account_id` не входит в идентичность |
 | 1-е число | По timezone пользователя, один раз за этот локальный день: у бюджетов текущего месяца с `copy_forward = 1`, если строки следующего месяца этого scope ещё нет, создаётся она с `copy_forward = 0`. Существующую строку проход не перезаписывает и дальше одного месяца не идёт. В другие дни фон строку не создаёт и не восстанавливает удалённую. Если сервер весь этот день не работал, пропуск не догоняется: следующий месяц появится, когда владелец сохранит уже наступивший месяц с тумблером |
 | Чтение | `GET /budgets`, `GET /budgets/summary` и воркер порога бюджеты не пишут |
-| `POST …/budgets/{id}/copy-next` | Ручное копирование одного бюджета на месяц `month + 1`. Конфликт scope — `409 ERR_BUDGET_COPY_EXISTS` |
+| `POST …/budgets/{id}/copy-next` | Ручное копирование одного бюджета на месяц `month + 1` в любом месяце, в том числе будущем. Включает у источника `copy_forward` и пишет следующий месяц так же, как сохранение с тумблером: строка того же scope обновляется, иначе создаётся. Конфликта нет |
 | `POST …/budgets/copy-from-previous?month=` | Все активные бюджеты прошлого месяца → указанный месяц (если нет конфликта) |
 | UI «Скопировать» | То же, что `copy-from-previous`; видна, если в выбранном месяце нет бюджетов, а в предыдущем есть (`can_copy_from_previous`) |
 
@@ -200,7 +200,7 @@ POST   /api/v1/budgets/copy-from-previous?month=2026-06
 
 `BudgetUpsertRequest`: `name`, `scope`, `amount`, опционально `category_id`, `subcategory_id`, `account_id`, `currency` (create), `alert_at_percent`, `is_active`, `copy_forward`.
 
-Коды ошибок: `ERR_BUDGET_DUPLICATE`, `ERR_BUDGET_COPY_EXISTS`, `ERR_BUDGET_NOTHING_TO_COPY`, `ERR_BUDGET_MONTH`, `ERR_BUDGET_SCOPE`, `ERR_CURRENCY_MISMATCH`.
+Коды ошибок: `ERR_BUDGET_DUPLICATE`, `ERR_BUDGET_NOTHING_TO_COPY`, `ERR_BUDGET_MONTH`, `ERR_BUDGET_SCOPE`, `ERR_CURRENCY_MISMATCH`.
 
 ---
 

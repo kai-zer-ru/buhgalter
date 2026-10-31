@@ -184,6 +184,7 @@
 
 	function resetForm() {
 		editId = null;
+		error = '';
 		name = '';
 		scope = 'category';
 		categoryId = expenseCategories[0]?.id ?? '';
@@ -198,6 +199,7 @@
 
 	function fillForm(item: BudgetSummaryItem) {
 		editId = item.id;
+		error = '';
 		name = item.name;
 		scope = item.scope;
 		categoryId = item.category_id ?? '';
@@ -320,13 +322,12 @@
 
 	async function copyFromPreviousMonth() {
 		copying = true;
-		error = '';
 		try {
 			await copyBudgetsFromPreviousMonth(month);
 			toast($_('common.saved'));
 			await loadAll();
 		} catch (err) {
-			error = formatApiError(err);
+			toast(formatApiError(err), 'error');
 		} finally {
 			copying = false;
 		}
@@ -334,13 +335,12 @@
 
 	async function copyItemToNextMonth(item: BudgetSummaryItem) {
 		copying = true;
-		error = '';
 		try {
 			await copyBudgetToNextMonth(item.id);
 			toast($_('common.saved'));
 			await loadAll();
 		} catch (err) {
-			error = formatApiError(err);
+			toast(formatApiError(err), 'error');
 		} finally {
 			copying = false;
 		}
@@ -373,6 +373,7 @@
 			return;
 		}
 		formOpen = true;
+		error = '';
 		if (editId) resetForm();
 	}
 

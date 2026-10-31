@@ -281,8 +281,6 @@ func writeBudgetError(w http.ResponseWriter, r *http.Request, err error) bool {
 		apperror.WriteR(w, r, http.StatusNotFound, apperror.NotFound)
 	case errors.Is(err, ErrDuplicateActive):
 		apperror.WriteR(w, r, http.StatusConflict, apperror.Conflict, "ERR_BUDGET_DUPLICATE")
-	case errors.Is(err, ErrCopyTargetExists):
-		apperror.WriteR(w, r, http.StatusConflict, apperror.Conflict, "ERR_BUDGET_COPY_EXISTS")
 	case errors.Is(err, ErrNothingToCopy):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_BUDGET_NOTHING_TO_COPY")
 	case errors.Is(err, ErrInvalidScope):

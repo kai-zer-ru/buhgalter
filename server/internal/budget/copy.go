@@ -12,10 +12,7 @@ import (
 	"github.com/kai-zer-ru/buhgalter/internal/timeutil"
 )
 
-var (
-	ErrCopyTargetExists = errors.New("budget already exists for target month")
-	ErrNothingToCopy    = errors.New("no budgets to copy from previous month")
-)
+var ErrNothingToCopy = errors.New("no budgets to copy from previous month")
 
 // copyForwardHook, when set, runs inside the save transaction before the next
 // month is written. Tests use it to fail that write and check the source rolls back.
@@ -72,7 +69,10 @@ func canCopyFromPrevious(ctx context.Context, db *sql.DB, userID, month string) 
 	return prev > 0, nil
 }
 
-// CopyToNextMonth clones a budget into the following calendar month.
+// CopyToNextMonth turns copy_forward on for the budget and writes it into the
+// following month, the same way a save with copy_forward does: an existing
+// next-month budget of the same scope is overwritten, otherwise a new one is created.
+// It returns the next-month budget.
 func CopyToNextMonth(ctx context.Context, db *sql.DB, userID, id string) (Budget, error) {
 	src, err := Get(ctx, db, userID, id)
 	if err != nil {
@@ -92,16 +92,49 @@ func CopyToNextMonth(ctx context.Context, db *sql.DB, userID, id string) (Budget
 		AlertAtPercent: src.AlertAtPercent,
 		IsActive:       src.IsActive,
 		Currency:       src.Currency,
-		Month:          targetMonth,
-		CopyForward:    false,
+		Month:          src.Month,
+		CopyForward:    true,
 	}
-	if err := checkActiveUniqueness(ctx, db, userID, in, ""); err != nil {
-		if errors.Is(err, ErrDuplicateActive) {
-			return Budget{}, ErrCopyTargetExists
-		}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
 		return Budget{}, err
 	}
-	return insertBudget(ctx, db, userID, in)
+	defer func() { _ = tx.Rollback() }()
+	n, err := queries(tx).UpdateBudget(ctx, sqlcdb.UpdateBudgetParams{
+		Name:           in.Name,
+		Scope:          in.Scope,
+		CategoryID:     in.CategoryID,
+		SubcategoryID:  in.SubcategoryID,
+		Amount:         in.Amount,
+		AccountID:      in.AccountID,
+		CopyForward:    1,
+		AlertAtPercent: in.AlertAtPercent,
+		IsActive:       boolToInt(in.IsActive),
+		UpdatedAt:      timeutil.FormatUTC(timeutil.NowUTC()),
+		ID:             id,
+		UserID:         userID,
+	})
+	if err != nil {
+		return Budget{}, err
+	}
+	if n == 0 {
+		return Budget{}, ErrNotFound
+	}
+	if err := upsertCopiedMonth(ctx, tx, userID, in, targetMonth); err != nil {
+		return Budget{}, err
+	}
+	rows, err := listBudgetRows(ctx, tx, userID, targetMonth)
+	if err != nil {
+		return Budget{}, err
+	}
+	target := pickCopyTarget(rows, in)
+	if target == nil {
+		return Budget{}, ErrNotFound
+	}
+	if err := tx.Commit(); err != nil {
+		return Budget{}, err
+	}
+	return Get(ctx, db, userID, target.ID)
 }
 
 // CopyFromPreviousMonth copies all active budgets from the previous month into month.

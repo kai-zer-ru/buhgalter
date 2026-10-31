@@ -971,3 +971,70 @@ func TestBudgetCopyKeepsCurrency(t *testing.T) {
 		t.Fatalf("january USD copy currency %q", got)
 	}
 }
+
+func TestBudgetCopyToNextMonthTurnsCopyForwardOn(t *testing.T) {
+	ctx, sqlDB, userID, _, categoryID := seedBudgetEnv(t)
+	month, next, _ := adjacentMonths(t, ctx, sqlDB, userID)
+	cat := categoryID
+	src, err := budget.Create(ctx, sqlDB, userID, budget.Input{
+		Name: "Октябрь", Scope: budget.ScopeCategory, CategoryID: &cat,
+		Amount: 10_000, AlertAtPercent: 80, IsActive: true, Month: month,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	copied, err := budget.CopyToNextMonth(ctx, sqlDB, userID, src.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if copied.Month != next || copied.Amount != 10_000 || copied.CopyForward {
+		t.Fatalf("copied: %+v", copied)
+	}
+	after, err := budget.Get(ctx, sqlDB, userID, src.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !after.CopyForward {
+		t.Fatal("copy-next should turn source copy_forward on")
+	}
+	if len(mustList(t, ctx, sqlDB, userID, next)) != 1 {
+		t.Fatal("expected one next-month budget")
+	}
+}
+
+func TestBudgetCopyToNextMonthOverwritesExisting(t *testing.T) {
+	ctx, sqlDB, userID, _, categoryID := seedBudgetEnv(t)
+	month, next, _ := adjacentMonths(t, ctx, sqlDB, userID)
+	cat := categoryID
+	src, err := budget.Create(ctx, sqlDB, userID, budget.Input{
+		Name: "Октябрь", Scope: budget.ScopeCategory, CategoryID: &cat,
+		Amount: 10_000, IsActive: true, Month: month,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	existing, err := budget.Create(ctx, sqlDB, userID, budget.Input{
+		Name: "Ноябрь старый", Scope: budget.ScopeCategory, CategoryID: &cat,
+		Amount: 5_000, IsActive: true, Month: next,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	copied, err := budget.CopyToNextMonth(ctx, sqlDB, userID, src.ID)
+	if err != nil {
+		t.Fatalf("copy-next over an existing budget: %v", err)
+	}
+	if copied.ID != existing.ID || copied.Name != "Октябрь" || copied.Amount != 10_000 {
+		t.Fatalf("expected existing row overwritten, got %+v", copied)
+	}
+	if len(mustList(t, ctx, sqlDB, userID, next)) != 1 {
+		t.Fatal("copy-next must not add a second next-month budget")
+	}
+	after, err := budget.Get(ctx, sqlDB, userID, src.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !after.CopyForward {
+		t.Fatal("copy-next should turn source copy_forward on")
+	}
+}
