@@ -434,6 +434,7 @@
 - [x] БАГ. Android: экран «Черновики», открытый до загрузки пользователя (холодный старт, переход из уведомления), показывал «Включите перехват уведомлений», хотя перехват включён
 - [x] БАГ. [Android: внешний URL из найденного сервера](roadmap/android-discovery-external-url.md) — при выборе сервера из LAN discovery `external_url` из `/health` не попадает в `remoteUrl` профиля, поле «Внешний URL» в настройках сервера остаётся пустым
 - [x] [Бюджет: «Копировать на следующий месяц» включает тумблер](docs/budget.md) — пункт меню копирует бюджет, включает у него `copy_forward` и перезаписывает уже существующий бюджет следующего месяца вместо `409 ERR_BUDGET_COPY_EXISTS`; ошибки копирования — тостом, а не в форме другой статьи
+- [x] **Docs:** [Release notes](docs/release-notes-v1.11.0.md) · [CHANGELOG.md](CHANGELOG.md) · [household.md](docs/household.md) · [multicurrency.md](roadmap/multicurrency.md) · [ui-visual-style.md](docs/ui-visual-style.md) · [budget.md](docs/budget.md) · [android-client-platform.md](docs/android-client-platform.md) · [README.md](README.md)
 
 ## v1.12.0
 
