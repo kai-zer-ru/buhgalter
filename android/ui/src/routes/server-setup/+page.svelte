@@ -8,9 +8,12 @@
 	import ServerProfileFields from '$lib/components/ServerProfileFields.svelte';
 	import ServerTrustDialog from '$lib/components/ServerTrustDialog.svelte';
 	import {
+		discoveredRemoteUrl,
 		getServerProfile,
 		normalizeProfile,
+		pickRemoteUrl,
 		setServerProfile,
+		type DiscoverySelection,
 		type ServerProfile
 	} from '$lib/platform/server-profile';
 	import { refreshActiveServerUrl } from '$lib/platform/server-url';
@@ -24,6 +27,8 @@
 	const initial = getServerProfile();
 	let lanUrl = $state(initial.lanUrl);
 	let trustedOrigins = $state([...initial.trustedOrigins]);
+	// Last server picked from discovery; its external URL is dropped if LAN URL is edited afterwards.
+	let selected = $state<DiscoverySelection | null>(null);
 	let loading = $state(false);
 	let demoBusy = $state(false);
 	let formError = $state<string | null>(null);
@@ -49,9 +54,11 @@
 	async function saveProfile(profile: ServerProfile) {
 		const verified = await verifyServerProfile(profile);
 		const existing = getServerProfile();
+		// The external URL is not pinged here: from the home network it may be unreachable (no hairpin NAT).
+		const discovered = discoveredRemoteUrl(verified.lanUrl, selected);
 		setServerProfile({
 			...verified,
-			remoteUrl: existing.remoteUrl,
+			remoteUrl: pickRemoteUrl(existing.remoteUrl, discovered, true),
 			homeSsids: existing.homeSsids,
 			lanFallbackRemote: existing.lanFallbackRemote,
 			trustedOrigins: verified.trustedOrigins
@@ -127,8 +134,9 @@
 		<h1 class="mb-2 text-xl font-semibold">{$_('serverSetup.title')}</h1>
 		<p class="mb-6 text-sm" style:color="var(--text-muted)">{$_('serverSetup.subtitle')}</p>
 		<ServerDiscoveryPanel
-			onselect={(origin) => {
-				lanUrl = origin;
+			onselect={(server) => {
+				lanUrl = server.origin;
+				selected = server;
 				formError = null;
 			}}
 		/>

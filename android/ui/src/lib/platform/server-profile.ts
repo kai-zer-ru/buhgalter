@@ -135,6 +135,43 @@ export function normalizeProfile(profile: Partial<ServerProfile>): ServerProfile
 	};
 }
 
+/** A server picked from LAN discovery: its origin and the `external_url` its `/health` reported. */
+export type DiscoverySelection = {
+	origin: string;
+	externalUrl?: string;
+};
+
+function usableOrigin(raw: string | null | undefined): string {
+	if (!raw?.trim()) return '';
+	try {
+		const origin = normalizeServerUrl(raw);
+		return isUsableServerOrigin(origin) ? origin : '';
+	} catch {
+		return '';
+	}
+}
+
+/**
+ * External URL reported by the discovered server, or '' when there is none, it is not a usable
+ * origin, or the LAN URL was edited by hand after the pick (it no longer points at that server).
+ */
+export function discoveredRemoteUrl(lanUrl: string, selected: DiscoverySelection | null): string {
+	if (!selected) return '';
+	const lan = usableOrigin(lanUrl);
+	if (!lan || lan !== usableOrigin(selected.origin)) return '';
+	return usableOrigin(selected.externalUrl);
+}
+
+/**
+ * Remote URL to keep after a discovery pick. `overwrite` replaces a non-empty current value
+ * (first launch); otherwise only an empty field is filled (settings).
+ */
+export function pickRemoteUrl(current: string, discovered: string, overwrite: boolean): string {
+	if (!discovered) return current;
+	if (!overwrite && current.trim()) return current;
+	return discovered;
+}
+
 export function getServerProfile(): ServerProfile {
 	return readStorage();
 }

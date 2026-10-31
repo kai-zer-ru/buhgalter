@@ -10,7 +10,7 @@
 	import { getWifiIpv4Subnet } from '$lib/platform/wifi-subnet';
 
 	type Props = {
-		onselect: (origin: string) => void;
+		onselect: (server: DiscoveredServer) => void;
 	};
 
 	let { onselect }: Props = $props();
@@ -114,7 +114,7 @@
 						type="button"
 						class="w-full rounded-lg border px-3 py-2.5 text-left transition hover:opacity-90"
 						style:border-color="var(--border)"
-						onclick={() => onselect(server.origin)}
+						onclick={() => onselect(server)}
 					>
 						<p class="font-medium">
 							{$_('serverDiscovery.rowTitle', { values: { address: formatRow(server) } })}

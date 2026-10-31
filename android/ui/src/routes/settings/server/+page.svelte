@@ -12,9 +12,12 @@
 	import { clearAppLock } from '$lib/platform/app-lock';
 	import {
 		activeServerMode,
+		discoveredRemoteUrl,
 		getServerProfile,
 		normalizeProfile,
+		pickRemoteUrl,
 		setServerProfile,
+		type DiscoverySelection,
 		type ServerProfile
 	} from '$lib/platform/server-profile';
 	import { clearServerUrl, refreshActiveServerUrl } from '$lib/platform/server-url';
@@ -42,6 +45,15 @@
 	let homeSsids = $state([...initial.homeSsids]);
 	let lanFallbackRemote = $state(initial.lanFallbackRemote);
 	let trustedOrigins = $state([...initial.trustedOrigins]);
+	let selected = $state<DiscoverySelection | null>(null);
+	const discoveredRemote = $derived(discoveredRemoteUrl(lanUrl, selected));
+	const normalizedRemote = $derived(normalizeProfile({ remoteUrl }).remoteUrl);
+	// A filled-in external URL is never overwritten silently: offer the reported one instead.
+	const remoteSuggestion = $derived(
+		discoveredRemote && remoteUrl.trim() && normalizedRemote !== discoveredRemote
+			? discoveredRemote
+			: ''
+	);
 	let currentSsid = $state<string | null>(null);
 	let loading = $state(false);
 	let formError = $state<string | null>(null);
@@ -67,11 +79,16 @@
 	}
 
 	async function saveProfile(profile: ServerProfile) {
-		const verified = await verifyServerProfile(profile);
+		let remoteUnreachable = false;
+		const fromDiscovery = !!profile.remoteUrl && profile.remoteUrl === discoveredRemote;
+		const verified = await verifyServerProfile(profile, {
+			onRemoteUnreachable: fromDiscovery ? () => (remoteUnreachable = true) : undefined
+		});
 		setServerProfile(verified);
 		await refreshActiveServerUrl();
 		await refreshSsid();
-		toast($_('common.saved'));
+		if (remoteUnreachable) toast($_('serverProfile.remoteUnreachableSaved'), 'warning');
+		else toast($_('common.saved'));
 	}
 
 	async function submit(e: Event) {
@@ -199,8 +216,10 @@
 		/>
 		<div class="card">
 			<ServerDiscoveryPanel
-				onselect={(origin) => {
-					lanUrl = origin;
+				onselect={(server) => {
+					lanUrl = server.origin;
+					selected = server;
+					remoteUrl = pickRemoteUrl(remoteUrl, discoveredRemoteUrl(server.origin, server), false);
 					formError = null;
 				}}
 			/>
@@ -214,6 +233,8 @@
 				showActiveStatus
 				activeMode={$activeServerMode}
 				{currentSsid}
+				{remoteSuggestion}
+				onapplyremote={() => (remoteUrl = remoteSuggestion)}
 			/>
 			{#if formError}
 				<p class="text-sm" style:color="var(--danger)" role="alert">{formError}</p>

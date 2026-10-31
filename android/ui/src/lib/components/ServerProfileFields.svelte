@@ -16,6 +16,9 @@
 		showActiveStatus?: boolean;
 		activeMode?: 'lan' | 'remote' | null;
 		currentSsid?: string | null;
+		/** External URL reported by the discovered server when it differs from the filled-in one. */
+		remoteSuggestion?: string;
+		onapplyremote?: () => void;
 	};
 
 	let {
@@ -26,7 +29,9 @@
 		variant = 'full',
 		showActiveStatus = false,
 		activeMode = null,
-		currentSsid = null
+		currentSsid = null,
+		remoteSuggestion = '',
+		onapplyremote
 	}: Props = $props();
 
 	let ssidHint = $state<string | null>(null);
@@ -141,6 +146,20 @@
 			<p class="mt-1.5 text-xs" style:color="var(--text-muted)">
 				{$_('serverProfile.remoteUrlHint')}
 			</p>
+			{#if remoteSuggestion}
+				<div class="mt-2 flex items-center justify-between gap-3 text-xs">
+					<span class="min-w-0 break-all" style:color="var(--text-muted)">
+						{$_('serverProfile.remoteSuggested', { values: { url: remoteSuggestion } })}
+					</span>
+					<button
+						type="button"
+						class="btn-ghost shrink-0 text-xs"
+						onclick={() => onapplyremote?.()}
+					>
+						{$_('serverProfile.remoteSuggestedApply')}
+					</button>
+				</div>
+			{/if}
 			{#if remoteUrl.trim()}
 				<div class="mt-3">
 					<div class="flex items-center justify-between gap-4">

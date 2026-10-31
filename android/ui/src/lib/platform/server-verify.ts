@@ -57,9 +57,18 @@ async function pingOrigin(origin: string, profile: ServerProfile): Promise<void>
 	await pingServer(normalized);
 }
 
+export type VerifyServerProfileOptions = {
+	/**
+	 * The remote URL came from the server itself (discovery): an unreachable remote does not fail
+	 * the save, since from the home network it may need hairpin NAT. Certificate errors still throw.
+	 */
+	onRemoteUnreachable?: () => void;
+};
+
 /** Ping LAN and remote URLs; throws SslTrustRequiredError when HTTPS cert is not trusted. */
 export async function verifyServerProfile(
-	profileInput: Partial<ServerProfile>
+	profileInput: Partial<ServerProfile>,
+	options: VerifyServerProfileOptions = {}
 ): Promise<ServerProfile> {
 	const profile = normalizeProfile(profileInput);
 	if (!profile.lanUrl) {
@@ -72,6 +81,14 @@ export async function verifyServerProfile(
 		} catch (err) {
 			if (isSslCertificateError(err)) {
 				throw new SslTrustRequiredError(origin);
+			}
+			if (
+				origin === profile.remoteUrl &&
+				origin !== profile.lanUrl &&
+				options.onRemoteUnreachable
+			) {
+				options.onRemoteUnreachable();
+				continue;
 			}
 			throw err;
 		}

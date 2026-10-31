@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+	discoveredRemoteUrl,
 	isHomeSsid,
 	normalizeHomeSsids,
 	normalizeProfile,
+	pickRemoteUrl,
 	resolveActiveServerUrl
 } from './server-profile';
 
@@ -99,5 +101,50 @@ describe('isHomeSsid', () => {
 	it('is case-sensitive', () => {
 		expect(isHomeSsid('homewifi', ['HomeWiFi'])).toBe(false);
 		expect(isHomeSsid('HomeWiFi', ['HomeWiFi'])).toBe(true);
+	});
+});
+
+describe('discoveredRemoteUrl', () => {
+	const server = { origin: 'http://192.168.1.10:8765', externalUrl: 'https://buh.example.com/' };
+
+	it('returns the normalized external URL of the picked server', () => {
+		expect(discoveredRemoteUrl('http://192.168.1.10:8765', server)).toBe('https://buh.example.com');
+	});
+
+	it('is empty without a pick or without an external URL', () => {
+		expect(discoveredRemoteUrl('http://192.168.1.10:8765', null)).toBe('');
+		expect(discoveredRemoteUrl('http://192.168.1.10:8765', { origin: server.origin })).toBe('');
+	});
+
+	it('drops an unusable external URL', () => {
+		expect(
+			discoveredRemoteUrl('http://192.168.1.10:8765', { ...server, externalUrl: 'not a url' })
+		).toBe('');
+	});
+
+	it('is empty once the LAN URL was edited to another address', () => {
+		expect(discoveredRemoteUrl('http://192.168.1.20:8765', server)).toBe('');
+	});
+});
+
+describe('pickRemoteUrl', () => {
+	it('takes the discovered URL for an empty profile', () => {
+		expect(pickRemoteUrl('', 'https://buh.example.com', false)).toBe('https://buh.example.com');
+	});
+
+	it('keeps the current URL when nothing was discovered', () => {
+		expect(pickRemoteUrl('https://old.example.com', '', true)).toBe('https://old.example.com');
+	});
+
+	it('does not overwrite a filled-in URL in settings', () => {
+		expect(pickRemoteUrl('https://old.example.com', 'https://buh.example.com', false)).toBe(
+			'https://old.example.com'
+		);
+	});
+
+	it('replaces the stored URL on first launch', () => {
+		expect(pickRemoteUrl('https://old.example.com', 'https://buh.example.com', true)).toBe(
+			'https://buh.example.com'
+		);
 	});
 });
