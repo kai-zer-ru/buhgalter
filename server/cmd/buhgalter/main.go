@@ -34,7 +34,7 @@ import (
 )
 
 var (
-	version       = "1.11.1"
+	version       = "1.11.2"
 	installMethod = "dev"
 	buildCommit   = "unknown"
 	buildTime     = ""

@@ -441,6 +441,10 @@
 - [x] Android: перехват уведомлений нового приложения «ВБ Банк» (`ru.wildberries.bank`) — пакет добавлен к банку `wbbank` рядом с прежним `ru.wildberries.fintech`
 - [x] **Docs:** [Release notes](docs/release-notes-v1.11.1.md) · [CHANGELOG.md](CHANGELOG.md) · [README.md](README.md)
 
+## v1.11.2
+
+- [x] БАГ. Android: перехват Ozon Банка брал «73» вместо «3 073» (разделитель тысяч — узкий неразрывный пробел U+202F); доход WB «Выплата процентов» попадал в описание как «а процентов» — теперь метка операции целиком
+
 ## v1.12.0
 
 - [ ] [Цели накопления](roadmap/savings-goals.md) — копилки, прогресс, напоминания (`savings_goals`)

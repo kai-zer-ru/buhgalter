@@ -85,8 +85,49 @@ describe('parseBankNotification', () => {
 		expect(parsed!.kind).toBe('income');
 		expect(parsed!.amount).toBe('5.36');
 		expect(parsed!.bankId).toBe('wbbank');
-		expect(parsed!.merchantText.toLowerCase()).toContain('процент');
+		expect(parsed!.merchantText).toBe('Выплата процентов');
 	});
+
+	it('labels WB Bank app interest payout without stem fragments', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'ru.wildberries.bank',
+				title: 'WB Банк',
+				text: 'Выплата процентов 10,60 ₽.\nДоступно 156\u00a0549,16 ₽'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.kind).toBe('income');
+		expect(parsed!.amount).toBe('10.60');
+		expect(parsed!.merchantText).toBe('Выплата процентов');
+	});
+
+	it('labels top-up without counterparty by the operation word', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'com.idamob.tinkoff.android',
+				text: 'Пополнение на 5 000 ₽. Доступно 12 000 ₽'
+			})
+		);
+		expect(parsed!.merchantText).toBe('Пополнение');
+	});
+
+	it.each(['\u202f', '\u2009', '\u2007'])(
+		'parses Ozon Bank amount with thousands separator %j',
+		(sep) => {
+			const parsed = parseBankNotification(
+				raw({
+					packageName: 'ru.ozon.fintech.finance',
+					title: 'Ozon Банк',
+					text: `Покупка на 3${sep}073 ₽. Ozon. Доступно 1${sep}215 ₽`
+				})
+			);
+			expect(parsed).not.toBeNull();
+			expect(parsed!.kind).toBe('purchase');
+			expect(parsed!.amount).toBe('3073.00');
+			expectCleanMerchant(parsed!.merchantText, 'Ozon');
+		}
+	);
 
 	it('parses top-up / incoming transfer as income', () => {
 		const topup = parseBankNotification(

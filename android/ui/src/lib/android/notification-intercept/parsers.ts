@@ -48,7 +48,7 @@ const PURCHASE_HINT_RE =
 
 /** Titles that are bank/card chrome, not a merchant (Yandex cancel uses «Карта Пэй»). */
 const GENERIC_TITLE_RE =
-	/^(карта(\s+пэй)?|card(\s+pay)?|пэй|pay|яндекс(\s+пэй)?|yandex(\s+pay)?|тинькофф|т-?банк|сбер(банк)?|втб(\s+онлайн)?|vtb(\s+online)?|wb\s*(банк|кошел[её]к)|кошел[её]к|mir(\s*pay)?|мир(\s*пэй|\s*pay)?|samsung(\s*(pay|wallet))?|google(\s*(pay|wallet))?|сбпэй|сбп|huawei(\s*(pay|wallet))?|mi(\s*pay)?|xiaomi(\s*(pay|wallet))?|юmoney|юмани|yoomoney)$/i;
+	/^(карта(\s+пэй)?|card(\s+pay)?|пэй|pay|яндекс(\s+пэй)?|yandex(\s+pay)?|тинькофф|т-?банк|сбер(банк)?|втб(\s+онлайн)?|vtb(\s+online)?|wb\s*(банк|кошел[её]к)|ozon\s*банк|кошел[её]к|mir(\s*pay)?|мир(\s*пэй|\s*pay)?|samsung(\s*(pay|wallet))?|google(\s*(pay|wallet))?|сбпэй|сбп|huawei(\s*(pay|wallet))?|mi(\s*pay)?|xiaomi(\s*(pay|wallet))?|юmoney|юмани|yoomoney)$/i;
 
 const AMOUNT_RE =
 	/(?:^|[^\d])(\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*(?:₽|руб\.?|р\.?|RUB|rub)?(?!\d)/i;
@@ -85,12 +85,14 @@ const BALANCE_TAIL_RE = /[\s.,:;!\-–—]+(?:баланс|доступно|avai
 const TBANK_SMS_MERCHANT_RE =
 	/(?:^|[^\d])(?:\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*(?:₽|руб\.?|р\.?|RUB)\.?\s+([A-Za-zА-Яа-яЁё0-9 ._-]{2,60}?)\s*\.?\s*(?:доступно|available)/i;
 
+/** Thin / narrow / figure spaces as thousands separators (Ozon: «3 073 ₽» with U+202F). */
+const EXOTIC_SPACE_RE = /[\u2007\u2009\u202f\u2060]/g;
+
 function combinedText(raw: RawBankNotification): string {
 	// SMS title is the sender address — exclude from amount/kind heuristics.
-	if (raw.channel === 'sms') {
-		return [raw.text, raw.bigText].filter(Boolean).join('\n');
-	}
-	return [raw.title, raw.text, raw.bigText].filter(Boolean).join('\n');
+	const parts =
+		raw.channel === 'sms' ? [raw.text, raw.bigText] : [raw.title, raw.text, raw.bigText];
+	return parts.filter(Boolean).join('\n').replace(EXOTIC_SPACE_RE, ' ');
 }
 
 function normalizeAmount(raw: string): string | null {
@@ -119,36 +121,46 @@ function extractAmount(text: string): string | null {
 	return normalizeAmount(currencyFirst[1]);
 }
 
+/** T-Bank SMS: label between the amount and «Доступно». */
+function smsMerchant(raw: RawBankNotification): string {
+	if (raw.channel !== 'sms') return '';
+	const body = [raw.text, raw.bigText].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+	const tbank = body.match(TBANK_SMS_MERCHANT_RE);
+	return tbank?.[1] ? tbank[1].replace(/^[\s.,:;!\-–—]+|[\s.,:;!\-–—]+$/g, '').trim() : '';
+}
+
+/** Notification title when it looks like a store / counterparty, not bank chrome. */
+function titleMerchant(raw: RawBankNotification): string {
+	const title = raw.title.trim();
+	// SMS title is the originator (900 / T-Bank), never a shop name.
+	if (
+		raw.channel === 'sms' ||
+		!title ||
+		GENERIC_TITLE_RE.test(title) ||
+		PURCHASE_HINT_RE.test(title) ||
+		CANCEL_RE.test(title) ||
+		INCOME_RE.test(title) ||
+		IGNORE_RE.test(title) ||
+		title.length > 80 ||
+		/^\d/.test(title) ||
+		/(₽|RUB|руб)/i.test(title)
+	) {
+		return '';
+	}
+	return title;
+}
+
 /**
  * Merchant / counterparty label: prefer notification title when it looks like a store name
  * (Yandex Pay puts the shop in EXTRA_TITLE and purchase details in EXTRA_TEXT).
  * Cancel pushes often use a generic title («Карта Пэй») and put the shop in the body.
  */
 function extractMerchant(raw: RawBankNotification, amount: string): string {
-	if (raw.channel === 'sms') {
-		const body = [raw.text, raw.bigText].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
-		const tbank = body.match(TBANK_SMS_MERCHANT_RE);
-		if (tbank?.[1]) {
-			return tbank[1].replace(/^[\s.,:;!\-–—]+|[\s.,:;!\-–—]+$/g, '').trim();
-		}
-	}
+	const fromSms = smsMerchant(raw);
+	if (fromSms) return fromSms;
 
-	const title = raw.title.trim();
-	// SMS title is the originator (900 / T-Bank), never a shop name.
-	if (
-		raw.channel !== 'sms' &&
-		title &&
-		!GENERIC_TITLE_RE.test(title) &&
-		!PURCHASE_HINT_RE.test(title) &&
-		!CANCEL_RE.test(title) &&
-		!INCOME_RE.test(title) &&
-		!IGNORE_RE.test(title) &&
-		title.length <= 80
-	) {
-		if (!/^\d/.test(title) && !/(₽|RUB|руб)/i.test(title)) {
-			return title;
-		}
-	}
+	const fromTitle = titleMerchant(raw);
+	if (fromTitle) return fromTitle;
 
 	let t = [raw.text, raw.bigText].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
 	t = t.replace(
@@ -231,6 +243,8 @@ function extractIncomeLabel(raw: RawBankNotification): string {
 	let t = (beforeAmount || line).trim();
 	t = t.replace(GENERIC_TITLE_RE, ' ').replace(/\s+/g, ' ').trim();
 	t = t.replace(/^[\s.,:;!\-–—]+|[\s.,:;!\-–—]+$/g, '').trim();
+	// «Пополнение на 5 000 ₽» → «Пополнение».
+	t = t.replace(/\s+(?:на|в)$/i, '').trim();
 	if (t.length > 80) t = t.slice(0, 80).trim();
 	return t;
 }
@@ -281,11 +295,13 @@ export function parseBankNotification(raw: RawBankNotification): ParsedPurchase 
 	const bankId = packageBankId ?? inferBankIdFromText(text) ?? walletId;
 	if (!bankId) return null;
 	let merchantText = extractTransferCounterparty(text, isIncome ? 'income' : 'purchase') ?? '';
+	if (!merchantText && isIncome) {
+		// Stripping INCOME_RE stems from the body leaves fragments («Выплата» → «а»).
+		merchantText =
+			smsMerchant(resolved) || titleMerchant(resolved) || extractIncomeLabel(resolved);
+	}
 	if (!merchantText) {
 		merchantText = extractMerchant(resolved, amount);
-	}
-	if (isIncome && !merchantText) {
-		merchantText = extractIncomeLabel(resolved);
 	}
 	const occurredAt = new Date(resolved.postedAt > 0 ? resolved.postedAt : Date.now()).toISOString();
 
