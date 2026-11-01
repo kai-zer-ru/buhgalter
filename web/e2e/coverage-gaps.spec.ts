@@ -112,7 +112,7 @@ test('create credit from credits list UI', async ({ page }) => {
 
 	await page.goto('/credits');
 	await waitAppReady(page);
-	await page.getByRole('button', { name: 'Новый кредит' }).click();
+	await page.getByRole('button', { name: 'Добавить' }).click();
 
 	const modal = page.getByRole('dialog');
 	await expect(modal.getByRole('heading', { name: 'Новый кредит' })).toBeVisible();

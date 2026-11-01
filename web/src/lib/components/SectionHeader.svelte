@@ -10,10 +10,12 @@
 	} = $props();
 </script>
 
-<div class="flex flex-wrap items-center justify-between gap-4">
-	<h1 class="text-2xl font-semibold tracking-tight">{title}</h1>
+<div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-4">
+	<h1 class="min-w-0 flex-[1_1_10rem] text-2xl font-semibold tracking-tight text-balance">
+		{title}
+	</h1>
 	{#if actions}
-		<div class="flex flex-wrap items-center gap-2">
+		<div class="flex shrink-0 flex-wrap items-center gap-2">
 			{@render actions()}
 		</div>
 	{/if}

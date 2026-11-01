@@ -452,10 +452,7 @@
 			<EmptyStateCard message={$_('admin.users.empty')} />
 		{:else}
 			<section class="space-y-3">
-				<GroupHeading
-					title={$_('admin.users.group.all', { values: { count: users.length } })}
-					hint={$_('admin.users.group.all_hint')}
-				/>
+				<GroupHeading title={$_('admin.users.group.all', { values: { count: users.length } })} />
 				<div class="card overflow-hidden p-0 sm:p-0">
 					<div class="hidden md:block">
 						<table class="w-full table-fixed text-left text-sm">

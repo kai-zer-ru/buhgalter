@@ -1,4 +1,6 @@
 <script lang="ts">
+	import GroupHeading from '$lib/components/GroupHeading.svelte';
+	import IconGlyph from '$lib/components/IconGlyph.svelte';
 	import CategoryIcon from '$lib/components/CategoryIcon.svelte';
 	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
 	import { nativeTimePicker } from '$lib/actions/native-time-picker';
@@ -32,7 +34,6 @@
 	import BackLink from '$lib/components/BackLink.svelte';
 	import DateTimePicker from '$lib/components/DateTimePicker.svelte';
 	import { dateOnlyPicker } from '$lib/datetime-picker-standards';
-	import GroupHeading from '$lib/components/GroupHeading.svelte';
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
 	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
 	import Select from '$lib/components/Select.svelte';
@@ -88,6 +89,16 @@
 	let active = $state(true);
 
 	const tz = $derived($user?.timezone ?? 'Europe/Moscow');
+	const recurringGroups = $derived(
+		[
+			{ key: 'active', titleKey: 'recurring.group.active', items: items.filter((i) => i.active) },
+			{
+				key: 'inactive',
+				titleKey: 'recurring.group.inactive',
+				items: items.filter((i) => !i.active)
+			}
+		].filter((g) => g.items.length > 0)
+	);
 	const selectedAcc = $derived(accounts.find((acc) => acc.id === accountId));
 	const categoryOptions = $derived(
 		categorySelectOptions(
@@ -603,8 +614,12 @@
 
 	<SectionHeader title={$_('nav.recurring')}>
 		{#snippet actions()}
-			<button type="button" class="btn-primary shrink-0" onclick={toggleForm}>
-				{formOpen && !editId ? $_('common.cancel') : $_('recurring.add')}
+			<button type="button" class="btn-primary btn-add" onclick={toggleForm}>
+				{#if formOpen && !editId}
+					{$_('common.cancel')}
+				{:else}
+					<IconGlyph icon="add" class="text-xs" />{$_('common.add')}
+				{/if}
 			</button>
 		{/snippet}
 	</SectionHeader>
@@ -620,95 +635,100 @@
 			{#if items.length === 0 && !formOpen}
 				<EmptyStateCard message={$_('recurring.empty')} />
 			{:else if items.length > 0}
-				<section class="space-y-3">
-					<GroupHeading
-						title={$_('recurring.group.all', { values: { count: items.length } })}
-						hint={$_('recurring.group.all_hint')}
-					/>
-					<div class="card overflow-x-auto p-0 sm:p-0">
-						<div class="hidden md:block">
-							<table class="data-table w-full text-left text-sm">
-								<thead>
-									<tr style:color="var(--text-muted)">
-										<th class="p-3">{$_('transactions.col.description')}</th>
-										<th class="p-3">{$_('recurring.period')}</th>
-										<th class="p-3">{$_('transactions.field.account')}</th>
-										<th class="p-3">{$_('recurring.nextRun')}</th>
-										<th class="p-3"></th>
-									</tr>
-								</thead>
-								<tbody>
-									{#each items as item (item.id)}
-										<tr class="border-t" style:border-color="var(--border)">
-											<td class="p-3">
-												<div class="font-medium">{item.description || item.category_name}</div>
-												<div class="text-xs" style:color="var(--text-muted)">
-													{item.category_name}
-													{#if item.subcategory_name}
-														• {item.subcategory_name}
-													{/if}
-													• <MoneyDisplay value={item.amount_display} class="" />
-												</div>
-											</td>
-											<td class="p-3">{periodLabel(item.period)}</td>
-											<td class="p-3">{item.account_name}</td>
-											<td class="p-3"
-												>{formatAPIOperationDateTimeForDisplay(item.next_run_at, tz)}</td
-											>
-											<td class="p-3 text-right">
-												<RowActionsMenu actions={rowActions(item)} />
-											</td>
-										</tr>
-										{#if editId === item.id}
-											<tr class="border-t" style:border-color="var(--border)">
-												<td colspan="5" class="p-3">
-													{@render operationForm('edit')}
-												</td>
+				<div class="space-y-8">
+					{#each recurringGroups as group (group.key)}
+						<section class="space-y-3">
+							<GroupHeading title={$_(group.titleKey)} />
+							<div class="card overflow-x-auto p-0 sm:p-0">
+								<div class="hidden md:block">
+									<table class="data-table w-full text-left text-sm">
+										<thead>
+											<tr style:color="var(--text-muted)">
+												<th class="p-3">{$_('transactions.col.description')}</th>
+												<th class="p-3">{$_('recurring.period')}</th>
+												<th class="p-3">{$_('transactions.field.account')}</th>
+												<th class="p-3">{$_('recurring.nextRun')}</th>
+												<th class="p-3"></th>
 											</tr>
+										</thead>
+										<tbody>
+											{#each group.items as item (item.id)}
+												<tr class="border-t" style:border-color="var(--border)">
+													<td class="p-3">
+														<div class="font-medium">{item.description || item.category_name}</div>
+														<div class="text-xs" style:color="var(--text-muted)">
+															{item.category_name}
+															{#if item.subcategory_name}
+																• {item.subcategory_name}
+															{/if}
+															• <MoneyDisplay value={item.amount_display} class="" />
+														</div>
+													</td>
+													<td class="p-3">{periodLabel(item.period)}</td>
+													<td class="p-3">{item.account_name}</td>
+													<td class="p-3"
+														>{formatAPIOperationDateTimeForDisplay(item.next_run_at, tz)}</td
+													>
+													<td class="p-3 text-right">
+														<RowActionsMenu actions={rowActions(item)} />
+													</td>
+												</tr>
+												{#if editId === item.id}
+													<tr class="border-t" style:border-color="var(--border)">
+														<td colspan="5" class="p-3">
+															{@render operationForm('edit')}
+														</td>
+													</tr>
+												{/if}
+											{/each}
+										</tbody>
+									</table>
+								</div>
+
+								<div class="list-divided md:hidden">
+									{#each group.items as item (item.id)}
+										<article class="flex items-center gap-3 px-4 py-3">
+											<CategoryIcon
+												icon={categories.find((c) => c.id === item.category_id)?.icon || 'default'}
+												size={36}
+											/>
+											<div class="min-w-0 flex-1">
+												<p class="truncate text-sm font-medium">
+													{item.description || item.category_name}
+												</p>
+												<p class="truncate text-xs" style:color="var(--text-muted)">
+													{item.category_name}{#if item.subcategory_name}&nbsp;› {item.subcategory_name}{/if}
+													· {item.account_name}
+												</p>
+											</div>
+											<div class="shrink-0 text-right">
+												<p class="text-sm font-semibold tabular-nums">
+													<MoneyDisplay value={item.amount_display} class="" />
+												</p>
+												<p class="text-xs" style:color="var(--text-muted)">
+													{formatAPIDayMonthTimeShortForDisplay(
+														item.next_run_at,
+														tz,
+														$locale ?? 'ru'
+													)}
+												</p>
+											</div>
+											<RowActionsMenu actions={rowActions(item)} />
+										</article>
+										{#if editId === item.id}
+											<div
+												class="p-4"
+												style:background-color="color-mix(in srgb, var(--border) 15%, transparent)"
+											>
+												{@render operationForm('edit-mobile')}
+											</div>
 										{/if}
 									{/each}
-								</tbody>
-							</table>
-						</div>
-
-						<div class="list-divided md:hidden">
-							{#each items as item (item.id)}
-								<article class="flex items-center gap-3 px-4 py-3">
-									<CategoryIcon
-										icon={categories.find((c) => c.id === item.category_id)?.icon || 'default'}
-										size={36}
-									/>
-									<div class="min-w-0 flex-1">
-										<p class="truncate text-sm font-medium">
-											{item.description || item.category_name}
-										</p>
-										<p class="truncate text-xs" style:color="var(--text-muted)">
-											{item.category_name}{#if item.subcategory_name}&nbsp;› {item.subcategory_name}{/if}
-											· {item.account_name}
-										</p>
-									</div>
-									<div class="shrink-0 text-right">
-										<p class="text-sm font-semibold tabular-nums">
-											<MoneyDisplay value={item.amount_display} class="" />
-										</p>
-										<p class="text-xs" style:color="var(--text-muted)">
-											{formatAPIDayMonthTimeShortForDisplay(item.next_run_at, tz, $locale ?? 'ru')}
-										</p>
-									</div>
-									<RowActionsMenu actions={rowActions(item)} />
-								</article>
-								{#if editId === item.id}
-									<div
-										class="p-4"
-										style:background-color="color-mix(in srgb, var(--border) 15%, transparent)"
-									>
-										{@render operationForm('edit-mobile')}
-									</div>
-								{/if}
-							{/each}
-						</div>
-					</div>
-				</section>
+								</div>
+							</div>
+						</section>
+					{/each}
+				</div>
 			{/if}
 		</PageLoadGate>
 	</div>

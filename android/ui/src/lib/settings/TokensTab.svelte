@@ -203,7 +203,6 @@
 			<section class="space-y-3">
 				<GroupHeading
 					title={$_('settings.tokens.group.all', { values: { count: tokens.length } })}
-					hint={$_('settings.tokens.group.all_hint')}
 				/>
 				<div class="card list-divided p-0 sm:p-0">
 					{#each tokens as t (t.id)}

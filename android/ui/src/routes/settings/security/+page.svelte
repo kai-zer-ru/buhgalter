@@ -1,7 +1,7 @@
 <script lang="ts">
+	import GroupHeading from '$lib/components/GroupHeading.svelte';
 	import { onMount } from 'svelte';
 	import { _ } from 'svelte-i18n';
-	import GroupHeading from '$lib/components/GroupHeading.svelte';
 	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
 	import {
 		BACKGROUND_LOCK_MS,
@@ -171,7 +171,7 @@
 {:else}
 	<div class="space-y-8">
 		<section class="space-y-3">
-			<GroupHeading title={$_('appLock.group.lock')} hint={$_('appLock.settingsHint')} />
+			<GroupHeading title={$_('appLock.group.lock')} />
 			<div class="card list-divided p-0 sm:p-0">
 				{#snippet enableToggle()}
 					<ToggleSwitch
@@ -234,7 +234,6 @@
 					)}
 				{/if}
 			</div>
-			<p class="px-1 text-xs" style:color="var(--text-muted)">{$_('appLock.limitations')}</p>
 		</section>
 
 		{#if setupOpen}

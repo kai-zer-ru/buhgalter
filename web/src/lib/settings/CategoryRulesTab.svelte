@@ -1,4 +1,6 @@
 <script lang="ts">
+	import GroupHeading from '$lib/components/GroupHeading.svelte';
+	import IconGlyph from '$lib/components/IconGlyph.svelte';
 	import { onMount } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import {
@@ -18,7 +20,6 @@
 	} from '$lib/api/client';
 	import CategoryIcon from '$lib/components/CategoryIcon.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
-	import GroupHeading from '$lib/components/GroupHeading.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
 	import ReorderDragGhost from '$lib/components/ReorderDragGhost.svelte';
@@ -270,8 +271,8 @@
 <div class="space-y-8">
 	<SectionHeader title={$_('categoryRules.title')}>
 		{#snippet actions()}
-			<button type="button" class="btn-primary" onclick={openCreate}>
-				{$_('categoryRules.add')}
+			<button type="button" class="btn-primary btn-add" onclick={openCreate}>
+				<IconGlyph icon="add" class="text-xs" />{$_('common.add')}
 			</button>
 		{/snippet}
 	</SectionHeader>
@@ -287,9 +288,6 @@
 							title={group.kind === 'category_account'
 								? $_('categoryRules.kind.categoryAccount')
 								: $_('categoryRules.kind.textCategory')}
-							hint={group.kind === 'category_account'
-								? $_('categoryRules.group.categoryAccount_hint')
-								: $_('categoryRules.group.textCategory_hint')}
 						/>
 						<div class="card list-divided p-0 sm:p-0">
 							{#each group.rules as rule, i (rule.id)}

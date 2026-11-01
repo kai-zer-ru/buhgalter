@@ -210,10 +210,7 @@
 
 <div class="space-y-8">
 	<section class="space-y-3">
-		<GroupHeading
-			title={$_('serverSettings.group.connection')}
-			hint={$_('serverSettings.subtitle')}
-		/>
+		<GroupHeading title={$_('serverSettings.group.connection')} />
 		<div class="card">
 			<ServerDiscoveryPanel
 				onselect={(server) => {
@@ -248,10 +245,7 @@
 	</section>
 
 	<section class="space-y-3">
-		<GroupHeading
-			title={$_('serverSettings.group.debug')}
-			hint={$_('serverSettings.group.debug_hint')}
-		/>
+		<GroupHeading title={$_('serverSettings.group.debug')} />
 		<div class="card list-divided p-0 sm:p-0">
 			<div class="flex items-center justify-between gap-4 px-4 py-3.5">
 				<div class="min-w-0">

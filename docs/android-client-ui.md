@@ -306,6 +306,8 @@
 
 Стили drawer: `android/ui/src/lib/android/android-shell.css`.
 
+Кнопки, кнопка «+ Добавить» в шапке и правила про заголовки групп и подсказки — общие с вебом: [ui-visual-style.md](ui-visual-style.md) («Кнопки», «Группа»). Только в Android: кнопка «✓✓» клавиатуры суммы (`MoneyKeypad`) тоже тональная; без подсказок экраны «Черновики», «Банковские уведомления», «Сервер» и «Безопасность».
+
 **Тема UI** (`users.theme` / `localStorage`): `light` | `dark` | `system`. Значение `system` («Как на устройстве») — default для новых пользователей и до логина; на DOM применяется resolved light/dark через `prefers-color-scheme` (слушатель `change`). То же на web. Лаунчер/splash night — отдельно, см. [android-client-platform.md](android-client-platform.md) (не зависит от настройки SPA).
 
 ## Иконка лаунчера

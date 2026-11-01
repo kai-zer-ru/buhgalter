@@ -1,4 +1,5 @@
 <script lang="ts">
+	import IconGlyph from '$lib/components/IconGlyph.svelte';
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { _ } from 'svelte-i18n';
@@ -57,8 +58,8 @@
 <div class="space-y-6">
 	<SectionHeader title={$_('accounts.title')}>
 		{#snippet actions()}
-			<a href={resolve('/accounts/new')} class="btn-primary w-full sm:w-auto">
-				{$_('accounts.new')}
+			<a href={resolve('/accounts/new')} class="btn-primary btn-add">
+				<IconGlyph icon="add" class="text-xs" />{$_('common.add')}
 			</a>
 		{/snippet}
 	</SectionHeader>

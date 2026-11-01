@@ -34,7 +34,7 @@ test('consumer credit principal income toggle updates account balance', async ({
 
 test('principal income toggle visible only for consumer credit form', async ({ page }) => {
 	await page.goto('/credits');
-	await page.getByRole('button', { name: 'Новый кредит' }).click();
+	await page.getByRole('button', { name: 'Добавить' }).click();
 	const modal = page.getByRole('dialog');
 	await expect(modal.getByText('Учитывать доход в балансе')).toBeVisible();
 
@@ -47,7 +47,7 @@ test('principal income toggle visible only for consumer credit form', async ({ p
 
 test('credit form defaults auto-debit time to 08:00', async ({ page }) => {
 	await page.goto('/credits');
-	await page.getByRole('button', { name: 'Новый кредит' }).click();
+	await page.getByRole('button', { name: 'Добавить' }).click();
 	const modal = page.getByRole('dialog');
 	await expect(modal.locator('input[type="time"]')).toHaveValue('08:00');
 });
@@ -57,7 +57,7 @@ test('principal income toggle enabled when schedule payments are in the future',
 }) => {
 	const account = await createCashAccount(page);
 	await page.goto('/credits');
-	await page.getByRole('button', { name: 'Новый кредит' }).click();
+	await page.getByRole('button', { name: 'Добавить' }).click();
 	const modal = page.getByRole('dialog');
 	await modal.getByRole('textbox', { name: 'Сумма кредита' }).fill('50000');
 	await selectLabeledCombobox(page, 'Счёт списания', { label: account.name });

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import GroupHeading from '$lib/components/GroupHeading.svelte';
 	import { onMount } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import {
@@ -12,7 +13,6 @@
 	import CategoryIcon from '$lib/components/CategoryIcon.svelte';
 	import CategoryIconPicker from '$lib/components/CategoryIconPicker.svelte';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
-	import GroupHeading from '$lib/components/GroupHeading.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
 	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
@@ -219,10 +219,7 @@
 		}}
 	/>
 	<section class="card space-y-3">
-		<div class="space-y-1">
-			<h2 class="font-semibold">{$_('merchants.add')}</h2>
-			<p class="text-sm" style:color="var(--text-muted)">{$_('merchants.add_hint')}</p>
-		</div>
+		<h2 class="font-semibold">{$_('merchants.add')}</h2>
 		<div class="flex items-center gap-2">
 			<CategoryIconPicker
 				bind:value={newIcon}
@@ -258,10 +255,7 @@
 			<EmptyStateCard message={$_('merchants.empty')} />
 		{:else}
 			<section class="space-y-3">
-				<GroupHeading
-					title={$_('merchants.group.all', { values: { count: merchants.length } })}
-					hint={$_('merchants.group.all_hint')}
-				/>
+				<GroupHeading title={$_('merchants.group.all')} />
 				<div class="card list-divided p-0 sm:p-0">
 					<div class="p-2 sm:p-3">
 						<input

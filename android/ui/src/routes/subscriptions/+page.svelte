@@ -1,4 +1,5 @@
 <script lang="ts">
+	import IconGlyph from '$lib/components/IconGlyph.svelte';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -219,10 +220,10 @@
 		{#snippet actions()}
 			<button
 				type="button"
-				class="btn-primary shrink-0"
+				class="btn-primary btn-add"
 				onclick={() => void goto(resolve(subscriptionNewPath({ from: LIST_FROM })))}
 			>
-				{$_('subscriptions.add')}
+				<IconGlyph icon="add" class="text-xs" />{$_('common.add')}
 			</button>
 		{/snippet}
 	</SectionHeader>
@@ -230,10 +231,7 @@
 	<div class="space-y-8">
 		{#if attachTxId}
 			<section class="space-y-3">
-				<GroupHeading
-					title={$_('subscriptions.selectToAttach')}
-					hint={$_('subscriptions.selectToAttach_hint')}
-				/>
+				<GroupHeading title={$_('subscriptions.selectToAttach')} />
 				{#if items.length === 0}
 					<p class="card text-sm" style:color="var(--text-muted)">{$_('subscriptions.empty')}</p>
 				{:else}
@@ -283,10 +281,7 @@
 			</div>
 			{#if summary.upcoming.length > 0}
 				<section class="space-y-3">
-					<GroupHeading
-						title={$_('subscriptions.upcoming')}
-						hint={$_('subscriptions.upcoming_hint')}
-					/>
+					<GroupHeading title={$_('subscriptions.upcoming')} />
 					<ul class="card list-divided p-0 sm:p-0">
 						{#each summary.upcoming as item (item.id)}
 							<li class="flex items-center gap-3 px-4 py-2.5 text-sm">
@@ -314,7 +309,6 @@
 				<section class="space-y-3">
 					<GroupHeading
 						title={$_('subscriptions.group.all', { values: { count: items.length } })}
-						hint={$_('subscriptions.group.all_hint')}
 					/>
 					<div class="card list-divided p-0 sm:p-0">
 						{#each items as item (item.id)}

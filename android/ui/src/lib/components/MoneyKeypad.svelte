@@ -98,14 +98,13 @@
 
 	.money-keypad-done {
 		grid-column: span 2;
-		background-color: var(--primary);
-		border-color: color-mix(in srgb, var(--primary) 80%, var(--border));
-		color: #fff;
+		background-color: color-mix(in srgb, var(--primary) 18%, transparent);
+		border-color: color-mix(in srgb, var(--primary) 45%, transparent);
+		color: var(--primary-ink);
 		font-weight: 600;
 	}
 
 	.money-keypad-done:active {
-		filter: brightness(1.08);
-		background-color: var(--primary);
+		background-color: color-mix(in srgb, var(--primary) 28%, transparent);
 	}
 </style>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import IconGlyph from '$lib/components/IconGlyph.svelte';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -130,18 +131,15 @@
 
 		<SectionHeader title={$_('credits.title')}>
 			{#snippet actions()}
-				<button type="button" class="btn-primary" onclick={() => (formOpen = true)}>
-					{$_('credits.new')}
+				<button type="button" class="btn-primary btn-add" onclick={() => (formOpen = true)}>
+					<IconGlyph icon="add" class="text-xs" />{$_('common.add')}
 				</button>
 			{/snippet}
 		</SectionHeader>
 
 		{#if attachTxId}
 			<section class="space-y-3">
-				<GroupHeading
-					title={$_('credits.selectToAttach')}
-					hint={$_('credits.selectToAttach_hint')}
-				/>
+				<GroupHeading title={$_('credits.selectToAttach')} />
 				{#if credits.length === 0}
 					<p class="card text-sm" style:color="var(--text-muted)">{$_('credits.empty')}</p>
 				{:else}

@@ -1,9 +1,9 @@
 <script lang="ts">
+	import GroupHeading from '$lib/components/GroupHeading.svelte';
 	import { onMount } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import { createTag, deleteTag, listTags, updateTag, type Tag } from '$lib/api/client';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
-	import GroupHeading from '$lib/components/GroupHeading.svelte';
 	import PageLoadGate from '$lib/components/PageLoadGate.svelte';
 	import RowActionsMenu, { type RowAction } from '$lib/components/RowActionsMenu.svelte';
 	import { confirm } from '$lib/confirm';
@@ -122,10 +122,7 @@
 		}}
 	/>
 	<section class="card space-y-3">
-		<div class="space-y-1">
-			<h2 class="font-semibold">{$_('tags.add')}</h2>
-			<p class="text-sm" style:color="var(--text-muted)">{$_('tags.add_hint')}</p>
-		</div>
+		<h2 class="font-semibold">{$_('tags.add')}</h2>
 		<form
 			class="flex flex-col gap-3 sm:flex-row sm:items-center"
 			onsubmit={(e) => {
@@ -147,10 +144,7 @@
 			<EmptyStateCard message={$_('tags.empty')} />
 		{:else}
 			<section class="space-y-3">
-				<GroupHeading
-					title={$_('tags.group.all', { values: { count: tags.length } })}
-					hint={$_('tags.group.all_hint')}
-				/>
+				<GroupHeading title={$_('tags.group.all')} />
 				<div class="card list-divided p-0 sm:p-0">
 					<div class="p-2 sm:p-3">
 						<input

@@ -366,7 +366,6 @@
 			<section class="space-y-3">
 				<GroupHeading
 					title={$_('household.members.title', { values: { count: members.length } })}
-					hint={isOwner ? $_('household.members.hint_owner') : ''}
 				/>
 				<ul class="card list-divided p-0 sm:p-0">
 					{#each members as member (member.user_id)}
@@ -415,7 +414,6 @@
 					<div class="flex flex-wrap items-end justify-between gap-3">
 						<GroupHeading
 							title={$_('household.invites.title', { values: { count: invites.length } })}
-							hint={$_('household.invites.hint')}
 						/>
 						<button
 							type="button"

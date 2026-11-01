@@ -130,7 +130,7 @@
 		<button
 			type="button"
 			bind:this={triggerEl}
-			class="btn-icon btn-ghost"
+			class="btn-icon btn-icon-soft"
 			aria-label={$_('common.actions')}
 			aria-expanded={open}
 			aria-controls={menuId}

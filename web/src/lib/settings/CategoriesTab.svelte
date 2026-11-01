@@ -613,10 +613,7 @@
 	</div>
 
 	<section class="card space-y-3">
-		<div class="space-y-1">
-			<h2 class="font-semibold">{$_('categories.add')}</h2>
-			<p class="text-sm" style:color="var(--text-muted)">{$_('categories.add_hint')}</p>
-		</div>
+		<h2 class="font-semibold">{$_('categories.add')}</h2>
 		<div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
 			<input
 				class="input min-w-[12rem] flex-1"
@@ -648,10 +645,7 @@
 			<div class="space-y-8">
 				{#if userCategories.length > 0}
 					<section class="space-y-3">
-						<GroupHeading
-							title={$_('categories.group.mine', { values: { count: userCategories.length } })}
-							hint={$_('categories.group.mine_hint')}
-						/>
+						<GroupHeading title={$_('categories.group.mine')} />
 						<div class="card list-divided p-0 sm:p-0">
 							{#each userCategories as cat (cat.id)}
 								{@render categoryRow(cat)}
@@ -661,10 +655,7 @@
 				{/if}
 				{#if systemCategories.length > 0}
 					<section class="space-y-3">
-						<GroupHeading
-							title={$_('categories.group.system')}
-							hint={$_('categories.group.system_hint')}
-						/>
+						<GroupHeading title={$_('categories.group.system')} />
 						<div class="card list-divided p-0 sm:p-0">
 							{#each systemCategories as cat (cat.id)}
 								{@render categoryRow(cat)}

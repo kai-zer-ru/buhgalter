@@ -1,4 +1,6 @@
 <script lang="ts">
+	import GroupHeading from '$lib/components/GroupHeading.svelte';
+	import IconGlyph from '$lib/components/IconGlyph.svelte';
 	import { onMount } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import {
@@ -22,7 +24,6 @@
 		type TransactionTemplateUpsert
 	} from '$lib/api/client';
 	import EmptyStateCard from '$lib/components/EmptyStateCard.svelte';
-	import GroupHeading from '$lib/components/GroupHeading.svelte';
 	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
 	import ModalShell from '$lib/components/ModalShell.svelte';
 	import MoneyInput from '$lib/components/MoneyInput.svelte';
@@ -407,8 +408,8 @@
 <div class="space-y-8">
 	<SectionHeader title={$_('settings.tab.templates')}>
 		{#snippet actions()}
-			<button type="button" class="btn-primary" onclick={openCreate}>
-				{$_('templates.add')}
+			<button type="button" class="btn-primary btn-add" onclick={openCreate}>
+				<IconGlyph icon="add" class="text-xs" />{$_('common.add')}
 			</button>
 		{/snippet}
 	</SectionHeader>
@@ -418,10 +419,7 @@
 			<EmptyStateCard message={$_('templates.empty')} />
 		{:else}
 			<section class="space-y-3">
-				<GroupHeading
-					title={$_('templates.group.all', { values: { count: templates.length } })}
-					hint={$_('templates.group.all_hint')}
-				/>
+				<GroupHeading title={$_('templates.group.all')} />
 				<div class="card list-divided p-0 sm:p-0">
 					{#each templates as t (t.id)}
 						{@const details = templateDetails(t)}

@@ -1,10 +1,10 @@
 <script lang="ts">
+	import GroupHeading from '$lib/components/GroupHeading.svelte';
 	import { onMount } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import { listAccounts, listBanks, type Account, type Bank } from '$lib/api/client';
 	import Select from '$lib/components/Select.svelte';
 	import RowActionsMenu from '$lib/components/RowActionsMenu.svelte';
-	import GroupHeading from '$lib/components/GroupHeading.svelte';
 	import ToggleSwitch from '$lib/components/ToggleSwitch.svelte';
 	import { accountSelectOptions } from '$lib/select-options';
 	import { toast } from '$lib/toast';
@@ -298,10 +298,7 @@
 {:else}
 	<div class="space-y-8">
 		<section class="space-y-3">
-			<GroupHeading
-				title={$_('bankNotifications.group.capture')}
-				hint={$_('bankNotifications.hint')}
-			/>
+			<GroupHeading title={$_('bankNotifications.group.capture')} />
 			{#if !isNativeApp()}
 				<p
 					class="rounded-xl border p-3 text-sm"
@@ -315,9 +312,6 @@
 				<div class="flex items-center justify-between gap-4 px-4 py-3.5">
 					<div class="min-w-0">
 						<p class="font-medium">{$_('bankNotifications.enable')}</p>
-						<p class="mt-0.5 text-sm leading-snug" style:color="var(--text-muted)">
-							{$_('bankNotifications.enableHint')}
-						</p>
 					</div>
 					<ToggleSwitch
 						label={$_('bankNotifications.enable')}
@@ -330,9 +324,6 @@
 					<div class="flex items-center justify-between gap-4">
 						<div class="min-w-0">
 							<p class="font-medium">{$_('bankNotifications.shade.enable')}</p>
-							<p class="mt-0.5 text-sm leading-snug" style:color="var(--text-muted)">
-								{$_('bankNotifications.shade.enableHint')}
-							</p>
 						</div>
 						<ToggleSwitch
 							label={$_('bankNotifications.shade.enable')}
@@ -364,10 +355,7 @@
 		</section>
 
 		<section class="space-y-3">
-			<GroupHeading
-				title={$_('bankNotifications.group.system')}
-				hint={$_('bankNotifications.group.system_hint')}
-			/>
+			<GroupHeading title={$_('bankNotifications.group.system')} />
 			<div class="card list-divided p-0 sm:p-0">
 				<div class="space-y-3 px-4 py-3.5">
 					<div>
@@ -412,9 +400,6 @@
 				<div class="space-y-3 px-4 py-3.5">
 					<div>
 						<p class="font-medium">{$_('bankNotifications.sms.title')}</p>
-						<p class="mt-0.5 text-sm leading-snug" style:color="var(--text-muted)">
-							{$_('bankNotifications.sms.hint')}
-						</p>
 						{@render status(
 							smsPermission,
 							smsPermission ? $_('bankNotifications.sms.on') : $_('bankNotifications.sms.off')
@@ -444,9 +429,6 @@
 				<div class="space-y-3 px-4 py-3.5">
 					<div>
 						<p class="font-medium">{$_('bankNotifications.background.title')}</p>
-						<p class="mt-0.5 text-sm leading-snug" style:color="var(--text-muted)">
-							{$_('bankNotifications.background.hint')}
-						</p>
 					</div>
 					<button
 						type="button"
@@ -461,10 +443,7 @@
 		</section>
 
 		<section class="space-y-3">
-			<GroupHeading
-				title={$_('bankNotifications.banks.title')}
-				hint={$_('bankNotifications.banks.hint')}
-			/>
+			<GroupHeading title={$_('bankNotifications.banks.title')} />
 			{#if bindableAccounts.length === 0}
 				<p class="card text-sm" style:color="var(--text-muted)">
 					{$_('bankNotifications.accounts.empty')}
@@ -486,10 +465,7 @@
 		</section>
 
 		<section class="space-y-3">
-			<GroupHeading
-				title={$_('bankNotifications.cards.title')}
-				hint={$_('bankNotifications.cards.hint')}
-			/>
+			<GroupHeading title={$_('bankNotifications.cards.title')} />
 			{#if settings.cardBindings.length}
 				<ul class="card list-divided p-0 sm:p-0">
 					{#each settings.cardBindings as card (card.bankId + card.last4)}

@@ -134,7 +134,7 @@ test('budget: copy forward writes only the next month', async ({ page }) => {
 	await selectLabeledCombobox(page, 'Категория', { label: category.name });
 	await page.getByLabel('Лимит').fill('1000');
 	const copySwitch = page.getByRole('switch', { name: 'Копировать на следующий месяц' });
-	await expect(page.getByText('Сохранение пишет только следующий месяц')).toBeVisible();
+	await expect(copySwitch).toBeVisible();
 	await copySwitch.click();
 	await page.getByRole('button', { name: 'Создать' }).click();
 

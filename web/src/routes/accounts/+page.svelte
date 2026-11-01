@@ -1,4 +1,5 @@
 <script lang="ts">
+	import IconGlyph from '$lib/components/IconGlyph.svelte';
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { resolve } from '$app/paths';
@@ -409,9 +410,9 @@
 				<!-- eslint-disable svelte/no-navigation-without-resolve -- query after resolved path -->
 				<a
 					href={`${resolve('/accounts/new')}?from=${encodeURIComponent('/accounts')}`}
-					class="btn-primary"
+					class="btn-primary btn-add"
 				>
-					{$_('accounts.new')}
+					<IconGlyph icon="add" class="text-xs" />{$_('common.add')}
 				</a>
 				<!-- eslint-enable svelte/no-navigation-without-resolve -->
 			{/snippet}

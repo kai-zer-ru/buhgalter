@@ -7,7 +7,7 @@ test('category rules page loads and can open create dialog', async ({ page }) =>
 	await expect(
 		page.getByRole('heading', { name: /правила категорий|category rules/i })
 	).toBeVisible();
-	await page.getByRole('button', { name: /добавить правило|add rule/i }).click();
+	await page.getByRole('button', { name: /^(добавить|add)$/i }).click();
 	await expect(page.getByText(/тип правила|rule type/i)).toBeVisible();
 });
 

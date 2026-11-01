@@ -193,7 +193,6 @@
 		<section class="space-y-3">
 			<GroupHeading
 				title={$_('admin.backups.group.archive', { values: { count: files.length } })}
-				hint={$_('admin.backups.group.archive_hint')}
 			/>
 			{#if files.length === 0}
 				<EmptyStateCard message={$_('admin.backups.empty')} />

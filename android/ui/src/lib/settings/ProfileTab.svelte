@@ -276,10 +276,7 @@
 		</form>
 
 		<section class="space-y-3">
-			<GroupHeading
-				title={$_('settings.profile.section.danger')}
-				hint={$_('settings.profile.section.danger_hint')}
-			/>
+			<GroupHeading title={$_('settings.profile.section.danger')} />
 			<div
 				class="card space-y-3"
 				style:border-color="color-mix(in srgb, var(--danger) 40%, var(--border))"

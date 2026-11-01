@@ -220,19 +220,14 @@
 			</p>
 		{/if}
 
-		<div class="card flex flex-col gap-3 sm:flex-row sm:items-center">
-			<p class="min-w-0 flex-1 text-sm" style:color="var(--text-muted)">
-				{$_('bankNotifications.history.scanActiveHint')}
-			</p>
-			<button
-				type="button"
-				class="btn-primary shrink-0"
-				disabled={scanning}
-				onclick={() => void scanActive()}
-			>
-				{$_('bankNotifications.history.scanActive')}
-			</button>
-		</div>
+		<button
+			type="button"
+			class="btn-primary w-full"
+			disabled={scanning}
+			onclick={() => void scanActive()}
+		>
+			{$_('bankNotifications.history.scanActive')}
+		</button>
 
 		{#if drafts.length === 0}
 			<EmptyStateCard message={$_('bankNotifications.drafts.empty')} />
@@ -243,7 +238,6 @@
 						title={$_('bankNotifications.drafts.group.pairs', {
 							values: { count: transferPairs.length }
 						})}
-						hint={$_('bankNotifications.drafts.transferHint')}
 					/>
 					<ul class="space-y-3">
 						{#each transferPairs as pair (`${pair.from.id}:${pair.to.id}`)}
@@ -302,7 +296,6 @@
 						title={$_('bankNotifications.drafts.group.single', {
 							values: { count: visibleDrafts.length }
 						})}
-						hint={$_('bankNotifications.drafts.group.single_hint')}
 					/>
 					<ul class="space-y-3">
 						{#each visibleDrafts as draft (draft.id)}

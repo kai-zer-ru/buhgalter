@@ -232,7 +232,6 @@
 			<div class="flex flex-wrap items-end justify-between gap-3">
 				<GroupHeading
 					title={$_('bankNotifications.history.group', { values: { count: items.length } })}
-					hint={$_('bankNotifications.history.hint')}
 				/>
 			</div>
 			<div class="flex flex-wrap gap-2">

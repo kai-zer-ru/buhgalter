@@ -1,4 +1,5 @@
 <script lang="ts">
+	import IconGlyph from '$lib/components/IconGlyph.svelte';
 	import { householdMe, householdMeLoaded, inHousehold } from '$lib/household/membership';
 	import { onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
@@ -292,7 +293,7 @@
 			toast($_('common.saved'));
 			formOpen = false;
 			resetForm();
-			await loadAll();
+			await loadAll({ background: true });
 		} catch (err) {
 			error = formatApiError(err);
 		} finally {
@@ -314,7 +315,7 @@
 				formOpen = false;
 				resetForm();
 			}
-			await loadAll();
+			await loadAll({ background: true });
 		} catch (err) {
 			error = formatApiError(err);
 		}
@@ -325,7 +326,7 @@
 		try {
 			await copyBudgetsFromPreviousMonth(month);
 			toast($_('common.saved'));
-			await loadAll();
+			await loadAll({ background: true });
 		} catch (err) {
 			toast(formatApiError(err), 'error');
 		} finally {
@@ -338,7 +339,7 @@
 		try {
 			await copyBudgetToNextMonth(item.id);
 			toast($_('common.saved'));
-			await loadAll();
+			await loadAll({ background: true });
 		} catch (err) {
 			toast(formatApiError(err), 'error');
 		} finally {
@@ -539,7 +540,7 @@
 				})}
 			</p>
 		{/if}
-		<div class="grid items-end gap-3 md:grid-cols-3">
+		<div class="grid items-end gap-3 md:grid-cols-2">
 			<Select
 				id="budget-account-{formPrefix}"
 				label={$_('budget.field.account')}
@@ -563,30 +564,23 @@
 					}}
 				/>
 			</div>
-			<div>
-				<span class="field-label">
-					{$_('budget.field.active')}
-				</span>
-				<div class="flex h-11 items-center">
-					<ToggleSwitch
-						checked={isActive}
-						label={$_('budget.field.active')}
-						onchange={() => (isActive = !isActive)}
-					/>
-				</div>
-			</div>
 		</div>
-		<div class="flex items-center gap-2">
-			<ToggleSwitch
-				checked={copyForward}
-				label={$_('budget.field.copy_forward')}
-				onchange={() => (copyForward = !copyForward)}
-			/>
-			<div>
+		<div class="flex flex-col gap-3 md:flex-row md:flex-wrap md:gap-x-8">
+			<div class="flex items-center gap-3">
+				<ToggleSwitch
+					checked={isActive}
+					label={$_('budget.field.active')}
+					onchange={() => (isActive = !isActive)}
+				/>
+				<span class="text-sm">{$_('budget.field.active')}</span>
+			</div>
+			<div class="flex items-center gap-3">
+				<ToggleSwitch
+					checked={copyForward}
+					label={$_('budget.field.copy_forward')}
+					onchange={() => (copyForward = !copyForward)}
+				/>
 				<span class="text-sm">{$_('budget.field.copy_forward')}</span>
-				<p class="text-xs" style:color="var(--text-muted)">
-					{$_('budget.field.copy_forward_hint')}
-				</p>
 			</div>
 		</div>
 		<div class="flex flex-wrap gap-2">
@@ -660,13 +654,12 @@
 					</button>
 				{/if}
 				<div class="flex items-center gap-2">
-					<button
-						type="button"
-						class="btn-primary shrink-0"
-						onclick={toggleForm}
-						disabled={copying}
-					>
-						{formOpen && !editId ? $_('common.cancel') : $_('budget.add')}
+					<button type="button" class="btn-primary btn-add" onclick={toggleForm} disabled={copying}>
+						{#if formOpen && !editId}
+							{$_('common.cancel')}
+						{:else}
+							<IconGlyph icon="add" class="text-xs" />{$_('common.add')}
+						{/if}
 					</button>
 					<div class="flex shrink-0 items-center gap-1">
 						<button
