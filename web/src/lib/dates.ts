@@ -256,6 +256,19 @@ export function nowDatetimeLocal(tz: string): string {
 	return toDatetimeLocalValue(formatUTC(new Date()), tz);
 }
 
+/**
+ * Calendar days from today to an API UTC date, both in the user TZ
+ * (0 = today, 1 = tomorrow, negative = past). Never slice the UTC string:
+ * local midnight east of UTC is the previous UTC day.
+ */
+export function daysUntilApiDate(apiDate: string, tz: string, now: Date = new Date()): number {
+	const due = toDatetimeLocalValue(apiDate, tz).slice(0, 10);
+	const today = toDatetimeLocalValue(formatUTC(now), tz).slice(0, 10);
+	return Math.round(
+		(Date.parse(`${due}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000
+	);
+}
+
 /** Date-only datetime-local (`T00:00`) in user TZ. */
 export function todayDateLocal(tz: string): string {
 	const v = nowDatetimeLocal(tz);

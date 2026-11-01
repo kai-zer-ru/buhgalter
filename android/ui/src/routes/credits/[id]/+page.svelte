@@ -30,10 +30,10 @@
 	import {
 		formatAPIDateForDisplay,
 		formatAPIOperationDateTimeForDisplay,
+		daysUntilApiDate,
 		formatCreditPaymentDateForDisplay,
 		dateOnlyLocalValue,
-		toDatetimeLocalValue,
-		todayDateLocal
+		toDatetimeLocalValue
 	} from '$lib/dates';
 	import { bankIconUrl } from '$lib/finance';
 	import MoneyDisplay from '$lib/components/MoneyDisplay.svelte';
@@ -232,11 +232,7 @@
 
 	/** «сегодня / завтра / через N дн. / просрочен на N дн.» for the next-payment card. */
 	function paymentDueLabel(p: CreditPayment): string {
-		const today = todayDateLocal(tz).slice(0, 10);
-		const due = p.payment_date.slice(0, 10);
-		const days = Math.round(
-			(Date.parse(`${due}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000
-		);
+		const days = daysUntilApiDate(p.payment_date, tz);
 		if (days === 0) return $_('credits.next.today');
 		if (days === 1) return $_('credits.next.tomorrow');
 		if (days > 1) return $_('credits.next.inDays', { values: { n: days } });

@@ -8,6 +8,7 @@ import {
 	formatAPIDayMonthTimeForDisplay,
 	formatAPIDayMonthTimeShortForDisplay,
 	formatAPIOperationDateTimeForDisplay,
+	daysUntilApiDate,
 	formatCreditPaymentDateForDisplay,
 	formatDisplayDate,
 	formatDisplayDateTime,
@@ -125,5 +126,29 @@ describe('formatAPIDayMonthTimeShortForDisplay', () => {
 		expect(formatAPIDayMonthTimeShortForDisplay('2027-05-04 09:22:00', 'UTC', 'ru')).toBe(
 			'4 мая, 09:22'
 		);
+	});
+});
+
+describe('daysUntilApiDate', () => {
+	// 2026-11-01 15:00 in Asia/Irkutsk (+08).
+	const now = new Date('2026-11-01T07:00:00Z');
+
+	it('uses the user TZ day, not the UTC day (local midnight is the previous UTC day)', () => {
+		// 02.11 00:00 +08 = 01.11 16:00 UTC → tomorrow, not today.
+		expect(daysUntilApiDate('2026-11-01T16:00:00Z', 'Asia/Irkutsk', now)).toBe(1);
+		expect(daysUntilApiDate('2026-11-01T16:00:00.000Z', 'Asia/Irkutsk', now)).toBe(1);
+	});
+
+	it('returns 0 for today, positive for future, negative for overdue', () => {
+		expect(daysUntilApiDate('2026-10-31T16:00:00Z', 'Asia/Irkutsk', now)).toBe(0);
+		expect(daysUntilApiDate('2026-11-04T16:00:00Z', 'Asia/Irkutsk', now)).toBe(4);
+		expect(daysUntilApiDate('2026-10-28T16:00:00Z', 'Asia/Irkutsk', now)).toBe(-3);
+	});
+
+	it('handles TZ west of UTC', () => {
+		// 2026-11-01 03:00 UTC is still 31.10 in New York.
+		const early = new Date('2026-11-01T03:00:00Z');
+		expect(daysUntilApiDate('2026-11-01T02:00:00Z', 'America/New_York', early)).toBe(0);
+		expect(daysUntilApiDate('2026-11-01T12:00:00Z', 'America/New_York', early)).toBe(1);
 	});
 });
