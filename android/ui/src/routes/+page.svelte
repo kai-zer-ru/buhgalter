@@ -109,10 +109,13 @@
 	const TEMPLATES_PATH = '/api/v1/transaction-templates';
 	const HOME_TEMPLATE_LIMIT = 12;
 
-	let catalogScope = $state<CatalogScope>(readStoredCatalogScope());
+	const initialCatalogScope = readStoredCatalogScope();
+	let catalogScope = $state<CatalogScope>(initialCatalogScope);
 	const DASHBOARD_PATH = $derived(dashboardRefPath(catalogScope));
-	let dashBase = $state<Dashboard | null>(readRefCache<Dashboard>(dashboardRefPath(catalogScope)));
-	let loading = $state(!refCacheReady(dashboardRefPath(catalogScope)));
+	let dashBase = $state<Dashboard | null>(
+		readRefCache<Dashboard>(dashboardRefPath(initialCatalogScope))
+	);
+	let loading = $state(!refCacheReady(dashboardRefPath(initialCatalogScope)));
 	let loadError = $state<string | null>(null);
 	let catalogLoadGen = 0;
 

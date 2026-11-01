@@ -46,6 +46,9 @@ describe('KNOWN_BANK_APPS', () => {
 		expect(isMarketplacePackage('ru.wildberries.fintech')).toBe(false);
 		expect(isMarketplacePackage('ru.ozon.fintech.finance')).toBe(false);
 		expect(bankIdForPackage('ru.wildberries.fintech')).toBe('wbbank');
+		expect(bankIdForPackage('ru.wildberries.bank')).toBe('wbbank');
+		expect(isMarketplacePackage('ru.wildberries.bank')).toBe(false);
+		expect(allKnownPackages()).toContain('ru.wildberries.bank');
 		expect(bankIdForPackage('ru.ozon.fintech.finance')).toBe('ozon');
 	});
 });

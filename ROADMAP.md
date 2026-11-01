@@ -436,6 +436,11 @@
 - [x] [Бюджет: «Копировать на следующий месяц» включает тумблер](docs/budget.md) — пункт меню копирует бюджет, включает у него `copy_forward` и перезаписывает уже существующий бюджет следующего месяца вместо `409 ERR_BUDGET_COPY_EXISTS`; ошибки копирования — тостом, а не в форме другой статьи
 - [x] **Docs:** [Release notes](docs/release-notes-v1.11.0.md) · [CHANGELOG.md](CHANGELOG.md) · [household.md](docs/household.md) · [multicurrency.md](roadmap/multicurrency.md) · [ui-visual-style.md](docs/ui-visual-style.md) · [budget.md](docs/budget.md) · [android-client-platform.md](docs/android-client-platform.md) · [README.md](README.md)
 
+## v1.11.1
+
+- [x] Android: перехват уведомлений нового приложения «ВБ Банк» (`ru.wildberries.bank`) — пакет добавлен к банку `wbbank` рядом с прежним `ru.wildberries.fintech`
+- [x] **Docs:** [Release notes](docs/release-notes-v1.11.1.md) · [CHANGELOG.md](CHANGELOG.md) · [README.md](README.md)
+
 ## v1.12.0
 
 - [ ] [Цели накопления](roadmap/savings-goals.md) — копилки, прогресс, напоминания (`savings_goals`)

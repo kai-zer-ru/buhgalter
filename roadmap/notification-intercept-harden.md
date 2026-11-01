@@ -36,7 +36,7 @@
 ## Корневые причины
 
 1. **Allowlist маркетплейсов целиком**  
-   - WB: `com.wildberries.ru` (+ `ru.wildberries.fintech`) → `wbbank`  
+   - WB: `com.wildberries.ru` (+ `ru.wildberries.fintech`, новое приложение `ru.wildberries.bank`) → `wbbank`  
    - Ozon: `ru.ozon.app.android` (+ `ru.ozon.fintech.finance`) → `ozon`  
    Маркетинг, доставка, распродажи проходят NLS так же, как «WB Кошелёк».
 

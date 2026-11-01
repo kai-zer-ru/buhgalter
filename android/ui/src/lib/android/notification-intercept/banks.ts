@@ -133,7 +133,7 @@ export const KNOWN_BANK_APPS: KnownBankApp[] = [
 	},
 	{
 		bankId: 'wbbank',
-		packageNames: ['ru.wildberries.fintech', 'com.wildberries.ru'],
+		packageNames: ['ru.wildberries.fintech', 'ru.wildberries.bank', 'com.wildberries.ru'],
 		smsSenders: ['WB', 'WBBank'],
 		labelKey: 'bankNotifications.bank.wbbank'
 	},
