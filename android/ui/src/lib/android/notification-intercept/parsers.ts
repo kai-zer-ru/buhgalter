@@ -297,8 +297,7 @@ export function parseBankNotification(raw: RawBankNotification): ParsedPurchase 
 	let merchantText = extractTransferCounterparty(text, isIncome ? 'income' : 'purchase') ?? '';
 	if (!merchantText && isIncome) {
 		// Stripping INCOME_RE stems from the body leaves fragments («Выплата» → «а»).
-		merchantText =
-			smsMerchant(resolved) || titleMerchant(resolved) || extractIncomeLabel(resolved);
+		merchantText = smsMerchant(resolved) || titleMerchant(resolved) || extractIncomeLabel(resolved);
 	}
 	if (!merchantText) {
 		merchantText = extractMerchant(resolved, amount);

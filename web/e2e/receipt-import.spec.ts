@@ -242,3 +242,51 @@ test('attach receipt to existing expense with sum mismatch confirm', async ({ pa
 	await expect(dialog).toHaveCount(0, { timeout: 15_000 });
 	expect(attachBody?.acknowledge_sum_mismatch).toBe(true);
 });
+
+/** Headless Chromium has no camera: hand html5-qrcode a blank canvas stream. */
+async function fakeCamera(page: import('@playwright/test').Page) {
+	await page.addInitScript(() => {
+		const fakeStream = async () => {
+			const canvas = document.createElement('canvas');
+			canvas.width = 640;
+			canvas.height = 480;
+			canvas.getContext('2d')?.fillRect(0, 0, 640, 480);
+			return canvas.captureStream(10);
+		};
+		Object.defineProperty(navigator, 'mediaDevices', {
+			configurable: true,
+			value: {
+				getUserMedia: fakeStream,
+				enumerateDevices: async () => [
+					{ kind: 'videoinput', deviceId: 'fake', label: 'fake', groupId: 'fake' }
+				]
+			}
+		});
+	});
+}
+
+test('live QR scanner keeps «Остановить» and photo upload active', async ({ page }) => {
+	await enableReceiptScannerFeatures(page);
+	await fakeCamera(page);
+	const fiscalDoc = String(Date.now()).slice(-5);
+	await mockReceiptParseRoute(page, { ...mockReceipt, fiscal_document_number: fiscalDoc });
+
+	await page.goto('/transactions');
+	await waitAppReady(page);
+	await page.getByRole('button', { name: 'Чек', exact: true }).click();
+
+	const dialog = page.getByRole('dialog');
+	await dialog.getByRole('button', { name: 'Сканировать QR' }).click();
+	const stop = dialog.getByRole('button', { name: 'Остановить' });
+	await expect(stop).toBeEnabled();
+	await expect(dialog.locator('input[type="file"]')).toBeEnabled();
+
+	await stop.click();
+	await expect(dialog.getByRole('button', { name: 'Сканировать QR' })).toBeEnabled();
+
+	// Photo while the camera runs: scanner stops, receipt is parsed.
+	await dialog.getByRole('button', { name: 'Сканировать QR' }).click();
+	await expect(stop).toBeEnabled();
+	await dialog.locator('input[type="file"]').setInputFiles(qrFixture);
+	await expect(dialog.getByText('E2E Магазин')).toBeVisible({ timeout: 20_000 });
+});

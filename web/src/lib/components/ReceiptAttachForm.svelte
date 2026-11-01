@@ -64,7 +64,8 @@
 	let decodeRun = 0;
 	let wasOpen = false;
 
-	const busy = $derived(loading || scanning);
+	// Not `scanning`: «Остановить» and photo upload stay active while the camera runs.
+	const busy = $derived(loading);
 	const txAmount = $derived(transaction?.amount ?? 0);
 	const categoryOptions = $derived(
 		categorySelectOptions(refsForAccount(transaction, categories).filter((c) => !c.is_system))
@@ -252,6 +253,7 @@
 		const file = input.files?.[0];
 		input.value = '';
 		if (!file || busy) return;
+		if (scanning) await stopScanner();
 		await scanPhotoAndParse(file);
 	}
 
@@ -302,12 +304,18 @@
 		error = '';
 		scanning = true;
 		try {
-			scannerHandle = await startQrScanner('receipt-attach-qr-reader', async (text) => {
+			const handle = await startQrScanner('receipt-attach-qr-reader', async (text) => {
 				await stopScanner();
 				await decodeAndParse(async () => text);
 			});
+			// «Остановить» pressed while the camera was starting.
+			if (!scanning) {
+				await handle.stop().catch(() => undefined);
+				return;
+			}
+			scannerHandle = handle;
 		} catch {
-			error = $_('receipt.scanError');
+			if (scanning) error = $_('receipt.scanError');
 			scanning = false;
 		}
 	}
