@@ -73,6 +73,31 @@ describe('parseBankNotification', () => {
 		).toBeNull();
 	});
 
+	it('parses Yandex Pay refund as income with merchant after amount', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'com.yandex.bank',
+				title: 'Карта Пэй',
+				text: 'Возврат на 1143.00 RUB. slvx.'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.kind).toBe('income');
+		expect(parsed!.amount).toBe('1143.00');
+		expect(parsed!.merchantText.toLowerCase()).toBe('slvx');
+	});
+
+	it('keeps Yandex purchase cancel distinct from refund income', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'com.yandex.bank',
+				title: 'Карта Пэй',
+				text: 'Возврат средств 155.00 RUB Поехали!'
+			})
+		);
+		expect(parsed!.kind).toBe('cancel');
+	});
+
 	it('parses interest payout as income (not expense)', () => {
 		const parsed = parseBankNotification(
 			raw({

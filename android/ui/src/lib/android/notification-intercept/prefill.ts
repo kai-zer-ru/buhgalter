@@ -1,5 +1,5 @@
 import { transferNewPath } from '$lib/android/form-routes';
-import { suggestCategoryFromMerchant } from './category-suggest';
+import { suggestCategoryForDraft } from './category-suggest';
 import type { InterceptDraft, TransactionCreatePrefill, TransferCreatePrefill } from './types';
 
 let pendingPrefill: TransactionCreatePrefill | null = null;
@@ -76,8 +76,12 @@ export async function prefillFromDraftWithSuggestions(
 	draft: InterceptDraft
 ): Promise<TransactionCreatePrefill> {
 	const base = prefillFromDraft(draft);
-	if (base.categoryId || !draft.merchantId) return base;
-	const suggest = await suggestCategoryFromMerchant(draft.merchantId, base.type ?? 'expense');
+	if (base.categoryId) return base;
+	const suggest = await suggestCategoryForDraft(
+		draft.merchantId,
+		draft.merchantName || draft.parsed.merchantText || base.description,
+		base.type ?? 'expense'
+	);
 	if (!suggest) return base;
 	return {
 		...base,

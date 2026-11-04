@@ -30,7 +30,11 @@ export * from './history-create';
 export { parseBankNotification } from './parsers';
 export { resolveAccountId } from './account-resolve';
 export { matchMerchant } from './merchant-match';
-export { pickCategorySuggestion, suggestCategoryFromMerchant } from './category-suggest';
+export {
+	pickCategorySuggestion,
+	suggestCategoryForDraft,
+	suggestCategoryFromMerchant
+} from './category-suggest';
 
 /**
  * Wire native pending queue → drafts. Call once from root layout.

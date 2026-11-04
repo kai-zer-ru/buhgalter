@@ -47,7 +47,7 @@
 	} from '$lib/select-options';
 	import { toast } from '$lib/toast';
 	import { user } from '$lib/stores/auth';
-	import { suggestCategoryFromMerchant } from '$lib/android/notification-intercept/category-suggest';
+	import { suggestCategoryForDraft } from '$lib/android/notification-intercept/category-suggest';
 	import { matchRefByName, refsForAccount, remapRefIds } from '$lib/household/refs-for-account';
 
 	function isCreditsExpenseCategory(cat: Category | undefined): boolean {
@@ -307,8 +307,12 @@
 			optionalDetailsOpen = Boolean(
 				merchantId || merchantQuery.trim() || description.trim() || selectedTags.length
 			);
-			if (prefill?.merchantId && !prefill.categoryId) {
-				const suggest = await suggestCategoryFromMerchant(prefill.merchantId, createType);
+			if (prefill && !prefill.categoryId) {
+				const suggest = await suggestCategoryForDraft(
+					prefill.merchantId,
+					prefill.merchantName || prefill.description,
+					createType
+				);
 				if (suggest) {
 					categoryId = suggest.categoryId;
 					subcategoryId = suggest.subcategoryId ?? '';

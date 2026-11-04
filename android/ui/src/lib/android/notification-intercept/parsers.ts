@@ -18,7 +18,7 @@ const IGNORE_RE =
  * «перевод по …» alone is outgoing (see OUTGOING_TRANSFER_RE → purchase).
  */
 const INCOME_RE =
-	/(выплат|процент|начислен|кэшб[еэ]к|кешб[еэ]к|cashback|поступлен|поступил[аи]?|зачисл|пополнен|входящ|перевод[\s\S]{0,120}?от|вам\s+перевел|зарплат|стипенд|доход\b|заработн)/i;
+	/(выплат|процент|начислен|кэшб[еэ]к|кешб[еэ]к|cashback|поступлен|поступил[аи]?|зачисл|пополнен|входящ|возврат|перевод[\s\S]{0,120}?от|вам\s+перевел|зарплат|стипенд|доход\b|заработн)/i;
 
 /** Outgoing transfer («перевод по СБП/номеру…») → expense draft unless «от» makes it income. */
 const OUTGOING_TRANSFER_RE = /перевод\s+по/i;
@@ -232,13 +232,30 @@ function passesMarketplaceGate(raw: RawBankNotification, text: string): boolean 
 	return MARKETPLACE_OP_RE.test(text);
 }
 
+/** Merchant after «сумма RUB. shop» (Yandex refund: «Возврат на 1143.00 RUB. slvx.»). */
+function extractIncomeTailMerchant(text: string): string {
+	const scoped = text.replace(BALANCE_TAIL_RE, ' ').replace(/\s+/g, ' ').trim();
+	const m = scoped.match(
+		/(?:\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*(?:₽|руб\.?|р\.?|RUB)\.?\s+([A-Za-zА-Яа-яЁё][A-Za-zА-Яа-яЁё0-9 ._-]{0,59}?)\s*\.?\s*$/i
+	);
+	if (!m?.[1]) return '';
+	const name = m[1].replace(/^[\s.,:;!\-–—]+|[\s.,:;!\-–—]+$/g, '').trim();
+	if (
+		!name ||
+		GENERIC_TITLE_RE.test(name) ||
+		INCOME_RE.test(name) ||
+		PURCHASE_HINT_RE.test(name) ||
+		CANCEL_RE.test(name)
+	) {
+		return '';
+	}
+	return name;
+}
+
 /** Short label for income when there is no counterparty (e.g. «Выплата процентов»). */
 function extractIncomeLabel(raw: RawBankNotification): string {
-	const line = [raw.text, raw.bigText, raw.title]
-		.filter(Boolean)
-		.join(' ')
-		.replace(/\s+/g, ' ')
-		.trim();
+	const title = GENERIC_TITLE_RE.test(raw.title.trim()) ? '' : raw.title;
+	const line = [raw.text, raw.bigText, title].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
 	const beforeAmount = line.split(/(?:\d[\d \u00a0]*(?:[.,]\d{1,2})?\s*(?:₽|руб\.?|р\.?|RUB))/i)[0];
 	let t = (beforeAmount || line).trim();
 	t = t.replace(GENERIC_TITLE_RE, ' ').replace(/\s+/g, ' ').trim();
@@ -297,7 +314,11 @@ export function parseBankNotification(raw: RawBankNotification): ParsedPurchase 
 	let merchantText = extractTransferCounterparty(text, isIncome ? 'income' : 'purchase') ?? '';
 	if (!merchantText && isIncome) {
 		// Stripping INCOME_RE stems from the body leaves fragments («Выплата» → «а»).
-		merchantText = smsMerchant(resolved) || titleMerchant(resolved) || extractIncomeLabel(resolved);
+		merchantText =
+			extractIncomeTailMerchant(text) ||
+			smsMerchant(resolved) ||
+			titleMerchant(resolved) ||
+			extractIncomeLabel(resolved);
 	}
 	if (!merchantText) {
 		merchantText = extractMerchant(resolved, amount);

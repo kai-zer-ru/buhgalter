@@ -85,3 +85,39 @@ export async function suggestCategoryFromMerchant(
 		return null;
 	}
 }
+
+const SEARCH_MIN = 3;
+
+/** Same majority heuristic by description substring (income labels without a catalog merchant). */
+export async function suggestCategoryFromSearch(
+	search: string,
+	type: 'expense' | 'income' = 'expense'
+): Promise<CategorySuggestion | null> {
+	const q = search.trim().replace(/\s+/g, ' ');
+	if (q.length < SEARCH_MIN) return null;
+	try {
+		const res = await listTransactions({
+			type,
+			search: q,
+			sort: 'date_desc',
+			limit: String(HISTORY_LIMIT),
+			page: '1'
+		});
+		return pickCategorySuggestion(res.data ?? [], type);
+	} catch {
+		return null;
+	}
+}
+
+/** Catalog merchant first; if none or no usable txs, search by label/description. */
+export async function suggestCategoryForDraft(
+	merchantId: string | undefined,
+	searchText: string | undefined,
+	type: 'expense' | 'income' = 'expense'
+): Promise<CategorySuggestion | null> {
+	if (merchantId?.trim()) {
+		const byMerchant = await suggestCategoryFromMerchant(merchantId, type);
+		if (byMerchant) return byMerchant;
+	}
+	return suggestCategoryFromSearch(searchText ?? '', type);
+}

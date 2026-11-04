@@ -8,7 +8,7 @@ import {
 	isAllowlistedPackage,
 	resolveRawBankNotification
 } from './banks';
-import { suggestCategoryFromMerchant } from './category-suggest';
+import { suggestCategoryForDraft } from './category-suggest';
 import { applyNativeDraftNotifySync, syncDraftNotifyToNative } from './draft-notify';
 import { addInterceptDraft, removeDraftMatchingCancel, updateInterceptDraft } from './drafts';
 import { appendLocalHistoryFromRaw } from './history-local';
@@ -146,8 +146,11 @@ export async function ingestRawNotification(
 }
 
 async function attachCategorySuggestion(draft: InterceptDraft, userId: string): Promise<void> {
-	if (!draft.merchantId) return;
-	const suggest = await suggestCategoryFromMerchant(draft.merchantId, draftTxType(draft));
+	const suggest = await suggestCategoryForDraft(
+		draft.merchantId,
+		draft.merchantName || draft.parsed.merchantText,
+		draftTxType(draft)
+	);
 	if (!suggest) return;
 	updateInterceptDraft(
 		draft.id,

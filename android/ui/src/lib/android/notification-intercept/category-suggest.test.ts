@@ -1,6 +1,11 @@
-import { describe, expect, it } from 'vitest';
-import { pickCategorySuggestion } from './category-suggest';
-import type { Transaction } from '$lib/api/client';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { pickCategorySuggestion, suggestCategoryForDraft } from './category-suggest';
+import { listTransactions, type Transaction } from '$lib/api/client';
+
+vi.mock('$lib/api/client', async (importOriginal) => {
+	const orig = await importOriginal<typeof import('$lib/api/client')>();
+	return { ...orig, listTransactions: vi.fn() };
+});
 
 function tx(
 	partial: Partial<Transaction> & {
@@ -80,5 +85,42 @@ describe('pickCategorySuggestion', () => {
 			subcategoryId: 'cafe'
 		});
 		expect(pickCategorySuggestion(txs, 'income')).toEqual({ categoryId: 'salary' });
+	});
+});
+
+describe('suggestCategoryForDraft', () => {
+	beforeEach(() => {
+		vi.mocked(listTransactions).mockReset();
+	});
+
+	it('falls back to description search when there is no merchant id', async () => {
+		vi.mocked(listTransactions).mockResolvedValue({
+			data: [
+				tx({
+					id: '1',
+					type: 'income',
+					category_id: 'interest',
+					subcategory_id: 'wb',
+					description: 'Выплата процентов'
+				})
+			],
+			meta: { page: 1, limit: 100, total: 1 }
+		} as Awaited<ReturnType<typeof listTransactions>>);
+		const result = await suggestCategoryForDraft(undefined, 'Выплата процентов', 'income');
+		expect(listTransactions).toHaveBeenCalledWith(
+			expect.objectContaining({ type: 'income', search: 'Выплата процентов' })
+		);
+		expect(result).toEqual({ categoryId: 'interest', subcategoryId: 'wb' });
+	});
+
+	it('prefers merchant_id history over search', async () => {
+		vi.mocked(listTransactions).mockResolvedValue({
+			data: [tx({ id: '1', type: 'income', category_id: 'from-merchant', subcategory_id: 'sub' })],
+			meta: { page: 1, limit: 100, total: 1 }
+		} as Awaited<ReturnType<typeof listTransactions>>);
+		const result = await suggestCategoryForDraft('m1', 'Выплата процентов', 'income');
+		expect(listTransactions).toHaveBeenCalledTimes(1);
+		expect(listTransactions).toHaveBeenCalledWith(expect.objectContaining({ merchant_id: 'm1' }));
+		expect(result).toEqual({ categoryId: 'from-merchant', subcategoryId: 'sub' });
 	});
 });
