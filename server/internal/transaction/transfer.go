@@ -129,9 +129,6 @@ func CreateTransferOwned(ctx context.Context, db *sql.DB, ownerIDs []string, act
 	if err != nil {
 		return Transfer{}, err
 	}
-	if err := validateCreditCardTransferAmount(ctx, tx, ownerIDs, in.ToAccountID, toAmount); err != nil {
-		return Transfer{}, err
-	}
 	fromType, toType, err := accountTypes(ctx, tx, ownerIDs, in.FromAccountID, in.ToAccountID)
 	if err != nil {
 		return Transfer{}, err
@@ -230,9 +227,6 @@ func CreateTransferForAccountDeleteTx(ctx context.Context, db sqlcdb.DBTX, userI
 		return Transfer{}, ErrCurrencyMismatch
 	}
 	toAmount := in.Amount
-	if err := validateCreditCardTransferAmount(ctx, db, []string{userID}, in.ToAccountID, toAmount); err != nil {
-		return Transfer{}, err
-	}
 
 	kind, err := resolveKind(ctx, db, userID, in.TransactionDate)
 	if err != nil {
@@ -379,9 +373,6 @@ func UpdateTransferOwned(ctx context.Context, db *sql.DB, ownerIDs []string, act
 	}
 	toAmount, err := resolveTransferToAmount(ctx, dbTx, ownerIDs, in)
 	if err != nil {
-		return Transfer{}, err
-	}
-	if err := validateCreditCardTransferAmount(ctx, dbTx, ownerIDs, in.ToAccountID, toAmount); err != nil {
 		return Transfer{}, err
 	}
 
@@ -764,27 +755,6 @@ func lockOwnedAccounts(ctx context.Context, db sqlcdb.DBTX, owners map[string]st
 			}
 			return err
 		}
-	}
-	return nil
-}
-
-func validateCreditCardTransferAmount(ctx context.Context, db sqlcdb.DBTX, ownerIDs []string, toAccountID string, amount int64) error {
-	row, err := queries(db).GetAccountByID(ctx, sqlcdb.GetAccountByIDParams{ID: toAccountID, OwnerIds: ownerIDs})
-	if errors.Is(err, sql.ErrNoRows) {
-		return ErrInvalidAccount
-	}
-	if err != nil {
-		return err
-	}
-	if !account.IsCreditCard(row.Type) {
-		return nil
-	}
-	if row.CreditLimit == nil {
-		return ErrCreditCardPaymentExceedsLimit
-	}
-	maxAmount := *row.CreditLimit - row.CurrentBalance
-	if amount > maxAmount {
-		return ErrCreditCardPaymentExceedsLimit
 	}
 	return nil
 }

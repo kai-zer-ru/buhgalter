@@ -257,32 +257,26 @@ func TestCreditCardPaymentAccountCurrency(t *testing.T) {
 	assertErrorMessage(t, status, raw, http.StatusBadRequest, msgCurrencyMismatch)
 }
 
-func TestTransferExchangeToCreditCardLimit(t *testing.T) {
+func TestTransferExchangeToCreditCardMayExceedLimit(t *testing.T) {
 	env := setupConfigured(t)
 	env.login(t, "admin", "secret123")
 	rub := currencyCreateAccount(t, env, map[string]any{"name": "Рубли", "type": "cash", "initial_balance": "100000.00"})
-	// USD card: limit 1000, balance 900 → room 100.
 	card := currencyCreateAccount(t, env, map[string]any{
 		"name": "USD карта", "type": "credit_card", "bank_id": "tinkoff",
 		"credit_limit": "1000.00", "initial_balance": "900.00", "currency": "USD",
 	})
 
-	status, _, raw := currencyTransfer(t, env, http.MethodPost, "/api/v1/transfers", map[string]any{
+	status, tr, raw := currencyTransfer(t, env, http.MethodPost, "/api/v1/transfers", map[string]any{
 		"from_account_id": rub.ID, "to_account_id": card.ID, "amount": "13500.00", "to_amount": "150.00",
 	})
-	assertErrorMessage(t, status, raw, http.StatusBadRequest, "ERR_CREDIT_CARD_PAYMENT_EXCEEDS_LIMIT")
-
-	status, tr, raw := currencyTransfer(t, env, http.MethodPost, "/api/v1/transfers", map[string]any{
-		"from_account_id": rub.ID, "to_account_id": card.ID, "amount": "9000.00", "to_amount": "100.00",
-	})
 	if status != http.StatusCreated {
-		t.Fatalf("exchange to card status %d: %s", status, raw)
+		t.Fatalf("over-limit exchange to card status %d: %s", status, raw)
 	}
-	if tr.Amount != 900000 || tr.ToAmount != 10000 {
+	if tr.Amount != 1_350_000 || tr.ToAmount != 15_000 {
 		t.Fatalf("transfer %+v", tr)
 	}
-	if b := currencyBalance(t, env, card.ID); b != 100000 {
-		t.Fatalf("card balance %d", b)
+	if b := currencyBalance(t, env, card.ID); b != 105_000 {
+		t.Fatalf("card balance %d, want 105000", b)
 	}
 }
 

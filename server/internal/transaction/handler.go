@@ -500,8 +500,6 @@ func writeTxError(w http.ResponseWriter, r *http.Request, err error) bool {
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_TAG_NOT_FOUND")
 	case errors.Is(err, ErrSameAccount):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_TRANSFER_SAME_ACCOUNT")
-	case errors.Is(err, ErrCreditCardPaymentExceedsLimit):
-		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_CREDIT_CARD_PAYMENT_EXCEEDS_LIMIT")
 	case errors.Is(err, ErrUseTransfersEndpoint):
 		apperror.WriteR(w, r, http.StatusBadRequest, apperror.ValidationError, "ERR_USE_TRANSFERS_ENDPOINT")
 	case errors.Is(err, ErrTransferToAmountRequired):

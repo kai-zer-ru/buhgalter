@@ -413,7 +413,7 @@ erDiagram
 | `accounts.currency` | код из allowlist (`GET /currencies`); при создании без поля — валюта профиля; смена при операциях/связях — `ERR_ACCOUNT_CURRENCY_LOCKED` |
 | `accounts.initial_balance` | начальный остаток, копейки в валюте счёта; фиксируется при создании и при явном изменении в форме редактирования |
 | `accounts.current_balance` | текущий баланс, копейки; денормализация, пересчитывается пакетом `accountbalance` |
-| `accounts.credit_limit` | лимит кредитной карты, копейки; только для `credit_card`; смена после создания — только `PUT /accounts/{id}/credit-limit` (с корректировкой `initial_balance`, см. [ui-credit-cards.md](ui-credit-cards.md)) |
+| `accounts.credit_limit` | лимит кредитной карты, копейки; только для `credit_card`; смена после создания — только `PUT /accounts/{id}/credit-limit` (с корректировкой `initial_balance`, см. [ui-credit-cards.md](ui-credit-cards.md)). Перевод **на** карту может сделать `balance > credit_limit` |
 | `accounts.payment_account_id` | счёт по умолчанию для переводов на карту (опционально); та же валюта, иначе `ERR_CURRENCY_MISMATCH` |
 | `accounts.auto_topup_*` | автопополнение bank-счёта — см. [balance-maintenance.md](balance-maintenance.md) |
 | `accounts.status` | `active`, `archived`, `deleted` |

@@ -315,7 +315,6 @@
 	"accounts.creditCard.changeLimitHint": "При увеличении лимита баланс вырастет на ту же сумму. Уменьшить лимит можно только при полном погашении.",
 	"accounts.creditCard.limitButton": "Лимит",
 	"accounts.creditCard.paymentAccountDefault": "Основной счёт",
-	"accounts.creditCard.payExceedsMax": "Сумма не больше {max}",
 	"accounts.creditCard.payFullLimit": "Весь лимит",
 	"accounts.creditCard.negativeBalance": "Баланс карты станет отрицательным — проверьте сумму",
 	"dashboard.creditCards": "Кредитный баланс",

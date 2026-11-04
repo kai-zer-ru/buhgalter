@@ -798,34 +798,33 @@ func TestTransferCommissionCreditCardDescriptions(t *testing.T) {
 	}
 }
 
-func TestCreditCardPaymentExceedsLimit(t *testing.T) {
+func TestCreditCardPaymentMayExceedLimit(t *testing.T) {
 	handle, env := seedEnvFull(t)
 	database := handle.DB()
 	ctx := context.Background()
 	past := timeutil.NowUTC().Add(-time.Hour)
-	insertCreditCardAccount(t, ctx, database, env.userID, "cc-1", 200_000, 100_000)
+	insertCreditCardAccount(t, ctx, database, env.userID, "cc-1", 200_000, 0)
 	if err := accountbalance.Refresh(ctx, database, env.userID); err != nil {
 		t.Fatal(err)
 	}
 
 	_, err := CreateTransfer(ctx, database, env.userID, TransferInput{
 		FromAccountID: env.accountID, ToAccountID: "cc-1",
-		Amount: 150_000, TransactionDate: past,
-	})
-	if !errors.Is(err, ErrCreditCardPaymentExceedsLimit) {
-		t.Fatalf("expected ErrCreditCardPaymentExceedsLimit, got %v", err)
-	}
-
-	_, err = CreateTransfer(ctx, database, env.userID, TransferInput{
-		FromAccountID: env.accountID, ToAccountID: "cc-1",
-		Amount: 100_000, TransactionDate: past,
+		Amount: 250_000, TransactionDate: past,
 	})
 	if err != nil {
-		t.Fatalf("payment within limit: %v", err)
+		t.Fatalf("over-limit payment: %v", err)
+	}
+	var balance int64
+	if err := database.QueryRowContext(ctx, `SELECT current_balance FROM accounts WHERE id = 'cc-1'`).Scan(&balance); err != nil {
+		t.Fatal(err)
+	}
+	if balance != 250_000 {
+		t.Fatalf("credit card balance %d, want 250000", balance)
 	}
 }
 
-func TestCreditCardConcurrentPaymentsDoNotExceedLimit(t *testing.T) {
+func TestCreditCardConcurrentPaymentsMayBothExceedLimit(t *testing.T) {
 	handle, env := seedEnvFull(t)
 	database := handle.DB()
 	ctx := context.Background()
@@ -850,26 +849,24 @@ func TestCreditCardConcurrentPaymentsDoNotExceedLimit(t *testing.T) {
 	}
 	wg.Wait()
 
-	ok, limited := 0, 0
 	for _, err := range errs {
-		switch {
-		case err == nil:
-			ok++
-		case errors.Is(err, ErrCreditCardPaymentExceedsLimit):
-			limited++
-		default:
+		if err != nil {
 			t.Fatalf("unexpected error: %v", errs)
 		}
-	}
-	if ok != 1 || limited != 1 {
-		t.Fatalf("want 1 success and 1 limit error, got ok=%d limited=%d errs=%v", ok, limited, errs)
 	}
 	var legs int
 	if err := database.QueryRow(`SELECT COUNT(*) FROM transactions WHERE account_id = 'cc-1' AND type = 'transfer'`).Scan(&legs); err != nil {
 		t.Fatal(err)
 	}
-	if legs != 1 {
-		t.Fatalf("credit card transfer legs = %d, want 1", legs)
+	if legs != 2 {
+		t.Fatalf("credit card transfer legs = %d, want 2", legs)
+	}
+	var balance int64
+	if err := database.QueryRowContext(ctx, `SELECT current_balance FROM accounts WHERE id = 'cc-1'`).Scan(&balance); err != nil {
+		t.Fatal(err)
+	}
+	if balance != 300_000 {
+		t.Fatalf("credit card balance %d, want 300000", balance)
 	}
 }
 

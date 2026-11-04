@@ -315,7 +315,6 @@
 	"accounts.creditCard.changeLimitHint": "Increasing the limit raises the balance by the same amount. Decreasing is allowed only when the card is fully paid.",
 	"accounts.creditCard.limitButton": "Limit",
 	"accounts.creditCard.paymentAccountDefault": "Primary account",
-	"accounts.creditCard.payExceedsMax": "Amount must not exceed {max}",
 	"accounts.creditCard.payFullLimit": "Full limit",
 	"accounts.creditCard.negativeBalance": "Card balance will go negative — check the amount",
 	"dashboard.creditCards": "Credit card balance",

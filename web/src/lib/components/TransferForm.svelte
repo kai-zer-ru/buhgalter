@@ -20,7 +20,6 @@
 	import { fromDatetimeLocalValue, nowDatetimeLocal, toDatetimeLocalValue } from '$lib/dates';
 	import { formatTransferRate } from '$lib/finance';
 	import { formatMoneyForInput, fromCents, toAPIAmount, toCents } from '$lib/money';
-	import { formatMoneyForDisplay } from '$lib/money-display';
 	import { transferAccountIds, transferGroupLegs, transferOutLeg } from '$lib/transaction-display';
 	import { pickOtherAccountId, transferAccountOptions } from '$lib/transfer-accounts';
 	import { toast } from '$lib/toast';
@@ -80,9 +79,6 @@
 	const toAccountOptions = $derived(transferAccountOptions(accounts, fromAccount));
 	const payMode = $derived(Boolean(creditCardPay && !editing));
 	const maxPayKopecks = $derived(creditCardPay ? maxCreditCardPaymentKopecks(creditCardPay) : null);
-	const payExceedsMax = $derived(
-		maxPayKopecks != null && amount.trim() !== '' && toCents(amount) > maxPayKopecks
-	);
 	const canFullLimit = $derived(payMode && maxPayKopecks != null && maxPayKopecks > 0);
 
 	$effect(() => {
@@ -286,13 +282,6 @@
 				>{$_('transactions.field.amount')}</label
 			>
 			<MoneyInput id="tr-amount" bind:value={amount} required />
-			{#if payExceedsMax && maxPayKopecks != null}
-				<p class="mt-1 text-sm" style:color="var(--danger)">
-					{$_('accounts.creditCard.payExceedsMax', {
-						values: { max: formatMoneyForDisplay({ cents: maxPayKopecks }) }
-					})}
-				</p>
-			{/if}
 			<div class="mt-1 flex flex-wrap gap-2">
 				<button
 					type="button"
@@ -355,7 +344,7 @@
 			type="submit"
 			form="transfer-form"
 			class="btn-primary"
-			disabled={saving || payExceedsMax || fxIncomplete}
+			disabled={saving || fxIncomplete}
 		>
 			{saving ? $_('common.loading') : $_('common.save')}
 		</button>
