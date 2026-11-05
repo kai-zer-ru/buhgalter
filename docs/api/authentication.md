@@ -86,6 +86,8 @@ Self-service смены пароля по e-mail **нет**. Сценарий д
 
 Поле **`field`** опционально: заполняется для ошибок валидации (`ERR_CREDIT_*`, `ERR_INVALID_*`, `ERR_ACCOUNT_*` и аналогичных), чтобы UI мог подсветить конкретное поле формы.
 
+В интерфейсе код (`ERR_…`) не показывают: `formatApiError` берёт `errors.{code}` из каталога клиента, иначе локализованный `error.message` из `server/locales/`. Если сообщение совпадает с кодом — общий `common.error`. Каждый код из `WriteR` / `WriteL` должен быть в `server/locales/{ru,en}.json` и в `errors.{code}` web и Android (`make ui-i18n-check` → `scripts/check_api_error_i18n.py`).
+
 Коды ошибок и схемы — в [openapi.yaml](openapi.yaml) (в т.ч. `/stats/*`, `POST /credits/schedule/preview`).
 
 ## Смежные документы

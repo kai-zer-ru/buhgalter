@@ -42,4 +42,18 @@ describe('formatApiError', () => {
 		const err = new ApiError('CONFLICT', '', 409);
 		expect(formatApiError(err)).toBe('Конфликт данных');
 	});
+
+	it('does not show a raw ERR_ code when i18n and server message are missing', () => {
+		const err = new ApiError(
+			'ERR_CREDIT_CARD_PAYMENT_EXCEEDS_LIMIT',
+			'ERR_CREDIT_CARD_PAYMENT_EXCEEDS_LIMIT',
+			400
+		);
+		expect(formatApiError(err)).toBe('Ошибка');
+	});
+
+	it('does not show a generic code when server message repeats the code', () => {
+		const err = new ApiError('CONFLICT', 'CONFLICT', 409);
+		expect(formatApiError(err)).toBe('Конфликт данных');
+	});
 });

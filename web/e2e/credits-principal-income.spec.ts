@@ -91,5 +91,5 @@ test('principal income API rejected when schedule has past payment', async ({ pa
 	expect(res.status()).toBe(400);
 	const body = (await res.json()) as { error?: { code?: string; message?: string } };
 	expect(body.error?.code).toBe('VALIDATION_ERROR');
-	expect(body.error?.message).toContain('ERR_CREDIT_PRINCIPAL_INCOME_PAST_PAYMENT');
+	expect(body.error?.message).toContain('Нельзя учесть доход в тело после прошедшего платежа');
 });

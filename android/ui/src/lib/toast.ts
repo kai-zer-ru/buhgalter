@@ -1,5 +1,5 @@
 import { writable } from 'svelte/store';
-import { formatApiError, isSilentClientError } from '$lib/api/errors';
+import { formatApiError, isRawErrorCode, isSilentClientError } from '$lib/api/errors';
 import { ApiError } from '$lib/api/client';
 import { isConnectionError, isServerUnavailableForUser } from '$lib/offline/server-connectivity';
 import { OnlineOnlyError } from '$lib/offline/require-online';
@@ -58,7 +58,12 @@ export const toast = Object.assign(toastFn, {
 			push(formatApiError(err, fallbackKey), 'error');
 			return;
 		}
-		if (err instanceof Error && !(err instanceof ApiError) && err.message) {
+		if (
+			err instanceof Error &&
+			!(err instanceof ApiError) &&
+			err.message &&
+			!isRawErrorCode(err.message)
+		) {
 			push(err.message, 'error');
 			return;
 		}

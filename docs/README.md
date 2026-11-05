@@ -4,7 +4,7 @@
 
 **Спецификация API:** [api/openapi.yaml](api/openapi.yaml) (интерактивно — `/docs` на запущенном сервере).
 
-История изменений по версиям — [CHANGELOG.md](../CHANGELOG.md). Последний релиз: [release-notes-v1.11.2.md](release-notes-v1.11.2.md).
+История изменений по версиям — [CHANGELOG.md](../CHANGELOG.md). Последний релиз: [release-notes-v1.11.3.md](release-notes-v1.11.3.md).
 
 ---
 
@@ -93,6 +93,7 @@
 | [../roadmap/category-rules-inbox.md](../roadmap/category-rules-inbox.md) | Спека правил и inbox (реализовано в v1.8.0) |
 | [feature-toggles.md](feature-toggles.md) | Флаги модулей в админке; чеклист для новых фич |
 | [subscriptions.md](subscriptions.md) | Подписки: API, UI, уведомления, плановый остаток, привязка и очередь |
+| [release-notes-v1.11.3.md](release-notes-v1.11.3.md) | Release notes v1.11.3: пополнение кредитки сверх лимита, тексты ошибок API, перехват «Возврат» и категория черновика |
 | [release-notes-v1.11.2.md](release-notes-v1.11.2.md) | Release notes v1.11.2: исправления перехвата уведомлений, сканера чеков, кредита и бюджета; кнопки и подсказки интерфейса |
 | [release-notes-v1.11.1.md](release-notes-v1.11.1.md) | Release notes v1.11.1: Android — перехват уведомлений нового приложения ВБ Банка |
 | [release-notes-v1.11.0.md](release-notes-v1.11.0.md) | Release notes v1.11.0: семья / команда, валюта счёта, редизайн веба и Android |

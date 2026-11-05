@@ -453,6 +453,8 @@
 
 - [x] БАГ. Android: распознавание уведомлений — «Возврат» как доход (магазин после суммы); категория и подкатегория черновика по истории того же типа, в том числе по описанию («Выплата процентов»), а не только по магазину из справочника
 - [x] Пополнение кредитной карты сверх лимита — перевод на карту любой суммы (`balance` может быть больше `credit_limit`)
+- [x] Ошибки API в UI не сырым кодом (`ERR_…`): все коды в `server/locales` и `errors.*`, `formatApiError` не показывает код как текст
+- [x] **Docs:** [Release notes](docs/release-notes-v1.11.3.md) · [CHANGELOG.md](CHANGELOG.md) · [ui-credit-cards.md](docs/ui-credit-cards.md) · [api/authentication.md](docs/api/authentication.md) · [ui-toast.md](docs/ui-toast.md) · [android-client-platform.md](docs/android-client-platform.md) · [README.md](README.md)
 
 ## v1.12.0
 

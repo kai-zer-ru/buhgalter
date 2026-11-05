@@ -9,7 +9,7 @@ OPENAPI_DST := server/internal/docs/openapi.yaml
 UI_I18N_SRC := android/ui/src/lib/i18n
 UI_I18N_DST := server/ui_locales
 
-.PHONY: dev dev-server dev-web build build-arm web-build category-icons-json copy-static copy-openapi check-openapi-examples openapi-check copy-ui-i18n check-ui-i18n-keys ui-i18n-check inline-sql-check server-build server-build-arm fix-build-perms test test-unit test-server test-web test-android test-e2e test-e2e-web test-coverage lint lint-go prepare prepare-go prepare-web prepare-android prepare-gen prepare-sql-check prepare-ui-check docker-build act-push act-release act-keep-image act-prune tag-release migrate ci sqlc sqlc-check download-bank-logos download-marketplace-logos clear version android-icons android-ui-build android-sync android-apk android-apk-release android-install android-install-release android-ensure-sdk dev-android-ui android-live
+.PHONY: dev dev-server dev-web build build-arm web-build category-icons-json copy-static copy-openapi check-openapi-examples openapi-check copy-ui-i18n check-ui-i18n-keys check-api-error-i18n ui-i18n-check inline-sql-check server-build server-build-arm fix-build-perms test test-unit test-server test-web test-android test-e2e test-e2e-web test-coverage lint lint-go prepare prepare-go prepare-web prepare-android prepare-gen prepare-sql-check prepare-ui-check docker-build act-push act-release act-keep-image act-prune tag-release migrate ci sqlc sqlc-check download-bank-logos download-marketplace-logos clear version android-icons android-ui-build android-sync android-apk android-apk-release android-install android-install-release android-ensure-sdk dev-android-ui android-live
 
 DOCKER_COMPOSE := docker compose -f docker/docker-compose.yml
 
@@ -44,8 +44,11 @@ copy-ui-i18n:
 check-ui-i18n-keys:
 	@python3 scripts/check_ui_i18n_keys.py
 
+check-api-error-i18n:
+	@python3 scripts/check_api_error_i18n.py
+
 # CI: sync + require committed server/ui_locales + key completeness.
-ui-i18n-check: copy-ui-i18n check-ui-i18n-keys
+ui-i18n-check: copy-ui-i18n check-ui-i18n-keys check-api-error-i18n
 	@git diff --exit-code -- $(UI_I18N_DST)/ru.json $(UI_I18N_DST)/en.json || \
 		(echo "ui-i18n: run 'make copy-ui-i18n' and commit $(UI_I18N_DST)/{ru,en}.json" && exit 1)
 
