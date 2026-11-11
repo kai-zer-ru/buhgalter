@@ -34,7 +34,7 @@ final class DraftNotifyProvisional {
     private static final Pattern AMOUNT_WITH_CURRENCY =
             Pattern.compile(
                     "(?<!\\d)(\\d{1,3}(?:[\\s\\u00a0]\\d{3})*(?:[.,]\\d{1,2})?|\\d+(?:[.,]\\d{1,2})?)"
-                            + "\\s*(?:₽|RUB|руб\\.?|р\\.?)(?!\\s*%)",
+                            + "\\s*(?:₽|RUR|RUB|руб\\.?|р\\.?)(?!\\s*%)",
                     Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
 
     private static final Pattern BALANCE_TAIL =

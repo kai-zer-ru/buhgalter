@@ -16,7 +16,7 @@ function raw(partial: Partial<RawBankNotification> & { packageName: string }): R
 /** Strict merchant cleanup: no purchase/card/balance chrome or orphan currency. */
 function expectCleanMerchant(actual: string, expected: string | RegExp) {
 	expect(actual).not.toMatch(/оплат|покупк|списан|карта|баланс|доступно/i);
-	expect(actual).not.toMatch(/(?:^|\s)(?:₽|руб\.?|р\.?|RUB)(?:\s|$)/i);
+	expect(actual).not.toMatch(/(?:^|\s)(?:₽|руб\.?|р\.?|RUR|RUB)(?:\s|$)/i);
 	if (typeof expected === 'string') expect(actual).toBe(expected);
 	else expect(actual).toMatch(expected);
 }
@@ -389,6 +389,35 @@ describe('parseBankNotification', () => {
 					packageName: 'ru.sberbankmobile',
 					title: '900',
 					text: 'Никому не сообщайте код: 12345. Вход в СберБанк Онлайн.',
+					channel: 'sms'
+				})
+			)
+		).toBeNull();
+	});
+
+	it('parses Alfa-Bank debit push with RUR as a purchase (own-account transfer)', () => {
+		const parsed = parseBankNotification(
+			raw({
+				packageName: 'ru.alfabank.mobile.android',
+				title: 'Уведомление',
+				text: 'Списание со счёта 4*9211 Perevod на 34.00 RUR Получатель 795*8425 10.11.2026 19:08:47'
+			})
+		);
+		expect(parsed).not.toBeNull();
+		expect(parsed!.kind).toBe('purchase');
+		expect(parsed!.bankId).toBe('alfabank');
+		expect(parsed!.amount).toBe('34.00');
+		expect(parsed!.last4).toBe('9211');
+		expectCleanMerchant(parsed!.merchantText, '795*8425');
+	});
+
+	it('still ignores Alfa-Bank OTP SMS', () => {
+		expect(
+			parseBankNotification(
+				raw({
+					packageName: 'com.android.mms',
+					title: 'Alfa-Bank',
+					text: '8 сообщений | 4445 - Ваш код для подтверждения. Никому не сообщайте!',
 					channel: 'sms'
 				})
 			)

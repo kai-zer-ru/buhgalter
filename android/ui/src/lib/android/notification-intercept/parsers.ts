@@ -37,8 +37,11 @@ const MARKETPLACE_OP_RE =
 const MARKETPLACE_MARKETING_RE =
 	/(у\s+вас\s+на\s+сч[её]те|потратьте|подобрать|купить\s+сейчас|вау-цен|пункт[еа]?\s+выдач|доставил|можно\s+забирать|личное\s+приглашение|\d+\s*%|выгодой\s+до)/i;
 
+/** Rub markers. Alfa still prints ISO 810 `RUR` next to the amount. */
+const RUB_CURRENCY = String.raw`(?:₽|руб\.?|RUR|RUB|р\.?)`;
+
 /** True when an amount is followed by a currency marker (bare `р` ok; avoids `р` in names). */
-const HAS_CURRENCY_AMOUNT_RE = /\d(?:[.,]\d{1,2})?\s*(?:₽|руб\.?|р\.?|RUB|rub)/i;
+const HAS_CURRENCY_AMOUNT_RE = new RegExp(String.raw`\d(?:[.,]\d{1,2})?\s*` + RUB_CURRENCY, 'i');
 
 const CANCEL_RE =
 	/(отмена\s+покупки|отмен[аы]\s+операц|отменена?\s+покупк|возврат\s+средств|возврат\s+покупк|purchase\s+cancel|canceled?\s+purchase|refund)/i;
@@ -48,10 +51,14 @@ const PURCHASE_HINT_RE =
 
 /** Titles that are bank/card chrome, not a merchant (Yandex cancel uses «Карта Пэй»). */
 const GENERIC_TITLE_RE =
-	/^(карта(\s+пэй)?|card(\s+pay)?|пэй|pay|яндекс(\s+пэй)?|yandex(\s+pay)?|тинькофф|т-?банк|сбер(банк)?|втб(\s+онлайн)?|vtb(\s+online)?|wb\s*(банк|кошел[её]к)|ozon\s*банк|кошел[её]к|mir(\s*pay)?|мир(\s*пэй|\s*pay)?|samsung(\s*(pay|wallet))?|google(\s*(pay|wallet))?|сбпэй|сбп|huawei(\s*(pay|wallet))?|mi(\s*pay)?|xiaomi(\s*(pay|wallet))?|юmoney|юмани|yoomoney)$/i;
+	/^(карта(\s+пэй)?|card(\s+pay)?|пэй|pay|яндекс(\s+пэй)?|yandex(\s+pay)?|тинькофф|т-?банк|сбер(банк)?|втб(\s+онлайн)?|vtb(\s+online)?|wb\s*(банк|кошел[её]к)|ozon\s*банк|кошел[её]к|mir(\s*pay)?|мир(\s*пэй|\s*pay)?|samsung(\s*(pay|wallet))?|google(\s*(pay|wallet))?|сбпэй|сбп|huawei(\s*(pay|wallet))?|mi(\s*pay)?|xiaomi(\s*(pay|wallet))?|юmoney|юмани|yoomoney|уведомление|notification)$/i;
 
-const AMOUNT_RE =
-	/(?:^|[^\d])(\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*(?:₽|руб\.?|р\.?|RUB|rub)?(?!\d)/i;
+const AMOUNT_RE = new RegExp(
+	String.raw`(?:^|[^\d])(\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*` +
+		RUB_CURRENCY +
+		String.raw`?(?!\d)`,
+	'i'
+);
 
 /** *XXXX, карта *XXXX, СЧЁТ5159 / Счет*1736 (optional * / bullet between счёт and digits). */
 const LAST4_RE = /(?:сч[её]т\s*[*⁎•∙●○∗]?|(?:[*⁎•∙●○∗]|карты?\s*|карта\s*|card\s*))(\d{4})\b/i;
@@ -66,11 +73,18 @@ const PURCHASE_WORD_RE = new RegExp(
 );
 
 /** Amount + currency as one unit; no trailing \b after Cyrillic `р`. */
-const AMOUNT_WITH_CURRENCY_RE =
-	/(?:^|[^\d])(\d{1,3}(?:[ \u00a0]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*(?:₽|руб\.?|р\.?|RUB)(?=[\s.,:;!]|\b|$)/gi;
+const AMOUNT_WITH_CURRENCY_RE = new RegExp(
+	String.raw`(?:^|[^\d])(\d{1,3}(?:[ \u00a0]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*` +
+		RUB_CURRENCY +
+		String.raw`(?=[\s.,:;!]|\b|$)`,
+	'gi'
+);
 
 /** Orphan currency left after stripping bare digits of the purchase amount. */
-const ORPHAN_CURRENCY_RE = /(?:^|[\s.,:;!\-–—])(?:₽|руб\.?|р\.?|RUB)(?=[\s.,:;!\-–—]|$)/gi;
+const ORPHAN_CURRENCY_RE = new RegExp(
+	String.raw`(?:^|[\s.,:;!\-–—])` + RUB_CURRENCY + String.raw`(?=[\s.,:;!\-–—]|$)`,
+	'gi'
+);
 
 /** Card / account chrome words — Cyrillic-safe (Latin \b ok for MIR/Visa). */
 const CARD_CHROME_RE = new RegExp(
@@ -82,8 +96,12 @@ const CARD_CHROME_RE = new RegExp(
 const BALANCE_TAIL_RE = /[\s.,:;!\-–—]+(?:баланс|доступно|available)[\s\S]*$/i;
 
 /** T-Bank SMS: «Покупка, карта *2552. 56 RUB. STOLOVAYA. Доступно …» */
-const TBANK_SMS_MERCHANT_RE =
-	/(?:^|[^\d])(?:\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*(?:₽|руб\.?|р\.?|RUB)\.?\s+([A-Za-zА-Яа-яЁё0-9 ._-]{2,60}?)\s*\.?\s*(?:доступно|available)/i;
+const TBANK_SMS_MERCHANT_RE = new RegExp(
+	String.raw`(?:^|[^\d])(?:\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*` +
+		RUB_CURRENCY +
+		String.raw`\.?\s+([A-Za-zА-Яа-яЁё0-9 ._-]{2,60}?)\s*\.?\s*(?:доступно|available)`,
+	'i'
+);
 
 /** Thin / narrow / figure spaces as thousands separators (Ozon: «3 073 ₽» with U+202F). */
 const EXOTIC_SPACE_RE = /[\u2007\u2009\u202f\u2060]/g;
@@ -112,10 +130,19 @@ function extractAmount(text: string): string | null {
 	const scoped = text.replace(BALANCE_TAIL_RE, ' ');
 	const currencyFirst =
 		scoped.match(
-			/(?:₽|руб\.?|RUB)\s*(\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)/i
+			new RegExp(
+				RUB_CURRENCY +
+					String.raw`\s*(\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)`,
+				'i'
+			)
 		) ??
 		scoped.match(
-			/(\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*(?:₽|руб\.?|р\.?|RUB)(?!\s*%)/i
+			new RegExp(
+				String.raw`(\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*` +
+					RUB_CURRENCY +
+					String.raw`(?!\s*%)`,
+				'i'
+			)
 		);
 	if (!currencyFirst?.[1]) return null;
 	return normalizeAmount(currencyFirst[1]);
@@ -143,7 +170,7 @@ function titleMerchant(raw: RawBankNotification): string {
 		IGNORE_RE.test(title) ||
 		title.length > 80 ||
 		/^\d/.test(title) ||
-		/(₽|RUB|руб)/i.test(title)
+		/(₽|RUR|RUB|руб)/i.test(title)
 	) {
 		return '';
 	}
@@ -202,7 +229,12 @@ function extractTransferCounterparty(
 ): string | undefined {
 	if (kind === 'income') {
 		const m = text.match(
-			/(?:^|[\s.,:;])от\s+([A-Za-zА-Яа-яЁё][^₽\n]*?)(?=\s*(?:\+?\d[\d \u00a0]*(?:[.,]\d{1,2})?\s*(?:₽|руб\.?|р\.?|RUB)|баланс|доступно|available|\d{1,2}:\d{2}|$))/i
+			new RegExp(
+				String.raw`(?:^|[\s.,:;])от\s+([A-Za-zА-Яа-яЁё][^₽\n]*?)(?=\s*(?:\+?\d[\d \u00a0]*(?:[.,]\d{1,2})?\s*` +
+					RUB_CURRENCY +
+					String.raw`|баланс|доступно|available|\d{1,2}:\d{2}|$))`,
+				'i'
+			)
 		);
 		if (m?.[1]) {
 			const name = m[1]
@@ -213,6 +245,8 @@ function extractTransferCounterparty(
 		}
 		return undefined;
 	}
+	const recipient = text.match(/получатель\s+([A-Za-zА-Яа-яЁё0-9*]+)/i);
+	if (recipient?.[1]) return recipient[1];
 	const wb = text.match(
 		/перевод\s+по\s+сбп[^\n]*\n+\s*([A-Za-zА-Яа-яЁё][^\n₽]{1,60}?)(?=\n+\s*(?:доступно|баланс|available)|$)/i
 	);
@@ -236,7 +270,12 @@ function passesMarketplaceGate(raw: RawBankNotification, text: string): boolean 
 function extractIncomeTailMerchant(text: string): string {
 	const scoped = text.replace(BALANCE_TAIL_RE, ' ').replace(/\s+/g, ' ').trim();
 	const m = scoped.match(
-		/(?:\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*(?:₽|руб\.?|р\.?|RUB)\.?\s+([A-Za-zА-Яа-яЁё][A-Za-zА-Яа-яЁё0-9 ._-]{0,59}?)\s*\.?\s*$/i
+		new RegExp(
+			String.raw`(?:\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*` +
+				RUB_CURRENCY +
+				String.raw`\.?\s+([A-Za-zА-Яа-яЁё][A-Za-zА-Яа-яЁё0-9 ._-]{0,59}?)\s*\.?\s*$`,
+			'i'
+		)
 	);
 	if (!m?.[1]) return '';
 	const name = m[1].replace(/^[\s.,:;!\-–—]+|[\s.,:;!\-–—]+$/g, '').trim();
@@ -256,7 +295,9 @@ function extractIncomeTailMerchant(text: string): string {
 function extractIncomeLabel(raw: RawBankNotification): string {
 	const title = GENERIC_TITLE_RE.test(raw.title.trim()) ? '' : raw.title;
 	const line = [raw.text, raw.bigText, title].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
-	const beforeAmount = line.split(/(?:\d[\d \u00a0]*(?:[.,]\d{1,2})?\s*(?:₽|руб\.?|р\.?|RUB))/i)[0];
+	const beforeAmount = line.split(
+		new RegExp(String.raw`(?:\d[\d \u00a0]*(?:[.,]\d{1,2})?\s*` + RUB_CURRENCY + ')', 'i')
+	)[0];
 	let t = (beforeAmount || line).trim();
 	t = t.replace(GENERIC_TITLE_RE, ' ').replace(/\s+/g, ' ').trim();
 	t = t.replace(/^[\s.,:;!\-–—]+|[\s.,:;!\-–—]+$/g, '').trim();

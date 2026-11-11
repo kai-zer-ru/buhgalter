@@ -456,6 +456,10 @@
 - [x] Ошибки API в UI не сырым кодом (`ERR_…`): все коды в `server/locales` и `errors.*`, `formatApiError` не показывает код как текст
 - [x] **Docs:** [Release notes](docs/release-notes-v1.11.3.md) · [CHANGELOG.md](CHANGELOG.md) · [ui-credit-cards.md](docs/ui-credit-cards.md) · [api/authentication.md](docs/api/authentication.md) · [ui-toast.md](docs/ui-toast.md) · [android-client-platform.md](docs/android-client-platform.md) · [README.md](README.md)
 
+## v1.11.4
+
+- [x] БАГ. Android: пуш Альфа-Банка «Списание … на N RUR» не распознавался как операция (валюта `RUR` вместо `RUB`)
+
 ## v1.12.0
 
 - [ ] [Цели накопления](roadmap/savings-goals.md) — копилки, прогресс, напоминания (`savings_goals`)
@@ -465,10 +469,6 @@
 - [ ] [Разбивка операции на несколько счетов](roadmap/transaction-split-accounts.md)
 - [ ] [PDF-отчёты](roadmap/savings-reports-import.md) — месячная сводка (server-side)
 - [ ] [Синхронизация с выпиской банка](roadmap/bank-sync.md) — РФ: файл выписки → normalize → dedup (не скрейпинг ЛК)
-
-## v1.13.0
-
-- [ ] [PostgreSQL](roadmap/postgresql.md) — опциональный драйвер вместо SQLite (K8s / managed DB / нагрузка после team)
 
 
 ## Общие планы
@@ -483,6 +483,7 @@
 - [ ] [Открытие приложения через ссылку](roadmap/app-open-links.md) — https **и локальные** (`http` LAN / `:8765`, localhost) при совпадении с профилем сервера в APK; custom scheme для виджетов; единый builder (notify / Telegram)
 - [ ] [Внутренняя ссылка в уведомлениях](roadmap/app-open-links.md#cap-6--внутренний-base-когда-external_url-пуст) — fallback вместо текста «настройте внешний URL»; LAN / scheme / опциональный internal base
 - [ ] Приложение для часов Zepp
+- [ ] [PostgreSQL](roadmap/postgresql.md) — опциональный драйвер вместо SQLite (K8s / managed DB / нагрузка после team)
 
 ## На подумать
 

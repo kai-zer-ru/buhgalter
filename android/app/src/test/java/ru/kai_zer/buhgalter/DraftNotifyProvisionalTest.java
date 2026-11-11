@@ -14,6 +14,10 @@ public class DraftNotifyProvisionalTest {
                 DraftNotifyProvisional.extractAmount(
                         "Перевод по СБП 500 ₽\nОльга Викторовна К.\nДоступно 26 867,01 ₽"));
         assertEquals("1256.00", DraftNotifyProvisional.extractAmount("Списали 1256.00 ₽ . Обновлённый"));
+        assertEquals(
+                "34.00",
+                DraftNotifyProvisional.extractAmount(
+                        "Списание со счёта 4*9211 Perevod на 34.00 RUR Получатель 795*8425"));
         assertEquals("", DraftNotifyProvisional.extractAmount("выгодой до 80%. Купить сейчас"));
         assertEquals("", DraftNotifyProvisional.extractAmount("Доступно 26 867,01 ₽"));
     }
