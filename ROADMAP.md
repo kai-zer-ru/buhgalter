@@ -460,6 +460,7 @@
 
 - [x] БАГ. Android: пуш Альфа-Банка «Списание … на N RUR» не распознавался как операция (валюта `RUR` вместо `RUB`)
 - [x] БАГ. Android: после добавления операции блок «Последние операции» на главной зависал на «Загрузка…» или пустел при «Нет соединения»
+- [x] **Docs:** [Release notes](docs/release-notes-v1.11.4.md) · [CHANGELOG.md](CHANGELOG.md) · [android-client-platform.md](docs/android-client-platform.md) · [ui-api-cache.md](docs/ui-api-cache.md) · [notification-intercept.md](roadmap/notification-intercept.md) · [README.md](README.md)
 
 ## v1.12.0
 
