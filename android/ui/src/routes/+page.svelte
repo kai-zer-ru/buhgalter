@@ -93,6 +93,7 @@
 		hasHomeDashboardSnapshot,
 		homeDashboardGateMessage,
 		homeNeedsForegroundLoad,
+		homeRecentSection,
 		reportHomeListLoadFailure
 	} from '$lib/home-snapshot';
 	import {
@@ -189,7 +190,16 @@
 	const showOwnershipHeadings = $derived(
 		accountGroups.some((group) => group.ownership === 'household')
 	);
-	const recentTotal = $derived(pastTotal + plannedTotal);
+	const recentSection = $derived(
+		homeRecentSection({
+			pastLoading,
+			plannedLoading,
+			pastTotal,
+			plannedTotal,
+			pastVisibleCount: pastVisible.length,
+			plannedVisibleCount: plannedVisible.length
+		})
+	);
 	const ownForecastFlags = $derived(
 		dash ? aggregateForecastLabelFlags(dash.accounts.filter((a) => a.type !== 'credit_card')) : {}
 	);
@@ -224,7 +234,11 @@
 	}
 
 	onMount(() => {
-		if (homeNeedsForegroundLoad(dashBase, catalogScope)) {
+		if (
+			homeNeedsForegroundLoad(dashBase, catalogScope) ||
+			!refCacheReady(PAST_TX_PATH) ||
+			!refCacheReady(PLANNED_TX_PATH)
+		) {
 			void loadAll();
 		} else {
 			// Snapshot is enough for the summary. Lists may still be cold — refresh in the
@@ -954,15 +968,12 @@
 					{/if}
 				</div>
 
-				<CollapsibleSection
-					label={$_('dashboard.recent')}
-					count={!pastLoading && !plannedLoading ? recentTotal : null}
-				>
-					{#if pastLoading && plannedLoading && pastTotal === 0 && plannedTotal === 0}
+				<CollapsibleSection label={$_('dashboard.recent')} count={recentSection.count}>
+					{#if recentSection.showLoading}
 						<p style:color="var(--text-muted)">{$_('common.loading')}</p>
 					{:else}
 						<div class="card overflow-hidden">
-							{#if !pastLoading && !plannedLoading && pastTotal === 0 && plannedTotal === 0}
+							{#if recentSection.showEmpty}
 								<p
 									class="flex min-h-[7rem] items-center justify-center px-4 py-6 text-center text-sm"
 									style:color="var(--text-muted)"
@@ -970,9 +981,9 @@
 									{$_('transactions.empty')}
 								</p>
 							{:else}
-								{#if plannedTotal > 0 || plannedLoading}
+								{#if recentSection.showPlanned}
 									<details
-										class:border-b={pastTotal > 0 || pastLoading}
+										class:border-b={recentSection.showPast}
 										style:border-color="var(--border)"
 									>
 										<summary
@@ -980,7 +991,7 @@
 											><span
 												>{$_('dashboard.group.planned')}
 												<span class="ml-1 font-normal tabular-nums" style:color="var(--text-muted)">
-													· {plannedTotal}
+													· {recentSection.plannedCount}
 												</span></span
 											>
 											<svg
@@ -1023,14 +1034,14 @@
 									</details>
 								{/if}
 
-								{#if pastTotal > 0 || pastLoading}
+								{#if recentSection.showPast}
 									<details open>
 										<summary
 											class="flex items-center justify-between gap-2 cursor-pointer list-none px-4 py-3 text-sm font-medium select-none [&::-webkit-details-marker]:hidden"
 											><span
 												>{$_('dashboard.group.past')}
 												<span class="ml-1 font-normal tabular-nums" style:color="var(--text-muted)">
-													· {pastTotal}
+													· {recentSection.pastCount}
 												</span></span
 											>
 											<svg

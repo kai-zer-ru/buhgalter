@@ -104,7 +104,9 @@ function patchTransactionList(
 	const total = cached.meta?.total ?? data.length;
 
 	if (change.action === 'deleted') {
-		const next = data.filter((row) => row.id !== change.entity_id);
+		const next = data.filter(
+			(row) => row.id !== change.entity_id && row.transfer_group_id !== change.entity_id
+		);
 		if (next.length === data.length) return;
 		publishRefCachePath(path, {
 			data: next,
@@ -202,6 +204,16 @@ function patchDebtorDetail(path: string, change: TransactionChange): void {
 		transaction_date: tx.transaction_date
 	};
 	publishRefCachePath(path, { ...detail, transactions: txs });
+}
+
+/** Patch cached lists/index after a local online create/update. */
+export function applyCachedTransactionUpsert(tx: Transaction): void {
+	applyUpsert(tx);
+}
+
+/** Patch cached lists/index after a local online delete. */
+export function applyCachedTransactionDeleted(id: string): void {
+	applyDeleted(id);
 }
 
 function applyDeleted(id: string): void {

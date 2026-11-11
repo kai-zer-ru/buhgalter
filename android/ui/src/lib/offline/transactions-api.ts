@@ -33,9 +33,20 @@ import {
 	ensureSubcategoryInCacheFromTransaction,
 	touchLedgerAfterTransactionMutation
 } from '$lib/offline/ref-cache-mutations';
+import {
+	applyCachedTransactionDeleted,
+	applyCachedTransactionUpsert
+} from '$lib/offline/transaction-changes';
 
-function afterOnlineLedgerWrite(): void {
+function afterOnlineLedgerWrite(result?: Transaction | Transfer): void {
 	touchLedgerAfterTransactionMutation();
+	if (result && 'legs' in result && Array.isArray(result.legs)) {
+		for (const leg of result.legs) {
+			if (leg?.id) applyCachedTransactionUpsert(leg);
+		}
+	} else if (result && 'id' in result && result.id) {
+		applyCachedTransactionUpsert(result);
+	}
 	afterOnlineWrite();
 }
 
@@ -89,14 +100,14 @@ export async function createTransaction(payload: TransactionPayload): Promise<Tr
 	if (!shouldUseOfflineQueue()) {
 		const tx = await apiCreateTransaction(payload);
 		patchTransactionCaches(tx);
-		afterOnlineLedgerWrite();
+		afterOnlineLedgerWrite(tx);
 		return tx;
 	}
 	if (await shouldTryServer()) {
 		const res = await tryOnline(() => apiCreateTransaction(payload));
 		if (res) {
 			patchTransactionCaches(res);
-			afterOnlineLedgerWrite();
+			afterOnlineLedgerWrite(res);
 			return res;
 		}
 	}
@@ -117,7 +128,7 @@ export async function updateTransaction(
 	if (!shouldUseOfflineQueue()) {
 		const tx = await apiUpdateTransaction(id, payload);
 		patchTransactionCaches(tx);
-		afterOnlineLedgerWrite();
+		afterOnlineLedgerWrite(tx);
 		return tx;
 	}
 	if (isLocalEntityKey(id)) {
@@ -133,7 +144,7 @@ export async function updateTransaction(
 		const res = await tryOnline(() => apiUpdateTransaction(id, payload));
 		if (res) {
 			patchTransactionCaches(res);
-			afterOnlineLedgerWrite();
+			afterOnlineLedgerWrite(res);
 			return res;
 		}
 	}
@@ -149,6 +160,7 @@ export async function updateTransaction(
 export async function deleteTransaction(id: string): Promise<void> {
 	if (!shouldUseOfflineQueue()) {
 		await apiDeleteTransaction(id);
+		applyCachedTransactionDeleted(id);
 		afterOnlineLedgerWrite();
 		return;
 	}
@@ -159,6 +171,7 @@ export async function deleteTransaction(id: string): Promise<void> {
 	if (await shouldTryServer()) {
 		const res = await tryOnline(() => apiDeleteTransaction(id));
 		if (res !== null) {
+			applyCachedTransactionDeleted(id);
 			afterOnlineLedgerWrite();
 			return;
 		}
@@ -187,13 +200,13 @@ function stubTransfer(groupId: string, payload: TransferPayload): Transfer {
 export async function createTransfer(payload: TransferPayload): Promise<Transfer> {
 	if (!shouldUseOfflineQueue()) {
 		const res = await apiCreateTransfer(payload);
-		afterOnlineLedgerWrite();
+		afterOnlineLedgerWrite(res);
 		return res;
 	}
 	if (await shouldTryServer()) {
 		const res = await tryOnline(() => apiCreateTransfer(payload));
 		if (res) {
-			afterOnlineLedgerWrite();
+			afterOnlineLedgerWrite(res);
 			return res;
 		}
 	}
@@ -205,7 +218,7 @@ export async function createTransfer(payload: TransferPayload): Promise<Transfer
 export async function updateTransfer(groupId: string, payload: TransferPayload): Promise<Transfer> {
 	if (!shouldUseOfflineQueue()) {
 		const res = await apiUpdateTransfer(groupId, payload);
-		afterOnlineLedgerWrite();
+		afterOnlineLedgerWrite(res);
 		return res;
 	}
 	if (isLocalEntityKey(groupId)) {
@@ -215,7 +228,7 @@ export async function updateTransfer(groupId: string, payload: TransferPayload):
 	if (await shouldTryServer()) {
 		const res = await tryOnline(() => apiUpdateTransfer(groupId, payload));
 		if (res) {
-			afterOnlineLedgerWrite();
+			afterOnlineLedgerWrite(res);
 			return res;
 		}
 	}
@@ -226,6 +239,7 @@ export async function updateTransfer(groupId: string, payload: TransferPayload):
 export async function deleteTransfer(groupId: string): Promise<void> {
 	if (!shouldUseOfflineQueue()) {
 		await apiDeleteTransfer(groupId);
+		applyCachedTransactionDeleted(groupId);
 		afterOnlineLedgerWrite();
 		return;
 	}
@@ -236,6 +250,7 @@ export async function deleteTransfer(groupId: string): Promise<void> {
 	if (await shouldTryServer()) {
 		const res = await tryOnline(() => apiDeleteTransfer(groupId));
 		if (res !== null) {
+			applyCachedTransactionDeleted(groupId);
 			afterOnlineLedgerWrite();
 			return;
 		}

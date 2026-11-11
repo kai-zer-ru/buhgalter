@@ -52,6 +52,7 @@ describe('shouldInvalidateRefCacheOnWrite', () => {
 		expect(shouldInvalidateRefCacheOnWrite('/api/v1/import/jobs')).toBe(false);
 		expect(shouldInvalidateRefCacheOnWrite('/api/v1/import')).toBe(true);
 		expect(shouldInvalidateRefCacheOnWrite('/api/v1/transactions')).toBe(true);
+		expect(shouldInvalidateRefCacheOnWrite('/api/v1/category-rules/evaluate')).toBe(false);
 	});
 
 	it('does not soft-reload after auth endpoints (logout must not 401 open screens)', () => {

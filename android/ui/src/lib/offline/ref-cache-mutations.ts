@@ -557,12 +557,14 @@ export function touchBalancesAfterCreditMutation(): void {
 	invalidateRefCache(ACCOUNTS_ARCHIVED);
 }
 
-/** Online tx/transfer write — drop ledger overlays so listAccounts/home cannot enrich from pre-mutation dashboard. */
+/** Online tx/transfer write — drop balance overlays so listAccounts/home cannot enrich from pre-mutation dashboard.
+ * Do not wipe `/transactions*` lists: home «Последние операции» then has no snapshot, warm
+ * suppresses reload, and an offline follow-up GET is a cache miss (empty / «Загрузка…»).
+ * Lists are patched via applyCachedTransactionUpsert/Deleted instead. */
 export function touchLedgerAfterTransactionMutation(): void {
 	touchBalancesAfterCreditMutation();
 	// Detail/balance keys survive preserveAuthMe; prefix wipe also bumps cacheEpoch.
 	invalidateRefCachePrefix('/api/v1/accounts/');
-	invalidateRefCachePrefix('/api/v1/transactions');
 }
 
 export function onRecurringCreated(item: RecurringOperation): void {

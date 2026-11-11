@@ -194,6 +194,7 @@ export function shouldInvalidateRefCacheOnWrite(path: string): boolean {
 	const pathOnly = path.split('?')[0] ?? path;
 	if (pathOnly === '/api/v1/import/jobs') return false;
 	if (pathOnly === '/api/v1/receipts/scan-jobs') return false;
+	if (pathOnly === '/api/v1/category-rules/evaluate') return false;
 	if (pathOnly.startsWith('/api/v1/auth/')) return false;
 	return true;
 }

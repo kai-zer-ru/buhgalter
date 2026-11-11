@@ -96,14 +96,30 @@ describe('transactions-api delete', () => {
 		vi.mocked(connectivity.shouldTryServer).mockResolvedValue(true);
 		vi.mocked(client.deleteTransaction).mockResolvedValue(undefined);
 		writeRefCache('/api/v1/dashboard', { total_balance: 500, accounts: [] });
-		writeRefCache('/api/v1/transactions?limit=20', [{ id: 'tx-1' }]);
+		writeRefCache('/api/v1/transactions?kind=manual&limit=10&page=1&sort=date_desc', {
+			data: [
+				{
+					id: 'tx-1',
+					kind: 'manual',
+					type: 'expense',
+					account_id: 'a1',
+					transaction_date: '2026-10-01 12:00:00',
+					created_at: '2026-10-01 12:00:00'
+				}
+			],
+			meta: { page: 1, limit: 10, total: 1 }
+		});
 
 		await deleteTransaction('tx-1');
 
 		expect(client.deleteTransaction).toHaveBeenCalledWith('tx-1');
 		expect(getOutboxEntries()).toHaveLength(0);
 		expect(readRefCache('/api/v1/dashboard')).toBeNull();
-		expect(readRefCache('/api/v1/transactions?limit=20')).toBeNull();
+		expect(
+			readRefCache<{ data: unknown[]; meta: { total: number } }>(
+				'/api/v1/transactions?kind=manual&limit=10&page=1&sort=date_desc'
+			)
+		).toEqual({ data: [], meta: { page: 1, limit: 10, total: 0 } });
 		expect(get(dataRefreshTick)).toBe(1);
 		expect(sync.scheduleSyncOutbox).toHaveBeenCalled();
 	});
@@ -183,7 +199,19 @@ describe('transactions-api delete', () => {
 				active_count: 0
 			}
 		});
-		writeRefCache('/api/v1/transactions?limit=20', [{ id: 'old' }]);
+		writeRefCache('/api/v1/transactions?kind=manual&limit=10&page=1&sort=date_desc', {
+			data: [
+				{
+					id: 'old',
+					kind: 'manual',
+					type: 'expense',
+					account_id: 'a1',
+					transaction_date: '2026-10-01 12:00:00',
+					created_at: '2026-10-01 12:00:00'
+				}
+			],
+			meta: { page: 1, limit: 10, total: 1 }
+		});
 		vi.mocked(client.createTransaction).mockResolvedValue({
 			id: 'tx-new',
 			account_id: 'a1',
@@ -210,7 +238,11 @@ describe('transactions-api delete', () => {
 		});
 
 		expect(readRefCache('/api/v1/dashboard')).toBeNull();
-		expect(readRefCache('/api/v1/transactions?limit=20')).toBeNull();
+		const homeList = readRefCache<{ data: { id: string }[]; meta: { total: number } }>(
+			'/api/v1/transactions?kind=manual&limit=10&page=1&sort=date_desc'
+		);
+		expect(homeList?.data.map((row) => row.id).sort()).toEqual(['old', 'tx-new']);
+		expect(homeList?.meta.total).toBe(2);
 		expect(get(dataRefreshTick)).toBe(1);
 	});
 
@@ -274,6 +306,10 @@ describe('touchLedgerAfterTransactionMutation', () => {
 			}
 		});
 		writeRefCache('/api/v1/accounts/a1/balance', { id: 'a1', balance: 500 });
+		writeRefCache('/api/v1/transactions?kind=manual&limit=10&page=1&sort=date_desc', {
+			data: [{ id: 'keep-me' }],
+			meta: { page: 1, limit: 10, total: 1 }
+		});
 		const rows = [
 			{
 				id: 'a1',
@@ -296,5 +332,11 @@ describe('touchLedgerAfterTransactionMutation', () => {
 		expect(readRefCache('/api/v1/dashboard')).toBeNull();
 		expect(readRefCache('/api/v1/accounts/a1/balance')).toBeNull();
 		expect(enrichAccountsWithCachedBalances(rows)[0]?.balance).toBe(100);
+		expect(readRefCache('/api/v1/transactions?kind=manual&limit=10&page=1&sort=date_desc')).toEqual(
+			{
+				data: [{ id: 'keep-me' }],
+				meta: { page: 1, limit: 10, total: 1 }
+			}
+		);
 	});
 });

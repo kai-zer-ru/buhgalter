@@ -55,3 +55,34 @@ export function reportHomeListLoadFailure(err: unknown): void {
 	if (isServerUnavailableForUser(err)) return;
 	toast.fromError(err);
 }
+
+/** Empty/loading for «Последние операции» — server `meta.total` plus visible/outbox rows. */
+export function homeRecentSection(input: {
+	pastLoading: boolean;
+	plannedLoading: boolean;
+	pastTotal: number;
+	plannedTotal: number;
+	pastVisibleCount: number;
+	plannedVisibleCount: number;
+}): {
+	showLoading: boolean;
+	showEmpty: boolean;
+	showPlanned: boolean;
+	showPast: boolean;
+	pastCount: number;
+	plannedCount: number;
+	count: number | null;
+} {
+	const hasRows = input.pastVisibleCount > 0 || input.plannedVisibleCount > 0;
+	const pastCount = Math.max(input.pastTotal, input.pastVisibleCount);
+	const plannedCount = Math.max(input.plannedTotal, input.plannedVisibleCount);
+	return {
+		showLoading: input.pastLoading && input.plannedLoading && !hasRows,
+		showEmpty: !input.pastLoading && !input.plannedLoading && !hasRows,
+		showPlanned: plannedCount > 0 || input.plannedLoading,
+		showPast: pastCount > 0 || input.pastLoading,
+		pastCount,
+		plannedCount,
+		count: !input.pastLoading && !input.plannedLoading ? pastCount + plannedCount : null
+	};
+}

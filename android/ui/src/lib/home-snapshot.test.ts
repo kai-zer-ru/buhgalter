@@ -51,6 +51,7 @@ import {
 	hasHomeDashboardSnapshot,
 	homeDashboardGateMessage,
 	homeNeedsForegroundLoad,
+	homeRecentSection,
 	reportHomeListLoadFailure
 } from './home-snapshot';
 
@@ -141,5 +142,36 @@ describe('home snapshot', () => {
 
 		expect(hasHomeDashboardSnapshot(null, 'household')).toBe(true);
 		expect(hasHomeDashboardSnapshot(null, 'personal')).toBe(false);
+	});
+
+	it('shows pending outbox rows instead of empty/loading on home recent list', () => {
+		expect(
+			homeRecentSection({
+				pastLoading: false,
+				plannedLoading: false,
+				pastTotal: 0,
+				plannedTotal: 0,
+				pastVisibleCount: 1,
+				plannedVisibleCount: 0
+			})
+		).toEqual({
+			showLoading: false,
+			showEmpty: false,
+			showPlanned: false,
+			showPast: true,
+			pastCount: 1,
+			plannedCount: 0,
+			count: 1
+		});
+		expect(
+			homeRecentSection({
+				pastLoading: true,
+				plannedLoading: true,
+				pastTotal: 0,
+				plannedTotal: 0,
+				pastVisibleCount: 0,
+				plannedVisibleCount: 0
+			}).showLoading
+		).toBe(true);
 	});
 });
